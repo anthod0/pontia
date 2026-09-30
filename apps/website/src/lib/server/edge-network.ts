@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { Database } from "./db";
 import { edges } from "./db/schema";
+import { isHeroName } from "./hero-name";
 
 const EDGE_ZONE = "edge.pontia.dev";
 const CHALLENGE_PREFIX = "/.well-known/pontia-edge-address/";
@@ -45,6 +46,14 @@ export function edgeHostname(tunnelUrl: string): string | null {
   const label = parsed.hostname.slice(0, -suffix.length);
   if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label) || label.length > 63) return null;
   return parsed.hostname;
+}
+
+export function edgeApiOrigin(tunnelUrl: string): string | null {
+  const hostname = edgeHostname(tunnelUrl);
+  if (!hostname || tunnelUrl !== `wss://${hostname}/tunnel`) return null;
+  const hero = hostname.slice(0, -`.${EDGE_ZONE}`.length);
+  if (!isHeroName(hero)) return null;
+  return `https://${hostname}`;
 }
 
 export function isGlobalUnicastIpv4(value: string): boolean {

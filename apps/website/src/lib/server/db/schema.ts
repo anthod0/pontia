@@ -57,6 +57,7 @@ export const devices = sqliteTable(
     edgeId: text("edge_id")
       .notNull()
       .references(() => edges.id, { onDelete: "restrict" }),
+    handle: text().notNull(),
     name: text(),
     createdAt: text("created_at").notNull().default(timestamp),
     updatedAt: text("updated_at").notNull().default(timestamp),
@@ -65,6 +66,11 @@ export const devices = sqliteTable(
     primaryKey({ columns: [table.id] }),
     index("idx_devices_user_id").on(table.userId),
     index("idx_devices_edge_id").on(table.edgeId),
+    uniqueIndex("idx_devices_user_handle").on(table.userId, table.handle),
+    check(
+      "devices_handle_format_check",
+      sql`length(${table.handle}) BETWEEN 4 AND 48 AND substr(${table.handle}, 1, 1) GLOB '[a-z]' AND ${table.handle} NOT GLOB '*[^a-z0-9_-]*'`,
+    ),
   ],
 );
 

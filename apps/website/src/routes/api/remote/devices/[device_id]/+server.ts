@@ -5,12 +5,14 @@ import type { RequestHandler } from "./$types";
 
 function deviceResponseBody(device: {
   id: string;
+  handle: string;
   name: string | null;
   edgeId: string;
   edgeName: string;
 }) {
   return {
     id: device.id,
+    device_handle: device.handle,
     name: device.name,
     edge_id: device.edgeId,
     edge_name: device.edgeName,

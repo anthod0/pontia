@@ -60,6 +60,7 @@ async function seedHttpTicketFixture() {
     id: deviceId,
     userId: "user-http",
     edgeId,
+    handle: "http-device",
   });
 }
 

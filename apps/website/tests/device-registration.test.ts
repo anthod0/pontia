@@ -66,6 +66,7 @@ test("device registration creates once and returns the stored record on retry", 
     status: "created",
     device: {
       id: deviceId,
+      handle: "my-device",
       name: "My device",
       edgeId: registrationEdge,
       edgeName: "Tokyo",
@@ -90,6 +91,38 @@ test("device registration creates once and returns the stored record on retry", 
   });
 });
 
+test("device handles are stable and unique within a user", async () => {
+  await database.db.insert(users).values({ id: "user-owner" });
+  await insertEdge(registrationEdge, "Tokyo");
+  const secondDeviceId = "0195e7c2-1b22-7c33-9d44-123456789abc";
+
+  const first = await registerDevice(
+    database.db,
+    "user-owner",
+    deviceId,
+    "Office machine",
+    registrationEdge,
+  );
+  const second = await registerDevice(
+    database.db,
+    "user-owner",
+    secondDeviceId,
+    "Office machine",
+    registrationEdge,
+  );
+  expect(first).toMatchObject({ device: { handle: "office-machine" } });
+  expect(second).toMatchObject({ device: { handle: "office-machine-0195e7c2" } });
+  expect(
+    await registerDevice(
+      database.db,
+      "user-owner",
+      secondDeviceId,
+      "Renamed machine",
+      registrationEdge,
+    ),
+  ).toMatchObject({ status: "existing", device: { handle: "office-machine-0195e7c2" } });
+});
+
 test("registration rejects invalid edges and device conflicts", async () => {
   await database.db.insert(users).values([{ id: "user-owner" }, { id: "user-other" }]);
   await insertEdge(conflictEdge, "Tokyo");
@@ -98,6 +131,7 @@ test("registration rejects invalid edges and device conflicts", async () => {
     id: deviceId,
     userId: "user-owner",
     edgeId: conflictEdge,
+    handle: "owned-device",
     name: "Owned",
   });
 

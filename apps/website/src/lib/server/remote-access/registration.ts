@@ -2,6 +2,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import type { Database } from "../db";
 import { devices, edges } from "../db/schema";
 import { isUuidV7 } from "../uuid";
+import { deviceHandleCandidates } from "./device-handle";
 import { edgeIsAccessibleTo } from "./resources";
 
 export type RegistrationEdge = {
@@ -11,6 +12,7 @@ export type RegistrationEdge = {
 
 export type RegisteredDevice = {
   id: string;
+  handle: string;
   name: string | null;
   edgeId: string;
   edgeName: string;
@@ -42,6 +44,7 @@ type StoredDevice = RegisteredDevice & { userId: string };
 function registeredDevice(device: StoredDevice): RegisteredDevice {
   return {
     id: device.id,
+    handle: device.handle,
     name: device.name,
     edgeId: device.edgeId,
     edgeName: device.edgeName,
@@ -52,6 +55,7 @@ async function storedDevice(db: Database, deviceId: string): Promise<StoredDevic
   const device = await db
     .select({
       id: devices.id,
+      handle: devices.handle,
       name: devices.name,
       userId: devices.userId,
       edgeId: devices.edgeId,
@@ -85,29 +89,40 @@ export async function registerDevice(
 ): Promise<DeviceRegistration> {
   if (!isUuidV7(deviceId) || !isUuidV7(edgeId) || !validName(name))
     return { status: "invalid_request" };
+  const existing = await storedDevice(db, deviceId);
+  if (existing) {
+    if (existing.userId !== userId || existing.edgeId !== edgeId) return { status: "conflict" };
+    return { status: "existing", device: registeredDevice(existing) };
+  }
+
   const now = new Date().toISOString();
-  const created = await db
-    .insert(devices)
-    .select(
-      db
-        .select({
-          id: sql<string>`${deviceId}`.as("id"),
-          userId: sql<string>`${userId}`.as("user_id"),
-          edgeId: edges.id,
-          name: sql<string>`${name}`.as("name"),
-          createdAt: sql<string>`${now}`.as("created_at"),
-          updatedAt: sql<string>`${now}`.as("updated_at"),
-        })
-        .from(edges)
-        .where(and(eq(edges.id, edgeId), edgeIsAccessibleTo(userId))),
-    )
-    .onConflictDoNothing()
-    .returning({ id: devices.id });
-  const stored = await storedDevice(db, deviceId);
-  if (!stored) return { status: "edge_not_found" };
-  if (stored.userId !== userId || stored.edgeId !== edgeId) return { status: "conflict" };
-  return {
-    status: created.length === 1 ? "created" : "existing",
-    device: registeredDevice(stored),
-  };
+  for (const handle of deviceHandleCandidates(name, deviceId)) {
+    const created = await db
+      .insert(devices)
+      .select(
+        db
+          .select({
+            id: sql<string>`${deviceId}`.as("id"),
+            userId: sql<string>`${userId}`.as("user_id"),
+            edgeId: edges.id,
+            handle: sql<string>`${handle}`.as("handle"),
+            name: sql<string>`${name}`.as("name"),
+            createdAt: sql<string>`${now}`.as("created_at"),
+            updatedAt: sql<string>`${now}`.as("updated_at"),
+          })
+          .from(edges)
+          .where(and(eq(edges.id, edgeId), edgeIsAccessibleTo(userId))),
+      )
+      .onConflictDoNothing()
+      .returning({ id: devices.id });
+    const stored = await storedDevice(db, deviceId);
+    if (stored) {
+      if (stored.userId !== userId || stored.edgeId !== edgeId) return { status: "conflict" };
+      return {
+        status: created.length === 1 ? "created" : "existing",
+        device: registeredDevice(stored),
+      };
+    }
+  }
+  return { status: "edge_not_found" };
 }

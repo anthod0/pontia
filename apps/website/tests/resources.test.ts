@@ -58,9 +58,12 @@ test("owned device lookup returns its current edge target", async () => {
     .insert(users)
     .values([{ id: "edge-owner" }, { id: "user-owner" }, { id: "user-other" }]);
   await insertEdge("edge-target", secret, "user-owner");
-  await database.db
-    .insert(devices)
-    .values({ id: "device-owned", userId: "user-owner", edgeId: "edge-target" });
+  await database.db.insert(devices).values({
+    id: "device-owned",
+    userId: "user-owner",
+    edgeId: "edge-target",
+    handle: "owned-device",
+  });
 
   expect(await findOwnedDeviceTarget(database.db, "user-owner", "device-owned")).toEqual({
     deviceId: "device-owned",
@@ -75,9 +78,12 @@ test("device binding checks owner, device, and edge together", async () => {
   await database.db.insert(users).values([{ id: "edge-owner" }, { id: "user-binding" }]);
   await insertEdge("edge-binding", secret, "user-binding");
   await insertEdge("edge-other");
-  await database.db
-    .insert(devices)
-    .values({ id: "device-binding", userId: "user-binding", edgeId: "edge-binding" });
+  await database.db.insert(devices).values({
+    id: "device-binding",
+    userId: "user-binding",
+    edgeId: "edge-binding",
+    handle: "bound-device",
+  });
 
   expect(
     await deviceBindingIsCurrent(database.db, "user-binding", "device-binding", "edge-binding"),
@@ -93,9 +99,12 @@ test("device binding checks owner, device, and edge together", async () => {
 test("device foreign keys cascade owners and restrict deleting assigned edges", async () => {
   await database.db.insert(users).values([{ id: "edge-owner" }, { id: "user-constraints" }]);
   await insertEdge("edge-constraints");
-  await database.db
-    .insert(devices)
-    .values({ id: "device-constraints", userId: "user-constraints", edgeId: "edge-constraints" });
+  await database.db.insert(devices).values({
+    id: "device-constraints",
+    userId: "user-constraints",
+    edgeId: "edge-constraints",
+    handle: "constrained-device",
+  });
 
   await expect(
     Promise.resolve(database.db.delete(edges).where(eq(edges.id, "edge-constraints"))),

@@ -1,0 +1,969 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "8f44f2ea-5fc0-4dc3-a2ea-1e1504b06613",
+  "prevIds": ["be24bc74-810d-4c32-b56a-08258d9b3b15"],
+  "ddl": [
+    {
+      "name": "accounts",
+      "entityType": "tables"
+    },
+    {
+      "name": "auth_sessions",
+      "entityType": "tables"
+    },
+    {
+      "name": "device_authorizations",
+      "entityType": "tables"
+    },
+    {
+      "name": "device_rate_limits",
+      "entityType": "tables"
+    },
+    {
+      "name": "devices",
+      "entityType": "tables"
+    },
+    {
+      "name": "edge_tickets",
+      "entityType": "tables"
+    },
+    {
+      "name": "edges",
+      "entityType": "tables"
+    },
+    {
+      "name": "users",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "accounts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "accounts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider",
+      "entityType": "columns",
+      "table": "accounts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "provider_subject",
+      "entityType": "columns",
+      "table": "accounts"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "email",
+      "entityType": "columns",
+      "table": "accounts"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "email_verified",
+      "entityType": "columns",
+      "table": "accounts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "accounts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "accounts"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "account_id",
+      "entityType": "columns",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'browser'",
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "token_hash",
+      "entityType": "columns",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "auth_sessions"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "device_authorizations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "device_code_hash",
+      "entityType": "columns",
+      "table": "device_authorizations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_code",
+      "entityType": "columns",
+      "table": "device_authorizations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "device_authorizations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "device_authorizations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "table": "device_authorizations"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_polled_at",
+      "entityType": "columns",
+      "table": "device_authorizations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "device_authorizations"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "key",
+      "entityType": "columns",
+      "table": "device_rate_limits"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "window_started_at",
+      "entityType": "columns",
+      "table": "device_rate_limits"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "attempt_count",
+      "entityType": "columns",
+      "table": "device_rate_limits"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "edge_id",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "handle",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "devices"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "edge_tickets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "purpose",
+      "entityType": "columns",
+      "table": "edge_tickets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "secret_hash",
+      "entityType": "columns",
+      "table": "edge_tickets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "edge_tickets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expected_edge_id",
+      "entityType": "columns",
+      "table": "edge_tickets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "payload",
+      "entityType": "columns",
+      "table": "edge_tickets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "table": "edge_tickets"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "consumed_at",
+      "entityType": "columns",
+      "table": "edge_tickets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "edge_tickets"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "edges"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "table": "edges"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'private'",
+      "generated": null,
+      "name": "access_scope",
+      "entityType": "columns",
+      "table": "edges"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "edges"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "tunnel_url",
+      "entityType": "columns",
+      "table": "edges"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "service_credential_hash",
+      "entityType": "columns",
+      "table": "edges"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "edges"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      "generated": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "table": "edges"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "users"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "display_name",
+      "entityType": "columns",
+      "table": "users"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "avatar_url",
+      "entityType": "columns",
+      "table": "users"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "users"
+    },
+    {
+      "columns": ["user_id"],
+      "tableTo": "users",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_accounts_user_id_users_id_fk",
+      "entityType": "fks",
+      "table": "accounts"
+    },
+    {
+      "columns": ["user_id"],
+      "tableTo": "users",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_auth_sessions_user_id_users_id_fk",
+      "entityType": "fks",
+      "table": "auth_sessions"
+    },
+    {
+      "columns": ["account_id"],
+      "tableTo": "accounts",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "nameExplicit": false,
+      "name": "fk_auth_sessions_account_id_accounts_id_fk",
+      "entityType": "fks",
+      "table": "auth_sessions"
+    },
+    {
+      "columns": ["user_id"],
+      "tableTo": "users",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_device_authorizations_user_id_users_id_fk",
+      "entityType": "fks",
+      "table": "device_authorizations"
+    },
+    {
+      "columns": ["user_id"],
+      "tableTo": "users",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_devices_user_id_users_id_fk",
+      "entityType": "fks",
+      "table": "devices"
+    },
+    {
+      "columns": ["edge_id"],
+      "tableTo": "edges",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_devices_edge_id_edges_id_fk",
+      "entityType": "fks",
+      "table": "devices"
+    },
+    {
+      "columns": ["user_id"],
+      "tableTo": "users",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_edge_tickets_user_id_users_id_fk",
+      "entityType": "fks",
+      "table": "edge_tickets"
+    },
+    {
+      "columns": ["user_id"],
+      "tableTo": "users",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "nameExplicit": false,
+      "name": "fk_edges_user_id_users_id_fk",
+      "entityType": "fks",
+      "table": "edges"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "accounts_pk",
+      "entityType": "pks",
+      "table": "accounts"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "auth_sessions_pk",
+      "entityType": "pks",
+      "table": "auth_sessions"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "device_authorizations_pk",
+      "entityType": "pks",
+      "table": "device_authorizations"
+    },
+    {
+      "columns": ["key"],
+      "nameExplicit": false,
+      "name": "device_rate_limits_pk",
+      "entityType": "pks",
+      "table": "device_rate_limits"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "devices_pk",
+      "entityType": "pks",
+      "table": "devices"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "edges_pk",
+      "entityType": "pks",
+      "table": "edges"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "users_pk",
+      "entityType": "pks",
+      "table": "users"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "edge_tickets_pk",
+      "table": "edge_tickets",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "provider",
+          "isExpression": false
+        },
+        {
+          "value": "provider_subject",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_accounts_provider_subject",
+      "entityType": "indexes",
+      "table": "accounts"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        },
+        {
+          "value": "provider",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_accounts_user_provider",
+      "entityType": "indexes",
+      "table": "accounts"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_auth_sessions_user_id",
+      "entityType": "indexes",
+      "table": "auth_sessions"
+    },
+    {
+      "columns": [
+        {
+          "value": "device_code_hash",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_device_authorizations_device_code",
+      "entityType": "indexes",
+      "table": "device_authorizations"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_code",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_device_authorizations_user_code",
+      "entityType": "indexes",
+      "table": "device_authorizations"
+    },
+    {
+      "columns": [
+        {
+          "value": "expires_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_device_authorizations_expires_at",
+      "entityType": "indexes",
+      "table": "device_authorizations"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_devices_user_id",
+      "entityType": "indexes",
+      "table": "devices"
+    },
+    {
+      "columns": [
+        {
+          "value": "edge_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_devices_edge_id",
+      "entityType": "indexes",
+      "table": "devices"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        },
+        {
+          "value": "handle",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_devices_user_handle",
+      "entityType": "indexes",
+      "table": "devices"
+    },
+    {
+      "columns": [
+        {
+          "value": "secret_hash",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_edge_tickets_secret_hash",
+      "entityType": "indexes",
+      "table": "edge_tickets"
+    },
+    {
+      "columns": [
+        {
+          "value": "expires_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_edge_tickets_expires_at",
+      "entityType": "indexes",
+      "table": "edge_tickets"
+    },
+    {
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_edges_user_id",
+      "entityType": "indexes",
+      "table": "edges"
+    },
+    {
+      "columns": [
+        {
+          "value": "access_scope",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_edges_access_scope",
+      "entityType": "indexes",
+      "table": "edges"
+    },
+    {
+      "columns": [
+        {
+          "value": "tunnel_url",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "idx_edges_tunnel_url",
+      "entityType": "indexes",
+      "table": "edges"
+    },
+    {
+      "value": "\"provider\" IN ('google', 'github')",
+      "name": "accounts_provider_check",
+      "entityType": "checks",
+      "table": "accounts"
+    },
+    {
+      "value": "\"status\" IN ('pending', 'approved', 'denied', 'consumed')",
+      "name": "device_authorizations_status_check",
+      "entityType": "checks",
+      "table": "device_authorizations"
+    },
+    {
+      "value": "length(\"handle\") BETWEEN 4 AND 48 AND substr(\"handle\", 1, 1) GLOB '[a-z]' AND \"handle\" NOT GLOB '*[^a-z0-9_-]*'",
+      "name": "devices_handle_format_check",
+      "entityType": "checks",
+      "table": "devices"
+    },
+    {
+      "value": "\"purpose\" IN ('edge_deployment', 'device_tunnel', 'dashboard_access')",
+      "name": "edge_tickets_purpose_check",
+      "entityType": "checks",
+      "table": "edge_tickets"
+    },
+    {
+      "value": "json_valid(\"payload\")",
+      "name": "edge_tickets_payload_json_check",
+      "entityType": "checks",
+      "table": "edge_tickets"
+    },
+    {
+      "value": "\"access_scope\" IN ('private', 'public')",
+      "name": "edges_access_scope_check",
+      "entityType": "checks",
+      "table": "edges"
+    }
+  ],
+  "renames": []
+}

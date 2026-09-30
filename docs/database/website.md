@@ -43,11 +43,13 @@ CREATE TABLE `devices` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
 	`edge_id` text NOT NULL,
+	`handle` text NOT NULL,
 	`name` text,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	CONSTRAINT `fk_devices_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-	CONSTRAINT `fk_devices_edge_id_edges_id_fk` FOREIGN KEY (`edge_id`) REFERENCES `edges`(`id`) ON DELETE RESTRICT
+	CONSTRAINT `fk_devices_edge_id_edges_id_fk` FOREIGN KEY (`edge_id`) REFERENCES `edges`(`id`) ON DELETE RESTRICT,
+	CONSTRAINT "devices_handle_format_check" CHECK(length("handle") BETWEEN 4 AND 48 AND substr("handle", 1, 1) GLOB '[a-z]' AND "handle" NOT GLOB '*[^a-z0-9_-]*')
 );
 
 CREATE TABLE `device_authorizations` (
@@ -99,6 +101,7 @@ CREATE INDEX `idx_edges_access_scope` ON `edges` (`access_scope`);
 CREATE UNIQUE INDEX `idx_edges_tunnel_url` ON `edges` (`tunnel_url`);
 CREATE INDEX `idx_devices_user_id` ON `devices` (`user_id`);
 CREATE INDEX `idx_devices_edge_id` ON `devices` (`edge_id`);
+CREATE UNIQUE INDEX `idx_devices_user_handle` ON `devices` (`user_id`,`handle`);
 CREATE UNIQUE INDEX `idx_device_authorizations_device_code` ON `device_authorizations` (`device_code_hash`);
 CREATE UNIQUE INDEX `idx_device_authorizations_user_code` ON `device_authorizations` (`user_code`);
 CREATE INDEX `idx_device_authorizations_expires_at` ON `device_authorizations` (`expires_at`);

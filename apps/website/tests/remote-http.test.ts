@@ -85,6 +85,7 @@ test("remote HTTP API lists edges and creates, retries, and reads a device", asy
   const createdDevice = (await created.json()) as Record<string, unknown>;
   expect(createdDevice).toEqual({
     id: deviceId,
+    device_handle: "http-device",
     name: "HTTP Device",
     edge_id: edgeId,
     edge_name: "HTTP Edge",

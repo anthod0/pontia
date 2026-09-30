@@ -1,7 +1,6 @@
 <script lang="ts">
   import DesktopTowerIcon from 'phosphor-svelte/lib/DesktopTowerIcon';
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
-  import { Badge } from '$lib/components/ui/badge/index.js';
   import { Button } from '$lib/components/ui/button/index.js';
   import * as Card from '$lib/components/ui/card/index.js';
   import * as Empty from '$lib/components/ui/empty/index.js';
@@ -10,7 +9,6 @@
   export type DeviceListItem = {
     handle: string;
     name: string;
-    online: boolean;
   };
 
   let { devices = [] }: { devices?: DeviceListItem[] } = $props();
@@ -37,14 +35,9 @@
         {#each validDevices as device (device.handle)}
           <Card.Root>
             <Card.Header>
-              <div class="flex items-start justify-between gap-3">
-                <span class="flex size-9 shrink-0 items-center justify-center bg-muted text-primary">
-                  <DesktopTowerIcon class="size-5" />
-                </span>
-                <Badge variant={device.online ? 'secondary' : 'outline'}>
-                  {device.online ? 'Online' : 'Offline'}
-                </Badge>
-              </div>
+              <span class="flex size-9 shrink-0 items-center justify-center bg-muted text-primary">
+                <DesktopTowerIcon class="size-5" />
+              </span>
               <div class="mt-2 min-w-0">
                 <Card.Title>{device.name}</Card.Title>
                 <Card.Description class="truncate font-mono">{device.handle}</Card.Description>

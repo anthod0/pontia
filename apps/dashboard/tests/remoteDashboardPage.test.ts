@@ -50,8 +50,8 @@ test("renders valid devices as handle-scoped dashboard links", () => {
   render(DevicesPage, {
     props: {
       devices: [
-        { handle, name: "Office Mac", online: true },
-        { handle: "2invalid_handle", name: "Invalid", online: false },
+        { handle, name: "Office Mac" },
+        { handle: "2invalid_handle", name: "Invalid" },
       ],
     },
   });
@@ -62,6 +62,8 @@ test("renders valid devices as handle-scoped dashboard links", () => {
   );
   expect(screen.getByText("Office Mac")).toBeInTheDocument();
   expect(screen.queryByText("Invalid")).not.toBeInTheDocument();
+  expect(screen.queryByText("Online")).not.toBeInTheDocument();
+  expect(screen.queryByText("Offline")).not.toBeInTheDocument();
 });
 
 test.each([
