@@ -39,7 +39,7 @@ test("a revoked browser login cannot issue an edge deployment", async () => {
   expect(result.status).toBe(401);
 });
 
-test("an authenticated user must accept the Let's Encrypt agreement", async () => {
+test("an authenticated user can issue an edge deployment", async () => {
   const userId = "0199791c-6600-7000-8000-000000000003";
   const loginId = "0199791c-6600-7000-8000-000000000004";
   const secret = "test-signing-secret-with-at-least-32-bytes";
@@ -50,17 +50,18 @@ test("an authenticated user must accept the Let's Encrypt agreement", async () =
     expiresAt: "2099-01-01T00:00:00.000Z",
   });
   const login = await issueLogin(database.db, loginId, secret);
-  const request = new Request("https://pontia.example/edges", {
-    method: "POST",
-    body: new FormData(),
-  });
 
   const result = (await issueDeployment({
     cookies: { get: (name: string) => (name === "_at" ? login.token : undefined) },
-    platform: { env: { DB: database.binding, JWT_SECRET: secret } },
-    request,
-  } as unknown as RequestEvent)) as { status: number; data: { error: string } };
+    platform: {
+      env: {
+        AUTH_ORIGIN: "https://pontia.example",
+        DB: database.binding,
+        JWT_SECRET: secret,
+      },
+    },
+    url: new URL("https://pontia.example/edges"),
+  } as unknown as RequestEvent)) as { deployment: { command: string } };
 
-  expect(result.status).toBe(400);
-  expect(result.data.error).toContain("Subscriber Agreement");
+  expect(result.deployment.command).toContain("--agree-to-lets-encrypt-subscriber-agreement");
 });

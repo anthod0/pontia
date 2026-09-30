@@ -25,7 +25,7 @@
 	<div class="choices">
 		<form method="POST" action="/api/auth/pending/bind">
 			<Button type="submit" class="button"
-				>Verify with {providerName} and link</Button
+				>Connect to existing account</Button
 			>
 		</form>
 		<form method="POST" action="/api/auth/pending/create">

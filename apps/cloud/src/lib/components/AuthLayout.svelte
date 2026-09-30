@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	let { children }: { children: Snippet } = $props();
+	let { children, wide = false }: { children: Snippet; wide?: boolean } = $props();
 </script>
 
 <header class="site-header page-width">
@@ -9,12 +9,15 @@
 	>
 	<a class="nav-link" href="/">Back to home</a>
 </header>
-<main class="auth-content">{@render children()}</main>
+<main class:wide class="auth-content">{@render children()}</main>
 
 <style>
 	.auth-content {
 		width: min(440px, calc(100% - 40px));
 		margin: 72px auto;
+	}
+	.auth-content.wide {
+		width: min(800px, calc(100% - 40px));
 	}
 	.auth-content :global(h1) {
 		font-size: 32px;

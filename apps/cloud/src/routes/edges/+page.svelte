@@ -1,6 +1,7 @@
 <script lang="ts">
+  import CheckIcon from "phosphor-svelte/lib/CheckIcon";
+  import CopyIcon from "phosphor-svelte/lib/CopyIcon";
   import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
   import AuthLayout from "$lib/components/AuthLayout.svelte";
   import type { ActionData, PageData } from "./$types";
 
@@ -18,7 +19,7 @@
   <meta name="robots" content="noindex" />
 </svelte:head>
 
-<AuthLayout>
+<AuthLayout wide={Boolean(form?.deployment)}>
   <h1>Deploy a self-hosted edge</h1>
   <p>Generate a one-time command, then run it on your public Linux server.</p>
 
@@ -32,21 +33,18 @@
       <p>This command expires at {new Date(form.deployment.expiresAt).toLocaleString()}.</p>
       <pre><code>{form.deployment.command}</code></pre>
       <Button type="button" onclick={() => copyCommand(form.deployment!.command)}>
+        {#if copied}<CheckIcon />{:else}<CopyIcon />{/if}
         {copied ? "Copied" : "Copy command"}
       </Button>
     </section>
   {:else}
     <form method="POST">
-      <label class="agreement">
-        <Checkbox name="subscriber_agreement" value="accepted" required />
-        <span>
-          I agree to the
-          <a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">
-            Let's Encrypt Subscriber Agreement
-          </a>
-          for certificate issuance on this server.
-        </span>
-      </label>
+      <p class="agreement">
+        By generating this command, you agree to the
+        <a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">
+          Let's Encrypt Subscriber Agreement</a
+        >.
+      </p>
       <Button type="submit">Generate deployment command</Button>
     </form>
   {/if}
@@ -65,15 +63,8 @@
   }
 
   .agreement {
-    align-items: flex-start;
-    display: flex;
-    gap: 10px;
     margin-block: 20px;
     max-width: 620px;
-  }
-
-  .agreement :global([data-slot="checkbox"]) {
-    margin-top: 4px;
   }
 
   pre {
@@ -83,7 +74,7 @@
     margin-block: 16px;
     overflow-x: auto;
     padding: 16px;
-    white-space: pre-wrap;
+    white-space: pre;
   }
 
   code {
