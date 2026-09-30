@@ -39,7 +39,7 @@ function shellQuote(value: string) {
 }
 
 export function deploymentCommand(origin: string, edgeId: string, ticket: string) {
-  return `curl -fsSL ${shellQuote(`${origin}/install-edge.sh`)} | sudo sh &&\nsudo pontia-edge init \\\n  --website-origin ${shellQuote(origin)} \\\n  --edge-id ${shellQuote(edgeId)} \\\n  --ticket ${shellQuote(ticket)} \\\n  --agree-to-lets-encrypt-subscriber-agreement`;
+  return `curl -fsSL ${shellQuote(`${origin}/install-edge.sh`)} | sudo sh &&\nsudo pontia-edge init \\\n  --cloud-origin ${shellQuote(origin)} \\\n  --edge-id ${shellQuote(edgeId)} \\\n  --ticket ${shellQuote(ticket)} \\\n  --agree-to-lets-encrypt-subscriber-agreement`;
 }
 
 async function unusedHeroName(db: Database, dependencies: DeploymentDependencies) {

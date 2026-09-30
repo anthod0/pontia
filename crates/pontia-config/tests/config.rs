@@ -96,17 +96,17 @@ fn auth_origin_uses_the_cli_override_and_requires_a_clean_https_origin() {
     let mut vars = vars_for_home(home.path());
     vars.insert(
         "PONTIA_AUTH_ORIGIN".to_string(),
-        "https://website.example/development".to_string(),
+        "https://cloud.example/development".to_string(),
     );
     assert_eq!(
         AppConfig::from_vars(&vars).unwrap().auth_origin,
-        "https://website.example"
+        "https://cloud.example"
     );
 
     for invalid in [
-        "http://website.example",
-        "https://user@website.example",
-        "https://website.example?query=true",
+        "http://cloud.example",
+        "https://user@cloud.example",
+        "https://cloud.example?query=true",
     ] {
         vars.insert("PONTIA_AUTH_ORIGIN".to_string(), invalid.to_string());
         assert!(AppConfig::from_vars(&vars).is_err(), "{invalid}");

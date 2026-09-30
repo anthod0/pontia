@@ -27,7 +27,7 @@ function json(value: unknown, status = 200): Response {
   });
 }
 
-test("loads the strict Website device list with browser credentials", async () => {
+test("loads the strict Cloud device list with browser credentials", async () => {
   const fetchMock = vi.fn(async () =>
     json([
       { device_handle: handle, name: "Office Mac" },
@@ -50,7 +50,7 @@ test.each([
   [{ device_handle: handle, name: "Office Mac", online: true }],
   [{ device_handle: "Invalid", name: "Office Mac" }],
   [{ device_handle: handle, name: " Office Mac" }],
-])("rejects an invalid Website device list", async (body) => {
+])("rejects an invalid Cloud device list", async (body) => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => json(body)),

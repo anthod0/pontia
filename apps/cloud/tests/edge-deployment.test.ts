@@ -64,7 +64,7 @@ test("issuing a deployment creates a one-hour bound ticket and copyable command"
     expiresAt: "2099-01-01T01:00:00.000Z",
   });
   expect(deployment.command).toBe(
-    `curl -fsSL 'https://pontia.example/install-edge.sh' | sudo sh &&\nsudo pontia-edge init \\\n  --website-origin 'https://pontia.example' \\\n  --edge-id '${edgeId}' \\\n  --ticket '${ticket}' \\\n  --agree-to-lets-encrypt-subscriber-agreement`,
+    `curl -fsSL 'https://pontia.example/install-edge.sh' | sudo sh &&\nsudo pontia-edge init \\\n  --cloud-origin 'https://pontia.example' \\\n  --edge-id '${edgeId}' \\\n  --ticket '${ticket}' \\\n  --agree-to-lets-encrypt-subscriber-agreement`,
   );
   const stored = await database.db.select().from(edgeTickets).get();
   expect(stored).toMatchObject({

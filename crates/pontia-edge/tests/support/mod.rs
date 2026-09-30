@@ -40,7 +40,7 @@ fn new_ticket() -> String {
 }
 
 #[derive(Clone)]
-struct WebsiteState {
+struct CloudState {
     tickets: Arc<Mutex<HashMap<String, Uuid>>>,
     dashboard_tickets: Arc<Mutex<HashMap<String, serde_json::Value>>>,
     issued: Arc<AtomicUsize>,
@@ -58,7 +58,7 @@ pub struct TestEdge {
     pub edge: Edge,
     pub tunnel_url: String,
     pub edge_origin: String,
-    pub website_origin: String,
+    pub cloud_origin: String,
     pub connector: Connector,
     pub http: reqwest::Client,
     tickets: Arc<Mutex<HashMap<String, Uuid>>>,
@@ -67,8 +67,8 @@ pub struct TestEdge {
     delay_redemption: Arc<AtomicBool>,
     edge_handle: Handle<std::net::SocketAddr>,
     edge_task: JoinHandle<std::io::Result<()>>,
-    website_handle: Handle<std::net::SocketAddr>,
-    website_task: JoinHandle<std::io::Result<()>>,
+    cloud_handle: Handle<std::net::SocketAddr>,
+    cloud_task: JoinHandle<std::io::Result<()>>,
 }
 
 impl TestEdge {
@@ -110,44 +110,44 @@ impl TestEdge {
             edge_listener.local_addr().unwrap().port()
         );
         let tunnel_url = format!("{edge_origin}/tunnel").replacen("https://", "wss://", 1);
-        let website_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        website_listener.set_nonblocking(true).unwrap();
-        let website_origin = format!(
+        let cloud_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        cloud_listener.set_nonblocking(true).unwrap();
+        let cloud_origin = format!(
             "https://127.0.0.1:{}",
-            website_listener.local_addr().unwrap().port()
+            cloud_listener.local_addr().unwrap().port()
         );
         let tickets = Arc::new(Mutex::new(HashMap::new()));
         let dashboard_tickets = Arc::new(Mutex::new(HashMap::new()));
         let issued = Arc::new(AtomicUsize::new(0));
         let delay_redemption = Arc::new(AtomicBool::new(false));
-        let website_state = WebsiteState {
+        let cloud_state = CloudState {
             tickets: tickets.clone(),
             dashboard_tickets: dashboard_tickets.clone(),
             issued: issued.clone(),
             delay_redemption: delay_redemption.clone(),
             tunnel_url: tunnel_url.clone(),
         };
-        let website = Router::new()
+        let cloud = Router::new()
             .route(
                 "/api/remote/devices/{device_id}/tunnel-tickets",
                 post(issue),
             )
             .route("/api/edge/tunnel-tickets/redeem", post(redeem))
             .route("/api/edge/dashboard-tickets/redeem", post(redeem_dashboard))
-            .with_state(website_state);
-        let website_handle = Handle::new();
-        let website_task = tokio::spawn(
+            .with_state(cloud_state);
+        let cloud_handle = Handle::new();
+        let cloud_task = tokio::spawn(
             axum_server::from_tcp_rustls(
-                website_listener,
+                cloud_listener,
                 RustlsConfig::from_config(Arc::new(server_tls())),
             )
             .unwrap()
-            .handle(website_handle.clone())
-            .serve(website.into_make_service()),
+            .handle(cloud_handle.clone())
+            .serve(cloud.into_make_service()),
         );
 
         let redeemer =
-            TicketRedeemer::with_client(&website_origin, EDGE_CREDENTIAL.to_string(), http.clone())
+            TicketRedeemer::with_client(&cloud_origin, EDGE_CREDENTIAL.to_string(), http.clone())
                 .unwrap();
         let access = BrowserAccess::open(&root.path().join("edge.sqlite3"))
             .await
@@ -176,7 +176,7 @@ impl TestEdge {
             edge,
             tunnel_url,
             edge_origin,
-            website_origin,
+            cloud_origin,
             connector,
             http,
             tickets,
@@ -185,8 +185,8 @@ impl TestEdge {
             delay_redemption,
             edge_handle,
             edge_task,
-            website_handle,
-            website_task,
+            cloud_handle,
+            cloud_task,
         }
     }
 
@@ -194,8 +194,8 @@ impl TestEdge {
         self.issued.load(Ordering::SeqCst)
     }
 
-    pub fn stop_website(&self) {
-        self.website_handle.shutdown();
+    pub fn stop_cloud(&self) {
+        self.cloud_handle.shutdown();
     }
 
     pub fn delay_redemption(&self) {
@@ -292,14 +292,14 @@ impl Drop for TestEdge {
     fn drop(&mut self) {
         self.edge.shutdown();
         self.edge_handle.shutdown();
-        self.website_handle.shutdown();
+        self.cloud_handle.shutdown();
         self.edge_task.abort();
-        self.website_task.abort();
+        self.cloud_task.abort();
     }
 }
 
 async fn issue(
-    State(state): State<WebsiteState>,
+    State(state): State<CloudState>,
     Path(device_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -325,7 +325,7 @@ async fn issue(
 }
 
 async fn redeem(
-    State(state): State<WebsiteState>,
+    State(state): State<CloudState>,
     headers: HeaderMap,
     Json(request): Json<RedeemRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -343,7 +343,7 @@ async fn redeem(
 }
 
 async fn redeem_dashboard(
-    State(state): State<WebsiteState>,
+    State(state): State<CloudState>,
     headers: HeaderMap,
     Json(request): Json<RedeemRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {

@@ -37,17 +37,17 @@ pub(crate) struct DashboardRedeemResponse {
 }
 
 impl TicketRedeemer {
-    pub fn new(website_origin: &str, service_credential: String) -> anyhow::Result<Self> {
+    pub fn new(cloud_origin: &str, service_credential: String) -> anyhow::Result<Self> {
         let client = Client::builder().timeout(REDEEM_TIMEOUT).build()?;
-        Self::with_client(website_origin, service_credential, client)
+        Self::with_client(cloud_origin, service_credential, client)
     }
 
     pub fn with_client(
-        website_origin: &str,
+        cloud_origin: &str,
         service_credential: String,
         client: Client,
     ) -> anyhow::Result<Self> {
-        let mut origin = Url::parse(website_origin)?;
+        let mut origin = Url::parse(cloud_origin)?;
         anyhow::ensure!(
             origin.scheme() == "https"
                 && origin.host_str().is_some()
@@ -55,7 +55,7 @@ impl TicketRedeemer {
                 && origin.password().is_none()
                 && origin.query().is_none()
                 && origin.fragment().is_none(),
-            "website origin must be an HTTPS origin without credentials, query, or fragment"
+            "cloud origin must be an HTTPS origin without credentials, query, or fragment"
         );
         anyhow::ensure!(
             valid_credential(&service_credential),

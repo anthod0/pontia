@@ -40,31 +40,28 @@ pub trait EdgeNetworkClient {
     async fn verify_health(&self, credential: &str) -> Result<String>;
 }
 
-pub struct HttpWebsiteClient {
+pub struct HttpCloudClient {
     client: Client,
     origin: Url,
 }
 
-impl HttpWebsiteClient {
+impl HttpCloudClient {
     pub fn new(origin: &str) -> Result<Self> {
-        let parsed = Url::parse(origin).context("--website-origin must be a valid URL")?;
-        anyhow::ensure!(
-            parsed.scheme() == "https",
-            "--website-origin must use HTTPS"
-        );
+        let parsed = Url::parse(origin).context("--cloud-origin must be a valid URL")?;
+        anyhow::ensure!(parsed.scheme() == "https", "--cloud-origin must use HTTPS");
         anyhow::ensure!(
             parsed.username().is_empty()
                 && parsed.password().is_none()
                 && parsed.query().is_none()
                 && parsed.fragment().is_none()
                 && parsed.path() == "/",
-            "--website-origin must contain only an HTTPS origin"
+            "--cloud-origin must contain only an HTTPS origin"
         );
         Ok(Self {
             client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
-                .context("failed to create Website client")?,
+                .context("failed to create Cloud client")?,
             origin: parsed,
         })
     }
@@ -74,9 +71,7 @@ impl HttpWebsiteClient {
     }
 
     fn endpoint(&self, path: &str) -> Result<Url> {
-        self.origin
-            .join(path)
-            .context("failed to build Website URL")
+        self.origin.join(path).context("failed to build Cloud URL")
     }
 }
 
@@ -96,7 +91,7 @@ struct HostnameResponse {
     hostname: String,
 }
 
-impl EnrollmentClient for HttpWebsiteClient {
+impl EnrollmentClient for HttpCloudClient {
     async fn identity(&self, credential: &str) -> Result<IdentityLookup> {
         let response = self
             .client
@@ -110,10 +105,10 @@ impl EnrollmentClient for HttpWebsiteClient {
                 response
                     .json()
                     .await
-                    .context("Website returned an invalid edge identity")?,
+                    .context("Cloud returned an invalid edge identity")?,
             )),
             StatusCode::UNAUTHORIZED => Ok(IdentityLookup::Unauthorized),
-            status => anyhow::bail!("Website returned an uncertain status: {status}"),
+            status => anyhow::bail!("Cloud returned an uncertain status: {status}"),
         }
     }
 
@@ -130,16 +125,16 @@ impl EnrollmentClient for HttpWebsiteClient {
             .context("failed to enroll edge")?;
         anyhow::ensure!(
             response.status() == StatusCode::OK,
-            "Website rejected edge enrollment"
+            "Cloud rejected edge enrollment"
         );
         response
             .json()
             .await
-            .context("Website returned an invalid enrollment response")
+            .context("Cloud returned an invalid enrollment response")
     }
 }
 
-impl EdgeNetworkClient for HttpWebsiteClient {
+impl EdgeNetworkClient for HttpCloudClient {
     async fn configure_network(&self, credential: &str, candidate_ipv4: &str) -> Result<String> {
         let response = self
             .client
@@ -151,12 +146,12 @@ impl EdgeNetworkClient for HttpWebsiteClient {
             .context("failed to request edge network configuration")?;
         anyhow::ensure!(
             response.status() == StatusCode::OK,
-            "Website rejected edge network configuration"
+            "Cloud rejected edge network configuration"
         );
         Ok(response
             .json::<HostnameResponse>()
             .await
-            .context("Website returned an invalid network configuration response")?
+            .context("Cloud returned an invalid network configuration response")?
             .hostname)
     }
 
@@ -170,12 +165,12 @@ impl EdgeNetworkClient for HttpWebsiteClient {
             .context("failed to request public edge health verification")?;
         anyhow::ensure!(
             response.status() == StatusCode::OK,
-            "Website could not verify public edge health"
+            "Cloud could not verify public edge health"
         );
         Ok(response
             .json::<HostnameResponse>()
             .await
-            .context("Website returned an invalid health response")?
+            .context("Cloud returned an invalid health response")?
             .hostname)
     }
 }
@@ -192,7 +187,7 @@ pub async fn initialize_and_enroll<C: EnrollmentClient>(
             IdentityLookup::Registered(identity) => {
                 anyhow::ensure!(
                     identity.edge_id == existing.edge_id,
-                    "Website returned a different edge identity"
+                    "Cloud returned a different edge identity"
                 );
                 return Ok(InitializationResult::AlreadyRegistered(identity));
             }
@@ -215,7 +210,7 @@ async fn enroll_credential<C: EnrollmentClient>(
     let identity = client.enroll(ticket, &credential.value).await?;
     anyhow::ensure!(
         identity.edge_id == expected_edge_id,
-        "Website returned a different edge identity"
+        "Cloud returned a different edge identity"
     );
     Ok(InitializationResult::Enrolled(identity))
 }
@@ -446,7 +441,7 @@ mod tests {
                 .handle(handle.clone())
                 .serve(router.into_make_service()),
         );
-        let client = HttpWebsiteClient {
+        let client = HttpCloudClient {
             client: Client::builder()
                 .add_root_certificate(reqwest::Certificate::from_der(cert.der()).unwrap())
                 .redirect(reqwest::redirect::Policy::none())
@@ -479,18 +474,15 @@ mod tests {
     }
 
     #[test]
-    fn website_origin_requires_a_bare_https_origin() {
-        assert!(HttpWebsiteClient::new("https://pontia.example").is_ok());
+    fn cloud_origin_requires_a_bare_https_origin() {
+        assert!(HttpCloudClient::new("https://pontia.example").is_ok());
         for invalid in [
             "http://pontia.example",
             "https://pontia.example/path",
             "https://user@pontia.example",
             "not a URL",
         ] {
-            assert!(
-                HttpWebsiteClient::new(invalid).is_err(),
-                "accepted {invalid}"
-            );
+            assert!(HttpCloudClient::new(invalid).is_err(), "accepted {invalid}");
         }
     }
 }

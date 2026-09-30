@@ -19,7 +19,7 @@ fn default_dashboard_origin() -> String {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ServiceConfig {
-    pub website_origin: String,
+    pub cloud_origin: String,
     pub hostname: String,
     #[serde(default = "default_bootstrap_origin")]
     pub browser_bootstrap_origin: String,
@@ -41,10 +41,10 @@ impl ServiceConfig {
         .context("edge service config is invalid")?;
         hostname_from_tunnel_url(&format!("wss://{}/tunnel", config.hostname))?;
         let origin =
-            Url::parse(&config.website_origin).context("configured Website origin is invalid")?;
+            Url::parse(&config.cloud_origin).context("configured Cloud origin is invalid")?;
         anyhow::ensure!(
             origin.scheme() == "https" && origin.path() == "/",
-            "configured Website origin is invalid"
+            "configured Cloud origin is invalid"
         );
         validate_browser_origin(&config.browser_bootstrap_origin)?;
         validate_browser_origin(&config.browser_dashboard_origin)?;
@@ -69,7 +69,7 @@ fn validate_browser_origin(value: &str) -> Result<()> {
 }
 
 pub fn hostname_from_tunnel_url(tunnel_url: &str) -> Result<String> {
-    let url = Url::parse(tunnel_url).context("Website returned an invalid tunnel URL")?;
+    let url = Url::parse(tunnel_url).context("Cloud returned an invalid tunnel URL")?;
     anyhow::ensure!(
         url.scheme() == "wss"
             && url.username().is_empty()
@@ -78,7 +78,7 @@ pub fn hostname_from_tunnel_url(tunnel_url: &str) -> Result<String> {
             && url.path() == "/tunnel"
             && url.query().is_none()
             && url.fragment().is_none(),
-        "Website returned a non-canonical tunnel URL"
+        "Cloud returned a non-canonical tunnel URL"
     );
     let hostname = url.host_str().context("tunnel URL has no hostname")?;
     let label = hostname

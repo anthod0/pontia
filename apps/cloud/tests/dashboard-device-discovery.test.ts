@@ -25,7 +25,7 @@ const callGetTargetOptions = getTargetOptions as unknown as (
 
 const database = testDatabase();
 const dashboardOrigin = "https://app.pontia.dev";
-const websiteOrigin = "https://pontia.dev";
+const cloudOrigin = "https://pontia.dev";
 const jwtSecret = "dashboard-discovery-signing-key-at-least-32-bytes";
 const ownerId = "0195e7d1-1b22-7c33-9d44-123456789abc";
 const otherId = "0195e7d2-1b22-7c33-9d44-123456789abc";
@@ -36,7 +36,7 @@ function event(
   path: string,
   options: { method?: string; origin?: string; token?: string } = {},
 ): RequestEvent {
-  const url = new URL(path, websiteOrigin);
+  const url = new URL(path, cloudOrigin);
   return {
     url,
     params: { device_handle: url.pathname.split("/").at(-2) },
@@ -45,7 +45,7 @@ function event(
       headers: options.origin === undefined ? undefined : { Origin: options.origin },
     }),
     platform: {
-      env: { DB: database.binding, JWT_SECRET: jwtSecret, AUTH_ORIGIN: websiteOrigin },
+      env: { DB: database.binding, JWT_SECRET: jwtSecret, AUTH_ORIGIN: cloudOrigin },
     },
     cookies: { get: (name: string) => (name === "_at" ? options.token : undefined) },
   } as unknown as RequestEvent;

@@ -9,7 +9,7 @@
     dashboardBootstrapUrl,
     listPublicDevices,
     resolvePublicDeviceTarget,
-    WebsiteRequestError,
+    CloudRequestError,
     type PublicDevice,
   } from './remoteAccess';
 
@@ -42,11 +42,11 @@
     runtimeHandle = null;
   }
 
-  function websiteFailureMessage(error: unknown, operation: 'list' | 'target'): string {
-    if (error instanceof WebsiteRequestError && [401, 403].includes(error.status ?? 0)) {
+  function cloudFailureMessage(error: unknown, operation: 'list' | 'target'): string {
+    if (error instanceof CloudRequestError && [401, 403].includes(error.status ?? 0)) {
       return 'Sign in to Pontia again, then retry.';
     }
-    if (error instanceof WebsiteRequestError) {
+    if (error instanceof CloudRequestError) {
       return operation === 'list'
         ? 'Pontia returned an invalid device list.'
         : 'Pontia could not confirm this device target.';
@@ -71,7 +71,7 @@
         if (!controller.signal.aborted) devices = loaded;
       })
       .catch((error: unknown) => {
-        if (!controller.signal.aborted) devicesError = websiteFailureMessage(error, 'list');
+        if (!controller.signal.aborted) devicesError = cloudFailureMessage(error, 'list');
       })
       .finally(() => {
         if (!controller.signal.aborted) devicesLoading = false;
@@ -106,7 +106,7 @@
       .catch((error: unknown) => {
         if (controller.signal.aborted || handle !== requestedHandle) return;
         failedHandle = requestedHandle;
-        targetFailureMessage = websiteFailureMessage(error, 'target');
+        targetFailureMessage = cloudFailureMessage(error, 'target');
       });
 
     return () => {

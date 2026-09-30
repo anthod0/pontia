@@ -139,7 +139,7 @@ async fn bootstrap_sets_a_host_cookie_redirects_and_authorizes_only_redeemed_dev
 }
 
 #[tokio::test]
-async fn bootstrap_rejects_wrong_origins_fields_and_untrusted_website_responses_without_leaking() {
+async fn bootstrap_rejects_wrong_origins_fields_and_untrusted_cloud_responses_without_leaking() {
     let server = TestEdge::start().await;
     let device = Uuid::new_v4();
     let ticket = server.issue_dashboard_ticket(device, "valid-device");
@@ -265,10 +265,10 @@ async fn bootstrap_rejects_wrong_origins_fields_and_untrusted_website_responses_
 }
 
 #[tokio::test]
-async fn bootstrap_fails_closed_when_the_website_is_unavailable() {
+async fn bootstrap_fails_closed_when_the_cloud_is_unavailable() {
     let server = TestEdge::start().await;
     let ticket = server.issue_dashboard_ticket(Uuid::new_v4(), "offline-device");
-    server.stop_website();
+    server.stop_cloud();
 
     let response = bootstrap(&server, &ticket, None).await;
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);

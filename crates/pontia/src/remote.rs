@@ -213,7 +213,7 @@ impl RegistrationApi<'_> {
                     .to_string(),
             ),
             status => Err(format!(
-                "the website rejected the device registration query ({status}); the configured device ID was preserved"
+                "the cloud rejected the device registration query ({status}); the configured device ID was preserved"
             )),
         }
     }
@@ -231,14 +231,14 @@ impl RegistrationApi<'_> {
         }
         if !response.status().is_success() {
             return Err(format!(
-                "the website rejected the official edge request ({})",
+                "the cloud rejected the official edge request ({})",
                 response.status()
             ));
         }
         let edges: Vec<Edge> = response
             .json()
             .await
-            .map_err(|_| "the website returned an invalid official edge list".to_string())?;
+            .map_err(|_| "the cloud returned an invalid official edge list".to_string())?;
         if edges.is_empty() {
             return Err("no official edge is currently available for registration".to_string());
         }
@@ -246,7 +246,7 @@ impl RegistrationApi<'_> {
             .iter()
             .any(|edge| !uuid_v7(&edge.id) || edge.name.is_empty())
         {
-            return Err("the website returned an invalid official edge list".to_string());
+            return Err("the cloud returned an invalid official edge list".to_string());
         }
         Ok(edges)
     }
@@ -293,10 +293,10 @@ impl RegistrationApi<'_> {
                     .to_string(),
             ),
             StatusCode::BAD_REQUEST => {
-                Err("the website rejected the device registration data".to_string())
+                Err("the cloud rejected the device registration data".to_string())
             }
             status => Err(format!(
-                "the website rejected device registration ({status}); the configured device ID was preserved"
+                "the cloud rejected device registration ({status}); the configured device ID was preserved"
             )),
         }
     }
@@ -323,7 +323,7 @@ fn uncertain(action: &str, error: reqwest::Error) -> String {
 }
 
 fn uncertain_result() -> String {
-    "the website returned an invalid device registration result; the registration state is unknown and the configured device ID was preserved".to_string()
+    "the cloud returned an invalid device registration result; the registration state is unknown and the configured device ID was preserved".to_string()
 }
 
 fn login_required() -> String {

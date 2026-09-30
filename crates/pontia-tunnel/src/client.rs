@@ -36,7 +36,7 @@ const CREDENTIAL_WATCH_INTERVAL: Duration = Duration::from_millis(10);
 const STABLE_CONNECTION: Duration = Duration::from_secs(60);
 
 pub struct RemoteClient {
-    website_origin: Url,
+    cloud_origin: Url,
     device_id: Uuid,
     credential_path: PathBuf,
     http: Client,
@@ -70,7 +70,7 @@ struct CredentialFingerprint(Option<u64>);
 
 impl RemoteClient {
     pub fn new(
-        website_origin: &str,
+        cloud_origin: &str,
         device_id: Uuid,
         pontia_home: &Path,
         handler: DeviceRequestHandler,
@@ -78,7 +78,7 @@ impl RemoteClient {
         let http = Client::builder()
             .timeout(REQUEST_TIMEOUT)
             .build()
-            .map_err(|_| Error::Protocol("failed to create website client"))?;
+            .map_err(|_| Error::Protocol("failed to create cloud client"))?;
         let roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
         let tls =
             ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
@@ -87,7 +87,7 @@ impl RemoteClient {
                 .with_root_certificates(roots)
                 .with_no_client_auth();
         Self::with_clients(
-            website_origin,
+            cloud_origin,
             device_id,
             pontia_home,
             http,
@@ -97,29 +97,29 @@ impl RemoteClient {
     }
 
     pub fn with_clients(
-        website_origin: &str,
+        cloud_origin: &str,
         device_id: Uuid,
         pontia_home: &Path,
         http: Client,
         connector: Connector,
         handler: DeviceRequestHandler,
     ) -> Result<Self> {
-        let mut website_origin =
-            Url::parse(website_origin).map_err(|_| Error::Protocol("invalid website origin"))?;
-        if website_origin.scheme() != "https"
-            || website_origin.host_str().is_none()
-            || !website_origin.username().is_empty()
-            || website_origin.password().is_some()
-            || website_origin.query().is_some()
-            || website_origin.fragment().is_some()
+        let mut cloud_origin =
+            Url::parse(cloud_origin).map_err(|_| Error::Protocol("invalid cloud origin"))?;
+        if cloud_origin.scheme() != "https"
+            || cloud_origin.host_str().is_none()
+            || !cloud_origin.username().is_empty()
+            || cloud_origin.password().is_some()
+            || cloud_origin.query().is_some()
+            || cloud_origin.fragment().is_some()
         {
             return Err(Error::Protocol(
-                "website origin must be an HTTPS origin without credentials, query, or fragment",
+                "cloud origin must be an HTTPS origin without credentials, query, or fragment",
             ));
         }
-        website_origin.set_path("/");
+        cloud_origin.set_path("/");
         Ok(Self {
-            website_origin,
+            cloud_origin,
             device_id,
             credential_path: pontia_home.join("auth.json"),
             http,
@@ -190,7 +190,7 @@ impl RemoteClient {
     async fn issue_ticket(&self) -> std::result::Result<(String, Url), AttemptError> {
         let (credential, fingerprint) = read_credential(&self.credential_path)?;
         let endpoint = self
-            .website_origin
+            .cloud_origin
             .join(&format!(
                 "api/remote/devices/{}/tunnel-tickets",
                 self.device_id

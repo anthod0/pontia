@@ -4,7 +4,7 @@ import { activeLogin } from "../auth/identity";
 import { remoteDatabase } from "./http";
 
 export const PUBLIC_DASHBOARD_ORIGIN = "https://app.pontia.dev";
-export const WEBSITE_ORIGIN = "https://pontia.dev";
+export const CLOUD_ORIGIN = "https://pontia.dev";
 
 function corsHeaders(): Headers {
   return new Headers({
@@ -52,7 +52,7 @@ export async function authenticateDashboardBootstrap(
   event: RequestEvent,
 ): Promise<{ userId: string } | { response: Response }> {
   const requestOrigin = event.request.headers.get("origin");
-  if (requestOrigin !== WEBSITE_ORIGIN && requestOrigin !== PUBLIC_DASHBOARD_ORIGIN) {
+  if (requestOrigin !== CLOUD_ORIGIN && requestOrigin !== PUBLIC_DASHBOARD_ORIGIN) {
     return { response: json({ error: "invalid_origin" }, { status: 403 }) };
   }
   const userId = await authenticatedUser(event);

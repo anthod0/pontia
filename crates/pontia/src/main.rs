@@ -42,7 +42,7 @@ struct Cli {
 enum Command {
     /// Configure Pontia interactively and start its per-user service
     Init,
-    /// Sign in to the Pontia website from a headless terminal
+    /// Sign in to the Pontia cloud from a headless terminal
     Login,
     /// Configure remote device access
     Remote(remote::RemoteCommand),

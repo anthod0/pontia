@@ -41,7 +41,7 @@ export function origin(event: RequestEvent) {
   const configuredUrl = new URL(environment(event).AUTH_ORIGIN);
   if (configuredUrl.protocol !== "https:") error(503, "Authentication requires HTTPS");
   const configured = configuredUrl.origin;
-  if (event.url.origin !== configured) error(400, "Use the configured website address to sign in");
+  if (event.url.origin !== configured) error(400, "Use the configured cloud address to sign in");
   return configured;
 }
 

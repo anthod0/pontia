@@ -1,4 +1,4 @@
-# Website database
+# Cloud database
 
 ```sql
 CREATE TABLE `accounts` (

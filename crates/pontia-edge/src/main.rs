@@ -14,9 +14,7 @@ use pontia_edge::{
     challenge::ChallengeServer,
     config::{CONFIG_PATH, DATABASE_PATH, ServiceConfig, hostname_from_tunnel_url},
     credential::{CREDENTIAL_PATH, ensure_managed_directory, ensure_root, read_edge_credential},
-    enrollment::{
-        EdgeNetworkClient, HttpWebsiteClient, InitializationResult, initialize_and_enroll,
-    },
+    enrollment::{EdgeNetworkClient, HttpCloudClient, InitializationResult, initialize_and_enroll},
     network::routed_public_ipv4,
     systemd::{Systemd, UNIT_PATH},
 };
@@ -52,7 +50,7 @@ enum Command {
 #[derive(Args)]
 struct InitArgs {
     #[arg(long)]
-    website_origin: String,
+    cloud_origin: String,
     #[arg(long, value_parser = parse_edge_id)]
     edge_id: Uuid,
     #[arg(long)]
@@ -88,7 +86,7 @@ async fn init(args: InitArgs) -> Result<()> {
         args.agree_to_lets_encrypt_subscriber_agreement,
         "accept the Let's Encrypt Subscriber Agreement with --agree-to-lets-encrypt-subscriber-agreement"
     );
-    let client = HttpWebsiteClient::new(&args.website_origin)?;
+    let client = HttpCloudClient::new(&args.cloud_origin)?;
     let enrollment = initialize_and_enroll(
         &client,
         CREDENTIAL_PATH.as_ref(),
@@ -104,7 +102,7 @@ async fn init(args: InitArgs) -> Result<()> {
     let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
     let candidate_ipv4 = routed_public_ipv4(client.origin()).await?;
     let expected_config = ServiceConfig {
-        website_origin: args.website_origin,
+        cloud_origin: args.cloud_origin,
         hostname: hostname.clone(),
         browser_bootstrap_origin: "https://pontia.dev".to_owned(),
         browser_dashboard_origin: "https://app.pontia.dev".to_owned(),
@@ -123,7 +121,7 @@ async fn init(args: InitArgs) -> Result<()> {
         .await?;
     anyhow::ensure!(
         configured_hostname == hostname,
-        "Website configured a different hostname"
+        "Cloud configured a different hostname"
     );
     wait_for_dns(&hostname, candidate_ipv4).await?;
 
@@ -213,18 +211,14 @@ async fn wait_for_dns(hostname: &str, candidate: Ipv4Addr) -> Result<()> {
     anyhow::bail!("assigned hostname did not resolve to the verified IPv4 address")
 }
 
-async fn wait_for_health(
-    client: &HttpWebsiteClient,
-    credential: &str,
-    hostname: &str,
-) -> Result<()> {
+async fn wait_for_health(client: &HttpCloudClient, credential: &str, hostname: &str) -> Result<()> {
     for _ in 0..HEALTH_WAIT_ATTEMPTS {
         if matches!(client.verify_health(credential).await, Ok(value) if value == hostname) {
             return Ok(());
         }
         tokio::time::sleep(RETRY_DELAY).await;
     }
-    anyhow::bail!("Website could not verify the public HTTPS health endpoint")
+    anyhow::bail!("Cloud could not verify the public HTTPS health endpoint")
 }
 
 async fn serve() -> Result<()> {
@@ -244,7 +238,7 @@ async fn serve() -> Result<()> {
         dashboard: config.browser_dashboard_origin.clone(),
     };
     let edge = Edge::new(
-        TicketRedeemer::new(&config.website_origin, service_credential)?,
+        TicketRedeemer::new(&config.cloud_origin, service_credential)?,
         access,
         origins,
         ConnectionLimits::default(),
@@ -363,7 +357,7 @@ mod tests {
         let init = Cli::try_parse_from([
             "pontia-edge",
             "init",
-            "--website-origin",
+            "--cloud-origin",
             "https://pontia.example",
             "--edge-id",
             "0199791c-6600-7000-8000-000000000001",
@@ -377,7 +371,7 @@ mod tests {
             Cli::try_parse_from([
                 "pontia-edge",
                 "init",
-                "--website-origin",
+                "--cloud-origin",
                 "https://pontia.example",
                 "--edge-id",
                 "0199791c-6600-7000-8000-000000000001",

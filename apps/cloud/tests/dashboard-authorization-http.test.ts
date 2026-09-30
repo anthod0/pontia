@@ -11,7 +11,7 @@ import { testDatabase } from "./database";
 const callLaunch = launch as unknown as (event: RequestEvent) => Promise<Response>;
 const callRedeem = redeem as unknown as (event: RequestEvent) => Promise<Response>;
 const database = testDatabase();
-const websiteOrigin = "https://pontia.dev";
+const cloudOrigin = "https://pontia.dev";
 const dashboardOrigin = "https://app.pontia.dev";
 const jwtSecret = "dashboard-authorization-signing-key-at-least-32-bytes";
 const userId = "0195e7d1-1b22-7c33-9d44-123456789abc";
@@ -34,7 +34,7 @@ function launchEvent(
 ) {
   const url = new URL(
     `/api/dashboard/devices/${handle}/bootstrap${options.query ?? ""}`,
-    websiteOrigin,
+    cloudOrigin,
   );
   return {
     url,
@@ -48,7 +48,7 @@ function launchEvent(
       env: {
         DB: options.binding ?? database.binding,
         JWT_SECRET: jwtSecret,
-        AUTH_ORIGIN: websiteOrigin,
+        AUTH_ORIGIN: cloudOrigin,
       },
     },
     cookies: { get: (name: string) => (name === "_at" ? options.token : undefined) },
@@ -56,7 +56,7 @@ function launchEvent(
 }
 
 function redeemEvent(body: unknown, options: { credential?: string; binding?: unknown } = {}) {
-  const url = new URL("/api/edge/dashboard-tickets/redeem", websiteOrigin);
+  const url = new URL("/api/edge/dashboard-tickets/redeem", cloudOrigin);
   return {
     url,
     params: {},
@@ -146,10 +146,8 @@ test("launch requires an active login and an exact approved Origin", async () =>
     expect(await response.text()).not.toContain(token);
   }
 
-  const websiteRequest = await callLaunch(
-    launchEvent("office-mac", { origin: websiteOrigin, token }),
-  );
-  expect(websiteRequest.status).toBe(200);
+  const cloudRequest = await callLaunch(launchEvent("office-mac", { origin: cloudOrigin, token }));
+  expect(cloudRequest.status).toBe(200);
 
   const queryOverride = await callLaunch(
     launchEvent("office-mac", {

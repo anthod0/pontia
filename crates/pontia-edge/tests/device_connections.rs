@@ -147,7 +147,7 @@ async fn production_client_fetches_a_fresh_ticket_when_reconnecting() {
     )
     .unwrap();
     let client = RemoteClient::with_clients(
-        &server.website_origin,
+        &server.cloud_origin,
         device_id,
         &home,
         server.http.clone(),

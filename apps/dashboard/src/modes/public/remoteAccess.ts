@@ -1,6 +1,6 @@
 import { isValidDeviceHandle } from "$lib/remoteDashboard";
 
-const WEBSITE_ORIGIN = "https://pontia.dev";
+const CLOUD_ORIGIN = "https://pontia.dev";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const EDGE_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.edge\.pontia\.dev$/;
 
@@ -15,13 +15,13 @@ export type PublicDeviceTarget = {
   edgeApiOrigin: string;
 };
 
-export class WebsiteRequestError extends Error {
+export class CloudRequestError extends Error {
   constructor(
     message: string,
     readonly status?: number,
   ) {
     super(message);
-    this.name = "WebsiteRequestError";
+    this.name = "CloudRequestError";
   }
 }
 
@@ -38,7 +38,7 @@ function hasOnlyKeys(value: Record<string, unknown>, keys: string[]): boolean {
 
 function parseDevice(value: unknown): PublicDevice {
   if (!isRecord(value) || !hasOnlyKeys(value, ["device_handle", "name"])) {
-    throw new WebsiteRequestError("Website returned an invalid device list.");
+    throw new CloudRequestError("Cloud returned an invalid device list.");
   }
   const handle = value.device_handle;
   const name = value.name;
@@ -50,20 +50,20 @@ function parseDevice(value: unknown): PublicDevice {
     name.length > 255 ||
     name.trim() !== name
   ) {
-    throw new WebsiteRequestError("Website returned an invalid device list.");
+    throw new CloudRequestError("Cloud returned an invalid device list.");
   }
   return { handle, name };
 }
 
 function parseEdgeOrigin(value: unknown): string {
   if (typeof value !== "string") {
-    throw new WebsiteRequestError("Website returned an invalid device target.");
+    throw new CloudRequestError("Cloud returned an invalid device target.");
   }
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    throw new WebsiteRequestError("Website returned an invalid device target.");
+    throw new CloudRequestError("Cloud returned an invalid device target.");
   }
   if (
     value !== url.origin ||
@@ -76,30 +76,29 @@ function parseEdgeOrigin(value: unknown): string {
     url.hash ||
     !EDGE_HOST.test(url.hostname)
   ) {
-    throw new WebsiteRequestError("Website returned an invalid device target.");
+    throw new CloudRequestError("Cloud returned an invalid device target.");
   }
   return value;
 }
 
-async function websiteJson(url: string, signal?: AbortSignal): Promise<unknown> {
+async function cloudJson(url: string, signal?: AbortSignal): Promise<unknown> {
   const response = await fetch(url, { credentials: "include", signal });
   if (!response.ok) {
-    throw new WebsiteRequestError("Website request failed.", response.status);
+    throw new CloudRequestError("Cloud request failed.", response.status);
   }
   try {
     return await response.json();
   } catch {
-    throw new WebsiteRequestError("Website returned an invalid response.", response.status);
+    throw new CloudRequestError("Cloud returned an invalid response.", response.status);
   }
 }
 
 export async function listPublicDevices(signal?: AbortSignal): Promise<PublicDevice[]> {
-  const value = await websiteJson(`${WEBSITE_ORIGIN}/api/dashboard/devices`, signal);
-  if (!Array.isArray(value))
-    throw new WebsiteRequestError("Website returned an invalid device list.");
+  const value = await cloudJson(`${CLOUD_ORIGIN}/api/dashboard/devices`, signal);
+  if (!Array.isArray(value)) throw new CloudRequestError("Cloud returned an invalid device list.");
   const devices = value.map(parseDevice);
   if (new Set(devices.map((device) => device.handle)).size !== devices.length) {
-    throw new WebsiteRequestError("Website returned an invalid device list.");
+    throw new CloudRequestError("Cloud returned an invalid device list.");
   }
   return devices;
 }
@@ -109,10 +108,10 @@ export async function resolvePublicDeviceTarget(
   signal?: AbortSignal,
 ): Promise<PublicDeviceTarget> {
   if (!isValidDeviceHandle(handle)) {
-    throw new WebsiteRequestError("Invalid device handle.");
+    throw new CloudRequestError("Invalid device handle.");
   }
-  const value = await websiteJson(
-    `${WEBSITE_ORIGIN}/api/dashboard/devices/${encodeURIComponent(handle)}/target`,
+  const value = await cloudJson(
+    `${CLOUD_ORIGIN}/api/dashboard/devices/${encodeURIComponent(handle)}/target`,
     signal,
   );
   if (
@@ -122,7 +121,7 @@ export async function resolvePublicDeviceTarget(
     typeof value.device_id !== "string" ||
     !UUID.test(value.device_id)
   ) {
-    throw new WebsiteRequestError("Website returned an invalid device target.");
+    throw new CloudRequestError("Cloud returned an invalid device target.");
   }
   return {
     handle,
@@ -133,5 +132,5 @@ export async function resolvePublicDeviceTarget(
 
 export function dashboardBootstrapUrl(handle: string): string {
   if (!isValidDeviceHandle(handle)) throw new Error("Invalid device handle.");
-  return `${WEBSITE_ORIGIN}/api/dashboard/devices/${encodeURIComponent(handle)}/bootstrap`;
+  return `${CLOUD_ORIGIN}/api/dashboard/devices/${encodeURIComponent(handle)}/bootstrap`;
 }

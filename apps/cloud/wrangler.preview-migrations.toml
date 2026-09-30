@@ -1,6 +1,6 @@
 [[d1_databases]]
 binding = "DB"
-database_name = "pontia-website-staging"
-database_id = "f6b7ddb3-0d81-4677-a5f0-8344074e7856"
+database_name = "pontia-cloud-staging"
+database_id = "37de0e2f-1dcd-4673-ad66-96f909c9fcec"
 migrations_dir = "migrations"
 migrations_pattern = "migrations/*/migration.sql"

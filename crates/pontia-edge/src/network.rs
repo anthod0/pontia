@@ -22,16 +22,16 @@ pub fn is_global_unicast(address: Ipv4Addr) -> bool {
         || (a == 203 && b == 0 && c == 113))
 }
 
-pub async fn routed_public_ipv4(website_origin: &Url) -> Result<Ipv4Addr> {
-    let host = website_origin
+pub async fn routed_public_ipv4(cloud_origin: &Url) -> Result<Ipv4Addr> {
+    let host = cloud_origin
         .host_str()
-        .context("Website origin has no hostname")?;
-    let website = tokio::net::lookup_host((host, 443))
+        .context("Cloud origin has no hostname")?;
+    let cloud = tokio::net::lookup_host((host, 443))
         .await
-        .context("failed to resolve Website hostname")?
+        .context("failed to resolve Cloud hostname")?
         .find(|address| address.is_ipv4())
-        .context("Website hostname has no IPv4 address")?;
-    routed_public_ipv4_for(website)
+        .context("Cloud hostname has no IPv4 address")?;
+    routed_public_ipv4_for(cloud)
 }
 
 fn routed_public_ipv4_for(destination: SocketAddr) -> Result<Ipv4Addr> {
@@ -39,14 +39,14 @@ fn routed_public_ipv4_for(destination: SocketAddr) -> Result<Ipv4Addr> {
         .context("failed to create IPv4 route socket")?;
     socket
         .connect(destination)
-        .context("failed to select a route to Website")?;
+        .context("failed to select a route to Cloud")?;
     let address = match socket.local_addr()?.ip() {
         IpAddr::V4(address) => address,
-        IpAddr::V6(_) => anyhow::bail!("Website route selected IPv6"),
+        IpAddr::V6(_) => anyhow::bail!("Cloud route selected IPv6"),
     };
     anyhow::ensure!(
         is_global_unicast(address),
-        "Website route did not select a global-unicast IPv4 address"
+        "Cloud route did not select a global-unicast IPv4 address"
     );
     let directly_bound = getifaddrs()
         .context("failed to inspect local network interfaces")?

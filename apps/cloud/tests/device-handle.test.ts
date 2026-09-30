@@ -21,7 +21,7 @@ describe("device handle", () => {
     expect(isValidDeviceHandle("office.mac")).toBe(false);
   });
 
-  test("rejects every Website-reserved handle", () => {
+  test("rejects every Cloud-reserved handle", () => {
     for (const handle of reservedDeviceHandles) {
       expect(isValidDeviceHandle(handle)).toBe(false);
     }
