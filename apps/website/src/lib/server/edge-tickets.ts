@@ -43,6 +43,7 @@ export async function issueEdgeTicket<T>(
     expectedEdgeId: string;
     payload: T;
     expiresAt: Date;
+    createdAt?: Date;
     decodePayload: EdgeTicketPayloadDecoder<T>;
   },
   dependencies: EdgeTicketDependencies = defaultDependencies,
@@ -65,6 +66,7 @@ export async function issueEdgeTicket<T>(
     expectedEdgeId: input.expectedEdgeId,
     payload,
     expiresAt: input.expiresAt.toISOString(),
+    createdAt: (input.createdAt ?? dependencies.now()).toISOString(),
   });
   await cleanupExpiredEdgeTickets(db, dependencies.now());
 
@@ -78,9 +80,19 @@ export async function consumeEdgeTicket<T>(
     purpose: EdgeTicketPurpose;
     expectedEdgeId: string;
     decodePayload: EdgeTicketPayloadDecoder<T>;
-    additionalCondition?(ticket: { userId: string; expectedEdgeId: string; payload: T }): SQL;
+    additionalCondition?(ticket: {
+      userId: string;
+      expectedEdgeId: string;
+      payload: T;
+      createdAt: string;
+    }): SQL;
   },
-): Promise<{ userId: string; expectedEdgeId: string; payload: T } | null> {
+): Promise<{
+  userId: string;
+  expectedEdgeId: string;
+  payload: T;
+  createdAt: string;
+} | null> {
   const parsed = parseEdgeTicket(input.ticket);
   if (!parsed) return null;
   const secretHash = await sha256Base64url(parsed.secret);
@@ -90,6 +102,7 @@ export async function consumeEdgeTicket<T>(
       userId: edgeTickets.userId,
       expectedEdgeId: edgeTickets.expectedEdgeId,
       payload: edgeTickets.payload,
+      createdAt: edgeTickets.createdAt,
     })
     .from(edgeTickets)
     .where(
@@ -116,6 +129,7 @@ export async function consumeEdgeTicket<T>(
     userId: candidate.userId,
     expectedEdgeId: candidate.expectedEdgeId,
     payload: decoded,
+    createdAt: candidate.createdAt,
   };
   const consumed = await db
     .update(edgeTickets)
@@ -128,6 +142,7 @@ export async function consumeEdgeTicket<T>(
         eq(edgeTickets.expectedEdgeId, input.expectedEdgeId),
         eq(edgeTickets.userId, candidate.userId),
         eq(edgeTickets.payload, candidate.payload),
+        eq(edgeTickets.createdAt, candidate.createdAt),
         isNull(edgeTickets.consumedAt),
         gt(edgeTickets.expiresAt, databaseTimestamp),
         input.additionalCondition?.(ticket),

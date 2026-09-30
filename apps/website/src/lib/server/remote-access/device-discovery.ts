@@ -12,6 +12,7 @@ export type DashboardDevice = {
 export type DashboardDeviceTarget = {
   deviceHandle: string;
   deviceId: string;
+  edgeId: string;
   edgeApiOrigin: string;
 };
 
@@ -36,6 +37,7 @@ export async function findDashboardDeviceTarget(
     .select({
       deviceHandle: devices.handle,
       deviceId: devices.id,
+      edgeId: devices.edgeId,
       tunnelUrl: edges.tunnelUrl,
     })
     .from(devices)
@@ -48,6 +50,7 @@ export async function findDashboardDeviceTarget(
   return {
     deviceHandle: target.deviceHandle,
     deviceId: target.deviceId,
+    edgeId: target.edgeId,
     edgeApiOrigin: apiOrigin,
   };
 }

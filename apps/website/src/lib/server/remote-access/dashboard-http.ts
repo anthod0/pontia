@@ -4,6 +4,7 @@ import { activeLogin } from "../auth/identity";
 import { remoteDatabase } from "./http";
 
 export const PUBLIC_DASHBOARD_ORIGIN = "https://app.pontia.dev";
+export const WEBSITE_ORIGIN = "https://pontia.dev";
 
 function corsHeaders(): Headers {
   return new Headers({
@@ -24,6 +25,13 @@ export function dashboardPreflight(request: Request): Response {
     : new Response(null, { status: 403, headers: rejectedCorsHeaders() });
 }
 
+async function authenticatedUser(event: RequestEvent): Promise<string | null> {
+  const claims = await currentLogin(event);
+  if (!claims) return null;
+  const login = await activeLogin(remoteDatabase(event), claims.sub, claims.user_id);
+  return login?.userId ?? null;
+}
+
 export async function authenticateDashboardRequest(
   event: RequestEvent,
 ): Promise<{ userId: string; headers: Headers } | { response: Response }> {
@@ -33,12 +41,22 @@ export async function authenticateDashboardRequest(
     };
   }
   const headers = corsHeaders();
-  const claims = await currentLogin(event);
-  if (claims) {
-    const login = await activeLogin(remoteDatabase(event), claims.sub, claims.user_id);
-    if (login) return { userId: login.userId, headers };
-  }
+  const userId = await authenticatedUser(event);
+  if (userId) return { userId, headers };
   return {
     response: json({ error: "invalid_credentials" }, { status: 401, headers }),
   };
+}
+
+export async function authenticateDashboardBootstrap(
+  event: RequestEvent,
+): Promise<{ userId: string } | { response: Response }> {
+  const requestOrigin = event.request.headers.get("origin");
+  if (requestOrigin !== WEBSITE_ORIGIN && requestOrigin !== PUBLIC_DASHBOARD_ORIGIN) {
+    return { response: json({ error: "invalid_origin" }, { status: 403 }) };
+  }
+  const userId = await authenticatedUser(event);
+  return userId
+    ? { userId }
+    : { response: json({ error: "invalid_credentials" }, { status: 401 }) };
 }
