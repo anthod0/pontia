@@ -1,14 +1,14 @@
-name: Website preview
+name: Cloud preview
 
 on:
   push:
     paths:
-      - apps/website/**
-      - .github/workflows/website-preview.yml
+      - apps/cloud/**
+      - .github/workflows/cloud-preview.yml
   workflow_dispatch:
 
 concurrency:
-  group: website-preview-${{ github.ref }}
+  group: cloud-preview-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-24.04
     defaults:
       run:
-        working-directory: apps/website
+        working-directory: apps/cloud
     steps:
       - uses: actions/checkout@v6
         with:
@@ -98,7 +98,7 @@ jobs:
           deployment_id="$(jq -er '.deployment.id' "$output_file")"
 
           {
-            echo "## Website preview"
+            echo "## Cloud preview"
             echo
             echo "- Preview: \`$preview_name\`"
             echo "- Deployment: \`$deployment_id\`"

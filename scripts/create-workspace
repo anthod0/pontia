@@ -54,7 +54,7 @@ copy_paths=(
   .env .env.local
   node_modules
   apps/dashboard/node_modules apps/dashboard/.svelte-kit apps/dashboard/dist
-  apps/website/node_modules apps/website/.svelte-kit apps/website/build
+  apps/cloud/node_modules apps/cloud/.svelte-kit apps/cloud/build
   clients/pi/node_modules
   target
 )
