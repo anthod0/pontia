@@ -13,6 +13,32 @@ const identity = {
   tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
 };
 
+function httpResponse(body: string, status = "200 OK") {
+  return `HTTP/1.1 ${status}\r\nContent-Length: ${new TextEncoder().encode(body).byteLength}\r\nConnection: close\r\n\r\n${body}`;
+}
+
+function socketResponse(response: string, request?: (value: string) => void) {
+  let written = "";
+  return {
+    opened: Promise.resolve({}),
+    readable: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(response));
+        controller.close();
+      },
+    }),
+    writable: new WritableStream<Uint8Array>({
+      write(chunk) {
+        written += new TextDecoder().decode(chunk);
+      },
+      close() {
+        request?.(written);
+      },
+    }),
+    async close() {},
+  };
+}
+
 test("extracts only a canonical assigned edge hostname", () => {
   expect(edgeHostname(identity.tunnelUrl)).toBe("brave-silver-atlas.edge.pontia.dev");
   for (const invalid of [
@@ -58,28 +84,32 @@ test("verifies address control before creating an idempotent A record", async ()
   };
   const result = await configureEdgeNetwork(identity, "8.8.8.8", {
     randomBytes: () => new Uint8Array(32).fill(7),
-    fetch: async (input, init) => {
-      calls.push(input);
-      expect(init.redirect).toBe("manual");
-      return new Response(input.split("/").at(-1));
+    connect: (address) => {
+      calls.push(`${address.hostname}:${address.port}`);
+      const challenge = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc";
+      return socketResponse(httpResponse(challenge), (request) => calls.push(request));
     },
     dns,
   });
   expect(result).toEqual({ status: "configured", hostname: "brave-silver-atlas.edge.pontia.dev" });
-  expect(calls[0]).toStartWith("http://8.8.8.8/.well-known/pontia-edge-address/");
-  expect(calls[1]).toBe("brave-silver-atlas.edge.pontia.dev=8.8.8.8");
+  expect(calls[0]).toBe("8.8.8.8:80");
+  expect(calls[1]).toStartWith(
+    "GET /.well-known/pontia-edge-address/BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc HTTP/1.1\r\n",
+  );
+  expect(calls[1]).toContain("\r\nHost: 8.8.8.8\r\n");
+  expect(calls[2]).toBe("brave-silver-atlas.edge.pontia.dev=8.8.8.8");
 });
 
-test("does not touch DNS when the probe redirects, mismatches, or is too large", async () => {
+test("does not touch DNS when the TCP probe has a bad status, mismatches, or is too large", async () => {
   for (const response of [
-    new Response("wrong"),
-    new Response("redirect", { status: 302, headers: { Location: "https://example.test" } }),
-    new Response("x".repeat(129)),
+    httpResponse("wrong"),
+    httpResponse("redirect", "302 Found"),
+    httpResponse("x".repeat(4_097)),
   ]) {
     let dnsCalls = 0;
     const result = await configureEdgeNetwork(identity, "8.8.8.8", {
       randomBytes: () => new Uint8Array(32).fill(9),
-      fetch: async () => response,
+      connect: () => socketResponse(response),
       dns: {
         async ensureA() {
           dnsCalls += 1;

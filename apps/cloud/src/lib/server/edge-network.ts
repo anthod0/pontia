@@ -7,6 +7,7 @@ const EDGE_ZONE = "edge.pontia.dev";
 const CHALLENGE_PREFIX = "/.well-known/pontia-edge-address/";
 const PROBE_TIMEOUT_MS = 5_000;
 const MAX_PROBE_BYTES = 128;
+const MAX_PROBE_RESPONSE_BYTES = 4_096;
 const HEALTH_RESPONSE = "ok";
 
 export type EdgeNetworkIdentity = {
@@ -17,11 +18,20 @@ export interface DnsProvider {
   ensureA(hostname: string, address: string): Promise<void>;
 }
 
+type TcpSocket = {
+  readable: ReadableStream<Uint8Array>;
+  writable: WritableStream<Uint8Array>;
+  opened: Promise<unknown>;
+  close(): Promise<void>;
+};
+
 export type EdgeNetworkDependencies = {
   randomBytes(length: number): Uint8Array;
-  fetch(input: string, init: RequestInit): Promise<Response>;
+  connect(address: { hostname: string; port: number }): TcpSocket;
   dns: DnsProvider;
 };
+
+type HttpFetcher = (input: string, init: RequestInit) => Promise<Response>;
 
 export function edgeHostname(tunnelUrl: string): string | null {
   let parsed: URL;
@@ -117,6 +127,62 @@ function nonce(randomBytes: (length: number) => Uint8Array) {
     .replace(/=+$/, "");
 }
 
+async function readSocket(socket: TcpSocket, maximum: number) {
+  const reader = socket.readable.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maximum) throw new Error("response too large");
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+async function probeIpv4(
+  candidateIpv4: string,
+  challenge: string,
+  connect: EdgeNetworkDependencies["connect"],
+) {
+  const socket = connect({ hostname: candidateIpv4, port: 80 });
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const probe = (async () => {
+      await socket.opened;
+      const writer = socket.writable.getWriter();
+      await writer.write(
+        new TextEncoder().encode(
+          `GET ${CHALLENGE_PREFIX}${challenge} HTTP/1.1\r\nHost: ${candidateIpv4}\r\nAccept: text/plain\r\nConnection: close\r\n\r\n`,
+        ),
+      );
+      await writer.close();
+      return readSocket(socket, MAX_PROBE_RESPONSE_BYTES);
+    })();
+    const response = await Promise.race([
+      probe,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("probe timed out")), PROBE_TIMEOUT_MS);
+      }),
+    ]);
+    const separator = response.indexOf("\r\n\r\n");
+    if (separator < 0) return false;
+    const headers = response.slice(0, separator);
+    const body = response.slice(separator + 4);
+    return /^HTTP\/1\.[01] 200(?: |$)/.test(headers.split("\r\n", 1)[0]) && body === challenge;
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+    await socket.close().catch(() => undefined);
+  }
+}
+
 export async function configureEdgeNetwork(
   identity: EdgeNetworkIdentity,
   candidateIpv4: string,
@@ -126,15 +192,8 @@ export async function configureEdgeNetwork(
   if (!hostname || !isGlobalUnicastIpv4(candidateIpv4)) return { status: "invalid" as const };
 
   const challenge = nonce(dependencies.randomBytes);
-  let response: Response;
   try {
-    response = await dependencies.fetch(`http://${candidateIpv4}${CHALLENGE_PREFIX}${challenge}`, {
-      method: "GET",
-      redirect: "manual",
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-      headers: { Accept: "text/plain" },
-    });
-    if (response.status !== 200 || (await boundedText(response, MAX_PROBE_BYTES)) !== challenge) {
+    if (!(await probeIpv4(candidateIpv4, challenge, dependencies.connect))) {
       return { status: "unreachable" as const };
     }
   } catch {
@@ -145,10 +204,7 @@ export async function configureEdgeNetwork(
   return { status: "configured" as const, hostname };
 }
 
-export async function verifyEdgeHealth(
-  identity: EdgeNetworkIdentity,
-  fetcher: EdgeNetworkDependencies["fetch"],
-) {
+export async function verifyEdgeHealth(identity: EdgeNetworkIdentity, fetcher: HttpFetcher) {
   const hostname = edgeHostname(identity.tunnelUrl);
   if (!hostname) return false;
   try {

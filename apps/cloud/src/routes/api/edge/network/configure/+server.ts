@@ -32,12 +32,13 @@ export const POST: RequestHandler = async (event) => {
     }
     const identity = await edgeNetworkIdentity(db, principal.edgeId);
     if (!identity) return json({ error: "invalid_edge_credentials" }, { status: 401 });
+    const { connect } = await import("cloudflare:sockets");
     const result = await configureEdgeNetwork(
       identity,
       (body as { candidate_ipv4: string }).candidate_ipv4,
       {
         randomBytes: (length) => crypto.getRandomValues(new Uint8Array(length)),
-        fetch,
+        connect,
         dns: new CloudflareDnsProvider(env.CLOUDFLARE_DNS_TOKEN, env.CLOUDFLARE_DNS_ZONE_ID),
       },
     );
