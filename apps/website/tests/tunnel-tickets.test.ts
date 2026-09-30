@@ -49,6 +49,7 @@ async function seedTicketFixture() {
     userId: "user-owner",
     edgeId: "edge-target",
     handle: "target-device",
+    name: "Target device",
   });
 }
 

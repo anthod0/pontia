@@ -6,7 +6,7 @@ import { isValidDeviceHandle } from "./device-handle";
 
 export type DashboardDevice = {
   deviceHandle: string;
-  name: string | null;
+  name: string;
 };
 
 export type DashboardDeviceTarget = {

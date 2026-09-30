@@ -58,7 +58,7 @@ export const devices = sqliteTable(
       .notNull()
       .references(() => edges.id, { onDelete: "restrict" }),
     handle: text().notNull(),
-    name: text(),
+    name: text().notNull(),
     createdAt: text("created_at").notNull().default(timestamp),
     updatedAt: text("updated_at").notNull().default(timestamp),
   },

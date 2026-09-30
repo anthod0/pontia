@@ -6,7 +6,7 @@ import type { RequestHandler } from "./$types";
 function deviceResponseBody(device: {
   id: string;
   handle: string;
-  name: string | null;
+  name: string;
   edgeId: string;
   edgeName: string;
 }) {

@@ -93,12 +93,14 @@ async function seedFixtureAndLogin() {
       userId,
       edgeId,
       handle: "office-mac",
+      name: "Office Mac",
     },
     {
       id: "0195e7d5-1b22-7c33-9d44-123456789abc",
       userId: otherUserId,
       edgeId,
       handle: "other-device",
+      name: "Other device",
     },
   ]);
   return (await issueLogin(database.db, sessionId, jwtSecret)).token;

@@ -63,6 +63,7 @@ test("owned device lookup returns its current edge target", async () => {
     userId: "user-owner",
     edgeId: "edge-target",
     handle: "owned-device",
+    name: "Owned device",
   });
 
   expect(await findOwnedDeviceTarget(database.db, "user-owner", "device-owned")).toEqual({
@@ -83,6 +84,7 @@ test("device binding checks owner, device, and edge together", async () => {
     userId: "user-binding",
     edgeId: "edge-binding",
     handle: "bound-device",
+    name: "Bound device",
   });
 
   expect(
@@ -104,6 +106,7 @@ test("device foreign keys cascade owners and restrict deleting assigned edges", 
     userId: "user-constraints",
     edgeId: "edge-constraints",
     handle: "constrained-device",
+    name: "Constrained device",
   });
 
   await expect(

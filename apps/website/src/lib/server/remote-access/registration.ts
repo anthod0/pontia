@@ -13,7 +13,7 @@ export type RegistrationEdge = {
 export type RegisteredDevice = {
   id: string;
   handle: string;
-  name: string | null;
+  name: string;
   edgeId: string;
   edgeName: string;
 };

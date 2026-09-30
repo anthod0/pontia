@@ -91,6 +91,18 @@ test("device registration creates once and returns the stored record on retry", 
   });
 });
 
+test("device names are required by the database", async () => {
+  await database.db.insert(users).values({ id: "user-owner" });
+  await insertEdge(registrationEdge, "Tokyo");
+
+  await expect(
+    database.binding
+      .prepare("INSERT INTO devices(id, user_id, edge_id, handle, name) VALUES (?, ?, ?, ?, NULL)")
+      .bind(deviceId, "user-owner", registrationEdge, "missing-name")
+      .run(),
+  ).rejects.toThrow();
+});
+
 test("device handles are stable and unique within a user", async () => {
   await database.db.insert(users).values({ id: "user-owner" });
   await insertEdge(registrationEdge, "Tokyo");

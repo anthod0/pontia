@@ -49,6 +49,7 @@ async function seedFixture(tunnelUrl = "wss://brave-silver-atlas.edge.pontia.dev
     userId: ownerId,
     edgeId,
     handle: "office-mac",
+    name: "Office Mac",
   });
 }
 
