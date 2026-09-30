@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-01
+
+### Fixed
+
+- Deferred self-hosted Edge registration until its public HTTPS health endpoint has been verified.
+- Verified Edge public IPv4 control through direct HTTP probes without following redirects.
+
 ## [0.3.1] - 2026-09-30
 
 ### Fixed
@@ -94,7 +101,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/anthod0/pontia/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/anthod0/pontia/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/anthod0/pontia/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/anthod0/pontia/compare/v0.2.0...v0.2.1
