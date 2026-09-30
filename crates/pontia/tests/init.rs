@@ -168,75 +168,50 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_opens_das
 }
 
 #[test]
-fn selecting_codex_configures_it_before_starting_pontia_with_the_same_home() {
+fn codex_is_not_available_during_initialization() {
     let dir = tempfile::tempdir().expect("temp dir");
     let user_home = dir.path().join("home");
     let pontia_home = dir.path().join("pontia");
     fs::create_dir(&user_home).expect("create home");
     let platform = FakePlatform::default();
-    let mut input = Cursor::new(b"codex\n\n\n".to_vec());
+    let mut input = Cursor::new(b"codex\n".to_vec());
     let mut output = Vec::new();
 
-    run(
+    let error = run(
         &mut input,
         &mut output,
         &vars(&user_home, &pontia_home),
         &platform,
     )
-    .expect("initialize Codex integration");
+    .expect_err("reject unavailable Codex integration");
 
-    let codex_home = user_home.join(".codex");
-    assert_eq!(
-        platform.events.borrow().as_slice(),
-        [
-            "inspect-codex",
-            "preflight:false",
-            &format!("initialize-codex:{}", codex_home.display()),
-            &format!(
-                "start:{}:true:{}",
-                pontia_home.display(),
-                codex_home.display()
-            ),
-            "dashboard-ready:127.0.0.1:8080",
-        ]
-    );
+    assert_eq!(error, "unsupported Agent Client selection: codex");
+    assert!(platform.events.borrow().is_empty());
     let output = String::from_utf8(output).expect("UTF-8 output");
-    assert!(output.contains("Codex integration: register autostart"));
-    assert!(output.contains(&codex_home.display().to_string()));
-    assert!(
-        !platform
-            .events
-            .borrow()
-            .iter()
-            .any(|event| event == "install-pi")
-    );
+    assert!(!output.contains("[ ] codex"));
+    assert!(!output.contains("'codex'"));
 }
 
 #[test]
-fn pi_and_codex_can_be_selected_together() {
+fn codex_cannot_be_combined_with_pi_during_initialization() {
     let dir = tempfile::tempdir().expect("temp dir");
     let user_home = dir.path().join("home");
     let pontia_home = dir.path().join("pontia");
     fs::create_dir(&user_home).expect("create home");
     let platform = FakePlatform::default();
-    let mut input = Cursor::new(b"pi,codex\n\n\n".to_vec());
+    let mut input = Cursor::new(b"pi,codex\n".to_vec());
     let mut output = Vec::new();
 
-    run(
+    let error = run(
         &mut input,
         &mut output,
         &vars(&user_home, &pontia_home),
         &platform,
     )
-    .expect("initialize both integrations");
+    .expect_err("reject unavailable Codex integration");
 
-    let events = platform.events.borrow();
-    assert!(events.iter().any(|event| event == "install-pi"));
-    assert!(
-        events
-            .iter()
-            .any(|event| event.starts_with("initialize-codex:"))
-    );
+    assert_eq!(error, "unsupported Agent Client selection: pi,codex");
+    assert!(platform.events.borrow().is_empty());
 }
 
 #[test]

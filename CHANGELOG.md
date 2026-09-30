@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-30
+
+### Added
+
+- Added self-hosted Edge enrollment, authenticated device tunnels, one-time connection tickets, and automated Edge networking.
+- Added Cloud account linking, device authorization, and remote Dashboard access through registered Edge devices.
+- Added an experimental native Codex integration with conversation history, runtime control, model selection, profile binding, and daemon management.
+- Added live turn output, richer tool-use rendering, file mentions, chat slash commands, and archived-session recovery to the Dashboard.
+
+### Changed
+
+- Moved Agent Client integrations behind dedicated adapters and application services, with Pi control and event reporting using bidirectional Unix JSON-RPC.
+- Redesigned the Dashboard and split local and public operating modes behind explicit build boundaries.
+- Renamed the hosted website domain to Cloud and migrated its package tooling to Bun.
+- Unified business HTTP endpoints under `/api/v1` and simplified native session control and history recovery.
+
+### Fixed
+
+- Added durable Workflow retries when Pi nodes fail to launch or report their initial turn.
+- Improved Pi and Codex reconnection, native history recovery, turn-boundary restoration, and Inbox delivery retry handling.
+- Hardened Cloud and Edge authorization, device login, deployment configuration, and tunnel authentication.
+
 ## [0.2.1] - 2026-09-11
 
 ### Added
@@ -66,7 +88,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/anthod0/pontia/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/anthod0/pontia/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/anthod0/pontia/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/anthod0/pontia/releases/tag/v0.1.0

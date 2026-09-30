@@ -250,10 +250,10 @@ fn line_agent_selection<R: BufRead, W: Write>(
     input: &mut R,
     output: &mut W,
 ) -> Result<AgentSelection, String> {
-    writeln!(output, "Select Agent Clients:\n  [x] pi\n  [ ] codex").map_err(io_error)?;
+    writeln!(output, "Select Agent Clients:\n  [x] pi").map_err(io_error)?;
     write!(
         output,
-        "Press Enter to keep the defaults, or type a comma-separated selection ('pi', 'codex', or 'none'): "
+        "Press Enter to keep the defaults, or type a selection ('pi' or 'none'): "
     )
     .map_err(io_error)?;
     let answer = read_answer(input, output)?;
@@ -275,16 +275,13 @@ fn line_agent_selection<R: BufRead, W: Write>(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .collect::<HashSet<_>>();
-    if selected.is_empty()
-        || selected
-            .iter()
-            .any(|value| !matches!(*value, "pi" | "codex"))
-    {
+    if selected.is_empty() || selected.iter().any(|value| !matches!(*value, "pi")) {
         return Err(format!("unsupported Agent Client selection: {answer}"));
     }
     Ok(AgentSelection {
         pi: selected.contains("pi"),
-        codex: selected.contains("codex"),
+        // codex: selected.contains("codex"), // Temporarily unavailable in pontia init.
+        codex: false,
     })
 }
 
@@ -295,13 +292,17 @@ fn interactive_agent_selection<R: BufRead, W: Write>(
     output.flush().map_err(io_error)?;
     let selected = MultiSelect::new()
         .with_prompt("Select Agent Clients (Space to toggle, Enter to confirm)")
-        .items(["pi", "codex"])
-        .defaults(&[true, false])
+        .items([
+            "pi",
+            // "codex", // Temporarily unavailable in pontia init.
+        ])
+        .defaults(&[true])
         .interact_on(&Term::stdout())
         .map_err(|error| format!("Agent Client selection failed: {error}"))?;
     Ok(AgentSelection {
         pi: selected.contains(&0),
-        codex: selected.contains(&1),
+        // codex: selected.contains(&1), // Temporarily unavailable in pontia init.
+        codex: false,
     })
 }
 
