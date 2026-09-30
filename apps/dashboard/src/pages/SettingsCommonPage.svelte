@@ -10,7 +10,7 @@
   import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
   import { startEventStream, stopEventStream } from '../services/eventStream'
-  import { token } from '../stores/auth'
+  import { token } from '$dashboard-mode/auth'
   import { dashboardStreamCursor, lastConnectionError, reconnectCount, resetConnectionState, sseStatus } from '../stores/connection'
 
   let draftToken = ''

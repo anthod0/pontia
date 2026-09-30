@@ -5,7 +5,7 @@
   import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
   import { validateExternalApiToken } from '../../api/client'
-  import { token } from '../../stores/auth'
+  import { token } from '$dashboard-mode/auth'
 
   let draftToken = ''
   let error = ''

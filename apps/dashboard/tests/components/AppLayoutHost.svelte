@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Layout from '../../src/routes/+layout.svelte';
+  import Layout from '../../src/modes/local/DashboardModeLayout.svelte';
 </script>
 
 <Layout>

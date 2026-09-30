@@ -1,6 +1,6 @@
 import { get } from "svelte/store";
 import type { DashboardStreamEvent } from "../api/types";
-import { token } from "../stores/auth";
+import { token } from "$dashboard-mode/auth";
 import {
   dashboardStreamCursor,
   lastConnectionError,

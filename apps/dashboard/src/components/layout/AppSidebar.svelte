@@ -11,6 +11,8 @@
   import GearIcon from 'phosphor-svelte/lib/GearIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
+  import { base } from '$app/paths'
+  import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -41,7 +43,7 @@
     { label: 'Archived sessions', path: '/sessions/archived', icon: ArchiveIcon },
   ]
 
-  let currentPath = $state(normalizePath(window.location.pathname))
+  let currentPath = $state(dashboardRelativePath())
   let renamingSessionId = $state<string | null>(null)
   let renamingSession = $state<SessionView | null>(null)
   let renameDialogOpen = $state(false)
@@ -57,10 +59,6 @@
   $effect(() => {
     if (!renameDialogOpen && renamingSession && renamingSessionId === null) cancelRenameSession()
   })
-
-  function normalizePath(pathname: string) {
-    return pathname.replace(/^\/dashboard/, '') || '/'
-  }
 
   function isActive(path: string) {
     return currentPath === path || (path !== '/' && currentPath.startsWith(`${path}/`))
@@ -118,7 +116,7 @@
 
   function go(path: string) {
     navigate(path)
-    currentPath = normalizePath(path)
+    currentPath = path
     notifyRouteChanged()
   }
 
@@ -217,7 +215,7 @@
   }
 </script>
 
-<svelte:window onpopstate={() => (currentPath = normalizePath(window.location.pathname))} />
+<svelte:window onpopstate={() => (currentPath = dashboardRelativePath())} />
 
 {#snippet shortcutHint(key: string)}
   <Kbd.Group class="ml-auto shrink-0 text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden" aria-hidden="true">
@@ -290,7 +288,7 @@
       aria-label="Open new chat"
     >
       <span class="flex size-8 shrink-0 items-center justify-center rounded-none">
-        <img src="/dashboard/logo.svg" alt="" class="size-8 shrink-0 object-contain" />
+        <img src={`${base}/logo.svg`} alt="" class="size-8 shrink-0 object-contain" />
       </span>
       <span class="truncate group-data-[collapsible=icon]:hidden">Pontia</span>
     </button>

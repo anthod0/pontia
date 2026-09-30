@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button } from '$lib/components/ui/button/index.js'
+  import { dashboardPath } from '$lib/dashboardRoutes'
   import PlaceholderPage from './PlaceholderPage.svelte'
 </script>
 
@@ -9,5 +10,5 @@
     eyebrow="404"
     description="This dashboard route is not registered yet."
   />
-  <Button href="/dashboard">Back to chat</Button>
+  <Button href={dashboardPath('/')}>Back to chat</Button>
 </div>

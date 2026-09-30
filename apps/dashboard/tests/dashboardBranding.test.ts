@@ -87,16 +87,16 @@ test("dashboard head advertises packaged logo icons", () => {
 
 test("dashboard manifest is installable within the dashboard scope", () => {
   expect(manifest).toMatchObject({
-    id: "/dashboard/",
+    id: "./",
     name: "Pontia Dashboard",
-    start_url: "/dashboard/",
-    scope: "/dashboard/",
+    start_url: "./",
+    scope: "./",
     display: "standalone",
   });
   expect(manifest.icons).toEqual(
     expect.arrayContaining([
-      { src: "/dashboard/logo-192.png", sizes: "192x192", type: "image/png" },
-      { src: "/dashboard/logo-512.png", sizes: "512x512", type: "image/png" },
+      { src: "logo-192.png", sizes: "192x192", type: "image/png" },
+      { src: "logo-512.png", sizes: "512x512", type: "image/png" },
     ]),
   );
 });

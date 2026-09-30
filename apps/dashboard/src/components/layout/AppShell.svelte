@@ -6,13 +6,14 @@
   import TopBar from './TopBar.svelte'
   import ChatShortcuts from '../chat/ChatShortcuts.svelte'
   import SettingsShell from '../settings/SettingsShell.svelte'
+  import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { installVisualViewportCssVars } from '$lib/visualViewport'
 
   let { children }: { children: Snippet } = $props()
-  let currentPath = $state(window.location.pathname)
+  let currentPath = $state(dashboardRelativePath())
 
   function updatePath(): void {
-    currentPath = window.location.pathname
+    currentPath = dashboardRelativePath()
   }
 
   function updatePathAfterNavigation(): void {
@@ -20,11 +21,11 @@
   }
 
   function isSettingsPath(path: string): boolean {
-    return path === '/dashboard/settings' || path.startsWith('/dashboard/settings/')
+    return path === '/settings' || path.startsWith('/settings/')
   }
 
   function isChatPath(path: string): boolean {
-    return path === '/dashboard' || path === '/dashboard/' || path.startsWith('/dashboard/chat/')
+    return path === '/' || path.startsWith('/chat/')
   }
 
   const settingsPath = $derived(isSettingsPath(currentPath))

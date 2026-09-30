@@ -1,14 +1,33 @@
-import { writable } from "svelte/store";
+import { writable, type Writable } from "svelte/store";
 
 const storageKey = "pontia.externalApiToken";
-const initialToken =
-  typeof localStorage === "undefined" ? "" : (localStorage.getItem(storageKey) ?? "");
+const value = writable("");
 
-export const token = writable(initialToken);
+function persist(next: string): void {
+  if (typeof localStorage !== "undefined") localStorage.setItem(storageKey, next);
+}
 
-token.subscribe((value) => {
-  if (typeof localStorage !== "undefined") localStorage.setItem(storageKey, value);
-});
+export const token: Writable<string> = {
+  subscribe: value.subscribe,
+  set(next) {
+    persist(next);
+    value.set(next);
+  },
+  update(updater) {
+    value.update((current) => {
+      const next = updater(current);
+      persist(next);
+      return next;
+    });
+  },
+};
+
+export function loadTokenFromStorage(): string {
+  const stored =
+    typeof localStorage === "undefined" ? "" : (localStorage.getItem(storageKey) ?? "");
+  value.set(stored);
+  return stored;
+}
 
 export function consumeTokenFromUrl(): void {
   if (typeof window === "undefined") return;

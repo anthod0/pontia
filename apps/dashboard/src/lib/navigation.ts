@@ -1,10 +1,12 @@
 import { goto } from "$app/navigation";
-import { base } from "$app/paths";
+import { dashboardPath } from "$lib/dashboardRoutes";
 
-export function dashboardPath(path: string): string {
-  if (!path.startsWith("/")) throw new Error(`Dashboard paths must be absolute: ${path}`);
-  return path === "/" ? base || "/" : `${base}${path}`;
-}
+export {
+  dashboardPath,
+  dashboardRelativePath,
+  dashboardScope,
+  routeParam,
+} from "$lib/dashboardRoutes";
 
 export async function navigate(
   path: string,
@@ -17,14 +19,4 @@ export async function navigate(
   }
   await goto(`${url.pathname}${url.search}${url.hash}`, options);
   window.dispatchEvent(new PopStateEvent("popstate"));
-}
-
-export function dashboardRelativePath(pathname = window.location.pathname): string {
-  return pathname.startsWith(base) ? pathname.slice(base.length) || "/" : pathname;
-}
-
-export function routeParam(segment: string, pathname = dashboardRelativePath()): string | null {
-  const parts = pathname.split("/").filter(Boolean);
-  const index = parts.indexOf(segment);
-  return index >= 0 && index + 1 < parts.length ? decodeURIComponent(parts[index + 1]) : null;
 }

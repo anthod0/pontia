@@ -1,5 +1,5 @@
 import { get } from "svelte/store";
-import { token } from "../stores/auth";
+import { token } from "$dashboard-mode/auth";
 import { ApiError } from "./errors";
 import type {
   AgentProfileView,

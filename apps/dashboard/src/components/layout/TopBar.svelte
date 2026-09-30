@@ -6,14 +6,15 @@
   import WifiMediumIcon from 'phosphor-svelte/lib/WifiMediumIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
+  import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { lastConnectionError, sseStatus } from '../../stores/connection'
   import { sessionDetail, sessionDetailError, sessions } from '../../stores/sessions'
 
-  let currentPath = $state(window.location.pathname)
+  let currentPath = $state(dashboardRelativePath())
 
   function updatePath(): void {
-    currentPath = window.location.pathname
+    currentPath = dashboardRelativePath()
   }
 
   function updatePathAfterNavigation(): void {
@@ -21,7 +22,7 @@
   }
 
   function isChatPath(path: string): boolean {
-    return path === '/dashboard' || path === '/dashboard/' || path.startsWith('/dashboard/chat/')
+    return path === '/' || path.startsWith('/chat/')
   }
 
   function openKeyboardShortcuts(): void {
@@ -29,7 +30,7 @@
   }
 
   const sseTitle = $derived($lastConnectionError ? `SSE ${$sseStatus}: ${$lastConnectionError}` : `SSE ${$sseStatus}`)
-  const sessionId = $derived(currentPath.startsWith('/dashboard/chat/') ? decodeURIComponent(currentPath.split('/')[3] ?? '') : '')
+  const sessionId = $derived(currentPath.startsWith('/chat/') ? decodeURIComponent(currentPath.split('/')[2] ?? '') : '')
   const session = $derived(sessionId
     ? ($sessionDetail?.session.session_id === sessionId ? $sessionDetail.session : ($sessionDetailError ? null : $sessions.find((item) => item.session_id === sessionId) ?? null))
     : null)

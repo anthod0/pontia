@@ -1,6 +1,6 @@
 import { get } from "svelte/store";
 import type { LiveOutputEvent } from "../lib/session-chat/liveOutput";
-import { token } from "../stores/auth";
+import { token } from "$dashboard-mode/auth";
 import { isAuthenticationFailure } from "../api/client";
 
 const API_BASE = "/api/v1";

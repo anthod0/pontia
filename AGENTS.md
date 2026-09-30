@@ -15,6 +15,7 @@ If `../pontia-docs/AGENTS.local.md` exists, read it before making changes.
 
 - When a new basic UI primitive is needed, first check the shadcn-svelte component catalog and add the component through the shadcn-svelte CLI instead of hand-rolling it.
 - Prefer extending or composing existing `ui/` components before writing one-off markup for common primitives.
+- In `apps/dashboard`, shared modules must never import directly from `src/modes/local/` or `src/modes/public/`. Always import mode-specific dependencies through `$dashboard-mode` so local-only code cannot enter the Public build.
 - Do not modify any README file unless the user explicitly requests it.
 - Do not restrict agent client release versions.
 - When performing a pure file split of Rust code without changing behavior, refer to [Rust Module Refactoring](docs/agents/rust-module-refactoring.md) and [Rust Test Refactoring](docs/agents/rust-test-refactoring.md).
