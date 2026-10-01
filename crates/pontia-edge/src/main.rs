@@ -1,5 +1,5 @@
 use std::{
-    io::BufReader,
+    io::{BufReader, Write},
     net::{Ipv4Addr, SocketAddr},
     path::Path,
     time::{Duration, SystemTime},
@@ -80,12 +80,21 @@ fn parse_edge_id(value: &str) -> std::result::Result<Uuid, String> {
 }
 
 async fn init(args: InitArgs) -> Result<()> {
+    let stdout = std::io::stdout();
+    let mut output = stdout.lock();
+    init_with_output(args, &mut output).await
+}
+
+async fn init_with_output<W: Write + ?Sized>(args: InitArgs, output: &mut W) -> Result<()> {
+    status(output, "Checking local requirements...")?;
     ensure_root(rustix::process::geteuid().as_raw())?;
     ensure_managed_directory()?;
     anyhow::ensure!(
         args.agree_to_lets_encrypt_subscriber_agreement,
         "accept the Let's Encrypt Subscriber Agreement with --agree-to-lets-encrypt-subscriber-agreement"
     );
+
+    status(output, "Preparing edge deployment with Pontia Cloud...")?;
     let client = HttpCloudClient::new(&args.cloud_origin)?;
     let enrollment = initialize_and_enroll(
         &client,
@@ -96,17 +105,28 @@ async fn init(args: InitArgs) -> Result<()> {
     .await?;
     let identity = match enrollment {
         InitializationResult::AlreadyRegistered(identity) => {
-            println!(
-                "Edge {} is available at {}.",
-                identity.name, identity.tunnel_url
-            );
+            status(
+                output,
+                &format!(
+                    "Edge {} is already registered and available at {}.",
+                    identity.name, identity.tunnel_url
+                ),
+            )?;
             return Ok(());
         }
         InitializationResult::Enrolled(identity) => identity,
     };
     let hostname = hostname_from_tunnel_url(&identity.tunnel_url)?;
+    status(
+        output,
+        &format!("Deployment authorized for {} ({hostname}).", identity.name),
+    )?;
+
     let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
+    status(output, "Detecting the public IPv4 address...")?;
     let candidate_ipv4 = routed_public_ipv4(client.origin()).await?;
+    status(output, &format!("Public IPv4 address: {candidate_ipv4}"))?;
+
     let expected_config = ServiceConfig {
         cloud_origin: args.cloud_origin,
         hostname: hostname.clone(),
@@ -117,21 +137,35 @@ async fn init(args: InitArgs) -> Result<()> {
     let systemd = Systemd::default();
     let service_already_running = reusable_certificate && systemd.is_active();
     let challenge_server = if service_already_running {
+        status(
+            output,
+            "Reusing the existing TLS certificate and running service.",
+        )?;
         None
     } else {
+        status(
+            output,
+            &format!("Starting the HTTP challenge server on {candidate_ipv4}:80..."),
+        )?;
         Some(ChallengeServer::start(SocketAddr::from((candidate_ipv4, 80))).await?)
     };
 
+    status(output, &format!("Configuring DNS for {hostname}..."))?;
     let configured_hostname = client
         .configure_network(&args.ticket, &credential.value, &candidate_ipv4.to_string())
         .await?;
     anyhow::ensure!(
         configured_hostname == hostname,
-        "Cloud configured a different hostname"
+        "Cloud configured a different hostname: expected {hostname}, received {configured_hostname}"
     );
-    wait_for_dns(&hostname, candidate_ipv4).await?;
+    status(output, "DNS configuration accepted by Pontia Cloud.")?;
+    wait_for_dns(&hostname, candidate_ipv4, output).await?;
 
     if !reusable_certificate {
+        status(
+            output,
+            &format!("Requesting a TLS certificate for {hostname} from Let's Encrypt..."),
+        )?;
         let issuer = if args.acme_staging {
             InstantAcmeIssuer::staging(ACCOUNT_PATH)
         } else {
@@ -147,19 +181,43 @@ async fn init(args: InitArgs) -> Result<()> {
             Path::new(TLS_PATH),
         )
         .await?;
+        status(output, "TLS certificate issued and saved.")?;
     }
+
+    status(output, "Saving edge configuration...")?;
     expected_config.save(Path::new(CONFIG_PATH))?;
     if let Some(challenge_server) = challenge_server {
         challenge_server.stop().await?;
     }
 
+    status(output, "Installing and starting the pontia-edge service...")?;
     systemd.install_and_start(Path::new(UNIT_PATH))?;
-    wait_for_health(&client, &args.ticket, &credential.value, &hostname).await?;
-    println!(
-        "Edge {} is available at {}.",
-        identity.name, identity.tunnel_url
-    );
+    status(output, "pontia-edge service started.")?;
+    wait_for_health(
+        &client,
+        &args.ticket,
+        &credential.value,
+        &hostname,
+        output,
+        HEALTH_WAIT_ATTEMPTS,
+        RETRY_DELAY,
+    )
+    .await?;
+    status(
+        output,
+        &format!(
+            "Edge {} is available at {}.",
+            identity.name, identity.tunnel_url
+        ),
+    )?;
     Ok(())
+}
+
+fn status(output: &mut (impl Write + ?Sized), message: &str) -> Result<()> {
+    writeln!(output, "{message}").context("failed to write deployment progress")?;
+    output
+        .flush()
+        .context("failed to flush deployment progress")
 }
 
 async fn existing_certificate_matches(expected: &ServiceConfig) -> bool {
@@ -203,34 +261,116 @@ fn certificate_matches_hostname(path: &Path, hostname: &str) -> bool {
         .is_ok()
 }
 
-async fn wait_for_dns(hostname: &str, candidate: Ipv4Addr) -> Result<()> {
-    for _ in 0..DNS_WAIT_ATTEMPTS {
-        if let Ok(addresses) = tokio::net::lookup_host((hostname, 443)).await
-            && addresses
-                .into_iter()
-                .any(|address| address.ip() == candidate)
-        {
-            return Ok(());
+async fn wait_for_dns(
+    hostname: &str,
+    candidate: Ipv4Addr,
+    output: &mut (impl Write + ?Sized),
+) -> Result<()> {
+    status(
+        output,
+        &format!(
+            "Waiting for {hostname} to resolve to {candidate} (up to {})...",
+            format_duration(RETRY_DELAY * DNS_WAIT_ATTEMPTS as u32)
+        ),
+    )?;
+    let mut last_observation = "no DNS response received".to_owned();
+    for attempt in 1..=DNS_WAIT_ATTEMPTS {
+        match tokio::net::lookup_host((hostname, 443)).await {
+            Ok(addresses) => {
+                let mut addresses = addresses.map(|address| address.ip()).collect::<Vec<_>>();
+                addresses.sort_unstable();
+                addresses.dedup();
+                if addresses.iter().any(|address| *address == candidate) {
+                    status(
+                        output,
+                        &format!("DNS now resolves {hostname} to {candidate}."),
+                    )?;
+                    return Ok(());
+                }
+                last_observation = if addresses.is_empty() {
+                    "the lookup returned no addresses".to_owned()
+                } else {
+                    format!(
+                        "resolved to {} instead of {candidate}",
+                        addresses
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                };
+            }
+            Err(error) => last_observation = format!("DNS lookup failed: {error}"),
         }
         tokio::time::sleep(RETRY_DELAY).await;
+        if attempt % 6 == 0 && attempt < DNS_WAIT_ATTEMPTS {
+            status(
+                output,
+                &format!(
+                    "Still waiting for DNS after {}; last check: {last_observation}.",
+                    format_duration(RETRY_DELAY * attempt as u32)
+                ),
+            )?;
+        }
     }
-    anyhow::bail!("assigned hostname did not resolve to the verified IPv4 address")
+    anyhow::bail!(
+        "assigned hostname did not resolve to the verified IPv4 address; last DNS check: {last_observation}"
+    )
 }
 
-async fn wait_for_health(
-    client: &HttpCloudClient,
+async fn wait_for_health<C: EdgeNetworkClient>(
+    client: &C,
     ticket: &str,
     credential: &str,
     hostname: &str,
+    output: &mut (impl Write + ?Sized),
+    attempts: usize,
+    retry_delay: Duration,
 ) -> Result<()> {
-    for _ in 0..HEALTH_WAIT_ATTEMPTS {
-        if matches!(client.verify_health(ticket, credential).await, Ok(value) if value == hostname)
-        {
-            return Ok(());
+    status(
+        output,
+        &format!(
+            "Waiting for Pontia Cloud to verify the public HTTPS endpoint (up to {})...",
+            format_duration(retry_delay * attempts as u32)
+        ),
+    )?;
+    let mut last_observation = "no health response received".to_owned();
+    for attempt in 1..=attempts {
+        match client.verify_health(ticket, credential).await {
+            Ok(value) if value == hostname => {
+                status(output, "Public HTTPS health verification succeeded.")?;
+                return Ok(());
+            }
+            Ok(value) => {
+                last_observation = format!("Cloud returned hostname {value} instead of {hostname}");
+            }
+            Err(error) => last_observation = format!("{error:#}"),
         }
-        tokio::time::sleep(RETRY_DELAY).await;
+        tokio::time::sleep(retry_delay).await;
+        if attempt % 6 == 0 && attempt < attempts {
+            status(
+                output,
+                &format!(
+                    "Still waiting for HTTPS health verification after {}; last check: {last_observation}.",
+                    format_duration(retry_delay * attempt as u32)
+                ),
+            )?;
+        }
     }
-    anyhow::bail!("Cloud could not verify the public HTTPS health endpoint")
+    anyhow::bail!(
+        "Cloud could not verify the public HTTPS health endpoint; last health check: {last_observation}"
+    )
+}
+
+fn format_duration(duration: Duration) -> String {
+    let seconds = duration.as_secs();
+    let minutes = seconds / 60;
+    let remaining_seconds = seconds % 60;
+    match (minutes, remaining_seconds) {
+        (0, seconds) => format!("{seconds} seconds"),
+        (minutes, 0) => format!("{minutes} minutes"),
+        (minutes, seconds) => format!("{minutes} minutes {seconds} seconds"),
+    }
 }
 
 async fn serve() -> Result<()> {
@@ -339,6 +479,60 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct FailingHealthClient;
+
+    impl EdgeNetworkClient for FailingHealthClient {
+        async fn configure_network(
+            &self,
+            _ticket: &str,
+            _credential: &str,
+            _candidate_ipv4: &str,
+        ) -> Result<String> {
+            unreachable!()
+        }
+
+        async fn verify_health(&self, _ticket: &str, _credential: &str) -> Result<String> {
+            anyhow::bail!(
+                "Cloud could not verify public edge health (HTTP 502 Bad Gateway, error: health_verification_failed)"
+            )
+        }
+    }
+
+    #[tokio::test]
+    async fn health_timeout_reports_progress_and_the_last_cloud_error() {
+        let mut output = Vec::new();
+        let error = wait_for_health(
+            &FailingHealthClient,
+            "secret-ticket",
+            "secret-credential",
+            "brave-silver-atlas.edge.pontia.dev",
+            &mut output,
+            1,
+            Duration::ZERO,
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        let output = String::from_utf8(output).unwrap();
+
+        assert!(output.contains("Waiting for Pontia Cloud to verify"));
+        assert!(error.contains("HTTP 502 Bad Gateway"));
+        assert!(error.contains("health_verification_failed"));
+        assert!(!output.contains("secret-ticket"));
+        assert!(!output.contains("secret-credential"));
+        assert!(!error.contains("secret-ticket"));
+        assert!(!error.contains("secret-credential"));
+    }
+
+    #[test]
+    fn deployment_wait_durations_are_readable() {
+        assert_eq!(
+            format_duration(Duration::from_secs(150)),
+            "2 minutes 30 seconds"
+        );
+        assert_eq!(format_duration(Duration::from_secs(300)), "5 minutes");
+    }
 
     #[test]
     fn rejects_an_untrusted_certificate_even_for_the_assigned_hostname() {
