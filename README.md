@@ -1,45 +1,36 @@
-<p align="center">Keep your coding agents working beyond a single terminal window.</p>
-
-> Pontia is experimental and under active development. Some workflows are incomplete, and breaking changes should be expected.
-
 ## What Pontia is
+
+Pontia is a console and control plane for coding agents. Agents continue to run on your machine, using your local development tools and project files, while you can view and control the same agent session from the terminal, local dashboard, or remote dashboard.
 
 Pontia aims to provide:
 
-- **Persistent agent sessions** — keep working with your agent over time without giving up its familiar terminal experience.
-- **One session, control from anywhere** — start, continue, observe, or steer the same agent session from your terminal or web dashboard, with broader desktop and mobile access as a product goal.
-- **Visible long-running tasks** — let agents break large tasks into manageable steps so you can understand progress, intervene, and retry work when needed.
+- **Agent dashboard** — a friendly interface for working with your agents.
+- **One session, control from anywhere** — keep the agent TUI and dashboard in sync, and continue the conversation from any device.
+- **Remote access** — access agents running on your machine from anywhere.
+- **Visible long-running tasks** — observable, dynamic workflows that break large tasks into manageable steps.
 
 ## Current status
 
-Pontia is currently intended for local development use. It supports:
+Pontia currently supports:
 
-- pi as the supported coding agent;
-- session creation, conversation, termination, and resume;
-- a web dashboard for viewing and controlling sessions;
-- interaction with the same session from the terminal and the web.
+- the pi coding agent;
+- viewing and controlling agents from the web dashboard;
+- two-way synchronization between the TUI and dashboard;
+- remote access.
 
-## Roadmap
+> Pontia is still under active development.
 
-- [x] pi integration
-- [x] Basic web dashboard
-- [x] Session creation, conversation, termination, and resume
-- [x] Terminal and web control of the same session
-- [ ] Human approval and review workflows
-- [ ] Agent-created plans for large tasks
-- [ ] Long-running task scheduling, progress inspection, retry, and repair
-- [ ] Stable product documentation
-- [ ] More coding agent integrations
-
-## Get started
+## Quick start
 
 ### Install
 
-1. Download the `pontia` and `pontiad` packages for your operating system and processor from [Releases](https://github.com/anthod0/pontia/releases/latest).
-2. Extract both executables into the same directory on your `PATH`, such as `$HOME/.local/bin`.
-3. Install pi CLI and tmux if they are not already available.
+Run the installation script on Linux x86_64 or ARM64:
 
-Pontia supports Linux with systemd and macOS. No Rust, Cargo, or frontend build tools are needed to use the published binaries.
+```bash
+curl -fsSL https://pontia.dev/install.sh | sh
+```
+
+The script installs Pontia to `$HOME/.local/bin` by default. Make sure this directory is included in your `PATH`.
 
 ### First-time setup
 
@@ -49,13 +40,13 @@ Run the interactive initializer:
 pontia init
 ```
 
-Accept the default pi integration and follow the prompts. The initializer installs the pi plugin, configures Pontia, starts the service, and opens the dashboard.
+Accept the default pi integration and follow the prompts. The initializer installs the pi plugin, configures Pontia, starts the background service, and opens the local dashboard.
 
 Exiting the initializer does not stop Pontia.
 
 ### Start and stop
 
-After setup, use:
+After setup, use the following commands to manage Pontia:
 
 ```bash
 pontia up
@@ -63,11 +54,39 @@ pontia status
 pontia down
 ```
 
-The dashboard is available at `http://127.0.0.1:8080/dashboard` by default. Use the access token configured during setup when prompted.
+The local dashboard is available at:
 
-### Configuration
+```text
+http://127.0.0.1:8080/dashboard
+```
 
-Pontia stores its configuration in `$HOME/.pontia/config.toml` by default. To use another location, set `PONTIA_HOME` to an absolute directory path.
+Use the access token configured during setup when prompted.
+
+## Remote access
+
+Pontia can connect your local Pontia service to the public dashboard through an official edge. Your agents, development tools, and project files remain on your machine.
+
+First, sign in to Pontia:
+
+```bash
+pontia login
+```
+
+Then register your machine and enable remote access:
+
+```bash
+pontia remote enable
+```
+
+Check the service status with:
+
+```bash
+pontia status
+```
+
+## Configuration
+
+Pontia stores its configuration in `$HOME/.pontia/config.toml` by default. To use another directory, set `PONTIA_HOME` to an absolute path.
 
 See [`.env.example`](.env.example) for available environment settings. Pontia does not automatically load `.env` files.
 
