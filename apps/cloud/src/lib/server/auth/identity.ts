@@ -6,7 +6,7 @@ import { AuthError, type AccountProfile } from "./types";
 
 export const AUTH_SESSION_SECONDS = 30 * 24 * 60 * 60;
 
-function sessionExpiry(now: Date) {
+export function sessionExpiry(now: Date) {
   return new Date(now.getTime() + AUTH_SESSION_SECONDS * 1000).toISOString();
 }
 

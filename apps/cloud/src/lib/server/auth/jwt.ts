@@ -13,6 +13,7 @@ export interface LoginClaims {
 }
 
 const uuidv7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+export const ACCESS_TOKEN_SECONDS = 15 * 60;
 
 export function signingKey(secret: string) {
   const key = new TextEncoder().encode(secret);
@@ -47,7 +48,7 @@ export async function signedLogin(
       claims.iat > seconds ||
       !Number.isSafeInteger(claims.exp) ||
       claims.exp <= claims.iat ||
-      claims.exp > claims.iat + 3600 ||
+      claims.exp > claims.iat + ACCESS_TOKEN_SECONDS ||
       !(claims.display_name === null || typeof claims.display_name === "string") ||
       !(claims.avatar_url === null || typeof claims.avatar_url === "string") ||
       ("nbf" in claims && (!Number.isSafeInteger(claims.nbf) || claims.nbf > seconds))
@@ -76,7 +77,7 @@ export async function issueLogin(
   const login = await activeLogin(db, id, userId, now);
   if (!login || !login.expiresAt) throw new AuthError("invalid_credentials");
   const iat = Math.floor(now.getTime() / 1000);
-  const exp = Math.min(iat + 3600, Math.floor(Date.parse(login.expiresAt) / 1000));
+  const exp = Math.min(iat + ACCESS_TOKEN_SECONDS, Math.floor(Date.parse(login.expiresAt) / 1000));
   if (exp <= iat) throw new AuthError("invalid_credentials");
   const token = await new SignJWT({
     user_id: login.userId,
@@ -88,11 +89,5 @@ export async function issueLogin(
     .setIssuedAt(iat)
     .setExpirationTime(exp)
     .sign(signingKey(secret));
-  return { token, expiresAt: new Date(login.expiresAt) };
-}
-
-export async function renewLogin(db: Database, oldToken: string, secret: string, now = new Date()) {
-  const claims = await signedLogin(oldToken, secret, now);
-  if (claims.exp > Math.floor(now.getTime() / 1000)) throw new AuthError("invalid_credentials");
-  return (await issueLogin(db, claims.sub, secret, now, claims.user_id)).token;
+  return { token, expiresAt: new Date(exp * 1000) };
 }

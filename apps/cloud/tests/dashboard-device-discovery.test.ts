@@ -130,6 +130,15 @@ test("lists only the authenticated user's minimal stateless device records", asy
   expectCredentialedCors(response);
 });
 
+test("accepts an issued access JWT without reading its browser session", async () => {
+  const token = await seedDashboardFixtureAndLogin();
+  await database.db.delete(authSessions).where(eq(authSessions.id, sessionId));
+  const response = await callListDevices(
+    event("/api/dashboard/devices", { origin: dashboardOrigin, token }),
+  );
+  expect(response.status).toBe(200);
+});
+
 test("resolves a handle to trusted target fields without request overrides", async () => {
   const token = await seedDashboardFixtureAndLogin();
   const response = await callGetTarget(

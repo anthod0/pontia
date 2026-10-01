@@ -1,8 +1,6 @@
 import { json, type RequestEvent } from "@sveltejs/kit";
 import { currentLogin } from "../auth/http";
-import { activeLogin } from "../auth/identity";
 import { PUBLIC_DASHBOARD_ORIGIN } from "../auth/return-to";
-import { remoteDatabase } from "./http";
 
 export { PUBLIC_DASHBOARD_ORIGIN } from "../auth/return-to";
 export const CLOUD_ORIGIN = "https://pontia.dev";
@@ -27,10 +25,7 @@ export function dashboardPreflight(request: Request): Response {
 }
 
 async function authenticatedUser(event: RequestEvent): Promise<string | null> {
-  const claims = await currentLogin(event);
-  if (!claims) return null;
-  const login = await activeLogin(remoteDatabase(event), claims.sub, claims.user_id);
-  return login?.userId ?? null;
+  return (await currentLogin(event))?.user_id ?? null;
 }
 
 export async function authenticateDashboardRequest(

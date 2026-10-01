@@ -1,15 +1,12 @@
 import { fail, redirect, type RequestEvent } from "@sveltejs/kit";
 import { currentLogin, environment, origin } from "$lib/server/auth/http";
-import { activeLogin } from "$lib/server/auth/identity";
 import { database } from "$lib/server/db";
 import { issueEdgeDeployment } from "$lib/server/edge-deployment";
 import type { Actions, PageServerLoad } from "./$types";
 
 async function activeUser(event: Pick<RequestEvent, "platform" | "cookies">) {
   const user = await currentLogin(event);
-  if (!user) return null;
-  const db = database(environment(event).DB);
-  return (await activeLogin(db, user.sub, user.user_id)) ? { user, db } : null;
+  return user ? { user, db: database(environment(event).DB) } : null;
 }
 
 export const load: PageServerLoad = async (event) => {

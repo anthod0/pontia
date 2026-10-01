@@ -11,8 +11,8 @@ import {
   startPendingBinding,
 } from "../src/lib/server/auth/http";
 import { activeLogin, login, logout } from "../src/lib/server/auth/identity";
-import { issueLogin, renewLogin, verifyLogin } from "../src/lib/server/auth/jwt";
-import { accounts, users } from "../src/lib/server/db/schema";
+import { issueLogin, verifyLogin } from "../src/lib/server/auth/jwt";
+import { accounts, authSessions, users } from "../src/lib/server/db/schema";
 import { testDatabase } from "./database";
 
 const database = testDatabase();
@@ -132,9 +132,24 @@ test("HTTP login, linking and logout persist identity and set and clear protecte
     sameSite: "lax",
     path: "/",
   });
-  expect((client.options.get("_at")!.expires as Date).getTime() - Date.now()).toBeGreaterThan(
+  expect((client.options.get("_at")!.expires as Date).getTime() - Date.now()).toBeLessThanOrEqual(
+    15 * 60_000,
+  );
+  expect(client.cookies.get("_rt")).toMatch(/^ptb_[A-Za-z0-9_-]{43}$/);
+  expect(client.options.get("_rt")).toMatchObject({
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+  });
+  expect((client.options.get("_rt")!.expires as Date).getTime() - Date.now()).toBeGreaterThan(
     29 * 86_400_000,
   );
+  const storedSession = (await database.db.select().from(authSessions)).find(
+    (session) => session.id === claims.sub,
+  );
+  expect(storedSession?.tokenHash).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  expect(storedSession?.tokenHash).not.toBe(client.cookies.get("_rt"));
   expect(client.cookies.has("_oauth")).toBe(false);
   const bindingUrl = new URL(await location(startBinding(client.event("/api/auth/github/bind"))));
   expect(
@@ -158,7 +173,13 @@ test("HTTP login, linking and logout persist identity and set and clear protecte
     sub: claims.sub,
   });
   await expect(
-    renewLogin(database.db, oldToken, config.JWT_SECRET, new Date((claims.exp + 1) * 1000)),
+    issueLogin(
+      database.db,
+      claims.sub,
+      config.JWT_SECRET,
+      new Date((claims.exp + 1) * 1000),
+      claims.user_id,
+    ),
   ).rejects.toThrow();
 });
 
@@ -379,16 +400,17 @@ test("binding callback rejects logout in another request and a browser switched 
   ).toBe(false);
 });
 
-test("binding callback rejects a JWT that expired during the OAuth round trip", async () => {
+test("an expired access JWT is refreshed during the OAuth round trip", async () => {
   providerResponses();
   const client = browser();
   const claims = await signedIn(client);
   const bindingUrl = new URL(await location(startBinding(client.event("/api/auth/github/bind"))));
+  await database.db
+    .update(authSessions)
+    .set({ expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
   const past = new Date(Date.now() - 2 * 3_600_000);
-  client.cookies.set(
-    "_at",
-    (await issueLogin(database.db, claims.sub, config.JWT_SECRET, past)).token,
-  );
+  const expired = (await issueLogin(database.db, claims.sub, config.JWT_SECRET, past)).token;
+  client.cookies.set("_at", expired);
   expect(
     await location(
       callback(
@@ -398,8 +420,16 @@ test("binding callback rejects a JWT that expired during the OAuth round trip", 
         ),
       ),
     ),
-  ).toBe("/account?error=invalid_credentials");
-  expect(await database.db.select().from(accounts)).toHaveLength(1);
+  ).toBe("/account");
+  expect(client.cookies.get("_at")).not.toBe(expired);
+  expect((client.options.get("_rt")!.expires as Date).getTime() - Date.now()).toBeGreaterThan(
+    29 * 86_400_000,
+  );
+  expect(
+    Date.parse((await activeLogin(database.db, claims.sub, claims.user_id))!.expiresAt!) -
+      Date.now(),
+  ).toBeGreaterThan(29 * 86_400_000);
+  expect(await database.db.select().from(accounts)).toHaveLength(2);
 });
 
 test("expired JWT can still log out and remove its D1 login record", async () => {

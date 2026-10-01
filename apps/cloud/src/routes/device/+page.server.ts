@@ -6,15 +6,11 @@ import {
   recordUserCodeAttempt,
 } from "$lib/server/auth/device";
 import { currentLogin, environment } from "$lib/server/auth/http";
-import { activeLogin } from "$lib/server/auth/identity";
 import { database } from "$lib/server/db";
 import type { Actions, PageServerLoad } from "./$types";
 
 async function browserLogin(event: RequestEvent) {
-  const claims = await currentLogin(event);
-  if (!claims) return null;
-  const db = database(environment(event).DB);
-  return (await activeLogin(db, claims.sub, claims.user_id)) ? claims : null;
+  return currentLogin(event);
 }
 
 export const load: PageServerLoad = async (event) => {

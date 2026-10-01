@@ -4,13 +4,13 @@ import { CompactSign } from "jose";
 import { v7 as uuidv7 } from "uuid";
 import { authSessions, users } from "../src/lib/server/db/schema";
 import { activeLogin, login, logout } from "../src/lib/server/auth/identity";
-import { issueLogin, renewLogin, signingKey, verifyLogin } from "../src/lib/server/auth/jwt";
+import { issueLogin, signedLogin, signingKey, verifyLogin } from "../src/lib/server/auth/jwt";
 import { testDatabase } from "./database";
 
 const database = testDatabase();
 const secret = "test-jwt-secret-with-at-least-32-bytes";
 const now = new Date("2026-09-26T00:00:00Z");
-const later = new Date("2026-09-26T01:00:00Z");
+const later = new Date("2026-09-26T00:15:00Z");
 
 async function credential() {
   const id = await login(
@@ -33,58 +33,57 @@ async function credential() {
   };
 }
 
-test("JWT-only verification expires in one hour; renewal reads current profile without extending D1 expiry", async () => {
+test("JWT-only verification expires in fifteen minutes; reissuance reads the current profile", async () => {
   const { id, token, claims } = await credential();
-  expect(claims.exp - claims.iat).toBe(3600);
+  expect(claims.exp - claims.iat).toBe(900);
   await expect(verifyLogin(token, secret, later)).rejects.toThrow();
   await database.db
     .update(users)
     .set({ displayName: "Updated", avatarUrl: "https://example.com/new" })
     .where(eq(users.id, claims.user_id));
-  const renewed = await renewLogin(database.db, token, secret, later);
-  expect(await verifyLogin(renewed, secret, later)).toMatchObject({
+  const reissued = await issueLogin(database.db, id, secret, later, claims.user_id);
+  expect(await verifyLogin(reissued.token, secret, later)).toMatchObject({
     sub: id,
     user_id: claims.user_id,
     display_name: "Updated",
     avatar_url: "https://example.com/new",
     iat: claims.exp,
-    exp: claims.exp + 3600,
+    exp: claims.exp + 900,
   });
   expect((await activeLogin(database.db, id, claims.user_id, later))!.expiresAt).toBe(
     "2026-10-26T00:00:00.000Z",
   );
 });
 
-test("logout prevents renewal while already-issued JWTs remain valid until expiration", async () => {
+test("logout prevents reissuance while an already-issued JWT remains valid until expiration", async () => {
   const { id, token, claims } = await credential();
   await logout(database.db, id, claims.user_id);
   expect(await verifyLogin(token, secret, now)).toMatchObject({ sub: id });
-  await expect(renewLogin(database.db, token, secret, later)).rejects.toThrow();
+  await expect(issueLogin(database.db, id, secret, later, claims.user_id)).rejects.toThrow();
 });
 
-test("renewal caps JWT lifetime at the fixed login expiry and refuses expiry or mismatched users", async () => {
-  const { id, token, claims } = await credential();
+test("issuance caps JWT lifetime at the login expiry and refuses expiry or mismatched users", async () => {
+  const { id, claims } = await credential();
   const nearEnd = new Date("2026-10-25T23:45:00Z");
-  const renewed = await renewLogin(database.db, token, secret, nearEnd);
-  expect((await verifyLogin(renewed, secret, nearEnd)).exp).toBe(
+  const reissued = await issueLogin(database.db, id, secret, nearEnd, claims.user_id);
+  expect((await verifyLogin(reissued.token, secret, nearEnd)).exp).toBe(
     Date.parse("2026-10-26T00:00:00Z") / 1000,
   );
   await expect(
-    renewLogin(database.db, token, secret, new Date("2026-10-26T00:00:00Z")),
+    issueLogin(database.db, id, secret, new Date("2026-10-26T00:00:00Z"), claims.user_id),
   ).rejects.toThrow();
   const otherId = uuidv7();
   await database.db.insert(users).values({ id: otherId });
   await database.db.update(authSessions).set({ userId: otherId }).where(eq(authSessions.id, id));
-  await expect(renewLogin(database.db, token, secret, later)).rejects.toThrow();
+  await expect(issueLogin(database.db, id, secret, later, claims.user_id)).rejects.toThrow();
   expect(claims.user_id).not.toBe(otherId);
 });
 
-test("renewal rejects unexpired, tampered, wrong-algorithm, wrong-type and malformed signed credentials", async () => {
+test("signed JWT parsing rejects tampering, wrong headers, and malformed claims", async () => {
   const { token, claims } = await credential();
-  await expect(renewLogin(database.db, token, secret, now)).rejects.toThrow();
   const parts = token.split(".");
   parts[1] = Buffer.from(JSON.stringify({ ...claims, user_id: uuidv7() })).toString("base64url");
-  await expect(renewLogin(database.db, parts.join("."), secret, later)).rejects.toThrow();
+  await expect(signedLogin(parts.join("."), secret, now)).rejects.toThrow();
   for (const [payload, header] of [
     [claims, { alg: "HS384", typ: "at+jwt" }],
     [claims, { alg: "HS256", typ: "oauth-state+jwt" }],
@@ -94,6 +93,10 @@ test("renewal rejects unexpired, tampered, wrong-algorithm, wrong-type and malfo
     ],
     [
       { ...claims, exp: "expired" },
+      { alg: "HS256", typ: "at+jwt" },
+    ],
+    [
+      { ...claims, exp: claims.iat + 901 },
       { alg: "HS256", typ: "at+jwt" },
     ],
     [
@@ -108,6 +111,6 @@ test("renewal rejects unexpired, tampered, wrong-algorithm, wrong-type and malfo
     const invalid = await new CompactSign(new TextEncoder().encode(JSON.stringify(payload)))
       .setProtectedHeader(header)
       .sign(signingKey(secret));
-    await expect(renewLogin(database.db, invalid, secret, later)).rejects.toThrow();
+    await expect(signedLogin(invalid, secret, now)).rejects.toThrow();
   }
 });

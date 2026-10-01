@@ -18,7 +18,7 @@ test("an unauthenticated browser cannot issue an edge deployment", async () => {
   expect(result.data).toEqual({ error: "Sign in to create an edge deployment." });
 });
 
-test("a revoked browser login cannot issue an edge deployment", async () => {
+test("an issued access JWT remains usable until it expires", async () => {
   const userId = "0199791c-6600-7000-8000-000000000001";
   const loginId = "0199791c-6600-7000-8000-000000000002";
   const secret = "test-signing-secret-with-at-least-32-bytes";
@@ -33,10 +33,17 @@ test("a revoked browser login cannot issue an edge deployment", async () => {
 
   const result = (await issueDeployment({
     cookies: { get: (name: string) => (name === "_at" ? login.token : undefined) },
-    platform: { env: { DB: database.binding, JWT_SECRET: secret } },
-  } as unknown as RequestEvent)) as { status: number };
+    platform: {
+      env: {
+        AUTH_ORIGIN: "https://pontia.example",
+        DB: database.binding,
+        JWT_SECRET: secret,
+      },
+    },
+    url: new URL("https://pontia.example/edges"),
+  } as unknown as RequestEvent)) as { deployment: { command: string } };
 
-  expect(result.status).toBe(401);
+  expect(result.deployment.command).toContain("--agree-to-lets-encrypt-subscriber-agreement");
 });
 
 test("an authenticated user can issue an edge deployment", async () => {

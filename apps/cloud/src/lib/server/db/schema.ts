@@ -162,6 +162,7 @@ export const authSessions = sqliteTable(
   (table) => [
     primaryKey({ columns: [table.id] }),
     index("idx_auth_sessions_user_id").on(table.userId),
+    uniqueIndex("idx_auth_sessions_token_hash").on(table.tokenHash),
   ],
 );
 

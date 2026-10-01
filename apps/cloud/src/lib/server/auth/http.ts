@@ -15,9 +15,15 @@ import { issueLogin, signedLogin, verifyLogin } from "./jwt";
 import { beginOAuth, exchangeAccount, OAUTH_SECONDS, readOAuth } from "./oauth";
 import { normalizeLoginReturnTo } from "./return-to";
 import { issuePendingAccount, PENDING_ACCOUNT_SECONDS, readPendingAccount } from "./pending";
+import {
+  createBrowserRefreshToken,
+  deleteBrowserSessionByRefreshToken,
+  refreshBrowserSession,
+} from "./refresh";
 import { AuthError, type Provider } from "./types";
 
 const LOGIN_COOKIE = "_at";
+const REFRESH_COOKIE = "_rt";
 const OAUTH_COOKIE = "_oauth";
 const PENDING_ACCOUNT_COOKIE = "_pending_account";
 const cookieOptions = {
@@ -60,12 +66,42 @@ function sameOriginPost(event: RequestEvent) {
 
 export async function currentLogin(event: Pick<RequestEvent, "platform" | "cookies">) {
   const token = event.cookies.get(LOGIN_COOKIE);
-  if (!token) return null;
+  const refreshToken = event.cookies.get(REFRESH_COOKIE);
+  if (!token && !refreshToken) return null;
+  const env = environment(event);
+  if (token) {
+    try {
+      return await verifyLogin(token, env.JWT_SECRET);
+    } catch (cause) {
+      if (!(cause instanceof AuthError)) throw cause;
+    }
+  }
+
+  if (!refreshToken) return null;
   try {
-    return await verifyLogin(token, environment(event).JWT_SECRET);
+    const db = database(env.DB);
+    const session = await refreshBrowserSession(db, refreshToken);
+    const credential = await issueLogin(
+      db,
+      session.sessionId,
+      env.JWT_SECRET,
+      new Date(),
+      session.userId,
+    );
+    event.cookies.set(LOGIN_COOKIE, credential.token, {
+      ...cookieOptions,
+      expires: credential.expiresAt,
+    });
+    event.cookies.set(REFRESH_COOKIE, refreshToken, {
+      ...cookieOptions,
+      expires: session.expiresAt,
+    });
+    return await verifyLogin(credential.token, env.JWT_SECRET);
   } catch (cause) {
-    if (cause instanceof AuthError) return null;
-    throw cause;
+    if (!(cause instanceof AuthError)) throw cause;
+    event.cookies.delete(LOGIN_COOKIE, cookieOptions);
+    event.cookies.delete(REFRESH_COOKIE, cookieOptions);
+    return null;
   }
 }
 
@@ -75,6 +111,7 @@ export function clearPendingAccount(cookies: Cookies) {
 
 function clearCookies(cookies: Cookies) {
   cookies.delete(LOGIN_COOKIE, cookieOptions);
+  cookies.delete(REFRESH_COOKIE, cookieOptions);
   cookies.delete(OAUTH_COOKIE, cookieOptions);
   clearPendingAccount(cookies);
 }
@@ -85,10 +122,17 @@ async function establishBrowserLogin(
   loginId: string,
   secret: string,
 ) {
-  const credential = await issueLogin(db, loginId, secret);
+  const [credential, refresh] = await Promise.all([
+    issueLogin(db, loginId, secret),
+    createBrowserRefreshToken(db, loginId),
+  ]);
   event.cookies.set(LOGIN_COOKIE, credential.token, {
     ...cookieOptions,
     expires: credential.expiresAt,
+  });
+  event.cookies.set(REFRESH_COOKIE, refresh.token, {
+    ...cookieOptions,
+    expires: refresh.expiresAt,
   });
 }
 
@@ -209,10 +253,9 @@ export async function callback(event: RequestEvent) {
     if (!code || event.url.searchParams.has("error")) throw new AuthError("invalid_oauth");
     const db = database(env.DB);
     if (oauth.intent.kind === "bind") {
-      const token = event.cookies.get(LOGIN_COOKIE);
-      if (!token) throw new AuthError("invalid_credentials");
-      const claims = await verifyLogin(token, env.JWT_SECRET);
+      const claims = await currentLogin(event);
       if (
+        !claims ||
         claims.sub !== oauth.intent.loginId ||
         claims.user_id !== oauth.intent.userId ||
         !(await activeLogin(db, claims.sub, claims.user_id))
@@ -269,17 +312,20 @@ export async function callback(event: RequestEvent) {
 export async function endLogin(event: RequestEvent) {
   sameOriginPost(event);
   const token = event.cookies.get(LOGIN_COOKIE);
+  const refreshToken = event.cookies.get(REFRESH_COOKIE);
   try {
+    const env = environment(event);
+    const db = database(env.DB);
     if (token) {
-      const env = environment(event);
       let claims;
       try {
         claims = await signedLogin(token, env.JWT_SECRET);
       } catch (cause) {
         if (!(cause instanceof AuthError)) throw cause;
       }
-      if (claims) await logout(database(env.DB), claims.sub, claims.user_id);
+      if (claims) await logout(db, claims.sub, claims.user_id);
     }
+    if (refreshToken) await deleteBrowserSessionByRefreshToken(db, refreshToken);
   } finally {
     clearCookies(event.cookies);
   }

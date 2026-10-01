@@ -104,6 +104,7 @@ CREATE TABLE `users` (
 CREATE UNIQUE INDEX `idx_accounts_provider_subject` ON `accounts` (`provider`,`provider_subject`);
 CREATE UNIQUE INDEX `idx_accounts_user_provider` ON `accounts` (`user_id`,`provider`);
 CREATE INDEX `idx_auth_sessions_user_id` ON `auth_sessions` (`user_id`);
+CREATE UNIQUE INDEX `idx_auth_sessions_token_hash` ON `auth_sessions` (`token_hash`);
 CREATE INDEX `idx_edges_user_id` ON `edges` (`user_id`);
 CREATE INDEX `idx_edges_access_scope` ON `edges` (`access_scope`);
 CREATE UNIQUE INDEX `idx_edges_tunnel_url` ON `edges` (`tunnel_url`);
