@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-01
+
+### Added
+
+- Added scheduled cleanup for expired Edge connection tickets and their DNS records.
+- Added clearer progress reporting to the Edge deployment console.
+
+### Fixed
+
+- Stabilized Edge DNS configuration and improved Cloudflare API error handling.
+- Allowed public Cloudflare API requests from Cloud and the cleanup worker.
+- Accepted underscores in CLI login credentials.
+- Fixed the Dashboard device bootstrap form flow.
+
 ## [0.3.2] - 2026-10-01
 
 ### Fixed
@@ -101,7 +115,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/anthod0/pontia/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/anthod0/pontia/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/anthod0/pontia/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/anthod0/pontia/compare/v0.2.1...v0.3.0
