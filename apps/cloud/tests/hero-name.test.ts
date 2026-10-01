@@ -1,32 +1,30 @@
 import { expect, test } from "bun:test";
-import { generateHeroName, HERO_NAME_COMBINATIONS, isHeroName } from "../src/lib/server/hero-name";
+import { generateHeroName, isHeroName } from "../src/lib/server/hero-name";
+import { testDatabase } from "./database";
 
-test("provides a sufficiently large hero name space", () => {
-  expect(HERO_NAME_COMBINATIONS).toBeGreaterThanOrEqual(100_000);
-});
+const database = testDatabase();
 
-test("generates a DNS-safe three-part name with cryptographic randomness", () => {
-  const name = generateHeroName();
+test("generates a DNS-safe two-part name from the database vocabulary", async () => {
+  const name = await generateHeroName(database.db);
 
-  expect(isHeroName(name)).toBe(true);
-  expect(name).toMatch(/^[a-z]+-[a-z]+-[a-z]+$/);
+  expect(await isHeroName(database.db, name)).toBe(true);
+  expect(name).toMatch(/^[a-z0-9]+-[a-z0-9]+$/);
   expect(name.length).toBeLessThanOrEqual(63);
 });
 
-test("accepts only canonical names from the curated word lists", () => {
-  expect(isHeroName("brave-silver-atlas")).toBe(true);
+test("accepts only canonical names from the database vocabulary", async () => {
+  expect(await isHeroName(database.db, "brave-atlas")).toBe(true);
 
   for (const invalid of [
     null,
     "",
-    "brave-silver",
-    "brave-silver-atlas-extra",
-    "Brave-silver-atlas",
-    "reckless-silver-atlas",
-    "brave-chartreuse-atlas",
-    "brave-silver-batman",
-    `brave-silver-${"a".repeat(64)}`,
+    "brave",
+    "brave-silver-atlas",
+    "Brave-atlas",
+    "reckless-atlas",
+    "brave-batman",
+    `brave-${"a".repeat(64)}`,
   ]) {
-    expect(isHeroName(invalid)).toBe(false);
+    expect(await isHeroName(database.db, invalid)).toBe(false);
   }
 });

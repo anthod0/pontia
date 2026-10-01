@@ -3,8 +3,6 @@ import {
   readDnsProviderResponse,
   type DnsOperation,
 } from "./cloudflare-dns-errors";
-import { isHeroName } from "./hero-name";
-
 const EDGE_ZONE = "edge.pontia.dev";
 const CHALLENGE_PREFIX = "/.well-known/pontia-edge-address/";
 const PROBE_TIMEOUT_MS = 5_000;
@@ -63,8 +61,6 @@ export function edgeHostname(tunnelUrl: string): string | null {
 export function edgeApiOrigin(tunnelUrl: string): string | null {
   const hostname = edgeHostname(tunnelUrl);
   if (!hostname || tunnelUrl !== `wss://${hostname}/tunnel`) return null;
-  const hero = hostname.slice(0, -`.${EDGE_ZONE}`.length);
-  if (!isHeroName(hero)) return null;
   return `https://${hostname}`;
 }
 

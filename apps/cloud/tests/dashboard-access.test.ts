@@ -26,7 +26,7 @@ const dependencies: DashboardAccessDependencies = {
   randomBytes: () => secretBytes.slice(),
 };
 
-async function seedFixture(tunnelUrl = "wss://brave-silver-atlas.edge.pontia.dev/tunnel") {
+async function seedFixture(tunnelUrl = "wss://brave-atlas.edge.pontia.dev/tunnel") {
   await database.db.insert(users).values([{ id: ownerId }, { id: otherId }]);
   await database.db.insert(edges).values([
     {
@@ -40,7 +40,7 @@ async function seedFixture(tunnelUrl = "wss://brave-silver-atlas.edge.pontia.dev
       id: otherEdgeId,
       userId: otherId,
       name: "Other edge",
-      tunnelUrl: "wss://calm-blue-arthur.edge.pontia.dev/tunnel",
+      tunnelUrl: "wss://calm-arthur.edge.pontia.dev/tunnel",
       serviceCredentialHash: "other-hash",
     },
   ]);
@@ -83,9 +83,7 @@ test("issuing binds a short dashboard ticket to the device and its canonical edg
 
   const issued = await issueTicket();
   const secret = base64url.encode(secretBytes);
-  expect(issued.bootstrapUrl).toBe(
-    "https://brave-silver-atlas.edge.pontia.dev/dashboard/bootstrap",
-  );
+  expect(issued.bootstrapUrl).toBe("https://brave-atlas.edge.pontia.dev/dashboard/bootstrap");
   expect(issued.ticket).toBe(`pet_v1_${secret}`);
 
   const stored = await database.db.select().from(edgeTickets).get();

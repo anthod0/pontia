@@ -10,7 +10,7 @@ const SECRET_LENGTH = 43;
 const databaseTimestamp = sql<string>`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
 export type EdgeTicketPurpose = "edge_deployment" | "device_tunnel" | "dashboard_access";
-export type EdgeTicketPayloadDecoder<T> = (value: unknown) => T | null;
+export type EdgeTicketPayloadDecoder<T> = (value: unknown) => T | null | Promise<T | null>;
 
 export type EdgeTicketDependencies = {
   now(): Date;
@@ -49,7 +49,7 @@ export async function issueEdgeTicket<T>(
   dependencies: EdgeTicketDependencies = defaultDependencies,
 ): Promise<string> {
   const payload = JSON.stringify(input.payload);
-  if (input.decodePayload(JSON.parse(payload)) === null) {
+  if ((await input.decodePayload(JSON.parse(payload))) === null) {
     throw new Error("Edge ticket payload encoder produced an invalid payload");
   }
 
@@ -118,7 +118,7 @@ export async function consumeEdgeTicket<T>(
 
   let decoded: T | null;
   try {
-    decoded = input.decodePayload(JSON.parse(candidate.payload));
+    decoded = await input.decodePayload(JSON.parse(candidate.payload));
   } catch {
     return null;
   }

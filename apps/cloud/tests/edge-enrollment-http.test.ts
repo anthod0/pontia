@@ -42,7 +42,7 @@ async function ticket() {
     now: () => new Date("2099-01-01T00:00:00.000Z"),
     randomBytes: () => new Uint8Array(32).fill(51),
     edgeId: () => edgeId,
-    heroName: () => "silent-crimson-orion",
+    heroName: async () => "silent-orion",
   };
   const deployment = await issueEdgeDeployment(
     database.db,
@@ -90,15 +90,15 @@ test("edge enrollment requires HTTPS and accepts only ticket and credential", as
   expect(response.status).toBe(200);
   expect((await response.json()) as Record<string, string>).toEqual({
     edge_id: edgeId,
-    name: "silent-crimson-orion",
-    tunnel_url: "wss://silent-crimson-orion.edge.pontia.dev/tunnel",
+    name: "silent-orion",
+    tunnel_url: "wss://silent-orion.edge.pontia.dev/tunnel",
   });
   expect(calls).toContainEqual([
     {
       event: "edge_enrollment_succeeded",
       stage: "enrollment",
       edge_id: edgeId,
-      hostname: "silent-crimson-orion.edge.pontia.dev",
+      hostname: "silent-orion.edge.pontia.dev",
     },
   ]);
   expect(JSON.stringify(calls)).not.toContain(deploymentTicket);

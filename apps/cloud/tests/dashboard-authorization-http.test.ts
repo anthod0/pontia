@@ -84,7 +84,7 @@ async function seedFixtureAndLogin() {
     id: edgeId,
     userId,
     name: "Owner edge",
-    tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
+    tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
     serviceCredentialHash: await sha256Base64url(edgeSecret),
   });
   await database.db.insert(devices).values([
@@ -121,15 +121,13 @@ test("launch returns a no-store nonce-authorized form to the derived edge bootst
   expect(response.headers.get("referrer-policy")).toBe("origin");
   expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
   const csp = response.headers.get("content-security-policy") ?? "";
-  expect(csp).toContain(
-    "form-action https://brave-silver-atlas.edge.pontia.dev https://app.pontia.dev",
-  );
+  expect(csp).toContain("form-action https://brave-atlas.edge.pontia.dev https://app.pontia.dev");
   expect(csp).toContain("script-src 'nonce-");
   expect(csp).not.toContain("unsafe-inline");
 
   const html = await response.text();
   expect(html).toContain(
-    'method="post" action="https://brave-silver-atlas.edge.pontia.dev/dashboard/bootstrap"',
+    'method="post" action="https://brave-atlas.edge.pontia.dev/dashboard/bootstrap"',
   );
   expect(html).toContain('document.getElementById("dashboard-bootstrap").submit()');
   expect(html).not.toContain(token);

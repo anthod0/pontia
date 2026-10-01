@@ -64,14 +64,14 @@ async function seedDashboardFixtureAndLogin() {
       id: "0195e7e1-1b22-7c33-9d44-123456789abc",
       userId: ownerId,
       name: "Owner edge",
-      tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
+      tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
       serviceCredentialHash: "owner-hash",
     },
     {
       id: "0195e7e2-1b22-7c33-9d44-123456789abc",
       userId: otherId,
       name: "Other edge",
-      tunnelUrl: "wss://calm-blue-arthur.edge.pontia.dev/tunnel",
+      tunnelUrl: "wss://calm-arthur.edge.pontia.dev/tunnel",
       serviceCredentialHash: "other-hash",
     },
   ]);
@@ -101,15 +101,18 @@ function expectCredentialedCors(response: Response) {
 }
 
 test("derives only canonical Pontia edge API origins", () => {
-  expect(edgeApiOrigin("wss://brave-silver-atlas.edge.pontia.dev/tunnel")).toBe(
-    "https://brave-silver-atlas.edge.pontia.dev",
+  expect(edgeApiOrigin("wss://brave-atlas.edge.pontia.dev/tunnel")).toBe(
+    "https://brave-atlas.edge.pontia.dev",
+  );
+  expect(edgeApiOrigin("wss://registered-name.edge.pontia.dev/tunnel")).toBe(
+    "https://registered-name.edge.pontia.dev",
   );
   for (const tunnelUrl of [
-    "ws://brave-silver-atlas.edge.pontia.dev/tunnel",
-    "wss://brave-silver-atlas.edge.pontia.dev:444/tunnel",
-    "wss://brave-silver-atlas.edge.pontia.dev/tunnel?target=x",
-    "wss://invented-hero-name.edge.pontia.dev/tunnel",
-    "wss://brave-silver-atlas.edge.pontia.dev/tunnel/",
+    "ws://brave-atlas.edge.pontia.dev/tunnel",
+    "wss://brave-atlas.edge.pontia.dev:444/tunnel",
+    "wss://brave-atlas.edge.pontia.dev/tunnel?target=x",
+    "wss://-invalid.edge.pontia.dev/tunnel",
+    "wss://brave-atlas.edge.pontia.dev/tunnel/",
   ]) {
     expect(edgeApiOrigin(tunnelUrl)).toBeNull();
   }
@@ -139,7 +142,7 @@ test("resolves a handle to trusted target fields without request overrides", asy
   expect((await response.json()) as unknown).toEqual({
     device_handle: "office-mac",
     device_id: ownerDeviceId,
-    edge_api_origin: "https://brave-silver-atlas.edge.pontia.dev",
+    edge_api_origin: "https://brave-atlas.edge.pontia.dev",
   });
   expectCredentialedCors(response);
 });
@@ -175,7 +178,7 @@ test("target resolution follows the device's current binding after a public edge
   );
   expect(response.status).toBe(200);
   expect((await response.json()) as { edge_api_origin: string }).toMatchObject({
-    edge_api_origin: "https://calm-blue-arthur.edge.pontia.dev",
+    edge_api_origin: "https://calm-arthur.edge.pontia.dev",
   });
 });
 

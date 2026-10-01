@@ -20,7 +20,7 @@ async function deploymentTicket() {
     now: () => new Date("2099-01-01T00:00:00.000Z"),
     randomBytes: () => new Uint8Array(32).fill(72),
     edgeId: () => edgeId,
-    heroName: () => "brave-silver-atlas",
+    heroName: async () => "brave-atlas",
   };
   const deployment = await issueEdgeDeployment(
     database.db,

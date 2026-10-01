@@ -16,7 +16,7 @@ type DeploymentPayload = { name: string };
 
 export type DeploymentDependencies = EdgeTicketDependencies & {
   edgeId(): string;
-  heroName(): string;
+  heroName(db: Database): Promise<string>;
 };
 
 const defaultDependencies: DeploymentDependencies = {
@@ -26,12 +26,15 @@ const defaultDependencies: DeploymentDependencies = {
   heroName: generateHeroName,
 };
 
-export function decodeDeploymentPayload(value: unknown): DeploymentPayload | null {
+export async function decodeDeploymentPayload(
+  db: Database,
+  value: unknown,
+): Promise<DeploymentPayload | null> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const keys = Object.keys(value);
   if (keys.length !== 1 || keys[0] !== "name") return null;
   const name = (value as Record<string, unknown>).name;
-  return isHeroName(name) ? { name } : null;
+  return typeof name === "string" && (await isHeroName(db, name)) ? { name } : null;
 }
 
 function shellQuote(value: string) {
@@ -44,8 +47,10 @@ export function deploymentCommand(origin: string, edgeId: string, ticket: string
 
 async function unusedHeroName(db: Database, dependencies: DeploymentDependencies) {
   for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt += 1) {
-    const name = dependencies.heroName();
-    if (!isHeroName(name)) throw new Error("Hero name generator returned an invalid name");
+    const name = await dependencies.heroName(db);
+    if (!(await isHeroName(db, name))) {
+      throw new Error("Hero name generator returned an invalid name");
+    }
     const payload = JSON.stringify({ name });
     const [edge, ticket] = await Promise.all([
       db.select({ id: edges.id }).from(edges).where(eq(edges.name, name)).get(),
@@ -80,7 +85,7 @@ export async function issueEdgeDeployment(
       expectedEdgeId: edgeId,
       payload: { name },
       expiresAt,
-      decodePayload: decodeDeploymentPayload,
+      decodePayload: (value) => decodeDeploymentPayload(db, value),
     },
     dependencies,
   );
@@ -178,7 +183,7 @@ async function deploymentAuthorization(
 
   let payload: DeploymentPayload | null;
   try {
-    payload = decodeDeploymentPayload(JSON.parse(candidate.payload));
+    payload = await decodeDeploymentPayload(db, JSON.parse(candidate.payload));
   } catch {
     payload = null;
   }

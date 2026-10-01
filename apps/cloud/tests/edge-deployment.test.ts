@@ -24,7 +24,7 @@ function dependencies(): DeploymentDependencies {
     now: () => now,
     randomBytes: () => ticketBytes.slice(),
     edgeId: () => edgeId,
-    heroName: () => "brave-silver-atlas",
+    heroName: async () => "brave-atlas",
   };
 }
 
@@ -39,18 +39,18 @@ function ticketFrom(command: string) {
   return match[1];
 }
 
-test("deployment payload decoding accepts only one reviewed hero name", () => {
-  expect(decodeDeploymentPayload({ name: "brave-silver-atlas" })).toEqual({
-    name: "brave-silver-atlas",
+test("deployment payload decoding accepts only one reviewed hero name", async () => {
+  expect(await decodeDeploymentPayload(database.db, { name: "brave-atlas" })).toEqual({
+    name: "brave-atlas",
   });
   for (const invalid of [
     null,
     [],
     {},
     { name: "custom-name" },
-    { name: "brave-silver-atlas", extra: true },
+    { name: "brave-atlas", extra: true },
   ]) {
-    expect(decodeDeploymentPayload(invalid)).toBeNull();
+    expect(await decodeDeploymentPayload(database.db, invalid)).toBeNull();
   }
 });
 
@@ -61,7 +61,7 @@ test("issuing a deployment creates a one-hour bound ticket and copyable command"
 
   expect(deployment).toMatchObject({
     edgeId,
-    name: "brave-silver-atlas",
+    name: "brave-atlas",
     expiresAt: "2099-01-01T01:00:00.000Z",
   });
   expect(deployment.command).toContain(`--edge-id '${edgeId}'`);
@@ -71,7 +71,7 @@ test("issuing a deployment creates a one-hour bound ticket and copyable command"
     purpose: "edge_deployment",
     userId: "user-owner",
     expectedEdgeId: edgeId,
-    payload: JSON.stringify({ name: "brave-silver-atlas" }),
+    payload: JSON.stringify({ name: "brave-atlas" }),
     expiresAt: "2099-01-01T01:00:00.000Z",
     secretHash: await sha256Base64url(secret),
     consumedAt: null,
@@ -85,8 +85,8 @@ test("enrollment is retryable authorization and does not register or consume the
     status: "authorized" as const,
     edge: {
       edgeId,
-      name: "brave-silver-atlas",
-      tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
+      name: "brave-atlas",
+      tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
     },
   };
 
@@ -103,8 +103,8 @@ test("health failure leaves the deployment unregistered and unconsumed", async (
     status: "unhealthy",
     edge: {
       edgeId,
-      name: "brave-silver-atlas",
-      tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
+      name: "brave-atlas",
+      tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
     },
   });
   expect(await database.db.select().from(edges)).toHaveLength(0);
@@ -117,7 +117,7 @@ test("successful health verification atomically registers the edge and supports 
 
   const result = await confirmEdgeDeployment(database.db, ticket, credential, async (identity) => {
     verifications += 1;
-    expect(identity.tunnelUrl).toBe("wss://brave-silver-atlas.edge.pontia.dev/tunnel");
+    expect(identity.tunnelUrl).toBe("wss://brave-atlas.edge.pontia.dev/tunnel");
     expect(await database.db.select().from(edges)).toHaveLength(0);
     expect((await database.db.select().from(edgeTickets).get())?.consumedAt).toBeNull();
     return true;
@@ -127,8 +127,8 @@ test("successful health verification atomically registers the edge and supports 
     id: edgeId,
     userId: "user-owner",
     accessScope: "private",
-    name: "brave-silver-atlas",
-    tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
+    name: "brave-atlas",
+    tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
     serviceCredentialHash: await sha256Base64url(credentialSecret),
   });
   expect((await database.db.select().from(edgeTickets).get())?.consumedAt).not.toBeNull();
@@ -199,7 +199,7 @@ test("wrong edge, purpose, malformed payload, and expired tickets never register
     } else if (testCase === "payload") {
       await database.db
         .update(edgeTickets)
-        .set({ payload: JSON.stringify({ name: "brave-silver-atlas", extra: true }) })
+        .set({ payload: JSON.stringify({ name: "brave-atlas", extra: true }) })
         .where(eq(edgeTickets.id, stored.id));
     } else {
       await database.db
@@ -233,7 +233,7 @@ test("a failed registration batch does not consume the deployment ticket", async
     id: "0199791c-6600-7000-8000-000000000002",
     userId: "user-owner",
     name: "conflicting-edge",
-    tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
+    tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
     serviceCredentialHash: "unrelated",
   });
 
