@@ -4,10 +4,12 @@ use std::{
     time::Duration,
 };
 
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use pontia::private_file;
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use tokio::time::{Instant, sleep};
+use uuid::Uuid;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const SLOW_DOWN_SECONDS: u64 = 5;
@@ -160,13 +162,18 @@ fn valid_user_code(value: &str) -> bool {
 }
 
 pub(super) fn validate_token(token: &str) -> Result<(), String> {
-    let mut parts = token.split('_');
-    if parts.next() != Some("ptr")
-        || parts.next() != Some("v1")
-        || !parts.next().is_some_and(|id| !id.is_empty())
-        || !parts.next().is_some_and(|secret| secret.len() >= 43)
-        || parts.next().is_some()
-    {
+    let Some(value) = token.strip_prefix("ptr_v1_") else {
+        return Err("the login service returned an invalid credential".to_string());
+    };
+    let Some((session_id, secret)) = value.split_once('_') else {
+        return Err("the login service returned an invalid credential".to_string());
+    };
+    let valid_session_id = Uuid::parse_str(session_id)
+        .is_ok_and(|parsed| parsed.get_version_num() == 7 && parsed.to_string() == session_id);
+    let valid_secret = URL_SAFE_NO_PAD
+        .decode(secret)
+        .is_ok_and(|decoded| decoded.len() == 32 && URL_SAFE_NO_PAD.encode(decoded) == secret);
+    if !valid_session_id || !valid_secret {
         return Err("the login service returned an invalid credential".to_string());
     }
     Ok(())
@@ -213,6 +220,22 @@ fn write_credential(path: &Path, token: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepts_credential_with_underscore_in_secret() {
+        let secret = URL_SAFE_NO_PAD.encode([u8::MAX; 32]);
+        assert!(secret.contains('_'));
+
+        validate_token(&format!(
+            "ptr_v1_0199791c-6600-7000-8000-000000000001_{secret}"
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn rejects_malformed_credential() {
+        assert!(validate_token("ptr_v1_not-a-uuid_secret").is_err());
+    }
 
     #[test]
     fn verification_url_includes_the_user_code() {
