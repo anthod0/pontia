@@ -78,6 +78,17 @@ impl HttpCloudClient {
     fn endpoint(&self, path: &str) -> Result<Url> {
         self.origin.join(path).context("failed to build Cloud URL")
     }
+
+    async fn require_ok(response: reqwest::Response, context: &str) -> Result<reqwest::Response> {
+        if response.status() == StatusCode::OK {
+            return Ok(response);
+        }
+        let status = response.status();
+        let code = bounded_cloud_error_code(response)
+            .await
+            .unwrap_or_else(|| "unknown_cloud_error".to_owned());
+        anyhow::bail!("{context} (HTTP {status}, error: {code})")
+    }
 }
 
 #[derive(Serialize)]
@@ -98,6 +109,45 @@ struct HostnameResponse {
     hostname: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CloudErrorResponse {
+    error: String,
+}
+
+async fn bounded_cloud_error_code(mut response: reqwest::Response) -> Option<String> {
+    const MAX_BODY_BYTES: usize = 4_096;
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_BODY_BYTES as u64)
+    {
+        return None;
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.ok()? {
+        if body.len() + chunk.len() > MAX_BODY_BYTES {
+            return None;
+        }
+        body.extend_from_slice(&chunk);
+    }
+    cloud_error_code(&body)
+}
+
+fn cloud_error_code(body: &[u8]) -> Option<String> {
+    serde_json::from_slice::<CloudErrorResponse>(body)
+        .ok()
+        .map(|response| response.error)
+        .filter(|code| valid_cloud_error_code(code))
+}
+
+fn valid_cloud_error_code(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
 impl EnrollmentClient for HttpCloudClient {
     async fn identity(&self, credential: &str) -> Result<IdentityLookup> {
         let response = self
@@ -115,7 +165,11 @@ impl EnrollmentClient for HttpCloudClient {
                     .context("Cloud returned an invalid edge identity")?,
             )),
             StatusCode::UNAUTHORIZED => Ok(IdentityLookup::Unauthorized),
-            status => anyhow::bail!("Cloud returned an uncertain status: {status}"),
+            _ => {
+                Self::require_ok(response, "Cloud could not query edge registration status")
+                    .await?;
+                unreachable!("non-success response passed success validation")
+            }
         }
     }
 
@@ -130,10 +184,7 @@ impl EnrollmentClient for HttpCloudClient {
             .send()
             .await
             .context("failed to enroll edge")?;
-        anyhow::ensure!(
-            response.status() == StatusCode::OK,
-            "Cloud rejected edge enrollment"
-        );
+        let response = Self::require_ok(response, "Cloud rejected edge enrollment").await?;
         response
             .json()
             .await
@@ -159,10 +210,8 @@ impl EdgeNetworkClient for HttpCloudClient {
             .send()
             .await
             .context("failed to request edge network configuration")?;
-        anyhow::ensure!(
-            response.status() == StatusCode::OK,
-            "Cloud rejected edge network configuration"
-        );
+        let response =
+            Self::require_ok(response, "Cloud rejected edge network configuration").await?;
         Ok(response
             .json::<HostnameResponse>()
             .await
@@ -181,10 +230,8 @@ impl EdgeNetworkClient for HttpCloudClient {
             .send()
             .await
             .context("failed to request public edge health verification")?;
-        anyhow::ensure!(
-            response.status() == StatusCode::OK,
-            "Cloud could not verify public edge health"
-        );
+        let response =
+            Self::require_ok(response, "Cloud could not verify public edge health").await?;
         Ok(response
             .json::<HostnameResponse>()
             .await
@@ -329,6 +376,31 @@ mod tests {
         ))
     }
 
+    async fn reject_network(Json(body): Json<Value>) -> (StatusCode, Json<Value>) {
+        match body.get("candidate_ipv4").and_then(Value::as_str) {
+            Some("1.1.1.1") => (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "error": "invalid_deployment_authorization" })),
+            ),
+            Some("9.9.9.9") => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({ "error": "address_verification_failed" })),
+            ),
+            Some("8.8.4.4") => (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(json!({ "error": "rate_limited" })),
+            ),
+            _ => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({ "error": "service_unavailable" })),
+            ),
+        }
+    }
+
+    async fn reject_health() -> (StatusCode, &'static str) {
+        (StatusCode::BAD_GATEWAY, "upstream secret response")
+    }
+
     #[tokio::test]
     async fn registered_credential_is_preserved_without_enrollment() {
         let test_root = tempfile::tempdir().unwrap();
@@ -451,6 +523,8 @@ mod tests {
         let router = Router::new()
             .route("/api/edge/me", get(get_identity))
             .route("/api/edge/enroll", post(enroll))
+            .route("/api/edge/network/configure", post(reject_network))
+            .route("/api/edge/network/health", post(reject_health))
             .with_state(log.clone());
         let handle = Handle::new();
         let task = tokio::spawn(
@@ -486,9 +560,62 @@ mod tests {
                 "service-credential".to_owned()
             )]
         );
+        for (address, expected) in [
+            (
+                "1.1.1.1",
+                "Cloud rejected edge network configuration (HTTP 401 Unauthorized, error: invalid_deployment_authorization)",
+            ),
+            (
+                "9.9.9.9",
+                "Cloud rejected edge network configuration (HTTP 422 Unprocessable Entity, error: address_verification_failed)",
+            ),
+            (
+                "8.8.4.4",
+                "Cloud rejected edge network configuration (HTTP 429 Too Many Requests, error: rate_limited)",
+            ),
+            (
+                "8.8.8.8",
+                "Cloud rejected edge network configuration (HTTP 503 Service Unavailable, error: service_unavailable)",
+            ),
+        ] {
+            assert_eq!(
+                client
+                    .configure_network("deployment-ticket", "service-credential", address)
+                    .await
+                    .unwrap_err()
+                    .to_string(),
+                expected
+            );
+        }
+        let unknown = client
+            .verify_health("deployment-ticket", "service-credential")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            unknown,
+            "Cloud could not verify public edge health (HTTP 502 Bad Gateway, error: unknown_cloud_error)"
+        );
+        assert!(!unknown.contains("upstream secret response"));
 
         handle.shutdown();
         task.await.unwrap().unwrap();
+    }
+
+    #[test]
+    fn cloud_error_codes_are_strict_and_do_not_expose_unknown_bodies() {
+        assert_eq!(
+            cloud_error_code(br#"{"error":"service_unavailable"}"#),
+            Some("service_unavailable".to_owned())
+        );
+        for body in [
+            br#"not json"#.as_slice(),
+            br#"{"message":"provider secret"}"#,
+            br#"{"error":"bad error"}"#,
+            br#"{"error":"valid_code","extra":"provider body"}"#,
+        ] {
+            assert_eq!(cloud_error_code(body), None);
+        }
     }
 
     #[test]

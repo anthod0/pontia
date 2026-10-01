@@ -8,6 +8,7 @@ import {
   type ExpiredTicket,
   type TicketRepository,
 } from "../src/cleanup";
+import { DnsProviderError } from "../src/dns-errors";
 import { createScheduledHandler, type Env } from "../src/index";
 
 const now = new Date("2099-01-01T01:00:00.000Z");
@@ -137,6 +138,25 @@ test("the scheduled entry uses its actual invocation time", async () => {
   ]);
 });
 
+test("diagnostic output cannot replace the cleanup result", async () => {
+  const result = await cleanupExpiredEdgeTickets(now, new MemoryRepository([]), new MemoryDns(), {
+    info() {
+      throw new Error("logger unavailable");
+    },
+    error() {
+      throw new Error("logger unavailable");
+    },
+  });
+
+  expect(result).toEqual({
+    scanned: 0,
+    ticketsDeleted: 0,
+    dnsRecordsDeleted: 0,
+    skipped: 0,
+    failed: 0,
+  });
+});
+
 test("ordinary purposes are deleted first and the expiration boundary is inclusive", async () => {
   const repository = new MemoryRepository([
     ticket({ id: 1 }),
@@ -258,6 +278,34 @@ test("one DNS failure retains its ticket without stopping independent cleanup", 
   expect(result).toMatchObject({ ticketsDeleted: 2, failed: 1 });
   expect(repository.tickets.map(({ id }) => id)).toEqual([1]);
   expect(dns.events).toContain("find:silent-crimson-orion.edge.pontia.dev");
+});
+
+test("DNS cleanup logs safe provider diagnostics and retains the ticket", async () => {
+  const repository = new MemoryRepository([ticket({ id: 1 })]);
+  const dns = new MemoryDns();
+  dns.findA = async () => {
+    throw new DnsProviderError("lookup", "provider_http_error", 403, [
+      { code: 10000, message: "Authentication error" },
+    ]);
+  };
+  const logs = logger();
+
+  expect(await cleanupExpiredEdgeTickets(now, repository, dns, logs.value)).toMatchObject({
+    failed: 1,
+    ticketsDeleted: 0,
+  });
+  expect(logs.errors).toEqual([
+    {
+      event: "edge_ticket_cleanup_item_failed",
+      ticket_id: 1,
+      hostname: "brave-silver-atlas.edge.pontia.dev",
+      operation: "lookup",
+      error: "provider_http_error",
+      status: 403,
+      provider_errors: [{ code: 10000, message: "Authentication error" }],
+    },
+  ]);
+  expect(repository.tickets).toHaveLength(1);
 });
 
 test("a retry finishes ticket deletion after DNS was removed", async () => {

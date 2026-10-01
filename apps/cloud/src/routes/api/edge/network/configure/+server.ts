@@ -1,7 +1,13 @@
 import { json } from "@sveltejs/kit";
 import { environment } from "$lib/server/auth/http";
-import { authorizeEdgeDeployment } from "$lib/server/edge-deployment";
-import { CloudflareDnsProvider, configureEdgeNetwork } from "$lib/server/edge-network";
+import { authorizeEdgeDeployment, type DeploymentIdentity } from "$lib/server/edge-deployment";
+import { DnsProviderError } from "$lib/server/cloudflare-dns-errors";
+import { logDeploymentEvent } from "$lib/server/deployment-observability";
+import {
+  CloudflareDnsProvider,
+  configureEdgeNetwork,
+  edgeHostname,
+} from "$lib/server/edge-network";
 import { remoteDatabase } from "$lib/server/remote-access/http";
 import type { RequestHandler } from "./$types";
 
@@ -10,11 +16,18 @@ export const POST: RequestHandler = async (event) => {
     return json({ error: "https_required" }, { status: 400 });
   }
 
+  let body: unknown;
   try {
-    const body = (await event.request.json()) as unknown;
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return json({ error: "invalid_network_configuration" }, { status: 400 });
-    }
+    body = await event.request.json();
+  } catch {
+    return json({ error: "service_unavailable" }, { status: 503 });
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return json({ error: "invalid_network_configuration" }, { status: 400 });
+  }
+
+  let trustedIdentity: DeploymentIdentity | null = null;
+  try {
     const input = body as Record<string, unknown>;
     if (
       Object.keys(input).length !== 3 ||
@@ -28,6 +41,7 @@ export const POST: RequestHandler = async (event) => {
     const db = remoteDatabase(event);
     const identity = await authorizeEdgeDeployment(db, input.ticket, input.service_credential);
     if (!identity) return json({ error: "invalid_deployment_authorization" }, { status: 401 });
+    trustedIdentity = identity;
 
     const env = environment(event);
     const allowed = await env.EDGE_NETWORK_RATE_LIMIT.limit({ key: identity.edgeId });
@@ -43,10 +57,41 @@ export const POST: RequestHandler = async (event) => {
       return json({ error: "invalid_network_configuration" }, { status: 400 });
     }
     if (result.status === "unreachable") {
+      logDeploymentEvent("warn", {
+        event: "edge_network_configuration_failed",
+        stage: "address_verification",
+        edge_id: identity.edgeId,
+        hostname: edgeHostname(identity.tunnelUrl),
+        candidate_ipv4: input.candidate_ipv4,
+        error: "address_verification_failed",
+      });
       return json({ error: "address_verification_failed" }, { status: 422 });
     }
+    logDeploymentEvent("info", {
+      event: "edge_network_configuration_succeeded",
+      stage: "dns_configuration",
+      edge_id: identity.edgeId,
+      hostname: result.hostname,
+      candidate_ipv4: input.candidate_ipv4,
+    });
     return json({ hostname: result.hostname });
-  } catch {
+  } catch (error) {
+    logDeploymentEvent("error", {
+      event: "edge_network_configuration_failed",
+      stage:
+        error instanceof DnsProviderError
+          ? "dns_provider"
+          : trustedIdentity
+            ? "network_configuration"
+            : "deployment_authorization",
+      ...(trustedIdentity
+        ? {
+            edge_id: trustedIdentity.edgeId,
+            hostname: edgeHostname(trustedIdentity.tunnelUrl),
+          }
+        : {}),
+      ...(error instanceof DnsProviderError ? error.fields() : { error: "unexpected_error" }),
+    });
     return json({ error: "service_unavailable" }, { status: 503 });
   }
 };

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import {
   CloudflareDnsProvider,
   configureEdgeNetwork,
@@ -7,6 +7,14 @@ import {
   verifyEdgeHealth,
   type DnsProvider,
 } from "../src/lib/server/edge-network";
+
+afterEach(() => mock.restore());
+
+function mockGlobalFetch(
+  implementation: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>,
+) {
+  return spyOn(globalThis, "fetch").mockImplementation(implementation as typeof fetch);
+}
 
 const identity = {
   edgeId: "0199791c-6600-7000-8000-000000000001",
@@ -134,10 +142,8 @@ test("health verification requires trusted HTTPS and the fixed response", async 
 });
 
 test("Cloudflare DNS adapter rejects a public IPv4 address change", async () => {
-  let requests = 0;
-  const provider = new CloudflareDnsProvider("secret", "zone", async () => {
-    requests += 1;
-    return Response.json({
+  const fetchMock = mockGlobalFetch(async () =>
+    Response.json({
       success: true,
       result: [
         {
@@ -148,19 +154,45 @@ test("Cloudflare DNS adapter rejects a public IPv4 address change", async () => 
           proxied: false,
         },
       ],
-    });
-  });
-
-  await expect(provider.ensureA("brave-silver-atlas.edge.pontia.dev", "8.8.8.8")).rejects.toThrow(
-    "unsupported",
+    }),
   );
-  expect(requests).toBe(1);
+  const provider = new CloudflareDnsProvider("secret", "zone");
+
+  await expect(
+    provider.ensureA("brave-silver-atlas.edge.pontia.dev", "8.8.8.8"),
+  ).rejects.toMatchObject({ operation: "update", category: "local_validation_error" });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("Cloudflare DNS adapter identifies lookup transport and provider failures", async () => {
+  let behavior = async (): Promise<Response> => {
+    throw new Error("token must not escape");
+  };
+  mockGlobalFetch(() => behavior());
+  const provider = new CloudflareDnsProvider("secret", "zone");
+  await expect(
+    provider.ensureA("brave-silver-atlas.edge.pontia.dev", "8.8.8.8"),
+  ).rejects.toMatchObject({ operation: "lookup", category: "network_error" });
+
+  behavior = async () =>
+    Response.json(
+      { success: false, errors: [{ code: 9109, message: "Invalid access token" }] },
+      { status: 403 },
+    );
+  await expect(
+    provider.ensureA("brave-silver-atlas.edge.pontia.dev", "8.8.8.8"),
+  ).rejects.toMatchObject({
+    operation: "lookup",
+    category: "provider_http_error",
+    status: 403,
+    providerErrors: [{ code: 9109, message: "Invalid access token" }],
+  });
 });
 
 test("Cloudflare DNS adapter updates only the exact A record", async () => {
   const requests: Array<[string, RequestInit]> = [];
-  const provider = new CloudflareDnsProvider("secret", "zone", async (input, init) => {
-    requests.push([String(input), init ?? {}]);
+  mockGlobalFetch(async (input, init) => {
+    requests.push([String(input), (init as RequestInit | undefined) ?? {}]);
     if (requests.length === 1) {
       return Response.json({
         success: true,
@@ -177,7 +209,11 @@ test("Cloudflare DNS adapter updates only the exact A record", async () => {
     }
     return Response.json({ success: true });
   });
+  const provider = new CloudflareDnsProvider("secret", "zone");
   await provider.ensureA("brave-silver-atlas.edge.pontia.dev", "8.8.8.8");
+  expect(requests[0][0]).toBe(
+    "https://api.cloudflare.com./client/v4/zones/zone/dns_records?type=A&name=brave-silver-atlas.edge.pontia.dev",
+  );
   expect(requests[1][0]).toEndWith("/dns_records/record");
   expect(requests[1][1].method).toBe("PUT");
   expect(requests[1][1].body).toContain('"proxied":false');

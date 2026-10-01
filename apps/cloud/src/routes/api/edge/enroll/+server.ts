@@ -1,5 +1,6 @@
 import { json } from "@sveltejs/kit";
 import { enrollEdge } from "$lib/server/edge-deployment";
+import { logDeploymentEvent } from "$lib/server/deployment-observability";
 import { remoteDatabase } from "$lib/server/remote-access/http";
 import type { RequestHandler } from "./$types";
 
@@ -31,12 +32,23 @@ export const POST: RequestHandler = async (event) => {
     if (result.status === "invalid") {
       return json({ error: "invalid_enrollment" }, { status: 401 });
     }
+    logDeploymentEvent("info", {
+      event: "edge_enrollment_succeeded",
+      stage: "enrollment",
+      edge_id: result.edge.edgeId,
+      hostname: new URL(result.edge.tunnelUrl).hostname,
+    });
     return json({
       edge_id: result.edge.edgeId,
       name: result.edge.name,
       tunnel_url: result.edge.tunnelUrl,
     });
   } catch {
+    logDeploymentEvent("error", {
+      event: "edge_enrollment_failed",
+      stage: "enrollment",
+      error: "unexpected_error",
+    });
     return json({ error: "service_unavailable" }, { status: 503 });
   }
 };

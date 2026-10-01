@@ -1,3 +1,5 @@
+import { DnsProviderError } from "./dns-errors";
+
 const EDGE_ZONE = "edge.pontia.dev";
 const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
@@ -47,6 +49,14 @@ export type CleanupSummary = {
   skipped: number;
   failed: number;
 };
+
+function log(logger: CleanupLogger, level: "info" | "error", value: Record<string, unknown>) {
+  try {
+    logger[level](value);
+  } catch {
+    // Cleanup results must not depend on diagnostic output.
+  }
+}
 
 function deploymentName(payload: string): string | null {
   let value: unknown;
@@ -156,14 +166,23 @@ export async function cleanupExpiredEdgeTickets(
       }
     } catch (error) {
       summary.failed += 1;
-      logger.error({
+      const name = ticket.purpose === "edge_deployment" ? deploymentName(ticket.payload) : null;
+      log(logger, "error", {
         event: "edge_ticket_cleanup_item_failed",
         ticket_id: ticket.id,
-        error: error instanceof Error ? error.message : "unexpected_error",
+        ...(name === null ? {} : { hostname: hostnameFor(name) }),
+        ...(error instanceof DnsProviderError
+          ? error.fields()
+          : {
+              error:
+                error instanceof Error && error.message === "invalid_deployment_payload"
+                  ? error.message
+                  : "unexpected_error",
+            }),
       });
     }
   }
 
-  logger.info({ event: "edge_ticket_cleanup_finished", ...summary });
+  log(logger, "info", { event: "edge_ticket_cleanup_finished", ...summary });
   return summary;
 }

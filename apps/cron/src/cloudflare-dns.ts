@@ -1,21 +1,14 @@
 import type { DnsARecord, DnsProvider } from "./cleanup";
-
-type LookupResponse = {
-  success?: unknown;
-  result?: Array<{ id?: unknown; name?: unknown; type?: unknown }>;
-};
-
-type Fetcher = (input: string, init: RequestInit) => Promise<Response>;
+import { DnsProviderError, readProviderResponse } from "./dns-errors";
 
 export class CloudflareDnsProvider implements DnsProvider {
   constructor(
     private readonly token: string,
     private readonly zoneId: string,
-    private readonly fetcher: Fetcher = fetch,
   ) {}
 
   private baseUrl() {
-    return `https://api.cloudflare.com/client/v4/zones/${encodeURIComponent(this.zoneId)}/dns_records`;
+    return `https://api.cloudflare.com./client/v4/zones/${encodeURIComponent(this.zoneId)}/dns_records`;
   }
 
   private headers() {
@@ -25,26 +18,22 @@ export class CloudflareDnsProvider implements DnsProvider {
   async findA(hostname: string): Promise<DnsARecord | null> {
     let response: Response;
     try {
-      response = await this.fetcher(
-        `${this.baseUrl()}?type=A&name=${encodeURIComponent(hostname)}`,
-        { method: "GET", headers: this.headers(), redirect: "manual" },
-      );
+      response = await fetch(`${this.baseUrl()}?type=A&name=${encodeURIComponent(hostname)}`, {
+        method: "GET",
+        headers: this.headers(),
+        redirect: "manual",
+      });
     } catch {
-      throw new Error("dns_lookup_failed");
+      throw new DnsProviderError("lookup", "network_error");
     }
-    if (!response.ok) throw new Error("dns_lookup_failed");
-
-    let body: LookupResponse;
-    try {
-      body = (await response.json()) as LookupResponse;
-    } catch {
-      throw new Error("dns_lookup_invalid_response");
+    const body = await readProviderResponse(response, "lookup");
+    if (!Array.isArray(body.result)) {
+      throw new DnsProviderError("lookup", "invalid_provider_response", response.status);
     }
-    if (body.success !== true || !Array.isArray(body.result)) {
-      throw new Error("dns_lookup_invalid_response");
+    if (body.result.length > 1) {
+      throw new DnsProviderError("lookup", "local_validation_error", response.status);
     }
-    if (body.result.length > 1) throw new Error("dns_lookup_duplicate_records");
-    const record = body.result[0];
+    const record = body.result[0] as Record<string, unknown> | undefined;
     if (record === undefined) return null;
     if (
       record.type !== "A" ||
@@ -52,7 +41,7 @@ export class CloudflareDnsProvider implements DnsProvider {
       typeof record.id !== "string" ||
       record.id.length === 0
     ) {
-      throw new Error("dns_lookup_unexpected_record");
+      throw new DnsProviderError("lookup", "local_validation_error", response.status);
     }
     return { id: record.id, hostname };
   }
@@ -60,26 +49,28 @@ export class CloudflareDnsProvider implements DnsProvider {
   async deleteA(record: DnsARecord) {
     let response: Response;
     try {
-      response = await this.fetcher(`${this.baseUrl()}/${encodeURIComponent(record.id)}`, {
+      response = await fetch(`${this.baseUrl()}/${encodeURIComponent(record.id)}`, {
         method: "DELETE",
         headers: this.headers(),
         redirect: "manual",
       });
     } catch {
-      throw new Error("dns_delete_failed");
+      throw new DnsProviderError("delete", "network_error");
     }
     if (response.status === 404) {
+      let deletionError: DnsProviderError;
+      try {
+        await readProviderResponse(response, "delete");
+        deletionError = new DnsProviderError("delete", "provider_http_error", 404);
+      } catch (error) {
+        deletionError =
+          error instanceof DnsProviderError
+            ? error
+            : new DnsProviderError("delete", "provider_http_error", 404);
+      }
       if ((await this.findA(record.hostname)) === null) return;
-      throw new Error("dns_delete_not_confirmed");
+      throw deletionError;
     }
-    if (!response.ok) throw new Error("dns_delete_failed");
-
-    let body: { success?: unknown };
-    try {
-      body = (await response.json()) as { success?: unknown };
-    } catch {
-      throw new Error("dns_delete_invalid_response");
-    }
-    if (body.success !== true) throw new Error("dns_delete_rejected");
+    await readProviderResponse(response, "delete");
   }
 }

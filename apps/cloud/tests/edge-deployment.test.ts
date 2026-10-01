@@ -101,6 +101,11 @@ test("health failure leaves the deployment unregistered and unconsumed", async (
 
   expect(await confirmEdgeDeployment(database.db, ticket, credential, async () => false)).toEqual({
     status: "unhealthy",
+    edge: {
+      edgeId,
+      name: "brave-silver-atlas",
+      tunnelUrl: "wss://brave-silver-atlas.edge.pontia.dev/tunnel",
+    },
   });
   expect(await database.db.select().from(edges)).toHaveLength(0);
   expect((await database.db.select().from(edgeTickets).get())?.consumedAt).toBeNull();

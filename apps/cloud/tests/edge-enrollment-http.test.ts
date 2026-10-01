@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import type { RequestEvent } from "@sveltejs/kit";
 import { base64url } from "jose";
 import { POST as enroll } from "../src/routes/api/edge/enroll/+server";
@@ -78,18 +78,31 @@ test("edge enrollment requires HTTPS and accepts only ticket and credential", as
   );
   expect(extra.status).toBe(401);
 
+  const info = spyOn(console, "info").mockImplementation(() => undefined);
   const response = await callEnroll(
     event("/api/edge/enroll", {
       method: "POST",
       body: { ticket: deploymentTicket, service_credential: credential },
     }),
   );
+  const calls = [...info.mock.calls];
+  info.mockRestore();
   expect(response.status).toBe(200);
   expect((await response.json()) as Record<string, string>).toEqual({
     edge_id: edgeId,
     name: "silent-crimson-orion",
     tunnel_url: "wss://silent-crimson-orion.edge.pontia.dev/tunnel",
   });
+  expect(calls).toContainEqual([
+    {
+      event: "edge_enrollment_succeeded",
+      stage: "enrollment",
+      edge_id: edgeId,
+      hostname: "silent-crimson-orion.edge.pontia.dev",
+    },
+  ]);
+  expect(JSON.stringify(calls)).not.toContain(deploymentTicket);
+  expect(JSON.stringify(calls)).not.toContain(credential);
 });
 
 test("enrollment does not establish the long-lived edge identity", async () => {

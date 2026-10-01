@@ -1,3 +1,8 @@
+import {
+  DnsProviderError,
+  readDnsProviderResponse,
+  type DnsOperation,
+} from "./cloudflare-dns-errors";
 import { isHeroName } from "./hero-name";
 
 const EDGE_ZONE = "edge.pontia.dev";
@@ -223,34 +228,30 @@ export class CloudflareDnsProvider implements DnsProvider {
   constructor(
     private readonly token: string,
     private readonly zoneId: string,
-    private readonly fetcher: (input: string, init: RequestInit) => Promise<Response> = fetch,
   ) {}
 
   async ensureA(hostname: string, address: string) {
-    const base = `https://api.cloudflare.com/client/v4/zones/${encodeURIComponent(this.zoneId)}/dns_records`;
+    const base = `https://api.cloudflare.com./client/v4/zones/${encodeURIComponent(this.zoneId)}/dns_records`;
     const headers = { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" };
-    const lookup = await this.fetcher(`${base}?type=A&name=${encodeURIComponent(hostname)}`, {
-      method: "GET",
-      headers,
-      redirect: "manual",
-    });
-    if (!lookup.ok) throw new Error("DNS provider lookup failed");
-    const body = (await lookup.json()) as {
-      success?: unknown;
-      result?: Array<{
-        id?: unknown;
-        name?: unknown;
-        type?: unknown;
-        content?: unknown;
-        proxied?: unknown;
-      }>;
-    };
-    if (body.success !== true || !Array.isArray(body.result)) {
-      throw new Error("DNS provider returned an invalid lookup response");
+    let lookup: Response;
+    try {
+      lookup = await fetch(`${base}?type=A&name=${encodeURIComponent(hostname)}`, {
+        method: "GET",
+        headers,
+        redirect: "manual",
+      });
+    } catch {
+      throw new DnsProviderError("lookup", "network_error");
+    }
+    const body = await readDnsProviderResponse(lookup, "lookup");
+    if (!Array.isArray(body.result)) {
+      throw new DnsProviderError("lookup", "invalid_provider_response", lookup.status);
     }
     const records = body.result;
-    if (records.length > 1) throw new Error("DNS provider returned duplicate A records");
-    const record = records[0];
+    if (records.length > 1) {
+      throw new DnsProviderError("lookup", "local_validation_error", lookup.status);
+    }
+    const record = records[0] as Record<string, unknown> | undefined;
     if (
       record &&
       (record.name !== hostname ||
@@ -258,10 +259,10 @@ export class CloudflareDnsProvider implements DnsProvider {
         typeof record.id !== "string" ||
         typeof record.content !== "string")
     ) {
-      throw new Error("DNS provider returned an unexpected record");
+      throw new DnsProviderError("lookup", "local_validation_error", lookup.status);
     }
     if (record?.content !== undefined && record.content !== address) {
-      throw new Error("changing an edge public IPv4 address is unsupported");
+      throw new DnsProviderError("update", "local_validation_error");
     }
     if (record?.content === address && record.proxied === false) return;
     const payload = JSON.stringify({
@@ -271,17 +272,18 @@ export class CloudflareDnsProvider implements DnsProvider {
       ttl: 60,
       proxied: false,
     });
-    const saved = await this.fetcher(
-      record ? `${base}/${encodeURIComponent(record.id as string)}` : base,
-      {
+    const operation: DnsOperation = record ? "update" : "create";
+    let saved: Response;
+    try {
+      saved = await fetch(record ? `${base}/${encodeURIComponent(record.id as string)}` : base, {
         method: record ? "PUT" : "POST",
         headers,
         body: payload,
         redirect: "manual",
-      },
-    );
-    if (!saved.ok) throw new Error("DNS provider update failed");
-    const savedBody = (await saved.json()) as { success?: unknown };
-    if (savedBody.success !== true) throw new Error("DNS provider rejected update");
+      });
+    } catch {
+      throw new DnsProviderError(operation, "network_error");
+    }
+    await readDnsProviderResponse(saved, operation);
   }
 }

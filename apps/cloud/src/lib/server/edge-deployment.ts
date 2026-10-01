@@ -232,7 +232,7 @@ export async function enrollEdge(
 export type ConfirmationResult =
   | { status: "created" | "existing"; edge: DeploymentIdentity }
   | { status: "invalid" }
-  | { status: "unhealthy" };
+  | { status: "unhealthy"; edge: DeploymentIdentity };
 
 export async function confirmEdgeDeployment(
   db: Database,
@@ -256,7 +256,7 @@ export async function confirmEdgeDeployment(
 
   const active = await authorizeEdgeDeployment(db, ticketValue, credentialValue);
   if (!active) return { status: "invalid" };
-  if (!(await verifyHealth(active))) return { status: "unhealthy" };
+  if (!(await verifyHealth(active))) return { status: "unhealthy", edge: active };
 
   const condition = and(
     eq(edgeTickets.id, deployment.ticketId),
