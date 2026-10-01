@@ -86,6 +86,14 @@ CREATE TABLE `edge_tickets` (
 	CONSTRAINT "edge_tickets_payload_json_check" CHECK(json_valid("payload"))
 );
 
+CREATE TABLE `hero_name_heroes` (
+	`word` text PRIMARY KEY NOT NULL
+);
+
+CREATE TABLE `hero_name_modifiers` (
+	`word` text PRIMARY KEY NOT NULL
+);
+
 CREATE TABLE `users` (
 	`id` text PRIMARY KEY NOT NULL,
 	`display_name` text,

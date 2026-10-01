@@ -47,6 +47,22 @@ export const edges = sqliteTable(
   ],
 );
 
+export const heroNameModifiers = sqliteTable(
+  "hero_name_modifiers",
+  {
+    word: text().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.word] })],
+);
+
+export const heroNameHeroes = sqliteTable(
+  "hero_name_heroes",
+  {
+    word: text().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.word] })],
+);
+
 export const devices = sqliteTable(
   "devices",
   {
