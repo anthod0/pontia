@@ -1,5 +1,8 @@
 import { base64url } from "jose";
-import { authenticateDashboardBootstrap } from "$lib/server/remote-access/dashboard-http";
+import {
+  authenticateDashboardBootstrap,
+  PUBLIC_DASHBOARD_ORIGIN,
+} from "$lib/server/remote-access/dashboard-http";
 import { issueDashboardAccess } from "$lib/server/remote-access/dashboard-access";
 import { remoteDatabase } from "$lib/server/remote-access/http";
 import type { RequestHandler } from "./$types";
@@ -17,9 +20,9 @@ function bootstrapPage(action: string, ticket: string) {
   const actionOrigin = new URL(action).origin;
   const headers = new Headers({
     "Cache-Control": "no-store",
-    "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; form-action ${actionOrigin}; base-uri 'none'; frame-ancestors 'none'`,
+    "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; form-action ${actionOrigin} ${PUBLIC_DASHBOARD_ORIGIN}; base-uri 'none'; frame-ancestors 'none'`,
     "Content-Type": "text/html; charset=utf-8",
-    "Referrer-Policy": "no-referrer",
+    "Referrer-Policy": "origin",
   });
   const body = `<!doctype html>
 <html lang="en">

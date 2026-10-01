@@ -118,10 +118,12 @@ test("launch returns a no-store nonce-authorized form to the derived edge bootst
 
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
-  expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  expect(response.headers.get("referrer-policy")).toBe("origin");
   expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
   const csp = response.headers.get("content-security-policy") ?? "";
-  expect(csp).toContain("form-action https://brave-silver-atlas.edge.pontia.dev");
+  expect(csp).toContain(
+    "form-action https://brave-silver-atlas.edge.pontia.dev https://app.pontia.dev",
+  );
   expect(csp).toContain("script-src 'nonce-");
   expect(csp).not.toContain("unsafe-inline");
 

@@ -13,6 +13,9 @@ export default defineConfig({
           filename.split(/[/\\]/).includes("node_modules") ? undefined : true,
       },
       adapter: adapter(),
+      csrf: {
+        trustedOrigins: ["https://app.pontia.dev"],
+      },
     }),
   ],
 });
