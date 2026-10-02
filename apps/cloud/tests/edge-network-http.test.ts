@@ -44,6 +44,7 @@ function event(ticket: string, serviceCredential: string, allowed: boolean) {
         ticket,
         service_credential: serviceCredential,
         candidate_ipv4: "8.8.8.8",
+        port: 80,
       }),
     }),
     platform: {

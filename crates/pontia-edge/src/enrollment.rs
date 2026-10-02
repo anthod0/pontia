@@ -41,8 +41,17 @@ pub trait EdgeNetworkClient {
         ticket: &str,
         credential: &str,
         candidate_ipv4: &str,
+        port: u16,
+        dns_challenge: Option<&str>,
     ) -> Result<String>;
-    async fn verify_health(&self, ticket: &str, credential: &str) -> Result<String>;
+    async fn verify_health(&self, ticket: &str, credential: &str, port: u16) -> Result<String>;
+}
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DnsOperation {
+    Publish,
+    Cleanup,
 }
 
 pub struct HttpCloudClient {
@@ -69,6 +78,30 @@ impl HttpCloudClient {
                 .context("failed to create Cloud client")?,
             origin: parsed,
         })
+    }
+
+    pub async fn dns_challenge(
+        &self,
+        credential: &str,
+        ticket: Option<&str>,
+        operation: DnsOperation,
+        value: &str,
+    ) -> Result<()> {
+        let mut body = serde_json::json!({ "operation": operation, "value": value });
+        if let Some(ticket) = ticket {
+            body["ticket"] = ticket.into();
+        }
+        let response = self
+            .client
+            .post(self.endpoint("api/edge/dns-challenge")?)
+            .bearer_auth(credential)
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(30))
+            .send()
+            .await
+            .context("failed to request DNS challenge operation")?;
+        Self::require_ok(response, "Cloud rejected DNS challenge operation").await?;
+        Ok(())
     }
 
     pub fn origin(&self) -> &Url {
@@ -102,6 +135,16 @@ struct NetworkRequest<'a> {
     ticket: &'a str,
     service_credential: &'a str,
     candidate_ipv4: &'a str,
+    port: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dns_challenge: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct HealthRequest<'a> {
+    ticket: &'a str,
+    service_credential: &'a str,
+    port: u16,
 }
 
 #[derive(Deserialize)]
@@ -198,6 +241,8 @@ impl EdgeNetworkClient for HttpCloudClient {
         ticket: &str,
         credential: &str,
         candidate_ipv4: &str,
+        port: u16,
+        dns_challenge: Option<&str>,
     ) -> Result<String> {
         let response = self
             .client
@@ -206,6 +251,8 @@ impl EdgeNetworkClient for HttpCloudClient {
                 ticket,
                 service_credential: credential,
                 candidate_ipv4,
+                port,
+                dns_challenge,
             })
             .send()
             .await
@@ -219,13 +266,14 @@ impl EdgeNetworkClient for HttpCloudClient {
             .hostname)
     }
 
-    async fn verify_health(&self, ticket: &str, credential: &str) -> Result<String> {
+    async fn verify_health(&self, ticket: &str, credential: &str, port: u16) -> Result<String> {
         let response = self
             .client
             .post(self.endpoint("api/edge/network/health")?)
-            .json(&EnrollmentRequest {
+            .json(&HealthRequest {
                 ticket,
                 service_credential: credential,
+                port,
             })
             .send()
             .await
@@ -580,7 +628,7 @@ mod tests {
         ] {
             assert_eq!(
                 client
-                    .configure_network("deployment-ticket", "service-credential", address)
+                    .configure_network("deployment-ticket", "service-credential", address, 80, None)
                     .await
                     .unwrap_err()
                     .to_string(),
@@ -588,7 +636,7 @@ mod tests {
             );
         }
         let unknown = client
-            .verify_health("deployment-ticket", "service-credential")
+            .verify_health("deployment-ticket", "service-credential", 443)
             .await
             .unwrap_err()
             .to_string();

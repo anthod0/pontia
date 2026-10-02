@@ -16,7 +16,7 @@ export interface Env {
 type ScheduledDependencies = {
   now(): Date;
   repository(env: Env): TicketRepository;
-  dns(env: Env): DnsProvider;
+  dns(env: Env): DnsProvider & { cleanupExpiredTxt(now: Date): Promise<number> };
   logger: CleanupLogger;
 };
 
@@ -34,10 +34,17 @@ const defaultDependencies: ScheduledDependencies = {
 
 export function createScheduledHandler(dependencies: ScheduledDependencies) {
   return async (_controller: ScheduledController, env: Env) => {
+    const dns = dependencies.dns(env);
+    try {
+      const deleted = await dns.cleanupExpiredTxt(dependencies.now());
+      dependencies.logger.info({ event: "edge_acme_txt_cleanup", deleted });
+    } catch {
+      dependencies.logger.error({ event: "edge_acme_txt_cleanup_failed" });
+    }
     await cleanupExpiredEdgeTickets(
       dependencies.now(),
       dependencies.repository(env),
-      dependencies.dns(env),
+      dns,
       dependencies.logger,
     );
   };

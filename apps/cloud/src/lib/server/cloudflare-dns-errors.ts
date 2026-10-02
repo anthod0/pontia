@@ -1,4 +1,4 @@
-export type DnsOperation = "lookup" | "create" | "update";
+export type DnsOperation = "lookup" | "create" | "update" | "delete";
 export type DnsErrorCategory =
   | "network_error"
   | "provider_http_error"

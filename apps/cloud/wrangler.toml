@@ -46,6 +46,14 @@ namespace_id = "1001"
 limit = 3
 period = 60
 
+[[ratelimits]]
+name = "EDGE_DNS_RATE_LIMIT"
+namespace_id = "1002"
+
+[ratelimits.simple]
+limit = 10
+period = 60
+
 [assets]
 binding = "ASSETS"
 directory = ".svelte-kit/cloudflare"

@@ -107,9 +107,12 @@ test("derives only canonical Pontia edge API origins", () => {
   expect(edgeApiOrigin("wss://registered-name.edge.pontia.dev/tunnel")).toBe(
     "https://registered-name.edge.pontia.dev",
   );
+  expect(edgeApiOrigin("wss://brave-atlas.edge.pontia.dev:8443/tunnel")).toBe(
+    "https://brave-atlas.edge.pontia.dev:8443",
+  );
   for (const tunnelUrl of [
     "ws://brave-atlas.edge.pontia.dev/tunnel",
-    "wss://brave-atlas.edge.pontia.dev:444/tunnel",
+    "wss://brave-atlas.edge.pontia.dev:25/tunnel",
     "wss://brave-atlas.edge.pontia.dev/tunnel?target=x",
     "wss://-invalid.edge.pontia.dev/tunnel",
     "wss://brave-atlas.edge.pontia.dev/tunnel/",

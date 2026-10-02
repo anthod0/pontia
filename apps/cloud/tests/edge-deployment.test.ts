@@ -143,6 +143,51 @@ test("successful health verification atomically registers the edge and supports 
   expect(await database.db.select().from(edges)).toHaveLength(1);
 });
 
+test("only final verified port is persisted and repeated init cannot reconfigure it", async () => {
+  const ticket = ticketFrom((await issuedDeployment()).command);
+  const tunnelUrl = "wss://brave-atlas.edge.pontia.dev:8443/tunnel";
+  expect(
+    await confirmEdgeDeployment(
+      database.db,
+      ticket,
+      credential,
+      async (identity) => {
+        expect(identity.tunnelUrl).toBe(tunnelUrl);
+        return false;
+      },
+      8443,
+    ),
+  ).toMatchObject({ status: "unhealthy" });
+  expect(await database.db.select().from(edges)).toHaveLength(0);
+  const result = await confirmEdgeDeployment(
+    database.db,
+    ticket,
+    credential,
+    async (identity) => {
+      expect(identity.tunnelUrl).toBe(tunnelUrl);
+      return true;
+    },
+    8443,
+  );
+  expect(result).toMatchObject({ status: "created", edge: { tunnelUrl } });
+  expect((await database.db.select().from(edges).get())?.tunnelUrl).toBe(tunnelUrl);
+  expect(await enrollEdge(database.db, ticket, credential)).toMatchObject({
+    status: "existing",
+    edge: { tunnelUrl },
+  });
+  expect(
+    await confirmEdgeDeployment(
+      database.db,
+      ticket,
+      credential,
+      async () => {
+        throw new Error("completed enrollment must not probe again");
+      },
+      9443,
+    ),
+  ).toMatchObject({ status: "existing", edge: { tunnelUrl } });
+});
+
 test("concurrent final confirmations deterministically return the same edge", async () => {
   const ticket = ticketFrom((await issuedDeployment()).command);
   let arrivals = 0;

@@ -9,8 +9,10 @@ pub mod enrollment;
 mod files;
 pub mod network;
 mod online;
+pub mod port;
 pub mod systemd;
 mod tickets;
+pub mod tls;
 
 use std::{sync::Arc, time::Duration};
 

@@ -3,6 +3,7 @@ import {
   CloudflareDnsProvider,
   configureEdgeNetwork,
   edgeHostname,
+  edgeApiOrigin,
   isGlobalUnicastIpv4,
   verifyEdgeHealth,
   type DnsProvider,
@@ -52,7 +53,7 @@ test("extracts only a canonical assigned edge hostname", () => {
   expect(edgeHostname(identity.tunnelUrl)).toBe("brave-atlas.edge.pontia.dev");
   for (const invalid of [
     "ws://brave-atlas.edge.pontia.dev/tunnel",
-    "wss://brave-atlas.edge.pontia.dev:444/tunnel",
+    "wss://brave-atlas.edge.pontia.dev:25/tunnel",
     "wss://brave-atlas.edge.pontia.dev/other",
     "wss://two.parts.edge.pontia.dev/tunnel",
     "wss://brave-atlas.edge.pontia.dev/tunnel?q=1",
@@ -87,6 +88,9 @@ test("accepts only global-unicast IPv4 candidates", () => {
 test("verifies address control before creating an idempotent A record", async () => {
   const calls: string[] = [];
   const dns: DnsProvider = {
+    async publishTxt() {
+      throw new Error("HTTP-01 must not publish TXT");
+    },
     async ensureA(hostname, address) {
       calls.push(`${hostname}=${address}`);
     },
@@ -120,6 +124,9 @@ test("does not touch DNS when the TCP probe has a bad status, mismatches, or is 
       randomBytes: () => new Uint8Array(32).fill(9),
       connect: () => socketResponse(response),
       dns: {
+        async publishTxt() {
+          throw new Error("unverified candidates must not publish TXT");
+        },
         async ensureA() {
           dnsCalls += 1;
         },

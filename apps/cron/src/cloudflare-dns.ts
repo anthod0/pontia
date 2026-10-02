@@ -15,6 +15,46 @@ export class CloudflareDnsProvider implements DnsProvider {
     return { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" };
   }
 
+  async cleanupExpiredTxt(now: Date) {
+    const expiredIds: string[] = [];
+    // Enumerate before deleting so pagination cannot skip records after a deletion.
+    for (let page = 1; ; page++) {
+      const response = await fetch(`${this.baseUrl()}?type=TXT&per_page=20&page=${page}`, {
+        headers: this.headers(),
+        redirect: "manual",
+      });
+      const body = await readProviderResponse(response, "lookup");
+      if (!Array.isArray(body.result))
+        throw new DnsProviderError("lookup", "invalid_provider_response");
+      for (const record of body.result as Record<string, unknown>[]) {
+        if (
+          record.type !== "TXT" ||
+          typeof record.name !== "string" ||
+          typeof record.id !== "string" ||
+          typeof record.created_on !== "string"
+        )
+          continue;
+        const match =
+          /^_acme-challenge\.([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\.edge\.pontia\.dev$/.exec(
+            record.name,
+          );
+        const created = Date.parse(record.created_on);
+        if (match && Number.isFinite(created) && now.getTime() - created > 24 * 60 * 60 * 1000)
+          expiredIds.push(record.id);
+      }
+      if (body.result.length < 20) break;
+    }
+    for (const id of expiredIds) {
+      const response = await fetch(`${this.baseUrl()}/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: this.headers(),
+        redirect: "manual",
+      });
+      if (response.status !== 404) await readProviderResponse(response, "delete");
+    }
+    return expiredIds.length;
+  }
+
   async findA(hostname: string): Promise<DnsARecord | null> {
     let response: Response;
     try {

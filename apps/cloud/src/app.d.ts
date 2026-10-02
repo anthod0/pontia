@@ -16,6 +16,7 @@ declare global {
         CLOUDFLARE_DNS_TOKEN: string;
         CLOUDFLARE_DNS_ZONE_ID: string;
         EDGE_NETWORK_RATE_LIMIT: RateLimit;
+        EDGE_DNS_RATE_LIMIT: RateLimit;
       };
       ctx: ExecutionContext;
       caches: CacheStorage;

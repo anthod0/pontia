@@ -397,6 +397,9 @@ mod tests {
     #[test]
     fn tunnel_url_accepts_only_the_wss_tunnel_endpoint() {
         assert!(validate_tunnel_url("wss://edge.example/tunnel").is_ok());
+        let custom = validate_tunnel_url("wss://edge.example:8443/tunnel").unwrap();
+        assert_eq!(custom.port(), Some(8443));
+        assert_eq!(custom.as_str(), "wss://edge.example:8443/tunnel");
         for value in [
             "ws://edge.example/tunnel",
             "wss://user:secret@edge.example/tunnel",

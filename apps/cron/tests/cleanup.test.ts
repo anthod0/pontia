@@ -87,6 +87,10 @@ class MemoryDns implements DnsProvider {
 
   constructor(readonly records = new Map<string, { id: string }>()) {}
 
+  async cleanupExpiredTxt(_now: Date) {
+    return 0;
+  }
+
   async findA(hostname: string) {
     this.events.push(`find:${hostname}`);
     if (this.failLookupFor.has(hostname)) throw new Error("dns_lookup_failed");
@@ -127,6 +131,7 @@ test("the scheduled entry uses its actual invocation time", async () => {
 
   expect(repository.events).toEqual([`scan:${now.toISOString()}`]);
   expect(logs.info).toEqual([
+    { event: "edge_acme_txt_cleanup", deleted: 0 },
     {
       event: "edge_ticket_cleanup_finished",
       scanned: 0,

@@ -1,3 +1,4 @@
+import { isEdgePort } from "../../../../../../../../shared/edge-port";
 import { json } from "@sveltejs/kit";
 import { confirmEdgeDeployment, type DeploymentIdentity } from "$lib/server/edge-deployment";
 import { logDeploymentEvent } from "$lib/server/deployment-observability";
@@ -24,7 +25,8 @@ export const POST: RequestHandler = async (event) => {
   try {
     const input = body as Record<string, unknown>;
     if (
-      Object.keys(input).length !== 2 ||
+      Object.keys(input).length !== 3 ||
+      !isEdgePort(input.port) ||
       typeof input.ticket !== "string" ||
       typeof input.service_credential !== "string"
     ) {
@@ -47,6 +49,7 @@ export const POST: RequestHandler = async (event) => {
         if (healthy) verification.identity = identity;
         return healthy;
       },
+      input.port,
     );
     if (result.status === "invalid") {
       if (verification.identity) {

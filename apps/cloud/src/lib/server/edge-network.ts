@@ -3,6 +3,7 @@ import {
   readDnsProviderResponse,
   type DnsOperation,
 } from "./cloudflare-dns-errors";
+import { isEdgePort, edgeAuthority } from "../../../../../shared/edge-port";
 const EDGE_ZONE = "edge.pontia.dev";
 const CHALLENGE_PREFIX = "/.well-known/pontia-edge-address/";
 const PROBE_TIMEOUT_MS = 5_000;
@@ -16,6 +17,7 @@ export type EdgeNetworkIdentity = {
 
 export interface DnsProvider {
   ensureA(hostname: string, address: string): Promise<void>;
+  publishTxt(hostname: string, value: string): Promise<void>;
 }
 
 type TcpSocket = {
@@ -44,7 +46,7 @@ export function edgeHostname(tunnelUrl: string): string | null {
     parsed.protocol !== "wss:" ||
     parsed.username !== "" ||
     parsed.password !== "" ||
-    parsed.port !== "" ||
+    !isEdgePort(Number(parsed.port || 443)) ||
     parsed.pathname !== "/tunnel" ||
     parsed.search !== "" ||
     parsed.hash !== ""
@@ -60,8 +62,10 @@ export function edgeHostname(tunnelUrl: string): string | null {
 
 export function edgeApiOrigin(tunnelUrl: string): string | null {
   const hostname = edgeHostname(tunnelUrl);
-  if (!hostname || tunnelUrl !== `wss://${hostname}/tunnel`) return null;
-  return `https://${hostname}`;
+  if (!hostname) return null;
+  const authority = edgeAuthority(hostname, Number(new URL(tunnelUrl).port || 443));
+  if (tunnelUrl !== `wss://${authority}/tunnel`) return null;
+  return `https://${authority}`;
 }
 
 export function isGlobalUnicastIpv4(value: string): boolean {
@@ -149,8 +153,9 @@ async function probeIpv4(
   candidateIpv4: string,
   challenge: string,
   connect: EdgeNetworkDependencies["connect"],
+  port: number,
 ) {
-  const socket = connect({ hostname: candidateIpv4, port: 80 });
+  const socket = connect({ hostname: candidateIpv4, port });
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const probe = (async () => {
@@ -158,7 +163,7 @@ async function probeIpv4(
       const writer = socket.writable.getWriter();
       await writer.write(
         new TextEncoder().encode(
-          `GET ${CHALLENGE_PREFIX}${challenge} HTTP/1.1\r\nHost: ${candidateIpv4}\r\nAccept: text/plain\r\nConnection: close\r\n\r\n`,
+          `GET ${CHALLENGE_PREFIX}${challenge} HTTP/1.1\r\nHost: ${port === 80 ? candidateIpv4 : `${candidateIpv4}:${port}`}\r\nAccept: text/plain\r\nConnection: close\r\n\r\n`,
         ),
       );
       writer.releaseLock();
@@ -185,13 +190,21 @@ export async function configureEdgeNetwork(
   identity: EdgeNetworkIdentity,
   candidateIpv4: string,
   dependencies: EdgeNetworkDependencies,
+  port = 80,
+  dnsChallenge?: string,
 ) {
   const hostname = edgeHostname(identity.tunnelUrl);
-  if (!hostname || !isGlobalUnicastIpv4(candidateIpv4)) return { status: "invalid" as const };
+  if (
+    !hostname ||
+    !isEdgePort(port) ||
+    !isGlobalUnicastIpv4(candidateIpv4) ||
+    (dnsChallenge !== undefined && !validDnsChallenge(dnsChallenge))
+  )
+    return { status: "invalid" as const };
 
   const challenge = nonce(dependencies.randomBytes);
   try {
-    if (!(await probeIpv4(candidateIpv4, challenge, dependencies.connect))) {
+    if (!(await probeIpv4(candidateIpv4, challenge, dependencies.connect, port))) {
       return { status: "unreachable" as const };
     }
   } catch {
@@ -199,14 +212,16 @@ export async function configureEdgeNetwork(
   }
 
   await dependencies.dns.ensureA(hostname, candidateIpv4);
+  if (dnsChallenge !== undefined) await dependencies.dns.publishTxt(hostname, dnsChallenge);
   return { status: "configured" as const, hostname };
 }
 
 export async function verifyEdgeHealth(identity: EdgeNetworkIdentity, fetcher: HttpFetcher) {
   const hostname = edgeHostname(identity.tunnelUrl);
-  if (!hostname) return false;
+  const origin = edgeApiOrigin(identity.tunnelUrl);
+  if (!hostname || !origin) return false;
   try {
-    const response = await fetcher(`https://${hostname}/healthz`, {
+    const response = await fetcher(`${origin}/healthz`, {
       method: "GET",
       redirect: "manual",
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
@@ -220,11 +235,85 @@ export async function verifyEdgeHealth(identity: EdgeNetworkIdentity, fetcher: H
   }
 }
 
+export function validDnsChallenge(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
 export class CloudflareDnsProvider implements DnsProvider {
   constructor(
     private readonly token: string,
     private readonly zoneId: string,
   ) {}
+
+  private async txtRequest(operation: DnsOperation, path: string, init: RequestInit = {}) {
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://api.cloudflare.com./client/v4/zones/${encodeURIComponent(this.zoneId)}/dns_records${path}`,
+        {
+          ...init,
+          signal: AbortSignal.timeout(10_000),
+          headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+          redirect: "manual",
+        },
+      );
+    } catch {
+      throw new DnsProviderError(operation, "network_error");
+    }
+    // Deleting an already-removed record is an idempotent success.
+    if (operation === "delete" && response.status === 404) return { result: [] };
+    return readDnsProviderResponse(response, operation);
+  }
+
+  private async matchingTxt(hostname: string, value: string) {
+    if (!edgeHostname(`wss://${hostname}/tunnel`) || !validDnsChallenge(value)) {
+      throw new DnsProviderError("lookup", "local_validation_error");
+    }
+    const name = `_acme-challenge.${hostname}`;
+    const records: { id: string }[] = [];
+    for (let page = 1; ; page++) {
+      const body = await this.txtRequest(
+        "lookup",
+        `?type=TXT&name=${encodeURIComponent(name)}&per_page=20&page=${page}`,
+      );
+      if (!Array.isArray(body.result))
+        throw new DnsProviderError("lookup", "invalid_provider_response");
+      for (const record of body.result as Record<string, unknown>[]) {
+        if (
+          record.name !== name ||
+          record.type !== "TXT" ||
+          typeof record.id !== "string" ||
+          typeof record.content !== "string"
+        ) {
+          throw new DnsProviderError("lookup", "invalid_provider_response");
+        }
+        if (record.content === value || record.content === JSON.stringify(value)) {
+          records.push({ id: record.id });
+        }
+      }
+      if (body.result.length < 20) break;
+    }
+    return records;
+  }
+
+  async publishTxt(hostname: string, value: string) {
+    if ((await this.matchingTxt(hostname, value)).length) return;
+    await this.txtRequest("create", "", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "TXT",
+        name: `_acme-challenge.${hostname}`,
+        content: JSON.stringify(value),
+        ttl: 60,
+      }),
+    });
+  }
+
+  async cleanupTxt(hostname: string, value: string) {
+    for (const record of await this.matchingTxt(hostname, value)) {
+      await this.txtRequest("delete", `/${encodeURIComponent(record.id)}`, { method: "DELETE" });
+    }
+  }
 
   async ensureA(hostname: string, address: string) {
     const base = `https://api.cloudflare.com./client/v4/zones/${encodeURIComponent(this.zoneId)}/dns_records`;

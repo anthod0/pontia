@@ -21,6 +21,10 @@ impl ChallengeResponses {
         self.0.write().await.insert(token, response);
     }
 
+    pub(crate) async fn is_active(&self) -> bool {
+        !self.0.read().await.is_empty()
+    }
+
     pub async fn remove(&self, token: &str) {
         self.0.write().await.remove(token);
     }
@@ -34,11 +38,19 @@ pub struct ChallengeServer {
 
 impl ChallengeServer {
     pub async fn start(address: SocketAddr) -> Result<Self> {
+        Self::start_router(address, true).await
+    }
+
+    pub async fn start_acme(address: SocketAddr) -> Result<Self> {
+        Self::start_router(address, false).await
+    }
+
+    async fn start_router(address: SocketAddr, address_challenges: bool) -> Result<Self> {
         let listener = TcpListener::bind(address)
             .await
             .with_context(|| format!("failed to listen for HTTP challenges on {address}"))?;
         let responses = ChallengeResponses::default();
-        let router = router(responses.clone());
+        let router = router(responses.clone(), address_challenges);
         let (shutdown, done) = oneshot::channel();
         let task = tokio::spawn(async move {
             axum::serve(listener, router)
@@ -83,14 +95,17 @@ impl Drop for ChallengeServer {
     }
 }
 
-fn router(responses: ChallengeResponses) -> Router {
-    Router::new()
-        .route(
+pub(crate) fn router(responses: ChallengeResponses, address_challenges: bool) -> Router {
+    let router = Router::new().route("/.well-known/acme-challenge/{token}", get(acme_challenge));
+    let router = if address_challenges {
+        router.route(
             "/.well-known/pontia-edge-address/{nonce}",
             get(address_challenge),
         )
-        .route("/.well-known/acme-challenge/{token}", get(acme_challenge))
-        .with_state(responses)
+    } else {
+        router
+    };
+    router.with_state(responses)
 }
 
 async fn address_challenge(Path(nonce): Path<String>) -> impl IntoResponse {
@@ -165,5 +180,20 @@ mod tests {
             StatusCode::NOT_FOUND
         );
         server.stop().await.unwrap();
+        let acme = ChallengeServer::start_acme(address).await.unwrap();
+        assert_eq!(
+            client
+                .get(format!(
+                    "http://{address}/.well-known/pontia-edge-address/{nonce}"
+                ))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        acme.stop().await.unwrap();
+        // Both stages fully release the port before TLS starts on it.
+        let _next_listener = tokio::net::TcpListener::bind(address).await.unwrap();
     }
 }

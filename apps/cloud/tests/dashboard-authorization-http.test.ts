@@ -72,7 +72,7 @@ function redeemEvent(body: unknown, options: { credential?: string; binding?: un
   } as unknown as RequestEvent;
 }
 
-async function seedFixtureAndLogin() {
+async function seedFixtureAndLogin(tunnelUrl = "wss://brave-atlas.edge.pontia.dev/tunnel") {
   await database.db.insert(users).values([{ id: userId }, { id: otherUserId }]);
   await database.db.insert(authSessions).values({
     id: sessionId,
@@ -84,7 +84,7 @@ async function seedFixtureAndLogin() {
     id: edgeId,
     userId,
     name: "Owner edge",
-    tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
+    tunnelUrl,
     serviceCredentialHash: await sha256Base64url(edgeSecret),
   });
   await database.db.insert(devices).values([
@@ -132,6 +132,18 @@ test("launch returns a no-store nonce-authorized form to the derived edge bootst
   expect(html).toContain('document.getElementById("dashboard-bootstrap").submit()');
   expect(html).not.toContain(token);
   expect(ticketFromHtml(html)).toMatch(/^pet_v1_[A-Za-z0-9_-]{43}$/);
+});
+
+test("custom endpoint port survives bootstrap form action and CSP", async () => {
+  const token = await seedFixtureAndLogin("wss://brave-atlas.edge.pontia.dev:8443/tunnel");
+  const response = await callLaunch(launchEvent("office-mac", { origin: dashboardOrigin, token }));
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-security-policy")).toContain(
+    "form-action https://brave-atlas.edge.pontia.dev:8443 https://app.pontia.dev",
+  );
+  expect(await response.text()).toContain(
+    'action="https://brave-atlas.edge.pontia.dev:8443/dashboard/bootstrap"',
+  );
 });
 
 test("launch requires an active login and an exact approved Origin", async () => {

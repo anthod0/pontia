@@ -1,3 +1,4 @@
+import { isEdgePort, edgeAuthority } from "../../../../../shared/edge-port";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import { sha256Base64url } from "./crypto";
@@ -131,7 +132,6 @@ function matchesDeployment(edge: StoredEdge, deployment: DeploymentAuthorization
     edge.edgeId === deployment.identity.edgeId &&
     edge.userId === deployment.userId &&
     edge.name === deployment.identity.name &&
-    edge.tunnelUrl === deployment.identity.tunnelUrl &&
     edge.accessScope === "private" &&
     edge.serviceCredentialHash === deployment.serviceCredentialHash
   );
@@ -146,7 +146,9 @@ async function completedDeployment(db: Database, deployment: DeploymentAuthoriza
       .where(eq(edgeTickets.id, deployment.ticketId))
       .get(),
   ]);
-  return ticket?.consumedAt && matchesDeployment(edge, deployment) ? deployment.identity : null;
+  return ticket?.consumedAt && matchesDeployment(edge, deployment) && edge
+    ? { edgeId: edge.edgeId, name: edge.name, tunnelUrl: edge.tunnelUrl }
+    : null;
 }
 
 async function deploymentAuthorization(
@@ -244,7 +246,9 @@ export async function confirmEdgeDeployment(
   ticketValue: string,
   credentialValue: string,
   verifyHealth: (identity: DeploymentIdentity) => Promise<boolean>,
+  port = 443,
 ): Promise<ConfirmationResult> {
+  if (!isEdgePort(port)) return { status: "invalid" };
   const authorized = await deploymentAuthorization(db, ticketValue, credentialValue, true);
   if (!authorized) return { status: "invalid" };
   const { deployment } = authorized;
@@ -261,6 +265,8 @@ export async function confirmEdgeDeployment(
 
   const active = await authorizeEdgeDeployment(db, ticketValue, credentialValue);
   if (!active) return { status: "invalid" };
+  active.tunnelUrl = `wss://${edgeAuthority(`${active.name}.edge.pontia.dev`, port)}/tunnel`;
+  deployment.identity.tunnelUrl = active.tunnelUrl;
   if (!(await verifyHealth(active))) return { status: "unhealthy", edge: active };
 
   const condition = and(

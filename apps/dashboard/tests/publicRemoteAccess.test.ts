@@ -76,6 +76,21 @@ test("resolves a matching immutable target with browser credentials", async () =
   );
 });
 
+test("custom port survives target discovery and API URL derivation", async () => {
+  const origin = `${edgeApiOrigin}:8443`;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      json({ device_handle: handle, device_id: deviceId, edge_api_origin: origin }),
+    ),
+  );
+  const target = await resolvePublicDeviceTarget(handle);
+  setPublicApiTarget(target);
+  expect(publicApiUrl("/api/v1/workspaces")).toBe(
+    `${origin}/devices/${deviceId}/api/v1/workspaces`,
+  );
+});
+
 describe("target validation", () => {
   test.each([
     [
@@ -99,8 +114,8 @@ describe("target validation", () => {
       },
     ],
     [
-      "a non-default port",
-      { device_handle: handle, device_id: deviceId, edge_api_origin: `${edgeApiOrigin}:8443` },
+      "an unsafe port",
+      { device_handle: handle, device_id: deviceId, edge_api_origin: `${edgeApiOrigin}:25` },
     ],
     [
       "a path",
