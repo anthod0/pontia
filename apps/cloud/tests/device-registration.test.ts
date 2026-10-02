@@ -4,6 +4,7 @@ import {
   findRegisteredDevice,
   registerDevice,
   registrationEdges,
+  unregisterDevice,
 } from "../src/lib/server/remote-access/registration";
 import { testDatabase } from "./database";
 
@@ -88,6 +89,28 @@ test("device registration creates once and returns the stored record on retry", 
   expect(await findRegisteredDevice(database.db, "user-owner", deviceId)).toMatchObject({
     status: "found",
     device: { edgeId: registrationEdge },
+  });
+});
+
+test("device unregistration is idempotent and enforces ownership", async () => {
+  await database.db.insert(users).values([{ id: "user-owner" }, { id: "user-other" }]);
+  await insertEdge(registrationEdge, "Tokyo");
+  await database.db.insert(devices).values({
+    id: deviceId,
+    userId: "user-owner",
+    edgeId: registrationEdge,
+    handle: "owned-device",
+    name: "Owned",
+  });
+
+  expect(await unregisterDevice(database.db, "user-other", deviceId)).toEqual({
+    status: "conflict",
+  });
+  expect(await unregisterDevice(database.db, "user-owner", deviceId)).toEqual({
+    status: "deleted",
+  });
+  expect(await unregisterDevice(database.db, "user-owner", deviceId)).toEqual({
+    status: "not_found",
   });
 });
 

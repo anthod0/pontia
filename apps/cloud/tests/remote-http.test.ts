@@ -3,6 +3,7 @@ import type { RequestEvent } from "@sveltejs/kit";
 import { base64url } from "jose";
 import { GET as listEdges } from "../src/routes/api/remote/edges/+server";
 import {
+  DELETE as deleteDevice,
   GET as getDevice,
   PUT as putDevice,
 } from "../src/routes/api/remote/devices/[device_id]/+server";
@@ -11,6 +12,7 @@ import { authSessions, edges, users } from "../src/lib/server/db/schema";
 import { testDatabase } from "./database";
 
 const callListEdges = listEdges as unknown as (event: RequestEvent) => Promise<Response>;
+const callDeleteDevice = deleteDevice as unknown as (event: RequestEvent) => Promise<Response>;
 const callGetDevice = getDevice as unknown as (event: RequestEvent) => Promise<Response>;
 const callPutDevice = putDevice as unknown as (event: RequestEvent) => Promise<Response>;
 
@@ -59,10 +61,14 @@ async function authenticatedRecords() {
 
 test("remote registration endpoints require a valid CLI bearer credential", async () => {
   const response = await callListEdges(event("/api/remote/edges"));
+  const deleted = await callDeleteDevice(
+    event(`/api/remote/devices/${deviceId}`, { method: "DELETE" }),
+  );
 
   expect(response.status).toBe(401);
   const error = (await response.json()) as { error: string };
   expect(error).toEqual({ error: "invalid_credentials" });
+  expect(deleted.status).toBe(401);
 });
 
 test("remote HTTP API lists edges and creates, retries, and reads a device", async () => {
@@ -104,4 +110,17 @@ test("remote HTTP API lists edges and creates, retries, and reads a device", asy
   );
   expect(found.status).toBe(200);
   expect(await found.json()).toMatchObject({ id: deviceId, edge_id: edgeId });
+
+  const deleted = await callDeleteDevice(
+    event(`/api/remote/devices/${deviceId}`, { method: "DELETE", token: credential }),
+  );
+  expect(deleted.status).toBe(204);
+  const retriedDelete = await callDeleteDevice(
+    event(`/api/remote/devices/${deviceId}`, { method: "DELETE", token: credential }),
+  );
+  expect(retriedDelete.status).toBe(204);
+  const missing = await callGetDevice(
+    event(`/api/remote/devices/${deviceId}`, { token: credential }),
+  );
+  expect(missing.status).toBe(404);
 });

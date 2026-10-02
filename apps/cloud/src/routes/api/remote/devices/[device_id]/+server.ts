@@ -1,6 +1,10 @@
 import { json } from "@sveltejs/kit";
 import { cliPrincipal, remoteDatabase } from "$lib/server/remote-access/http";
-import { findRegisteredDevice, registerDevice } from "$lib/server/remote-access/registration";
+import {
+  findRegisteredDevice,
+  registerDevice,
+  unregisterDevice,
+} from "$lib/server/remote-access/registration";
 import type { RequestHandler } from "./$types";
 
 function deviceResponseBody(device: {
@@ -30,6 +34,18 @@ export const GET: RequestHandler = async (event) => {
   if (result.status === "not_found") return json({ error: "device_not_found" }, { status: 404 });
   if (result.status === "conflict") return json({ error: "device_conflict" }, { status: 409 });
   return json(deviceResponseBody(result.device));
+};
+
+export const DELETE: RequestHandler = async (event) => {
+  const principal = await cliPrincipal(event);
+  if (!principal) return json({ error: "invalid_credentials" }, { status: 401 });
+  const result = await unregisterDevice(
+    remoteDatabase(event),
+    principal.userId,
+    event.params.device_id,
+  );
+  if (result.status === "conflict") return json({ error: "device_conflict" }, { status: 409 });
+  return new Response(null, { status: 204 });
 };
 
 export const PUT: RequestHandler = async (event) => {

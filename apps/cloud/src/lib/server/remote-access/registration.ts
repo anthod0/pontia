@@ -27,6 +27,8 @@ export type DeviceRegistration =
   | { status: "created" | "existing"; device: RegisteredDevice }
   | { status: "invalid_request" | "edge_not_found" | "conflict" };
 
+export type DeviceUnregistration = { status: "deleted" | "not_found" | "conflict" };
+
 function validName(value: string) {
   return value.trim() === value && value.length > 0 && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
 }
@@ -78,6 +80,20 @@ export async function findRegisteredDevice(
   if (!device) return { status: "not_found" };
   if (device.userId !== userId) return { status: "conflict" };
   return { status: "found", device: registeredDevice(device) };
+}
+
+export async function unregisterDevice(
+  db: Database,
+  userId: string,
+  deviceId: string,
+): Promise<DeviceUnregistration> {
+  if (!isUuidV7(deviceId)) return { status: "not_found" };
+  const deleted = await db
+    .delete(devices)
+    .where(and(eq(devices.id, deviceId), eq(devices.userId, userId)))
+    .returning({ id: devices.id });
+  if (deleted.length === 1) return { status: "deleted" };
+  return (await storedDevice(db, deviceId)) ? { status: "conflict" } : { status: "not_found" };
 }
 
 export async function registerDevice(

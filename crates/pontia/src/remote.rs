@@ -22,6 +22,8 @@ pub(crate) struct RemoteCommand {
 enum RemoteCommandKind {
     /// Register this machine as a remote device
     Enable,
+    /// Unregister this machine and disable remote access
+    Disable,
 }
 
 pub(crate) async fn run(
@@ -30,6 +32,7 @@ pub(crate) async fn run(
 ) -> Result<(), String> {
     match command.command {
         RemoteCommandKind::Enable => enable(vars).await,
+        RemoteCommandKind::Disable => disable(vars).await,
     }
 }
 
@@ -68,7 +71,7 @@ struct RegistrationApi<'a> {
 pub async fn enable(vars: &HashMap<String, String>) -> Result<(), String> {
     let home = login::pontia_home(vars)?;
     let origin = login::auth_origin(vars)?;
-    let credential = read_credential(&home.join("auth.json"))?;
+    let credential = read_credential(&home.join("auth.json"), "enabling")?;
     let client = Client::builder()
         .timeout(REQUEST_TIMEOUT)
         .build()
@@ -112,10 +115,37 @@ pub async fn enable(vars: &HashMap<String, String>) -> Result<(), String> {
     Ok(())
 }
 
-fn read_credential(path: &Path) -> Result<String, String> {
+pub async fn disable(vars: &HashMap<String, String>) -> Result<(), String> {
+    let home = login::pontia_home(vars)?;
+    let config_path = home.join("config.toml");
+    let Some(device_id) = read_device_id(&config_path)? else {
+        println!("Remote access is already disabled.");
+        return Ok(());
+    };
+    let origin = login::auth_origin(vars)?;
+    let credential = read_credential(&home.join("auth.json"), "disabling")?;
+    let client = Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .map_err(|error| {
+            format!("failed to create the remote registration HTTP client: {error}")
+        })?;
+    RegistrationApi {
+        client: &client,
+        origin: &origin,
+        credential: &credential,
+    }
+    .unregister_device(&device_id)
+    .await?;
+    remove_device_id(&config_path, &device_id)?;
+    println!("Remote access disabled.");
+    Ok(())
+}
+
+fn read_credential(path: &Path, action: &str) -> Result<String, String> {
     let contents = fs::read(path).map_err(|error| {
         if error.kind() == ErrorKind::NotFound {
-            "not logged in; run `pontia login` before enabling remote access".to_string()
+            format!("not logged in; run `pontia login` before {action} remote access")
         } else {
             format!("failed to read {}: {error}", path.display())
         }
@@ -135,49 +165,84 @@ fn read_credential(path: &Path) -> Result<String, String> {
     Ok(stored.token)
 }
 
-fn ensure_device_id(path: &Path) -> Result<String, String> {
+fn read_document(path: &Path) -> Result<DocumentMut, String> {
     let original = match fs::read_to_string(path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == ErrorKind::NotFound => String::new(),
         Err(error) => return Err(format!("failed to read {}: {error}", path.display())),
     };
-    let mut document = if original.trim().is_empty() {
-        DocumentMut::new()
+    if original.trim().is_empty() {
+        Ok(DocumentMut::new())
     } else {
         original
             .parse::<DocumentMut>()
-            .map_err(|error| format!("failed to parse {}: {error}", path.display()))?
-    };
-    if let Some(value) = document
-        .get("remote")
-        .and_then(Item::as_table_like)
-        .and_then(|remote| remote.get("device_id"))
-        .and_then(Item::as_str)
-    {
-        if !uuid_v7(value) {
-            return Err(format!(
-                "remote.device_id in {} must be a UUIDv7",
-                path.display()
-            ));
-        }
-        return Ok(value.to_string());
+            .map_err(|error| format!("failed to parse {}: {error}", path.display()))
     }
-    if document
+}
+
+fn device_id(document: &DocumentMut, path: &Path) -> Result<Option<String>, String> {
+    let item = document
         .get("remote")
         .and_then(Item::as_table_like)
-        .and_then(|remote| remote.get("device_id"))
-        .is_some()
-    {
+        .and_then(|remote| remote.get("device_id"));
+    let Some(item) = item else {
+        return Ok(None);
+    };
+    let Some(value) = item.as_str() else {
         return Err(format!(
             "remote.device_id in {} must be a UUIDv7 string",
             path.display()
         ));
+    };
+    if !uuid_v7(value) {
+        return Err(format!(
+            "remote.device_id in {} must be a UUIDv7",
+            path.display()
+        ));
+    }
+    Ok(Some(value.to_string()))
+}
+
+fn read_device_id(path: &Path) -> Result<Option<String>, String> {
+    device_id(&read_document(path)?, path)
+}
+
+fn ensure_device_id(path: &Path) -> Result<String, String> {
+    let mut document = read_document(path)?;
+    if let Some(device_id) = device_id(&document, path)? {
+        return Ok(device_id);
     }
 
     let device_id = Uuid::now_v7().to_string();
     document["remote"]["device_id"] = toml_edit::value(&device_id);
     private_file::atomic_write(path, document.to_string().as_bytes())?;
     Ok(device_id)
+}
+
+fn remove_device_id(path: &Path, expected_device_id: &str) -> Result<(), String> {
+    let mut document = read_document(path)?;
+    match device_id(&document, path)? {
+        None => return Ok(()),
+        Some(device_id) if device_id != expected_device_id => {
+            return Err(format!(
+                "remote.device_id in {} changed while remote access was being disabled; the new value was preserved",
+                path.display()
+            ));
+        }
+        Some(_) => {}
+    }
+    let remote_is_empty = {
+        let remote = document
+            .get_mut("remote")
+            .and_then(Item::as_table_like_mut)
+            .expect("validated remote table");
+        remote.remove("device_id");
+        remote.is_empty()
+    };
+    if remote_is_empty {
+        document.remove("remote");
+    }
+    private_file::atomic_write(path, document.to_string().as_bytes())
 }
 
 fn uuid_v7(value: &str) -> bool {
@@ -193,6 +258,30 @@ fn validate_name(name: &str) -> Result<(), String> {
 }
 
 impl RegistrationApi<'_> {
+    async fn unregister_device(&self, device_id: &str) -> Result<(), String> {
+        let response = self
+            .client
+            .delete(endpoint(
+                self.origin,
+                &format!("api/remote/devices/{device_id}"),
+            )?)
+            .bearer_auth(self.credential)
+            .send()
+            .await
+            .map_err(|error| uncertain("unregister the device", error))?;
+        match response.status() {
+            StatusCode::NO_CONTENT | StatusCode::NOT_FOUND => Ok(()),
+            StatusCode::UNAUTHORIZED => Err(login_required()),
+            StatusCode::CONFLICT => Err(
+                "the configured device ID is registered to a different user; refusing to remove it"
+                    .to_string(),
+            ),
+            status => Err(format!(
+                "the cloud rejected device unregistration ({status}); the configured device ID was preserved"
+            )),
+        }
+    }
+
     async fn find_device(&self, device_id: &str) -> Result<Option<Device>, String> {
         let response = self
             .client
@@ -372,5 +461,38 @@ mod tests {
 
         assert!(ensure_device_id(&path).unwrap_err().contains("UUIDv7"));
         assert_eq!(fs::read_to_string(path).unwrap(), original);
+    }
+
+    #[test]
+    fn removing_device_id_preserves_other_configuration() {
+        let root = tempdir().unwrap();
+        let path = root.path().join("config.toml");
+        let device_id = "0195e7c1-1b22-7c33-9d44-123456789abc";
+        fs::write(
+            &path,
+            format!(
+                "bind_addr = '127.0.0.1:9000'\n[remote]\ndevice_id = '{device_id}'\nfuture = true\n"
+            ),
+        )
+        .unwrap();
+
+        remove_device_id(&path, device_id).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(path).unwrap(),
+            "bind_addr = '127.0.0.1:9000'\n[remote]\nfuture = true\n"
+        );
+    }
+
+    #[test]
+    fn removing_the_only_remote_setting_removes_the_table() {
+        let root = tempdir().unwrap();
+        let path = root.path().join("config.toml");
+        let device_id = "0195e7c1-1b22-7c33-9d44-123456789abc";
+        fs::write(&path, format!("[remote]\ndevice_id = '{device_id}'\n")).unwrap();
+
+        remove_device_id(&path, device_id).unwrap();
+
+        assert_eq!(fs::read_to_string(path).unwrap(), "");
     }
 }

@@ -547,6 +547,49 @@ fn remote_enable_requires_login_before_creating_a_device_id() {
 }
 
 #[test]
+fn remote_disable_requires_login_without_removing_the_device_id() {
+    let dir = temp_dir("remote-disable-not-logged-in");
+    let original = "[remote]\ndevice_id = '0195e7c1-1b22-7c33-9d44-123456789abc'\n";
+    fs::write(dir.path().join("config.toml"), original).expect("write config");
+    let output = pontia()
+        .args(["remote", "disable"])
+        .env("PONTIA_HOME", dir.path())
+        .output()
+        .expect("run remote disable");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("run `pontia login` before disabling remote access")
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("config.toml")).unwrap(),
+        original
+    );
+}
+
+#[test]
+fn remote_disable_is_idempotent_when_remote_access_is_not_configured() {
+    let dir = temp_dir("remote-already-disabled");
+    let output = pontia()
+        .args(["remote", "disable"])
+        .env("PONTIA_HOME", dir.path())
+        .output()
+        .expect("run remote disable");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "Remote access is already disabled.\n"
+    );
+    assert!(!dir.path().join("config.toml").exists());
+}
+
+#[test]
 fn workflow_submit_rejects_a_pane_without_pontia_identity() {
     let dir = temp_dir("unmanaged-pane");
     let bin_dir = dir.path().join("bin");
