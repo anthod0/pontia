@@ -1,6 +1,6 @@
 {
   "name": "@pontia/pi-client-plugin",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Pi extension that connects coding-agent sessions to Pontia.",
   "keywords": [
     "pi-package",
@@ -36,14 +36,14 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": ">=0.86.1 <1",
+    "@earendil-works/pi-coding-agent": "^1.0.0",
     "@types/node": "^22.15.3",
     "oxfmt": "^0.70.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.2"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": ">=0.86.1 <1"
+    "@earendil-works/pi-coding-agent": "*"
   },
   "pi": {
     "extensions": [

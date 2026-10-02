@@ -1149,17 +1149,141 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported).toEqual([]);
   });
 
-  test("session_start non-startup does not report ready", async () => {
-    const { handlers, reported } = install({
-      env: {
-        PONTIA_SESSION_ID: "sess_ready",
-        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
+  test("session_start reload reconnects the existing runtime and reports ready", async () => {
+    const workspace = await realpath(await tempDir());
+    const request = vi.fn(async (method: string, params: Record<string, unknown>) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
+      }
+      if (method === "session.context") {
+        return {
+          session_context: {
+            session_id: "sess_reload",
+            session_state: "idle",
+            client_type: "pi",
+            runtime_instance_id: "rtinst_reload",
+          },
+        };
+      }
+      expect(method).toBe("runtime.register");
+      expect(params).toMatchObject({
+        client_session_key: "pi_session_reload",
+        runtime_instance_id: "rtinst_reload",
+      });
+      return {
+        session: { session_id: "sess_reload" },
+        runtime: { runtime_instance_id: "rtinst_reload" },
+      };
+    });
+    const { handlers, reported } = install({ request });
+
+    await handlers.session_start(
+      { reason: "reload" },
+      {
+        sessionManager: {
+          getSessionId: () => "pi_session_reload",
+          getCwd: () => workspace,
+        },
       },
+    );
+
+    expect(request.mock.calls.map(([method]) => method)).toEqual([
+      "workspaces.list",
+      "session.context",
+      "runtime.register",
+    ]);
+    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+    expect(reported[0]).toMatchObject({
+      session_id: "sess_reload",
+      data: { runtime_instance_id: "rtinst_reload" },
+    });
+  });
+
+  test("session_start reload fails closed without an existing runtime binding", async () => {
+    const workspace = await realpath(await tempDir());
+    const request = vi.fn(async (method: string) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
+      }
+      if (method === "session.context") return { session_context: null };
+      throw new Error(`Unexpected RPC: ${method}`);
+    });
+    const logDiagnostic = vi.fn(async () => undefined);
+    const { handlers, reported } = install({
+      request,
+      isManagedPane: vi.fn(async () => true),
+      logDiagnostic,
     });
 
-    await handlers.session_start({ reason: "reload" }, {});
+    const ctx = {
+      sessionManager: {
+        getSessionId: () => "pi_session_reload",
+        getCwd: () => workspace,
+      },
+    };
+    await handlers.session_start({ reason: "reload" }, ctx);
+    await handlers.agent_start({}, ctx);
 
+    expect(request.mock.calls.map(([method]) => method)).toEqual([
+      "workspaces.list",
+      "session.context",
+    ]);
     expect(reported).toEqual([]);
+    expect(logDiagnostic).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ code: "reload_session_context_missing" }),
+    );
+  });
+
+  test("session_start reload rejects a changed runtime identity", async () => {
+    const workspace = await realpath(await tempDir());
+    const request = vi.fn(async (method: string) => {
+      if (method === "workspaces.list") {
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
+      }
+      if (method === "session.context") {
+        return {
+          session_context: {
+            session_id: "sess_reload",
+            session_state: "idle",
+            client_type: "pi",
+            runtime_instance_id: "rtinst_reload",
+          },
+        };
+      }
+      if (method === "runtime.register") {
+        return {
+          session: { session_id: "sess_reload" },
+          runtime: { runtime_instance_id: "rtinst_different" },
+        };
+      }
+      throw new Error(`Unexpected RPC: ${method}`);
+    });
+    const logDiagnostic = vi.fn(async () => undefined);
+    const { handlers, reported } = install({ request, logDiagnostic });
+
+    const ctx = {
+      sessionManager: {
+        getSessionId: () => "pi_session_reload",
+        getCwd: () => workspace,
+      },
+    };
+    await handlers.session_start({ reason: "reload" }, ctx);
+    await handlers.agent_start({}, ctx);
+
+    expect(request.mock.calls.map(([method]) => method)).toEqual([
+      "workspaces.list",
+      "session.context",
+      "runtime.register",
+    ]);
+    expect(reported).toEqual([]);
+    expect(logDiagnostic).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        code: "unexpected_extension_exception",
+        details: "pi reload runtime binding changed identity",
+      }),
+    );
   });
 
   test("registers pi lifecycle handlers without custom tools", () => {
@@ -1287,9 +1411,14 @@ describe("pontia pi extension lifecycle", () => {
       request: requestImpl as any,
     });
 
-    const result = await handlers.before_agent_start({ systemPrompt: "Base prompt" }, {});
+    const event = {
+      systemPrompt: "Base prompt",
+      systemPromptOptions: { sections: {} as Record<string, string> },
+    };
+    const result = await handlers.before_agent_start(event, {});
 
-    expect(result).toEqual({ systemPrompt: "Base prompt" });
+    expect(result).toBeUndefined();
+    expect(event.systemPromptOptions.sections).toEqual({});
     expect(requestImpl).not.toHaveBeenCalled();
   });
 
@@ -1319,9 +1448,14 @@ describe("pontia pi extension lifecycle", () => {
           sessionManager: { getSessionId: () => "native", getCwd: () => workspace },
         },
       );
-      expect(await handlers.before_agent_start({ systemPrompt: "Base prompt" }, {})).toEqual({
-        systemPrompt: prompt && prompt !== "error" ? `Base prompt\n\n${prompt}` : "Base prompt",
-      });
+      const event = {
+        systemPrompt: "Base prompt",
+        systemPromptOptions: { sections: {} as Record<string, string> },
+      };
+      expect(await handlers.before_agent_start(event, {})).toBeUndefined();
+      expect(event.systemPromptOptions.sections).toEqual(
+        prompt && prompt !== "error" ? { pontia_execution_profile: prompt } : {},
+      );
       expect(request).toHaveBeenCalledWith("profile.get", { profile_id: "reviewer", version: "1" });
     },
   );
@@ -1719,6 +1853,25 @@ describe("pontia pi extension lifecycle", () => {
     );
     await handlers.tool_execution_end(
       { toolCallId: "call_2", toolName: "bash", result: {}, isError: true },
+      {},
+    );
+    await handlers.tool_execution_start(
+      {
+        toolCallId: "call_parent/1",
+        parentToolCallId: "call_parent",
+        toolName: "read",
+        args: { path: "nested.txt" },
+      },
+      {},
+    );
+    await handlers.tool_execution_end(
+      {
+        toolCallId: "call_parent/1",
+        parentToolCallId: "call_parent",
+        toolName: "read",
+        result: {},
+        isError: false,
+      },
       {},
     );
 

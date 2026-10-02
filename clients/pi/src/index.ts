@@ -504,22 +504,16 @@ export function createPontiaPiExtension(
   }
 
   pi.on("before_agent_start", async (event) => {
-    const eventRecord = event as unknown as Record<string, unknown>;
-    pendingPrompt = optionalString(eventRecord.prompt);
-    if (reportingDisabled || !(await confirmManagedPane())) {
-      return {
-        systemPrompt: typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "",
-      };
-    }
-    const currentSystemPrompt =
-      typeof eventRecord.systemPrompt === "string" ? eventRecord.systemPrompt : "";
+    pendingPrompt = event.prompt;
+    if (reportingDisabled || !(await confirmManagedPane())) return;
     try {
       const profilePrompt = await loadProfileSystemPrompt(
         rpcConnection,
         boundSessionContext?.sessionId,
       );
-      if (!profilePrompt) return { systemPrompt: currentSystemPrompt };
-      return { systemPrompt: `${currentSystemPrompt}\n\n${profilePrompt}` };
+      if (profilePrompt) {
+        event.systemPromptOptions.sections.pontia_execution_profile = profilePrompt;
+      }
     } catch (error) {
       await logDiagnostic(currentHookLogFile(), {
         level: "warn",
@@ -527,7 +521,6 @@ export function createPontiaPiExtension(
         message: "failed to append pontia execution profile system prompt",
         details: error instanceof Error ? error.message : String(error),
       });
-      return { systemPrompt: currentSystemPrompt };
     }
   });
 
@@ -540,7 +533,13 @@ export function createPontiaPiExtension(
     if (reportingDisabled) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
     if (readyReported && reason !== "fork" && reason !== "resume" && reason !== "new") return;
-    if (reason !== "startup" && reason !== "new" && reason !== "resume" && reason !== "fork")
+    if (
+      reason !== "startup" &&
+      reason !== "reload" &&
+      reason !== "new" &&
+      reason !== "resume" &&
+      reason !== "fork"
+    )
       return;
     await closeControlSocket();
     const parentSessionId = boundSessionContext?.sessionId;
@@ -595,7 +594,20 @@ export function createPontiaPiExtension(
           await registrationConnection(),
           sessionDetails,
         );
+        if (reason === "reload" && !existingSession) {
+          reportingDisabled = true;
+          deferredManualSessionDetails = undefined;
+          await closeControlSocket();
+          await logDiagnostic(logFile, {
+            level: "error",
+            code: "reload_session_context_missing",
+            message: "pi reload could not recover the existing pontia runtime binding",
+            details: { client_session_key: sessionDetails.clientSessionKey },
+          });
+          return;
+        }
         if (
+          reason !== "reload" &&
           existingSession &&
           ["idle", "busy", "interrupted"].includes(existingSession.sessionState)
         ) {
@@ -625,13 +637,26 @@ export function createPontiaPiExtension(
 
         context = await bindSession(await registrationConnection(), env, sessionDetails, {
           runtimeInstanceId:
-            existingSession?.sessionState === "starting"
-              ? existingSession.runtimeInstanceId
+            reason === "reload" || existingSession?.sessionState === "starting"
+              ? existingSession?.runtimeInstanceId
               : undefined,
         });
-        if (reason === "resume" || reason === "new") readyReported = false;
+        if (
+          reason === "reload" &&
+          (context?.sessionId !== existingSession!.sessionId ||
+            context.runtimeInstanceId !== existingSession!.runtimeInstanceId)
+        ) {
+          reportingDisabled = true;
+          deferredManualSessionDetails = undefined;
+          throw new Error("pi reload runtime binding changed identity");
+        }
+        if (reason === "reload" || reason === "resume" || reason === "new") readyReported = false;
       }
       if (!context || !(await confirmManagedPane(true))) {
+        if (reason === "reload") {
+          reportingDisabled = true;
+          deferredManualSessionDetails = undefined;
+        }
         await closeControlSocket();
         return;
       }
@@ -815,12 +840,12 @@ export function createPontiaPiExtension(
     if (isTranscriptBoundaryMessageUpdate(event)) await scheduleMessageRefresh("update");
   });
 
-  pi.on("tool_execution_start", async () => {
-    await scheduleMessageRefresh("update");
+  pi.on("tool_execution_start", async (event) => {
+    if (!event.parentToolCallId) await scheduleMessageRefresh("update");
   });
 
-  pi.on("tool_execution_end", async () => {
-    await scheduleMessageRefresh("update");
+  pi.on("tool_execution_end", async (event) => {
+    if (!event.parentToolCallId) await scheduleMessageRefresh("update");
   });
 
   pi.on("message_end", async (event, ctx) => {
