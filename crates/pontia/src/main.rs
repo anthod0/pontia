@@ -13,6 +13,7 @@ use std::{
 };
 
 use clap::{Parser, Subcommand};
+use dialoguer::Confirm;
 use pontia::{
     codex::{self, CodexDaemonProbe, CodexSetup},
     init::{self, InitPlatform},
@@ -78,7 +79,7 @@ async fn main() -> ExitCode {
 
 async fn execute(command: Command) -> Result<bool, String> {
     match command {
-        Command::Init => run_init(),
+        Command::Init => run_init().await,
         Command::Login => {
             let vars: HashMap<String, String> = env::vars().collect();
             login::run(&vars).await?;
@@ -306,10 +307,6 @@ impl InitPlatform for RealInitPlatform {
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String> {
         dashboard_available(addr)
     }
-
-    fn open_browser(&self, url: &str) -> Result<(), String> {
-        open_browser(url)
-    }
 }
 
 fn start_init_with_manager<M: ServiceManager>(
@@ -398,10 +395,71 @@ fn run_browser_opener(program: &str, url: &str) -> Result<(), String> {
     }
 }
 
-fn run_init() -> Result<bool, String> {
+async fn run_init() -> Result<bool, String> {
     let vars: HashMap<String, String> = env::vars().collect();
-    init::run_interactive(&vars, &RealInitPlatform)?;
-    Ok(true)
+    let Some(outcome) = init::run_interactive(&vars, &RealInitPlatform)? else {
+        return Ok(true);
+    };
+
+    let enable_remote = Confirm::new()
+        .with_prompt("Sign in and enable remote access?")
+        .default(true)
+        .interact()
+        .map_err(|error| format!("failed to read the remote access selection: {error}"))?;
+
+    if !enable_remote {
+        println!(
+            "Remote access skipped. Run `pontia login` and `pontia remote enable` later to enable it."
+        );
+        open_dashboard("Local Dashboard", &outcome.local_dashboard_url);
+        return Ok(true);
+    }
+
+    match enable_remote_access(&vars).await {
+        Ok(url) => {
+            open_dashboard("Remote Dashboard", &url);
+            Ok(true)
+        }
+        Err(error) => {
+            println!(
+                "Remote access setup did not complete. Local initialization is complete; retry with `pontia login` and `pontia remote enable`."
+            );
+            open_dashboard("Local Dashboard", &outcome.local_dashboard_url);
+            Err(error)
+        }
+    }
+}
+
+async fn enable_remote_access(vars: &HashMap<String, String>) -> Result<String, String> {
+    if !login::has_valid_credential(vars)? {
+        login::run_with_verification(vars, |url| {
+            let _ = open_browser(url);
+        })
+        .await?;
+    } else {
+        println!("Using the existing Pontia cloud login.");
+    }
+    let access = remote::enable(vars).await?;
+    restart_service_for_remote_config()?;
+    remote_dashboard_url(&access.device_handle)
+}
+
+fn remote_dashboard_url(device_handle: &str) -> Result<String, String> {
+    let mut url = url::Url::parse("https://app.pontia.dev/")
+        .map_err(|error| format!("failed to build the remote Dashboard URL: {error}"))?;
+    url.path_segments_mut()
+        .map_err(|_| "failed to build the remote Dashboard URL".to_string())?
+        .push(device_handle);
+    Ok(url.to_string())
+}
+
+fn open_dashboard(label: &str, url: &str) {
+    println!("{label}:\n\n{url}\n");
+    if open_browser(url).is_ok() {
+        println!("✓ Dashboard opened. `pontia down` stops the local service.");
+    } else {
+        println!("Browser not opened; use the URL above. `pontia down` stops the local service.");
+    }
 }
 
 fn dashboard_available(addr: SocketAddr) -> Result<bool, String> {
@@ -535,4 +593,17 @@ fn current_uid<R: CommandRunner>(runner: &R) -> Result<u32, String> {
         .trim()
         .parse()
         .map_err(|error| format!("id -u returned an invalid user ID: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remote_dashboard_url_targets_the_registered_device() {
+        assert_eq!(
+            remote_dashboard_url("office-mac").unwrap(),
+            "https://app.pontia.dev/office-mac"
+        );
+    }
 }

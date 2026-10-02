@@ -31,7 +31,7 @@ pub(crate) async fn run(
     vars: &HashMap<String, String>,
 ) -> Result<(), String> {
     match command.command {
-        RemoteCommandKind::Enable => enable(vars).await,
+        RemoteCommandKind::Enable => enable(vars).await.map(|_| ()),
         RemoteCommandKind::Disable => disable(vars).await,
     }
 }
@@ -51,9 +51,15 @@ struct Edge {
 #[derive(Debug, Deserialize)]
 struct Device {
     id: String,
+    #[serde(rename = "device_handle")]
+    handle: String,
     name: Option<String>,
     edge_id: String,
     edge_name: String,
+}
+
+pub(crate) struct RemoteAccess {
+    pub(crate) device_handle: String,
 }
 
 #[derive(Serialize)]
@@ -68,7 +74,7 @@ struct RegistrationApi<'a> {
     credential: &'a str,
 }
 
-pub async fn enable(vars: &HashMap<String, String>) -> Result<(), String> {
+pub async fn enable(vars: &HashMap<String, String>) -> Result<RemoteAccess, String> {
     let home = login::pontia_home(vars)?;
     let origin = login::auth_origin(vars)?;
     let credential = read_credential(&home.join("auth.json"), "enabling")?;
@@ -88,7 +94,7 @@ pub async fn enable(vars: &HashMap<String, String>) -> Result<(), String> {
 
     if let Some(device) = api.find_device(&device_id).await? {
         print_registered(&device, true);
-        return Ok(());
+        return remote_access(device);
     }
 
     let edges = api.fetch_edges().await?;
@@ -112,7 +118,7 @@ pub async fn enable(vars: &HashMap<String, String>) -> Result<(), String> {
 
     let device = api.register_device(&device_id, &name, &edge.id).await?;
     print_registered(&device, false);
-    Ok(())
+    remote_access(device)
 }
 
 pub async fn disable(vars: &HashMap<String, String>) -> Result<(), String> {
@@ -393,10 +399,34 @@ impl RegistrationApi<'_> {
 
 async fn parse_device(response: reqwest::Response, expected_id: &str) -> Result<Device, String> {
     let device: Device = response.json().await.map_err(|_| uncertain_result())?;
-    if device.id != expected_id || !uuid_v7(&device.id) || !uuid_v7(&device.edge_id) {
+    if device.id != expected_id
+        || !uuid_v7(&device.id)
+        || !uuid_v7(&device.edge_id)
+        || !valid_device_handle(&device.handle)
+    {
         return Err(uncertain_result());
     }
     Ok(device)
+}
+
+fn valid_device_handle(value: &str) -> bool {
+    (4..=48).contains(&value.len())
+        && value
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_lowercase())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_-".contains(&byte))
+}
+
+fn remote_access(device: Device) -> Result<RemoteAccess, String> {
+    if !valid_device_handle(&device.handle) {
+        return Err(uncertain_result());
+    }
+    Ok(RemoteAccess {
+        device_handle: device.handle,
+    })
 }
 
 fn endpoint(origin: &Url, path: &str) -> Result<Url, String> {
@@ -494,5 +524,14 @@ mod tests {
         remove_device_id(&path, device_id).unwrap();
 
         assert_eq!(fs::read_to_string(path).unwrap(), "");
+    }
+
+    #[test]
+    fn validates_device_handles_used_in_remote_dashboard_urls() {
+        assert!(valid_device_handle("office-mac"));
+        assert!(valid_device_handle("home_2"));
+        assert!(!valid_device_handle("abc"));
+        assert!(!valid_device_handle("Office-Mac"));
+        assert!(!valid_device_handle("office/mac"));
     }
 }

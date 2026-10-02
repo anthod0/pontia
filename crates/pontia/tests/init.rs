@@ -1,11 +1,4 @@
-use std::{
-    cell::{Cell, RefCell},
-    collections::HashMap,
-    fs,
-    io::Cursor,
-    net::SocketAddr,
-    path::Path,
-};
+use std::{cell::RefCell, collections::HashMap, fs, io::Cursor, net::SocketAddr, path::Path};
 
 use pontia::{
     codex::CodexSetup,
@@ -15,20 +8,16 @@ use pontia_config::AppConfig;
 
 struct FakePlatform {
     events: RefCell<Vec<String>>,
-    opened_urls: RefCell<Vec<String>>,
     install_error: Option<&'static str>,
     dashboard_ready: bool,
-    browser_failures: Cell<usize>,
 }
 
 impl Default for FakePlatform {
     fn default() -> Self {
         Self {
             events: RefCell::new(Vec::new()),
-            opened_urls: RefCell::new(Vec::new()),
             install_error: None,
             dashboard_ready: true,
-            browser_failures: Cell::new(0),
         }
     }
 }
@@ -97,17 +86,6 @@ impl InitPlatform for FakePlatform {
             .push(format!("dashboard-ready:{addr}"));
         Ok(self.dashboard_ready)
     }
-
-    fn open_browser(&self, url: &str) -> Result<(), String> {
-        self.opened_urls.borrow_mut().push(url.to_string());
-        let remaining = self.browser_failures.get();
-        if remaining > 0 {
-            self.browser_failures.set(remaining - 1);
-            Err("browser unavailable".to_string())
-        } else {
-            Ok(())
-        }
-    }
 }
 
 fn vars(home: &Path, pontia_home: &Path) -> HashMap<String, String> {
@@ -118,7 +96,7 @@ fn vars(home: &Path, pontia_home: &Path) -> HashMap<String, String> {
 }
 
 #[test]
-fn default_initialization_installs_pi_writes_config_starts_service_and_opens_dashboard() {
+fn default_initialization_installs_pi_writes_config_starts_service_and_returns_dashboard() {
     let dir = tempfile::tempdir().expect("temp dir");
     let user_home = dir.path().join("home");
     let pontia_home = dir.path().join("pontia");
@@ -127,13 +105,14 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_opens_das
     let mut input = Cursor::new(b"\n\n\n".to_vec());
     let mut output = Vec::new();
 
-    run(
+    let outcome = run(
         &mut input,
         &mut output,
         &vars(&user_home, &pontia_home),
         &platform,
     )
-    .expect("initialize Pontia");
+    .expect("initialize Pontia")
+    .expect("initialization completed");
 
     let config_text = fs::read_to_string(pontia_home.join("config.toml")).expect("read config");
     let config: toml::Value = toml::from_str(&config_text).expect("valid TOML");
@@ -158,13 +137,7 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_opens_das
         ]
     );
     let expected_url = format!("http://127.0.0.1:8080/dashboard?token={token}");
-    assert_eq!(
-        platform.opened_urls.borrow().as_slice(),
-        [expected_url.as_str()]
-    );
-
-    let output = String::from_utf8(output).expect("UTF-8 output");
-    assert!(output.contains(&expected_url));
+    assert_eq!(outcome.local_dashboard_url, expected_url);
 }
 
 #[test]
@@ -283,15 +256,20 @@ fn existing_token_is_query_encoded_in_the_dashboard_url() {
     let mut input = Cursor::new(b"\n\n\n".to_vec());
     let mut output = Vec::new();
 
-    run(
+    let outcome = run(
         &mut input,
         &mut output,
         &vars(&user_home, &pontia_home),
         &platform,
     )
-    .expect("initialize Pontia");
+    .expect("initialize Pontia")
+    .expect("initialization completed");
 
-    assert!(platform.opened_urls.borrow()[0].ends_with("?token=token+with+spaces%26separator"));
+    assert!(
+        outcome
+            .local_dashboard_url
+            .ends_with("?token=token+with+spaces%26separator")
+    );
 }
 
 #[test]
@@ -309,17 +287,13 @@ fn command_scoped_token_is_warned_about_and_never_used_as_daemon_credential() {
     let mut input = Cursor::new(b"\n\n\n".to_vec());
     let mut output = Vec::new();
 
-    run(&mut input, &mut output, &environment, &platform).expect("initialize Pontia");
+    let outcome = run(&mut input, &mut output, &environment, &platform)
+        .expect("initialize Pontia")
+        .expect("initialization completed");
 
     let config = fs::read_to_string(pontia_home.join("config.toml")).expect("read config");
     assert!(!config.contains("command-only-secret"));
-    assert!(
-        platform
-            .opened_urls
-            .borrow()
-            .iter()
-            .all(|url| !url.contains("command-only-secret"))
-    );
+    assert!(!outcome.local_dashboard_url.contains("command-only-secret"));
     let output = String::from_utf8(output).expect("UTF-8 output");
     assert!(output.contains("PONTIA_EXTERNAL_API_TOKEN"));
     assert!(!output.contains("command-only-secret"));
@@ -434,7 +408,7 @@ fn failed_pi_install_does_not_write_config_or_start_service() {
 }
 
 #[test]
-fn unavailable_dashboard_keeps_started_service_but_does_not_print_or_open_token_url() {
+fn unavailable_dashboard_keeps_started_service_without_returning_a_token_url() {
     let dir = tempfile::tempdir().expect("temp dir");
     let user_home = dir.path().join("home");
     let pontia_home = dir.path().join("pontia");
@@ -462,7 +436,6 @@ fn unavailable_dashboard_keeps_started_service_but_does_not_print_or_open_token_
             .iter()
             .any(|event| event.starts_with("start:"))
     );
-    assert!(platform.opened_urls.borrow().is_empty());
     assert!(
         !String::from_utf8(output)
             .expect("UTF-8 output")
@@ -471,48 +444,28 @@ fn unavailable_dashboard_keeps_started_service_but_does_not_print_or_open_token_
 }
 
 #[test]
-fn a_failed_initial_browser_open_can_be_retried_with_enter() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let user_home = dir.path().join("home");
-    let pontia_home = dir.path().join("pontia");
-    fs::create_dir(&user_home).expect("create home");
-    let platform = FakePlatform {
-        browser_failures: Cell::new(1),
-        ..FakePlatform::default()
-    };
-    let mut input = Cursor::new(b"\n\n\n\n".to_vec());
-    let mut output = Vec::new();
-
-    run(
-        &mut input,
-        &mut output,
-        &vars(&user_home, &pontia_home),
-        &platform,
-    )
-    .expect("browser failure is non-fatal");
-
-    assert_eq!(platform.opened_urls.borrow().len(), 2);
-}
-
-#[test]
-fn reopening_dashboard_uses_the_same_url_until_input_ends() {
+fn initialization_returns_without_waiting_for_dashboard_reopen_input() {
     let dir = tempfile::tempdir().expect("temp dir");
     let user_home = dir.path().join("home");
     let pontia_home = dir.path().join("pontia");
     fs::create_dir(&user_home).expect("create home");
     let platform = FakePlatform::default();
-    let mut input = Cursor::new(b"\n\n\n\n\n".to_vec());
+    let mut input = Cursor::new(b"\n\n\nnot consumed\n".to_vec());
     let mut output = Vec::new();
 
-    run(
+    let outcome = run(
         &mut input,
         &mut output,
         &vars(&user_home, &pontia_home),
         &platform,
     )
-    .expect("initialize Pontia");
+    .expect("initialize Pontia")
+    .expect("initialization completed");
 
-    let opened = platform.opened_urls.borrow();
-    assert_eq!(opened.len(), 3);
-    assert!(opened.iter().all(|url| url == &opened[0]));
+    assert!(
+        outcome
+            .local_dashboard_url
+            .starts_with("http://127.0.0.1:8080/dashboard?token=")
+    );
+    assert_eq!(input.position(), 3);
 }

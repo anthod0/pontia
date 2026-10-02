@@ -19,6 +19,11 @@ pub struct AgentSelection {
     pub codex: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InitOutcome {
+    pub local_dashboard_url: String,
+}
+
 pub trait InitPlatform {
     fn inspect_codex(
         &self,
@@ -36,7 +41,6 @@ pub trait InitPlatform {
         codex_home: Option<&Path>,
     ) -> Result<(), String>;
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String>;
-    fn open_browser(&self, url: &str) -> Result<(), String>;
 }
 
 pub fn run<R: BufRead, W: Write, P: InitPlatform>(
@@ -44,14 +48,14 @@ pub fn run<R: BufRead, W: Write, P: InitPlatform>(
     output: &mut W,
     vars: &HashMap<String, String>,
     platform: &P,
-) -> Result<(), String> {
+) -> Result<Option<InitOutcome>, String> {
     run_with_selector(input, output, vars, platform, line_agent_selection)
 }
 
 pub fn run_interactive<P: InitPlatform>(
     vars: &HashMap<String, String>,
     platform: &P,
-) -> Result<(), String> {
+) -> Result<Option<InitOutcome>, String> {
     let stdin = io::stdin();
     let stdout = io::stdout();
     run_with_selector(
@@ -69,7 +73,7 @@ fn run_with_selector<R, W, P, S>(
     vars: &HashMap<String, String>,
     platform: &P,
     select_agents: S,
-) -> Result<(), String>
+) -> Result<Option<InitOutcome>, String>
 where
     R: BufRead,
     W: Write,
@@ -172,7 +176,7 @@ where
         "" | "y" | "yes" => {}
         "n" | "no" => {
             writeln!(output, "Initialization cancelled.").map_err(io_error)?;
-            return Ok(());
+            return Ok(None);
         }
         answer => return Err(format!("expected yes or no, got {answer:?}")),
     }
@@ -219,31 +223,9 @@ where
     let mut url = url::Url::parse(&format!("http://{dashboard_addr}/dashboard"))
         .map_err(|error| format!("failed to build Dashboard URL: {error}"))?;
     url.query_pairs_mut().append_pair("token", &token);
-    let url = url.to_string();
-    writeln!(output, "Dashboard:\n\n{url}\n").map_err(io_error)?;
-    write_browser_result(output, platform.open_browser(&url).is_ok())?;
-
-    loop {
-        let mut line = String::new();
-        match input.read_line(&mut line).map_err(io_error)? {
-            0 => return Ok(()),
-            _ if line.trim().is_empty() => {
-                write_browser_result(output, platform.open_browser(&url).is_ok())?
-            }
-            _ => writeln!(output, "Press Enter to open Dashboard or Ctrl-C to exit.")
-                .map_err(io_error)?,
-        }
-        output.flush().map_err(io_error)?;
-    }
-}
-
-fn write_browser_result<W: Write>(output: &mut W, opened: bool) -> Result<(), String> {
-    let message = if opened {
-        "✓ Dashboard opened; Enter reopens it, Ctrl-C exits, and `pontia down` stops it."
-    } else {
-        "Browser not opened; use the URL above or press Enter to retry; Ctrl-C exits, and `pontia down` stops it."
-    };
-    writeln!(output, "{message}").map_err(io_error)
+    Ok(Some(InitOutcome {
+        local_dashboard_url: url.to_string(),
+    }))
 }
 
 fn line_agent_selection<R: BufRead, W: Write>(

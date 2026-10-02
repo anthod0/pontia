@@ -30,12 +30,23 @@ struct TokenResponse {
     error: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 struct StoredCredential<'a> {
+    #[serde(borrow)]
     token: &'a str,
 }
 
 pub async fn run(vars: &HashMap<String, String>) -> Result<(), String> {
+    run_with_verification(vars, |_| {}).await
+}
+
+pub async fn run_with_verification<F>(
+    vars: &HashMap<String, String>,
+    on_verification: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&str),
+{
     let home = pontia_home(vars)?;
     let origin = auth_origin(vars)?;
     let client = Client::builder()
@@ -44,7 +55,7 @@ pub async fn run(vars: &HashMap<String, String>) -> Result<(), String> {
         .map_err(|error| format!("failed to create the login HTTP client: {error}"))?;
 
     tokio::select! {
-        result = login(&client, &origin, &home) => result,
+        result = login(&client, &origin, &home, on_verification) => result,
         result = tokio::signal::ctrl_c() => {
             result.map_err(|error| format!("failed to listen for cancellation: {error}"))?;
             Err("login canceled".to_string())
@@ -52,7 +63,15 @@ pub async fn run(vars: &HashMap<String, String>) -> Result<(), String> {
     }
 }
 
-async fn login(client: &Client, origin: &Url, home: &Path) -> Result<(), String> {
+async fn login<F>(
+    client: &Client,
+    origin: &Url,
+    home: &Path,
+    on_verification: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&str),
+{
     let authorization_url = origin
         .join("api/device/authorize")
         .map_err(|error| format!("invalid authorization endpoint: {error}"))?;
@@ -80,6 +99,7 @@ async fn login(client: &Client, origin: &Url, home: &Path) -> Result<(), String>
     println!("{}", authorization.user_code);
     println!();
     println!("Waiting for approval...");
+    on_verification(verification_url.as_str());
 
     let token_url = origin
         .join("api/device/token")
@@ -184,6 +204,19 @@ pub(super) fn auth_origin(vars: &HashMap<String, String>) -> Result<Url, String>
     Url::parse(&origin).map_err(|error| format!("PONTIA_AUTH_ORIGIN is invalid: {error}"))
 }
 
+pub(super) fn has_valid_credential(vars: &HashMap<String, String>) -> Result<bool, String> {
+    let path = pontia_home(vars)?.join("auth.json");
+    let contents = match std::fs::read(&path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(format!("failed to read {}: {error}", path.display())),
+    };
+    let Ok(stored) = serde_json::from_slice::<StoredCredential<'_>>(&contents) else {
+        return Ok(false);
+    };
+    Ok(validate_token(stored.token).is_ok())
+}
+
 pub(super) fn pontia_home(vars: &HashMap<String, String>) -> Result<PathBuf, String> {
     let (key, value, append) = match vars.get("PONTIA_HOME") {
         Some(value) => ("PONTIA_HOME", value.as_str(), false),
@@ -254,5 +287,22 @@ mod tests {
             verification.as_str(),
             "https://pontia.dev/device?user_code=BCDF-GHJK"
         );
+    }
+
+    #[test]
+    fn detects_a_valid_saved_credential_without_using_the_process_home() {
+        let root = tempfile::tempdir().unwrap();
+        let vars = HashMap::from([("PONTIA_HOME".to_string(), root.path().display().to_string())]);
+        assert!(!has_valid_credential(&vars).unwrap());
+
+        let secret = URL_SAFE_NO_PAD.encode([7_u8; 32]);
+        let token = format!("ptr_v1_0199791c-6600-7000-8000-000000000001_{secret}");
+        std::fs::write(
+            root.path().join("auth.json"),
+            serde_json::json!({ "token": token }).to_string(),
+        )
+        .unwrap();
+
+        assert!(has_valid_credential(&vars).unwrap());
     }
 }
