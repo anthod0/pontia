@@ -1,4 +1,4 @@
-import { isEdgePort, edgeAuthority } from "../../../../../shared/edge-port";
+import { isEdgePort, edgeAuthority } from "../edge-port";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { v7 as uuidv7 } from "uuid";
 import { sha256Base64url } from "./crypto";

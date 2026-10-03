@@ -1,4 +1,4 @@
-import unsafePorts from "./edge-unsafe-ports.json";
+import unsafePorts from "../../../../config/edge-unsafe-ports.json";
 
 // https://fetch.spec.whatwg.org/#port-blocking (includes Workers' prohibited TCP 25).
 export function isEdgePort(value: unknown): value is number {

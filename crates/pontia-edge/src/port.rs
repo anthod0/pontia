@@ -1,7 +1,7 @@
 use std::sync::LazyLock;
 
 static UNSAFE_PORTS: LazyLock<Vec<u16>> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("../../../shared/edge-unsafe-ports.json"))
+    serde_json::from_str(include_str!("../../../config/edge-unsafe-ports.json"))
         .expect("shared unsafe-port policy must be valid")
 });
 

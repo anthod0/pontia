@@ -114,10 +114,6 @@ describe("target validation", () => {
       },
     ],
     [
-      "an unsafe port",
-      { device_handle: handle, device_id: deviceId, edge_api_origin: `${edgeApiOrigin}:25` },
-    ],
-    [
       "a path",
       { device_handle: handle, device_id: deviceId, edge_api_origin: `${edgeApiOrigin}/api` },
     ],

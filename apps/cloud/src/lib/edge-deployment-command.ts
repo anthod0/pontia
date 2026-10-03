@@ -1,4 +1,4 @@
-import { isEdgePort } from "../../../../shared/edge-port";
+import { isEdgePort } from "./edge-port";
 
 export function deploymentModeCommand(
   command: string,

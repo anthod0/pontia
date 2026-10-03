@@ -1,4 +1,4 @@
-import { isEdgePort } from "../../../../../../../../shared/edge-port";
+import { isEdgePort } from "$lib/edge-port";
 import { json } from "@sveltejs/kit";
 import { confirmEdgeDeployment, type DeploymentIdentity } from "$lib/server/edge-deployment";
 import { logDeploymentEvent } from "$lib/server/deployment-observability";

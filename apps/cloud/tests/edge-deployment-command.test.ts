@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { deploymentModeCommand } from "../src/lib/edge-deployment-command";
 import { deploymentCommand } from "../src/lib/server/edge-deployment";
-import unsafePorts from "../../../shared/edge-unsafe-ports.json";
+import unsafePorts from "../../../config/edge-unsafe-ports.json";
 
 const command = deploymentCommand("https://pontia.example", "edge-id", "deployment-ticket");
 

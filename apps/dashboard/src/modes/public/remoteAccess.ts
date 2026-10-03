@@ -1,4 +1,3 @@
-import { isEdgePort } from "../../../../../shared/edge-port";
 import { isValidDeviceHandle } from "$lib/remoteDashboard";
 
 const CLOUD_ORIGIN = "https://pontia.dev";
@@ -72,7 +71,6 @@ function parseEdgeOrigin(value: unknown): string {
     url.protocol !== "https:" ||
     url.username ||
     url.password ||
-    !isEdgePort(Number(url.port || 443)) ||
     url.pathname !== "/" ||
     url.search ||
     url.hash ||

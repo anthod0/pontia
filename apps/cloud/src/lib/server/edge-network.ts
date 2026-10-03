@@ -3,7 +3,7 @@ import {
   readDnsProviderResponse,
   type DnsOperation,
 } from "./cloudflare-dns-errors";
-import { isEdgePort, edgeAuthority } from "../../../../../shared/edge-port";
+import { isEdgePort, edgeAuthority } from "../edge-port";
 const EDGE_ZONE = "edge.pontia.dev";
 const CHALLENGE_PREFIX = "/.well-known/pontia-edge-address/";
 const PROBE_TIMEOUT_MS = 5_000;
