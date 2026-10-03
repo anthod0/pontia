@@ -1871,7 +1871,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "pontia"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -1898,7 +1898,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-application"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "ignore",
  "nucleo-matcher",
@@ -1920,7 +1920,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-client-codex"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "futures-util",
  "libc",
@@ -1940,7 +1940,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-client-pi"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "pontia-application",
  "pontia-config",
@@ -1956,7 +1956,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-config"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "pontia-core",
  "serde",
@@ -1967,7 +1967,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-core"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -1979,7 +1979,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-edge"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -2013,7 +2013,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-http"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "axum",
  "flate2",
@@ -2043,7 +2043,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-runtime"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "libc",
  "pontia-core",
@@ -2056,7 +2056,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-storage-sqlite"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "pontia-core",
  "serde",
@@ -2068,7 +2068,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-tunnel"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -2095,7 +2095,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-workflow"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "pontia-application",
  "pontia-core",
@@ -2114,7 +2114,7 @@ dependencies = [
 
 [[package]]
 name = "pontiad"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "axum",
  "pontia-application",

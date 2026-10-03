@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-10-03
+
+### Added
+
+- Added `pontia update` to install verified, signed stable releases.
+- Added signed release manifests and Linux installers distributed through R2.
+- Added custom Edge ports and DNS-01 certificate issuance.
+- Added guided remote-access setup during initialization and a command to disable remote access.
+
+### Changed
+
+- Updated the Pi client integration for Pi 1.0.
+- Moved generated device names to private vocabulary tables.
+
+### Fixed
+
+- Kept active Cloud browser sessions signed in with sliding session refresh.
+
 ## [0.3.3] - 2026-10-01
 
 ### Added
@@ -115,7 +133,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/anthod0/pontia/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/anthod0/pontia/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/anthod0/pontia/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/anthod0/pontia/compare/v0.3.0...v0.3.1
