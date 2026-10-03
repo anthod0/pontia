@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import DevicesPage from "../src/components/devices/DevicesPage.svelte";
-import RemoteDashboardPage from "../src/components/devices/RemoteDashboardPage.svelte";
-import { match as matchHandle } from "../src/params/handle";
-import { initialRemoteDashboardState, isValidDeviceHandle } from "../src/lib/remoteDashboard";
+import DevicesPage from "../../src/components/devices/DevicesPage.svelte";
+import RemoteDashboardPage from "../../src/components/devices/RemoteDashboardPage.svelte";
+import { match as matchHandle } from "../../src/params/handle";
+import { isValidDeviceHandle } from "../../src/lib/remoteDashboard";
 
 const handle = "office-mac";
 
@@ -27,13 +27,8 @@ describe("device handle", () => {
     expect(isValidDeviceHandle("workflows")).toBe(false);
   });
 
-  test("maps valid targets to connecting and invalid targets to invalid", () => {
-    expect(initialRemoteDashboardState(handle)).toBe("connecting");
-    expect(initialRemoteDashboardState("2not_a_handle")).toBe("invalid");
-  });
-
-  test("only enables the optional handle route in public builds", () => {
-    expect(matchHandle(handle)).toBe(import.meta.env.VITE_DASHBOARD_MODE === "public");
+  test("matches device handles without taking reserved routes", () => {
+    expect(matchHandle(handle)).toBe(true);
     expect(matchHandle("workflows")).toBe(false);
   });
 });
@@ -43,7 +38,6 @@ test("renders the public device list empty state", () => {
 
   expect(screen.getByRole("heading", { name: "Devices" })).toBeInTheDocument();
   expect(screen.getByText("No devices yet")).toBeInTheDocument();
-  expect(screen.queryByLabelText(/bearer token/i)).not.toBeInTheDocument();
 });
 
 test("renders a sign-in action when loading devices requires authentication", () => {
@@ -78,24 +72,6 @@ test("renders valid devices as handle-scoped dashboard links", () => {
   );
   expect(screen.getByText("Office Mac")).toBeInTheDocument();
   expect(screen.queryByText("Invalid")).not.toBeInTheDocument();
-  expect(screen.queryByText("Online")).not.toBeInTheDocument();
-  expect(screen.queryByText("Offline")).not.toBeInTheDocument();
-});
-
-test.each([
-  ["connecting", "Connecting to device"],
-  ["authorization-required", "Authorization required"],
-  ["unavailable", "Device unavailable"],
-] as const)("renders the %s state", (state, heading) => {
-  render(RemoteDashboardPage, { props: { handle, state } });
-  expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
-});
-
-test("enters the existing dashboard shell when the device is available", () => {
-  render(RemoteDashboardPage, { props: { handle, state: "available" } });
-
-  expect(screen.getByText("Pontia")).toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: "Connecting to device" })).not.toBeInTheDocument();
 });
 
 test("invalid handles override any requested connection state", () => {

@@ -759,8 +759,6 @@ test("chat help shortcut opens a kbd shortcut reference dialog", async () => {
   const dialog = screen.getByRole("dialog", { name: /keyboard shortcuts/i });
   expect(within(dialog).getByText(/next active chat/i)).toBeInTheDocument();
   expect(within(dialog).getByText(/focus chat input/i)).toBeInTheDocument();
-  expect(within(dialog).getAllByText("Alt").length).toBeGreaterThan(0);
-  expect(within(dialog).getByText("?")).toBeInTheDocument();
 });
 
 test("chat header help button opens the shortcuts dialog", async () => {

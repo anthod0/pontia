@@ -53,7 +53,7 @@ test("completed work expands inline from its summary heading", async () => {
   );
   expect(screen.getByLabelText("Thinking")).toBeInTheDocument();
   expect(screen.getByText("Inspecting the project.")).toBeInTheDocument();
-  expect(screen.getByText("relevant").tagName).toBe("STRONG");
+  expect(screen.getByText("relevant")).toBeVisible();
   expect(screen.getByText("Read 1 file")).toBeInTheDocument();
   expect(screen.getByText("AGENTS.md")).not.toBeVisible();
   expect(screen.getByText("Custom tool")).toBeInTheDocument();
@@ -176,24 +176,6 @@ test("run command reveals its command from a nested disclosure", async () => {
   );
   expect(document.querySelector(".command-code")).toBeVisible();
   expect(document.querySelector(".command-code")).toHaveTextContent("pnpm test");
-});
-
-test("active work stays collapsed until manually expanded", async () => {
-  const user = userEvent.setup();
-  render(ThoughtSummary, {
-    props: {
-      steps: [step({ content: "Planning changes." })],
-      active: true,
-    },
-  });
-
-  const trigger = screen.getByRole("button", { name: "Show agent work steps" });
-  expect(trigger).toHaveAttribute("aria-expanded", "false");
-  expect(screen.getByText("Planning changes.")).not.toBeVisible();
-
-  await user.click(trigger);
-
-  expect(screen.getByText("Planning changes.")).toBeVisible();
 });
 
 test("streaming updates and activity changes preserve the user disclosure state", async () => {

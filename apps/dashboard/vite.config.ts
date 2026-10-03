@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import { loadEnv, type ProxyOptions } from "vite";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -66,6 +66,8 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: "jsdom",
       setupFiles: ["./tests/setup.ts"],
+      include: publicDashboard ? ["tests/public/**/*.test.ts"] : ["tests/**/*.test.ts"],
+      exclude: [...configDefaults.exclude, ...(publicDashboard ? [] : ["tests/public/**"])],
     },
     server: {
       host: true,

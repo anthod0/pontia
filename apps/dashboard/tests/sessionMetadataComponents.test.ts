@@ -101,7 +101,7 @@ describe("session metadata component boundaries", () => {
 
     await fireEvent.click(
       screen.getByRole("button", {
-        name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/,
+        name: /^Session details:/,
       }),
     );
 

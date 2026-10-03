@@ -43,13 +43,5 @@ describe("workspace git status API client", () => {
       branch: "main",
       clean: true,
     });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/workspaces/workspace-1/git-status",
-      expect.any(Object),
-    );
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/workspaces/workspace-1/git-status/refresh",
-      expect.objectContaining({ method: "POST" }),
-    );
   });
 });

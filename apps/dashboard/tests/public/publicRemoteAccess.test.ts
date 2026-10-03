@@ -4,13 +4,13 @@ import {
   dashboardSignInUrl,
   listPublicDevices,
   resolvePublicDeviceTarget,
-} from "../src/modes/public/remoteAccess";
+} from "../../src/modes/public/remoteAccess";
 import {
   clearPublicApiTarget,
   publicApiSignal,
   publicApiUrl,
   setPublicApiTarget,
-} from "../src/modes/public/apiTarget";
+} from "../../src/modes/public/apiTarget";
 
 const handle = "office-mac";
 const deviceId = "01234567-89ab-cdef-0123-456789abcdef";
