@@ -1,0 +1,87 @@
+name: Publish Cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/cloud/**
+      - apps/dashboard/**
+      - apps/cron/**
+      - config/**
+      - .github/workflows/publish-cloudflare.yml
+  workflow_dispatch:
+
+concurrency:
+  group: publish-cloudflare-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check ${{ matrix.app }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [cloud, dashboard, cron]
+    defaults:
+      run:
+        working-directory: apps/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Check
+        run: bun run check
+      - name: Test
+        run: bun run test
+      - name: Check and test Public Dashboard
+        if: matrix.app == 'dashboard'
+        env:
+          VITE_DASHBOARD_MODE: public
+        run: |
+          bun run check
+          bun run test
+      - name: Build Cloud
+        if: matrix.app == 'cloud'
+        run: bun run build
+      - name: Build Public Dashboard
+        if: matrix.app == 'dashboard'
+        run: bun run build:public
+
+  deploy:
+    name: Deploy production
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - name: Deploy Cloud, Dashboard, and Cron
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -z "${CLOUDFLARE_API_TOKEN:-}" || -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+            echo "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be set as repository secrets" >&2
+            exit 1
+          fi
+          for app in cloud dashboard cron; do
+            echo "Deploying $app production"
+            (
+              cd "apps/$app"
+              bun install --frozen-lockfile
+              bun run deploy
+            )
+          done
