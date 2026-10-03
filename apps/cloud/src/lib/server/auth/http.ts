@@ -45,8 +45,19 @@ function provider(event: RequestEvent): Provider {
 }
 
 export function origin(event: RequestEvent) {
-  const configuredUrl = new URL(environment(event).AUTH_ORIGIN);
-  if (configuredUrl.protocol !== "https:") error(503, "Authentication requires HTTPS");
+  const configuredOrigin = environment(event).AUTH_ORIGIN;
+  let configuredUrl: URL;
+  try {
+    configuredUrl = new URL(configuredOrigin);
+  } catch {
+    error(503, "Authentication requires a valid AUTH_ORIGIN");
+  }
+  const localDevelopment =
+    import.meta.env.DEV &&
+    configuredUrl.protocol === "http:" &&
+    configuredUrl.hostname === "localhost";
+  if (configuredUrl.protocol !== "https:" && !localDevelopment)
+    error(503, "Authentication requires HTTPS");
   const configured = configuredUrl.origin;
   if (event.url.origin !== configured) error(400, "Use the configured cloud address to sign in");
   return configured;
