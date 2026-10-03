@@ -54,9 +54,14 @@ struct CaState {
     finalized: bool,
     txt: Option<String>,
     challenges: Vec<String>,
+    stall_http: bool,
 }
 
 async fn ca(State(state): State<Arc<Mutex<CaState>>>, uri: Uri) -> impl IntoResponse {
+    let stall_http = state.lock().unwrap().stall_http;
+    if uri.path() == "/http" && stall_http {
+        std::future::pending::<()>().await;
+    }
     let mut state = state.lock().unwrap();
     let base = state.origin.clone();
     let mut headers = HeaderMap::new();
@@ -89,9 +94,6 @@ async fn ca(State(state): State<Arc<Mutex<CaState>>>, uri: Uri) -> impl IntoResp
             state.ready = true;
             json!({ "type": if uri.path() == "/dns" { "dns-01" } else { "http-01" }, "url": format!("{base}{}", uri.path()), "token": format!("token-{}", state.orders), "status": "valid" })
         }
-        "/dns-query" => {
-            json!({ "Answer": state.txt.iter().map(|value| json!({ "type": 16, "data": format!("\"{value}\"") })).collect::<Vec<_>>() })
-        }
         "/certificate" => return (headers, "issued-certificate".to_owned()).into_response(),
         "/new-order" | "/order" | "/finalize" => {
             if uri.path() == "/new-order" {
@@ -113,6 +115,52 @@ async fn ca(State(state): State<Arc<Mutex<CaState>>>, uri: Uri) -> impl IntoResp
         path => panic!("unexpected CA request: {path}"),
     };
     (headers, axum::Json(body)).into_response()
+}
+
+#[tokio::test]
+async fn http_issuance_timeout_cleans_up_shared_challenge_tokens() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let state = Arc::new(Mutex::new(CaState {
+        origin: origin.clone(),
+        stall_http: true,
+        ..Default::default()
+    }));
+    let router = Router::new().fallback(ca).with_state(state);
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let account = Account::builder_with_http(Box::new(LocalHttp(reqwest::Client::new())))
+        .create(
+            &NewAccount {
+                contact: &[],
+                terms_of_service_agreed: true,
+                only_return_existing: false,
+            },
+            format!("{origin}/directory"),
+            None,
+        )
+        .await
+        .unwrap()
+        .0;
+    let challenges = ChallengeResponses::default();
+    let shared = challenges.clone();
+    let issuance =
+        tokio::spawn(
+            async move { issue_http(account, "brave-atlas.edge.pontia.dev", shared).await },
+        );
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while !challenges.is_active().await {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(180)).await;
+    let error = issuance.await.unwrap().unwrap_err();
+    assert!(error.to_string().contains("timed out after 3 minutes"));
+    assert!(!challenges.is_active().await);
+    server.abort();
+    let _ = server.await;
 }
 
 #[tokio::test]
@@ -145,13 +193,7 @@ async fn dns_initial_issuance_and_renewal_reuse_local_account_and_keep_private_k
         assert_eq!(value.len(), 43);
         assert!(!state.lock().unwrap().ready);
         state.lock().unwrap().txt = Some(value.clone());
-        let certificate = order
-            .complete_with_resolver(
-                "brave-atlas.edge.pontia.dev",
-                &format!("{origin}/dns-query"),
-            )
-            .await
-            .unwrap();
+        let certificate = order.validate_and_issue().await.unwrap();
         assert_eq!(certificate.certificate_pem, "issued-certificate");
         assert!(certificate.private_key_pem.contains("PRIVATE KEY"));
         values.push(value);

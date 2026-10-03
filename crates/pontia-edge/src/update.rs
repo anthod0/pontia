@@ -25,7 +25,7 @@ pub async fn run() -> Result<()> {
         .map_err(anyhow::Error::msg)?;
     // Inspect service state after downloading, immediately before replacement.
     let systemd = Systemd::default();
-    let running = systemd.update_is_active()?;
+    let running = systemd.update_is_active().await?;
     let config = if running {
         let output = Command::new("systemctl")
             .args([
@@ -54,12 +54,15 @@ pub async fn run() -> Result<()> {
                 let (Some(config), Some(client)) = (&config, &client) else {
                     return Ok(());
                 };
-                systemd.restart().map_err(|error| error.to_string())?;
-                tokio::runtime::Handle::current()
+                let runtime = tokio::runtime::Handle::current();
+                runtime
+                    .block_on(systemd.restart())
+                    .map_err(|error| error.to_string())?;
+                runtime
                     .block_on(wait_for_health(client, config))
                     .map_err(|error| error.to_string())?;
-                if !systemd
-                    .update_is_active()
+                if !runtime
+                    .block_on(systemd.update_is_active())
                     .map_err(|error| error.to_string())?
                 {
                     return Err("edge service is not active after restart".into());

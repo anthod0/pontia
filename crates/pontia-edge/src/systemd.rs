@@ -1,4 +1,6 @@
-use std::{path::Path, process::Command};
+use std::{future::Future, path::Path, time::Duration};
+
+use tokio::process::Command;
 
 use anyhow::{Context, Result};
 
@@ -27,18 +29,27 @@ WantedBy=multi-user.target
 "#;
 
 pub trait CommandRunner {
-    fn run(&self, arguments: &[&str]) -> Result<bool>;
+    fn run(&self, arguments: &[&str]) -> impl Future<Output = Result<bool>> + Send;
 }
 
 pub struct ProcessCommandRunner;
 
 impl CommandRunner for ProcessCommandRunner {
-    fn run(&self, arguments: &[&str]) -> Result<bool> {
-        Ok(Command::new("systemctl")
-            .args(arguments)
-            .status()
-            .with_context(|| format!("failed to run systemctl {}", arguments.join(" ")))?
-            .success())
+    async fn run(&self, arguments: &[&str]) -> Result<bool> {
+        let mut command = Command::new("systemctl");
+        command.args(arguments).kill_on_drop(true);
+        Ok(
+            tokio::time::timeout(Duration::from_secs(30), command.status())
+                .await
+                .with_context(|| {
+                    format!(
+                        "systemctl {} timed out after 30 seconds",
+                        arguments.join(" ")
+                    )
+                })?
+                .with_context(|| format!("failed to run systemctl {}", arguments.join(" ")))?
+                .success(),
+        )
     }
 }
 
@@ -55,30 +66,33 @@ impl Default for Systemd {
 }
 
 impl<R: CommandRunner> Systemd<R> {
-    pub fn is_active(&self) -> bool {
+    pub async fn is_active(&self) -> bool {
         self.runner
             .run(&["is-active", "--quiet", "pontia-edge.service"])
+            .await
             .unwrap_or(false)
     }
 
-    pub fn update_is_active(&self) -> Result<bool> {
+    pub async fn update_is_active(&self) -> Result<bool> {
         self.runner
             .run(&["is-active", "--quiet", "pontia-edge.service"])
+            .await
     }
 
-    pub fn restart(&self) -> Result<()> {
-        self.run_required(&["restart", "pontia-edge.service"])
+    pub async fn restart(&self) -> Result<()> {
+        self.run_required(&["restart", "pontia-edge.service"]).await
     }
 
-    pub fn install_and_start(&self, unit_path: &Path) -> Result<()> {
+    pub async fn install_and_start(&self, unit_path: &Path) -> Result<()> {
         atomic_write(unit_path, UNIT.as_bytes(), 0o644)?;
-        self.run_required(&["daemon-reload"])?;
+        self.run_required(&["daemon-reload"]).await?;
         self.run_required(&["enable", "--now", "pontia-edge.service"])
+            .await
     }
 
-    fn run_required(&self, arguments: &[&str]) -> Result<()> {
+    async fn run_required(&self, arguments: &[&str]) -> Result<()> {
         anyhow::ensure!(
-            self.runner.run(arguments)?,
+            self.runner.run(arguments).await?,
             "systemctl {} failed",
             arguments.join(" ")
         );
@@ -97,7 +111,7 @@ mod tests {
     }
 
     impl CommandRunner for FakeRunner {
-        fn run(&self, arguments: &[&str]) -> Result<bool> {
+        async fn run(&self, arguments: &[&str]) -> Result<bool> {
             self.calls
                 .lock()
                 .unwrap()
@@ -106,15 +120,15 @@ mod tests {
         }
     }
 
-    #[test]
-    fn update_checks_status_and_restarts_without_reinstalling_the_unit() {
+    #[tokio::test]
+    async fn update_checks_status_and_restarts_without_reinstalling_the_unit() {
         let systemd = Systemd {
             runner: FakeRunner {
                 calls: Mutex::new(Vec::new()),
             },
         };
-        assert!(systemd.update_is_active().unwrap());
-        systemd.restart().unwrap();
+        assert!(systemd.update_is_active().await.unwrap());
+        systemd.restart().await.unwrap();
         assert_eq!(
             *systemd.runner.calls.lock().unwrap(),
             [
@@ -128,23 +142,23 @@ mod tests {
         );
     }
 
-    #[test]
-    fn restart_failure_is_not_reported_as_success() {
+    #[tokio::test]
+    async fn restart_failure_is_not_reported_as_success() {
         struct FailingRunner;
         impl CommandRunner for FailingRunner {
-            fn run(&self, _arguments: &[&str]) -> Result<bool> {
+            async fn run(&self, _arguments: &[&str]) -> Result<bool> {
                 Ok(false)
             }
         }
         let systemd = Systemd {
             runner: FailingRunner,
         };
-        assert!(!systemd.update_is_active().unwrap());
-        assert!(systemd.restart().is_err());
+        assert!(!systemd.update_is_active().await.unwrap());
+        assert!(systemd.restart().await.is_err());
     }
 
-    #[test]
-    fn installs_the_embedded_unit_before_reloading_and_starting_systemd() {
+    #[tokio::test]
+    async fn installs_the_embedded_unit_before_reloading_and_starting_systemd() {
         let test_root = tempfile::tempdir().unwrap();
         let unit_path = test_root.path().join("pontia-edge.service");
         let systemd = Systemd {
@@ -153,7 +167,7 @@ mod tests {
             },
         };
 
-        systemd.install_and_start(&unit_path).unwrap();
+        systemd.install_and_start(&unit_path).await.unwrap();
 
         assert_eq!(std::fs::read_to_string(unit_path).unwrap(), UNIT);
         assert_eq!(

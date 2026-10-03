@@ -74,6 +74,8 @@ impl HttpCloudClient {
         Ok(Self {
             client: Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(30))
                 .build()
                 .context("failed to create Cloud client")?,
             origin: parsed,
@@ -96,7 +98,6 @@ impl HttpCloudClient {
             .post(self.endpoint("api/edge/dns-challenge")?)
             .bearer_auth(credential)
             .json(&body)
-            .timeout(std::time::Duration::from_secs(30))
             .send()
             .await
             .context("failed to request DNS challenge operation")?;

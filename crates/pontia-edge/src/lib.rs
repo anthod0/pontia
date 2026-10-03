@@ -1,4 +1,5 @@
 pub mod acme;
+mod acme_dns;
 pub mod browser_access;
 mod browser_http;
 pub mod challenge;

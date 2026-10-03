@@ -4,8 +4,22 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use hickory_resolver::TokioResolver;
 use reqwest::{Client, Url};
 use serde::Deserialize;
+
+/// Use the DNS servers configured by the OS, without pinning an external provider.
+pub fn system_dns_resolver() -> Result<TokioResolver> {
+    let mut builder = TokioResolver::builder_tokio()
+        .context("failed to load system DNS resolver configuration")?;
+    // Newly published records must not be hidden by our own negative cache.
+    builder.options_mut().cache_size = 0;
+    // Propagation must be observed in DNS, not satisfied by a local /etc/hosts entry.
+    builder.options_mut().use_hosts_file = hickory_resolver::config::ResolveHosts::Never;
+    builder.options_mut().timeout = Duration::from_secs(5);
+    builder.options_mut().attempts = 1;
+    Ok(builder.build())
+}
 
 pub fn is_global_unicast(address: Ipv4Addr) -> bool {
     let [a, b, c, _] = address.octets();
@@ -36,6 +50,7 @@ pub async fn discover_public_ipv4(cloud_origin: &Url) -> Result<Ipv4Addr> {
         .local_address(IpAddr::V4(Ipv4Addr::UNSPECIFIED))
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(30))
         .build()
         .context("failed to create IPv4 discovery client")?;

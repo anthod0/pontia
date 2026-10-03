@@ -1,6 +1,8 @@
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use anyhow::{Context, Result};
@@ -10,6 +12,7 @@ use instant_acme::{
 };
 
 use crate::{
+    acme_dns::{progress, wait_for_txt},
     challenge::{ChallengeResponses, ChallengeServer},
     enrollment::{DnsOperation, HttpCloudClient},
     files::atomic_write,
@@ -34,10 +37,11 @@ pub async fn complete_dns_and_save(
     hostname: &str,
     tls_path: &Path,
     dns: &CloudDnsChallenges<'_>,
+    output: &mut (impl Write + ?Sized),
 ) -> Result<()> {
     let value = order.value.clone();
     let result = async {
-        let certificate = order.complete(hostname).await?;
+        let certificate = order.complete(hostname, output).await?;
         save_certificate(&certificate, tls_path)
     }
     .await;
@@ -54,12 +58,13 @@ pub async fn issue_dns_and_save(
     hostname: &str,
     tls_path: &Path,
     dns: &CloudDnsChallenges<'_>,
+    output: &mut (impl Write + ?Sized),
 ) -> Result<()> {
     let order = issuer.prepare_dns(hostname).await?;
     if let Some(value) = &order.value {
         dns.change(DnsOperation::Publish, value).await?;
     }
-    complete_dns_and_save(order, hostname, tls_path, dns).await
+    complete_dns_and_save(order, hostname, tls_path, dns, output).await
 }
 
 pub async fn issue_http_and_save(
@@ -67,6 +72,7 @@ pub async fn issue_http_and_save(
     hostname: &str,
     tls_path: &Path,
     shared: Option<ChallengeResponses>,
+    output: &mut (impl Write + ?Sized),
 ) -> Result<()> {
     let listener = if shared.is_none() {
         Some(ChallengeServer::start_acme("0.0.0.0:80".parse().unwrap()).await?)
@@ -74,7 +80,11 @@ pub async fn issue_http_and_save(
         None
     };
     let responses = shared.unwrap_or_else(|| listener.as_ref().unwrap().responses());
-    let result = issue_and_save(issuer, hostname, responses, tls_path).await;
+    let result = report_issuance_progress(
+        issue_and_save(issuer, hostname, responses, tls_path),
+        output,
+    )
+    .await;
     if let Some(listener) = listener {
         listener.stop().await?;
     }
@@ -108,19 +118,22 @@ pub struct PreparedDnsOrder {
 }
 
 impl PreparedDnsOrder {
-    pub async fn complete(self, hostname: &str) -> Result<IssuedCertificate> {
-        self.complete_with_resolver(hostname, "https://cloudflare-dns.com/dns-query")
-            .await
-    }
-
-    async fn complete_with_resolver(
-        mut self,
+    pub async fn complete(
+        self,
         hostname: &str,
-        resolver: &str,
+        output: &mut (impl Write + ?Sized),
     ) -> Result<IssuedCertificate> {
         if let Some(value) = &self.value {
-            wait_for_txt(hostname, value, resolver).await?;
+            wait_for_txt(hostname, value, output).await?;
         }
+        report_issuance_progress(async {
+            tokio::time::timeout(Duration::from_secs(180), self.validate_and_issue())
+                .await
+                .context("Let's Encrypt validation or certificate issuance timed out after 3 minutes")?
+        }, output).await
+    }
+
+    async fn validate_and_issue(mut self) -> Result<IssuedCertificate> {
         let mut authorizations = self.order.authorizations();
         while let Some(authorization) = authorizations.next().await {
             let mut authorization = authorization?;
@@ -137,41 +150,41 @@ impl PreparedDnsOrder {
     }
 }
 
-async fn wait_for_txt(hostname: &str, value: &str, resolver: &str) -> Result<()> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()?;
-    for _ in 0..120 {
-        let response = client
-            .get(resolver)
-            .query(&[
-                ("name", format!("_acme-challenge.{hostname}")),
-                ("type", "TXT".to_owned()),
-            ])
-            .header("accept", "application/dns-json")
-            .send()
-            .await;
-        if let Ok(response) = response
-            && let Ok(body) = response.json::<serde_json::Value>().await
-            && body["Answer"].as_array().is_some_and(|answers| {
-                answers.iter().any(|answer| {
-                    answer["type"] == 16
-                        && answer["data"]
-                            .as_str()
-                            .is_some_and(|data| data.trim_matches('"') == value)
-                })
-            })
-        {
-            return Ok(());
+async fn report_issuance_progress<T>(
+    issuance: impl std::future::Future<Output = Result<T>>,
+    output: &mut (impl Write + ?Sized),
+) -> Result<T> {
+    progress(
+        output,
+        "Waiting for Let's Encrypt account/validation/certificate requests...",
+    )?;
+    let started = tokio::time::Instant::now();
+    let mut reports =
+        tokio::time::interval_at(started + Duration::from_secs(15), Duration::from_secs(15));
+    reports.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    tokio::pin!(issuance);
+    let mut progress_error = None;
+    loop {
+        tokio::select! {
+            biased;
+            result = &mut issuance => {
+                let value = result?;
+                if let Some(error) = progress_error {
+                    return Err(error);
+                }
+                return Ok(value);
+            }
+            _ = reports.tick(), if progress_error.is_none() => {
+                // Finish issuance/cleanup even if the output pipe closes mid-request.
+                progress_error = progress(output, &format!("Still waiting for Let's Encrypt after {} seconds...", started.elapsed().as_secs())).err();
+            }
         }
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
-    anyhow::bail!("DNS-01 TXT record did not propagate")
 }
 
 async fn finish_order(order: &mut Order) -> Result<IssuedCertificate> {
     let status = order
-        .poll_ready(&RetryPolicy::default())
+        .poll_ready(&RetryPolicy::new().timeout(Duration::from_secs(120)))
         .await
         .context("ACME validation failed")?;
     anyhow::ensure!(
@@ -183,7 +196,7 @@ async fn finish_order(order: &mut Order) -> Result<IssuedCertificate> {
         .await
         .context("failed to finalize ACME order")?;
     let certificate_pem = order
-        .poll_certificate(&RetryPolicy::default())
+        .poll_certificate(&RetryPolicy::new().timeout(Duration::from_secs(60)))
         .await
         .context("failed to download issued certificate")?;
     Ok(IssuedCertificate {
@@ -231,11 +244,20 @@ impl InstantAcmeIssuer {
     }
 
     pub async fn prepare_dns(&self, hostname: &str) -> Result<PreparedDnsOrder> {
-        prepare_dns_order(self.account().await?, hostname).await
+        tokio::time::timeout(Duration::from_secs(60), async {
+            prepare_dns_order(self.account().await?, hostname).await
+        })
+        .await
+        .context("Let's Encrypt DNS-01 order preparation timed out after 60 seconds")?
     }
 
     async fn account(&self) -> Result<Account> {
-        self.load_account(Account::builder()?).await
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            self.load_account(Account::builder()?),
+        )
+        .await
+        .context("Let's Encrypt account request timed out after 30 seconds")?
     }
 }
 
@@ -311,13 +333,13 @@ async fn issue_http(
     hostname: &str,
     challenges: ChallengeResponses,
 ) -> Result<IssuedCertificate> {
-    let identifier = Identifier::Dns(hostname.to_owned());
-    let mut order = account
-        .new_order(&NewOrder::new(&[identifier]))
-        .await
-        .context("failed to create ACME order")?;
     let mut tokens = Vec::new();
-    let result = async {
+    let result = tokio::time::timeout(Duration::from_secs(180), async {
+        let identifier = Identifier::Dns(hostname.to_owned());
+        let mut order = account
+            .new_order(&NewOrder::new(&[identifier]))
+            .await
+            .context("failed to create ACME order")?;
         let mut authorizations = order.authorizations();
         while let Some(authorization) = authorizations.next().await {
             let mut authorization = authorization.context("failed to load ACME authorization")?;
@@ -339,8 +361,10 @@ async fn issue_http(
                 .context("failed to start ACME HTTP-01 challenge")?;
         }
         finish_order(&mut order).await
-    }
-    .await;
+    })
+    .await
+    .context("Let's Encrypt HTTP-01 certificate issuance timed out after 3 minutes")
+    .and_then(|result| result);
     for token in &tokens {
         challenges.remove(token).await;
     }
@@ -390,6 +414,36 @@ mod tests {
                 private_key_pem: "private-key".to_owned(),
             })
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn progress_write_failure_does_not_cancel_in_flight_issuance_or_cleanup() {
+        struct ClosedProgressPipe;
+        impl Write for ClosedProgressPipe {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                if bytes.starts_with(b"Still waiting") {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "closed",
+                    ));
+                }
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut finished = false;
+        let issuance = async {
+            tokio::time::sleep(Duration::from_secs(20)).await;
+            finished = true;
+            Ok(())
+        };
+        let error = report_issuance_progress(issuance, &mut ClosedProgressPipe)
+            .await
+            .unwrap_err();
+        assert!(finished);
+        assert!(format!("{error:#}").contains("closed"));
     }
 
     #[tokio::test]

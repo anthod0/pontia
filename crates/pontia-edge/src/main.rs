@@ -18,7 +18,7 @@ use pontia_edge::{
     config::{CONFIG_PATH, DATABASE_PATH, ServiceConfig, hostname_from_tunnel_url},
     credential::{CREDENTIAL_PATH, ensure_managed_directory, ensure_root, read_edge_credential},
     enrollment::{EdgeNetworkClient, HttpCloudClient, InitializationResult, initialize_and_enroll},
-    network::discover_public_ipv4,
+    network::{discover_public_ipv4, system_dns_resolver},
     port::{parse_edge_port, tunnel_url},
     systemd::{Systemd, UNIT_PATH},
     tls::AcmeAcceptor,
@@ -33,7 +33,7 @@ use uuid::Uuid;
 
 mod update;
 
-const DNS_WAIT_ATTEMPTS: usize = 60;
+const DNS_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
 const HEALTH_WAIT_ATTEMPTS: usize = 30;
 const RETRY_DELAY: Duration = Duration::from_secs(5);
 const RENEW_AFTER: Duration = Duration::from_secs(50 * 24 * 60 * 60);
@@ -79,10 +79,7 @@ async fn main() -> Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
     let cli = Cli::parse();
     match cli.command {
-        Some(Command::Init(args)) => tokio::select! {
-            result = init(args) => result,
-            _ = shutdown_signal() => anyhow::bail!("edge initialization interrupted"),
-        },
+        Some(Command::Init(args)) => run_until_shutdown(init(args)).await,
         Some(Command::Update) => update::run().await,
         None => serve().await,
     }
@@ -97,8 +94,8 @@ fn parse_edge_id(value: &str) -> std::result::Result<Uuid, String> {
 }
 
 async fn init(args: InitArgs) -> Result<()> {
-    let stdout = std::io::stdout();
-    let mut output = stdout.lock();
+    // Do not hold the global stdout lock across network waits or cancellation.
+    let mut output = std::io::stdout();
     init_with_output(args, &mut output).await
 }
 
@@ -198,10 +195,10 @@ async fn init_with_output<W: Write + ?Sized>(args: InitArgs, output: &mut W) -> 
                 credential: &credential.value,
                 ticket: Some(&args.ticket),
             };
-            complete_dns_and_save(order, &hostname, Path::new(TLS_PATH), &dns).await?;
+            complete_dns_and_save(order, &hostname, Path::new(TLS_PATH), &dns, output).await?;
         } else {
             wait_for_dns(&hostname, candidate_ipv4, output).await?;
-            issue_http_and_save(&issuer, &hostname, Path::new(TLS_PATH), None).await?;
+            issue_http_and_save(&issuer, &hostname, Path::new(TLS_PATH), None, output).await?;
         }
         status(output, "TLS certificate issued and saved.")?;
     }
@@ -209,7 +206,7 @@ async fn init_with_output<W: Write + ?Sized>(args: InitArgs, output: &mut W) -> 
     status(output, "Saving edge configuration...")?;
     expected_config.save(Path::new(CONFIG_PATH))?;
     status(output, "Installing and starting the pontia-edge service...")?;
-    systemd.install_and_start(Path::new(UNIT_PATH))?;
+    systemd.install_and_start(Path::new(UNIT_PATH)).await?;
     status(output, "pontia-edge service started.")?;
     wait_for_health(
         &client,
@@ -288,53 +285,60 @@ async fn wait_for_dns(
     status(
         output,
         &format!(
-            "Waiting for {hostname} to resolve to {candidate} (up to {})...",
-            format_duration(RETRY_DELAY * DNS_WAIT_ATTEMPTS as u32)
+            "Waiting for {hostname} to resolve to {candidate} using system DNS (up to 5 minutes)..."
         ),
     )?;
+    let resolver = system_dns_resolver()?;
+    let name = format!("{hostname}.");
+    let started = tokio::time::Instant::now();
+    let deadline = started + DNS_WAIT_TIMEOUT;
+    let mut reports =
+        tokio::time::interval_at(started + Duration::from_secs(15), Duration::from_secs(15));
+    reports.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut next_query = started;
     let mut last_observation = "no DNS response received".to_owned();
-    for attempt in 1..=DNS_WAIT_ATTEMPTS {
-        match tokio::net::lookup_host((hostname, 443)).await {
-            Ok(addresses) => {
-                let mut addresses = addresses.map(|address| address.ip()).collect::<Vec<_>>();
-                addresses.sort_unstable();
-                addresses.dedup();
-                if addresses.iter().any(|address| *address == candidate) {
-                    status(
-                        output,
-                        &format!("DNS now resolves {hostname} to {candidate}."),
-                    )?;
-                    return Ok(());
+    loop {
+        let query_at = next_query;
+        let query = async {
+            tokio::time::sleep_until(query_at).await;
+            tokio::time::timeout(Duration::from_secs(5), resolver.ipv4_lookup(name.as_str())).await
+        };
+        tokio::pin!(query);
+        let result = loop {
+            tokio::select! {
+                biased;
+                _ = tokio::time::sleep_until(deadline) => {
+                    anyhow::bail!("assigned hostname did not resolve to the verified IPv4 address within 5 minutes; last DNS check: {last_observation}");
                 }
-                last_observation = if addresses.is_empty() {
-                    "the lookup returned no addresses".to_owned()
-                } else {
-                    format!(
-                        "resolved to {} instead of {candidate}",
-                        addresses
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
-                };
+                result = &mut query => break result,
+                _ = reports.tick() => {
+                    status(output, &format!("Still waiting for DNS after {} seconds; last check: {last_observation}.", started.elapsed().as_secs()))?;
+                }
             }
-            Err(error) => last_observation = format!("DNS lookup failed: {error}"),
+        };
+        match result {
+            Ok(Ok(addresses)) if addresses.iter().any(|address| address.0 == candidate) => {
+                status(
+                    output,
+                    &format!("DNS now resolves {hostname} to {candidate}."),
+                )?;
+                return Ok(());
+            }
+            Ok(Ok(addresses)) => {
+                last_observation = format!(
+                    "resolved to {} instead of {candidate}",
+                    addresses
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            Ok(Err(error)) => last_observation = format!("system DNS lookup failed: {error}"),
+            Err(_) => last_observation = "system DNS lookup timed out after 5 seconds".to_owned(),
         }
-        tokio::time::sleep(RETRY_DELAY).await;
-        if attempt % 6 == 0 && attempt < DNS_WAIT_ATTEMPTS {
-            status(
-                output,
-                &format!(
-                    "Still waiting for DNS after {}; last check: {last_observation}.",
-                    format_duration(RETRY_DELAY * attempt as u32)
-                ),
-            )?;
-        }
+        next_query = tokio::time::Instant::now() + RETRY_DELAY;
     }
-    anyhow::bail!(
-        "assigned hostname did not resolve to the verified IPv4 address; last DNS check: {last_observation}"
-    )
 }
 
 async fn wait_for_health<C: EdgeNetworkClient>(
@@ -471,13 +475,21 @@ async fn renew_certificates(
                     credential: &credential,
                     ticket: None,
                 };
-                issue_dns_and_save(&issuer, &config.hostname, Path::new(TLS_PATH), &dns).await?;
+                issue_dns_and_save(
+                    &issuer,
+                    &config.hostname,
+                    Path::new(TLS_PATH),
+                    &dns,
+                    &mut std::io::stdout(),
+                )
+                .await?;
             } else {
                 issue_http_and_save(
                     &issuer,
                     &config.hostname,
                     Path::new(TLS_PATH),
                     shared_acme.clone(),
+                    &mut std::io::stdout(),
                 )
                 .await?;
             }
@@ -501,25 +513,141 @@ fn certificate_needs_renewal(path: &Path) -> bool {
         .is_none_or(|age| age >= RENEW_AFTER)
 }
 
-async fn shutdown_signal() {
+struct ShutdownSignals {
     #[cfg(unix)]
-    let terminate = async {
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("install SIGTERM handler")
-            .recv()
-            .await;
-    };
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-    tokio::select! {
-        _ = tokio::signal::ctrl_c() => {}
-        _ = terminate => {}
+    interrupt: tokio::signal::unix::Signal,
+    #[cfg(unix)]
+    terminate: tokio::signal::unix::Signal,
+}
+
+impl ShutdownSignals {
+    fn install() -> Result<Self> {
+        Ok(Self {
+            #[cfg(unix)]
+            interrupt: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+                .context("failed to install SIGINT handler")?,
+            #[cfg(unix)]
+            terminate: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .context("failed to install SIGTERM handler")?,
+        })
     }
+
+    async fn recv(&mut self) {
+        #[cfg(unix)]
+        tokio::select! {
+            _ = self.interrupt.recv() => {}
+            _ = self.terminate.recv() => {}
+        }
+        #[cfg(not(unix))]
+        tokio::signal::ctrl_c().await.expect("wait for Ctrl-C");
+    }
+}
+
+async fn run_until_shutdown(
+    operation: impl std::future::Future<Output = Result<()>>,
+) -> Result<()> {
+    // Register both handlers before polling initialization, and prioritize cancellation.
+    let mut signals = ShutdownSignals::install()?;
+    tokio::select! {
+        biased;
+        _ = signals.recv() => anyhow::bail!("edge initialization interrupted"),
+        result = operation => result,
+    }
+}
+
+async fn shutdown_signal() {
+    ShutdownSignals::install()
+        .expect("install shutdown handlers")
+        .recv()
+        .await;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Run the real signal listener in an isolated process, never signal the test runner.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn signal_test_child() {
+        let Some(ready_path) = std::env::var_os("PONTIA_EDGE_SIGNAL_TEST_READY") else {
+            return;
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let result = run_until_shutdown(async {
+            std::fs::write(ready_path, address.to_string()).unwrap();
+            // Simulate an initialization request whose peer never responds.
+            reqwest::Client::new()
+                .get(format!("http://{address}"))
+                .send()
+                .await?;
+            anyhow::bail!("request unexpectedly completed")
+        })
+        .await;
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "edge initialization interrupted"
+        );
+    }
+
+    #[cfg(unix)]
+    async fn assert_signal_cancels_initialization(
+        signal: rustix::process::Signal,
+        ignore_sigint: bool,
+    ) {
+        let root = tempfile::tempdir().unwrap();
+        let ready = root.path().join("ready");
+        let executable = std::env::current_exe().unwrap();
+        let mut command = if ignore_sigint {
+            // Reproduce SIGINT being inherited as ignored from a launching shell.
+            let mut command = tokio::process::Command::new("sh");
+            command.args(["-c", "trap '' INT; exec \"$@\"", "sh"]);
+            command.arg(&executable);
+            command
+        } else {
+            tokio::process::Command::new(&executable)
+        };
+        let mut child = command
+            .args(["--exact", "tests::signal_test_child", "--nocapture"])
+            .env("PONTIA_EDGE_SIGNAL_TEST_READY", &ready)
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !ready.exists() {
+                if let Some(status) = child.try_wait().unwrap() {
+                    panic!("signal test exited before installing handlers: {status}");
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("signal test did not become ready");
+        rustix::process::kill_process(
+            rustix::process::Pid::from_raw(child.id().unwrap() as i32).unwrap(),
+            signal,
+        )
+        .unwrap();
+        let status = tokio::time::timeout(Duration::from_secs(3), child.wait())
+            .await
+            .expect("initialization did not respond to signal")
+            .unwrap();
+        assert!(status.success(), "signal test failed: {status}");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn sigint_cancels_stalled_initialization_even_when_inherited_as_ignored() {
+        assert_signal_cancels_initialization(rustix::process::Signal::INT, false).await;
+        assert_signal_cancels_initialization(rustix::process::Signal::INT, true).await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn sigterm_cancels_stalled_initialization() {
+        assert_signal_cancels_initialization(rustix::process::Signal::TERM, false).await;
+    }
 
     struct FailingHealthClient;
 
