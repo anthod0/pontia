@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-10-03
+
+### Added
+
+- Added `pontia-edge update` to install verified, signed stable releases.
+- Added owned Edge listings and a deployment command page in Cloud.
+
+### Changed
+
+- Removed the explicit Let's Encrypt subscriber agreement flag from Edge initialization.
+
+### Fixed
+
+- Discovered Edge public IPv4 addresses through Cloud to support NAT deployments.
+- Allowed localhost HTTP authentication in Cloud development environments.
+
 ## [0.3.4] - 2026-10-03
 
 ### Added
@@ -133,7 +149,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/anthod0/pontia/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/anthod0/pontia/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/anthod0/pontia/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/anthod0/pontia/compare/v0.3.1...v0.3.2
