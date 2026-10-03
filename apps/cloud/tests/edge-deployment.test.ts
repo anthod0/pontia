@@ -64,6 +64,10 @@ test("issuing a deployment creates a one-hour bound ticket and copyable command"
     name: "brave-atlas",
     expiresAt: "2099-01-01T01:00:00.000Z",
   });
+  expect(deployment.command).toContain(
+    "curl -fsSL 'https://get.pontia.dev/install-edge.sh' | sudo sh",
+  );
+  expect(deployment.command).toContain("--cloud-origin 'https://pontia.example'");
   expect(deployment.command).toContain(`--edge-id '${edgeId}'`);
   expect(deployment.command).toContain(`--ticket '${ticket}'`);
   const stored = await database.db.select().from(edgeTickets).get();

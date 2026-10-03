@@ -31,7 +31,7 @@ pub struct RemoteConfig {
 }
 
 const DEFAULT_DASHBOARD_SOURCE: &str = concat!(
-    "https://github.com/anthod0/pontia/releases/download/v",
+    "https://get.pontia.dev/releases/v",
     env!("CARGO_PKG_VERSION"),
     "/pontia-dashboard.tar.gz"
 );

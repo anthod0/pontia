@@ -396,7 +396,7 @@ fn provides_development_defaults_for_optional_values() {
     assert_eq!(
         config.dashboard.source.as_deref(),
         Some(concat!(
-            "https://github.com/anthod0/pontia/releases/download/v",
+            "https://get.pontia.dev/releases/v",
             env!("CARGO_PKG_VERSION"),
             "/pontia-dashboard.tar.gz"
         ))

@@ -79,7 +79,7 @@
 			<h2 id="start-title">Start your first session.</h2>
 			<p class="setup-description">Install Pontia, connect pi, and open your dashboard.</p>
 			<ol class="setup-steps">
-				<li><span class="step-number">01</span><div><h3>Install Pontia</h3><p>Download <code>pontia</code> and <code>pontiad</code> for your platform. Put both on your <code>PATH</code>.</p><a class="text-link" href={`${repository}/releases/latest`}>Download the latest release<ArrowUpRightIcon size={14} /></a></div></li>
+				<li><span class="step-number">01</span><div><h3>Install Pontia</h3><p>Run <code>curl -fsSL https://get.pontia.dev/install.sh | sh</code> to install <code>pontia</code> and <code>pontiad</code>.</p><a class="text-link" href="https://get.pontia.dev/install.sh">View the installer<ArrowUpRightIcon size={14} /></a></div></li>
 				<li><span class="step-number">02</span><div><h3>Install pi and tmux</h3><p>Install <a href="https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent">pi CLI</a> and <a href="https://github.com/tmux/tmux/wiki/Installing">tmux</a> if you don’t already have them.</p></div></li>
 				<li><span class="step-number">03</span><div><h3>Run the setup</h3><p>Run <code>pontia init</code>. Follow the prompts to set up the pi integration, start the service, and open your dashboard.</p></div></li>
 			</ol>

@@ -174,8 +174,12 @@ jobs:
         with:
           name: dashboard
           path: artifacts
-      - name: Generate checksums
-        run: cd artifacts && sha256sum *.tar.gz > SHA256SUMS
+      - name: Prepare signed release
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+          RELEASE_PUBLIC_KEY: ${{ vars.RELEASE_PUBLIC_KEY }}
+          TAG: ${{ needs.detect.outputs.tag }}
+        run: python3 scripts/publish-release.py prepare-release artifacts --version "$TAG"
       - name: Extract release notes
         shell: bash
         env:
@@ -190,8 +194,17 @@ jobs:
             END { if (!found) exit 1 }
           ' CHANGELOG.md > release-notes.md
           test -s release-notes.md
-      - name: Create GitHub Release
+      - name: Verify assets and publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.detect.outputs.tag }}
-        run: gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file release-notes.md artifacts/*
+        run: python3 scripts/publish-release.py publish-github-release artifacts --version "$TAG"
+      - name: Publish verified release to R2 and advance stable
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          TAG: ${{ needs.detect.outputs.tag }}
+        run: python3 scripts/publish-release.py publish-release artifacts --version "$TAG"
