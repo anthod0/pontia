@@ -115,7 +115,8 @@ test("an issued access JWT remains usable until it expires", async () => {
     url: new URL("https://pontia.example/edges/deploy"),
   } as unknown as RequestEvent)) as { deployment: { command: string } };
 
-  expect(result.deployment.command).toContain("--agree-to-lets-encrypt-subscriber-agreement");
+  expect(result.deployment.command).toContain("sudo pontia-edge init");
+  expect(result.deployment.command).not.toContain("--agree-to-lets-encrypt-subscriber-agreement");
 });
 
 test("an authenticated user can issue an edge deployment", async () => {
@@ -142,5 +143,6 @@ test("an authenticated user can issue an edge deployment", async () => {
     url: new URL("https://pontia.example/edges"),
   } as unknown as RequestEvent)) as { deployment: { command: string } };
 
-  expect(result.deployment.command).toContain("--agree-to-lets-encrypt-subscriber-agreement");
+  expect(result.deployment.command).toContain("sudo pontia-edge init");
+  expect(result.deployment.command).not.toContain("--agree-to-lets-encrypt-subscriber-agreement");
 });

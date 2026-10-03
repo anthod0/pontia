@@ -60,8 +60,6 @@ struct InitArgs {
     edge_id: Uuid,
     #[arg(long)]
     ticket: String,
-    #[arg(long, action = clap::ArgAction::SetTrue, required = true)]
-    agree_to_lets_encrypt_subscriber_agreement: bool,
     #[arg(long, hide = true)]
     acme_staging: bool,
     /// Public HTTPS/WSS port (recommended alternative: 8443). Also used for IP verification.
@@ -103,10 +101,6 @@ async fn init_with_output<W: Write + ?Sized>(args: InitArgs, output: &mut W) -> 
     status(output, "Checking local requirements...")?;
     ensure_root(rustix::process::geteuid().as_raw())?;
     ensure_managed_directory()?;
-    anyhow::ensure!(
-        args.agree_to_lets_encrypt_subscriber_agreement,
-        "accept the Let's Encrypt Subscriber Agreement with --agree-to-lets-encrypt-subscriber-agreement"
-    );
 
     status(output, "Preparing edge deployment with Pontia Cloud...")?;
     let client = HttpCloudClient::new(&args.cloud_origin)?;
@@ -618,7 +612,6 @@ mod tests {
             "0199791c-6600-7000-8000-000000000001",
             "--ticket",
             "ticket",
-            "--agree-to-lets-encrypt-subscriber-agreement",
         ];
         for (extra, port, method) in [
             (vec![], None, AcmeChallenge::Http01),
@@ -652,7 +645,7 @@ mod tests {
     }
 
     #[test]
-    fn command_line_requires_explicit_subscriber_agreement() {
+    fn command_line_initializes_without_subscriber_agreement_flag() {
         let init = Cli::try_parse_from([
             "pontia-edge",
             "init",
@@ -662,7 +655,6 @@ mod tests {
             "0199791c-6600-7000-8000-000000000001",
             "--ticket",
             "pet_v1_example",
-            "--agree-to-lets-encrypt-subscriber-agreement",
         ])
         .unwrap();
         assert!(matches!(init.command, Some(Command::Init(_))));
@@ -676,6 +668,7 @@ mod tests {
                 "0199791c-6600-7000-8000-000000000001",
                 "--ticket",
                 "pet_v1_example",
+                "--agree-to-lets-encrypt-subscriber-agreement",
             ])
             .is_err()
         );
