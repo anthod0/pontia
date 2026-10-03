@@ -1876,18 +1876,14 @@ dependencies = [
  "base64 0.22.1",
  "clap",
  "dialoguer",
- "ed25519-dalek",
- "flate2",
- "fs2",
  "getrandom 0.3.4",
  "hostname",
  "pontia-client-codex",
  "pontia-config",
+ "pontia-update",
  "reqwest",
  "serde",
  "serde_json",
- "sha2 0.10.9",
- "tar",
  "tempfile",
  "tokio",
  "toml",
@@ -1992,6 +1988,7 @@ dependencies = [
  "instant-acme",
  "nix",
  "pontia-tunnel",
+ "pontia-update",
  "rcgen",
  "reqwest",
  "rustix",
@@ -2091,6 +2088,22 @@ dependencies = [
  "url",
  "uuid",
  "webpki-roots 1.0.7",
+]
+
+[[package]]
+name = "pontia-update"
+version = "0.3.4"
+dependencies = [
+ "base64 0.22.1",
+ "ed25519-dalek",
+ "flate2",
+ "fs2",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tar",
+ "tempfile",
 ]
 
 [[package]]

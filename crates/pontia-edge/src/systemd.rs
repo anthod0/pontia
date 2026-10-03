@@ -61,6 +61,15 @@ impl<R: CommandRunner> Systemd<R> {
             .unwrap_or(false)
     }
 
+    pub fn update_is_active(&self) -> Result<bool> {
+        self.runner
+            .run(&["is-active", "--quiet", "pontia-edge.service"])
+    }
+
+    pub fn restart(&self) -> Result<()> {
+        self.run_required(&["restart", "pontia-edge.service"])
+    }
+
     pub fn install_and_start(&self, unit_path: &Path) -> Result<()> {
         atomic_write(unit_path, UNIT.as_bytes(), 0o644)?;
         self.run_required(&["daemon-reload"])?;
@@ -95,6 +104,43 @@ mod tests {
                 .push(arguments.iter().map(|value| (*value).to_owned()).collect());
             Ok(true)
         }
+    }
+
+    #[test]
+    fn update_checks_status_and_restarts_without_reinstalling_the_unit() {
+        let systemd = Systemd {
+            runner: FakeRunner {
+                calls: Mutex::new(Vec::new()),
+            },
+        };
+        assert!(systemd.update_is_active().unwrap());
+        systemd.restart().unwrap();
+        assert_eq!(
+            *systemd.runner.calls.lock().unwrap(),
+            [
+                vec![
+                    "is-active".to_owned(),
+                    "--quiet".to_owned(),
+                    "pontia-edge.service".to_owned()
+                ],
+                vec!["restart".to_owned(), "pontia-edge.service".to_owned()],
+            ]
+        );
+    }
+
+    #[test]
+    fn restart_failure_is_not_reported_as_success() {
+        struct FailingRunner;
+        impl CommandRunner for FailingRunner {
+            fn run(&self, _arguments: &[&str]) -> Result<bool> {
+                Ok(false)
+            }
+        }
+        let systemd = Systemd {
+            runner: FailingRunner,
+        };
+        assert!(!systemd.update_is_active().unwrap());
+        assert!(systemd.restart().is_err());
     }
 
     #[test]

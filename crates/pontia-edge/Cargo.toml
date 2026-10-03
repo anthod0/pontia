@@ -14,6 +14,7 @@ getrandom = "0.3"
 instant-acme = { version = "=0.8.5", default-features = false, features = ["hyper-rustls", "ring", "rcgen"] }
 nix = { version = "0.30", features = ["net", "socket"] }
 pontia-tunnel.workspace = true
+pontia-update = { path = "../pontia-update" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rustix = { version = "1", features = ["process"] }
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }

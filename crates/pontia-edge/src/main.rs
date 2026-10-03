@@ -31,6 +31,8 @@ use rustls::{
 };
 use uuid::Uuid;
 
+mod update;
+
 const DNS_WAIT_ATTEMPTS: usize = 60;
 const HEALTH_WAIT_ATTEMPTS: usize = 30;
 const RETRY_DELAY: Duration = Duration::from_secs(5);
@@ -50,6 +52,8 @@ struct Cli {
 enum Command {
     /// Initialize this edge, configure its public endpoint, and install its service.
     Init(InitArgs),
+    /// Update pontia-edge to the latest stable release.
+    Update,
 }
 
 #[derive(Args)]
@@ -79,6 +83,7 @@ async fn main() -> Result<()> {
             result = init(args) => result,
             _ = shutdown_signal() => anyhow::bail!("edge initialization interrupted"),
         },
+        Some(Command::Update) => update::run().await,
         None => serve().await,
     }
 }
@@ -566,6 +571,13 @@ mod tests {
         assert!(!output.contains("secret-credential"));
         assert!(!error.contains("secret-ticket"));
         assert!(!error.contains("secret-credential"));
+    }
+
+    #[test]
+    fn update_is_a_standalone_command() {
+        let cli = Cli::try_parse_from(["pontia-edge", "update"]).unwrap();
+        assert!(matches!(cli.command, Some(Command::Update)));
+        assert!(Cli::try_parse_from(["pontia-edge", "update", "--ticket", "secret"]).is_err());
     }
 
     #[test]
