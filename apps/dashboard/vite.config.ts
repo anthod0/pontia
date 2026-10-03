@@ -6,7 +6,7 @@ import { loadEnv, type ProxyOptions } from "vite";
 import { defineConfig } from "vitest/config";
 
 // https://vite.dev/config/
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ mode }) => {
   const viteEnv = loadEnv(mode, process.cwd(), "");
   const dashboardMode =
     process.env.VITE_DASHBOARD_MODE?.trim() || viteEnv.VITE_DASHBOARD_MODE || "local";
@@ -21,40 +21,20 @@ export default defineConfig(({ command, mode }) => {
   const publicDashboard = dashboardMode === "public";
   const publicDevBackend = env.PONTIA_PUBLIC_DEV_BACKEND?.trim();
   const publicDevToken = env.PONTIA_EXTERNAL_API_TOKEN?.trim();
-  const publicDevBridge = command === "serve" && mode === "development" && publicDashboard;
-
-  if (publicDevBridge && (!publicDevBackend || !publicDevToken)) {
-    throw new Error(
-      "Public Dashboard development requires both PONTIA_PUBLIC_DEV_BACKEND and PONTIA_EXTERNAL_API_TOKEN",
-    );
-  }
-
-  if (publicDevBridge) {
-    const backend = new URL(publicDevBackend!);
-    if (
-      !["http:", "https:"].includes(backend.protocol) ||
-      backend.username ||
-      backend.password ||
-      backend.pathname !== "/" ||
-      backend.search ||
-      backend.hash
-    ) {
-      throw new Error(
-        "PONTIA_PUBLIC_DEV_BACKEND must be an HTTP(S) origin without credentials or a path",
-      );
-    }
-  }
-
-  const apiProxy: ProxyOptions = {
-    target: publicDevBridge ? publicDevBackend! : "http://127.0.0.1:8080",
-    changeOrigin: true,
-    configure(proxy) {
-      if (!publicDevBridge) return;
-      proxy.on("proxyReq", (request) => {
-        request.setHeader("Authorization", `Bearer ${publicDevToken}`);
-      });
-    },
-  };
+  const apiProxy: ProxyOptions | undefined = publicDashboard
+    ? publicDevBackend
+      ? {
+          target: publicDevBackend,
+          changeOrigin: true,
+          configure(proxy) {
+            if (!publicDevToken) return;
+            proxy.on("proxyReq", (request) => {
+              request.setHeader("Authorization", `Bearer ${publicDevToken}`);
+            });
+          },
+        }
+      : undefined
+    : { target: "http://127.0.0.1:8080", changeOrigin: true };
 
   return {
     plugins: [
@@ -89,9 +69,10 @@ export default defineConfig(({ command, mode }) => {
     },
     server: {
       host: true,
-      proxy: {
-        "/api": apiProxy,
-      },
+      proxy: apiProxy ? { "/api": apiProxy } : undefined,
+    },
+    preview: {
+      proxy: {},
     },
   };
 });
