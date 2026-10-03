@@ -1,17 +1,10 @@
 <script lang="ts">
-  import CheckIcon from "phosphor-svelte/lib/CheckIcon";
-  import CopyIcon from "phosphor-svelte/lib/CopyIcon";
   import { Button } from "$lib/components/ui/button";
+  import * as Table from "$lib/components/ui/table";
   import AuthLayout from "$lib/components/AuthLayout.svelte";
-  import type { ActionData, PageData } from "./$types";
+  import type { PageData } from "./$types";
 
-  let { data, form }: { data: PageData; form: ActionData } = $props();
-  let copied = $state(false);
-
-  async function copyCommand(command: string) {
-    await navigator.clipboard.writeText(command);
-    copied = true;
-  }
+  let { data }: { data: PageData } = $props();
 </script>
 
 <svelte:head>
@@ -19,37 +12,47 @@
   <meta name="robots" content="noindex" />
 </svelte:head>
 
-<AuthLayout wide={Boolean(form?.deployment)}>
-  <h1>Deploy a self-hosted edge</h1>
+<AuthLayout wide>
+  <h1>Self-hosted edges</h1>
+
+  <section aria-labelledby="your-edges">
+    <h2 id="your-edges">Your edges</h2>
+    {#if data.edges.length > 0}
+      <Table.Root>
+        <Table.Header>
+          <Table.Row>
+            <Table.Head>Name</Table.Head>
+            <Table.Head>Address</Table.Head>
+            <Table.Head>Created</Table.Head>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {#each data.edges as edge (edge.id)}
+            <Table.Row>
+              <Table.Cell>{edge.name}</Table.Cell>
+              <Table.Cell>{edge.tunnelUrl}</Table.Cell>
+              <Table.Cell>{new Date(edge.createdAt).toLocaleString()}</Table.Cell>
+            </Table.Row>
+          {/each}
+        </Table.Body>
+      </Table.Root>
+    {:else}
+      <p>You haven't deployed any edges yet. Generate a command below to get started.</p>
+    {/if}
+  </section>
+
+  <h2>Deploy a self-hosted edge</h2>
   <p>Generate a one-time command, then run it on your public Linux server.</p>
 
-  {#if form?.error}
-    <p class="auth-error" role="alert">{form.error}</p>
-  {/if}
-
-  {#if form?.deployment}
-    <section aria-labelledby="deployment-name">
-      <h2 id="deployment-name">{form.deployment.name}</h2>
-      <p>This command expires at {new Date(form.deployment.expiresAt).toLocaleString()}.</p>
-      <pre><code>{form.deployment.command}</code></pre>
-      <Button type="button" onclick={() => copyCommand(form.deployment!.command)}>
-        {#if copied}<CheckIcon />{:else}<CopyIcon />{/if}
-        {copied ? "Copied" : "Copy command"}
-      </Button>
-    </section>
-  {:else}
-    <form method="POST">
-      <p class="agreement">
-        By generating this command, you agree to the
-        <a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">
-          Let's Encrypt Subscriber Agreement</a
-        >.
-      </p>
-      <Button type="submit">Generate deployment command</Button>
-    </form>
-  {/if}
-
-  <p><a href="/account">Back to account</a></p>
+  <form method="POST" action="/edges/deploy">
+    <p class="agreement">
+      By generating this command, you agree to the
+      <a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">
+        Let's Encrypt Subscriber Agreement</a
+      >.
+    </p>
+    <Button type="submit">Generate deployment command</Button>
+  </form>
 </AuthLayout>
 
 <style>
@@ -67,17 +70,4 @@
     max-width: 620px;
   }
 
-  pre {
-    background: var(--muted);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    margin-block: 16px;
-    overflow-x: auto;
-    padding: 16px;
-    white-space: pre;
-  }
-
-  code {
-    overflow-wrap: anywhere;
-  }
 </style>

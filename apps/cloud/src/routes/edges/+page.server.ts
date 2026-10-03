@@ -1,8 +1,9 @@
-import { fail, redirect, type RequestEvent } from "@sveltejs/kit";
-import { currentLogin, environment, origin } from "$lib/server/auth/http";
+import { redirect, type RequestEvent } from "@sveltejs/kit";
+import { asc, eq } from "drizzle-orm";
+import { currentLogin, environment } from "$lib/server/auth/http";
 import { database } from "$lib/server/db";
-import { issueEdgeDeployment } from "$lib/server/edge-deployment";
-import type { Actions, PageServerLoad } from "./$types";
+import { edges } from "$lib/server/db/schema";
+import type { PageServerLoad } from "./$types";
 
 async function activeUser(event: Pick<RequestEvent, "platform" | "cookies">) {
   const user = await currentLogin(event);
@@ -12,23 +13,15 @@ async function activeUser(event: Pick<RequestEvent, "platform" | "cookies">) {
 export const load: PageServerLoad = async (event) => {
   const authenticated = await activeUser(event);
   if (!authenticated) redirect(303, "/login");
-  return { user: authenticated.user };
-};
-
-export const actions: Actions = {
-  default: async (event) => {
-    const authenticated = await activeUser(event);
-    if (!authenticated) return fail(401, { error: "Sign in to create an edge deployment." });
-    try {
-      return {
-        deployment: await issueEdgeDeployment(
-          authenticated.db,
-          authenticated.user.user_id,
-          origin(event),
-        ),
-      };
-    } catch {
-      return fail(503, { error: "Edge deployment is temporarily unavailable." });
-    }
-  },
+  const ownedEdges = await authenticated.db
+    .select({
+      id: edges.id,
+      name: edges.name,
+      tunnelUrl: edges.tunnelUrl,
+      createdAt: edges.createdAt,
+    })
+    .from(edges)
+    .where(eq(edges.userId, authenticated.user.user_id))
+    .orderBy(asc(edges.name), asc(edges.id));
+  return { user: authenticated.user, edges: ownedEdges };
 };
