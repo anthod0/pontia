@@ -111,6 +111,23 @@ fn help_describes_the_cli() {
     assert!(stdout.contains("Usage: pontia"));
     assert!(stdout.contains("init"));
     assert!(stdout.contains("Configure Pontia interactively"));
+    assert!(stdout.contains("update"));
+    assert!(stdout.contains("latest stable release"));
+}
+
+#[test]
+fn update_help_has_no_version_selection() {
+    let output = pontia().args(["update", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    let help = String::from_utf8(output.stdout).unwrap();
+    assert!(help.contains("Usage: pontia update"));
+    assert!(!help.contains("--version"));
+    let output = pontia()
+        .args(["update", "--version", "v1.2.3"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unexpected argument"));
 }
 
 #[test]

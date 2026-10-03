@@ -1,5 +1,6 @@
 mod login;
 mod remote;
+mod update;
 mod workflow;
 
 use std::{
@@ -49,6 +50,8 @@ enum Command {
     Remote(remote::RemoteCommand),
     /// Install and start the per-user Pontia service
     Up,
+    /// Update pontia and pontiad to the latest stable release
+    Update,
     /// Stop and disable the per-user Pontia service
     Down,
     /// Show the Pontia service and health state
@@ -96,10 +99,71 @@ async fn execute(command: Command) -> Result<bool, String> {
             restart_service_for_remote_config()?;
             Ok(true)
         }
+        Command::Update => run_update().await,
         Command::Up => run_lifecycle(LifecycleCommand::Up),
         Command::Down => run_lifecycle(LifecycleCommand::Down),
         Command::Status => run_lifecycle(LifecycleCommand::Status),
     }
+}
+
+async fn run_update() -> Result<bool, String> {
+    let update = update::prepare().await?;
+    #[cfg(target_os = "linux")]
+    {
+        let runner = ProcessCommandRunner;
+        let manager = SystemdManager::new(&runner);
+        // Resolve the installed service's configuration, not the invoking shell's PONTIA_HOME.
+        let config = if Path::new("/run/systemd/system").is_dir() {
+            let config = update_service_config(&manager, &user_home()?)?;
+            if config.is_some() && manager.running_executable()? != update.daemon_path() {
+                return Err("the running service belongs to another Pontia installation; run its sibling pontia update instead".into());
+            }
+            config
+        } else {
+            None
+        };
+        if config.is_none() {
+            update.ensure_no_unmanaged_daemon()?;
+        }
+        update.install(|| {
+            if let Some(config) = &config {
+                eprintln!("Restarting Pontia and waiting for it to become healthy...");
+                Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe).restart(config)?;
+            }
+            Ok(())
+        })?;
+        Ok(true)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = update;
+        Err("pontia update supports only Linux".into())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn update_service_config<M: ServiceManager>(
+    manager: &M,
+    home: &Path,
+) -> Result<Option<AppConfig>, String> {
+    use pontia::lifecycle::DefinitionStore;
+    let Some(definition) = FileDefinitionStore.read(&manager.definition_path(home))? else {
+        return Ok(None);
+    };
+    match manager.status()?.run_state {
+        RunState::Starting => {
+            return Err("Pontia is starting; retry the update once it has settled".into());
+        }
+        RunState::Running => {}
+        RunState::Stopped | RunState::Failed => return Ok(None),
+    }
+    let pontia_home = manager.persisted_home(&definition)?;
+    AppConfig::from_vars(&HashMap::from([(
+        "PONTIA_HOME".to_string(),
+        pontia_home.display().to_string(),
+    )]))
+    .map(Some)
+    .map_err(|error| error.to_string())
 }
 
 fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {

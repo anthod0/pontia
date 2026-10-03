@@ -91,6 +91,30 @@ impl<'a, R: CommandRunner> SystemdManager<'a, R> {
         }
     }
 
+    /// Resolve the actual executable of the running per-user daemon.
+    pub fn running_executable(&self) -> Result<PathBuf, String> {
+        let args = [
+            "show",
+            SYSTEMD_SERVICE_NAME,
+            "--property=MainPID",
+            "--value",
+        ];
+        let output = self.systemctl(&args)?;
+        if output.code != 0 {
+            return Err(command_failure("systemctl", &args, &output));
+        }
+        let pid = output
+            .stdout
+            .trim()
+            .parse::<u32>()
+            .map_err(|_| "Pontia service has an invalid MainPID".to_string())?;
+        if pid == 0 {
+            return Err("Pontia service has no running process".into());
+        }
+        std::fs::canonicalize(format!("/proc/{pid}/exe"))
+            .map_err(|error| format!("cannot resolve the running Pontia daemon: {error}"))
+    }
+
     fn systemctl(&self, args: &[&str]) -> Result<CommandOutput, String> {
         self.runner.run(
             "systemctl",
@@ -204,6 +228,10 @@ impl<R: CommandRunner> ServiceManager for SystemdManager<'_, R> {
             self.require_systemctl(&["restart", SYSTEMD_SERVICE_NAME])?;
         }
         Ok(())
+    }
+
+    fn restart(&self) -> Result<(), String> {
+        self.require_systemctl(&["restart", SYSTEMD_SERVICE_NAME])
     }
 
     fn down(&self) -> Result<(), String> {
@@ -360,6 +388,14 @@ impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {
             self.require_launchctl(vec!["kickstart".to_string(), "-k".to_string(), target])?;
         }
         Ok(())
+    }
+
+    fn restart(&self) -> Result<(), String> {
+        self.require_launchctl(vec![
+            "kickstart".to_string(),
+            "-k".to_string(),
+            self.target(),
+        ])
     }
 
     fn down(&self) -> Result<(), String> {

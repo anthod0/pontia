@@ -107,7 +107,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Build binaries
-        run: cargo build --release --locked --package pontia --package pontiad
+        env:
+          RELEASE_PUBLIC_KEY: ${{ vars.RELEASE_PUBLIC_KEY }}
+        run: |
+          test -n "$RELEASE_PUBLIC_KEY"
+          cargo build --release --locked --package pontia --package pontiad
       - name: Build Edge
         if: runner.os == 'Linux'
         run: cargo build --release --locked --package pontia-edge

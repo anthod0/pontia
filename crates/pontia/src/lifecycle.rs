@@ -74,6 +74,8 @@ pub trait ServiceManager {
         restart_running: bool,
         previous: ServiceStatus,
     ) -> Result<(), String>;
+    /// Restart without changing the service definition or enabled state.
+    fn restart(&self) -> Result<(), String>;
     fn down(&self) -> Result<(), String>;
 }
 
@@ -129,6 +131,16 @@ where
         self.manager
             .apply(&path, definition_changed, restart_running, previous)?;
 
+        self.wait_until_healthy(config)
+    }
+
+    /// Restart an existing service without installing or enabling it.
+    pub fn restart(&self, config: &AppConfig) -> Result<(), String> {
+        self.manager.restart()?;
+        self.wait_until_healthy(config)
+    }
+
+    fn wait_until_healthy(&self, config: &AppConfig) -> Result<(), String> {
         let addr = local_health_addr(config.bind_addr);
         let mut service_failed = false;
         let healthy = self

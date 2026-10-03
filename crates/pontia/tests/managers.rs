@@ -41,6 +41,32 @@ fn output(code: i32, stdout: &str, stderr: &str) -> CommandOutput {
 }
 
 #[test]
+fn restarting_does_not_enable_or_reinstall_the_service() {
+    let runner = FakeRunner::with_outputs(vec![output(0, "", "")]);
+    SystemdManager::new(&runner).restart().unwrap();
+    assert_eq!(
+        runner.calls.into_inner(),
+        vec![(
+            "systemctl".into(),
+            vec!["--user".into(), "restart".into(), "pontia.service".into()]
+        )]
+    );
+    let runner = FakeRunner::with_outputs(vec![output(0, "", "")]);
+    LaunchdManager::new(&runner, 501).restart().unwrap();
+    assert_eq!(
+        runner.calls.into_inner(),
+        vec![(
+            "launchctl".into(),
+            vec![
+                "kickstart".into(),
+                "-k".into(),
+                "gui/501/dev.pontia.pontiad".into()
+            ]
+        )]
+    );
+}
+
+#[test]
 fn systemd_reports_normalized_status() {
     let runner = FakeRunner::with_outputs(vec![
         output(0, "enabled\n", ""),

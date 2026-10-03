@@ -92,6 +92,11 @@ impl ServiceManager for FakeManager {
         Ok(())
     }
 
+    fn restart(&self) -> Result<(), String> {
+        self.applied.set(true);
+        Ok(())
+    }
+
     fn down(&self) -> Result<(), String> {
         *self.down_calls.borrow_mut() += 1;
         Ok(())
@@ -142,6 +147,39 @@ fn manager(status: ServiceStatus) -> FakeManager {
         apply_calls: RefCell::new(Vec::new()),
         down_calls: RefCell::new(0),
     }
+}
+
+#[test]
+fn restart_preserves_definition_and_enabled_state_and_validates_health() {
+    let root = tempfile::tempdir().unwrap();
+    let store = FakeStore::default();
+    let manager = manager(ServiceStatus {
+        enabled: EnabledState::Disabled,
+        loaded: true,
+        run_state: RunState::Running,
+    });
+    let health = FakeHealth {
+        healthy: true,
+        waits: RefCell::new(Vec::new()),
+        probes: RefCell::new(Vec::new()),
+    };
+    Lifecycle::new(&manager, &store, &health)
+        .restart(&config(root.path()))
+        .unwrap();
+    assert!(manager.applied.get());
+    assert!(manager.apply_calls.borrow().is_empty());
+    assert!(store.installed.borrow().is_empty());
+    assert_eq!(health.waits.borrow().len(), 1);
+    let unhealthy = FakeHealth {
+        healthy: false,
+        waits: RefCell::new(Vec::new()),
+        probes: RefCell::new(Vec::new()),
+    };
+    assert!(
+        Lifecycle::new(&manager, &store, &unhealthy)
+            .restart(&config(root.path()))
+            .is_err()
+    );
 }
 
 #[test]
