@@ -139,7 +139,10 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         drop(listener);
-        let server = ChallengeServer::start(address).await.unwrap();
+        // NAT public addresses are not locally bindable; listen on all IPv4 interfaces.
+        let server = ChallengeServer::start(SocketAddr::from(([0, 0, 0, 0], address.port())))
+            .await
+            .unwrap();
         server
             .responses()
             .set("token".into(), "authorization".into())

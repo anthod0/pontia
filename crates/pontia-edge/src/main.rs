@@ -18,7 +18,7 @@ use pontia_edge::{
     config::{CONFIG_PATH, DATABASE_PATH, ServiceConfig, hostname_from_tunnel_url},
     credential::{CREDENTIAL_PATH, ensure_managed_directory, ensure_root, read_edge_credential},
     enrollment::{EdgeNetworkClient, HttpCloudClient, InitializationResult, initialize_and_enroll},
-    network::routed_public_ipv4,
+    network::discover_public_ipv4,
     port::{parse_edge_port, tunnel_url},
     systemd::{Systemd, UNIT_PATH},
     tls::AcmeAcceptor,
@@ -137,7 +137,7 @@ async fn init_with_output<W: Write + ?Sized>(args: InitArgs, output: &mut W) -> 
 
     let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
     status(output, "Detecting the public IPv4 address...")?;
-    let candidate_ipv4 = routed_public_ipv4(client.origin()).await?;
+    let candidate_ipv4 = discover_public_ipv4(client.origin()).await?;
     status(output, &format!("Public IPv4 address: {candidate_ipv4}"))?;
 
     let expected_config = ServiceConfig {
@@ -153,10 +153,10 @@ async fn init_with_output<W: Write + ?Sized>(args: InitArgs, output: &mut W) -> 
     let probe_port = args.port.unwrap_or(80);
     status(
         output,
-        &format!("Starting the IP challenge server on {candidate_ipv4}:{probe_port}..."),
+        &format!("Starting the IP challenge server on 0.0.0.0:{probe_port}..."),
     )?;
     let challenge_server =
-        ChallengeServer::start(SocketAddr::from((candidate_ipv4, probe_port))).await?;
+        ChallengeServer::start(SocketAddr::from((Ipv4Addr::UNSPECIFIED, probe_port))).await?;
     let issuer = if args.acme_staging {
         InstantAcmeIssuer::staging(ACCOUNT_PATH)
     } else {
