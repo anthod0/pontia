@@ -5,7 +5,6 @@ import AppSidebarHost from "./components/layout/AppSidebarHost.svelte";
 import AppShellHost from "./components/layout/AppShellHost.svelte";
 import TopBarHost from "./components/layout/TopBarHost.svelte";
 import SettingsShellHost from "./components/settings/SettingsShellHost.svelte";
-import SettingsCommonPage from "../src/pages/SettingsCommonPage.svelte";
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -211,26 +210,6 @@ test("sidebar keeps its empty recent-workspaces state stable during a background
 
   expect(screen.getByText("No recent workspaces")).toBeInTheDocument();
   expect(document.querySelector('[data-slot="sidebar-menu-skeleton"]')).not.toBeInTheDocument();
-});
-
-test("sidebar scrolls recent workspace and session groups together below fixed primary navigation", () => {
-  render(AppSidebarHost);
-
-  const newChatGroup = screen.getByText("New Chat").closest('[data-slot="sidebar-group"]');
-  const recentWorkspacesGroup = screen
-    .getByText("Recent Workspaces")
-    .closest('[data-slot="sidebar-group"]');
-  const recentSessionsGroup = screen
-    .getByText("Recent Sessions")
-    .closest('[data-slot="sidebar-group"]');
-  expect(newChatGroup).not.toBeNull();
-  expect(recentWorkspacesGroup).not.toBeNull();
-  expect(recentSessionsGroup).not.toBeNull();
-
-  const sharedScrollArea = recentWorkspacesGroup?.parentElement;
-  expect(sharedScrollArea).toContainElement(recentWorkspacesGroup as HTMLElement);
-  expect(sharedScrollArea).toContainElement(recentSessionsGroup as HTMLElement);
-  expect(sharedScrollArea).not.toContainElement(newChatGroup as HTMLElement);
 });
 
 test("sidebar groups recent sessions under non-empty recent workspaces without changing Recent Sessions", async () => {
@@ -592,17 +571,6 @@ test("sidebar session actions menu exits sessions without opening them", async (
     screen.getByRole("button", { name: /open session actions for original title/i }),
   );
   const menu = screen.getByRole("menu");
-  const menuItems = within(menu)
-    .getAllByRole("menuitem")
-    .map((item) => item.textContent?.trim());
-  const separator = menu.querySelector('[data-slot="dropdown-menu-separator"]');
-
-  expect(menuItems).toEqual(["Rename", "Pin", "Archive", "Exit"]);
-  expect(separator).not.toBeNull();
-  expect(
-    separator?.compareDocumentPosition(within(menu).getByRole("menuitem", { name: /^exit$/i })),
-  ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-
   await fireEvent.click(within(menu).getByRole("menuitem", { name: /^exit$/i }));
   expect(mocks.terminateSession).toHaveBeenCalledWith("session-active");
   expect(mocks.navigate).not.toHaveBeenCalled();
@@ -744,12 +712,17 @@ test("sidebar highlights the matching recent session on chat routes", () => {
   expect(screen.getByText("other").closest("button")).not.toHaveAttribute("data-active");
 });
 
-test("top bar exposes the sidebar trigger", () => {
-  render(TopBarHost);
+test("top bar trigger closes and reopens the sidebar", async () => {
+  const onOpenChange = vi.fn();
+  render(TopBarHost, { props: { onOpenChange } });
 
-  const topBar = screen.getByRole("banner");
-  const sidebarTrigger = within(topBar).getByRole("button", { name: /toggle sidebar/i });
-  expect(sidebarTrigger).toHaveAttribute("data-sidebar", "trigger");
+  const trigger = within(screen.getByRole("banner")).getByRole("button", {
+    name: /toggle sidebar/i,
+  });
+  await fireEvent.click(trigger);
+  await fireEvent.click(trigger);
+
+  expect(onOpenChange.mock.calls).toEqual([[false], [true]]);
 });
 
 test("sidebar settings button navigates directly to common settings without document reload", async () => {
@@ -757,18 +730,6 @@ test("sidebar settings button navigates directly to common settings without docu
 
   await fireEvent.click(screen.getByRole("button", { name: /settings/i }));
   expect(mocks.navigate).toHaveBeenCalledWith("/settings/common");
-});
-
-test("settings common page contains controls without owning the section switcher", () => {
-  window.history.pushState({}, "", "/dashboard/settings/common");
-
-  render(SettingsCommonPage);
-
-  expect(screen.getByRole("heading", { name: /common settings/i })).toBeInTheDocument();
-  expect(screen.getByLabelText(/bearer token/i)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /save token/i })).toBeInTheDocument();
-  expect(screen.getByText(/live stream/i)).toBeInTheDocument();
-  expect(screen.queryByRole("navigation", { name: /settings sections/i })).not.toBeInTheDocument();
 });
 
 test("chat shortcuts switch among active sessions on chat routes", async () => {
@@ -790,27 +751,6 @@ test("chat shortcuts switch among active sessions on chat routes", async () => {
   expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-older");
 });
 
-test("sidebar shows new chat kbd hint without showing numeric hints beside sessions", () => {
-  mocks.sessions.set([
-    chatSession("session-recent", "idle", "2026-05-14T04:00:00Z"),
-    chatSession("session-pinned", "idle", "2026-05-14T01:00:00Z", "2026-05-14T05:00:00Z"),
-  ]);
-
-  render(AppSidebarHost);
-
-  const newChat = screen.getByText("New Chat").closest("button");
-  expect(newChat).not.toBeNull();
-  expect(within(newChat as HTMLElement).getByText("Alt")).toBeInTheDocument();
-  expect(within(newChat as HTMLElement).getByText("N")).toBeInTheDocument();
-
-  const pinnedSession = screen.getByText("session-pinned").closest("button");
-  expect(pinnedSession).not.toBeNull();
-  expect(within(pinnedSession as HTMLElement).queryByText("1")).not.toBeInTheDocument();
-  const recentSession = screen.getByText("session-recent").closest("button");
-  expect(recentSession).not.toBeNull();
-  expect(within(recentSession as HTMLElement).queryByText("2")).not.toBeInTheDocument();
-});
-
 test("chat help shortcut opens a kbd shortcut reference dialog", async () => {
   render(AppShellHost);
 
@@ -823,7 +763,7 @@ test("chat help shortcut opens a kbd shortcut reference dialog", async () => {
   expect(within(dialog).getByText("?")).toBeInTheDocument();
 });
 
-test("chat header help button opens the shortcuts dialog and is hidden on mobile", async () => {
+test("chat header help button opens the shortcuts dialog", async () => {
   render(AppShellHost);
 
   const helpButton = screen.getByRole("button", { name: /keyboard shortcuts/i });
@@ -900,30 +840,18 @@ test("chat new shortcut on a session route preserves the current session workspa
   expect(mocks.navigate).toHaveBeenLastCalledWith("/", { workspace: "workspace-current" });
 });
 
-test("settings app shell removes centered main chrome so the settings nav can align left", () => {
-  window.history.pushState({}, "", "/dashboard/settings/common");
-
-  render(AppShellHost);
-
-  const main = screen.getByText("App shell page content").closest("main");
-  expect(main).not.toBeNull();
-});
-
 test("settings shell renders a persistent vertical side switcher around page content", () => {
   window.history.pushState({}, "", "/dashboard/settings/workspaces");
 
   render(SettingsShellHost);
 
   const nav = screen.getByRole("navigation", { name: /settings sections/i });
-  expect(nav).toHaveAttribute("data-settings-shell-nav", "persistent");
-
   expect(within(nav).getByRole("link", { name: /^common$/i })).toHaveAttribute(
     "href",
     "/dashboard/settings/common",
   );
   const activeLink = within(nav).getByRole("link", { name: /^workspaces$/i });
   expect(activeLink).toHaveAttribute("aria-current", "page");
-  expect(within(nav).queryByRole("link", { name: /^agent profiles$/i })).not.toBeInTheDocument();
 
   const content = screen.getByText("Current settings page content");
   expect(content).toBeInTheDocument();

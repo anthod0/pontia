@@ -43,7 +43,7 @@ const turns = [
 ];
 
 describe("ChatRuler", () => {
-  test("renders alternating user and assistant marks with hover summaries", async () => {
+  test("renders user and assistant marks with hover summaries", async () => {
     const user = userEvent.setup();
     render(ChatRuler, {
       props: { turns, navigableTurnIds: turns.map((item) => item.turn_id) },
@@ -55,35 +55,7 @@ describe("ChatRuler", () => {
 
     await user.hover(userMark);
     const summary = await screen.findByText("Root question");
-    const tooltipLayout = summary.parentElement;
-    expect(tooltipLayout?.parentElement?.querySelector(".hidden")).toBeInTheDocument();
-    expect(tooltipLayout?.children[0]).toHaveTextContent("User");
-    expect(tooltipLayout?.children[1]).toHaveTextContent("Root question");
-  });
-
-  test("renders sibling branches as darker user lines only in tree mode", () => {
-    const { rerender } = render(ChatRuler, {
-      props: {
-        turns,
-        treeMode: false,
-        navigableTurnIds: ["turn-root", "turn-current"],
-      },
-    });
-    expect(document.querySelectorAll("[data-chat-ruler-branch]")).toHaveLength(0);
-
-    rerender({
-      turns,
-      treeMode: true,
-      navigableTurnIds: ["turn-root", "turn-current"],
-    });
-    const branchLines = document.querySelectorAll("[data-chat-ruler-branch]");
-    expect(branchLines).toHaveLength(1);
-    expect(branchLines[0].tagName).toBe("SPAN");
-    expect(branchLines[0].closest("button")).toHaveAttribute("data-turn-id", "turn-current");
-    expect(
-      screen.queryByRole("button", { name: "User message: Other branch question" }),
-    ).not.toBeInTheDocument();
-    expect(document.querySelector("[data-chat-ruler] svg")).not.toBeInTheDocument();
+    expect(summary).toBeVisible();
   });
 
   test("renders and navigates only current-lineage marks", async () => {

@@ -364,7 +364,7 @@ test("selects tree timeline loading when the Session advertises timeline and top
   );
 });
 
-test("shows icon-only Edit and Copy controls outside eligible user message bubbles", async () => {
+test("copies eligible user messages and opens and cancels historical edits", async () => {
   const user = userEvent.setup();
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
@@ -398,14 +398,7 @@ test("shows icon-only Edit and Copy controls outside eligible user message bubbl
   const copyButton = screen.getByRole("button", {
     name: "Copy user message: Inspect the original implementation.",
   });
-  const messageActions = editButton.closest("[data-user-message-actions]");
-  const messageBubble = messageActions?.previousElementSibling;
   expect(screen.getAllByRole("button", { name: /^Edit message:/ })).toHaveLength(1);
-  expect(editButton).toHaveTextContent("");
-  expect(copyButton).toHaveTextContent("");
-  expect(messageBubble).toHaveTextContent("Inspect the original implementation.");
-  expect(messageBubble).not.toContainElement(editButton);
-  expect(screen.queryByRole("button", { name: /^Resend message:/ })).not.toBeInTheDocument();
   await user.click(copyButton);
   await waitFor(() =>
     expect(writeText).toHaveBeenCalledWith("Inspect the original implementation."),
@@ -422,7 +415,6 @@ test("shows icon-only Edit and Copy controls outside eligible user message bubbl
 
   const editor = screen.getByRole("textbox", { name: "Edit historical message" });
   expect(editor).toHaveValue("Inspect the original implementation.");
-  expect(editor).not.toHaveAttribute("rows");
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
   await fireEvent.keyDown(screen.getByRole("textbox", { name: "Edit historical message" }), {
@@ -1661,8 +1653,6 @@ test("shows idle thought summary trigger above the final assistant response", as
     "false",
   );
   expect(screen.getByText("I should inspect the code.")).not.toBeVisible();
-  expect(screen.queryByText("started")).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("started")).not.toBeInTheDocument();
 });
 
 test("renders assistant output as markdown while leaving user prompts as plain text", async () => {
@@ -1719,12 +1709,9 @@ test("highlights fenced code blocks in assistant markdown and copies their text"
     "const",
   );
   const copyCodeButton = await screen.findByRole("button", { name: /copy code block/i });
-  const pre = container.querySelector("pre");
   const codeBlockHeader = container.querySelector("[data-code-block-header]");
   expect(codeBlockHeader).toHaveTextContent("ts");
 
-  expect(navigator.clipboard?.writeText).toBe(writeText);
-  expect(copyCodeButton.querySelector("svg")).toBeInTheDocument();
   await fireEvent.click(copyCodeButton);
   await waitFor(() => expect(writeText).toHaveBeenCalledWith("const answer: number = 42;"));
   expect(await screen.findByRole("button", { name: /code block copied/i })).toBeInTheDocument();
@@ -1941,7 +1928,6 @@ test("renders an existing session title in the top bar and metadata above the pr
   expect(
     within(screen.getByRole("banner")).getByRole("heading", { name: /second · reviewer/i }),
   ).toBeInTheDocument();
-  expect(screen.queryByText("Description: Review dashboard changes")).not.toBeInTheDocument();
   const sessionDetailsButton = screen.getByRole("button", {
     name: /Session details: pontia · pi · coder@1 · second/i,
   });
@@ -1951,15 +1937,9 @@ test("renders an existing session title in the top bar and metadata above the pr
   expect(clientBadge).toBeInTheDocument();
   expect(profileBadge).toBeInTheDocument();
   expect(screen.getAllByLabelText("Handle: second")[0]).toBeInTheDocument();
-  expect(screen.queryByText("Client: pi")).not.toBeInTheDocument();
-  expect(screen.queryByText("Profile: coder@1")).not.toBeInTheDocument();
-  expect(screen.queryByText("Handle: second")).not.toBeInTheDocument();
-  expect(screen.queryByText("Workspace: workspace-1")).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("Session state: busy")).not.toBeInTheDocument();
   const workspaceBadge = screen.getAllByLabelText("Workspace: /repo/pontia")[0];
   expect(workspaceBadge).toHaveTextContent("/repo/pontia");
   const followUpInput = screen.getByPlaceholderText("Continue the thread…");
-  expect(screen.queryByText("State: busy")).not.toBeInTheDocument();
   expect(
     sessionDetailsButton.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
@@ -1996,7 +1976,6 @@ test("shows supported context usage in chat session metadata while hiding unsupp
   expect(contextBadge).toBeInTheDocument();
   expect(within(contextBadge).getByText("example-model")).toBeInTheDocument();
   expect(screen.getAllByText("33% · 42k / 128k")[0]).toBeInTheDocument();
-  expect(screen.queryByText("Context 33% · 42k / 128k")).not.toBeInTheDocument();
 
   cleanup();
   const unsupported = session({

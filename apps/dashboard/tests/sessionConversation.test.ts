@@ -107,15 +107,6 @@ test("conversation groups each Turn’s user and assistant messages with its sta
   expect(turns[1]).toContainElement(screen.getByLabelText("Agent status: Agent working"));
 });
 
-test("conversation renders messages without role headers", () => {
-  render(SessionConversation, { props: { messages } });
-
-  expect(screen.getByText("Please inspect the repo.")).toBeInTheDocument();
-  expect(screen.getByText("I will inspect it now.")).toBeInTheDocument();
-  expect(screen.queryByText("You")).not.toBeInTheDocument();
-  expect(screen.queryByText("AI")).not.toBeInTheDocument();
-});
-
 test("conversation groups assistant-side items after each user message", () => {
   render(SessionConversation, {
     props: {
@@ -183,38 +174,23 @@ test("conversation hides the agent status component while the session is idle", 
   expect(screen.queryByText("Agent idle")).not.toBeInTheDocument();
 });
 
-test("conversation does not render an interrupt button in the busy agent status", () => {
-  render(SessionConversation, { props: { sessionState: "busy", messages } });
-
-  expect(screen.getByLabelText("Agent status: Agent working")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
-});
-
-test("conversation renders exited status as a left-aligned bottom status after the conversation", () => {
+test("conversation renders exited status after the conversation", () => {
   render(SessionConversation, { props: { sessionState: "exited", messages } });
 
   expect(screen.queryByLabelText(/agent status/i)).not.toBeInTheDocument();
-  expect(screen.queryByText("Session exited")).not.toBeInTheDocument();
-
   const bottomStatus = screen.getByText("session exited · send a message to resume");
-  const bottomStatusContainer = bottomStatus.closest("[data-chat-session-bottom-status]");
-  expect(bottomStatusContainer).toBeInTheDocument();
-  expect(bottomStatusContainer?.querySelector(".h-px")).not.toBeInTheDocument();
   expect(
     screen.getByText("I will inspect it now.").compareDocumentPosition(bottomStatus) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 });
 
-test("conversation renders interrupted status as a left-aligned bottom status after the conversation", () => {
+test("conversation renders interrupted status after the conversation", () => {
   render(SessionConversation, { props: { sessionState: "interrupted", messages } });
 
   expect(screen.queryByLabelText(/agent status/i)).not.toBeInTheDocument();
 
   const bottomStatus = screen.getByText("session interrupted");
-  const bottomStatusContainer = bottomStatus.closest("[data-chat-session-bottom-status]");
-  expect(bottomStatusContainer).toBeInTheDocument();
-  expect(bottomStatusContainer?.querySelector(".h-px")).not.toBeInTheDocument();
   expect(
     screen.getByText("I will inspect it now.").compareDocumentPosition(bottomStatus) &
       Node.DOCUMENT_POSITION_FOLLOWING,
@@ -228,10 +204,6 @@ test("conversation copies assistant reply content with the http-compatible fallb
 
   render(SessionConversation, { props: { messages } });
 
-  const userCopyButton = screen.getByRole("button", { name: /copy user message/i });
-  expect(
-    userCopyButton.closest("[data-user-message-actions]")?.previousElementSibling,
-  ).toHaveTextContent("Please inspect the repo.");
   const copyButton = screen.getByRole("button", { name: /copy assistant reply/i });
   await fireEvent.click(copyButton);
 

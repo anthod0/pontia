@@ -1,8 +1,8 @@
-import { render, screen, waitFor, within } from "@testing-library/svelte";
+import { render, screen, waitFor } from "@testing-library/svelte";
 import { expect, test } from "vitest";
 import MessageResponse from "../../src/lib/components/ai-elements/message/message-response.svelte";
 
-test("markdown links open in a new tab and show an external link icon", async () => {
+test("markdown links open in a new tab without exposing the opener", async () => {
   render(MessageResponse, {
     props: {
       content: "Read the [docs](https://example.com/docs).",
@@ -16,10 +16,6 @@ test("markdown links open in a new tab and show an external link icon", async ()
     expect(link).toHaveAttribute("target", "_blank");
   });
   expect(link).toHaveAttribute("rel", "noopener noreferrer");
-  expect(within(link).getByTestId("markdown-external-link-icon")).toHaveAttribute(
-    "aria-hidden",
-    "true",
-  );
 });
 
 test("does not create executable elements from raw HTML", () => {

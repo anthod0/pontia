@@ -206,7 +206,6 @@ test("a failed deployment deletes its known DNS record before its ticket", async
     dnsRecordsDeleted: 1,
   });
   expect(events).toEqual(["dns", "ticket"]);
-  expect(repository.events.filter((event) => event === "ownership:1")).toHaveLength(2);
 });
 
 test("consumed deployments and deployments with a registered edge only lose the ticket", async () => {

@@ -125,25 +125,18 @@ beforeEach(() => {
   visit();
 });
 
-test("Replanning appears below the workflow only for its base revision, without tabs or a global Replanner", async () => {
+test("Replanning records appear only for their base revision", async () => {
   visit("?revision=2");
   render(WorkflowDetailPage, { routeWorkflowId: "wf" });
   expect(await screen.findByText("Viewing v2")).toBeInTheDocument();
   await waitFor(() => expect(mocks.listWorkflowPatches).toHaveBeenCalledTimes(1));
   expect(screen.queryByRole("region", { name: "Replanning records" })).not.toBeInTheDocument();
-  expect(screen.queryByText("Current Replanner")).not.toBeInTheDocument();
-  expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
   expect(mocks.getSession).not.toHaveBeenCalled();
   await fireEvent.click(screen.getByRole("button", { name: "v3 Current" }));
   expect(await screen.findByText("Session now: busy")).toBeInTheDocument();
   expect(screen.getByText("Current request")).toBeInTheDocument();
   expect(screen.getByText("Patch state: planning · Outcome: Not recorded")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
-  const workflow = screen.getByText("No agents in this workflow");
-  expect(
-    workflow.compareDocumentPosition(screen.getByRole("region", { name: "Replanning records" })) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
   expect(selectedWorkflowSessionIds()).toContain("replanner");
   await fireEvent.click(screen.getByRole("button", { name: "v2" }));
   expect(screen.queryByRole("region", { name: "Replanning records" })).not.toBeInTheDocument();

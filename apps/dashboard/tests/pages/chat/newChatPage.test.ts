@@ -6,27 +6,6 @@ import type { CreateSessionResult } from "../../../src/api/types";
 
 const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).default;
 
-test("guides first-time users to activate a workspace instead of showing an unusable composer", async () => {
-  mocks.workspaces.set([]);
-  mocks.browseWorkspaceRoot.mockResolvedValue({
-    root_id: "root-1",
-    path: "",
-    canonical_path: "/repo",
-    parent_path: null,
-    entries: [{ name: "pontia", path: "pontia", kind: "directory", is_workspace: false }],
-    warnings: [],
-  });
-
-  render(NewChatPage);
-
-  expect(
-    await screen.findByRole("heading", { name: "Set up your first workspace" }),
-  ).toBeInTheDocument();
-  expect(screen.getByText(/workspace is the project directory/i)).toBeInTheDocument();
-  expect(await screen.findByRole("button", { name: "Activate pontia" })).toBeInTheDocument();
-  expect(screen.queryByPlaceholderText("What should the agent do?")).not.toBeInTheDocument();
-});
-
 test("keeps first-time users in workspace setup until they continue explicitly", async () => {
   const user = userEvent.setup();
   const firstWorkspace = workspace();

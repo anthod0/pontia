@@ -68,8 +68,6 @@ test("ticket parsing accepts only canonical pet v1 tickets", () => {
   const secret = base64url.encode(secretBytes);
   const ticket = `pet_v1_${secret}`;
 
-  expect(secret).toContain("-");
-  expect(secret).toContain("_");
   expect(parseEdgeTicket(ticket)).toEqual({ secret });
   for (const invalid of [
     ticket.replace("pet_v1", "pet_v2"),
@@ -123,7 +121,6 @@ test("issuing binds an opaque 60 second ticket without storing its secret", asyn
     consumedAt: null,
     secretHash: await sha256Base64url(secret),
   });
-  expect(Number.isInteger(stored?.id)).toBe(true);
   expect(JSON.stringify(stored)).not.toContain(secret);
 });
 

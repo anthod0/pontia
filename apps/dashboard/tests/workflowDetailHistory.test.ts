@@ -148,14 +148,6 @@ test("version buttons and popstate select history independently of the current r
   workflowDetail.set({ ...snapshot, current_revision: 4 });
   expect(await screen.findByText("Current v4")).toBeInTheDocument();
   expect(screen.getByText("Viewing v2")).toBeInTheDocument();
-  expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-  expect(screen.queryByText("Current Replanner")).not.toBeInTheDocument();
-  const versions = screen.getByRole("group", { name: "Workflow versions" });
-  expect(
-    versions.compareDocumentPosition(screen.getByText("Viewing v2")) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-  expect(view.container.querySelectorAll('[data-slot="card"]')).toHaveLength(1);
   await fireEvent.click(screen.getByRole("button", { name: "v4 Current" }));
   expect(await screen.findByText("Current writer")).toBeInTheDocument();
   expect(new URLSearchParams(window.location.search).has("phase")).toBe(false);

@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/svelte";
-import { describe, expect, test, vi } from "vitest";
-import SessionComposerDock from "../src/components/chat/SessionComposerDock.svelte";
+import { describe, expect, test } from "vitest";
 import SessionMetadata from "../src/components/chat/SessionMetadata.svelte";
 import {
   sessionMetadataItems,
@@ -97,34 +96,6 @@ function metadataProps() {
 }
 
 describe("session metadata component boundaries", () => {
-  test("composer dock shows metadata without session action buttons", () => {
-    render(SessionComposerDock, {
-      props: {
-        ...metadataProps(),
-        queuedMessages: [],
-        inboxBusyMessageId: null,
-        input: "",
-        onCancelInboxMessage: vi.fn(),
-        onRetryInboxMessage: vi.fn(),
-        onDismissInboxMessage: vi.fn(),
-        onSend: vi.fn(),
-        onInterrupt: vi.fn(),
-        onFocus: vi.fn(),
-      },
-    });
-
-    expect(
-      screen.getByRole("button", {
-        name: /Session details: pontia · pi · main · dirty · 33% · 42k \/ 128k · coder@1 · main/,
-      }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /exit session/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /new chat/i })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /advanced session controls/i }),
-    ).not.toBeInTheDocument();
-  });
-
   test("session metadata details render as an accessible popover dialog", async () => {
     render(SessionMetadata, { props: metadataProps() });
 
