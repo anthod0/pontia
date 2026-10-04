@@ -1,6 +1,5 @@
 pub mod acme;
 mod acme_dns;
-pub mod browser_access;
 mod browser_http;
 pub mod challenge;
 pub mod config;
@@ -24,8 +23,7 @@ use axum::{
 };
 use tokio::sync::{Semaphore, watch};
 
-pub use browser_access::BrowserAccess;
-pub use browser_http::{BOOTSTRAP_PATH, BrowserOrigins, DEVICE_API_PATH};
+pub use browser_http::{BrowserOrigins, REQUESTS_PATH, SESSIONS_PATH};
 pub use online::OnlineDevices;
 pub use tickets::TicketRedeemer;
 
@@ -47,7 +45,6 @@ impl Default for ConnectionLimits {
 #[derive(Clone)]
 pub struct Edge {
     pub(crate) redeemer: TicketRedeemer,
-    pub(crate) access: BrowserAccess,
     pub(crate) origins: BrowserOrigins,
     online: OnlineDevices,
     pending: Arc<Semaphore>,
@@ -58,21 +55,17 @@ pub struct Edge {
 impl Edge {
     pub fn new(
         redeemer: TicketRedeemer,
-        access: BrowserAccess,
         origins: BrowserOrigins,
         limits: ConnectionLimits,
     ) -> Self {
-        let edge = Self {
+        Self {
             redeemer,
-            access,
             origins,
             online: OnlineDevices::default(),
             pending: Arc::new(Semaphore::new(limits.max_pending)),
             limits,
             shutdown: watch::channel(false).0,
-        };
-        edge.start_capability_cleanup();
-        edge
+        }
     }
 
     pub fn online(&self) -> &OnlineDevices {
@@ -84,39 +77,19 @@ impl Edge {
             .route("/healthz", get(|| async { "ok" }))
             .route("/tunnel", get(connection::upgrade))
             .route(
-                browser_http::BOOTSTRAP_PATH,
-                post(browser_http::bootstrap).layer(DefaultBodyLimit::max(1024)),
+                browser_http::SESSIONS_PATH,
+                post(browser_http::relay).options(browser_http::preflight),
             )
             .route(
-                browser_http::DEVICE_API_PATH,
-                get(browser_http::device_boundary)
-                    .post(browser_http::device_boundary)
-                    .put(browser_http::device_boundary)
-                    .patch(browser_http::device_boundary)
-                    .delete(browser_http::device_boundary)
-                    .options(browser_http::device_preflight),
+                browser_http::REQUESTS_PATH,
+                post(browser_http::relay).options(browser_http::preflight),
             )
+            .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
             .with_state(self.clone())
     }
 
     pub fn shutdown(&self) {
         self.pending.close();
         self.shutdown.send_replace(true);
-    }
-
-    fn start_capability_cleanup(&self) {
-        let access = self.access.clone();
-        let mut shutdown = self.shutdown.subscribe();
-        tokio::spawn(async move {
-            loop {
-                if let Err(error) = access.cleanup_expired().await {
-                    tracing::error!(%error, "browser capability cleanup failed");
-                }
-                tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(60 * 60)) => {}
-                    _ = shutdown.wait_for(|stop| *stop) => break,
-                }
-            }
-        });
     }
 }

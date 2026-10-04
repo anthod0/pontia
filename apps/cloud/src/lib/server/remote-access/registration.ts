@@ -16,6 +16,8 @@ export type RegisteredDevice = {
   name: string;
   edgeId: string;
   edgeName: string;
+  e2ePublicKey: string;
+  e2eKeyVersion: number;
 };
 
 export type DeviceLookup =
@@ -41,7 +43,11 @@ export async function registrationEdges(db: Database, userId: string): Promise<R
     .orderBy(asc(edges.name), asc(edges.id));
 }
 
-type StoredDevice = RegisteredDevice & { userId: string };
+type StoredDevice = Omit<RegisteredDevice, "e2ePublicKey" | "e2eKeyVersion"> & {
+  userId: string;
+  e2ePublicKey: string | null;
+  e2eKeyVersion: number | null;
+};
 
 function registeredDevice(device: StoredDevice): RegisteredDevice {
   return {
@@ -50,6 +56,8 @@ function registeredDevice(device: StoredDevice): RegisteredDevice {
     name: device.name,
     edgeId: device.edgeId,
     edgeName: device.edgeName,
+    e2ePublicKey: device.e2ePublicKey ?? "",
+    e2eKeyVersion: device.e2eKeyVersion ?? 0,
   };
 }
 
@@ -62,6 +70,8 @@ async function storedDevice(db: Database, deviceId: string): Promise<StoredDevic
       userId: devices.userId,
       edgeId: devices.edgeId,
       edgeName: edges.name,
+      e2ePublicKey: devices.e2ePublicKey,
+      e2eKeyVersion: devices.e2eKeyVersion,
     })
     .from(devices)
     .innerJoin(edges, eq(devices.edgeId, edges.id))
@@ -102,13 +112,36 @@ export async function registerDevice(
   deviceId: string,
   name: string,
   edgeId: string,
+  e2ePublicKey: string,
+  e2eKeyVersion: number,
 ): Promise<DeviceRegistration> {
-  if (!isUuidV7(deviceId) || !isUuidV7(edgeId) || !validName(name))
+  if (
+    !isUuidV7(deviceId) ||
+    !isUuidV7(edgeId) ||
+    !validName(name) ||
+    !/^[A-Za-z0-9_-]{43}$/.test(e2ePublicKey) ||
+    !Number.isSafeInteger(e2eKeyVersion) ||
+    e2eKeyVersion < 1
+  )
     return { status: "invalid_request" };
   const existing = await storedDevice(db, deviceId);
   if (existing) {
     if (existing.userId !== userId || existing.edgeId !== edgeId) return { status: "conflict" };
-    return { status: "existing", device: registeredDevice(existing) };
+    if (e2eKeyVersion <= (existing.e2eKeyVersion ?? 0)) {
+      if (e2eKeyVersion !== existing.e2eKeyVersion || e2ePublicKey !== existing.e2ePublicKey)
+        return { status: "conflict" };
+      return { status: "existing", device: registeredDevice(existing) };
+    }
+    const [updated] = await db
+      .update(devices)
+      .set({ e2ePublicKey, e2eKeyVersion, updatedAt: new Date().toISOString() })
+      .where(and(eq(devices.id, deviceId), eq(devices.userId, userId)))
+      .returning({ id: devices.id });
+    if (!updated) return { status: "conflict" };
+    const stored = await storedDevice(db, deviceId);
+    return stored
+      ? { status: "existing", device: registeredDevice(stored) }
+      : { status: "conflict" };
   }
 
   const now = new Date().toISOString();
@@ -123,6 +156,8 @@ export async function registerDevice(
             edgeId: edges.id,
             handle: sql<string>`${handle}`.as("handle"),
             name: sql<string>`${name}`.as("name"),
+            e2ePublicKey: sql<string>`${e2ePublicKey}`.as("e2e_public_key"),
+            e2eKeyVersion: sql<number>`${e2eKeyVersion}`.as("e2e_key_version"),
             createdAt: sql<string>`${now}`.as("created_at"),
             updatedAt: sql<string>`${now}`.as("updated_at"),
           })

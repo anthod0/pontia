@@ -11,12 +11,6 @@ fn default_port() -> u16 {
 }
 
 pub const CONFIG_PATH: &str = "/etc/pontia/edge/config.json";
-pub const DATABASE_PATH: &str = "/etc/pontia/edge/edge.sqlite3";
-
-fn default_bootstrap_origin() -> String {
-    "https://pontia.dev".to_owned()
-}
-
 fn default_dashboard_origin() -> String {
     "https://app.pontia.dev".to_owned()
 }
@@ -29,8 +23,6 @@ pub struct ServiceConfig {
     pub port: u16,
     #[serde(default)]
     pub acme_challenge: AcmeChallenge,
-    #[serde(default = "default_bootstrap_origin")]
-    pub browser_bootstrap_origin: String,
     #[serde(default = "default_dashboard_origin")]
     pub browser_dashboard_origin: String,
 }
@@ -55,7 +47,6 @@ impl ServiceConfig {
             origin.scheme() == "https" && origin.path() == "/",
             "configured Cloud origin is invalid"
         );
-        validate_browser_origin(&config.browser_bootstrap_origin)?;
         validate_browser_origin(&config.browser_dashboard_origin)?;
         Ok(config)
     }
@@ -122,7 +113,6 @@ mod tests {
                     hostname: "brave-atlas.edge.pontia.dev".to_owned(),
                     port,
                     acme_challenge,
-                    browser_bootstrap_origin: default_bootstrap_origin(),
                     browser_dashboard_origin: default_dashboard_origin(),
                 };
                 config.save(&path).unwrap();

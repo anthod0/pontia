@@ -116,9 +116,7 @@
 
         {#if effectiveState === 'authorization-required' && reauthorizationUrl}
           <Card.Footer class="justify-end border-t border-border bg-muted/30 px-4 py-3">
-            <form method="POST" action={reauthorizationUrl}>
-              <Button type="submit">Authorize again</Button>
-            </form>
+            <Button href={reauthorizationUrl}>Authorize again</Button>
           </Card.Footer>
         {:else if effectiveState === 'unavailable' && signInUrl}
           <Card.Footer class="justify-end border-t border-border bg-muted/30 px-4 py-3">

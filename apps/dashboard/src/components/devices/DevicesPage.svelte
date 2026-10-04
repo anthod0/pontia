@@ -90,9 +90,7 @@
             </Card.Header>
             <Card.Footer class="border-t border-border bg-muted/30 px-4 py-3">
               {#if openAction}
-                <form method="POST" action={openAction(device.handle)} class="ml-auto">
-                  <Button type="submit">Open Dashboard</Button>
-                </form>
+                <Button href={openAction(device.handle)} class="ml-auto">Open Dashboard</Button>
               {/if}
             </Card.Footer>
           </Card.Root>

@@ -1,3 +1,4 @@
+mod e2e_identity;
 mod initialization;
 use pontia_config::AppConfig;
 use pontia_core::error::Result;
@@ -66,7 +67,24 @@ async fn main() -> Result<()> {
                     message: "must be a UUIDv7".to_string(),
                 });
             }
-            let ingress = http_entrypoints.trusted_tunnel();
+            let sessions =
+                e2e_identity::load(&config.pontia_home, device_id).map_err(|message| {
+                    pontia_core::error::Error::InvalidConfig {
+                        key: "remote.device_id",
+                        message,
+                    }
+                })?;
+            let ingress = http_entrypoints.e2e_tunnel(sessions);
+            let maintenance = ingress.clone();
+            let mut maintenance_shutdown = cleanup_shutdown.subscribe();
+            tokio::spawn(async move {
+                loop {
+                    tokio::select! {
+                        _ = tokio::time::sleep(Duration::from_secs(60)) => maintenance.reap(),
+                        _ = maintenance_shutdown.wait_for(|stop| *stop) => break,
+                    }
+                }
+            });
             let handler = pontia_tunnel::DeviceRequestHandler::new(move |request| {
                 let ingress = ingress.clone();
                 async move { ingress.handle(request).await }

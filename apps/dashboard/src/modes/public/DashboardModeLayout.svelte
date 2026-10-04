@@ -5,6 +5,7 @@
   import { initialRemoteDashboardState, isValidDeviceHandle, type RemoteDashboardState } from '$lib/remoteDashboard';
   import { clearDashboardRuntimeState, startDashboardRuntime, stopDashboardRuntime } from '../../services/dashboardRuntime';
   import { clearPublicApiTarget, setPublicApiTarget } from './apiTarget';
+  import { clearE2eSession } from './e2eTransport';
   import {
     dashboardBootstrapUrl,
     dashboardSignInUrl,
@@ -43,6 +44,7 @@
 
   function teardownRuntime(): void {
     clearPublicApiTarget();
+    clearE2eSession();
     stopDashboardRuntime();
     clearDashboardRuntimeState();
     runtimeHandle = null;

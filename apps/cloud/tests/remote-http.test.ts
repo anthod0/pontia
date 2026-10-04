@@ -22,6 +22,8 @@ const edgeId = "0195e7d2-1b22-7c33-9d44-123456789abc";
 const deviceId = "0195e7d3-1b22-7c33-9d44-123456789abc";
 const secret = base64url.encode(new Uint8Array(32).fill(9));
 const credential = `ptr_v1_${sessionId}_${secret}`;
+let proofPrivateKey = "";
+const capabilityVerificationKey = base64url.encode(new Uint8Array(32).fill(3));
 
 function event(path: string, options?: { method?: string; token?: string; body?: unknown }) {
   const url = new URL(path, "https://example.com");
@@ -38,7 +40,13 @@ function event(path: string, options?: { method?: string; token?: string; body?:
         : undefined,
       body: options?.body === undefined ? undefined : JSON.stringify(options.body),
     }),
-    platform: { env: { DB: database.binding } },
+    platform: {
+      env: {
+        DB: database.binding,
+        E2E_REGISTRATION_PROOF_PRIVATE_KEY: proofPrivateKey,
+        E2E_CAPABILITY_VERIFICATION_KEY: capabilityVerificationKey,
+      },
+    },
   } as unknown as RequestEvent;
 }
 
@@ -79,7 +87,43 @@ test("remote HTTP API lists edges and creates, retries, and reads a device", asy
   const edgeList = (await listed.json()) as Array<{ id: string; name: string }>;
   expect(edgeList).toContainEqual({ id: edgeId, name: "HTTP Edge" });
 
-  const body = { name: "HTTP Device", edge_id: edgeId };
+  const cloud = await crypto.subtle.generateKey("X25519", true, ["deriveBits"]);
+  const device = await crypto.subtle.generateKey("X25519", true, ["deriveBits"]);
+  proofPrivateKey = base64url.encode(
+    new Uint8Array(await crypto.subtle.exportKey("pkcs8", cloud.privateKey)),
+  );
+  const devicePublic = new Uint8Array(await crypto.subtle.exportKey("raw", device.publicKey));
+  const shared = await crypto.subtle.deriveBits(
+    { name: "X25519", public: cloud.publicKey },
+    device.privateKey,
+    256,
+  );
+  const hkdf = await crypto.subtle.importKey("raw", shared, "HKDF", false, ["deriveKey"]);
+  const proofKey = await crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new ArrayBuffer(0),
+      info: new TextEncoder().encode("pontia-device-key-registration-v1\0"),
+    },
+    hkdf,
+    { name: "HMAC", hash: "SHA-256", length: 256 },
+    false,
+    ["sign"],
+  );
+  const id = new TextEncoder().encode(deviceId);
+  const proofMessage = new Uint8Array(id.length + 1 + 8 + 32);
+  proofMessage.set(id);
+  new DataView(proofMessage.buffer).setBigUint64(id.length + 1, 1n);
+  proofMessage.set(devicePublic, id.length + 9);
+  const proof = new Uint8Array(await crypto.subtle.sign("HMAC", proofKey, proofMessage));
+  const body = {
+    name: "HTTP Device",
+    edge_id: edgeId,
+    e2e_public_key: base64url.encode(devicePublic),
+    e2e_key_version: 1,
+    e2e_key_proof: base64url.encode(proof),
+  };
   const created = await callPutDevice(
     event(`/api/remote/devices/${deviceId}`, {
       method: "PUT",
@@ -95,6 +139,9 @@ test("remote HTTP API lists edges and creates, retries, and reads a device", asy
     name: "HTTP Device",
     edge_id: edgeId,
     edge_name: "HTTP Edge",
+    e2e_public_key: base64url.encode(devicePublic),
+    e2e_key_version: 1,
+    capability_verification_key: capabilityVerificationKey,
   });
 
   const retried = await callPutDevice(

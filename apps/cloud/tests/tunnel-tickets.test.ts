@@ -172,7 +172,7 @@ test("redemption rejects wrong secrets, purpose, expiry, payload, and stale bind
     } else if (testCase === "wrong-purpose") {
       await database.db
         .update(edgeTickets)
-        .set({ purpose: "dashboard_access" })
+        .set({ purpose: "edge_deployment" })
         .where(eq(edgeTickets.id, stored.id));
       expect(await redeemTunnelTicket(database.db, "edge-target", issued.ticket)).toBeNull();
     } else if (testCase === "expired") {

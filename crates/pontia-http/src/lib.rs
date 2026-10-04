@@ -4,15 +4,10 @@ use std::{
 };
 
 use axum::{
-    Extension, Router,
-    body::Body,
-    http::Request,
-    middleware,
-    response::Response,
+    Router, middleware,
     routing::{get, post},
 };
 use tokio::sync::oneshot;
-use tower::ServiceExt;
 use tracing::warn;
 
 use pontia_core::error::Result;
@@ -66,18 +61,12 @@ where
 pub struct HttpEntrypoints {
     external_api: Router,
     local_http: Router,
-    trusted_tunnel: TrustedTunnelIngress,
 }
 
 impl HttpEntrypoints {
     pub fn new(state: impl Into<HttpState>) -> Self {
         let state = state.into();
         let external_api = external_api_router(state.clone());
-        let trusted_tunnel = TrustedTunnelIngress {
-            router: external_api
-                .clone()
-                .layer(Extension(api::TrustedTunnelRequest)),
-        };
         let local_http = Router::new()
             .route("/healthz", get(health::healthz))
             .route("/dashboard", get(dashboard::dashboard))
@@ -90,7 +79,6 @@ impl HttpEntrypoints {
         Self {
             external_api,
             local_http,
-            trusted_tunnel,
         }
     }
 
@@ -100,25 +88,6 @@ impl HttpEntrypoints {
 
     pub fn e2e_tunnel(&self, sessions: pontia_e2e::DeviceSessions) -> e2e::E2eIngress {
         e2e::E2eIngress::new(sessions, self.external_api.clone())
-    }
-
-    pub fn trusted_tunnel(&self) -> TrustedTunnelIngress {
-        self.trusted_tunnel.clone()
-    }
-}
-
-#[derive(Clone)]
-pub struct TrustedTunnelIngress {
-    router: Router,
-}
-
-impl TrustedTunnelIngress {
-    pub async fn handle(&self, request: Request<Body>) -> Response {
-        self.router
-            .clone()
-            .oneshot(request)
-            .await
-            .expect("router service is infallible")
     }
 }
 

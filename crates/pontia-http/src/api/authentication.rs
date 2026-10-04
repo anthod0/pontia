@@ -10,12 +10,8 @@ use crate::HttpState;
 use super::response::ApiError;
 
 #[derive(Clone, Copy)]
-pub(crate) struct TrustedTunnelRequest;
-
-#[derive(Clone, Copy)]
 enum ExternalApiPrincipal {
     LocalToken,
-    DeviceTunnel,
     E2e,
 }
 
@@ -30,8 +26,6 @@ pub(crate) async fn authenticate(
         .is_some()
     {
         ExternalApiPrincipal::E2e
-    } else if request.extensions().get::<TrustedTunnelRequest>().is_some() {
-        ExternalApiPrincipal::DeviceTunnel
     } else {
         authenticate_local_token(state.app().external_api_token(), request.headers())?
     };

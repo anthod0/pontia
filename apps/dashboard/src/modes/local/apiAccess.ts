@@ -9,6 +9,10 @@ export function apiUrl(path: string): string {
   return path;
 }
 
+export function apiFetch(path: string, init: RequestInit): Promise<Response> {
+  return fetch(path, init);
+}
+
 export function apiSignal(signal?: AbortSignal | null): AbortSignal | undefined {
   return signal ?? undefined;
 }

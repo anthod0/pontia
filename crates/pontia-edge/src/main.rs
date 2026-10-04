@@ -9,13 +9,13 @@ use anyhow::{Context, Result};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::{Args, Parser, Subcommand};
 use pontia_edge::{
-    BrowserAccess, BrowserOrigins, ConnectionLimits, Edge, TicketRedeemer,
+    BrowserOrigins, ConnectionLimits, Edge, TicketRedeemer,
     acme::{
         ACCOUNT_PATH, AcmeChallenge, CloudDnsChallenges, InstantAcmeIssuer, TLS_PATH,
         complete_dns_and_save, issue_dns_and_save, issue_http_and_save,
     },
     challenge::ChallengeServer,
-    config::{CONFIG_PATH, DATABASE_PATH, ServiceConfig, hostname_from_tunnel_url},
+    config::{CONFIG_PATH, ServiceConfig, hostname_from_tunnel_url},
     credential::{CREDENTIAL_PATH, ensure_managed_directory, ensure_root, read_edge_credential},
     enrollment::{EdgeNetworkClient, HttpCloudClient, InitializationResult, initialize_and_enroll},
     network::{discover_public_ipv4, system_dns_resolver},
@@ -142,7 +142,6 @@ async fn init_with_output<W: Write + ?Sized>(args: InitArgs, output: &mut W) -> 
         hostname: hostname.clone(),
         port: args.port.unwrap_or(443),
         acme_challenge: args.acme_challenge,
-        browser_bootstrap_origin: "https://pontia.dev".to_owned(),
         browser_dashboard_origin: "https://app.pontia.dev".to_owned(),
     };
     let reusable_certificate = existing_certificate_matches(&expected_config).await;
@@ -407,14 +406,11 @@ async fn serve() -> Result<()> {
     let config = ServiceConfig::read(Path::new(CONFIG_PATH))?;
     let service_credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?.value;
     let tls = RustlsConfig::from_pem_file(TLS_PATH, TLS_PATH).await?;
-    let access = BrowserAccess::open(Path::new(DATABASE_PATH)).await?;
     let origins = BrowserOrigins {
-        bootstrap: config.browser_bootstrap_origin.clone(),
         dashboard: config.browser_dashboard_origin.clone(),
     };
     let edge = Edge::new(
         TicketRedeemer::new(&config.cloud_origin, service_credential.clone())?,
-        access,
         origins,
         ConnectionLimits::default(),
     );

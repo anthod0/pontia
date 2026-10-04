@@ -452,7 +452,7 @@ fn valid_device_request(request: &Request<Incoming>) -> bool {
     protocol::method_allowed(request.method())
         && request.uri().scheme_str() == Some("https")
         && request.uri().authority().map(|value| value.as_str()) == Some("pontia-device")
-        && protocol::canonical_api_uri(request.uri())
+        && protocol::canonical_tunnel_uri(request.uri())
         && request
             .headers()
             .keys()

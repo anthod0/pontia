@@ -75,6 +75,8 @@ export const devices = sqliteTable(
       .references(() => edges.id, { onDelete: "restrict" }),
     handle: text().notNull(),
     name: text().notNull(),
+    e2ePublicKey: text("e2e_public_key"),
+    e2eKeyVersion: integer("e2e_key_version"),
     createdAt: text("created_at").notNull().default(timestamp),
     updatedAt: text("updated_at").notNull().default(timestamp),
   },
@@ -83,6 +85,8 @@ export const devices = sqliteTable(
     index("idx_devices_user_id").on(table.userId),
     index("idx_devices_edge_id").on(table.edgeId),
     uniqueIndex("idx_devices_user_handle").on(table.userId, table.handle),
+    uniqueIndex("idx_devices_e2e_public_key").on(table.e2ePublicKey),
+    index("idx_devices_e2e_key_version").on(table.e2eKeyVersion),
     check(
       "devices_handle_format_check",
       sql`length(${table.handle}) BETWEEN 4 AND 48 AND substr(${table.handle}, 1, 1) GLOB '[a-z]' AND ${table.handle} NOT GLOB '*[^a-z0-9_-]*'`,
@@ -95,7 +99,7 @@ export const edgeTickets = sqliteTable(
   {
     id: integer().notNull().primaryKey(),
     purpose: text({
-      enum: ["edge_deployment", "device_tunnel", "dashboard_access"],
+      enum: ["edge_deployment", "device_tunnel"],
     }).notNull(),
     secretHash: text("secret_hash").notNull(),
     userId: text("user_id")
@@ -110,7 +114,7 @@ export const edgeTickets = sqliteTable(
   (table) => [
     check(
       "edge_tickets_purpose_check",
-      sql`${table.purpose} IN ('edge_deployment', 'device_tunnel', 'dashboard_access')`,
+      sql`${table.purpose} IN ('edge_deployment', 'device_tunnel')`,
     ),
     check("edge_tickets_payload_json_check", sql`json_valid(${table.payload})`),
     uniqueIndex("idx_edge_tickets_secret_hash").on(table.secretHash),

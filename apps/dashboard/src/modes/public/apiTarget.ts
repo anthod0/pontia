@@ -19,10 +19,9 @@ export function hasPublicApiTarget(): boolean {
   return target !== null;
 }
 
-export function publicApiUrl(path: string): string {
+export function publicApiTarget(): PublicDeviceTarget {
   if (!target) throw new Error("Remote device target is not available.");
-  if (!path.startsWith("/api/v1/")) throw new Error("Remote API path must start with /api/v1/.");
-  return `${target.edgeApiOrigin}/devices/${target.deviceId}${path}`;
+  return target;
 }
 
 export function publicApiSignal(signal?: AbortSignal | null): AbortSignal {

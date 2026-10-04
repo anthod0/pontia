@@ -142,5 +142,5 @@ export function dashboardSignInUrl(returnPath: string): string {
 
 export function dashboardBootstrapUrl(handle: string): string {
   if (!isValidDeviceHandle(handle)) throw new Error("Invalid device handle.");
-  return `${CLOUD_ORIGIN}/api/dashboard/devices/${encodeURIComponent(handle)}/bootstrap`;
+  return `${PUBLIC_DASHBOARD_ORIGIN}/${encodeURIComponent(handle)}`;
 }

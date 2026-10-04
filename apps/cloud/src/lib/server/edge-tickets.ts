@@ -9,7 +9,7 @@ const SECRET_BYTES = 32;
 const SECRET_LENGTH = 43;
 const databaseTimestamp = sql<string>`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
-export type EdgeTicketPurpose = "edge_deployment" | "device_tunnel" | "dashboard_access";
+export type EdgeTicketPurpose = "edge_deployment" | "device_tunnel";
 export type EdgeTicketPayloadDecoder<T> = (value: unknown) => T | null | Promise<T | null>;
 
 export type EdgeTicketDependencies = {

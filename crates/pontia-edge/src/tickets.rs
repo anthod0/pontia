@@ -11,7 +11,6 @@ const REDEEM_TIMEOUT: Duration = Duration::from_secs(10);
 #[derive(Clone)]
 pub struct TicketRedeemer {
     tunnel_endpoint: Url,
-    dashboard_endpoint: Url,
     service_credential: String,
     client: Client,
 }
@@ -26,14 +25,6 @@ pub(crate) enum RedeemError {
 #[serde(deny_unknown_fields)]
 struct RedeemResponse {
     device_id: Uuid,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct DashboardRedeemResponse {
-    pub device_id: String,
-    pub device_handle: String,
-    pub expires_at: String,
 }
 
 impl TicketRedeemer {
@@ -63,10 +54,8 @@ impl TicketRedeemer {
         );
         origin.set_path("/");
         let tunnel_endpoint = origin.join("api/edge/tunnel-tickets/redeem")?;
-        let dashboard_endpoint = origin.join("api/edge/dashboard-tickets/redeem")?;
         Ok(Self {
             tunnel_endpoint,
-            dashboard_endpoint,
             service_credential,
             client,
         })
@@ -79,22 +68,6 @@ impl TicketRedeemer {
                 .await
                 .map(|response: RedeemResponse| response.device_id),
             StatusCode::UNAUTHORIZED => Err(RedeemError::Rejected),
-            _ => Err(RedeemError::Unavailable),
-        }
-    }
-
-    pub(crate) async fn redeem_dashboard(
-        &self,
-        ticket: &str,
-    ) -> Result<DashboardRedeemResponse, RedeemError> {
-        let response = self
-            .request(self.dashboard_endpoint.clone(), ticket)
-            .await?;
-        match response.status() {
-            StatusCode::OK => decode_response(response).await,
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::BAD_REQUEST => {
-                Err(RedeemError::Rejected)
-            }
             _ => Err(RedeemError::Unavailable),
         }
     }

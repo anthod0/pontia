@@ -2,6 +2,7 @@ import { get } from "svelte/store";
 import type { DashboardStreamEvent } from "../api/types";
 import {
   apiCredentials,
+  apiFetch,
   apiSignal,
   apiStreamUnavailableMessage,
   apiUrl,
@@ -154,7 +155,7 @@ async function connect(streamGeneration: number): Promise<void> {
   try {
     const after = get(dashboardStreamCursor);
     const query = after ? `?after=${encodeURIComponent(after)}` : "";
-    const response = await fetch(apiUrl(`${API_BASE}/dashboard/events/stream${query}`), {
+    const response = await apiFetch(apiUrl(`${API_BASE}/dashboard/events/stream${query}`), {
       headers,
       credentials: apiCredentials,
       signal: apiSignal(localController.signal),

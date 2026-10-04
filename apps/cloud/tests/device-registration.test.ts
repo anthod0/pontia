@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { devices, edges, users } from "../src/lib/server/db/schema";
 import {
   findRegisteredDevice,
-  registerDevice,
+  registerDevice as registerDeviceWithIdentity,
   registrationEdges,
   unregisterDevice,
 } from "../src/lib/server/remote-access/registration";
@@ -15,6 +15,24 @@ const registrationEdge = "0195e7b9-91c2-73d4-a560-2f78b90c1234";
 const conflictEdge = "0195e7ba-91c2-73d4-a560-2f78b90c1234";
 const conflictOtherEdge = "0195e7bb-91c2-73d4-a560-2f78b90c1234";
 const deviceId = "0195e7c1-1b22-7c33-9d44-123456789abc";
+
+function registerDevice(
+  db: Parameters<typeof registerDeviceWithIdentity>[0],
+  userId: string,
+  id: string,
+  name: string,
+  edgeId: string,
+) {
+  return registerDeviceWithIdentity(
+    db,
+    userId,
+    id,
+    name,
+    edgeId,
+    `${id.replaceAll("-", "")}AAAAAAAAAAA`,
+    1,
+  );
+}
 
 async function insertEdge(
   id: string,
@@ -71,6 +89,8 @@ test("device registration creates once and returns the stored record on retry", 
       name: "My device",
       edgeId: registrationEdge,
       edgeName: "Tokyo",
+      e2ePublicKey: `${deviceId.replaceAll("-", "")}AAAAAAAAAAA`,
+      e2eKeyVersion: 1,
     },
   });
   expect(

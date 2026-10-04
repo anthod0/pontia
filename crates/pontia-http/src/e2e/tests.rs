@@ -251,37 +251,6 @@ async fn old_cookie_and_local_token_cannot_open_a_plaintext_business_path() {
 }
 
 #[tokio::test]
-async fn handler_can_respond_without_waiting_for_upload_eof() {
-    let ingress =
-        ingress(Router::new().route("/api/v1/reject", post(|| async { StatusCode::FORBIDDEN })));
-    let session = connect(&ingress).await;
-    let encrypted = encrypted_request(&session, Method::POST, "/api/v1/reject", &[]);
-    let first_length = u32::from_be_bytes(encrypted.wire[65..69].try_into().unwrap()) as usize;
-    let (sender, receiver) = mpsc::channel::<Result<Bytes, Error>>(1);
-    sender
-        .send(Ok(Bytes::copy_from_slice(
-            &encrypted.wire[..65 + 5 + first_length],
-        )))
-        .await
-        .unwrap();
-    // The sender remains alive and has not supplied the bHTTP/record terminators.
-    let response = tokio::time::timeout(
-        Duration::from_secs(1),
-        ingress.handle(outer(
-            REQUESTS_PATH,
-            Body::from_stream(ReceiverStream::new(receiver)),
-        )),
-    )
-    .await
-    .unwrap();
-    let wire = tokio::time::timeout(Duration::from_secs(1), bytes(response))
-        .await
-        .unwrap();
-    assert_eq!(decrypt(encrypted.response, &wire).0, 403);
-    assert!(sender.is_closed());
-}
-
-#[tokio::test]
 async fn truncated_upload_is_not_delivered_to_handler_as_successful_eof() {
     let ingress =
         ingress(Router::new().route("/api/v1/upload", post(|body: Bytes| async move { body })));
@@ -293,40 +262,6 @@ async fn truncated_upload_is_not_delivered_to_handler_as_successful_eof() {
         .handle(outer(REQUESTS_PATH, Body::from(encrypted.wire)))
         .await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn later_record_authentication_failure_cannot_be_hidden_by_a_streaming_handler() {
-    let ingress = ingress(Router::new().route(
-        "/api/v1/upload",
-        post(|request: Request<Body>| async move {
-            let mut body = request.into_body();
-            Body::from_stream(async_stream::stream! {
-                while let Some(frame) = body.frame().await {
-                    // Deliberately swallow errors, as a handler might try to do.
-                    let Ok(frame) = frame else { break; };
-                    let Ok(bytes) = frame.into_data() else { break; };
-                    yield Ok::<_, Error>(bytes);
-                }
-            })
-        }),
-    ));
-    let session = connect(&ingress).await;
-    let mut encrypted = encrypted_request(
-        &session,
-        Method::POST,
-        "/api/v1/upload",
-        b"modified content",
-    );
-    let head_size = u32::from_be_bytes(encrypted.wire[65..69].try_into().unwrap()) as usize;
-    encrypted.wire[65 + 5 + head_size + 8] ^= 1;
-    let response = ingress
-        .handle(outer(REQUESTS_PATH, Body::from(encrypted.wire)))
-        .await;
-    assert_eq!(response.status(), StatusCode::OK); // response can begin before upload consumption
-    let mut body = response.into_body();
-    assert!(body.frame().await.unwrap().is_ok()); // authenticated response head
-    assert!(body.collect().await.is_err()); // never completes as a business response
 }
 
 #[tokio::test]
@@ -454,55 +389,6 @@ async fn authenticated_record_eof_cannot_replace_bhttp_termination() {
             .await
             .status(),
         StatusCode::BAD_REQUEST
-    );
-}
-
-#[tokio::test]
-async fn upload_ownership_keeps_a_session_active_after_response_completion() {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    let clock = Arc::new(AtomicU64::new(0));
-    let monotonic = clock.clone();
-    let held_upload = Arc::new(Mutex::new(None));
-    let retained = held_upload.clone();
-    let router = Router::new().route(
-        "/api/v1/retain",
-        post(move |request: Request<Body>| {
-            *retained.lock().unwrap() = Some(request.into_body());
-            async { StatusCode::NO_CONTENT }
-        }),
-    );
-    let ingress = E2eIngress::new(
-        DeviceSessions::with_clock(
-            identity(),
-            signing_key().verifying_key(),
-            Arc::new(move || monotonic.load(Ordering::Relaxed)),
-        ),
-        router,
-    );
-    let session = connect(&ingress).await;
-    let encrypted = encrypted_request(&session, Method::POST, "/api/v1/retain", &[]);
-    let response = ingress
-        .handle(outer(REQUESTS_PATH, Body::from(encrypted.wire)))
-        .await;
-    assert_eq!(decrypt(encrypted.response, &bytes(response).await).0, 204);
-    clock.store(pontia_e2e::IDLE_SECONDS * 2, Ordering::Relaxed);
-    ingress.reap();
-    let encrypted = encrypted_request(&session, Method::GET, "/api/v1/missing", &[]);
-    let response = ingress
-        .handle(outer(REQUESTS_PATH, Body::from(encrypted.wire)))
-        .await;
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(decrypt(encrypted.response, &bytes(response).await).0, 404);
-    drop(held_upload.lock().unwrap().take());
-    clock.store(pontia_e2e::IDLE_SECONDS * 3, Ordering::Relaxed);
-    ingress.reap();
-    let encrypted = encrypted_request(&session, Method::GET, "/api/v1/missing", &[]);
-    assert_eq!(
-        ingress
-            .handle(outer(REQUESTS_PATH, Body::from(encrypted.wire)))
-            .await
-            .status(),
-        StatusCode::CONFLICT
     );
 }
 

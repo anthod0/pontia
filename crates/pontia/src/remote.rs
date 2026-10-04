@@ -1,11 +1,17 @@
 use std::{collections::HashMap, fs, io::ErrorKind, path::Path, time::Duration};
 
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use clap::{Args, Subcommand};
 use dialoguer::{Input, Select};
+use hkdf::Hkdf;
+use hmac::{Hmac, Mac};
+use pontia_e2e::DeviceIdentity;
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use toml_edit::{DocumentMut, Item};
 use uuid::Uuid;
+use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
 use crate::login;
 use pontia::private_file;
@@ -22,6 +28,8 @@ pub(crate) struct RemoteCommand {
 enum RemoteCommandKind {
     /// Register this machine as a remote device
     Enable,
+    /// Replace the device E2E identity key
+    RotateKey,
     /// Unregister this machine and disable remote access
     Disable,
 }
@@ -32,6 +40,7 @@ pub(crate) async fn run(
 ) -> Result<(), String> {
     match command.command {
         RemoteCommandKind::Enable => enable(vars).await.map(|_| ()),
+        RemoteCommandKind::RotateKey => rotate_key(vars).await,
         RemoteCommandKind::Disable => disable(vars).await,
     }
 }
@@ -56,6 +65,9 @@ struct Device {
     name: Option<String>,
     edge_id: String,
     edge_name: String,
+    e2e_public_key: String,
+    e2e_key_version: u64,
+    capability_verification_key: String,
 }
 
 pub(crate) struct RemoteAccess {
@@ -66,6 +78,25 @@ pub(crate) struct RemoteAccess {
 struct RegistrationRequest<'a> {
     name: &'a str,
     edge_id: &'a str,
+    e2e_public_key: &'a str,
+    e2e_key_version: u64,
+    e2e_key_proof: &'a str,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct E2eConfig {
+    registration_proof_public_key: String,
+    capability_verification_key: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredIdentity {
+    device_id: String,
+    key_version: u64,
+    private_key: String,
+    capability_verification_key: String,
 }
 
 struct RegistrationApi<'a> {
@@ -91,8 +122,15 @@ pub async fn enable(vars: &HashMap<String, String>) -> Result<RemoteAccess, Stri
     };
     let config_path = home.join("config.toml");
     let device_id = ensure_device_id(&config_path)?;
+    let e2e_config = api.e2e_config().await?;
 
     if let Some(device) = api.find_device(&device_id).await? {
+        let identity_path = home.join("e2e-identity.json");
+        if stored_identity_matches(&identity_path, &device)? {
+            print_registered(&device, true);
+            return remote_access(device);
+        }
+        let device = rotate_registered_identity(&api, &identity_path, device, &e2e_config).await?;
         print_registered(&device, true);
         return remote_access(device);
     }
@@ -116,9 +154,165 @@ pub async fn enable(vars: &HashMap<String, String>) -> Result<RemoteAccess, Stri
         .map_err(|error| format!("failed to read the device name: {error}"))?;
     validate_name(&name)?;
 
-    let device = api.register_device(&device_id, &name, &edge.id).await?;
+    let pending = generate_identity(
+        &device_id,
+        1,
+        e2e_config.capability_verification_key.clone(),
+    )?;
+    let public_key = identity_public_key(&pending)?;
+    let proof = identity_proof(&pending, &e2e_config.registration_proof_public_key)?;
+    let device = api
+        .register_device(&device_id, &name, &edge.id, &public_key, 1, &proof)
+        .await?;
+    let stored = StoredIdentity {
+        capability_verification_key: device.capability_verification_key.clone(),
+        ..pending
+    };
+    write_identity(&home.join("e2e-identity.json"), &stored)?;
     print_registered(&device, false);
     remote_access(device)
+}
+
+pub async fn rotate_key(vars: &HashMap<String, String>) -> Result<(), String> {
+    let home = login::pontia_home(vars)?;
+    let device_id = read_device_id(&home.join("config.toml"))?
+        .ok_or_else(|| "remote access is disabled; run `pontia remote enable` first".to_string())?;
+    let origin = login::auth_origin(vars)?;
+    let credential = read_credential(&home.join("auth.json"), "rotating the remote identity key")?;
+    let client = Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .map_err(|error| {
+            format!("failed to create the remote registration HTTP client: {error}")
+        })?;
+    let api = RegistrationApi {
+        client: &client,
+        origin: &origin,
+        credential: &credential,
+    };
+    let device = api.find_device(&device_id).await?.ok_or_else(|| {
+        "the configured remote device is not registered; run `pontia remote enable`".to_string()
+    })?;
+    let e2e_config = api.e2e_config().await?;
+    let device =
+        rotate_registered_identity(&api, &home.join("e2e-identity.json"), device, &e2e_config)
+            .await?;
+    println!(
+        "Device identity key rotated to version {}.",
+        device.e2e_key_version
+    );
+    Ok(())
+}
+
+fn generate_identity(
+    device_id: &str,
+    key_version: u64,
+    trust_key: String,
+) -> Result<StoredIdentity, String> {
+    let id = Uuid::parse_str(device_id).map_err(|_| "invalid device ID".to_string())?;
+    let identity = DeviceIdentity::generate(*id.as_bytes(), key_version)
+        .map_err(|error| format!("failed to generate device identity: {error}"))?;
+    Ok(StoredIdentity {
+        device_id: device_id.to_string(),
+        key_version,
+        private_key: URL_SAFE_NO_PAD.encode(identity.private_bytes()),
+        capability_verification_key: trust_key,
+    })
+}
+
+fn identity_public_key(stored: &StoredIdentity) -> Result<String, String> {
+    let id = Uuid::parse_str(&stored.device_id)
+        .map_err(|_| "invalid stored device identity".to_string())?;
+    let private = URL_SAFE_NO_PAD
+        .decode(&stored.private_key)
+        .map_err(|_| "invalid stored device identity".to_string())?;
+    let identity = DeviceIdentity::from_private_bytes(*id.as_bytes(), stored.key_version, &private)
+        .map_err(|_| "invalid stored device identity".to_string())?;
+    Ok(URL_SAFE_NO_PAD.encode(identity.public_key()))
+}
+
+fn identity_proof(identity: &StoredIdentity, cloud_public_key: &str) -> Result<String, String> {
+    let private: [u8; 32] = URL_SAFE_NO_PAD
+        .decode(&identity.private_key)
+        .ok()
+        .and_then(|bytes| bytes.try_into().ok())
+        .ok_or_else(|| "invalid stored device identity".to_string())?;
+    let cloud_public: [u8; 32] = URL_SAFE_NO_PAD
+        .decode(cloud_public_key)
+        .ok()
+        .and_then(|bytes| bytes.try_into().ok())
+        .ok_or_else(|| "Cloud returned an invalid registration proof key".to_string())?;
+    let public = identity_public_key(identity)?;
+    let public_bytes = URL_SAFE_NO_PAD.decode(public).unwrap();
+    let shared = StaticSecret::from(private).diffie_hellman(&X25519PublicKey::from(cloud_public));
+    let mut key = [0_u8; 32];
+    Hkdf::<Sha256>::new(None, shared.as_bytes())
+        .expand(b"pontia-device-key-registration-v1\0", &mut key)
+        .map_err(|_| "failed to derive device key proof".to_string())?;
+    let mut message = identity.device_id.as_bytes().to_vec();
+    message.push(0);
+    message.extend_from_slice(&identity.key_version.to_be_bytes());
+    message.extend_from_slice(&public_bytes);
+    let mut mac = Hmac::<Sha256>::new_from_slice(&key).unwrap();
+    mac.update(&message);
+    Ok(URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes()))
+}
+
+fn read_identity(path: &Path) -> Result<Option<StoredIdentity>, String> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("failed to read {}: {error}", path.display())),
+    };
+    serde_json::from_slice(&bytes)
+        .map(Some)
+        .map_err(|_| format!("invalid device identity in {}", path.display()))
+}
+
+fn write_identity(path: &Path, identity: &StoredIdentity) -> Result<(), String> {
+    let mut bytes = serde_json::to_vec_pretty(identity)
+        .map_err(|error| format!("failed to serialize device identity: {error}"))?;
+    bytes.push(b'\n');
+    private_file::atomic_write(path, &bytes)
+}
+
+fn stored_identity_matches(path: &Path, device: &Device) -> Result<bool, String> {
+    let Some(identity) = read_identity(path)? else {
+        return Ok(false);
+    };
+    Ok(identity.device_id == device.id
+        && identity.key_version == device.e2e_key_version
+        && identity.capability_verification_key == device.capability_verification_key
+        && identity_public_key(&identity)? == device.e2e_public_key)
+}
+
+async fn rotate_registered_identity(
+    api: &RegistrationApi<'_>,
+    path: &Path,
+    device: Device,
+    config: &E2eConfig,
+) -> Result<Device, String> {
+    let key_version = device
+        .e2e_key_version
+        .checked_add(1)
+        .ok_or_else(|| "device identity key version is exhausted".to_string())?;
+    let pending = generate_identity(
+        &device.id,
+        key_version,
+        config.capability_verification_key.clone(),
+    )?;
+    let public_key = identity_public_key(&pending)?;
+    let proof = identity_proof(&pending, &config.registration_proof_public_key)?;
+    write_identity(path, &pending)?;
+    api.register_device(
+        &device.id,
+        device.name.as_deref().unwrap_or("unnamed device"),
+        &device.edge_id,
+        &public_key,
+        key_version,
+        &proof,
+    )
+    .await
 }
 
 pub async fn disable(vars: &HashMap<String, String>) -> Result<(), String> {
@@ -144,6 +338,15 @@ pub async fn disable(vars: &HashMap<String, String>) -> Result<(), String> {
     .unregister_device(&device_id)
     .await?;
     remove_device_id(&config_path, &device_id)?;
+    match fs::remove_file(home.join("e2e-identity.json")) {
+        Ok(()) => {}
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(format!(
+                "remote access was disabled, but the local identity could not be removed: {error}"
+            ));
+        }
+    }
     println!("Remote access disabled.");
     Ok(())
 }
@@ -264,6 +467,35 @@ fn validate_name(name: &str) -> Result<(), String> {
 }
 
 impl RegistrationApi<'_> {
+    async fn e2e_config(&self) -> Result<E2eConfig, String> {
+        let response = self
+            .client
+            .get(endpoint(self.origin, "api/remote/e2e-config")?)
+            .bearer_auth(self.credential)
+            .send()
+            .await
+            .map_err(|error| uncertain("fetch E2E configuration", error))?;
+        if response.status() == StatusCode::UNAUTHORIZED {
+            return Err(login_required());
+        }
+        if !response.status().is_success() {
+            return Err(format!(
+                "the cloud rejected the E2E configuration request ({})",
+                response.status()
+            ));
+        }
+        let config: E2eConfig = response
+            .json()
+            .await
+            .map_err(|_| "the cloud returned invalid E2E configuration".to_string())?;
+        if !valid_key(&config.registration_proof_public_key)
+            || !valid_key(&config.capability_verification_key)
+        {
+            return Err("the cloud returned invalid E2E configuration".to_string());
+        }
+        Ok(config)
+    }
+
     async fn unregister_device(&self, device_id: &str) -> Result<(), String> {
         let response = self
             .client
@@ -368,6 +600,9 @@ impl RegistrationApi<'_> {
         device_id: &str,
         name: &str,
         edge_id: &str,
+        e2e_public_key: &str,
+        e2e_key_version: u64,
+        e2e_key_proof: &str,
     ) -> Result<Device, String> {
         let response = self
             .client
@@ -376,7 +611,13 @@ impl RegistrationApi<'_> {
                 &format!("api/remote/devices/{device_id}"),
             )?)
             .bearer_auth(self.credential)
-            .json(&RegistrationRequest { name, edge_id })
+            .json(&RegistrationRequest {
+                name,
+                edge_id,
+                e2e_public_key,
+                e2e_key_version,
+                e2e_key_proof,
+            })
             .send()
             .await
             .map_err(|error| uncertain("register the device", error))?;
@@ -403,10 +644,19 @@ async fn parse_device(response: reqwest::Response, expected_id: &str) -> Result<
         || !uuid_v7(&device.id)
         || !uuid_v7(&device.edge_id)
         || !valid_device_handle(&device.handle)
+        || (device.e2e_key_version == 0 && !device.e2e_public_key.is_empty())
+        || (device.e2e_key_version > 0 && !valid_key(&device.e2e_public_key))
+        || !valid_key(&device.capability_verification_key)
     {
         return Err(uncertain_result());
     }
     Ok(device)
+}
+
+fn valid_key(value: &str) -> bool {
+    URL_SAFE_NO_PAD
+        .decode(value)
+        .is_ok_and(|bytes| bytes.len() == 32 && URL_SAFE_NO_PAD.encode(bytes) == value)
 }
 
 fn valid_device_handle(value: &str) -> bool {

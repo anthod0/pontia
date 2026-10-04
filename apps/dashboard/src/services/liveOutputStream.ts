@@ -1,6 +1,7 @@
 import type { LiveOutputEvent } from "../lib/session-chat/liveOutput";
 import {
   apiCredentials,
+  apiFetch,
   apiSignal,
   apiUrl,
   applyApiAuthentication,
@@ -29,7 +30,7 @@ export function openLiveOutputStream(
     if (stopped || !applyApiAuthentication(headers)) return;
     controller = new AbortController();
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         apiUrl(`${API_BASE}/sessions/${encodeURIComponent(sessionId)}/live-output/stream`),
         {
           headers,

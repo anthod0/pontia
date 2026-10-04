@@ -13,6 +13,10 @@ declare global {
         GITHUB_CLIENT_SECRET: string;
         JWT_SECRET: string;
         OAUTH_COOKIE_SECRET: string;
+        E2E_CAPABILITY_SIGNING_KEY: string;
+        E2E_CAPABILITY_VERIFICATION_KEY: string;
+        E2E_REGISTRATION_PROOF_PRIVATE_KEY: string;
+        E2E_REGISTRATION_PROOF_PUBLIC_KEY: string;
         CLOUDFLARE_DNS_TOKEN: string;
         CLOUDFLARE_DNS_ZONE_ID: string;
         EDGE_NETWORK_RATE_LIMIT: RateLimit;

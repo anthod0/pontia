@@ -8,7 +8,6 @@ import {
 import {
   clearPublicApiTarget,
   publicApiSignal,
-  publicApiUrl,
   setPublicApiTarget,
 } from "../../src/modes/public/apiTarget";
 
@@ -76,7 +75,7 @@ test("resolves a matching immutable target with browser credentials", async () =
   );
 });
 
-test("custom port survives target discovery and API URL derivation", async () => {
+test("custom port survives target discovery", async () => {
   const origin = `${edgeApiOrigin}:8443`;
   vi.stubGlobal(
     "fetch",
@@ -84,11 +83,11 @@ test("custom port survives target discovery and API URL derivation", async () =>
       json({ device_handle: handle, device_id: deviceId, edge_api_origin: origin }),
     ),
   );
-  const target = await resolvePublicDeviceTarget(handle);
-  setPublicApiTarget(target);
-  expect(publicApiUrl("/api/v1/workspaces")).toBe(
-    `${origin}/devices/${deviceId}/api/v1/workspaces`,
-  );
+  await expect(resolvePublicDeviceTarget(handle)).resolves.toEqual({
+    handle,
+    deviceId,
+    edgeApiOrigin: origin,
+  });
 });
 
 describe("target validation", () => {
@@ -152,16 +151,8 @@ test("constructs a Cloud sign-in URL that returns only to the public Dashboard",
   );
 });
 
-test("constructs fixed bootstrap and edge proxy paths without bearer authentication", () => {
-  setPublicApiTarget({ handle, deviceId, edgeApiOrigin });
-
-  expect(dashboardBootstrapUrl(handle)).toBe(
-    `https://pontia.dev/api/dashboard/devices/${handle}/bootstrap`,
-  );
-  expect(publicApiUrl("/api/v1/workspaces?limit=5")).toBe(
-    `${edgeApiOrigin}/devices/${deviceId}/api/v1/workspaces?limit=5`,
-  );
-  expect(() => publicApiUrl("https://attacker.example/api/v1/workspaces")).toThrow();
+test("constructs a direct public Dashboard device path", () => {
+  expect(dashboardBootstrapUrl(handle)).toBe(`https://app.pontia.dev/${handle}`);
 });
 
 test("changing target aborts requests bound to the previous target", () => {

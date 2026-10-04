@@ -57,18 +57,13 @@ test("renders valid devices as handle-scoped dashboard links", () => {
         { handle, name: "Office Mac" },
         { handle: "2invalid_handle", name: "Invalid" },
       ],
-      openAction: (deviceHandle: string) =>
-        `https://pontia.dev/api/dashboard/devices/${deviceHandle}/bootstrap`,
+      openAction: (deviceHandle: string) => `https://app.pontia.dev/${deviceHandle}`,
     },
   });
 
-  expect(screen.getByRole("button", { name: "Open Dashboard" }).closest("form")).toHaveAttribute(
-    "action",
-    `https://pontia.dev/api/dashboard/devices/${handle}/bootstrap`,
-  );
-  expect(screen.getByRole("button", { name: "Open Dashboard" }).closest("form")).toHaveAttribute(
-    "method",
-    "POST",
+  expect(screen.getByRole("link", { name: "Open Dashboard" })).toHaveAttribute(
+    "href",
+    `https://app.pontia.dev/${handle}`,
   );
   expect(screen.getByText("Office Mac")).toBeInTheDocument();
   expect(screen.queryByText("Invalid")).not.toBeInTheDocument();
@@ -96,15 +91,13 @@ test("exposes retry and reauthorization actions without inventing credential han
     props: {
       handle,
       state: "authorization-required",
-      reauthorizationUrl: `https://pontia.dev/api/dashboard/devices/${handle}/bootstrap`,
+      reauthorizationUrl: `https://app.pontia.dev/${handle}`,
     },
   });
-  const form = screen.getByRole("button", { name: "Authorize again" }).closest("form");
-  expect(form).toHaveAttribute(
-    "action",
-    `https://pontia.dev/api/dashboard/devices/${handle}/bootstrap`,
+  expect(screen.getByRole("link", { name: "Authorize again" })).toHaveAttribute(
+    "href",
+    `https://app.pontia.dev/${handle}`,
   );
-  expect(form).toHaveAttribute("method", "POST");
 });
 
 test("offers sign-in instead of retry when a device target requires authentication", () => {

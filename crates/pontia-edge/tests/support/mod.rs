@@ -19,7 +19,7 @@ use axum::{
 };
 use axum_server::{Handle, tls_rustls::RustlsConfig};
 use futures_util::StreamExt;
-use pontia_edge::{BrowserAccess, BrowserOrigins, ConnectionLimits, Edge, TicketRedeemer};
+use pontia_edge::{BrowserOrigins, ConnectionLimits, Edge, TicketRedeemer};
 use pontia_tunnel::{DeviceRequestHandler, protocol, serve_device};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, pki_types::PrivatePkcs8KeyDer};
 use serde::Deserialize;
@@ -42,7 +42,6 @@ fn new_ticket() -> String {
 #[derive(Clone)]
 struct CloudState {
     tickets: Arc<Mutex<HashMap<String, Uuid>>>,
-    dashboard_tickets: Arc<Mutex<HashMap<String, serde_json::Value>>>,
     issued: Arc<AtomicUsize>,
     delay_redemption: Arc<AtomicBool>,
     tunnel_url: String,
@@ -62,7 +61,6 @@ pub struct TestEdge {
     pub connector: Connector,
     pub http: reqwest::Client,
     tickets: Arc<Mutex<HashMap<String, Uuid>>>,
-    dashboard_tickets: Arc<Mutex<HashMap<String, serde_json::Value>>>,
     issued: Arc<AtomicUsize>,
     delay_redemption: Arc<AtomicBool>,
     edge_handle: Handle<std::net::SocketAddr>,
@@ -117,12 +115,10 @@ impl TestEdge {
             cloud_listener.local_addr().unwrap().port()
         );
         let tickets = Arc::new(Mutex::new(HashMap::new()));
-        let dashboard_tickets = Arc::new(Mutex::new(HashMap::new()));
         let issued = Arc::new(AtomicUsize::new(0));
         let delay_redemption = Arc::new(AtomicBool::new(false));
         let cloud_state = CloudState {
             tickets: tickets.clone(),
-            dashboard_tickets: dashboard_tickets.clone(),
             issued: issued.clone(),
             delay_redemption: delay_redemption.clone(),
             tunnel_url: tunnel_url.clone(),
@@ -133,7 +129,6 @@ impl TestEdge {
                 post(issue),
             )
             .route("/api/edge/tunnel-tickets/redeem", post(redeem))
-            .route("/api/edge/dashboard-tickets/redeem", post(redeem_dashboard))
             .with_state(cloud_state);
         let cloud_handle = Handle::new();
         let cloud_task = tokio::spawn(
@@ -149,12 +144,8 @@ impl TestEdge {
         let redeemer =
             TicketRedeemer::with_client(&cloud_origin, EDGE_CREDENTIAL.to_string(), http.clone())
                 .unwrap();
-        let access = BrowserAccess::open(&root.path().join("edge.sqlite3"))
-            .await
-            .unwrap();
         let edge = Edge::new(
             redeemer,
-            access,
             BrowserOrigins::default(),
             ConnectionLimits {
                 max_pending: 2,
@@ -180,7 +171,6 @@ impl TestEdge {
             connector,
             http,
             tickets,
-            dashboard_tickets,
             issued,
             delay_redemption,
             edge_handle,
@@ -209,26 +199,6 @@ impl TestEdge {
             .unwrap()
             .insert(ticket.clone(), device_id);
         ticket
-    }
-
-    pub fn issue_dashboard_ticket(&self, device_id: Uuid, handle: &str) -> String {
-        let ticket = new_ticket();
-        self.dashboard_tickets.lock().unwrap().insert(
-            ticket.clone(),
-            serde_json::json!({
-                "device_id": device_id,
-                "device_handle": handle,
-                "expires_at": "2099-01-01T00:00:00.000Z"
-            }),
-        );
-        ticket
-    }
-
-    pub fn set_dashboard_response(&self, ticket: String, response: serde_json::Value) {
-        self.dashboard_tickets
-            .lock()
-            .unwrap()
-            .insert(ticket, response);
     }
 
     pub async fn connect(
@@ -340,21 +310,6 @@ async fn redeem(
         .remove(&request.ticket)
         .ok_or(StatusCode::UNAUTHORIZED)?;
     Ok(Json(serde_json::json!({ "device_id": device_id })))
-}
-
-async fn redeem_dashboard(
-    State(state): State<CloudState>,
-    headers: HeaderMap,
-    Json(request): Json<RedeemRequest>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    authenticate_edge(&headers)?;
-    let response = state
-        .dashboard_tickets
-        .lock()
-        .unwrap()
-        .remove(&request.ticket)
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-    Ok(Json(response))
 }
 
 fn authenticate_edge(headers: &HeaderMap) -> Result<(), StatusCode> {

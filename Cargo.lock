@@ -2209,19 +2209,24 @@ dependencies = [
  "clap",
  "dialoguer",
  "getrandom 0.3.4",
+ "hkdf",
+ "hmac",
  "hostname",
  "pontia-client-codex",
  "pontia-config",
+ "pontia-e2e",
  "pontia-update",
  "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "tokio",
  "toml",
  "toml_edit",
  "url",
  "uuid",
+ "x25519-dalek",
 ]
 
 [[package]]
@@ -2351,8 +2356,6 @@ dependencies = [
  "rustls-pemfile",
  "serde",
  "serde_json",
- "sha2 0.10.9",
- "sqlx",
  "tempfile",
  "time",
  "tokio",
@@ -2489,11 +2492,14 @@ name = "pontiad"
 version = "0.3.6"
 dependencies = [
  "axum",
+ "base64 0.22.1",
+ "ed25519-dalek 2.2.0",
  "pontia-application",
  "pontia-client-codex",
  "pontia-client-pi",
  "pontia-config",
  "pontia-core",
+ "pontia-e2e",
  "pontia-http",
  "pontia-runtime",
  "pontia-storage-sqlite",
@@ -4644,6 +4650,8 @@ checksum = "c7e468321c81fb07fa7f4c636c3972b9100f0346e5b6a9f2bd0603a52f7ed277"
 dependencies = [
  "curve25519-dalek 4.1.3",
  "rand_core 0.6.4",
+ "serde",
+ "zeroize",
 ]
 
 [[package]]

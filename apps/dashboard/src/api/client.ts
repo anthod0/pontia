@@ -1,5 +1,6 @@
 import {
   apiCredentials,
+  apiFetch,
   apiSignal,
   apiUrl,
   applyApiAuthentication,
@@ -99,7 +100,7 @@ async function fetchWithTransientNetworkRetry(
   let attempt = 0;
   while (true) {
     try {
-      return await fetch(input, init);
+      return await apiFetch(String(input), init);
     } catch (error) {
       if (!isTransientNetworkError(error) || attempt >= TRANSIENT_NETWORK_RETRY_DELAYS_MS.length)
         throw error;
@@ -147,7 +148,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   let afterNetworkFailure = false;
   const fetchRequest =
     options.retryNetworkErrors === false
-      ? fetch
+      ? (input: RequestInfo | URL, init: RequestInit) => apiFetch(String(input), init)
       : (input: RequestInfo | URL, init: RequestInit) =>
           fetchWithTransientNetworkRetry(input, init, () => {
             afterNetworkFailure = true;

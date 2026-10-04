@@ -45,6 +45,8 @@ CREATE TABLE `devices` (
 	`edge_id` text NOT NULL,
 	`handle` text NOT NULL,
 	`name` text NOT NULL,
+	`e2e_public_key` text,
+	`e2e_key_version` integer,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	CONSTRAINT `fk_devices_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
@@ -82,7 +84,7 @@ CREATE TABLE `edge_tickets` (
 	`consumed_at` text,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	CONSTRAINT `fk_edge_tickets_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-	CONSTRAINT "edge_tickets_purpose_check" CHECK("purpose" IN ('edge_deployment', 'device_tunnel', 'dashboard_access')),
+	CONSTRAINT "edge_tickets_purpose_check" CHECK("purpose" IN ('edge_deployment', 'device_tunnel')),
 	CONSTRAINT "edge_tickets_payload_json_check" CHECK(json_valid("payload"))
 );
 
@@ -111,6 +113,8 @@ CREATE UNIQUE INDEX `idx_edges_tunnel_url` ON `edges` (`tunnel_url`);
 CREATE INDEX `idx_devices_user_id` ON `devices` (`user_id`);
 CREATE INDEX `idx_devices_edge_id` ON `devices` (`edge_id`);
 CREATE UNIQUE INDEX `idx_devices_user_handle` ON `devices` (`user_id`,`handle`);
+CREATE UNIQUE INDEX `idx_devices_e2e_public_key` ON `devices` (`e2e_public_key`);
+CREATE INDEX `idx_devices_e2e_key_version` ON `devices` (`e2e_key_version`);
 CREATE UNIQUE INDEX `idx_device_authorizations_device_code` ON `device_authorizations` (`device_code_hash`);
 CREATE UNIQUE INDEX `idx_device_authorizations_user_code` ON `device_authorizations` (`user_code`);
 CREATE INDEX `idx_device_authorizations_expires_at` ON `device_authorizations` (`expires_at`);

@@ -8,7 +8,8 @@ export const CLOUD_ORIGIN = "https://pontia.dev";
 function corsHeaders(): Headers {
   return new Headers({
     "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "content-type",
     "Access-Control-Allow-Origin": PUBLIC_DASHBOARD_ORIGIN,
     Vary: "Origin",
   });

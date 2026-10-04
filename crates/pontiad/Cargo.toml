@@ -9,10 +9,13 @@ repository.workspace = true
 pontia-client-codex.workspace = true
 pontia-client-pi.workspace = true
 axum = "0.8"
+base64 = "0.22"
+ed25519-dalek = "2"
 pontia-application = { workspace = true, default-features = true }
 pontia-config = { workspace = true, default-features = true }
 pontia-core.workspace = true
 pontia-http.workspace = true
+pontia-e2e.workspace = true
 pontia-runtime.workspace = true
 pontia-storage-sqlite.workspace = true
 pontia-workflow.workspace = true

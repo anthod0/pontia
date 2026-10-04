@@ -21,7 +21,6 @@ use pontia_e2e::{
     bhttp::{Decoder, Encoder, Event, Head, Kind},
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
-use tokio_stream::StreamExt;
 use tower::ServiceExt;
 
 pub const SESSIONS_PATH: &str = "/e2e/v1/sessions";
@@ -29,6 +28,7 @@ pub const REQUESTS_PATH: &str = "/e2e/v1/requests";
 pub const CONTENT_TYPE: &str = "application/pontia-e2e";
 const ADMISSION_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_HANDSHAKE_BYTES: usize = 1024;
+const MAX_REQUEST_BODY_BYTES: usize = 1024 * 1024;
 
 /// This identity cannot be supplied by a header or by a tunnel connection.
 #[derive(Clone, Copy)]
@@ -98,7 +98,7 @@ impl E2eIngress {
         }
         let admitted = tokio::time::timeout(ADMISSION_TIMEOUT, self.admit(&mut input)).await;
         match admitted {
-            Ok(Ok(admitted)) => self.dispatch(input, admitted, permit).await,
+            Ok(Ok(admitted)) => self.dispatch(admitted, permit).await,
             Ok(Err(error)) => transport_error(error),
             Err(_) => StatusCode::REQUEST_TIMEOUT.into_response(),
         }
@@ -139,20 +139,11 @@ impl E2eIngress {
             bhttp: Decoder::new(Kind::Request),
             pending: Bytes::from(plaintext),
         };
-        loop {
+        let head = loop {
             lease.check()?;
             if let Some(event) = decoder.event()? {
                 match event {
-                    Event::Head(head) => {
-                        lease.accept_head(&head)?;
-                        return Ok(Admitted {
-                            head,
-                            decoder,
-                            response,
-                            lease,
-                            invalidation,
-                        });
-                    }
+                    Event::Head(head) => break head,
                     _ => return Err(Error::Protocol),
                 }
             }
@@ -161,18 +152,57 @@ impl E2eIngress {
                 _ = invalidation.changed() => Err(Error::UnknownSession),
                 result = decoder.read_record(input) => result,
             }?;
+        };
+        let mut body = Vec::new();
+        let mut ended = false;
+        loop {
+            lease.check()?;
+            if let Some(event) = decoder.event()? {
+                match event {
+                    Event::Content(bytes) if !ended => {
+                        if body.len() + bytes.len() > MAX_REQUEST_BODY_BYTES {
+                            return Err(Error::Capacity);
+                        }
+                        body.extend_from_slice(&bytes);
+                    }
+                    Event::End if !ended => ended = true,
+                    _ => return Err(Error::Protocol),
+                }
+                continue;
+            }
+            let available = tokio::select! {
+                biased;
+                _ = invalidation.changed() => Err(Error::UnknownSession),
+                available = input.peek() => available,
+            }?;
+            if available.is_none() {
+                decoder.records.finish()?;
+                decoder.bhttp.finish()?;
+                if !ended {
+                    return Err(Error::Truncated);
+                }
+                break;
+            }
+            tokio::select! {
+                biased;
+                _ = invalidation.changed() => Err(Error::UnknownSession),
+                result = decoder.read_record(input) => result,
+            }?;
         }
+        lease.accept_head(&head)?;
+        Ok(Admitted {
+            head,
+            body: Bytes::from(body),
+            response,
+            lease,
+            invalidation,
+        })
     }
 
-    async fn dispatch(
-        &self,
-        mut input: Input,
-        admitted: Admitted,
-        permit: OwnedSemaphorePermit,
-    ) -> Response {
+    async fn dispatch(&self, admitted: Admitted, permit: OwnedSemaphorePermit) -> Response {
         let Admitted {
             head,
-            mut decoder,
+            body: request_body,
             mut response,
             lease,
             mut invalidation,
@@ -189,49 +219,7 @@ impl E2eIngress {
             lease,
             _permit: permit,
         });
-        let upload_activity = activity.clone();
-        let mut upload_invalidation = invalidation.clone();
-        let (failure_sender, mut failure) = watch::channel(false);
-        let upload_failure = failure_sender.clone();
-        let upload = async_stream::try_stream! {
-            loop {
-                upload_activity.lease.check()?;
-                if let Some(event) = decoder.event()? {
-                    match event {
-                        Event::Content(bytes) => yield Bytes::from(bytes),
-                        Event::End => {},
-                        Event::Head(_) => Err(Error::Protocol)?,
-                    }
-                    continue;
-                }
-                let available = tokio::select! {
-                    biased;
-                    _ = upload_invalidation.changed() => Err(Error::UnknownSession),
-                    available = input.peek() => available,
-                }?;
-                if available.is_none() {
-                    decoder.records.finish()?;
-                    decoder.bhttp.finish()?;
-                    break;
-                }
-                tokio::select! {
-                    biased;
-                    _ = upload_invalidation.changed() => Err(Error::UnknownSession),
-                    result = decoder.read_record(&mut input) => result,
-                }?;
-            }
-            Ok::<(), Error>(())?;
-        };
-        // The handler may convert a request-body error into an ordinary response.
-        // Record/protocol failures instead invalidate the entire transport, even
-        // when the handler catches the error or has already started responding.
-        let upload = upload.map(move |result: Result<Bytes, Error>| {
-            if result.is_err() {
-                upload_failure.send_replace(true);
-            }
-            result
-        });
-        let mut request = Request::new(body_stream(upload));
+        let mut request = Request::new(Body::from(request_body));
         *request.method_mut() = method;
         *request.uri_mut() = uri;
         *request.headers_mut() = headers;
@@ -242,49 +230,34 @@ impl E2eIngress {
         let result = tokio::select! {
             biased;
             _ = invalidation.changed() => return transport_error(Error::UnknownSession),
-            _ = failure.changed() => return transport_error(Error::Protocol),
             result = self.business.clone().oneshot(request) => result.expect("router is infallible"),
         };
-        if *failure.borrow() {
-            return transport_error(Error::Protocol);
-        }
         let (parts, body) = result.into_parts();
         let headers = pontia_e2e::bhttp::response_headers(&parts.headers);
-        let encoded = Encoder::new(&Head::Response {
+        let Ok((mut bhttp, head)) = Encoder::new(&Head::Response {
             status: parts.status.as_u16(),
             headers,
-        });
-        let Ok((mut bhttp, head)) = encoded else {
+        }) else {
             return transport_error(Error::Protocol);
         };
         let stream = async_stream::try_stream! {
-            // Keep the channel open if the handler has finished/dropped upload.
-            let _failure_sender = failure_sender;
             activity.lease.check()?;
-            if *failure.borrow() { Err(Error::Protocol)?; }
             yield Bytes::from(response.seal(&head)?);
             let mut body = body;
             while let Some(frame) = tokio::select! {
                 biased;
                 _ = invalidation.changed() => Err(Error::UnknownSession),
-                _ = failure.changed() => Err(Error::Protocol),
                 frame = body.frame() => Ok(frame),
             }? {
-                if *failure.borrow() { Err(Error::Protocol)?; }
-                let frame = frame.map_err(|_| Error::Truncated)?;
-                let bytes = frame.into_data().map_err(|_| Error::Protocol)?;
+                let bytes = frame.map_err(|_| Error::Truncated)?.into_data().map_err(|_| Error::Protocol)?;
                 for chunk in bytes.chunks(MAX_RECORD_PLAINTEXT) {
                     activity.lease.check()?;
-                    if *failure.borrow() { Err(Error::Protocol)?; }
-                    let encoded = bhttp.content(chunk)?;
-                    for record in encoded.chunks(MAX_RECORD_PLAINTEXT) {
+                    for record in bhttp.content(chunk)?.chunks(MAX_RECORD_PLAINTEXT) {
                         yield Bytes::from(response.seal(record)?);
                     }
                 }
             }
-            if *failure.borrow() { Err(Error::Protocol)?; }
             yield Bytes::from(response.seal(&bhttp.finish()?)?);
-            if *failure.borrow() { Err(Error::Protocol)?; }
             yield Bytes::from(response.finish()?);
             Ok::<(), Error>(())?;
         };
@@ -298,7 +271,7 @@ struct Activity {
 }
 struct Admitted {
     head: Head,
-    decoder: DecodedInput,
+    body: Bytes,
     response: RecordEncoder,
     lease: StreamLease,
     invalidation: watch::Receiver<()>,
