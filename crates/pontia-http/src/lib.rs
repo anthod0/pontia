@@ -21,6 +21,7 @@ pub use state::HttpState;
 
 pub mod api;
 pub mod dashboard;
+pub mod e2e;
 pub mod health;
 pub mod state;
 
@@ -63,6 +64,7 @@ where
 
 #[derive(Clone)]
 pub struct HttpEntrypoints {
+    external_api: Router,
     local_http: Router,
     trusted_tunnel: TrustedTunnelIngress,
 }
@@ -83,9 +85,10 @@ impl HttpEntrypoints {
             .route("/dashboard/assets/{*path}", get(dashboard::dashboard_asset))
             .route("/dashboard/{*path}", get(dashboard::dashboard_path))
             .with_state(state)
-            .merge(external_api);
+            .merge(external_api.clone());
 
         Self {
+            external_api,
             local_http,
             trusted_tunnel,
         }
@@ -93,6 +96,10 @@ impl HttpEntrypoints {
 
     pub fn local_http(&self) -> Router {
         self.local_http.clone()
+    }
+
+    pub fn e2e_tunnel(&self, sessions: pontia_e2e::DeviceSessions) -> e2e::E2eIngress {
+        e2e::E2eIngress::new(sessions, self.external_api.clone())
     }
 
     pub fn trusted_tunnel(&self) -> TrustedTunnelIngress {

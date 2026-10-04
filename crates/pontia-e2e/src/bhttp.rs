@@ -99,6 +99,17 @@ fn allowed_method(method: &Method) -> bool {
     )
 }
 
+/// Filter handler response fields using the same profile enforced by decoding.
+pub fn response_headers(input: &HeaderMap) -> HeaderMap {
+    let mut output = HeaderMap::new();
+    for name in RESPONSE_HEADERS {
+        for value in input.get_all(*name) {
+            output.append(HeaderName::from_static(name), value.clone());
+        }
+    }
+    output
+}
+
 pub(crate) fn validate_head(head: &Head) -> Result<()> {
     let (headers, allowed) = match head {
         Head::Request {

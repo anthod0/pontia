@@ -16,6 +16,7 @@ pub(crate) struct TrustedTunnelRequest;
 enum ExternalApiPrincipal {
     LocalToken,
     DeviceTunnel,
+    E2e,
 }
 
 pub(crate) async fn authenticate(
@@ -23,7 +24,13 @@ pub(crate) async fn authenticate(
     mut request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    let principal = if request.extensions().get::<TrustedTunnelRequest>().is_some() {
+    let principal = if request
+        .extensions()
+        .get::<crate::e2e::AuthenticatedE2eRequest>()
+        .is_some()
+    {
+        ExternalApiPrincipal::E2e
+    } else if request.extensions().get::<TrustedTunnelRequest>().is_some() {
         ExternalApiPrincipal::DeviceTunnel
     } else {
         authenticate_local_token(state.app().external_api_token(), request.headers())?

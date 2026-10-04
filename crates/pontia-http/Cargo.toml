@@ -5,11 +5,15 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+async-stream = "0.3"
 axum = "0.8"
+bytes = "1"
 flate2 = "1"
+http-body-util = "0.1"
 pontia-application.workspace = true
 pontia-config.workspace = true
 pontia-core.workspace = true
+pontia-e2e.workspace = true
 pontia-workflow.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 serde = { workspace = true, features = ["derive"] }
@@ -25,12 +29,13 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 [dev-dependencies]
 pontia-client-codex.workspace = true
 pontia-client-pi.workspace = true
-http-body-util = "0.1"
+ed25519-dalek = "2"
 pontia-application = { workspace = true, default-features = true, features = ["generic-test-client"] }
 pontia-runtime = { workspace = true, default-features = true }
 pontia-storage-sqlite.workspace = true
 sqlx.workspace = true
 tempfile = "3"
+tokio = { version = "1", features = ["test-util"] }
 tracing-subscriber = { version = "0.3", features = ["fmt", "json"] }
 
 [features]

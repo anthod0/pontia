@@ -2,6 +2,7 @@
 mod common;
 
 mod agent_profile;
+mod e2e_authentication;
 mod entrypoint_authentication;
 mod external_event_stream;
 mod external_queries;

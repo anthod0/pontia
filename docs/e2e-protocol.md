@@ -1,6 +1,6 @@
 # E2E core protocol v1
 
-`crates/pontia-e2e` implements the shared native/WASM protocol core. **It is not yet wired into Cloud, pontiad, edge, CLI registration, or Public Dashboard. Existing remote access remains unchanged; this crate alone does not make it end-to-end encrypted.**
+`crates/pontia-e2e` implements the shared native/WASM protocol core. `pontia-http` provides an opt-in native adapter through `HttpEntrypoints::e2e_tunnel`. **The adapter is not yet wired into pontiad's running tunnel, Cloud, edge, CLI registration, or Public Dashboard. Existing remote access remains unchanged; these modules alone do not make it end-to-end encrypted.**
 
 The core owns HPKE Auth, capability verification, confirmation, request-key derivation, bounded record framing, a restricted streaming bHTTP profile, and process-local device sessions. Network adapters own HTTP routing, trust-key distribution, persistence, backpressure, cancellation, and automatic reauthorization. The exported WASM handles contain protocol state; they expose no private keys, master secrets, derived keys, or nonce setters.
 
@@ -60,7 +60,7 @@ Request framing indicator is 2; response indicator is 3 (RFC 9292 indeterminate-
 
 Heads are at most 16 KiB. Before invoking the `bhttp` crate's head parser, a framing guard bounds vector lengths and checks that the complete head is available. The crate's async parser is not used because its field-vector allocations have no configurable head budget. Content decoding retains no full body; incoming content chunks can declare at most 1 MiB and outgoing chunks carry at most 16 KiB. Content chunks, encrypted records, and network reads do not have to align.
 
-Only final statuses 200–599, empty trailers, and explicit content/trailer terminators are accepted. Padding, informational responses, upgrades, CONNECT, and known-length messages are rejected. JSON, SSE, and binary files are opaque body bytes. Request and response directions are independent, allowing early responses during upload. WASM response completion preserves an unfinished upload; protocol/authentication failures close the entire request handle.
+Only final statuses 200–599, empty trailers, and explicit content/trailer terminators are accepted. Padding, informational responses, upgrades, CONNECT, and known-length messages are rejected. JSON, SSE, and binary files are opaque body bytes. Request and response directions are independent, allowing device handlers to respond before upload completion. Browser fetch is half-duplex: JavaScript reads the response after upload completion, and early termination may surface as a network failure rather than a readable business error. No separate preflight-upload protocol or alternative transport compensates for this browser limitation. WASM response completion preserves an unfinished upload; protocol/authentication failures close the entire request handle.
 
 Adapters must honor the consumed-byte count, process each returned plaintext/event before feeding its suffix, and call both record and bHTTP completion checks at EOF. WASM `receive` accepts at most one encrypted record and `next_event` drains its decoded events before another record is accepted. Its event arrays are local FFI values, not wire envelopes.
 
@@ -73,6 +73,14 @@ Each session retains at most 65,536 request IDs. IDs are never evicted from a li
 There is no absolute session expiry. Sessions are reclaimed after four idle hours without an accepted business stream. First-record authentication reserves replay/stream resources but does not refresh activity. After incrementally decoding a valid request head, the adapter must call `StreamLease::accept_head` before dispatch. Only accepted heads refresh activity and their leases hold activity for both request and response lifetimes; dropping an accepted lease starts the next idle interval. Invalid or incomplete heads cannot keep a session alive. Adapters must hold the lease until both directions end or are cancelled and invoke `reap` periodically as well as at admission.
 
 A local identity switch clears the table and invalidates outstanding device record keys and leases. Cloud login changes are not consulted for established sessions. Sessions, master secrets, and request keys are memory-only; the core does not persist device identities or browser state.
+
+## Native HTTP adapter
+
+The opt-in [`pontia-http` adapter](../crates/pontia-http/src/e2e.rs) accepts only `POST /e2e/v1/sessions` and `POST /e2e/v1/requests`, without query parameters, with `Content-Type: application/pontia-e2e`. These are internal device paths; the public edge endpoints are not yet implemented. Neither a local token nor an old browser Cookie grants access through this adapter to plaintext business paths.
+
+Authenticated and validated bHTTP heads enter the same External API router as local Token requests, using an internal identity that network headers cannot supply. Bodies are decoded and encrypted incrementally under consumer backpressure. Business statuses and allowlisted response headers are encrypted; successful outer transport uses HTTP 200. Unknown sessions use outer 409, capacity exhaustion 429, authentication/replay failures 401, malformed or truncated admission 400, and admission timeout 408. Errors after streaming begins terminate that stream, without implying business rollback.
+
+The adapter bounds simultaneous pending and established transports to 64. Handshake bodies are limited to 1 KiB, and both handshake-body reading and business-head admission have a ten-second deadline. The shared core additionally limits handshake attempts and session/replay resources. A stream holds its activity lease until both upload and response owners release it; cancellation releases ownership without a detached forwarding task. Local identity replacement wakes even silent outstanding streams and invalidates their keys. Callers must schedule `reap` periodically; admission also reaps through the core. Production startup, key persistence, and maintenance scheduling remain unimplemented.
 
 ## Verification
 
