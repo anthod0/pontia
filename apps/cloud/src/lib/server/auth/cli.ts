@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, isNull, or } from "drizzle-orm";
 import { base64url } from "jose";
 import { sha256Base64url } from "../crypto";
 import { isUuidV7 } from "../uuid";
@@ -27,6 +27,7 @@ function parseCliCredential(credential: string) {
 export async function authenticateCliCredential(
   db: Database,
   credential: string,
+  now = new Date(),
 ): Promise<CliPrincipal | null> {
   const parsed = parseCliCredential(credential);
   if (!parsed) return null;
@@ -36,7 +37,13 @@ export async function authenticateCliCredential(
       tokenHash: authSessions.tokenHash,
     })
     .from(authSessions)
-    .where(and(eq(authSessions.id, parsed.sessionId), eq(authSessions.kind, "cli")))
+    .where(
+      and(
+        eq(authSessions.id, parsed.sessionId),
+        eq(authSessions.kind, "cli"),
+        or(isNull(authSessions.expiresAt), gt(authSessions.expiresAt, now.toISOString())),
+      ),
+    )
     .get();
   if (!session?.tokenHash) return null;
   if (session.tokenHash !== (await sha256Base64url(parsed.secret))) return null;
