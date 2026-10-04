@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/pontia-e2e",
     "crates/pontia-edge",
     "crates/pontia-update",
     "crates/pontia-tunnel",
