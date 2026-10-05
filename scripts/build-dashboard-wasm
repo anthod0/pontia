@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+output_dir="$repo_root/apps/dashboard/src/e2e-wasm"
+expected_bindgen_version="$(awk '
+  $0 == "name = \"wasm-bindgen\"" { in_package = 1; next }
+  in_package && /^version = / { gsub(/"/, "", $3); print $3; exit }
+' "$repo_root/Cargo.lock")"
+install_bindgen=false
+
+if [[ "${1:-}" == "--install-bindgen" ]]; then
+  install_bindgen=true
+  shift
+fi
+if (( $# != 0 )); then
+  echo "usage: $0 [--install-bindgen]" >&2
+  exit 1
+fi
+
+if [[ -z "$expected_bindgen_version" ]]; then
+  echo "could not determine wasm-bindgen version from Cargo.lock" >&2
+  exit 1
+fi
+
+actual_bindgen_version="$(wasm-bindgen --version 2>/dev/null | awk '{print $2}' || true)"
+if [[ "$actual_bindgen_version" != "$expected_bindgen_version" && "$install_bindgen" == true ]]; then
+  cargo install wasm-bindgen-cli --version "$expected_bindgen_version" --locked
+  actual_bindgen_version="$(wasm-bindgen --version | awk '{print $2}')"
+fi
+if [[ "$actual_bindgen_version" != "$expected_bindgen_version" ]]; then
+  echo "wasm-bindgen $expected_bindgen_version is required, found ${actual_bindgen_version:-none}" >&2
+  exit 1
+fi
+
+cargo build \
+  --locked \
+  --manifest-path "$repo_root/Cargo.toml" \
+  --package pontia-e2e \
+  --release \
+  --target wasm32-unknown-unknown
+
+rm -rf "$output_dir"
+wasm-bindgen \
+  "$repo_root/target/wasm32-unknown-unknown/release/pontia_e2e.wasm" \
+  --out-dir "$output_dir" \
+  --out-name pontia_e2e \
+  --target web \
+  --typescript

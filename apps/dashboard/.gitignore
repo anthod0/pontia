@@ -11,6 +11,7 @@ lerna-debug.log*
 node_modules
 .svelte-kit
 dist
+/src/e2e-wasm/
 dist-ssr
 *.local
 .env

@@ -7,7 +7,11 @@ on:
       - apps/cloud/**
       - apps/dashboard/**
       - apps/cron/**
+      - crates/pontia-e2e/**
       - config/**
+      - scripts/build-dashboard-wasm
+      - Cargo.toml
+      - Cargo.lock
       - .github/workflows/publish-cloudflare.yml
   workflow_dispatch:
 
@@ -39,6 +43,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.4.0"
+      - name: Install Rust with the WASM target
+        if: matrix.app == 'dashboard'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Build Dashboard WASM
+        if: matrix.app == 'dashboard'
+        run: ../../scripts/build-dashboard-wasm --install-bindgen
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Check
@@ -70,6 +82,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.4.0"
+      - name: Install Rust with the WASM target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
       - name: Deploy Cloud, Dashboard, and Cron
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -84,6 +100,12 @@ jobs:
             (
               cd "apps/$app"
               bun install --frozen-lockfile
-              bun run deploy
+              if [[ "$app" == "dashboard" ]]; then
+                ../../scripts/build-dashboard-wasm --install-bindgen
+                bun run build:public
+                bunx wrangler deploy
+              else
+                bun run deploy
+              fi
             )
           done

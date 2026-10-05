@@ -100,4 +100,6 @@ CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner \
   cargo test -p pontia-e2e --target wasm32-unknown-unknown
 ```
 
+Dashboard bindings are generated rather than tracked. Run `scripts/build-dashboard-wasm` with the locked `wasm-bindgen-cli` installed. Cloudflare CI passes `--install-bindgen`, then builds the Public Dashboard and deploys the resulting Worker assets.
+
 Device-side WASM tests inject a monotonic clock; only native construction uses `std::time::Instant`. Production WASM exports only browser handles.
