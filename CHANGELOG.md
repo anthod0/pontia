@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-06
+
+### Added
+
+- Added end-to-end encryption between the Public Dashboard and devices, backed by a shared native/WASM protocol implementation with authenticated session establishment, replay protection, and encrypted streaming responses.
+- Added Cloud-issued short-lived E2E capabilities, proof-of-possession device registration, and persistent device encryption identities.
+- Added `pontia remote rotate-key` for replacing a device encryption identity.
+
+### Changed
+
+- Routed local token-authenticated and remotely E2E-authenticated requests through the same External API router and shared 2 MiB request-body policy.
+- Restricted Edge and device tunnels to the fixed encrypted session and request transports; Edge now relays ciphertext without interpreting Dashboard API traffic.
+- Generated the Public Dashboard WASM module during Cloudflare deployment instead of storing generated bindings in Git.
+
+### Fixed
+
+- Enforced expiry when authenticating CLI credentials.
+- Authenticated complete bounded E2E requests before dispatching them to business handlers or refreshing session activity.
+
+### Removed
+
+- Removed plaintext Dashboard access tickets, browser authorization cookies, Edge SQLite browser authorization state, and the trusted-tunnel authentication bypass.
+
 ## [0.3.6] - 2026-10-03
 
 ### Changed
@@ -162,7 +185,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.3.6...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/anthod0/pontia/compare/v0.3.6...v0.4.0
 [0.3.6]: https://github.com/anthod0/pontia/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/anthod0/pontia/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/anthod0/pontia/compare/v0.3.3...v0.3.4
