@@ -265,6 +265,53 @@ async fn truncated_upload_is_not_delivered_to_handler_as_successful_eof() {
 }
 
 #[tokio::test]
+async fn e2e_and_plaintext_business_routes_share_the_request_body_limit() {
+    let business = Router::new()
+        .route(
+            "/api/v1/upload",
+            post(|body: Bytes| async move { body.len().to_string() }),
+        )
+        .layer(axum::extract::DefaultBodyLimit::max(
+            EXTERNAL_API_REQUEST_BODY_LIMIT,
+        ));
+    let oversized = vec![0; EXTERNAL_API_REQUEST_BODY_LIMIT + 1];
+    let local = business
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/upload")
+                .body(Body::from(oversized.clone()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(local.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+    let ingress = ingress(business);
+    let session = connect(&ingress).await;
+    let formerly_rejected = vec![0; 1024 * 1024 + 1];
+    let encrypted = encrypted_request(&session, Method::POST, "/api/v1/upload", &formerly_rejected);
+    let accepted = ingress
+        .handle(outer(REQUESTS_PATH, Body::from(encrypted.wire)))
+        .await;
+    assert_eq!(accepted.status(), StatusCode::OK);
+    assert_eq!(
+        decrypt(encrypted.response, &bytes(accepted).await).2,
+        formerly_rejected.len().to_string().as_bytes()
+    );
+
+    let encrypted = encrypted_request(&session, Method::POST, "/api/v1/upload", &oversized);
+    assert_eq!(
+        ingress
+            .handle(outer(REQUESTS_PATH, Body::from(encrypted.wire)))
+            .await
+            .status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+}
+
+#[tokio::test]
 async fn identity_switch_wakes_authenticated_pending_head_admission() {
     let ingress = ingress(Router::new());
     let session = connect(&ingress).await;

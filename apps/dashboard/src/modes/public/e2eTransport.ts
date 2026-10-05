@@ -91,20 +91,11 @@ function requestHeaders(headers: Headers): [string, string][] {
   return fields;
 }
 
-const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
-const MAX_RECORD_PLAINTEXT_BYTES = 16 * 1024;
-
 function encryptedBody(request: E2eRequest, body: BodyInit | null | undefined): Uint8Array {
   if (body != null && typeof body !== "string")
-    throw new Error("Public E2E requests require a bounded text body");
-  const encodedBody = new TextEncoder().encode(body ?? "");
-  if (encodedBody.length > MAX_REQUEST_BODY_BYTES)
-    throw new Error("Public E2E request body exceeds 1 MiB");
-
+    throw new Error("Public E2E requests require a text body");
   const chunks = [request.first_bytes()];
-  for (let offset = 0; offset < encodedBody.length; offset += MAX_RECORD_PLAINTEXT_BYTES) {
-    chunks.push(request.content(encodedBody.subarray(offset, offset + MAX_RECORD_PLAINTEXT_BYTES)));
-  }
+  if (body) chunks.push(request.content(new TextEncoder().encode(body)));
   chunks.push(request.finish_upload());
   const size = chunks.reduce((total, chunk) => total + chunk.length, 0);
   const output = new Uint8Array(size);

@@ -1,7 +1,7 @@
 #[path = "../tests/support/mod.rs"]
 mod support;
 use crate::{
-    DeviceIdentity, DeviceSessions, Id,
+    DeviceIdentity, DeviceSessions, Id, MAX_RECORD_PLAINTEXT,
     bhttp::{Decoder, Encoder, Event, Head, Kind},
     wasm::Identity,
 };
@@ -86,7 +86,7 @@ fn feed_response(request: &mut crate::wasm::Request, wire: &[u8]) -> (Option<f64
 fn wasm_upload_preserves_binary_content_and_complete_http_framing() {
     let (session, mut device) = connected();
     let (mut request, mut plaintext, mut upload, _, _lease) = request(&session, &mut device);
-    let binary = vec![0xfe; 16 * 1024];
+    let binary = vec![0xfe; MAX_RECORD_PLAINTEXT + 1];
     let mut wire = request.content(&binary).unwrap();
     wire.extend_from_slice(&request.finish_upload().unwrap());
     let mut offset = 0;

@@ -13,10 +13,10 @@ use zeroize::Zeroizing;
 
 use crate::{DeviceId, Error, Id, Result, context};
 
-pub const MAX_RECORD_PLAINTEXT: usize = 16 * 1024;
+pub const MAX_RECORD_PLAINTEXT: usize = 64 * 1024;
 const TAG_BYTES: usize = 16;
 const PREFIX_BYTES: usize = 5;
-// A direction can encrypt at most 2^32 records (64 TiB), including the final record.
+// A direction can encrypt at most 2^32 records (256 TiB), including the final record.
 const MAX_RECORDS: u64 = 1 << 32;
 
 #[derive(Clone, Copy)]

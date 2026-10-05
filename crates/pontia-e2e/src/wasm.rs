@@ -177,10 +177,12 @@ impl Request {
     }
     fn content_inner(&mut self, content: &[u8]) -> Result<Vec<u8>> {
         let state = self.inner.as_mut().ok_or(Error::Closed)?;
-        let bytes = state.bhttp_encoder.content(content)?;
         let mut result = Vec::new();
-        for chunk in bytes.chunks(MAX_RECORD_PLAINTEXT) {
-            result.extend_from_slice(&state.encoder.seal(chunk)?);
+        for content_chunk in content.chunks(MAX_RECORD_PLAINTEXT) {
+            let bytes = state.bhttp_encoder.content(content_chunk)?;
+            for record in bytes.chunks(MAX_RECORD_PLAINTEXT) {
+                result.extend_from_slice(&state.encoder.seal(record)?);
+            }
         }
         Ok(result)
     }

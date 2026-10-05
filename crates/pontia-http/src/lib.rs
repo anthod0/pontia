@@ -4,7 +4,9 @@ use std::{
 };
 
 use axum::{
-    Router, middleware,
+    Router,
+    extract::DefaultBodyLimit,
+    middleware,
     routing::{get, post},
 };
 use tokio::sync::oneshot;
@@ -19,6 +21,8 @@ pub mod dashboard;
 pub mod e2e;
 pub mod health;
 pub mod state;
+
+pub(crate) const EXTERNAL_API_REQUEST_BODY_LIMIT: usize = 2 * 1024 * 1024;
 
 pub async fn serve_with_shutdown_timeout<F>(
     listener: tokio::net::TcpListener,
@@ -324,5 +328,6 @@ fn external_api_router(state: HttpState) -> Router {
             state.clone(),
             api::authenticate,
         ))
+        .layer(DefaultBodyLimit::max(EXTERNAL_API_REQUEST_BODY_LIMIT))
         .with_state(state)
 }

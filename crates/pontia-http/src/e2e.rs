@@ -7,6 +7,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::EXTERNAL_API_REQUEST_BODY_LIMIT;
 use axum::{
     Router,
     body::Body,
@@ -28,7 +29,6 @@ pub const REQUESTS_PATH: &str = "/e2e/v1/requests";
 pub const CONTENT_TYPE: &str = "application/pontia-e2e";
 const ADMISSION_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_HANDSHAKE_BYTES: usize = 1024;
-const MAX_REQUEST_BODY_BYTES: usize = 1024 * 1024;
 
 /// This identity cannot be supplied by a header or by a tunnel connection.
 #[derive(Clone, Copy)]
@@ -160,7 +160,7 @@ impl E2eIngress {
             if let Some(event) = decoder.event()? {
                 match event {
                     Event::Content(bytes) if !ended => {
-                        if body.len() + bytes.len() > MAX_REQUEST_BODY_BYTES {
+                        if body.len() + bytes.len() > EXTERNAL_API_REQUEST_BODY_LIMIT {
                             return Err(Error::Capacity);
                         }
                         body.extend_from_slice(&bytes);
