@@ -66,6 +66,7 @@ const mocks = vi.hoisted(() => {
   const sessionDetailError = writableStore<string | null>(null);
   const workspaces = writableStore<WorkspaceView[]>([]);
   const workspacesLoading = writableStore(false);
+  const workspacesInitialized = writableStore(true);
   const workspacesError = writableStore<string | null>(null);
   const workspaceRoots = writableStore<WorkspaceRootView[]>([]);
   const workspaceGitStatuses = writableStore({});
@@ -90,6 +91,7 @@ const mocks = vi.hoisted(() => {
     sessionDetailErrorKind: writableStore<string | null>(null),
     workspaces,
     workspacesLoading,
+    workspacesInitialized,
     workspacesError,
     workspaceRoots,
     workspaceGitStatuses,
@@ -186,6 +188,7 @@ vi.mock("../../../src/stores/sessions", () => ({
 vi.mock("../../../src/stores/workspaces", () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
+  workspacesInitialized: mocks.workspacesInitialized,
   workspacesError: mocks.workspacesError,
   workspaceRoots: mocks.workspaceRoots,
   workspaceGitStatuses: mocks.workspaceGitStatuses,
@@ -357,6 +360,7 @@ beforeEach(() => {
   mocks.sessionDetailErrorKind.set(null);
   mocks.workspaces.set([workspace()]);
   mocks.workspacesLoading.set(false);
+  mocks.workspacesInitialized.set(true);
   mocks.workspacesError.set(null);
   mocks.workspaceRoots.set([
     { root_id: "root-1", label: "Projects", canonical_path: "/repo", state: "available" },

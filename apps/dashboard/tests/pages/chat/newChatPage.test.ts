@@ -1,5 +1,5 @@
 import { mocks, session, turn, workspace } from "./fixtures";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import type { CreateSessionResult } from "../../../src/api/types";
@@ -47,6 +47,36 @@ test("keeps first-time users in workspace setup until they continue explicitly",
     screen.queryByRole("heading", { name: "Set up your first workspace" }),
   ).not.toBeInTheDocument();
 });
+
+test.each([true, false])(
+  "waits for the latest workspace request before choosing setup, with registered workspaces: %s",
+  async (hasWorkspace) => {
+    mocks.workspaces.set([]);
+    mocks.workspacesInitialized.set(false);
+    mocks.loadWorkspaces.mockImplementationOnce(async () => {
+      // This request has been superseded; its completion does not settle the list.
+      mocks.workspacesLoading.set(true);
+    });
+
+    await act(async () => {
+      render(NewChatPage);
+    });
+
+    expect(screen.getByRole("region", { name: "Loading dashboard" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue to New Chat" })).not.toBeInTheDocument();
+
+    mocks.workspaces.set(hasWorkspace ? [workspace()] : []);
+    mocks.workspacesInitialized.set(true);
+    mocks.workspacesLoading.set(false);
+
+    if (hasWorkspace) {
+      expect(await screen.findByPlaceholderText("What should the agent do?")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Continue to New Chat" })).not.toBeInTheDocument();
+    } else {
+      expect(await screen.findByRole("button", { name: "Continue to New Chat" })).toBeDisabled();
+    }
+  },
+);
 
 test("explains how to configure Pontia when no workspace roots exist", async () => {
   mocks.workspaces.set([]);

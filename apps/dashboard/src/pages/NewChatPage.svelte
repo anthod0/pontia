@@ -16,6 +16,7 @@
     loadWorkspaces,
     workspaces,
     workspacesError,
+    workspacesInitialized,
     workspacesLoading,
   } from '../stores/workspaces'
   import {
@@ -34,6 +35,7 @@
   let queryWorkspaceSelectionId: string | null = null
   let autofocusComposer = false
   let initialWorkspaceLoadComplete = false
+  let workspaceSetupDecisionPending = true
   let workspaceOnboardingActive = false
 
   const CLIENT_TYPE_OPTIONS = ['pi', 'codex']
@@ -52,13 +54,19 @@
       .finally(() => {
         if (!mounted) return
         initialWorkspaceLoadComplete = true
-        workspaceOnboardingActive = !$workspaces.length && !$workspacesError
       })
     return () => {
       mounted = false
       window.removeEventListener('popstate', handleLocationChange)
     }
   })
+
+  // A superseded request can finish before the latest workspace list is available.
+  // Decide only once the shared store has settled; activation still requires Continue.
+  $: if (initialWorkspaceLoadComplete && workspaceSetupDecisionPending && $workspacesInitialized && !$workspacesLoading) {
+    workspaceOnboardingActive = !$workspaces.length && !$workspacesError
+    workspaceSetupDecisionPending = false
+  }
 
   $: if ($workspaces.length) ensureCreateWorkspaceSelection()
   $: selectedWorkspace = $workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
@@ -116,8 +124,8 @@
   }
 
   async function retryWorkspaces(): Promise<void> {
+    workspaceSetupDecisionPending = true
     await loadWorkspaces()
-    workspaceOnboardingActive = !$workspaces.length && !$workspacesError
   }
 
   function completeWorkspaceOnboarding(): void {
@@ -172,7 +180,7 @@
   }
 </script>
 
-{#if !$workspaces.length && !initialWorkspaceLoadComplete}
+{#if !$workspaces.length && (!initialWorkspaceLoadComplete || workspaceSetupDecisionPending)}
   <section class="flex min-h-[calc(100svh-5.5rem)] items-center justify-center md:min-h-[calc(100svh-6.5rem)]" aria-label="Loading dashboard">
     <div class="w-full max-w-3xl space-y-3">
       <Skeleton class="h-24 w-full" />
