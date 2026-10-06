@@ -9,7 +9,7 @@ use pontia_edge::{
 
 const EXECUTABLE: &str = "/usr/local/bin/pontia-edge";
 
-pub async fn run() -> Result<()> {
+pub fn ensure_managed_installation() -> Result<std::path::PathBuf> {
     ensure_root(rustix::process::geteuid().as_raw())?;
     let executable = std::fs::canonicalize(std::env::current_exe()?)?;
     anyhow::ensure!(
@@ -20,12 +20,32 @@ pub async fn run() -> Result<()> {
         Path::new("/run/systemd/system").is_dir(),
         "edge update requires a running systemd manager"
     );
-    let update = pontia_update::prepare("pontia-edge", &["pontia-edge"])
-        .await
-        .map_err(anyhow::Error::msg)?;
-    // Inspect service state after downloading, immediately before replacement.
+    Ok(executable)
+}
+
+pub async fn run(automatic: bool) -> Result<()> {
+    let executable = ensure_managed_installation()?;
     let systemd = Systemd::default();
+    if automatic && !systemd.update_is_active().await? {
+        println!("Edge service is stopped; skipping automatic update.");
+        return Ok(());
+    }
+    let Some(update) = pontia_update::prepare(
+        "pontia-edge",
+        &["pontia-edge"],
+        Some(env!("CARGO_PKG_VERSION")),
+    )
+    .await
+    .map_err(anyhow::Error::msg)?
+    else {
+        return Ok(());
+    };
+    // Inspect service state after downloading, immediately before replacement.
     let running = systemd.update_is_active().await?;
+    if automatic && !running {
+        println!("Edge service stopped during download; skipping automatic update.");
+        return Ok(());
+    }
     let config = if running {
         let output = Command::new("systemctl")
             .args([

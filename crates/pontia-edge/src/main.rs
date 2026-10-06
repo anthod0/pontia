@@ -20,7 +20,7 @@ use pontia_edge::{
     enrollment::{EdgeNetworkClient, HttpCloudClient, InitializationResult, initialize_and_enroll},
     network::{discover_public_ipv4, system_dns_resolver},
     port::{parse_edge_port, tunnel_url},
-    systemd::{Systemd, UNIT_PATH},
+    systemd::{Systemd, UNIT_DIRECTORY, UNIT_PATH},
     tls::AcmeAcceptor,
 };
 use rustls::{
@@ -31,6 +31,7 @@ use rustls::{
 };
 use uuid::Uuid;
 
+mod auto_update;
 mod update;
 
 const DNS_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
@@ -41,6 +42,7 @@ const RENEW_AFTER: Duration = Duration::from_secs(50 * 24 * 60 * 60);
 #[derive(Parser)]
 #[command(
     about = "Pontia device connection service",
+    version,
     args_conflicts_with_subcommands = true
 )]
 struct Cli {
@@ -53,7 +55,16 @@ enum Command {
     /// Initialize this edge, configure its public endpoint, and install its service.
     Init(InitArgs),
     /// Update pontia-edge to the latest stable release.
-    Update,
+    Update {
+        /// Skip updates while the Edge service is stopped.
+        #[arg(long, hide = true)]
+        automatic: bool,
+    },
+    /// Manage automatic stable-release updates.
+    AutoUpdate {
+        #[command(subcommand)]
+        command: auto_update::Command,
+    },
 }
 
 #[derive(Args)]
@@ -80,7 +91,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Some(Command::Init(args)) => run_until_shutdown(init(args)).await,
-        Some(Command::Update) => update::run().await,
+        Some(Command::Update { automatic }) => update::run(automatic).await,
+        Some(Command::AutoUpdate { command }) => auto_update::run(command).await,
         None => serve().await,
     }
 }
@@ -217,6 +229,10 @@ async fn init_with_output<W: Write + ?Sized>(args: InitArgs, output: &mut W) -> 
         RETRY_DELAY,
     )
     .await?;
+    status(output, "Enabling automatic stable-release updates...")?;
+    systemd
+        .enable_auto_update(Path::new(UNIT_DIRECTORY))
+        .await?;
     status(
         output,
         &format!(
@@ -700,8 +716,26 @@ mod tests {
     #[test]
     fn update_is_a_standalone_command() {
         let cli = Cli::try_parse_from(["pontia-edge", "update"]).unwrap();
-        assert!(matches!(cli.command, Some(Command::Update)));
+        assert!(matches!(
+            cli.command,
+            Some(Command::Update { automatic: false })
+        ));
         assert!(Cli::try_parse_from(["pontia-edge", "update", "--ticket", "secret"]).is_err());
+    }
+
+    #[test]
+    fn accepts_auto_update_management_and_the_scheduled_update_invocation() {
+        for action in ["enable", "disable", "status"] {
+            let cli = Cli::try_parse_from(["pontia-edge", "auto-update", action]).unwrap();
+            assert!(matches!(cli.command, Some(Command::AutoUpdate { .. })));
+        }
+        assert!(Cli::try_parse_from(["pontia-edge", "auto-update"]).is_err());
+        assert!(Cli::try_parse_from(["pontia-edge", "auto-update", "unknown"]).is_err());
+        let cli = Cli::try_parse_from(["pontia-edge", "update", "--automatic"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Update { automatic: true })
+        ));
     }
 
     #[test]

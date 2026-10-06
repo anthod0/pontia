@@ -1,0 +1,17 @@
+[Unit]
+Description=Update Pontia Edge
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/pontia/edge/config.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pontia-edge update --automatic
+# Downloads and health probes have their own timeouts. Allow rollback to finish.
+TimeoutStartSec=infinity
+User=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/usr/local/bin

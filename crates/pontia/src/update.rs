@@ -3,9 +3,13 @@ use std::path::PathBuf;
 pub struct PreparedUpdate(pontia_update::PreparedUpdate);
 
 pub async fn prepare() -> Result<PreparedUpdate, String> {
-    pontia_update::prepare("pontia", &["pontia", "pontiad"])
+    pontia_update::prepare("pontia", &["pontia", "pontiad"], None)
         .await
-        .map(PreparedUpdate)
+        .and_then(|update| {
+            update
+                .map(PreparedUpdate)
+                .ok_or_else(|| "no update prepared".into())
+        })
 }
 
 impl PreparedUpdate {

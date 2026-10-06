@@ -11,6 +11,7 @@ ed25519-dalek = { version = "3.0.0", features = ["pkcs8", "pem"] }
 flate2 = "1.1.10"
 fs2 = "0.4.3"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+semver = "1"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2 = "0.10"

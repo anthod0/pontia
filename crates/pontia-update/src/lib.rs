@@ -13,6 +13,8 @@ use fs2::FileExt;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
+mod version;
+
 const ORIGIN: &str = "https://get.pontia.dev";
 #[cfg(test)]
 const BINARIES: [&str; 2] = ["pontia", "pontiad"];
@@ -51,7 +53,8 @@ pub struct PreparedUpdate {
 pub async fn prepare(
     executable_name: &'static str,
     binaries: &'static [&'static str],
-) -> Result<PreparedUpdate, String> {
+    current_version: Option<&str>,
+) -> Result<Option<PreparedUpdate>, String> {
     let target = target()?;
     let key = option_env!("PONTIA_RELEASE_PUBLIC_KEY")
         .ok_or("this build has no release verification key; use an official Pontia release")?
@@ -70,6 +73,15 @@ pub async fn prepare(
         ));
     }
     let lock = lock_directory(directory)?;
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let running = fs::metadata("/proc/self/exe").map_err(io_error)?;
+        let installed = fs::metadata(&executable).map_err(io_error)?;
+        if (running.dev(), running.ino()) != (installed.dev(), installed.ino()) {
+            return Err("the installation changed before the update lock was acquired; run the installed executable again".into());
+        }
+    }
     for binary in binaries {
         let metadata = fs::symlink_metadata(directory.join(binary)).map_err(io_error)?;
         if !metadata.file_type().is_file() {
@@ -79,10 +91,6 @@ pub async fn prepare(
             ));
         }
     }
-    let staging = tempfile::Builder::new()
-        .prefix(".pontia-update-")
-        .tempdir_in(directory)
-        .map_err(io_error)?;
     let client = reqwest::Client::builder()
         .https_only(true)
         .redirect(reqwest::redirect::Policy::none())
@@ -98,6 +106,19 @@ pub async fn prepare(
     )
     .await?;
     let manifest = verify_manifest(&envelope, &key)?;
+    if let Some(current) = current_version
+        && !version::is_newer(current, &manifest.version)?
+    {
+        println!(
+            "Installed version {current} is already at or ahead of stable {}.",
+            manifest.version
+        );
+        return Ok(None);
+    }
+    let staging = tempfile::Builder::new()
+        .prefix(".pontia-update-")
+        .tempdir_in(directory)
+        .map_err(io_error)?;
     for binary in binaries {
         let name = format!("{binary}-{target}.tar.gz");
         let artifact = manifest
@@ -113,13 +134,13 @@ pub async fn prepare(
         verify_artifact(&bytes, artifact)?;
         extract_binary(&bytes, binary, &staging.path().join(binary))?;
     }
-    Ok(PreparedUpdate {
+    Ok(Some(PreparedUpdate {
         directory: directory.to_path_buf(),
         binaries,
         staging,
         version: manifest.version,
         _lock: lock,
-    })
+    }))
 }
 
 fn target() -> Result<&'static str, String> {
