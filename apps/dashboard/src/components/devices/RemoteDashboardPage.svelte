@@ -83,7 +83,7 @@
                 <Card.Description>Your browser needs renewed access before it can connect to this device.</Card.Description>
               {:else if effectiveState === 'unavailable'}
                 <Card.Title role="heading" aria-level={1}>Device unavailable</Card.Title>
-                <Card.Description>Pontia could not confirm access to this device.</Card.Description>
+                <Card.Description>Pontia could not establish a secure connection to this device.</Card.Description>
               {:else}
                 <Card.Title role="heading" aria-level={1}>Invalid device</Card.Title>
                 <Card.Description>This link does not contain a valid Pontia device handle.</Card.Description>
@@ -103,12 +103,12 @@
           {#if effectiveState === 'connecting'}
             <div class="flex items-center gap-2 text-xs text-muted-foreground" role="status">
               <span class="size-1.5 animate-pulse bg-primary"></span>
-              Checking device availability…
+              Establishing a secure connection…
             </div>
           {:else if effectiveState === 'authorization-required'}
             <p class="text-sm text-muted-foreground">Return to Pontia to authorize this browser again. No access credentials are entered on this page.</p>
           {:else if effectiveState === 'unavailable'}
-            <p class="text-sm text-muted-foreground">{unavailableMessage ?? 'Try confirming the device target again.'}</p>
+            <p class="text-sm text-muted-foreground">{unavailableMessage ?? 'Try connecting to the device again.'}</p>
           {:else}
             <p class="text-sm text-muted-foreground">Open the device from Pontia again or check that the complete link was copied.</p>
           {/if}

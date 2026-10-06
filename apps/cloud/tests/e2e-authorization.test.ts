@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { base64url } from "jose";
 import { devices, edges, users } from "../src/lib/server/db/schema";
-import { issueE2eCapability } from "../src/lib/server/remote-access/e2e-capability";
+import { connectDashboardDevice } from "../src/lib/server/remote-access/device-connect";
 import { verifyDeviceKeyProof } from "../src/lib/server/remote-access/device-key-proof";
 import { testDatabase } from "./database";
 
@@ -27,7 +27,7 @@ async function seedDevice(publicKey: string) {
     id: "0195e7b9-91c2-73d4-a560-2f78b90c1234",
     userId: "user-owner",
     name: "Tokyo",
-    tunnelUrl: "wss://edge.example/tunnel",
+    tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
     serviceCredentialHash: "hash",
   });
   await database.db.insert(devices).values({
@@ -47,7 +47,7 @@ test("capability is signed for the owned device and browser key with a 60 second
   const browserPublic = base64url.encode(new Uint8Array(32).fill(9));
   await seedDevice(devicePublic);
 
-  const result = await issueE2eCapability(
+  const result = await connectDashboardDevice(
     database.db,
     "user-owner",
     handle,
@@ -69,7 +69,7 @@ test("capability is signed for the owned device and browser key with a 60 second
     true,
   );
   expect(
-    await issueE2eCapability(database.db, "user-other", handle, browserPublic, keys.privateKey),
+    await connectDashboardDevice(database.db, "user-other", handle, browserPublic, keys.privateKey),
   ).toBeNull();
 });
 

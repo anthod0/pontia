@@ -5,12 +5,11 @@
   import { initialRemoteDashboardState, isValidDeviceHandle, type RemoteDashboardState } from '$lib/remoteDashboard';
   import { clearDashboardRuntimeState, startDashboardRuntime, stopDashboardRuntime } from '../../services/dashboardRuntime';
   import { clearPublicApiTarget, setPublicApiTarget } from './apiTarget';
-  import { clearE2eSession } from './e2eTransport';
+  import { clearE2eSession, connectPublicDevice } from './e2eTransport';
   import {
     dashboardBootstrapUrl,
     dashboardSignInUrl,
     listPublicDevices,
-    resolvePublicDeviceTarget,
     CloudRequestError,
     type PublicDevice,
   } from './remoteAccess';
@@ -60,11 +59,11 @@
     if (error instanceof CloudRequestError) {
       return operation === 'list'
         ? 'Pontia returned an invalid device list.'
-        : 'Pontia could not confirm this device target.';
+        : 'Pontia could not authorize this device connection.';
     }
     return operation === 'list'
       ? 'Could not reach Pontia to load devices.'
-      : 'Could not reach Pontia to confirm this device target.';
+      : 'Could not establish a secure connection to this device.';
   }
 
   $effect.pre(() => {
@@ -112,7 +111,7 @@
     }
 
     const controller = new AbortController();
-    void resolvePublicDeviceTarget(requestedHandle, controller.signal)
+    void connectPublicDevice(requestedHandle, controller.signal)
       .then((target) => {
         if (controller.signal.aborted || handle !== requestedHandle) return;
         setPublicApiTarget(target);

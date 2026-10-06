@@ -9,19 +9,17 @@ import {
   OPTIONS as listDevicesOptions,
 } from "../src/routes/api/dashboard/devices/+server";
 import {
-  GET as getTarget,
-  OPTIONS as getTargetOptions,
-} from "../src/routes/api/dashboard/devices/[device_handle]/target/+server";
+  POST as connect,
+  OPTIONS as connectOptions,
+} from "../src/routes/api/dashboard/devices/[device_handle]/connect/+server";
 import { testDatabase } from "./database";
 
 const callListDevices = listDevices as unknown as (event: RequestEvent) => Promise<Response>;
 const callListDevicesOptions = listDevicesOptions as unknown as (
   event: RequestEvent,
 ) => Promise<Response>;
-const callGetTarget = getTarget as unknown as (event: RequestEvent) => Promise<Response>;
-const callGetTargetOptions = getTargetOptions as unknown as (
-  event: RequestEvent,
-) => Promise<Response>;
+const callConnect = connect as unknown as (event: RequestEvent) => Promise<Response>;
+const callConnectOptions = connectOptions as unknown as (event: RequestEvent) => Promise<Response>;
 
 const database = testDatabase();
 const dashboardOrigin = "https://app.pontia.dev";
@@ -31,21 +29,39 @@ const ownerId = "0195e7d1-1b22-7c33-9d44-123456789abc";
 const otherId = "0195e7d2-1b22-7c33-9d44-123456789abc";
 const sessionId = "0195e7d3-1b22-7c33-9d44-123456789abc";
 const ownerDeviceId = "0195e7d4-1b22-7c33-9d44-123456789abc";
+const browserPublicKey = "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk";
+const signingKeys = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
+const signingKey = Buffer.from(
+  await crypto.subtle.exportKey("pkcs8", signingKeys.privateKey),
+).toString("base64url");
 
 function event(
   path: string,
-  options: { method?: string; origin?: string; token?: string } = {},
+  options: { method?: string; origin?: string; token?: string; body?: unknown } = {},
 ): RequestEvent {
   const url = new URL(path, cloudOrigin);
+  const method = options.method ?? (url.pathname.endsWith("/connect") ? "POST" : "GET");
   return {
     url,
     params: { device_handle: url.pathname.split("/").at(-2) },
     request: new Request(url, {
-      method: options.method ?? "GET",
-      headers: options.origin === undefined ? undefined : { Origin: options.origin },
+      method,
+      headers: {
+        ...(options.origin ? { Origin: options.origin } : {}),
+        "Content-Type": "application/json",
+      },
+      body:
+        method === "POST"
+          ? JSON.stringify(options.body ?? { browser_public_key: browserPublicKey })
+          : undefined,
     }),
     platform: {
-      env: { DB: database.binding, JWT_SECRET: jwtSecret, AUTH_ORIGIN: cloudOrigin },
+      env: {
+        DB: database.binding,
+        JWT_SECRET: jwtSecret,
+        AUTH_ORIGIN: cloudOrigin,
+        E2E_CAPABILITY_SIGNING_KEY: signingKey,
+      },
     },
     cookies: { get: (name: string) => (name === "_at" ? options.token : undefined) },
   } as unknown as RequestEvent;
@@ -82,6 +98,8 @@ async function seedDashboardFixtureAndLogin() {
       edgeId: "0195e7e1-1b22-7c33-9d44-123456789abc",
       handle: "office-mac",
       name: "Office Mac",
+      e2ePublicKey: browserPublicKey,
+      e2eKeyVersion: 1,
     },
     {
       id: "0195e7d5-1b22-7c33-9d44-123456789abc",
@@ -142,37 +160,50 @@ test("accepts an issued access JWT without reading its browser session", async (
   expect(response.status).toBe(200);
 });
 
-test("resolves a handle to trusted target fields without request overrides", async () => {
+test("connect returns trusted routing and browser-bound signed authorization without request overrides", async () => {
   const token = await seedDashboardFixtureAndLogin();
-  const response = await callGetTarget(
+  const response = await callConnect(
     event(
-      "/api/dashboard/devices/office-mac/target?device_id=attacker&edge_api_origin=https://attacker.example",
+      "/api/dashboard/devices/office-mac/connect?device_id=attacker&edge_api_origin=https://attacker.example",
       { origin: dashboardOrigin, token },
     ),
   );
   expect(response.status).toBe(200);
-  expect((await response.json()) as unknown).toEqual({
+  const body = (await response.json()) as Record<string, unknown>;
+  expect(body).toEqual({
     device_handle: "office-mac",
     device_id: ownerDeviceId,
     edge_api_origin: "https://brave-atlas.edge.pontia.dev",
+    device_public_key: browserPublicKey,
+    device_key_version: 1,
+    capability: expect.any(String),
   });
+  const capability = Buffer.from(body.capability as string, "base64url");
+  const signed = Buffer.concat([
+    Buffer.from("pontia-e2e-capability-v1\0"),
+    capability.subarray(0, 105),
+  ]);
+  expect(
+    await crypto.subtle.verify("Ed25519", signingKeys.publicKey, capability.subarray(105), signed),
+  ).toBe(true);
+  expect(capability.subarray(25, 57).toString("base64url")).toBe(browserPublicKey);
   expectCredentialedCors(response);
 });
 
-test("target lookup does not reveal another user's handle", async () => {
+test("connect does not reveal another user's handle", async () => {
   const token = await seedDashboardFixtureAndLogin();
-  const other = await callGetTarget(
-    event("/api/dashboard/devices/other-device/target", { origin: dashboardOrigin, token }),
+  const other = await callConnect(
+    event("/api/dashboard/devices/other-device/connect", { origin: dashboardOrigin, token }),
   );
-  const missing = await callGetTarget(
-    event("/api/dashboard/devices/missing-device/target", { origin: dashboardOrigin, token }),
+  const missing = await callConnect(
+    event("/api/dashboard/devices/missing-device/connect", { origin: dashboardOrigin, token }),
   );
   expect(other.status).toBe(404);
   expect(missing.status).toBe(404);
   expect(await other.json()).toEqual(await missing.json());
 });
 
-test("target resolution follows the device's current binding after a public edge becomes private", async () => {
+test("connect follows the device's current binding after a public edge becomes private", async () => {
   const token = await seedDashboardFixtureAndLogin();
   const edgeId = "0195e7e2-1b22-7c33-9d44-123456789abc";
   await database.db.update(edges).set({ accessScope: "public" }).where(eq(edges.id, edgeId));
@@ -182,11 +213,13 @@ test("target resolution follows the device's current binding after a public edge
     edgeId,
     handle: "public-edge-device",
     name: "Public edge device",
+    e2ePublicKey: Buffer.alloc(32, 7).toString("base64url"),
+    e2eKeyVersion: 1,
   });
   await database.db.update(edges).set({ accessScope: "private" }).where(eq(edges.id, edgeId));
 
-  const response = await callGetTarget(
-    event("/api/dashboard/devices/public-edge-device/target", { origin: dashboardOrigin, token }),
+  const response = await callConnect(
+    event("/api/dashboard/devices/public-edge-device/connect", { origin: dashboardOrigin, token }),
   );
   expect(response.status).toBe(200);
   expect((await response.json()) as { edge_api_origin: string }).toMatchObject({
@@ -194,7 +227,7 @@ test("target resolution follows the device's current binding after a public edge
   });
 });
 
-test("invalid tunnel URLs do not produce a target", async () => {
+test("connect rejects invalid tunnel URLs", async () => {
   const token = await seedDashboardFixtureAndLogin();
   const edgeId = "0195e7e3-1b22-7c33-9d44-123456789abc";
   await database.db.insert(edges).values({
@@ -210,18 +243,52 @@ test("invalid tunnel URLs do not produce a target", async () => {
     edgeId,
     handle: "invalid-edge",
     name: "Invalid edge",
+    e2ePublicKey: Buffer.alloc(32, 8).toString("base64url"),
+    e2eKeyVersion: 1,
   });
-  const response = await callGetTarget(
-    event("/api/dashboard/devices/invalid-edge/target", { origin: dashboardOrigin, token }),
+  const response = await callConnect(
+    event("/api/dashboard/devices/invalid-edge/connect", { origin: dashboardOrigin, token }),
   );
   expect(response.status).toBe(404);
 });
 
-test("both discovery endpoints enforce authenticated credentialed Dashboard CORS", async () => {
+test("connect rejects malformed browser keys and extra request fields", async () => {
+  const token = await seedDashboardFixtureAndLogin();
+  for (const [body, status] of [
+    [{}, 400],
+    [{ browser_public_key: 12 }, 400],
+    [{ browser_public_key: "invalid" }, 404],
+    [{ browser_public_key: `${browserPublicKey}=` }, 404],
+    [{ browser_public_key: browserPublicKey, device_id: ownerDeviceId }, 400],
+  ] as const) {
+    const response = await callConnect(
+      event("/api/dashboard/devices/office-mac/connect", {
+        origin: dashboardOrigin,
+        token,
+        body,
+      }),
+    );
+    expect(response.status).toBe(status);
+  }
+});
+
+test("connect refuses a device without an E2E key", async () => {
+  const token = await seedDashboardFixtureAndLogin();
+  await database.db
+    .update(devices)
+    .set({ e2ePublicKey: null, e2eKeyVersion: 0 })
+    .where(eq(devices.id, ownerDeviceId));
+  const response = await callConnect(
+    event("/api/dashboard/devices/office-mac/connect", { origin: dashboardOrigin, token }),
+  );
+  expect(response.status).toBe(404);
+});
+
+test("device listing and connect enforce authenticated credentialed Dashboard CORS", async () => {
   const token = await seedDashboardFixtureAndLogin();
   for (const [path, get, options] of [
     ["/api/dashboard/devices", callListDevices, callListDevicesOptions],
-    ["/api/dashboard/devices/office-mac/target", callGetTarget, callGetTargetOptions],
+    ["/api/dashboard/devices/office-mac/connect", callConnect, callConnectOptions],
   ] as const) {
     const unauthenticated = await get(event(path, { origin: dashboardOrigin }));
     expect(unauthenticated.status).toBe(401);

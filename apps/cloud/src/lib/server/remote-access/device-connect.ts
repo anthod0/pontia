@@ -1,7 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { base64url } from "jose";
 import type { Database } from "../db";
-import { devices } from "../db/schema";
+import { devices, edges } from "../db/schema";
+import { edgeApiOrigin } from "../edge-network";
 import { isValidDeviceHandle } from "./device-handle";
 
 const LABEL = new TextEncoder().encode("pontia-e2e-capability-v1\0");
@@ -23,7 +24,7 @@ function writeU64(output: Uint8Array, offset: number, value: number) {
   );
 }
 
-export async function issueE2eCapability(
+export async function connectDashboardDevice(
   db: Database,
   userId: string,
   deviceHandle: string,
@@ -42,13 +43,18 @@ export async function issueE2eCapability(
   const device = await db
     .select({
       id: devices.id,
+      handle: devices.handle,
+      tunnelUrl: edges.tunnelUrl,
       publicKey: devices.e2ePublicKey,
       keyVersion: devices.e2eKeyVersion,
     })
     .from(devices)
+    .innerJoin(edges, eq(devices.edgeId, edges.id))
     .where(and(eq(devices.userId, userId), eq(devices.handle, deviceHandle)))
     .get();
   if (!device?.publicKey || !device.keyVersion) return null;
+  const apiOrigin = edgeApiOrigin(device.tunnelUrl);
+  if (!apiOrigin) return null;
   const issuedAt = Math.floor(now.getTime() / 1000);
   const authorizationId = crypto.getRandomValues(new Uint8Array(32));
   const unsigned = new Uint8Array(105);
@@ -74,6 +80,8 @@ export async function issueE2eCapability(
   capability.set(unsigned);
   capability.set(signature, unsigned.length);
   return {
+    device_handle: device.handle,
+    edge_api_origin: apiOrigin,
     device_id: device.id,
     device_public_key: device.publicKey,
     device_key_version: device.keyVersion,

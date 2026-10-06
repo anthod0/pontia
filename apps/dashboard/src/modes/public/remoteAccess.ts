@@ -103,20 +103,64 @@ export async function listPublicDevices(signal?: AbortSignal): Promise<PublicDev
   return devices;
 }
 
-export async function resolvePublicDeviceTarget(
+export type PublicDeviceConnection = {
+  target: PublicDeviceTarget;
+  devicePublicKey: string;
+  capability: string;
+};
+
+function isEncodedBytes(value: unknown, length: number): value is string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value)) return false;
+  try {
+    const bytes = atob(value.replaceAll("-", "+").replaceAll("_", "/"));
+    return (
+      bytes.length === length &&
+      btoa(bytes).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "") === value
+    );
+  } catch {
+    return false;
+  }
+}
+
+export async function requestPublicDeviceConnection(
   handle: string,
+  browserPublicKey: string,
   signal?: AbortSignal,
-): Promise<PublicDeviceTarget> {
+): Promise<PublicDeviceConnection> {
   if (!isValidDeviceHandle(handle)) {
     throw new CloudRequestError("Invalid device handle.");
   }
-  const value = await cloudJson(
-    `${CLOUD_ORIGIN}/api/dashboard/devices/${encodeURIComponent(handle)}/target`,
-    signal,
+  const response = await fetch(
+    `${CLOUD_ORIGIN}/api/dashboard/devices/${encodeURIComponent(handle)}/connect`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ browser_public_key: browserPublicKey }),
+      signal,
+    },
   );
+  if (!response.ok) throw new CloudRequestError("Cloud request failed.", response.status);
+  let value: unknown;
+  try {
+    value = await response.json();
+  } catch {
+    throw new CloudRequestError("Cloud returned an invalid response.", response.status);
+  }
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ["device_handle", "device_id", "edge_api_origin"]) ||
+    !hasOnlyKeys(value, [
+      "device_handle",
+      "device_id",
+      "edge_api_origin",
+      "device_public_key",
+      "device_key_version",
+      "capability",
+    ]) ||
+    !isEncodedBytes(value.device_public_key, 32) ||
+    !isEncodedBytes(value.capability, 169) ||
+    !Number.isSafeInteger(value.device_key_version) ||
+    (value.device_key_version as number) <= 0 ||
     value.device_handle !== handle ||
     typeof value.device_id !== "string" ||
     !UUID.test(value.device_id)
@@ -124,9 +168,13 @@ export async function resolvePublicDeviceTarget(
     throw new CloudRequestError("Cloud returned an invalid device target.");
   }
   return {
-    handle,
-    deviceId: value.device_id,
-    edgeApiOrigin: parseEdgeOrigin(value.edge_api_origin),
+    target: {
+      handle,
+      deviceId: value.device_id,
+      edgeApiOrigin: parseEdgeOrigin(value.edge_api_origin),
+    },
+    devicePublicKey: value.device_public_key,
+    capability: value.capability,
   };
 }
 

@@ -5,12 +5,18 @@ import initWasm, {
 } from "../../e2e-wasm/pontia_e2e";
 import wasmUrl from "../../e2e-wasm/pontia_e2e_bg.wasm?url";
 import { publicApiTarget } from "./apiTarget";
-
-const CLOUD_ORIGIN = "https://pontia.dev";
+import { requestPublicDeviceConnection, type PublicDeviceTarget } from "./remoteAccess";
 const CONTENT_TYPE = "application/pontia-e2e";
 let session: Session | null = null;
-let sessionDeviceId: string | null = null;
-let establishing: Promise<Session> | null = null;
+let sessionTarget: PublicDeviceTarget | null = null;
+type Establishment = {
+  handle: string;
+  promise: Promise<PublicDeviceTarget>;
+  controller: AbortController;
+  waiters: number;
+};
+let establishing: Establishment | null = null;
+let generation = 0;
 let initialized: Promise<unknown> | null = null;
 
 function bodyBytes(value: Uint8Array): ArrayBuffer {
@@ -26,57 +32,98 @@ function decode(value: string): Uint8Array {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-async function establish(signal?: AbortSignal): Promise<Session> {
-  const currentTarget = publicApiTarget();
-  if (session && sessionDeviceId === currentTarget.deviceId) return session;
-  if (session) clearE2eSession();
-  if (establishing) return establishing;
-  establishing = (async () => {
+function waitForConnection(
+  connection: Establishment,
+  signal?: AbortSignal,
+): Promise<PublicDeviceTarget> {
+  connection.waiters += 1;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      if (settled) return false;
+      settled = true;
+      signal?.removeEventListener("abort", abort);
+      connection.waiters -= 1;
+      return true;
+    };
+    const abort = () => {
+      if (!cleanup()) return;
+      reject(signal?.reason ?? new DOMException("Connection was aborted", "AbortError"));
+      if (connection.waiters === 0 && establishing === connection) clearE2eSession();
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    connection.promise.then(
+      (target) => {
+        if (cleanup()) resolve(target);
+      },
+      (error) => {
+        if (cleanup()) reject(error);
+      },
+    );
+    if (signal?.aborted) abort();
+  });
+}
+
+export async function connectPublicDevice(
+  handle: string,
+  signal?: AbortSignal,
+): Promise<PublicDeviceTarget> {
+  signal?.throwIfAborted();
+  if (session && sessionTarget?.handle === handle) return sessionTarget;
+  if (establishing?.handle === handle) return waitForConnection(establishing, signal);
+  if (session || establishing) clearE2eSession();
+  const connectionGeneration = generation;
+  const controller = new AbortController();
+  const connectionSignal = controller.signal;
+  const checkActive = () => {
+    connectionSignal.throwIfAborted();
+    if (connectionGeneration !== generation)
+      throw new DOMException("Connection was superseded", "AbortError");
+  };
+  const promise = (async () => {
     initialized ??= initWasm(wasmUrl);
     await initialized;
-    const target = publicApiTarget();
+    checkActive();
     const identity = new Identity();
-    const browserPublicKey = identity.public_key();
-    const response = await fetch(
-      `${CLOUD_ORIGIN}/api/dashboard/devices/${encodeURIComponent(target.handle)}/capability`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ browser_public_key: encode(browserPublicKey) }),
-        signal,
-      },
-    );
-    if (!response.ok) throw new Error(`E2E authorization failed (${response.status})`);
-    const capability = (await response.json()) as Record<string, unknown>;
-    if (
-      capability.device_id !== target.deviceId ||
-      typeof capability.device_public_key !== "string" ||
-      typeof capability.capability !== "string"
-    )
-      throw new Error("Cloud returned an invalid E2E authorization");
-    const handshake = identity.start(
-      decode(capability.device_public_key),
-      decode(capability.capability),
-    );
-    const confirmation = await fetch(
-      `${target.edgeApiOrigin}/devices/${target.deviceId}/e2e/v1/sessions`,
-      {
-        method: "POST",
-        headers: { "Content-Type": CONTENT_TYPE },
-        body: bodyBytes(handshake.bytes()),
-        signal,
-      },
-    );
-    if (!confirmation.ok) throw new Error(`E2E handshake failed (${confirmation.status})`);
-    const established = handshake.confirm(new Uint8Array(await confirmation.arrayBuffer()));
-    session = established;
-    sessionDeviceId = target.deviceId;
-    return established;
+    try {
+      const connection = await requestPublicDeviceConnection(
+        handle,
+        encode(identity.public_key()),
+        connectionSignal,
+      );
+      checkActive();
+      const { target } = connection;
+      const handshake = identity.start(
+        decode(connection.devicePublicKey),
+        decode(connection.capability),
+      );
+      try {
+        const confirmation = await fetch(
+          `${target.edgeApiOrigin}/devices/${target.deviceId}/e2e/v1/sessions`,
+          {
+            method: "POST",
+            headers: { "Content-Type": CONTENT_TYPE },
+            body: bodyBytes(handshake.bytes()),
+            signal: connectionSignal,
+          },
+        );
+        if (!confirmation.ok) throw new Error(`E2E handshake failed (${confirmation.status})`);
+        const bytes = new Uint8Array(await confirmation.arrayBuffer());
+        checkActive();
+        session = handshake.confirm(bytes);
+        sessionTarget = target;
+        return target;
+      } finally {
+        handshake.free();
+      }
+    } finally {
+      identity.free();
+    }
   })().finally(() => {
-    establishing = null;
+    if (connectionGeneration === generation) establishing = null;
   });
-  return establishing;
+  establishing = { handle, promise, controller, waiters: 0 };
+  return waitForConnection(establishing, signal);
 }
 
 function encode(value: Uint8Array): string {
@@ -182,8 +229,12 @@ export async function e2eFetch(
   init: RequestInit = {},
   reauthorized = false,
 ): Promise<Response> {
-  const target = publicApiTarget();
-  const active = await establish(init.signal ?? undefined);
+  const requestedTarget = publicApiTarget();
+  const target = await connectPublicDevice(requestedTarget.handle, init.signal ?? undefined);
+  init.signal?.throwIfAborted();
+  if (!session || sessionTarget !== target)
+    throw new DOMException("Connection was superseded", "AbortError");
+  const active = session;
   const headers = new Headers(init.headers);
   headers.delete("authorization");
   const request = active.request(init.method ?? "GET", path, requestHeaders(headers));
@@ -198,7 +249,8 @@ export async function e2eFetch(
   );
   if ((response.status === 409 || response.status === 401) && !reauthorized) {
     request.free();
-    clearE2eSession();
+    // A delayed rejection must not invalidate a replacement session/handshake.
+    if (session === active) clearE2eSession();
     return e2eFetch(path, init, true);
   }
   if (!response.ok) {
@@ -209,8 +261,10 @@ export async function e2eFetch(
 }
 
 export function clearE2eSession(): void {
+  generation += 1;
+  establishing?.controller.abort();
   session?.free();
   session = null;
-  sessionDeviceId = null;
+  sessionTarget = null;
   establishing = null;
 }

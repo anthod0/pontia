@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import {
   dashboardBootstrapUrl,
   dashboardSignInUrl,
   listPublicDevices,
-  resolvePublicDeviceTarget,
+  requestPublicDeviceConnection,
+  CloudRequestError,
 } from "../../src/modes/public/remoteAccess";
 import {
   clearPublicApiTarget,
@@ -14,6 +15,18 @@ import {
 const handle = "office-mac";
 const deviceId = "01234567-89ab-cdef-0123-456789abcdef";
 const edgeApiOrigin = "https://brave-silver-atlas.edge.pontia.dev";
+const browserPublicKey = btoa(String.fromCharCode(...new Uint8Array(32).fill(9))).replace(
+  /=+$/,
+  "",
+);
+const connection = {
+  device_handle: handle,
+  device_id: deviceId,
+  edge_api_origin: edgeApiOrigin,
+  device_public_key: browserPublicKey,
+  device_key_version: 1,
+  capability: btoa(String.fromCharCode(...new Uint8Array(169).fill(7))).replace(/=+$/, ""),
+};
 
 afterEach(() => {
   clearPublicApiTarget();
@@ -35,7 +48,6 @@ test("loads the strict Cloud device list with browser credentials", async () => 
     ]),
   );
   vi.stubGlobal("fetch", fetchMock);
-
   await expect(listPublicDevices()).resolves.toEqual([
     { handle, name: "Office Mac" },
     { handle: "travel-laptop", name: "Travel Laptop" },
@@ -55,90 +67,67 @@ test.each([
     "fetch",
     vi.fn(async () => json(body)),
   );
-  await expect(listPublicDevices()).rejects.toThrow("invalid device list");
+  await expect(listPublicDevices()).rejects.toBeInstanceOf(CloudRequestError);
 });
 
-test("resolves a matching immutable target with browser credentials", async () => {
-  const fetchMock = vi.fn(async () =>
-    json({ device_handle: handle, device_id: deviceId, edge_api_origin: edgeApiOrigin }),
-  );
+test("gets routing and authorization together using the browser key and login", async () => {
+  const fetchMock = vi.fn(async () => json(connection));
   vi.stubGlobal("fetch", fetchMock);
-
-  await expect(resolvePublicDeviceTarget(handle)).resolves.toEqual({
-    handle,
-    deviceId,
-    edgeApiOrigin,
+  await expect(requestPublicDeviceConnection(handle, browserPublicKey)).resolves.toEqual({
+    target: { handle, deviceId, edgeApiOrigin },
+    devicePublicKey: browserPublicKey,
+    capability: connection.capability,
   });
   expect(fetchMock).toHaveBeenCalledWith(
-    `https://pontia.dev/api/dashboard/devices/${handle}/target`,
-    { credentials: "include", signal: undefined },
+    `https://pontia.dev/api/dashboard/devices/${handle}/connect`,
+    {
+      method: "POST",
+      credentials: "include",
+      signal: undefined,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ browser_public_key: browserPublicKey }),
+    },
   );
 });
 
-test("custom port survives target discovery", async () => {
-  const origin = `${edgeApiOrigin}:8443`;
+test("custom port survives connection discovery", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      json({ device_handle: handle, device_id: deviceId, edge_api_origin: origin }),
-    ),
+    vi.fn(async () => json({ ...connection, edge_api_origin: `${edgeApiOrigin}:8443` })),
   );
-  await expect(resolvePublicDeviceTarget(handle)).resolves.toEqual({
-    handle,
-    deviceId,
-    edgeApiOrigin: origin,
-  });
+  const result = await requestPublicDeviceConnection(handle, browserPublicKey);
+  expect(result.target.edgeApiOrigin).toBe(`${edgeApiOrigin}:8443`);
 });
 
-describe("target validation", () => {
-  test.each([
-    [
-      "a different handle",
-      { device_handle: "other-device", device_id: deviceId, edge_api_origin: edgeApiOrigin },
-    ],
-    [
-      "a non-canonical UUID",
-      { device_handle: handle, device_id: deviceId.toUpperCase(), edge_api_origin: edgeApiOrigin },
-    ],
-    [
-      "an external origin",
-      { device_handle: handle, device_id: deviceId, edge_api_origin: "https://attacker.example" },
-    ],
-    [
-      "a nested edge hostname",
-      {
-        device_handle: handle,
-        device_id: deviceId,
-        edge_api_origin: "https://one.two.edge.pontia.dev",
-      },
-    ],
-    [
-      "a path",
-      { device_handle: handle, device_id: deviceId, edge_api_origin: `${edgeApiOrigin}/api` },
-    ],
-    [
-      "credentials",
-      {
-        device_handle: handle,
-        device_id: deviceId,
-        edge_api_origin: "https://user@brave-silver-atlas.edge.pontia.dev",
-      },
-    ],
-    [
-      "unknown fields",
-      {
-        device_handle: handle,
-        device_id: deviceId,
-        edge_api_origin: edgeApiOrigin,
-        redirect: "https://attacker.example",
-      },
-    ],
-  ])("rejects %s", async (_name, body) => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => json(body)),
-    );
-    await expect(resolvePublicDeviceTarget(handle)).rejects.toThrow("invalid device target");
+test.each([
+  { device_handle: "other-device" },
+  { device_id: deviceId.toUpperCase() },
+  { edge_api_origin: "https://attacker.example" },
+  { edge_api_origin: "https://one.two.edge.pontia.dev" },
+  { edge_api_origin: `${edgeApiOrigin}/api` },
+  { edge_api_origin: "https://user@brave-silver-atlas.edge.pontia.dev" },
+  { redirect: "https://attacker.example" },
+  { device_public_key: "invalid" },
+  { capability: "invalid" },
+  { device_key_version: 0 },
+  { device_key_version: 1.5 },
+])("rejects invalid connection metadata %j", async (override) => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => json({ ...connection, ...override })),
+  );
+  await expect(requestPublicDeviceConnection(handle, browserPublicKey)).rejects.toBeInstanceOf(
+    CloudRequestError,
+  );
+});
+
+test("preserves Cloud authentication failure status", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => json({ error: "unauthorized" }, 401)),
+  );
+  await expect(requestPublicDeviceConnection(handle, browserPublicKey)).rejects.toMatchObject({
+    status: 401,
   });
 });
 
@@ -146,9 +135,7 @@ test("constructs a Cloud sign-in URL that returns only to the public Dashboard",
   expect(dashboardSignInUrl(`/${handle}/workspaces?view=recent#active`)).toBe(
     `https://pontia.dev/login?return_to=${encodeURIComponent(`https://app.pontia.dev/${handle}/workspaces?view=recent#active`)}`,
   );
-  expect(() => dashboardSignInUrl("//attacker.example/path")).toThrow(
-    "Invalid dashboard return path",
-  );
+  expect(() => dashboardSignInUrl("//attacker.example/path")).toThrow();
 });
 
 test("constructs a direct public Dashboard device path", () => {
@@ -158,13 +145,11 @@ test("constructs a direct public Dashboard device path", () => {
 test("changing target aborts requests bound to the previous target", () => {
   setPublicApiTarget({ handle, deviceId, edgeApiOrigin });
   const oldSignal = publicApiSignal();
-
   setPublicApiTarget({
     handle: "travel-laptop",
     deviceId: "12345678-9abc-def0-1234-56789abcdef0",
     edgeApiOrigin: "https://calm-blue-arthur.edge.pontia.dev",
   });
-
   expect(oldSignal.aborted).toBe(true);
   expect(publicApiSignal().aborted).toBe(false);
 });

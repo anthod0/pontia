@@ -3,7 +3,7 @@ import {
   authenticateDashboardRequest,
   dashboardPreflight,
 } from "$lib/server/remote-access/dashboard-http";
-import { issueE2eCapability } from "$lib/server/remote-access/e2e-capability";
+import { connectDashboardDevice } from "$lib/server/remote-access/device-connect";
 import { remoteDatabase } from "$lib/server/remote-access/http";
 import type { RequestHandler } from "./$types";
 
@@ -30,14 +30,14 @@ export const POST: RequestHandler = async (event) => {
   const signingKey = event.platform?.env.E2E_CAPABILITY_SIGNING_KEY;
   if (!signingKey)
     return json({ error: "unavailable" }, { status: 503, headers: authentication.headers });
-  const capability = await issueE2eCapability(
+  const connection = await connectDashboardDevice(
     remoteDatabase(event),
     authentication.userId,
     event.params.device_handle,
     (body as { browser_public_key: string }).browser_public_key,
     signingKey,
   );
-  return capability
-    ? json(capability, { headers: authentication.headers })
+  return connection
+    ? json(connection, { headers: authentication.headers })
     : json({ error: "device_not_found" }, { status: 404, headers: authentication.headers });
 };
