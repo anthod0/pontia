@@ -16,7 +16,7 @@ use std::{
 use clap::{Parser, Subcommand};
 use dialoguer::Confirm;
 use pontia::{
-    codex::{self, CodexDaemonProbe, CodexSetup},
+    codex::CodexSetup,
     init::{self, InitPlatform},
     lifecycle::{EnabledState, Lifecycle, LifecycleStatus, RunState, ServiceManager, UpOptions},
     manager::ProcessCommandRunner,
@@ -291,32 +291,13 @@ fn start_with_lifecycle<M: ServiceManager>(
 
 struct RealInitPlatform;
 
-struct RealCodexDaemonProbe;
-
-impl CodexDaemonProbe for RealCodexDaemonProbe {
-    fn probe(&self, codex_home: &Path) -> Result<(), String> {
-        let codex_home = codex_home.to_path_buf();
-        std::thread::spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map_err(|error| format!("failed to create Codex probe runtime: {error}"))?;
-            runtime
-                .block_on(pontia_client_codex::runtime::probe_daemon(&codex_home))
-                .map_err(|error| error.to_string())
-        })
-        .join()
-        .map_err(|_| "Codex protocol probe panicked".to_string())?
-    }
-}
-
 impl InitPlatform for RealInitPlatform {
     fn inspect_codex(
         &self,
-        vars: &HashMap<String, String>,
-        user_home: &Path,
+        _vars: &HashMap<String, String>,
+        _user_home: &Path,
     ) -> Result<CodexSetup, String> {
-        codex::inspect(vars, user_home, &ProcessCommandRunner)
+        Err("Codex integration is currently unavailable".into())
     }
 
     fn preflight(&self, install_pi: bool) -> Result<(), String> {
@@ -353,9 +334,8 @@ impl InitPlatform for RealInitPlatform {
         }
     }
 
-    fn initialize_codex(&self, setup: &CodexSetup) -> Result<(), String> {
-        let runner = ProcessCommandRunner;
-        codex::initialize(setup, &runner, &FileDefinitionStore, &RealCodexDaemonProbe)
+    fn initialize_codex(&self, _setup: &CodexSetup) -> Result<(), String> {
+        Err("Codex integration is currently unavailable".into())
     }
 
     fn start_service(

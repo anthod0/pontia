@@ -63,6 +63,7 @@ async fn request(
 }
 
 #[tokio::test]
+#[ignore = "Codex integration is frozen pending session-runtimes migration"]
 async fn model_routes_enforce_authentication_capabilities_and_runtime_identity() {
     let (_root, state, session) = fixture().await;
     let change = json!({"model":"model-b","runtime_instance_id":"old"});

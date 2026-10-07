@@ -9,11 +9,13 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     clients.register(pontia_client_pi::registration(
         config.runtime.tui_command_for_client_config_key("pi"),
     ));
-    clients.register(pontia_client_codex::registration());
     if clients.spec(&config.default_client_type).is_none() {
         return Err(pontia_core::Error::InvalidConfig {
             key: "PONTIA_DEFAULT_CLIENT_TYPE",
-            message: "default client is not registered".into(),
+            message: format!(
+                "client {} is currently unavailable (not registered)",
+                config.default_client_type
+            ),
         });
     }
     let db = connect_sqlite(&config.database_url).await?;
@@ -29,9 +31,6 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
         .workspace_browser(config.workspace_browser.clone())
         .file_picker(config.file_picker.clone())
         .build();
-    pontia_client_codex::CodexService::new(state.event_ingest_service())
-        .reset_connections()
-        .await?;
     state.inbox_commands().recover_deliveries().await?;
     Ok(state)
 }

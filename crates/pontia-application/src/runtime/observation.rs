@@ -84,6 +84,9 @@ impl RuntimeObservationService {
             .await?;
 
         for session in sessions {
+            if self.clients.spec(&session.client_type).is_none() {
+                continue;
+            }
             let timeout_seconds = STARTUP_TIMEOUT.as_secs();
             let mut payload = json!({
                 "reason": "startup_timeout",
@@ -127,6 +130,9 @@ impl RuntimeObservationService {
             .active_tmux_process_bindings()
             .await?;
         for binding in bindings {
+            if self.clients.spec(&binding.client_type).is_none() {
+                continue;
+            }
             if let Err(error) = self.observe_tmux_process(binding).await {
                 tracing::warn!(%error, "tmux agent process observation failed");
             }
@@ -307,7 +313,7 @@ mod tests {
                 session_id.to_string(),
                 None,
                 PontiaEventSource::ExternalApi,
-                "pi".to_string(),
+                "generic".to_string(),
                 PontiaEventType::SessionCreated,
                 json!({}),
             ))
@@ -318,7 +324,7 @@ mod tests {
                 session_id.to_string(),
                 None,
                 PontiaEventSource::ExternalApi,
-                "pi".to_string(),
+                "generic".to_string(),
                 PontiaEventType::SessionStarting,
                 json!({}),
             ))
@@ -338,6 +344,7 @@ mod tests {
         .expect("age startup event");
 
         crate::AppState::builder(pool.clone(), _dir.path().into())
+            .clients(crate::clients::testing::clients())
             .build()
             .runtime_observer()
             .sweep_startup_timeouts()
@@ -371,7 +378,7 @@ mod tests {
                 "sess_ready".to_string(),
                 None,
                 EventSource::AgentClient,
-                "pi".to_string(),
+                "generic".to_string(),
                 EventType::SessionReady,
                 json!({}),
             ))
@@ -379,6 +386,7 @@ mod tests {
             .expect("ready session");
 
         crate::AppState::builder(pool.clone(), _dir.path().into())
+            .clients(crate::clients::testing::clients())
             .build()
             .runtime_observer()
             .sweep_startup_timeouts()

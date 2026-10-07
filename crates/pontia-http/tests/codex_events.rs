@@ -50,6 +50,7 @@ async fn report(state: &AppState, session: &str, kind: &str, data: Value) -> (St
 }
 
 #[tokio::test]
+#[ignore = "Codex integration is frozen pending session-runtimes migration"]
 async fn native_turns_are_deduplicated_and_old_instances_cannot_report() {
     let (_root, state, session) = app().await;
     let data = json!({"runtime_instance_id":"instance","native_turn_id":"native-one","input":{"summary":"manual input"}});
@@ -81,6 +82,7 @@ async fn native_turns_are_deduplicated_and_old_instances_cannot_report() {
 }
 
 #[tokio::test]
+#[ignore = "Codex integration is frozen pending session-runtimes migration"]
 async fn archive_does_not_invent_a_turn_terminal_and_late_native_terminal_converges() {
     let (_root, state, session) = app().await;
     assert_eq!(

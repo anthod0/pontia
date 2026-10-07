@@ -2212,7 +2212,6 @@ dependencies = [
  "hkdf",
  "hmac",
  "hostname",
- "pontia-client-codex",
  "pontia-config",
  "pontia-e2e",
  "pontia-update",
@@ -2249,26 +2248,6 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "pontia-client-codex"
-version = "0.4.0"
-dependencies = [
- "futures-util",
- "libc",
- "pontia-application",
- "pontia-core",
- "pontia-runtime",
- "pontia-storage-sqlite",
- "serde",
- "serde_json",
- "sqlx",
- "tempfile",
- "time",
- "tokio",
- "tokio-tungstenite 0.30.0",
- "tracing",
 ]
 
 [[package]]
@@ -2377,7 +2356,6 @@ dependencies = [
  "flate2",
  "http-body-util",
  "pontia-application",
- "pontia-client-codex",
  "pontia-client-pi",
  "pontia-config",
  "pontia-core",
@@ -2496,7 +2474,6 @@ dependencies = [
  "base64 0.22.1",
  "ed25519-dalek 2.2.0",
  "pontia-application",
- "pontia-client-codex",
  "pontia-client-pi",
  "pontia-config",
  "pontia-core",

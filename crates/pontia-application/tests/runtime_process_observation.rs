@@ -47,7 +47,7 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
     sqlx::query(
-        "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_observed', 'pi', 'idle')",
+        "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_observed', 'generic', 'idle')",
     )
     .execute(&db)
     .await
@@ -75,6 +75,11 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
         .status();
 
     AppState::builder(db.clone(), temp.path().into())
+        .clients({
+            let mut clients = pontia_application::clients::ClientRegistry::default();
+            clients.register(pontia_application::client_contract::test_registration());
+            clients
+        })
         .build()
         .runtime_observer()
         .sweep_active_tmux_sessions()
@@ -108,7 +113,7 @@ async fn active_tmux_session_without_a_fingerprint_exits_immediately() {
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
     sqlx::query(
-        "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_without_fingerprint', 'pi', 'idle')",
+        "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_without_fingerprint', 'generic', 'idle')",
     )
     .execute(&db)
     .await
@@ -128,6 +133,11 @@ async fn active_tmux_session_without_a_fingerprint_exits_immediately() {
     .expect("insert binding");
 
     AppState::builder(db.clone(), temp.path().into())
+        .clients({
+            let mut clients = pontia_application::clients::ClientRegistry::default();
+            clients.register(pontia_application::client_contract::test_registration());
+            clients
+        })
         .build()
         .runtime_observer()
         .sweep_active_tmux_sessions()

@@ -91,6 +91,9 @@ impl ExternalQueryService {
         session_id: &str,
         client_type: &str,
     ) -> Result<SessionCapabilities> {
+        if self.clients.spec(client_type).is_none() {
+            return Ok(SessionCapabilities::default());
+        }
         let row = SqliteSessionRepository::new(self.pool.clone())
             .get_runtime_binding_capabilities(session_id)
             .await?;

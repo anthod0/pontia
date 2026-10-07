@@ -11,11 +11,12 @@ members = [
     "crates/pontia-runtime",
     "crates/pontia-application",
     "crates/pontia-client-pi",
-    "crates/pontia-client-codex",
     "crates/pontia-http",
     "crates/pontia",
     "crates/pontia-workflow",
 ]
+# Codex integration is frozen until its session-runtimes migration.
+exclude = ["crates/pontia-client-codex"]
 default-members = ["crates/pontiad"]
 resolver = "2"
 
@@ -26,7 +27,6 @@ license = "Apache-2.0"
 repository = "https://github.com/anthod0/pontia"
 
 [workspace.dependencies]
-pontia-client-codex = { path = "crates/pontia-client-codex" }
 pontia-client-pi = { path = "crates/pontia-client-pi" }
 pontia-application = { path = "crates/pontia-application", default-features = false }
 pontia-config = { path = "crates/pontia-config", default-features = false }

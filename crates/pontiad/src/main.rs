@@ -21,13 +21,6 @@ async fn main() -> Result<()> {
     let pi_listener = pontia_client_pi::ipc::PiIpcListener::bind(&config.pontia_home).await?;
     let pi_task =
         tokio::spawn(pi_listener.run(app_state.clone(), app_state.shutdown().subscribe()));
-    let codex_task = tokio::spawn(
-        pontia_client_codex::CodexObserver::new(
-            app_state.event_ingest_service(),
-            app_state.pontia_home().to_path_buf(),
-        )
-        .run(app_state.shutdown().subscribe()),
-    );
     let inbox = app_state.inbox_commands();
     let client_control = app_state.client_control();
     let runtime_observer = app_state.runtime_observer();
@@ -48,7 +41,6 @@ async fn main() -> Result<()> {
 
     let shutdown = state.app().shutdown();
     let cleanup_shutdown = shutdown.clone();
-    let codex_root = state.app().pontia_home().to_path_buf();
     let http_entrypoints = http::HttpEntrypoints::new(state);
     let remote = config
         .remote
@@ -122,10 +114,7 @@ async fn main() -> Result<()> {
         let _ = task.await;
     }
 
-    let codex_result = codex_task.await;
-    pontia_client_codex::runtime::CodexRuntime::shutdown(&codex_root).await;
     pi_result.map_err(|error| pontia_core::Error::Domain(error.to_string()))??;
-    codex_result.map_err(|error| pontia_core::Error::Domain(error.to_string()))?;
 
     server_result?;
 

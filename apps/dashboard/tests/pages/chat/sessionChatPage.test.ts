@@ -22,7 +22,8 @@ const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).defa
 const SessionChatPage = (await import("../../../src/pages/SessionChatPage.svelte")).default;
 const TopBarHost = (await import("../../components/layout/TopBarHost.svelte")).default;
 
-test("continues following the original Codex TUI after a second thread switch", async () => {
+// Codex integration is frozen pending session-runtimes migration.
+test.skip("continues following the original Codex TUI after a second thread switch", async () => {
   const selected = session({
     session_id: "session-b",
     client_type: "codex",

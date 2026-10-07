@@ -42,10 +42,11 @@ impl ClientExecutionService {
 
     pub(crate) fn for_client(&self, client: &str) -> Result<ClientAdapter> {
         Ok(ClientAdapter {
-            spec: self
-                .registry
-                .spec(client)
-                .ok_or_else(|| Error::Domain(format!("unsupported client_type: {client}")))?,
+            spec: self.registry.spec(client).ok_or_else(|| {
+                Error::Domain(format!(
+                    "client {client} is currently unavailable (not registered)"
+                ))
+            })?,
             pool: self.pool.clone(),
             registry: self.registry.clone(),
             events: self.events.clone(),

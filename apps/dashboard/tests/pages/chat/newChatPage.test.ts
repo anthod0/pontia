@@ -71,7 +71,9 @@ test.each([true, false])(
 
     if (hasWorkspace) {
       expect(await screen.findByPlaceholderText("What should the agent do?")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Continue to New Chat" })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Continue to New Chat" }),
+      ).not.toBeInTheDocument();
     } else {
       expect(await screen.findByRole("button", { name: "Continue to New Chat" })).toBeDisabled();
     }
@@ -180,15 +182,12 @@ test("remembers the selected new chat workspace after starting a chat", async ()
   expect(window.localStorage.getItem("pontia.chat.lastWorkspaceId")).toBe("workspace-2");
 });
 
-test("offers Pi and Codex and requires a task before submission", async () => {
+test("offers only Pi and requires a task before submission", async () => {
   render(NewChatPage);
 
   expect(await screen.findByRole("heading", { name: "Start a session" })).toBeInTheDocument();
   const clients = screen.getByRole("group", { name: "Agent client" });
-  expect(within(clients).getByRole("button", { name: "codex" })).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
+  expect(within(clients).queryByRole("button", { name: "codex" })).not.toBeInTheDocument();
   expect(within(clients).getByRole("button", { name: "pi" })).toHaveAttribute(
     "aria-pressed",
     "true",

@@ -114,7 +114,6 @@
   const SCROLL_DOWN_BUTTON_ANIMATION_MS = 200
   const INITIAL_SCROLL_SETTLE_PASSES = 2
 
-  let codexPoll: ReturnType<typeof setInterval> | null = null
   let codexRefreshing = false
   async function refreshCodex(): Promise<void> {
     if (codexRefreshing || selectedSession?.client_type !== 'codex') return
@@ -148,7 +147,6 @@
   }
 
   onMount(() => {
-    codexPoll = setInterval(() => void refreshCodex(), 2000)
     selectedSessionId = requestedSessionIdFromLocation()
     selectSession(selectedSessionId || null)
     autofocusComposer = claimChatEntryAutofocus(`/chat/${selectedSessionId}`)
@@ -161,7 +159,6 @@
     destroyed = true
     selectSession(null)
     resetTimelineState()
-    if (codexPoll) clearInterval(codexPoll)
     unsubscribeDashboardEvents?.()
     closeLiveOutputStream?.()
     bottomIntersectionObserver?.disconnect()
@@ -910,7 +907,7 @@
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
-  {#if selectedSession?.codex}
+  {#if selectedSession?.codex && selectedSession.capabilities.accept_task}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
       <span>Control: {selectedSession.codex.connection.replaceAll('_', ' ')}</span>
       <span>TUI: {selectedSession.codex.tui?.connected ? 'connected' : 'disconnected'}</span>
