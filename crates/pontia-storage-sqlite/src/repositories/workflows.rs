@@ -44,7 +44,7 @@ pub struct SqliteWorkflowRepository {
 pub struct RequestWorkflowPatchRecord {
     pub patch_id: String,
     pub session_id: String,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
     pub request_document_ref: String,
     pub request_size_bytes: i64,
     pub replanner_creation_token: String,
@@ -67,7 +67,7 @@ pub struct ApplyWorkflowNodeRecord {
 #[derive(Debug, Clone)]
 pub struct ApplyWorkflowPatchRecord {
     pub session_id: String,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
     pub decision_document_ref: String,
     pub decision_size_bytes: i64,
     pub decision_summary: String,
@@ -80,7 +80,7 @@ pub struct ApplyWorkflowPatchRecord {
 #[derive(Debug, Clone)]
 pub struct BlockWorkflowPatchRecord {
     pub session_id: String,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
     pub reason_document_ref: String,
     pub blocked_draft_ref: Option<String>,
     pub event_id: String,

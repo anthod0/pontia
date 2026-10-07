@@ -132,7 +132,7 @@ pub(super) async fn seed_requester(
         .unwrap();
     sqlx::query("INSERT INTO turns (turn_id, session_id, state, topology_status) VALUES ('turn_requester', 'sess_requester', 'running', 'root')")
         .execute(pool).await.unwrap();
-    sqlx::query("INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, binding_state) VALUES ('sess_requester', 'pi_tui', 'runtime_requester', 'confirmed')")
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('sess_requester', 'runtime_requester', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
         .execute(pool).await.unwrap();
     insert_fact(
         pool,
@@ -190,8 +190,9 @@ pub(super) async fn seed_replanner_session(
         .bind(session_id).bind(turn_id).bind(metadata.to_string()).execute(pool).await.unwrap();
     sqlx::query("INSERT INTO turns (turn_id, session_id, state, topology_status) VALUES (?, ?, 'running', 'root')")
         .bind(turn_id).bind(session_id).execute(pool).await.unwrap();
-    sqlx::query("INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, binding_state) VALUES (?, 'pi_tui', ?, 'confirmed')")
-        .bind(session_id).bind(runtime_id).execute(pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES (?, ?, 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+.bind(session_id)
+.bind(runtime_id).execute(pool).await.unwrap();
     insert_fact(
         pool,
         &format!("evt_{turn_id}_started"),
@@ -221,7 +222,7 @@ pub(super) async fn insert_fact(
     .bind(turn_id)
     .bind(event_type)
     .bind(if event_type == "turn.started" {
-        json!({ "runtime_instance_id": runtime_id }).to_string()
+        json!({ "runtime_id": runtime_id }).to_string()
     } else {
         "{}".into()
     })

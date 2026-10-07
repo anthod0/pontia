@@ -140,7 +140,7 @@ impl SqliteWorkflowRepository {
     pub async fn record_node_submission(
         &self,
         node_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
         event_id: &str,
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
@@ -156,13 +156,13 @@ impl SqliteWorkflowRepository {
         let result = sqlx::query(
             r#"UPDATE workflow_nodes
                SET submitted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-                   submitted_runtime_instance_id = ?
+                   submitted_runtime_id = ?
                WHERE node_id = ?
                  AND submitted_at IS NULL
                  AND NOT EXISTS (
-                     SELECT 1 FROM workflow_recoveries r WHERE r.node_id=workflow_nodes.node_id AND r.runtime_instance_id IS NOT NULL
-                     AND r.rowid=(SELECT MAX(rowid) FROM workflow_recoveries WHERE node_id=r.node_id AND runtime_instance_id IS NOT NULL)
-                     AND r.runtime_instance_id<>?
+                     SELECT 1 FROM workflow_recoveries r WHERE r.node_id=workflow_nodes.node_id AND r.runtime_id IS NOT NULL
+                     AND r.rowid=(SELECT MAX(rowid) FROM workflow_recoveries WHERE node_id=r.node_id AND runtime_id IS NOT NULL)
+                     AND r.runtime_id<>?
                  )
                  AND NOT EXISTS (
                      SELECT 1 FROM sessions
@@ -178,9 +178,9 @@ impl SqliteWorkflowRepository {
                             OR workflow_nodes.retired_revision > workflows.current_revision)
                  )"#,
         )
-        .bind(runtime_instance_id)
+        .bind(runtime_id)
         .bind(node_id)
-        .bind(runtime_instance_id)
+        .bind(runtime_id)
         .execute(&mut *tx)
         .await?;
         if result.rows_affected() != 1 {
@@ -210,7 +210,7 @@ impl SqliteWorkflowRepository {
                 "node_id": node_id,
                 "session_id": session_id,
                 "turn_id": turn_id,
-                "runtime_instance_id": runtime_instance_id,
+                "runtime_id": runtime_id,
             })
             .to_string(),
         )
@@ -220,16 +220,12 @@ impl SqliteWorkflowRepository {
         Ok(())
     }
 
-    pub async fn claim_node_exit_request(
-        &self,
-        node_id: &str,
-        runtime_instance_id: &str,
-    ) -> Result<bool> {
+    pub async fn claim_node_exit_request(&self, node_id: &str, runtime_id: &str) -> Result<bool> {
         let result = sqlx::query(
             r#"UPDATE workflow_nodes
                SET exit_request_started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                WHERE node_id = ?
-                 AND submitted_runtime_instance_id = ?
+                 AND submitted_runtime_id = ?
                  AND exit_request_started_at IS NULL
                  AND EXISTS (
                      SELECT 1 FROM workflows
@@ -241,7 +237,7 @@ impl SqliteWorkflowRepository {
                  )"#,
         )
         .bind(node_id)
-        .bind(runtime_instance_id)
+        .bind(runtime_id)
         .execute(&self.pool)
         .await?;
         Ok(result.rows_affected() == 1)

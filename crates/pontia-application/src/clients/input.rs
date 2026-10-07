@@ -88,7 +88,7 @@ impl ClientAdapter {
         }
         Ok(InputReceipt {
             native_turn_id: None,
-            runtime_instance_id: target.runtime_instance_id.clone(),
+            runtime_id: target.runtime_id.clone(),
         })
     }
 

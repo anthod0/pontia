@@ -46,7 +46,7 @@ pub struct TurnProjection {
 pub struct ProjectionState {
     sessions: HashMap<String, SessionProjection>,
     turns: HashMap<String, TurnProjection>,
-    runtime_bindings: HashMap<String, String>,
+    session_runtimes: HashMap<String, String>,
 }
 
 impl ProjectionState {
@@ -60,7 +60,7 @@ impl ProjectionState {
                 .map(|s| (s.session_id.clone(), s))
                 .collect(),
             turns: turns.into_iter().map(|t| (t.turn_id.clone(), t)).collect(),
-            runtime_bindings: HashMap::new(),
+            session_runtimes: HashMap::new(),
         }
     }
 
@@ -81,7 +81,7 @@ impl ProjectionState {
     }
 
     pub fn record_runtime_binding(&mut self, session_id: &str, binding: &str) {
-        self.runtime_bindings
+        self.session_runtimes
             .insert(session_id.to_string(), binding.to_string());
     }
 

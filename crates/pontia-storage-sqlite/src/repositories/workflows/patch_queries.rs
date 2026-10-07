@@ -8,8 +8,8 @@ impl SqliteWorkflowRepository {
     pub async fn list_patches(&self, workflow_id: &str) -> Result<Vec<WorkflowPatchRow>> {
         Ok(sqlx::query_as::<_, WorkflowPatchRow>(
             r#"SELECT patch_id, workflow_id, requesting_node_id, requesting_session_id,
-                      requesting_turn_id, requesting_runtime_instance_id, replanner_creation_token,
-                      replanner_session_id, replanner_turn_id, replanner_runtime_instance_id,
+                      requesting_turn_id, requesting_runtime_id, replanner_creation_token,
+                      replanner_session_id, replanner_turn_id, replanner_runtime_id,
                       base_revision, result_revision, state, request_document_ref,
                       request_size_bytes, decision_document_ref, reason_document_ref,
                       blocked_draft_ref, interruption_attempted_at, interruption_requested_at,
@@ -27,8 +27,8 @@ impl SqliteWorkflowRepository {
     pub async fn get_patch(&self, patch_id: &str) -> Result<Option<WorkflowPatchRow>> {
         Ok(sqlx::query_as::<_, WorkflowPatchRow>(
             r#"SELECT patch_id, workflow_id, requesting_node_id, requesting_session_id,
-                      requesting_turn_id, requesting_runtime_instance_id, replanner_creation_token,
-                      replanner_session_id, replanner_turn_id, replanner_runtime_instance_id,
+                      requesting_turn_id, requesting_runtime_id, replanner_creation_token,
+                      replanner_session_id, replanner_turn_id, replanner_runtime_id,
                       base_revision, result_revision, state, request_document_ref,
                       request_size_bytes, decision_document_ref, reason_document_ref,
                       blocked_draft_ref, interruption_attempted_at, interruption_requested_at,
@@ -44,23 +44,23 @@ impl SqliteWorkflowRepository {
     pub async fn get_active_patch_for_replanner(
         &self,
         session_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> Result<Option<WorkflowPatchRow>> {
         let patch_id: Option<String> = sqlx::query_scalar(
             r#"SELECT p.patch_id FROM workflow_patches AS p
                JOIN workflows AS w ON w.active_patch_id = p.patch_id
                JOIN sessions AS s ON s.session_id = p.replanner_session_id
                JOIN turns AS t ON t.turn_id = s.current_turn_id AND t.session_id = s.session_id
-               JOIN runtime_bindings AS r ON r.session_id = s.session_id
-               WHERE p.replanner_session_id = ? AND p.replanner_runtime_instance_id = ?
+               JOIN session_runtimes AS r ON r.session_id = s.session_id
+               WHERE p.replanner_session_id = ? AND p.replanner_runtime_id = ?
                  AND p.state = 'planning' AND w.state = 'replanning'
                  AND w.active_replanner_session_id = p.replanner_session_id
-                 AND r.binding_state = 'confirmed' AND r.runtime_instance_id = ?
+                 AND r.state IN ('starting','running') AND r.role = 'tui' AND r.runtime_id = ?
                  AND t.state IN ('queued', 'running')"#,
         )
         .bind(session_id)
-        .bind(runtime_instance_id)
-        .bind(runtime_instance_id)
+        .bind(runtime_id)
+        .bind(runtime_id)
         .fetch_optional(&self.pool)
         .await?;
         match patch_id {
@@ -72,9 +72,9 @@ impl SqliteWorkflowRepository {
     pub async fn get_active_patch(&self, workflow_id: &str) -> Result<Option<WorkflowPatchRow>> {
         Ok(sqlx::query_as::<_, WorkflowPatchRow>(
             r#"SELECT p.patch_id, p.workflow_id, p.requesting_node_id, p.requesting_session_id,
-                      p.requesting_turn_id, p.requesting_runtime_instance_id,
+                      p.requesting_turn_id, p.requesting_runtime_id,
                       p.replanner_creation_token, p.replanner_session_id, p.replanner_turn_id,
-                      p.replanner_runtime_instance_id, p.base_revision, p.result_revision,
+                      p.replanner_runtime_id, p.base_revision, p.result_revision,
                       p.state, p.request_document_ref, p.request_size_bytes,
                       p.decision_document_ref, p.reason_document_ref, p.blocked_draft_ref,
                       p.interruption_attempted_at, p.interruption_requested_at,

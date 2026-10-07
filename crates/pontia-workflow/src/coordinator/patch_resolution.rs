@@ -142,16 +142,16 @@ where
         if patch.replanner_exit_requested_at.is_some() {
             return Ok(());
         }
-        let (Some(session_id), Some(turn_id), Some(runtime_instance_id)) = (
+        let (Some(session_id), Some(turn_id), Some(runtime_id)) = (
             patch.replanner_session_id.as_deref(),
             patch.replanner_turn_id.as_deref(),
-            patch.replanner_runtime_instance_id.as_deref(),
+            patch.replanner_runtime_id.as_deref(),
         ) else {
             return Ok(());
         };
         let Some(event) = self
             .persisted_events
-            .latest_workflow_terminal_event(session_id, Some(runtime_instance_id), Some(turn_id))
+            .latest_workflow_terminal_event(session_id, Some(runtime_id), Some(turn_id))
             .await?
         else {
             return Ok(());
@@ -177,7 +177,7 @@ where
         }
         if let Err(error) = self
             .exits
-            .request_graceful_exit(session_id, runtime_instance_id)
+            .request_graceful_exit(session_id, runtime_id)
             .await
         {
             self.repository

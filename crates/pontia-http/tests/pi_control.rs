@@ -32,8 +32,14 @@ async fn state() -> (AppState, tempfile::TempDir) {
 
 async fn bind(state: &AppState, session: &str, runtime: &str) {
     sqlx::query("INSERT INTO sessions (session_id,client_type,state) VALUES (?,'pi','idle') ON CONFLICT DO NOTHING").bind(session).execute(&state.db()).await.unwrap();
-    sqlx::query("INSERT INTO runtime_bindings (session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities) VALUES (?,'tmux',?,'confirmed','/unused/tmux','%1',?) ON CONFLICT(session_id) DO UPDATE SET runtime_instance_id=excluded.runtime_instance_id")
-        .bind(session).bind(runtime).bind(serde_json::to_string(&pontia_client_pi::CAPABILITIES).unwrap()).execute(&state.db()).await.unwrap();
+    sqlx::query("UPDATE session_runtimes SET runtime_id=? WHERE session_id=?")
+        .bind(runtime)
+        .bind(session)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,tmux_socket_path,tmux_pane_id,created_at) VALUES (?,?,'tui','running','/unused/tmux','%1',strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(runtime_id) DO NOTHING")
+        .bind(runtime).bind(session).execute(&state.db()).await.unwrap();
     sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES (?,?,'pi','/unused',?,'{}') ON CONFLICT DO NOTHING")
         .bind(format!("binding_{session}")).bind(session).bind(format!("native_{session}")).execute(&state.db()).await.unwrap();
 }
@@ -82,8 +88,8 @@ async fn replacement_and_exit_fence_connections_without_synthesizing_facts() {
         tokio::spawn(async move { control.submit("sess_pi", "rt_old", "uncertain", None).await })
     };
     requests.recv().await.unwrap();
-    bind(&state, "sess_pi", "rt_new").await;
-    let (new, _requests) = attach(&state, "sess_pi", "rt_new").await;
+    old.close();
+    let (new, _requests) = attach(&state, "sess_pi", "rt_old").await;
     assert!(matches!(
         blocked.await.unwrap(),
         Err(pontia_core::Error::ControlUnknown(_))
@@ -91,7 +97,7 @@ async fn replacement_and_exit_fence_connections_without_synthesizing_facts() {
     assert!(
         state
             .client_control()
-            .ping("sess_pi", "rt_old")
+            .ping("sess_pi", "unrelated")
             .await
             .is_err()
     );
@@ -104,7 +110,7 @@ async fn replacement_and_exit_fence_connections_without_synthesizing_facts() {
             pontia_core::domain::EventSource::AgentClient,
             "pi".into(),
             pontia_core::domain::EventType::SessionExited,
-            json!({"runtime_instance_id":"rt_new"}),
+            json!({"runtime_id":"rt_old"}),
         ))
         .await
         .unwrap();
@@ -166,7 +172,7 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
             pontia_core::domain::EventSource::AgentClient,
             "pi".into(),
             pontia_core::domain::EventType::SessionReady,
-            json!({"runtime_instance_id":"rt_input"}),
+            json!({"runtime_id":"rt_input"}),
         ))
         .await
         .unwrap();
@@ -277,8 +283,8 @@ async fn pi_models_use_the_bound_client_and_only_reported_facts_update_the_curre
     let (status, body) = task.await.unwrap();
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["data"]["models"], catalog["models"]);
-    assert_eq!(body["data"]["runtime_instance_id"], "rt_models");
-    let change = json!({"model":"two/shared", "runtime_instance_id":"rt_models"});
+    assert_eq!(body["data"]["runtime_id"], "rt_models");
+    let change = json!({"model":"two/shared", "runtime_id":"rt_models"});
     let task = {
         let state = state.clone();
         let change = change.clone();
@@ -308,7 +314,7 @@ async fn pi_models_use_the_bound_client_and_only_reported_facts_update_the_curre
             session_id: "sess_models".into(),
             turn_id: None,
             fact_type: pontia_core::domain::EventType::SessionModelUpdated,
-            data: json!({"model":"two/shared", "runtime_instance_id":"rt_models"}),
+            data: json!({"model":"two/shared", "runtime_id":"rt_models"}),
         })
         .await
         .unwrap();
@@ -322,7 +328,7 @@ async fn pi_models_use_the_bound_client_and_only_reported_facts_update_the_curre
             .as_deref(),
         Some("two/shared")
     );
-    let stale = json!({"model":"one/shared", "runtime_instance_id":"rt_old"});
+    let stale = json!({"model":"one/shared", "runtime_id":"rt_old"});
     assert_eq!(
         control_request(&state, "PATCH", "model", stale).await.0,
         StatusCode::CONFLICT
@@ -557,7 +563,7 @@ async fn shutdown_accepts_its_own_exit_but_not_a_replacement_instances_exit() {
                 pontia_core::domain::EventSource::AgentClient,
                 "pi".into(),
                 pontia_core::domain::EventType::SessionExited,
-                json!({"runtime_instance_id":runtime}),
+                json!({"runtime_id":runtime}),
             ))
             .await
             .unwrap();

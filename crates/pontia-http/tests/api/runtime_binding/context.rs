@@ -9,10 +9,7 @@ async fn pi_session_context_returns_stable_runtime_without_an_active_turn() {
     .execute(&state.db())
     .await
     .expect("insert session");
-    sqlx::query(
-        r#"INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id)
-           VALUES ('sess_context', 'pi_tui', 'rtinst_stable')"#,
-    )
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('sess_context', 'rtinst_stable', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
     .execute(&state.db())
     .await
     .expect("insert runtime binding");
@@ -32,5 +29,5 @@ async fn pi_session_context_returns_stable_runtime_without_an_active_turn() {
     assert_eq!(context["session_state"], "idle");
     assert_eq!(context["client_type"], "pi");
     assert_eq!(context["client_session_key"], "pi_context");
-    assert_eq!(context["runtime_instance_id"], "rtinst_stable");
+    assert_eq!(context["runtime_id"], "rtinst_stable");
 }

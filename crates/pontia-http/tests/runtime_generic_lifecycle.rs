@@ -57,9 +57,9 @@ async fn request(
 
 async fn binding_fields(state: &AppState, session_id: &str) -> Value {
     let row = sqlx::query(
-        r#"SELECT r.runtime_kind, r.runtime_instance_id, r.started_at, r.restart_count,
+        r#"SELECT r.role AS runtime_role, r.runtime_id, r.created_at,
                   s.handle, s.role
-           FROM runtime_bindings r
+           FROM session_runtimes r
            JOIN sessions s ON s.session_id = r.session_id
            WHERE r.session_id = ?"#,
     )
@@ -68,10 +68,9 @@ async fn binding_fields(state: &AppState, session_id: &str) -> Value {
     .await
     .expect("runtime binding");
     serde_json::json!({
-        "backend": row.get::<String, _>("runtime_kind"),
-        "runtime_instance_id": row.get::<Option<String>, _>("runtime_instance_id"),
-        "started_at": row.get::<Option<String>, _>("started_at"),
-        "restart_count": row.get::<i64, _>("restart_count"),
+        "runtime_role": row.get::<String, _>("runtime_role"),
+        "runtime_id": row.get::<Option<String>, _>("runtime_id"),
+        "created_at": row.get::<String, _>("created_at"),
         "handle": row.get::<Option<String>, _>("handle"),
         "role": row.get::<Option<String>, _>("role"),
     })
@@ -102,7 +101,7 @@ async fn submit_turn(state: AppState, session_id: &str) -> String {
 }
 
 #[tokio::test]
-async fn generic_runtime_handle_includes_handle_role_and_short_session_id() {
+async fn generic_runtime_preserves_session_metadata_and_stable_identity() {
     let scope = GenericClientTestScope::new().await;
     let state = test_state("generic_named_runtime").await;
     let workspace = tempfile::tempdir().expect("workspace");
@@ -119,16 +118,10 @@ async fn generic_runtime_handle_includes_handle_role_and_short_session_id() {
     .await;
     let metadata = binding_fields(&state, &session_id).await;
     let runtime_handle = scope.runtime_handle(&state, &session_id).await;
-    let id_body = session_id.rsplit('_').next().unwrap_or(&session_id);
-    let short_id = id_body[id_body.len() - 8..].to_string();
-
-    assert_eq!(metadata["backend"], "in_process");
+    assert_eq!(metadata["runtime_role"], "tui");
     assert_eq!(metadata["handle"], "@reviewer");
     assert_eq!(metadata["role"], "execution reviewer");
-    assert_eq!(
-        runtime_handle,
-        format!("generic:reviewer:execution_reviewer:{short_id}")
-    );
+    assert_eq!(runtime_handle, metadata["runtime_id"].as_str().unwrap());
     assert!(scope.is_runtime_alive(&runtime_handle));
 }
 
@@ -157,9 +150,8 @@ async fn generic_terminate_and_restart_update_runtime_lifecycle() {
         scope.runtime_handle(&state, &session_id).await,
         runtime_handle
     );
-    assert_eq!(second["restart_count"], 1);
-    assert_ne!(first["runtime_instance_id"], second["runtime_instance_id"]);
-    assert_ne!(first["started_at"], second["started_at"]);
+    assert_eq!(first["runtime_id"], second["runtime_id"]);
+    assert_eq!(first["created_at"], second["created_at"]);
     assert!(scope.is_runtime_alive(&runtime_handle));
 
     let (status, body) = request(

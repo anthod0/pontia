@@ -74,7 +74,7 @@ async fn turn_terminal_runtime_comes_from_its_first_confirmed_start_not_terminal
             Some(turn),
             source,
             "turn.started",
-            json!({ "runtime_instance_id": runtime }),
+            json!({ "runtime_id": runtime }),
         )
         .await;
     }
@@ -85,7 +85,7 @@ async fn turn_terminal_runtime_comes_from_its_first_confirmed_start_not_terminal
         Some("turn"),
         "agent_adapter",
         "turn.interrupted",
-        json!({ "runtime_instance_id": "replacement" }),
+        json!({ "runtime_id": "replacement" }),
     )
     .await;
     let terminal = events
@@ -94,7 +94,7 @@ async fn turn_terminal_runtime_comes_from_its_first_confirmed_start_not_terminal
         .unwrap()
         .unwrap();
     assert_eq!(terminal.event_id, "terminal");
-    assert_eq!(terminal.runtime_instance_id.as_deref(), Some("original"));
+    assert_eq!(terminal.runtime_id.as_deref(), Some("original"));
     assert!(
         events
             .latest_workflow_terminal_event("session", Some("replacement"), Some("turn"))
@@ -105,7 +105,7 @@ async fn turn_terminal_runtime_comes_from_its_first_confirmed_start_not_terminal
     let stored = events.list_turn_events("session", "turn").await.unwrap();
     assert_eq!(
         serde_json::from_str::<Value>(&stored.last().unwrap().payload).unwrap(),
-        json!({ "runtime_instance_id": "replacement" }),
+        json!({ "runtime_id": "replacement" }),
         "correlation must not rewrite persisted Agent facts"
     );
 }
@@ -139,7 +139,7 @@ async fn unstarted_turn_and_later_start_do_not_supply_fenced_terminal_evidence()
         Some("turn"),
         "agent_adapter",
         "turn.started",
-        json!({ "runtime_instance_id": "runtime" }),
+        json!({ "runtime_id": "runtime" }),
     )
     .await;
     assert!(
@@ -154,7 +154,7 @@ async fn unstarted_turn_and_later_start_do_not_supply_fenced_terminal_evidence()
         .await
         .unwrap()
         .unwrap();
-    assert!(terminal.runtime_instance_id.is_none());
+    assert!(terminal.runtime_id.is_none());
 }
 
 #[tokio::test]
@@ -169,7 +169,7 @@ async fn runtime_and_turn_fences_are_applied_before_selecting_terminal_evidence(
         None,
         "runtime_manager",
         "session.exited",
-        json!({ "runtime_instance_id": "old_runtime" }),
+        json!({ "runtime_id": "old_runtime" }),
     )
     .await;
     fact(
@@ -179,7 +179,7 @@ async fn runtime_and_turn_fences_are_applied_before_selecting_terminal_evidence(
         Some("turn"),
         "agent_adapter",
         "turn.started",
-        json!({ "runtime_instance_id": "runtime" }),
+        json!({ "runtime_id": "runtime" }),
     )
     .await;
     fact(
@@ -199,7 +199,7 @@ async fn runtime_and_turn_fences_are_applied_before_selecting_terminal_evidence(
         Some("other_turn"),
         "agent_adapter",
         "turn.started",
-        json!({ "runtime_instance_id": "runtime" }),
+        json!({ "runtime_id": "runtime" }),
     )
     .await;
     fact(
@@ -229,5 +229,98 @@ async fn runtime_and_turn_fences_are_applied_before_selecting_terminal_evidence(
     assert_eq!(
         exited.event_id, "old_exit",
         "Session exit retains its own Runtime fence"
+    );
+}
+
+#[tokio::test]
+async fn reused_runtime_does_not_correlate_historical_exit_or_previous_turn_to_new_start() {
+    let root = tempfile::tempdir().unwrap();
+    let pool = test_pool(root.path()).await;
+    let events = SqliteEventRepository::new(pool.clone());
+    fact(
+        &pool,
+        "start",
+        "session",
+        Some("old-turn"),
+        "agent_client",
+        "turn.started",
+        json!({"runtime_id":"stable"}),
+    )
+    .await;
+    fact(
+        &pool,
+        "exit",
+        "session",
+        None,
+        "agent_client",
+        "session.exited",
+        json!({"runtime_id":"stable"}),
+    )
+    .await;
+    assert_eq!(
+        events
+            .latest_workflow_terminal_event("session", Some("stable"), None)
+            .await
+            .unwrap()
+            .unwrap()
+            .event_id,
+        "exit"
+    );
+    fact(
+        &pool,
+        "resume",
+        "session",
+        None,
+        "external_api",
+        "session.resuming",
+        json!({"runtime_id":"stable"}),
+    )
+    .await;
+    // A terminal for a historical Turn may still be recorded for its history.
+    fact(
+        &pool,
+        "late-terminal",
+        "session",
+        Some("old-turn"),
+        "agent_client",
+        "turn.failed",
+        json!({}),
+    )
+    .await;
+    assert!(
+        events
+            .latest_workflow_terminal_event("session", Some("stable"), None)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    fact(
+        &pool,
+        "new-start",
+        "session",
+        Some("new-turn"),
+        "agent_client",
+        "turn.started",
+        json!({"runtime_id":"stable"}),
+    )
+    .await;
+    fact(
+        &pool,
+        "new-terminal",
+        "session",
+        Some("new-turn"),
+        "agent_client",
+        "turn.completed",
+        json!({}),
+    )
+    .await;
+    assert_eq!(
+        events
+            .latest_workflow_terminal_event("session", Some("stable"), None)
+            .await
+            .unwrap()
+            .unwrap()
+            .event_id,
+        "new-terminal"
     );
 }

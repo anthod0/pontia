@@ -169,6 +169,22 @@ impl EventCommitter {
                 },
             });
         }
+        if let Some(fingerprint) = event.payload["process_fingerprint"].as_str() {
+            let current: Option<String> = sqlx::query_scalar("SELECT process_fingerprint FROM session_runtimes WHERE runtime_id = ? AND session_id = ?")
+                .bind(event.payload["runtime_id"].as_str()).bind(&event.session_id).fetch_optional(&mut *tx).await?.flatten();
+            if current.as_deref() != Some(fingerprint) {
+                return Err(Error::StateConflict(
+                    "Process observation has been replaced".into(),
+                ));
+            }
+        }
+        if let Some(startup_event_id) = event.payload["startup_event_id"].as_str() {
+            let latest: Option<String> = sqlx::query_scalar("SELECT event_id FROM events WHERE session_id=? AND event_type IN ('session.starting','session.resuming') ORDER BY rowid DESC LIMIT 1")
+                .bind(&event.session_id).fetch_optional(&mut *tx).await?;
+            if latest.as_deref() != Some(startup_event_id) {
+                return Ok(CommitOutcome::Skipped);
+            }
+        }
         validate_turn_identity_in_tx(&mut tx, &event, enforce_runtime_fence).await?;
         let sessions =
             SqliteSessionRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
@@ -182,6 +198,28 @@ impl EventCommitter {
                 .is_some_and(|session| session.state == expected_state)
         {
             return Ok(CommitOutcome::Skipped);
+        }
+        if event.client_type == "pi"
+            && event.event_type == EventType::SessionReady
+            && sessions
+                .first()
+                .is_some_and(|session| session.state.is_terminal())
+        {
+            return Err(Error::StateConflict(
+                "Terminal Pi session cannot become ready".into(),
+            ));
+        }
+        if event.client_type == "pi"
+            && event.event_type == EventType::SessionExited
+            && sessions
+                .first()
+                .is_some_and(|session| session.state == SessionState::Exited)
+        {
+            let existing: Option<String> = sqlx::query_scalar("SELECT event_id FROM events WHERE session_id=? AND event_type='session.exited' ORDER BY rowid DESC LIMIT 1")
+                .bind(&event.session_id).fetch_optional(&mut *tx).await?;
+            if let Some(existing) = existing {
+                return duplicate_without_effects(&mut tx, event, existing).await;
+            }
         }
         let turns = SqliteTurnRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
             .await?
@@ -198,6 +236,7 @@ impl EventCommitter {
         let mut projection = ProjectionState::with_existing(sessions, turns);
         projection.apply(&event)?;
 
+        project_pi_runtime_in_tx(&mut tx, &event).await?;
         insert_event_in_tx(&mut tx, &event).await?;
 
         let state_version =
@@ -237,4 +276,67 @@ impl EventCommitter {
             .existing_event_state_version(event_id, session_id)
             .await
     }
+}
+
+async fn project_pi_runtime_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event: &DomainEvent,
+) -> Result<()> {
+    if event.client_type != "pi" {
+        return Ok(());
+    }
+    let state = match event.event_type {
+        EventType::SessionStarting | EventType::SessionResuming => "starting",
+        EventType::SessionReady => "running",
+        EventType::SessionExited => "exited",
+        EventType::SessionError
+            if event.payload["reason"] == "startup_timeout"
+                || event.payload["reason"] == "startup_failed" =>
+        {
+            "exited"
+        }
+        _ => return Ok(()),
+    };
+    let id = if let Some(id) = event.payload["runtime_id"].as_str() {
+        Some(id.to_owned())
+    } else {
+        pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::runtime_id_in_tx(tx, &event.session_id).await?
+    };
+    let Some(id) = id else {
+        return Ok(());
+    };
+    if state == "starting" {
+        sqlx::query("INSERT INTO session_runtimes(runtime_id, session_id, role, state, created_at) VALUES (?, ?, 'tui', 'starting', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT(runtime_id) DO NOTHING")
+            .bind(&id).bind(&event.session_id).execute(&mut **tx).await?;
+        sqlx::query("UPDATE session_runtimes SET process_fingerprint=NULL WHERE runtime_id=? AND session_id=?")
+            .bind(&id).bind(&event.session_id).execute(&mut **tx).await?;
+    }
+    let updated = sqlx::query("UPDATE session_runtimes SET state = ? WHERE runtime_id = ? AND session_id = ? AND role = 'tui'")
+        .bind(state).bind(id).bind(&event.session_id).execute(&mut **tx).await?;
+    if updated.rows_affected() != 1 {
+        return Err(Error::StateConflict(
+            "Pi lifecycle runtime is missing".into(),
+        ));
+    }
+    Ok(())
+}
+
+async fn duplicate_without_effects(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event: DomainEvent,
+    event_id: String,
+) -> Result<CommitOutcome> {
+    let state_version =
+        SqliteEventRepository::session_event_count_in_tx(tx, &event.session_id).await?;
+    Ok(CommitOutcome::Duplicate {
+        cleanup: None,
+        result: EventIngestResult {
+            accepted: true,
+            duplicate: true,
+            event_id,
+            session_id: event.session_id,
+            turn_id: event.turn_id,
+            state_version,
+        },
+    })
 }

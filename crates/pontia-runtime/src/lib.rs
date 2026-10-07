@@ -13,7 +13,9 @@ mod types;
 
 pub use manager::GenericRuntimeManager;
 use std::path::PathBuf;
-pub use tmux::{TmuxProcessFingerprint, is_alive, pane_binding, spawn_tmux_session};
+pub use tmux::{
+    ProcessObservation, TmuxProcessFingerprint, is_alive, pane_binding, spawn_tmux_session,
+};
 pub use types::{AgentInput, RuntimeStartRequest, RuntimeStartResult, TmuxLaunchOptions};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +66,7 @@ mod tests {
             .start_in_process(
                 Path::new("/pontia-test-home"),
                 RuntimeStartRequest {
+                    runtime_id: None,
                     session_id: session_id.clone(),
                     client_type: "generic".to_string(),
                     workspace: None,
@@ -79,7 +82,7 @@ mod tests {
             .expect("generic runtime should start");
 
         assert_eq!(runtime.runtime_kind, "in_process");
-        assert_eq!(runtime.runtime_handle, format!("generic:{session_id}"));
+        assert_eq!(Some(runtime.runtime_handle.as_str()), runtime.runtime_id());
         assert_eq!(runtime.metadata["backend"], "in_process");
         assert_eq!(runtime.metadata["in_process_runtime"], true);
         assert!(
@@ -92,7 +95,7 @@ mod tests {
     }
 
     #[test]
-    fn generic_runtime_handle_uses_handle_role_and_short_session_id() {
+    fn generic_runtime_uses_the_supplied_runtime_identity() {
         let manager = GenericRuntimeManager;
         let session_id = "sess_1234567890abcdef".to_string();
 
@@ -100,6 +103,7 @@ mod tests {
             .start_in_process(
                 Path::new("/pontia-test-home"),
                 RuntimeStartRequest {
+                    runtime_id: Some("runtime_named".into()),
                     session_id,
                     client_type: "generic".to_string(),
                     workspace: None,
@@ -114,16 +118,14 @@ mod tests {
             )
             .expect("generic runtime should start");
 
-        assert_eq!(
-            runtime.runtime_handle,
-            "generic:reviewer:execution_reviewer:90abcdef"
-        );
+        assert_eq!(runtime.runtime_handle, "runtime_named");
     }
 
     #[test]
     fn generic_runtime_registry_tracks_lifecycle_and_restart_identity() {
         let manager = GenericRuntimeManager;
         let request = RuntimeStartRequest {
+            runtime_id: Some("runtime_lifecycle".into()),
             session_id: "sess_runtime_lifecycle_abcdef12".to_string(),
             client_type: "generic".to_string(),
             workspace: None,
@@ -159,10 +161,7 @@ mod tests {
             .expect("generic runtime should restart");
         assert_eq!(second.runtime_handle, first.runtime_handle);
         assert!(manager.is_alive(&second.runtime_handle));
-        assert_ne!(
-            first.metadata["runtime_instance_id"],
-            second.metadata["runtime_instance_id"]
-        );
+        assert_eq!(first.metadata["runtime_id"], second.metadata["runtime_id"]);
         assert_ne!(first.metadata["started_at"], second.metadata["started_at"]);
     }
 
@@ -211,6 +210,7 @@ mod tests {
             .start_tmux(
                 dir.path(),
                 RuntimeStartRequest {
+                    runtime_id: None,
                     session_id: session_id.clone(),
                     client_type: "pi".to_string(),
                     workspace: Some(dir.path().display().to_string()),

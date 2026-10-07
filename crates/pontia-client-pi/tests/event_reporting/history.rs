@@ -5,11 +5,6 @@ use std::io::Write;
 
 impl Fixture {
     async fn history_source(&self) -> std::path::PathBuf {
-        sqlx::query("UPDATE runtime_bindings SET capabilities=? WHERE session_id='session'")
-            .bind(serde_json::to_string(&pontia_client_pi::CAPABILITIES).unwrap())
-            .execute(&self.state.db())
-            .await
-            .unwrap();
         let path = self.root.path().join("native.jsonl");
         std::fs::write(&path, b"").unwrap();
         AgentBindingService::new(self.state.db())
@@ -31,7 +26,7 @@ impl Fixture {
             EventType::TurnStarted,
             None,
             json!({
-                "runtime_instance_id":"runtime", "timeline_anchor":{"previous_leaf_id":previous}
+                "runtime_id":"runtime", "timeline_anchor":{"previous_leaf_id":previous}
             }),
         )
         .await
@@ -45,7 +40,7 @@ impl Fixture {
             EventType::TurnCompleted,
             Some(turn),
             json!({
-                "runtime_instance_id":"runtime", "timeline_anchor":{"terminal_leaf_id":leaf}
+                "runtime_id":"runtime", "timeline_anchor":{"terminal_leaf_id":leaf}
             }),
         )
         .await
@@ -61,7 +56,7 @@ impl Fixture {
                 PontiaEventSource::RuntimeManager,
                 "pi",
                 PontiaEventType::SessionExited,
-                json!({"runtime_instance_id":"runtime"}),
+                json!({"runtime_id":"runtime"}),
             ))
             .await
             .unwrap();
@@ -83,7 +78,7 @@ impl Fixture {
         self.report(
             EventType::SessionReady,
             None,
-            json!({"runtime_instance_id":"runtime", "client_session_key":"native", "client_cwd":self.root.path(), "client_session_file":self.root.path().join("native.jsonl")}),
+            json!({"runtime_id":"runtime", "client_session_key":"native", "client_cwd":self.root.path(), "client_session_file":self.root.path().join("native.jsonl")}),
         )
         .await
         .unwrap();

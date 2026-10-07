@@ -107,7 +107,7 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
     assert_eq!(nodes[0].session_id.as_deref(), Some("session_1"));
     assert!(nodes[0].submitted_at.is_some());
     assert_eq!(
-        nodes[0].submitted_runtime_instance_id.as_deref(),
+        nodes[0].submitted_runtime_id.as_deref(),
         Some("runtime_session_1")
     );
     assert_eq!(nodes[1].parent_node_id.as_deref(), Some("node_1"));

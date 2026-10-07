@@ -5,21 +5,21 @@ use pontia_core::error::{Error, Result};
 use super::pane::is_pane_alive;
 
 const PONTIA_SESSION_MARKER: &str = "@pontia_session_id";
-const PONTIA_RUNTIME_INSTANCE_MARKER: &str = "@pontia_runtime_instance_id";
+const PONTIA_RUNTIME_INSTANCE_MARKER: &str = "@pontia_runtime_id";
 const REUSABLE_SHELL_COMMANDS: &[&str] = &["sh", "bash", "zsh", "fish", "dash"];
 
 pub(crate) fn mark_pontia_pane(
     socket_path: &str,
     pane_id: &str,
     session_id: &str,
-    runtime_instance_id: &str,
+    runtime_id: &str,
 ) -> Result<()> {
     set_pane_option(socket_path, pane_id, PONTIA_SESSION_MARKER, session_id)?;
     set_pane_option(
         socket_path,
         pane_id,
         PONTIA_RUNTIME_INSTANCE_MARKER,
-        runtime_instance_id,
+        runtime_id,
     )
 }
 
@@ -27,13 +27,13 @@ pub(crate) fn clear_pontia_pane_markers(
     socket_path: &str,
     pane_id: &str,
     expected_session_id: &str,
-    expected_runtime_instance_id: &str,
+    expected_runtime_id: &str,
 ) -> Result<()> {
     if !is_pane_alive(socket_path, pane_id)
         || pane_option(socket_path, pane_id, PONTIA_SESSION_MARKER).as_deref()
             != Some(expected_session_id)
         || pane_option(socket_path, pane_id, PONTIA_RUNTIME_INSTANCE_MARKER).as_deref()
-            != Some(expected_runtime_instance_id)
+            != Some(expected_runtime_id)
     {
         return Ok(());
     }

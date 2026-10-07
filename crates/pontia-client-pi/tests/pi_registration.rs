@@ -51,9 +51,7 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
         .await
         .unwrap();
     let session = registered["session"]["session_id"].as_str().unwrap();
-    let runtime = registered["runtime"]["runtime_instance_id"]
-        .as_str()
-        .unwrap();
+    let runtime = registered["runtime"]["runtime_id"].as_str().unwrap();
     assert!(state.client_control().available(session).await.unwrap());
     assert_eq!(registered["session"]["state"], "starting");
     let count: i64 =
@@ -79,7 +77,7 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
     pi.reply(request.id, json!({"pong":true})).await.unwrap();
     ping.await.unwrap().unwrap();
     assert!(pi.call("runtime.register", registration).await.is_err());
-    let attach = json!({"version":PROTOCOL_VERSION,"session_id":session,"runtime_instance_id":runtime,"client_session_key":"native"});
+    let attach = json!({"version":PROTOCOL_VERSION,"session_id":session,"runtime_id":runtime,"client_session_key":"native"});
     let (other, _requests) = client(&state);
     assert!(
         other.call("runtime.attach", attach.clone()).await.is_err(),
@@ -94,7 +92,7 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
     .await
     .unwrap();
     assert_eq!(
-        other.call("runtime.attach", attach.clone()).await.unwrap()["runtime_instance_id"],
+        other.call("runtime.attach", attach.clone()).await.unwrap()["runtime_id"],
         runtime
     );
     other.close();
@@ -105,7 +103,7 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
         .unwrap();
     let (stale, _requests) = client(&state);
     assert!(stale.call("runtime.attach", attach).await.is_err());
-    let current:(String,String)=sqlx::query_as("SELECT s.state,r.runtime_instance_id FROM sessions s JOIN runtime_bindings r ON r.session_id=s.session_id WHERE s.session_id=?").bind(session).fetch_one(&state.db()).await.unwrap();
+    let current:(String,String)=sqlx::query_as("SELECT s.state,r.runtime_id FROM sessions s JOIN session_runtimes r ON r.session_id=s.session_id WHERE s.session_id=?").bind(session).fetch_one(&state.db()).await.unwrap();
     assert_eq!(current, ("exited".into(), runtime.into()));
     stale.close();
     state.client_control().close().await;
@@ -116,7 +114,7 @@ async fn rejects_old_protocol_and_invalid_registration_before_mutating_business_
     let (state, _root) = state().await;
     let (pi, _requests) = client(&state);
     for (method, params) in [
-        ("hello", json!({"session_id":"s","runtime_instance_id":"r"})),
+        ("hello", json!({"session_id":"s","runtime_id":"r"})),
         (
             "runtime.register",
             json!({"version":2,"binding":{"client_type":"pi","client_session_key":"n"}}),
@@ -127,7 +125,7 @@ async fn rejects_old_protocol_and_invalid_registration_before_mutating_business_
         ),
         (
             "runtime.attach",
-            json!({"version":PROTOCOL_VERSION,"session_id":"s","runtime_instance_id":"old","client_session_key":"unknown"}),
+            json!({"version":PROTOCOL_VERSION,"session_id":"s","runtime_id":"old","client_session_key":"unknown"}),
         ),
     ] {
         assert!(pi.call(method, params).await.is_err());
@@ -180,15 +178,12 @@ async fn register(pi: &PiRpcPeer, root: &std::path::Path) -> (String, String) {
         .unwrap();
     (
         result["session"]["session_id"].as_str().unwrap().into(),
-        result["runtime"]["runtime_instance_id"]
-            .as_str()
-            .unwrap()
-            .into(),
+        result["runtime"]["runtime_id"].as_str().unwrap().into(),
     )
 }
 
 fn fact(session: &str, runtime: &str, kind: &str, data: serde_json::Value) -> serde_json::Value {
-    json!({"runtime_instance_id":runtime,"event":{"session_id":session,"type":kind,"data":data}})
+    json!({"runtime_id":runtime,"event":{"session_id":session,"type":kind,"data":data}})
 }
 
 #[tokio::test]
@@ -212,7 +207,7 @@ async fn branch_replay_lost_acknowledgement_is_unknown_and_not_replayed_after_at
             "runtime.attach",
             json!({
                 "version": PROTOCOL_VERSION, "session_id": session,
-                "runtime_instance_id": runtime, "client_session_key": "native",
+                "runtime_id": runtime, "client_session_key": "native",
             }),
         )
         .await
@@ -245,7 +240,7 @@ async fn reports_use_shared_fact_processing_and_acknowledge_exit_before_closing(
                 &runtime,
                 "session.ready",
                 json!({
-                    "runtime_instance_id":runtime, "client_session_key":"native"
+                    "runtime_id":runtime, "client_session_key":"native"
                 }),
             ),
         )
@@ -268,7 +263,7 @@ async fn reports_use_shared_fact_processing_and_acknowledge_exit_before_closing(
                 &runtime,
                 "turn.started",
                 json!({
-                    "runtime_instance_id":runtime, "input_summary":"界".repeat(40_000)
+                    "runtime_id":runtime, "input_summary":"界".repeat(40_000)
                 }),
             ),
         )
@@ -320,7 +315,7 @@ async fn reports_use_shared_fact_processing_and_acknowledge_exit_before_closing(
                 &session,
                 &runtime,
                 "session.exited",
-                json!({"runtime_instance_id":runtime,"reason":"quit"}),
+                json!({"runtime_id":runtime,"reason":"quit"}),
             ),
         )
         .await
@@ -352,7 +347,7 @@ async fn reporting_rejects_unregistered_cross_session_and_stale_identities_and_i
     assert!(
         pi.call(
             "turn.startFailure",
-            json!({"session_id":"unknown","runtime_instance_id":"r","reason":"transport_failed"})
+            json!({"session_id":"unknown","runtime_id":"r","reason":"transport_failed"})
         )
         .await
         .is_err()
@@ -382,9 +377,9 @@ async fn reporting_rejects_unregistered_cross_session_and_stale_identities_and_i
     foreign["event"]["session_id"] = json!("other");
     assert!(pi.call("event.report", foreign).await.is_err());
     let mut stale = valid.clone();
-    stale["runtime_instance_id"] = json!("old");
+    stale["runtime_id"] = json!("old");
     assert!(pi.call("event.report", stale).await.is_err());
-    sqlx::query("UPDATE runtime_bindings SET runtime_instance_id='replacement' WHERE session_id=?")
+    sqlx::query("UPDATE session_runtimes SET runtime_id='replacement' WHERE session_id=?")
         .bind(&session)
         .execute(&state.db())
         .await
@@ -393,7 +388,7 @@ async fn reporting_rejects_unregistered_cross_session_and_stale_identities_and_i
     assert!(
         pi.call(
             "turn.startFailure",
-            json!({"session_id":session,"runtime_instance_id":runtime,"client_session_key":"native","reason":"transport_failed"})
+            json!({"session_id":session,"runtime_id":runtime,"client_session_key":"native","reason":"transport_failed"})
         )
         .await
         .is_err()
@@ -419,12 +414,12 @@ async fn failure_reports_are_idempotent_after_a_lost_started_acknowledgement() {
                 &session,
                 &runtime,
                 "turn.started",
-                json!({"runtime_instance_id":runtime}),
+                json!({"runtime_id":runtime}),
             ),
         )
         .await
         .unwrap();
-    // Only the failure notification is retried, over an independent connection.
+    // Only the failure notification is retried after attaching the new connection.
     pi.close();
     tokio::time::timeout(Duration::from_secs(1), async {
         while state.client_control().available(&session).await.unwrap() {
@@ -434,7 +429,8 @@ async fn failure_reports_are_idempotent_after_a_lost_started_acknowledgement() {
     .await
     .unwrap();
     let (pi, _requests) = client(&state);
-    let failure = json!({"session_id":session,"runtime_instance_id":runtime,"client_session_key":"native","reason":"transport_failed"});
+    pi.call("runtime.attach", json!({"version":PROTOCOL_VERSION,"session_id":session,"runtime_id":runtime,"client_session_key":"native"})).await.unwrap();
+    let failure = json!({"session_id":session,"runtime_id":runtime,"client_session_key":"native","reason":"transport_failed"});
     assert_eq!(
         pi.call("turn.startFailure", failure.clone()).await.unwrap()["accepted"],
         true
@@ -442,10 +438,12 @@ async fn failure_reports_are_idempotent_after_a_lost_started_acknowledgement() {
     pi.close();
     let (retry, _requests) = client(&state);
     assert!(!state.client_control().available(&session).await.unwrap());
-    assert_eq!(
-        retry.call("turn.startFailure", failure).await.unwrap()["accepted"],
-        true
-    );
+    assert!(retry.call("turn.startFailure", failure).await.is_err());
+    state
+        .event_ingest_service()
+        .report_turn_start_failure(&session, &runtime, "transport_failed")
+        .await
+        .unwrap();
     retry.close();
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_type='session.error'")
@@ -536,4 +534,106 @@ async fn rpc_queries_read_workspace_session_and_pinned_or_latest_profiles() {
         assert!(pi.call(method, params).await.is_err());
     }
     pi.close();
+}
+
+#[tokio::test]
+async fn restarting_a_stable_runtime_rejects_old_connection_facts_and_receipts() {
+    use pontia_application::{PontiaEvent, PontiaEventSource, PontiaEventType};
+    let (state, root) = state().await;
+    let (old, mut requests) = client(&state);
+    let (session, runtime) = register(&old, root.path()).await;
+    old.call(
+        "event.report",
+        fact(
+            &session,
+            &runtime,
+            "session.ready",
+            json!({"client_session_key":"native"}),
+        ),
+    )
+    .await
+    .unwrap();
+    let created: String =
+        sqlx::query_scalar("SELECT created_at FROM session_runtimes WHERE runtime_id=?")
+            .bind(&runtime)
+            .fetch_one(&state.db())
+            .await
+            .unwrap();
+    let pending = {
+        let control = state.client_control();
+        let (session, runtime) = (session.clone(), runtime.clone());
+        tokio::spawn(async move { control.submit(&session, &runtime, "one input", None).await })
+    };
+    let receipt = requests.recv().await.unwrap();
+    assert_eq!(receipt.method, "submit");
+    old.call(
+        "event.report",
+        fact(
+            &session,
+            &runtime,
+            "session.exited",
+            json!({"reason":"quit"}),
+        ),
+    )
+    .await
+    .unwrap();
+    state
+        .event_ingest_service()
+        .ingest_pontia_event(PontiaEvent::new(
+            &session,
+            None,
+            PontiaEventSource::ExternalApi,
+            "pi",
+            PontiaEventType::SessionResuming,
+            json!({"runtime_id":runtime}),
+        ))
+        .await
+        .unwrap();
+    let (current, mut requests) = client(&state);
+    current.call("runtime.attach", json!({"version":PROTOCOL_VERSION,"session_id":session,"runtime_id":runtime,"client_session_key":"native"})).await.unwrap();
+    current
+        .call(
+            "event.report",
+            fact(
+                &session,
+                &runtime,
+                "session.ready",
+                json!({"client_session_key":"native"}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert!(
+        old.call(
+            "event.report",
+            fact(
+                &session,
+                &runtime,
+                "session.exited",
+                json!({"reason":"late"})
+            )
+        )
+        .await
+        .is_err()
+    );
+    let _ = old.reply(receipt.id, json!({"accepted":true})).await;
+    assert!(matches!(
+        pending.await.unwrap(),
+        Err(pontia_core::Error::ControlUnknown(_))
+    ));
+    assert!(
+        requests.try_recv().is_err(),
+        "input with an unknown receipt is not replayed"
+    );
+    let record: (String,String,String) = sqlx::query_as("SELECT s.state,r.state,r.created_at FROM sessions s JOIN session_runtimes r USING(session_id) WHERE r.runtime_id=?").bind(&runtime).fetch_one(&state.db()).await.unwrap();
+    assert_eq!(record, ("idle".into(), "running".into(), created));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM session_runtimes WHERE session_id=?")
+            .bind(&session)
+            .fetch_one(&state.db())
+            .await
+            .unwrap(),
+        1
+    );
+    current.close();
 }

@@ -49,7 +49,7 @@ async fn active_pi_timeline_fixture(
             "turn_id": turn_id,
             "type": "turn.started",
             "data": {
-                "runtime_instance_id": "rtinst_projected_timeline",
+                "runtime_id": format!("runtime_{session_id}"),
                 "timeline_anchor": { "previous_leaf_id": "root" },
                 "topology_context": { "entries": [] },
             }

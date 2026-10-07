@@ -77,7 +77,7 @@ async fn reporting_service_rejects_supplied_unknown_turn_id_for_started_fact() {
             "session_id": "sess_unknown_started_turn",
             "turn_id": "turn_client_chosen",
             "type": "turn.started",
-            "data": { "runtime_instance_id": "rtinst_unknown_started_turn" }
+            "data": { "runtime_id": "rtinst_unknown_started_turn" }
         }),
     )
     .await
@@ -177,7 +177,7 @@ async fn reporting_service_rejects_followups_for_unknown_or_other_session_turns(
         json!({
             "session_id": "sess_turn_owner",
             "type": "turn.started",
-            "data": { "runtime_instance_id": "rtinst_owner" }
+            "data": { "runtime_id": "rtinst_owner" }
         }),
     )
     .await

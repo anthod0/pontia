@@ -8,8 +8,11 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TmuxProcessFingerprint {
     pub boot_id: String,
+    pub tmux_socket_path: String,
+    pub tmux_pane_id: String,
     pub pane_pid: u32,
     pub pane_start_time_ticks: u64,
     pub agent_pid: u32,
@@ -46,6 +49,8 @@ pub(crate) fn capture_fingerprint(
 
     let fingerprint = TmuxProcessFingerprint {
         boot_id: read_boot_id().ok()?,
+        tmux_socket_path: socket_path.into(),
+        tmux_pane_id: pane_id.into(),
         pane_pid,
         pane_start_time_ticks: pane.start_time_ticks,
         agent_pid: agent.pid,
@@ -56,35 +61,56 @@ pub(crate) fn capture_fingerprint(
 
     // Re-read identity fields so a process exit/PID reuse during capture cannot
     // produce a fingerprint assembled from two different processes.
-    validate_fingerprint(socket_path, pane_id, &fingerprint).then_some(fingerprint)
+    (observe_fingerprint(&fingerprint) == ProcessObservation::Alive).then_some(fingerprint)
 }
 
-pub(crate) fn validate_fingerprint(
-    socket_path: &str,
-    pane_id: &str,
-    fingerprint: &TmuxProcessFingerprint,
-) -> bool {
-    if read_boot_id().ok().as_deref() != Some(fingerprint.boot_id.as_str()) {
-        return false;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessObservation {
+    Alive,
+    Exited,
+    Unknown,
+}
+
+pub(crate) fn observe_fingerprint(fingerprint: &TmuxProcessFingerprint) -> ProcessObservation {
+    let Ok(boot_id) = read_boot_id() else {
+        return ProcessObservation::Unknown;
+    };
+    if boot_id != fingerprint.boot_id {
+        return ProcessObservation::Exited;
     }
-    if pane_pid(socket_path, pane_id) != Some(fingerprint.pane_pid) {
-        return false;
+    // Reading the confirmed process directly distinguishes ENOENT/PID reuse
+    // from permission errors, incomplete snapshots and unavailable tmux servers.
+    for (pid, expected_ticks) in [
+        (fingerprint.pane_pid, fingerprint.pane_start_time_ticks),
+        (fingerprint.agent_pid, fingerprint.agent_start_time_ticks),
+    ] {
+        let stat = match fs::read_to_string(format!("/proc/{pid}/stat")) {
+            Ok(stat) => stat,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return ProcessObservation::Exited;
+            }
+            Err(_) => return ProcessObservation::Unknown,
+        };
+        let Some((_, ticks, state)) = parse_stat(&stat) else {
+            return ProcessObservation::Unknown;
+        };
+        if ticks != expected_ticks || state == 'Z' {
+            return ProcessObservation::Exited;
+        }
+    }
+    if pane_pid(&fingerprint.tmux_socket_path, &fingerprint.tmux_pane_id)
+        != Some(fingerprint.pane_pid)
+    {
+        return ProcessObservation::Unknown;
     }
     let Ok(processes) = process_table() else {
-        return false;
+        return ProcessObservation::Unknown;
     };
-    let Some(pane) = processes.get(&fingerprint.pane_pid) else {
-        return false;
-    };
-    if pane.start_time_ticks != fingerprint.pane_start_time_ticks {
-        return false;
+    if descendant_depth(&processes, fingerprint.agent_pid, fingerprint.pane_pid).is_some() {
+        ProcessObservation::Alive
+    } else {
+        ProcessObservation::Unknown
     }
-    let Some(agent) = processes.get(&fingerprint.agent_pid) else {
-        return false;
-    };
-    agent.state != 'Z'
-        && agent.start_time_ticks == fingerprint.agent_start_time_ticks
-        && descendant_depth(&processes, agent.pid, pane.pid).is_some()
 }
 
 fn pane_pid(socket_path: &str, pane_id: &str) -> Option<u32> {

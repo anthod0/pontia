@@ -201,7 +201,7 @@
 | `branch_target_turn_id` | TEXT | foreign key → `turns.turn_id` |
 | `steer_target_turn_id` | TEXT | foreign key → `turns.turn_id` |
 | `retry_of_message_id` | TEXT | foreign key → `inbox_messages.message_id` |
-| `required_runtime_instance_id` | TEXT | |
+| `required_runtime_id` | TEXT | |
 
 **Indexes**
 
@@ -271,33 +271,30 @@ Table constraint: `UNIQUE(session_id, client_type, client_session_key)`.
 | `idx_agent_bindings_session` | No | `session_id`, `id` |  |
 | `idx_agent_bindings_unique_client_identity` | Yes | `client_type`, `client_session_key` |  |
 
-## `runtime_bindings`
+## `session_runtimes`
 
-| Column | Type | Constraints / default |
+| Column | Type | Constraints |
 |---|---|---|
-| `session_id` | TEXT | primary key, NOT NULL, foreign key → `sessions.session_id` ON DELETE CASCADE |
-| `runtime_kind` | TEXT | NOT NULL |
-| `runtime_instance_id` | TEXT | |
-| `binding_state` | TEXT | NOT NULL, default `'provisioned'`, CHECK `binding_state IN ('provisioned', 'confirmed')` |
-| `runtime_handle` | TEXT | |
+| `runtime_id` | TEXT | primary key, NOT NULL |
+| `session_id` | TEXT | NOT NULL, foreign key → `sessions.session_id` ON DELETE CASCADE |
+| `role` | TEXT | NOT NULL |
+| `state` | TEXT | NOT NULL, CHECK `state IN ('starting', 'running', 'exited')` |
 | `start_command` | TEXT | |
-| `launch_cwd` | TEXT | |
-| `started_at` | TEXT | |
-| `last_seen_at` | TEXT | |
-| `restart_count` | INTEGER | NOT NULL, default `0` |
 | `tmux_socket_path` | TEXT | |
 | `tmux_pane_id` | TEXT | |
-| `process_fingerprint` | TEXT | CHECK `process_fingerprint IS NULL OR json_valid(process_fingerprint)` |
-| `capabilities` | TEXT | NOT NULL, default `'{}'`, CHECK `json_valid(capabilities)` |
-| `diagnostics` | TEXT | NOT NULL, default `'{}'`, CHECK `json_valid(diagnostics)` |
-| `adapter_details` | TEXT | NOT NULL, default `'{}'`, CHECK `json_valid(adapter_details)` |
-| `updated_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
+| `process_fingerprint` | TEXT | NULL or valid JSON object satisfying the field constraints below |
+| `created_at` | TEXT | NOT NULL |
+
+CHECK `(tmux_socket_path IS NULL) = (tmux_pane_id IS NULL)`.
+
+`process_fingerprint` has exactly these keys: `boot_id`, `tmux_socket_path`, `tmux_pane_id`, `agent_comm` (JSON text); `pane_pid`, `pane_start_time_ticks`, `agent_pid`, `agent_start_time_ticks` (JSON integers); `agent_argv0` (JSON text or null). Missing or additional keys fail the CHECK.
 
 **Indexes**
 
 | Name | Unique | Columns | Condition |
 |---|---|---|---|
-| `idx_runtime_bindings_tmux_unconfirmed` | No | `tmux_socket_path`, `tmux_pane_id`, `binding_state` |  |
+| `idx_session_runtimes_session` | No | `session_id` | |
+| `idx_session_runtimes_tmux` | No | `tmux_socket_path`, `tmux_pane_id` | |
 
 ## `native_turn_bindings`
 
@@ -379,7 +376,7 @@ Primary key: (`session_id`, `client_turn_id`).
 | `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 | `node_type` | TEXT | NOT NULL, default `'agent'` |
 | `phase` | TEXT | NOT NULL, default `''` |
-| `submitted_runtime_instance_id` | TEXT | |
+| `submitted_runtime_id` | TEXT | |
 | `exit_request_started_at` | TEXT | |
 
 **Indexes**
@@ -409,11 +406,11 @@ Primary key: (`session_id`, `client_turn_id`).
 | `requesting_node_id` | TEXT | NOT NULL, foreign key → `workflow_nodes.node_id` |
 | `requesting_session_id` | TEXT | NOT NULL, foreign key → `sessions.session_id` |
 | `requesting_turn_id` | TEXT | NOT NULL, foreign key → `turns.turn_id` |
-| `requesting_runtime_instance_id` | TEXT | NOT NULL |
+| `requesting_runtime_id` | TEXT | NOT NULL |
 | `replanner_creation_token` | TEXT | NOT NULL, unique |
 | `replanner_session_id` | TEXT | foreign key → `sessions.session_id` |
 | `replanner_turn_id` | TEXT | foreign key → `turns.turn_id` |
-| `replanner_runtime_instance_id` | TEXT | |
+| `replanner_runtime_id` | TEXT | |
 | `base_revision` | INTEGER | NOT NULL, check `base_revision >= 1` |
 | `result_revision` | INTEGER | check `result_revision IS NULL OR result_revision >= base_revision` |
 | `state` | TEXT | NOT NULL, CHECK `state IN ('requested', 'planning', 'applied', 'rejected', 'blocked')` |
@@ -454,7 +451,7 @@ Primary key: (`session_id`, `client_turn_id`).
 | `session_id` | TEXT | NOT NULL, foreign key → `sessions.session_id` |
 | `message_id` | TEXT | NOT NULL, UNIQUE |
 | `state` | TEXT | NOT NULL, CHECK `state IN ('requested', 'preparing', 'dispatching', 'completed', 'failed')` |
-| `runtime_instance_id` | TEXT | |
+| `runtime_id` | TEXT | |
 | `failure_message` | TEXT | |
 | `created_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |
 | `updated_at` | TEXT | NOT NULL, default `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')` |

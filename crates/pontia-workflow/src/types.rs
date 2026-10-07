@@ -88,7 +88,7 @@ pub struct RunWorkflowOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubmitWorkflowNodeRequest {
     pub session_id: String,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,7 +100,7 @@ pub struct StartWorkflowOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestWorkflowPatch {
     pub session_id: String,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,7 +111,7 @@ pub struct RequestWorkflowPatchOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApplyWorkflowPatch {
     pub session_id: String,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,7 +125,7 @@ pub struct ApplyWorkflowPatchOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockWorkflowPatch {
     pub session_id: String,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

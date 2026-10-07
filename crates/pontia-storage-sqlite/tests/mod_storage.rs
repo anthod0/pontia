@@ -67,7 +67,7 @@ async fn migrations_preserve_removed_schema_contracts() {
 }
 
 #[tokio::test]
-async fn runtime_bindings_schema_uses_structured_runtime_fields_without_runtime_ref() {
+async fn session_runtimes_schema_uses_structured_runtime_fields_without_runtime_ref() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("runtime-bindings-schema.db");
     let database_url = format!("sqlite://{}", db_path.display());
@@ -75,32 +75,26 @@ async fn runtime_bindings_schema_uses_structured_runtime_fields_without_runtime_
     let pool = connect_sqlite(&database_url).await.expect("connect sqlite");
     run_migrations(&pool).await.expect("run migrations");
 
-    let columns = sqlx::query("PRAGMA table_info(runtime_bindings)")
+    let columns = sqlx::query("PRAGMA table_info(session_runtimes)")
         .fetch_all(&pool)
         .await
-        .expect("runtime_bindings columns")
+        .expect("session_runtimes columns")
         .into_iter()
         .map(|row| row.get::<String, _>("name"))
         .collect::<Vec<_>>();
 
-    for column in [
-        "runtime_instance_id",
-        "binding_state",
-        "runtime_handle",
-        "start_command",
-        "launch_cwd",
-        "started_at",
-        "last_seen_at",
-        "restart_count",
-        "tmux_socket_path",
-        "tmux_pane_id",
-        "process_fingerprint",
-        "capabilities",
-        "diagnostics",
-        "adapter_details",
-    ] {
-        assert!(columns.contains(&column.to_string()), "missing {column}");
-    }
-    assert!(!columns.contains(&"metadata".to_string()));
-    assert!(!columns.contains(&"runtime_ref".to_string()));
+    assert_eq!(
+        columns,
+        [
+            "runtime_id",
+            "session_id",
+            "role",
+            "state",
+            "start_command",
+            "tmux_socket_path",
+            "tmux_pane_id",
+            "process_fingerprint",
+            "created_at"
+        ]
+    );
 }

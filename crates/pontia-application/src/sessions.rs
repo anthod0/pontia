@@ -76,6 +76,7 @@ pub struct SessionCommandService {
     turns: crate::TurnCommandService,
     inbox: std::sync::Arc<crate::InboxCommandService>,
     pontia_home: PathBuf,
+    control: crate::ClientControlService,
 }
 
 impl SessionCommandService {
@@ -88,7 +89,9 @@ impl SessionCommandService {
         inbox: std::sync::Arc<crate::InboxCommandService>,
         pontia_home: PathBuf,
     ) -> Self {
+        let control = clients.control_service();
         Self {
+            control,
             pool,
             event_ingest,
             queries,

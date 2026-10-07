@@ -62,7 +62,7 @@ pub struct LiveOutputIdentity {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveOutputProducer {
     pub identity: LiveOutputIdentity,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
 }
 
 #[derive(Debug, Clone)]

@@ -24,9 +24,9 @@ impl TurnCommandService {
         &self,
         session_id: &str,
         turn_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> Result<ControlCommandOutcome> {
-        self.interrupt_turn_scoped(session_id, turn_id, Some(runtime_instance_id))
+        self.interrupt_turn_scoped(session_id, turn_id, Some(runtime_id))
             .await
     }
 

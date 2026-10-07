@@ -29,7 +29,7 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
     let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .request_patch(RequestWorkflowPatch {
             session_id: "sess_requester".into(),
-            runtime_instance_id: "runtime_requester".into(),
+            runtime_id: "runtime_requester".into(),
         })
         .await
         .expect("request Patch")
@@ -121,7 +121,7 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
         Some("sess_replanner")
     );
     assert_eq!(
-        patch.replanner_runtime_instance_id.as_deref(),
+        patch.replanner_runtime_id.as_deref(),
         Some("runtime_replanner")
     );
     assert!(
@@ -146,7 +146,7 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
     let outcome = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .block_patch(BlockWorkflowPatch {
             session_id: "sess_replanner".into(),
-            runtime_instance_id: "runtime_replanner".into(),
+            runtime_id: "runtime_replanner".into(),
         })
         .await
         .expect("block Patch");
@@ -190,7 +190,7 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
     let stale = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .block_patch(BlockWorkflowPatch {
             session_id: "sess_replanner".into(),
-            runtime_instance_id: "runtime_replanner".into(),
+            runtime_id: "runtime_replanner".into(),
         })
         .await;
     assert!(stale.is_err());
@@ -247,7 +247,7 @@ async fn requester_terminal_fact_implicitly_blocks_and_preserves_the_accepted_ou
     let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .request_patch(RequestWorkflowPatch {
             session_id: "sess_requester".into(),
-            runtime_instance_id: "runtime_requester".into(),
+            runtime_id: "runtime_requester".into(),
         })
         .await
         .unwrap()
@@ -331,7 +331,7 @@ async fn unresolved_replanner_terminal_blocks_once_restores_definition_and_late_
     let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .request_patch(RequestWorkflowPatch {
             session_id: "sess_requester".into(),
-            runtime_instance_id: "runtime_requester".into(),
+            runtime_id: "runtime_requester".into(),
         })
         .await
         .unwrap()

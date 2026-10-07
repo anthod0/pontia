@@ -1,7 +1,7 @@
 import { createConnection, type Socket } from "node:net";
 import { isAbsolute, join } from "node:path";
 
-export const CONTROL_VERSION = 6;
+export const CONTROL_VERSION = 7;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
 // Match the former HTTP event body limit, including the RPC envelope.
 export const MAX_RPC_FRAME_BYTES = 2 * 1024 * 1024 + 1024;
@@ -9,7 +9,7 @@ const REQUEST_TIMEOUT_MS = 5_000;
 
 export interface ControlIdentity {
   sessionId: string;
-  runtimeInstanceId: string;
+  runtimeId: string;
   clientSessionKey?: string;
 }
 export interface ControlInput {
@@ -392,12 +392,12 @@ export async function connectPi(
         const result = (await peer.request("runtime.attach", {
           version: CONTROL_VERSION,
           session_id: identity!.sessionId,
-          runtime_instance_id: identity!.runtimeInstanceId,
+          runtime_id: identity!.runtimeId,
           client_session_key: identity!.clientSessionKey,
         })) as Record<string, unknown>;
         if (
           result?.session_id !== identity!.sessionId ||
-          result?.runtime_instance_id !== identity!.runtimeInstanceId
+          result?.runtime_id !== identity!.runtimeId
         ) {
           throw new RpcError(-32009, "Pi reconnect identity mismatch");
         }
@@ -425,15 +425,12 @@ export async function connectPi(
       if (method === "turn.startFailure") {
         if (!identity?.clientSessionKey || stopped)
           throw new Error("Pi reporting identity is unavailable");
-        const peer = await open(true);
-        try {
-          return await peer.request(method, {
-            ...params,
-            client_session_key: identity.clientSessionKey,
-          });
-        } finally {
-          peer.close();
-        }
+        await ready();
+        if (!current || stopped) throw new Error("Pi connection is unavailable");
+        return current.request(method, {
+          ...params,
+          client_session_key: identity.clientSessionKey,
+        });
       }
       await ready();
       if (!current || stopped) return Promise.reject(new Error("Pi connection is unavailable"));

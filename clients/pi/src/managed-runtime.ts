@@ -6,7 +6,7 @@ const execFileAsync = promisify(execFile);
 
 export interface ManagedRuntimeIdentity {
   sessionId: string;
-  runtimeInstanceId: string;
+  runtimeId: string;
 }
 
 export function hasTmuxPaneEnvironment(env: EnvLike = process.env): boolean {
@@ -43,12 +43,12 @@ export async function loadPontiaManagedRuntimeIdentity(
   const socketPath = env.TMUX!.trim().split(",", 1)[0]!.trim();
   const paneId = env.TMUX_PANE!.trim();
 
-  const [sessionId, runtimeInstanceId] = await Promise.all([
+  const [sessionId, runtimeId] = await Promise.all([
     paneOption(socketPath, paneId, "@pontia_session_id"),
-    paneOption(socketPath, paneId, "@pontia_runtime_instance_id"),
+    paneOption(socketPath, paneId, "@pontia_runtime_id"),
   ]);
-  if (!sessionId || !runtimeInstanceId) return undefined;
-  return { sessionId, runtimeInstanceId };
+  if (!sessionId || !runtimeId) return undefined;
+  return { sessionId, runtimeId };
 }
 
 export async function isPontiaManagedTmuxPane(env: EnvLike = process.env): Promise<boolean> {

@@ -44,10 +44,10 @@ pub enum Error {
     #[error("workflow {workflow_id} must be running, but is {state}")]
     WorkflowNotRunning { workflow_id: String, state: String },
 
-    #[error("runtime {runtime_instance_id} is not the current runtime for session {session_id}")]
+    #[error("runtime {runtime_id} is not the current runtime for session {session_id}")]
     RuntimeMismatch {
         session_id: String,
-        runtime_instance_id: String,
+        runtime_id: String,
     },
 
     #[error("runtime control is unavailable for session {session_id}: {message}")]

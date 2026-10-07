@@ -1,7 +1,7 @@
 use pontia_core::{domain::TurnState, error::Error};
 use pontia_storage_sqlite::repositories::{
     agent_bindings::SqliteAgentBindingRepository, inbox::SqliteInboxRepository,
-    runtime_bindings::SqliteRuntimeBindingRepository, turns::SqliteTurnRepository,
+    session_runtimes::SqliteSessionRuntimeRepository, turns::SqliteTurnRepository,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -12,7 +12,7 @@ use crate::ExternalQueryService;
 pub struct ResolveBranchReplayRequest {
     pub inbox_message_id: String,
     pub session_id: String,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
     pub client_type: String,
 }
 
@@ -20,7 +20,7 @@ pub struct ResolveBranchReplayRequest {
 pub struct ResolvedBranchReplay {
     pub inbox_message_id: String,
     pub session_id: String,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
     pub client_type: String,
     pub replacement_input: String,
     pub target_entry_id: String,
@@ -60,7 +60,7 @@ impl BranchReplayService {
         self.resolve_command(ResolveBranchReplayRequest {
             inbox_message_id: message.into(),
             session_id: session.into(),
-            runtime_instance_id: target.instance()?.into(),
+            runtime_id: target.instance()?.into(),
             client_type: view.client_type.clone(),
         })
         .await?;
@@ -93,8 +93,8 @@ impl BranchReplayService {
         &self,
         request: ResolveBranchReplayRequest,
     ) -> pontia_core::Result<ResolvedBranchReplay> {
-        let runtime_instance_id = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .runtime_instance_id(&request.session_id)
+        let runtime_id = SqliteSessionRuntimeRepository::new(self.pool.clone())
+            .runtime_id(&request.session_id)
             .await?
             .ok_or_else(|| {
                 Error::StateConflict(format!(
@@ -102,7 +102,7 @@ impl BranchReplayService {
                     request.session_id
                 ))
             })?;
-        if runtime_instance_id != request.runtime_instance_id {
+        if runtime_id != request.runtime_id {
             return Err(Error::StateConflict(format!(
                 "Runtime instance does not own Session {}",
                 request.session_id
@@ -150,7 +150,7 @@ impl BranchReplayService {
         Ok(ResolvedBranchReplay {
             inbox_message_id: request.inbox_message_id,
             session_id: request.session_id,
-            runtime_instance_id: request.runtime_instance_id,
+            runtime_id: request.runtime_id,
             client_type: request.client_type,
             replacement_input: message.input_summary,
             target_entry_id,

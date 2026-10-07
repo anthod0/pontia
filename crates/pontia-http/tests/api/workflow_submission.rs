@@ -10,7 +10,7 @@ use axum::{
 use http_body_util::BodyExt;
 use pontia_http as http;
 use pontia_storage_sqlite::repositories::{
-    runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
+    session_runtimes::{SessionRuntimeRecord, SqliteSessionRuntimeRepository},
     workflows::{CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository},
 };
 use serde_json::{Value, json};
@@ -55,24 +55,17 @@ async fn seed_running_workflow(
         .bind_node_session("node_http_submit", "sess_http_submit")
         .await
         .expect("bind node session");
-    SqliteRuntimeBindingRepository::new(app.db.clone())
-        .upsert_binding(RuntimeBindingUpsertRecord {
+    SqliteSessionRuntimeRepository::new(app.db.clone())
+        .upsert_binding(SessionRuntimeRecord {
             session_id: "sess_http_submit".to_string(),
-            runtime_kind: "pi_tui".to_string(),
-            runtime_instance_id: Some("rtinst_http_submit".to_string()),
-            binding_state: "confirmed".to_string(),
-            runtime_handle: None,
+            runtime_id: "rtinst_http_submit".to_string(),
             start_command: None,
-            launch_cwd: Some(app.workspace().path().display().to_string()),
-            started_at: None,
-            last_seen_at: None,
-            restart_count: 0,
             tmux_socket_path: Some("/tmp/fake-pontia-tmux.sock".to_string()),
             tmux_pane_id: Some("%42".to_string()),
             process_fingerprint: None,
-            capabilities: "{}".to_string(),
-            diagnostics: "{}".to_string(),
-            adapter_details: "{}".to_string(),
+            role: "tui".into(),
+            state: "running".into(),
+            created_at: "2026-10-01T00:00:00Z".into(),
         })
         .await
         .expect("create runtime binding");
@@ -100,7 +93,7 @@ async fn seed_running_workflow(
             json!({
                 "version": PROTOCOL_VERSION,
                 "session_id": "sess_http_submit",
-                "runtime_instance_id": "rtinst_http_submit",
+                "runtime_id": "rtinst_http_submit",
                 "client_session_key": "native_http_submit",
             }),
         )
@@ -148,7 +141,7 @@ async fn workflow_submission_accepts_the_node_owned_output_file() {
         &app,
         json!({
             "session_id": "sess_http_submit",
-            "runtime_instance_id": "rtinst_http_submit"
+            "runtime_id": "rtinst_http_submit"
         }),
     )
     .await;
@@ -195,7 +188,7 @@ async fn workflow_submission_preserves_service_conflicts() {
         &app,
         json!({
             "session_id": "sess_http_submit",
-            "runtime_instance_id": "rtinst_http_submit"
+            "runtime_id": "rtinst_http_submit"
         }),
     )
     .await;

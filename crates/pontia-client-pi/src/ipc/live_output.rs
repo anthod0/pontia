@@ -14,7 +14,7 @@ enum LiveOutputRequest {
     Append {
         session_id: String,
         turn_id: String,
-        runtime_instance_id: String,
+        runtime_id: String,
         stream_id: String,
         first_sequence: u64,
         updates: Vec<LiveOutputUpdate>,
@@ -22,7 +22,7 @@ enum LiveOutputRequest {
     Snapshot {
         session_id: String,
         turn_id: String,
-        runtime_instance_id: String,
+        runtime_id: String,
         stream_id: String,
         sequence: u64,
         items: Vec<LiveOutputItem>,
@@ -30,7 +30,7 @@ enum LiveOutputRequest {
     StreamClosed {
         session_id: String,
         turn_id: String,
-        runtime_instance_id: String,
+        runtime_id: String,
         stream_id: String,
         sequence: u64,
     },
@@ -46,24 +46,24 @@ struct LiveOutputResponse {
 
 pub(super) async fn publish(state: &AppState, identity: &Attach, params: Value) -> Result<Value> {
     let request: LiveOutputRequest = serde_json::from_value(params)?;
-    let (session_id, runtime_instance_id) = match &request {
+    let (session_id, runtime_id) = match &request {
         LiveOutputRequest::Append {
             session_id,
-            runtime_instance_id,
+            runtime_id,
             ..
         }
         | LiveOutputRequest::Snapshot {
             session_id,
-            runtime_instance_id,
+            runtime_id,
             ..
         }
         | LiveOutputRequest::StreamClosed {
             session_id,
-            runtime_instance_id,
+            runtime_id,
             ..
-        } => (session_id, runtime_instance_id),
+        } => (session_id, runtime_id),
     };
-    if session_id != &identity.session_id || runtime_instance_id != &identity.runtime_instance_id {
+    if session_id != &identity.session_id || runtime_id != &identity.runtime_id {
         return Err(Error::StateConflict(
             "Pi live output does not match its connection identity".into(),
         ));
@@ -73,14 +73,14 @@ pub(super) async fn publish(state: &AppState, identity: &Attach, params: Value) 
         LiveOutputRequest::Append {
             session_id,
             turn_id,
-            runtime_instance_id,
+            runtime_id,
             stream_id,
             first_sequence,
             updates,
         } => {
             service
                 .publish_batch(LiveOutputBatch {
-                    producer: producer(session_id, turn_id, stream_id, runtime_instance_id),
+                    producer: producer(session_id, turn_id, stream_id, runtime_id),
                     first_sequence,
                     updates,
                 })
@@ -89,14 +89,14 @@ pub(super) async fn publish(state: &AppState, identity: &Attach, params: Value) 
         LiveOutputRequest::Snapshot {
             session_id,
             turn_id,
-            runtime_instance_id,
+            runtime_id,
             stream_id,
             sequence,
             items,
         } => {
             service
                 .replace_snapshot(LiveOutputSnapshotReplacement {
-                    producer: producer(session_id, turn_id, stream_id, runtime_instance_id),
+                    producer: producer(session_id, turn_id, stream_id, runtime_id),
                     sequence,
                     items,
                 })
@@ -105,13 +105,13 @@ pub(super) async fn publish(state: &AppState, identity: &Attach, params: Value) 
         LiveOutputRequest::StreamClosed {
             session_id,
             turn_id,
-            runtime_instance_id,
+            runtime_id,
             stream_id,
             sequence,
         } => {
             service
                 .close(LiveOutputClose {
-                    producer: producer(session_id, turn_id, stream_id, runtime_instance_id),
+                    producer: producer(session_id, turn_id, stream_id, runtime_id),
                     sequence,
                 })
                 .await?
@@ -125,7 +125,7 @@ fn producer(
     session_id: String,
     turn_id: String,
     stream_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
 ) -> LiveOutputProducer {
     LiveOutputProducer {
         identity: LiveOutputIdentity {
@@ -133,7 +133,7 @@ fn producer(
             turn_id,
             stream_id,
         },
-        runtime_instance_id,
+        runtime_id,
     }
 }
 

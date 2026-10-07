@@ -90,7 +90,7 @@ impl ClientSession for Client {
 }
 
 #[tokio::test]
-async fn input_checks_persisted_capabilities_without_fetching_display_details() -> Result<()> {
+async fn input_uses_client_capabilities_without_fetching_display_details() -> Result<()> {
     let root = tempfile::tempdir()?;
     let db = pontia_storage_sqlite::connect_sqlite("sqlite::memory:").await?;
     pontia_storage_sqlite::run_migrations(&db).await?;
@@ -110,7 +110,7 @@ async fn input_checks_persisted_capabilities_without_fetching_display_details() 
     )
     .execute(&db)
     .await?;
-    sqlx::query("INSERT INTO runtime_bindings(session_id,runtime_kind,runtime_instance_id,binding_state,capabilities) VALUES ('session','test','runtime','confirmed','{\"accept_task\":true}')").execute(&db).await?;
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('session', 'runtime', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&db).await?;
     assert!(app.queries().get_session("session").await.is_err());
     assert!(
         app.turn_commands()
@@ -119,7 +119,7 @@ async fn input_checks_persisted_capabilities_without_fetching_display_details() 
             .is_none()
     );
     assert_eq!(client.inputs.load(Ordering::SeqCst), 1);
-    sqlx::query("UPDATE runtime_bindings SET capabilities='{}' WHERE session_id='session'")
+    sqlx::query("DELETE FROM session_runtimes WHERE session_id='session'")
         .execute(&db)
         .await?;
     assert!(matches!(

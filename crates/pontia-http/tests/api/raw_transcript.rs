@@ -116,14 +116,7 @@ async fn seed_session_for_client(state: &AppState, session_id: &str, client_type
 
 async fn seed_session(state: &AppState, session_id: &str) {
     seed_session_for_client(state, session_id, "pi").await;
-    sqlx::query(
-        "INSERT INTO runtime_bindings(session_id,runtime_kind,capabilities) VALUES (?,'tmux',?)",
-    )
-    .bind(session_id)
-    .bind(serde_json::to_string(&pontia_client_pi::CAPABILITIES).unwrap())
-    .execute(&state.db())
-    .await
-    .unwrap();
+    sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('runtime_' || ?,?,'tui','running',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(session_id).bind(session_id).execute(&state.db()).await.unwrap();
 }
 
 async fn precreate_turn_if_missing(state: &AppState, session_id: &str, turn_id: &str) {
@@ -164,7 +157,7 @@ async fn post_pi_turn_event(
             "turn_id": turn_id,
             "type": event_type,
             "data": {
-                "runtime_instance_id": "rtinst_projected_timeline",
+                "runtime_id": format!("runtime_{session_id}"),
                 "timeline_anchor": timeline_anchor,
             }
         }),

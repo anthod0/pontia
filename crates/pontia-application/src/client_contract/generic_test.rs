@@ -68,7 +68,7 @@ impl GenericTestClient {
             .clone()
     }
 
-    pub fn ready_event(session_id: &str, runtime_instance_id: &str) -> ReportedEvent {
+    pub fn ready_event(session_id: &str, runtime_id: &str) -> ReportedEvent {
         ReportedEvent::new(
             new_event_id().to_string(),
             session_id.to_string(),
@@ -76,7 +76,7 @@ impl GenericTestClient {
             EventSource::AgentClient,
             SPEC.client_type.to_string(),
             EventType::SessionReady,
-            json!({ "runtime_instance_id": runtime_instance_id }),
+            json!({ "runtime_id": runtime_id }),
         )
     }
 }

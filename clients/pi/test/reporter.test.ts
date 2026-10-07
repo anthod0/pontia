@@ -22,7 +22,7 @@ async function tempLogFile() {
 const context = {
   sessionId: "sess_1",
   turnId: "turn_1",
-  runtimeInstanceId: "rtinst_1",
+  runtimeId: "rtinst_1",
   clientType: "pi",
 } as const;
 
@@ -34,7 +34,7 @@ describe("event builders", () => {
       session_id: "sess_1",
       type: "turn.started",
       data: {
-        runtime_instance_id: "rtinst_1",
+        runtime_id: "rtinst_1",
         input_summary: "from web",
         previous_leaf_id: null,
         inbox_message_id: "msg_1",
@@ -65,12 +65,12 @@ describe("event builders", () => {
       type: "turn.completed",
       data: { terminal_leaf_id: null },
     });
-    expect(buildTurnCompletedEvent(context).data).not.toHaveProperty("runtime_instance_id");
+    expect(buildTurnCompletedEvent(context).data).not.toHaveProperty("runtime_id");
     expect(buildTurnFailedEvent(context, "boom")).toMatchObject({
       type: "turn.failed",
       data: { failure_message: "boom" },
     });
-    expect(buildTurnFailedEvent(context, "boom").data).not.toHaveProperty("runtime_instance_id");
+    expect(buildTurnFailedEvent(context, "boom").data).not.toHaveProperty("runtime_id");
   });
 
   test("truncates turn.output summaries to 200 Unicode characters", () => {
@@ -241,7 +241,7 @@ describe("EventReporter", () => {
       turnId: "turn_server",
     });
     expect(request).toHaveBeenCalledWith("event.report", {
-      runtime_instance_id: "rtinst_1",
+      runtime_id: "rtinst_1",
       event,
     });
   });
@@ -263,7 +263,7 @@ describe("EventReporter", () => {
     });
     expect(request).toHaveBeenLastCalledWith("turn.startFailure", {
       session_id: "sess_1",
-      runtime_instance_id: "rtinst_1",
+      runtime_id: "rtinst_1",
       reason,
     });
     expect(request).toHaveBeenCalledTimes(2);

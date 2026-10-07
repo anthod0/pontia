@@ -66,7 +66,7 @@ impl InboxCommandService {
         &self,
         session_id: &str,
         message_id: &str,
-        required_runtime_instance_id: &str,
+        required_runtime_id: &str,
     ) -> Result<()> {
         let lock = self.scheduler.command_lock(session_id);
         let _guard = lock.lock().await;
@@ -78,8 +78,8 @@ impl InboxCommandService {
             return Ok(());
         }
         // Never turn an in-flight or uncertain delivery back into pending.
-        sqlx::query("UPDATE inbox_messages SET state='pending',required_runtime_instance_id=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE session_id=? AND message_id=? AND state='resuming'")
-            .bind(required_runtime_instance_id).bind(session_id).bind(message_id).execute(&self.pool).await?;
+        sqlx::query("UPDATE inbox_messages SET state='pending',required_runtime_id=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE session_id=? AND message_id=? AND state='resuming'")
+            .bind(required_runtime_id).bind(session_id).bind(message_id).execute(&self.pool).await?;
         self.drain_inbox(session_id).await
     }
 }

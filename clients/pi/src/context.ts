@@ -3,7 +3,7 @@ import { join } from "node:path";
 export interface TurnContext {
   sessionId: string;
   turnId?: string;
-  runtimeInstanceId: string;
+  runtimeId: string;
   input?: string;
   inboxMessageId?: string;
   clientType: "pi";

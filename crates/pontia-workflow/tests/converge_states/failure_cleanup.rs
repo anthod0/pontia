@@ -85,7 +85,7 @@ async fn submission_binding_failure_fails_without_starting_a_child() {
     let error = scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_root".to_string(),
-            runtime_instance_id: "runtime_session_root".to_string(),
+            runtime_id: "runtime_session_root".to_string(),
         })
         .await
         .expect_err("submission without a runtime binding must fail");
@@ -144,7 +144,7 @@ async fn deferred_exit_failure_fails_without_starting_a_child() {
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_root".to_string(),
-            runtime_instance_id: "runtime_session_root".to_string(),
+            runtime_id: "runtime_session_root".to_string(),
         })
         .await
         .expect("submission records output before Turn completion");

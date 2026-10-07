@@ -54,13 +54,13 @@ test("RPC replay enters Pi's native command context and navigates the running se
                 if (method === "runtime.register")
                   return {
                     session: { session_id: "sess_native" },
-                    runtime: { runtime_instance_id: "rt_native" },
+                    runtime: { runtime_id: "rt_native" },
                   };
                 expect(method).toBe("branch.resolve");
                 expect(params).toEqual({
                   inbox_message_id: "msg_native",
                   session_id: "sess_native",
-                  runtime_instance_id: "rt_native",
+                  runtime_id: "rt_native",
                   client_type: "pi",
                 });
                 return {

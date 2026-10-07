@@ -6,7 +6,7 @@ import { completeToolCallFromMessageUpdate, LiveOutputPublisher } from "../src/l
 const context: TurnContext & { turnId: string } = {
   sessionId: "sess_1",
   turnId: "turn_1",
-  runtimeInstanceId: "rtinst_1",
+  runtimeId: "rtinst_1",
   clientType: "pi",
 };
 

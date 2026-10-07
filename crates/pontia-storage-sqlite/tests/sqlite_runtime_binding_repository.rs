@@ -1,134 +1,88 @@
 use pontia_storage_sqlite::{
     connect_sqlite,
-    repositories::runtime_bindings::{
-        RuntimeBindingConfirmationRecord, RuntimeBindingUpsertRecord,
-        SqliteRuntimeBindingRepository,
-    },
+    repositories::session_runtimes::{SessionRuntimeRecord, SqliteSessionRuntimeRepository},
     run_migrations,
 };
 
 async fn test_pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("sqlite_runtime_binding_repository.db");
-    let database_url = format!("sqlite://{}", db_path.display());
-    let pool = connect_sqlite(&database_url).await.expect("connect");
-    run_migrations(&pool).await.expect("migrate");
-    (pool, dir)
+    let root = tempfile::tempdir().unwrap();
+    let pool = connect_sqlite(&format!(
+        "sqlite://{}",
+        root.path().join("runtimes.db").display()
+    ))
+    .await
+    .unwrap();
+    run_migrations(&pool).await.unwrap();
+    sqlx::query("INSERT INTO sessions(session_id, client_type, state) VALUES ('session', 'pi', 'idle'), ('other', 'pi', 'idle')").execute(&pool).await.unwrap();
+    (pool, root)
 }
 
-fn binding(runtime_instance_id: &str, suffix: &str) -> RuntimeBindingUpsertRecord {
-    RuntimeBindingUpsertRecord {
-        session_id: "sess_runtime".to_string(),
-        runtime_kind: "tmux".to_string(),
-        runtime_instance_id: Some(runtime_instance_id.to_string()),
-        binding_state: "provisioned".to_string(),
-        runtime_handle: Some(format!("runtime-{suffix}")),
-        start_command: Some(format!("pi --{suffix}")),
-        launch_cwd: Some(format!("/workspace/{suffix}")),
-        started_at: Some("2026-06-18T12:00:00Z".to_string()),
-        last_seen_at: Some("2026-06-18T12:01:00Z".to_string()),
-        restart_count: 1,
-        tmux_socket_path: Some(format!("/tmp/{suffix}.sock")),
-        tmux_pane_id: Some(format!("%{suffix}")),
+fn runtime(id: &str) -> SessionRuntimeRecord {
+    SessionRuntimeRecord {
+        runtime_id: id.into(),
+        session_id: "session".into(),
+        role: "tui".into(),
+        state: "running".into(),
+        start_command: Some("pi --approve".into()),
+        tmux_socket_path: Some("/tmp/test.sock".into()),
+        tmux_pane_id: Some("%1".into()),
         process_fingerprint: None,
-        capabilities: "{}".to_string(),
-        diagnostics: format!(r#"{{"runtime_log":"/{suffix}.log"}}"#),
-        adapter_details: "{}".to_string(),
+        created_at: "2026-10-01T00:00:00Z".into(),
     }
 }
 
 #[tokio::test]
-async fn upserts_runtime_binding_and_replaces_structured_fields() {
-    let (pool, _pontia_home) = test_pool().await;
-    sqlx::query("INSERT INTO sessions (session_id, client_type, state, metadata) VALUES ('sess_runtime', 'pi', 'ready', '{}')")
-        .execute(&pool)
-        .await
-        .expect("insert session");
-    let repository = SqliteRuntimeBindingRepository::new(pool);
-
-    repository
-        .upsert_binding(binding("rtinst_one", "one"))
-        .await
-        .expect("insert binding");
-    repository
-        .upsert_binding(binding("rtinst_two", "two"))
-        .await
-        .expect("update binding");
-
-    assert_eq!(
-        repository
-            .start_command("sess_runtime")
-            .await
-            .expect("start command"),
-        Some("pi --two".to_string())
+async fn updating_one_runtime_preserves_other_runtimes_and_creation_time() {
+    let (pool, _root) = test_pool().await;
+    let repository = SqliteSessionRuntimeRepository::new(pool);
+    let a = runtime("a");
+    let b = runtime("b");
+    repository.upsert_binding(a.clone()).await.unwrap();
+    repository.upsert_binding(b.clone()).await.unwrap();
+    let mut exited = a.clone();
+    exited.state = "exited".into();
+    repository.upsert_binding(exited.clone()).await.unwrap();
+    let mut restarting = exited;
+    restarting.state = "starting".into();
+    restarting.created_at = "2099-01-01T00:00:00Z".into();
+    repository.upsert_binding(restarting).await.unwrap();
+    let mut running = a.clone();
+    running.tmux_pane_id = Some("%9".into());
+    repository.upsert_binding(running.clone()).await.unwrap();
+    assert_eq!(repository.get("a").await.unwrap(), Some(running));
+    assert_eq!(repository.get("b").await.unwrap(), Some(b));
+    assert_eq!(repository.list("session").await.unwrap().len(), 2);
+    assert!(
+        repository.runtime_id("session").await.is_err(),
+        "ambiguous control must not choose an arbitrary TUI"
     );
-    assert_eq!(
-        repository
-            .runtime_handle("sess_runtime")
-            .await
-            .expect("runtime handle"),
-        Some("runtime-two".to_string())
-    );
-    let pane = repository
-        .tmux_pane_binding("sess_runtime")
-        .await
-        .expect("pane binding")
-        .expect("pane exists");
-    assert_eq!(pane.runtime_instance_id.as_deref(), Some("rtinst_two"));
-    assert_eq!(pane.socket_path.as_deref(), Some("/tmp/two.sock"));
-    assert_eq!(pane.pane_id.as_deref(), Some("%two"));
 }
 
 #[tokio::test]
-async fn stale_provisioning_write_cannot_downgrade_confirmed_process_identity() {
-    let (pool, _pontia_home) = test_pool().await;
-    sqlx::query("INSERT INTO sessions (session_id, client_type, state, metadata) VALUES ('sess_runtime', 'pi', 'starting', '{}')")
-        .execute(&pool)
-        .await
-        .expect("insert session");
-    let repository = SqliteRuntimeBindingRepository::new(pool.clone());
-    let stale_provisioning = binding("rtinst_one", "one");
-    repository
-        .upsert_binding(stale_provisioning.clone())
-        .await
-        .expect("provision binding");
+async fn runtime_cannot_move_to_another_session() {
+    let (pool, _root) = test_pool().await;
+    let repository = SqliteSessionRuntimeRepository::new(pool);
+    let original = runtime("a");
+    repository.upsert_binding(original.clone()).await.unwrap();
+    let mut moved = original.clone();
+    moved.session_id = "other".into();
+    assert!(repository.upsert_binding(moved).await.is_err());
+    assert_eq!(repository.get("a").await.unwrap(), Some(original));
+    assert!(repository.list("other").await.unwrap().is_empty());
+}
 
-    let mut tx = pool.begin().await.expect("begin confirmation");
-    SqliteRuntimeBindingRepository::confirm_binding_in_tx(
-        &mut tx,
-        RuntimeBindingConfirmationRecord {
-            session_id: "sess_runtime".to_string(),
-            runtime_kind: "tmux".to_string(),
-            runtime_instance_id: "rtinst_one".to_string(),
-            start_command: None,
-            launch_cwd: "/workspace/one".to_string(),
-            last_seen_at: "2026-06-18T12:02:00Z".to_string(),
-            tmux_socket_path: Some("/tmp/one.sock".to_string()),
-            tmux_pane_id: Some("%one".to_string()),
-            process_fingerprint: Some(r#"{"agent_pid":42}"#.to_string()),
-            capabilities: "{}".to_string(),
-            diagnostics: "{}".to_string(),
-            adapter_details: "{}".to_string(),
-        },
-    )
-    .await
-    .expect("confirm binding");
-    tx.commit().await.expect("commit confirmation");
-
-    repository
-        .upsert_binding(stale_provisioning)
-        .await
-        .expect("late provisioning write");
-
-    let state_and_fingerprint: (String, Option<String>) = sqlx::query_as(
-        "SELECT binding_state, process_fingerprint FROM runtime_bindings WHERE session_id = 'sess_runtime'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("confirmed binding");
-    assert_eq!(state_and_fingerprint.0, "confirmed");
-    assert_eq!(
-        state_and_fingerprint.1.as_deref(),
-        Some(r#"{"agent_pid":42}"#)
-    );
+#[tokio::test]
+async fn rejects_invalid_lifecycle_location_and_fingerprint() {
+    let (pool, _root) = test_pool().await;
+    let repository = SqliteSessionRuntimeRepository::new(pool);
+    let mut invalid = runtime("invalid");
+    invalid.state = "busy".into();
+    assert!(repository.upsert_binding(invalid).await.is_err());
+    let mut invalid = runtime("invalid");
+    invalid.tmux_pane_id = None;
+    assert!(repository.upsert_binding(invalid).await.is_err());
+    let mut invalid = runtime("invalid");
+    invalid.process_fingerprint = Some("{\"agent_pid\":42}".into());
+    assert!(repository.upsert_binding(invalid).await.is_err());
+    assert!(repository.list("session").await.unwrap().is_empty());
 }

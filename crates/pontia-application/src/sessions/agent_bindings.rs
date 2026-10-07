@@ -6,7 +6,6 @@ use pontia_storage_sqlite::{
     models::agent_bindings::AgentBindingRow,
     repositories::{
         agent_bindings::{AgentBindingUpsertRecord, SqliteAgentBindingRepository},
-        runtime_bindings::SqliteRuntimeBindingRepository,
         sessions::SqliteSessionRepository,
     },
 };
@@ -43,7 +42,7 @@ pub struct AgentBindingSessionContext {
     pub client_type: String,
     pub client_session_key: String,
     pub client_session_file: Option<String>,
-    pub runtime_instance_id: Option<String>,
+    pub runtime_id: Option<String>,
     pub binding_metadata: Value,
     pub runtime_metadata: Value,
 }
@@ -95,15 +94,18 @@ impl AgentBindingService {
             return Ok(None);
         };
 
+        let runtime_id = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).runtime_id(&binding.session_id).await?;
         let Some(row) = sqlx::query(
             r#"SELECT s.state AS session_state,
-                      r.runtime_instance_id,
-                      r.launch_cwd
+                      r.runtime_id,
+                      COALESCE(s.workspace_ref, a.launch_cwd) AS launch_cwd
                FROM sessions s
-               JOIN runtime_bindings r ON r.session_id = s.session_id
-               WHERE s.session_id = ?"#,
+               JOIN session_runtimes r ON r.session_id = s.session_id AND r.role = 'tui'
+               JOIN agent_bindings a ON a.session_id = s.session_id
+               WHERE s.session_id = ? AND r.runtime_id = ?"#,
         )
         .bind(&binding.session_id)
+        .bind(runtime_id)
         .fetch_optional(&self.pool)
         .await?
         else {
@@ -117,7 +119,7 @@ impl AgentBindingService {
             client_type: binding.client_type,
             client_session_key: binding.client_session_key,
             client_session_file: binding.client_session_file,
-            runtime_instance_id: row.try_get("runtime_instance_id")?,
+            runtime_id: row.try_get("runtime_id")?,
             binding_metadata: binding.metadata,
             runtime_metadata,
         }))
@@ -168,7 +170,7 @@ impl AgentBindingService {
 
 fn runtime_metadata_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Value> {
     Ok(serde_json::json!({
-        "runtime_instance_id": row.try_get::<Option<String>, _>("runtime_instance_id")?,
+        "runtime_id": row.try_get::<Option<String>, _>("runtime_id")?,
         "launch_cwd": row.try_get::<Option<String>, _>("launch_cwd")?,
     }))
 }
@@ -192,8 +194,8 @@ pub(crate) async fn register_agent_binding_for_ready_event_in_tx(
         return Ok(None);
     };
 
-    let launch_cwd = SqliteRuntimeBindingRepository::launch_cwd_in_tx(tx, &event.session_id)
-        .await?
+    let launch_cwd = sqlx::query_scalar::<_, Option<String>>("SELECT COALESCE(workspace_ref, (SELECT launch_cwd FROM agent_bindings WHERE session_id = sessions.session_id)) FROM sessions WHERE session_id = ?")
+        .bind(&event.session_id).fetch_optional(&mut **tx).await?.flatten()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| {
             Error::Domain(format!(

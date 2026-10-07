@@ -42,7 +42,7 @@ export async function bindSession(
   connection: PiConnection,
   env: EnvLike,
   sessionDetails: PiSessionDetails,
-  options: { startKind?: "fork"; parentSessionId?: string; runtimeInstanceId?: string } = {},
+  options: { startKind?: "fork"; parentSessionId?: string; runtimeId?: string } = {},
 ): Promise<SessionContext | undefined> {
   if (!sessionDetails.clientSessionKey) return undefined;
   const tmux = tmuxBindingFromEnv(env);
@@ -57,7 +57,7 @@ export async function bindSession(
       launch_cwd: sessionDetails.clientCwd,
       ...(options.startKind ? { start_kind: options.startKind } : {}),
       ...(options.parentSessionId ? { parent_session_id: options.parentSessionId } : {}),
-      ...(options.runtimeInstanceId ? { runtime_instance_id: options.runtimeInstanceId } : {}),
+      ...(options.runtimeId ? { runtime_id: options.runtimeId } : {}),
       ...(tmux ? { tmux } : {}),
     },
   });
@@ -66,14 +66,14 @@ export async function bindSession(
   const session = asRecord(record?.session);
   const runtime = asRecord(record?.runtime);
   const sessionId = optionalString(session?.session_id);
-  const resolvedRuntimeInstanceId = optionalString(runtime?.runtime_instance_id);
+  const resolvedRuntimeId = optionalString(runtime?.runtime_id);
   if (!sessionId) throw new Error("runtime binding upsert response missing session.session_id");
-  if (!resolvedRuntimeInstanceId)
-    throw new Error("runtime binding upsert response missing runtime.runtime_instance_id");
+  if (!resolvedRuntimeId)
+    throw new Error("runtime binding upsert response missing runtime.runtime_id");
   return {
     sessionId,
     clientType: "pi",
-    runtimeInstanceId: resolvedRuntimeInstanceId,
+    runtimeId: resolvedRuntimeId,
     ...sessionDetails,
   };
 }
@@ -95,15 +95,15 @@ export async function loadExistingSessionContext(
   const sessionId = optionalString(record?.session_id);
   const sessionState = optionalString(record?.session_state);
   const clientType = optionalString(record?.client_type);
-  const runtimeInstanceId = optionalString(record?.runtime_instance_id);
-  if (!sessionId || !sessionState || clientType !== "pi" || !runtimeInstanceId) {
+  const runtimeId = optionalString(record?.runtime_id);
+  if (!sessionId || !sessionState || clientType !== "pi" || !runtimeId) {
     throw new Error("agent binding session context lookup returned an invalid context");
   }
   return {
     sessionId,
     sessionState,
     clientType: "pi",
-    runtimeInstanceId,
+    runtimeId,
     ...sessionDetails,
   };
 }

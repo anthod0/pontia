@@ -37,6 +37,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         &config,
         tempdir.path().join("pontia-home").as_path(),
         RuntimeStartRequest {
+            runtime_id: None,
             session_id: "sess_configured".to_string(),
             client_type: "pi".to_string(),
             workspace: Some(tempdir.path().join("workspace").display().to_string()),
@@ -103,6 +104,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
         &config,
         tempdir.path().join("pontia-home").as_path(),
         RuntimeStartRequest {
+            runtime_id: None,
             session_id: "sess_env_override".to_string(),
             client_type: "pi".to_string(),
             workspace: Some(tempdir.path().join("workspace-env").display().to_string()),
@@ -265,6 +267,7 @@ fn resume_rejects_missing_invalid_or_different_native_session_before_launch() {
 
 fn launch_request(root: &Path, start_command: Option<String>) -> RuntimeStartRequest {
     RuntimeStartRequest {
+        runtime_id: None,
         session_id: "sess_launch".into(),
         client_type: "pi".into(),
         workspace: Some(root.join("workspace").display().to_string()),

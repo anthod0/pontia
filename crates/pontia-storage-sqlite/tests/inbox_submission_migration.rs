@@ -64,11 +64,12 @@ async fn removing_submission_snapshots_preserves_messages_and_queue_order() {
                 .iter()
                 .any(|column| column.name() == "submission_payload")
         );
-        for column in before
-            .columns()
-            .iter()
-            .filter(|column| !matches!(column.name(), "queue_order" | "submission_payload"))
-        {
+        for column in before.columns().iter().filter(|column| {
+            !matches!(
+                column.name(),
+                "queue_order" | "submission_payload" | "required_runtime_instance_id"
+            )
+        }) {
             assert_eq!(
                 before.get::<Option<String>, _>(column.name()),
                 after.get::<Option<String>, _>(column.name()),

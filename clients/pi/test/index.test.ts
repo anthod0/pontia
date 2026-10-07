@@ -90,7 +90,7 @@ function install(
   };
   const managedRuntime =
     env.PONTIA_SESSION_ID && env.PONTIA_RUNTIME_INSTANCE_ID
-      ? { sessionId: env.PONTIA_SESSION_ID, runtimeInstanceId: env.PONTIA_RUNTIME_INSTANCE_ID }
+      ? { sessionId: env.PONTIA_SESSION_ID, runtimeId: env.PONTIA_RUNTIME_INSTANCE_ID }
       : undefined;
   delete env.PONTIA_SESSION_ID;
   delete env.PONTIA_RUNTIME_INSTANCE_ID;
@@ -103,7 +103,7 @@ function install(
       paneManaged = true;
       return {
         session: { session_id: managedRuntime.sessionId },
-        runtime: { runtime_instance_id: managedRuntime.runtimeInstanceId },
+        runtime: { runtime_id: managedRuntime.runtimeId },
       };
     }
     if (!suppliedRequest) throw new Error(`Unexpected RPC: ${method}`);
@@ -258,14 +258,14 @@ describe("pontia pi extension lifecycle", () => {
       expect(params).toEqual({
         inbox_message_id: "msg_replay",
         session_id: "sess_replay",
-        runtime_instance_id: "rtinst_replay",
+        runtime_id: "rtinst_replay",
         client_type: "pi",
       });
       return {
         branch_replay: {
           inbox_message_id: "msg_replay",
           session_id: "sess_replay",
-          runtime_instance_id: "rtinst_replay",
+          runtime_id: "rtinst_replay",
           client_type: "pi",
           replacement_input: "replacement prompt",
           target_entry_id: "native-user",
@@ -363,7 +363,7 @@ describe("pontia pi extension lifecycle", () => {
           branch_replay: {
             inbox_message_id: "msg_replay",
             session_id: "sess_replay",
-            runtime_instance_id: "rtinst_replay",
+            runtime_id: "rtinst_replay",
             client_type: "pi",
             replacement_input: "replacement prompt",
             target_entry_id: "native-user",
@@ -432,7 +432,7 @@ describe("pontia pi extension lifecycle", () => {
         branch_replay: {
           inbox_message_id: "msg_replay",
           session_id: "sess_replay",
-          runtime_instance_id: "rtinst_replay",
+          runtime_id: "rtinst_replay",
           client_type: "pi",
           replacement_input: "replacement prompt",
           target_entry_id: "native-user",
@@ -491,7 +491,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported[0]).toMatchObject({
       session_id: "sess_ready",
       data: {
-        runtime_instance_id: "rtinst_1",
+        runtime_id: "rtinst_1",
         client_session_key: "pi_session_1",
         client_session_file: "/tmp/pi/session.jsonl",
         client_session_dir: "/tmp/pi",
@@ -564,7 +564,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported[0]).toMatchObject({
       session_id: "sess_new",
       data: {
-        runtime_instance_id: "rtinst_new",
+        runtime_id: "rtinst_new",
         client_session_key: "pi_session_new",
         client_session_file: "/tmp/pi/new-session.jsonl",
         client_session_dir: "/tmp/pi",
@@ -589,11 +589,11 @@ describe("pontia pi extension lifecycle", () => {
           tmux: { socket_path: "/tmp/tmux-1000/default", pane_id: "%42" },
         });
         expect(body).not.toHaveProperty("session_id");
-        expect(body).not.toHaveProperty("runtime_instance_id");
+        expect(body).not.toHaveProperty("runtime_id");
         return {
           session: { session_id: "sess_fresh" },
           runtime: {
-            runtime_instance_id: "rtinst_fresh",
+            runtime_id: "rtinst_fresh",
           },
         };
       }
@@ -603,7 +603,7 @@ describe("pontia pi extension lifecycle", () => {
       request: requestImpl as any,
       loadManagedRuntime: vi.fn(async () => ({
         sessionId: "sess_stale",
-        runtimeInstanceId: "rtinst_stale",
+        runtimeId: "rtinst_stale",
       })),
       isManagedPane: vi.fn(async () => true),
     });
@@ -622,7 +622,7 @@ describe("pontia pi extension lifecycle", () => {
 
     expect(reported[0]).toMatchObject({
       session_id: "sess_fresh",
-      data: { runtime_instance_id: "rtinst_fresh", client_session_key: "pi_session_fresh" },
+      data: { runtime_id: "rtinst_fresh", client_session_key: "pi_session_fresh" },
     });
   });
 
@@ -641,7 +641,7 @@ describe("pontia pi extension lifecycle", () => {
               session_state: sessionState,
               client_type: "pi",
               client_session_key: "pi_session_active",
-              runtime_instance_id: "rtinst_active",
+              runtime_id: "rtinst_active",
             },
           };
         }
@@ -673,7 +673,7 @@ describe("pontia pi extension lifecycle", () => {
             session_id: "sess_starting",
             session_state: "starting",
             client_type: "pi",
-            runtime_instance_id: "rtinst_starting",
+            runtime_id: "rtinst_starting",
           },
         };
       }
@@ -681,7 +681,7 @@ describe("pontia pi extension lifecycle", () => {
         return {
           session: { session_id: "sess_starting" },
           runtime: {
-            runtime_instance_id: "rtinst_bound",
+            runtime_id: "rtinst_bound",
           },
         };
       }
@@ -706,7 +706,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_starting",
-      data: { runtime_instance_id: "rtinst_bound" },
+      data: { runtime_id: "rtinst_bound" },
     });
   });
 
@@ -723,7 +723,7 @@ describe("pontia pi extension lifecycle", () => {
             session_state: "exited",
             client_type: "pi",
             client_session_key: "pi_session_resumed",
-            runtime_instance_id: "rtinst_exited",
+            runtime_id: "rtinst_exited",
           },
         };
       }
@@ -736,7 +736,7 @@ describe("pontia pi extension lifecycle", () => {
         return {
           session: { session_id: "sess_existing" },
           runtime: {
-            runtime_instance_id: "rtinst_reattached",
+            runtime_id: "rtinst_reattached",
           },
         };
       }
@@ -767,7 +767,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported[0]).toMatchObject({
       session_id: "sess_existing",
       data: {
-        runtime_instance_id: "rtinst_reattached",
+        runtime_id: "rtinst_reattached",
         client_session_key: "pi_session_resumed",
         client_session_file: "/tmp/pi/resumed.jsonl",
       },
@@ -786,7 +786,7 @@ describe("pontia pi extension lifecycle", () => {
       if (method === "runtime.register") {
         return {
           session: { session_id: "sess_manual" },
-          runtime: { runtime_instance_id: "rtinst_manual" },
+          runtime: { runtime_id: "rtinst_manual" },
         };
       }
       return Promise.reject(new Error("unexpected"));
@@ -906,14 +906,14 @@ describe("pontia pi extension lifecycle", () => {
             session_id: "sess_discovered",
             session_state: "exited",
             client_type: "pi",
-            runtime_instance_id: "rtinst_old",
+            runtime_id: "rtinst_old",
           },
         };
       }
       if (method === "runtime.register") {
         return {
           session: { session_id: "sess_discovered" },
-          runtime: { runtime_instance_id: "rtinst_discovered" },
+          runtime: { runtime_id: "rtinst_discovered" },
         };
       }
       return Promise.reject(new Error("unexpected"));
@@ -950,7 +950,7 @@ describe("pontia pi extension lifecycle", () => {
       if (method === "runtime.register") {
         return {
           session: { session_id: "sess_late_env" },
-          runtime: { runtime_instance_id: "rtinst_late_env" },
+          runtime: { runtime_id: "rtinst_late_env" },
         };
       }
       return Promise.reject(new Error("unexpected"));
@@ -1001,7 +1001,7 @@ describe("pontia pi extension lifecycle", () => {
       return {
         session: { session_id: "sess_bound" },
         runtime: {
-          runtime_instance_id: "rtinst_bound",
+          runtime_id: "rtinst_bound",
         },
       };
     });
@@ -1022,7 +1022,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
     expect(reported[1]).toMatchObject({
       session_id: "sess_bound",
-      data: { runtime_instance_id: "rtinst_bound", input_summary: "typed in tui" },
+      data: { runtime_id: "rtinst_bound", input_summary: "typed in tui" },
     });
   });
 
@@ -1039,11 +1039,11 @@ describe("pontia pi extension lifecycle", () => {
         start_kind: "fork",
         parent_session_id: "sess_parent",
       });
-      expect(body).not.toHaveProperty("runtime_instance_id");
+      expect(body).not.toHaveProperty("runtime_id");
       return {
         session: { session_id: "sess_child" },
         runtime: {
-          runtime_instance_id: "rtinst_child",
+          runtime_id: "rtinst_child",
         },
       };
     });
@@ -1077,7 +1077,7 @@ describe("pontia pi extension lifecycle", () => {
     ]);
     expect(reported[1]).toMatchObject({
       session_id: "sess_child",
-      data: { runtime_instance_id: "rtinst_child" },
+      data: { runtime_id: "rtinst_child" },
     });
     expect(reported[2]).toMatchObject({
       session_id: "sess_child",
@@ -1097,19 +1097,19 @@ describe("pontia pi extension lifecycle", () => {
             session_id: "sess_resume",
             session_state: "starting",
             client_type: "pi",
-            runtime_instance_id: "rtinst_resume",
+            runtime_id: "rtinst_resume",
           },
         };
       }
       if (method === "runtime.register") {
         expect(params).toMatchObject({
           client_session_key: "pi_session_resume",
-          runtime_instance_id: "rtinst_resume",
+          runtime_id: "rtinst_resume",
         });
         return {
           session: { session_id: "sess_resume" },
           runtime: {
-            runtime_instance_id: "rtinst_resume",
+            runtime_id: "rtinst_resume",
           },
         };
       }
@@ -1161,18 +1161,18 @@ describe("pontia pi extension lifecycle", () => {
             session_id: "sess_reload",
             session_state: "idle",
             client_type: "pi",
-            runtime_instance_id: "rtinst_reload",
+            runtime_id: "rtinst_reload",
           },
         };
       }
       expect(method).toBe("runtime.register");
       expect(params).toMatchObject({
         client_session_key: "pi_session_reload",
-        runtime_instance_id: "rtinst_reload",
+        runtime_id: "rtinst_reload",
       });
       return {
         session: { session_id: "sess_reload" },
-        runtime: { runtime_instance_id: "rtinst_reload" },
+        runtime: { runtime_id: "rtinst_reload" },
       };
     });
     const { handlers, reported } = install({ request });
@@ -1195,7 +1195,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_reload",
-      data: { runtime_instance_id: "rtinst_reload" },
+      data: { runtime_id: "rtinst_reload" },
     });
   });
 
@@ -1247,14 +1247,14 @@ describe("pontia pi extension lifecycle", () => {
             session_id: "sess_reload",
             session_state: "idle",
             client_type: "pi",
-            runtime_instance_id: "rtinst_reload",
+            runtime_id: "rtinst_reload",
           },
         };
       }
       if (method === "runtime.register") {
         return {
           session: { session_id: "sess_reload" },
-          runtime: { runtime_instance_id: "rtinst_different" },
+          runtime: { runtime_id: "rtinst_different" },
         };
       }
       throw new Error(`Unexpected RPC: ${method}`);
@@ -1334,7 +1334,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready", "session.exited"]);
     expect(reported[1]).toMatchObject({
       session_id: "sess_exit",
-      data: { reason: "quit", runtime_instance_id: "rtinst_1" },
+      data: { reason: "quit", runtime_id: "rtinst_1" },
     });
   });
 
@@ -1364,7 +1364,7 @@ describe("pontia pi extension lifecycle", () => {
       expect(reported.map((event) => event.type)).toEqual(["session.ready", "session.exited"]);
       expect(reported[1]).toMatchObject({
         session_id: "sess_exit",
-        data: { reason: shutdownReason, runtime_instance_id: "rtinst_1" },
+        data: { reason: shutdownReason, runtime_id: "rtinst_1" },
       });
     },
   );
@@ -1548,7 +1548,7 @@ describe("pontia pi extension lifecycle", () => {
       "session.message_updated",
     ]);
     expect(reported[0].data).toEqual({
-      runtime_instance_id: "rtinst_1",
+      runtime_id: "rtinst_1",
       input_summary: undefined,
       previous_leaf_id: null,
     });

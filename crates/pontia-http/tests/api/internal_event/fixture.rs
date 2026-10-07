@@ -4,8 +4,8 @@ use pontia_core::{
     domain::{EventSource, EventType, ReportedEvent},
     ids::new_event_id,
 };
-use pontia_storage_sqlite::repositories::runtime_bindings::{
-    RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository,
+use pontia_storage_sqlite::repositories::session_runtimes::{
+    SessionRuntimeRecord, SqliteSessionRuntimeRepository,
 };
 use serde_json::json;
 
@@ -33,25 +33,36 @@ pub(super) async fn create_session(state: &AppState, session_id: &str, client_ty
         .expect("create session");
 }
 
-pub(super) async fn bind_runtime(state: &AppState, session_id: &str, runtime_instance_id: &str) {
-    SqliteRuntimeBindingRepository::new(state.db())
-        .upsert_binding(RuntimeBindingUpsertRecord {
+pub(super) async fn bind_runtime(state: &AppState, session_id: &str, runtime_id: &str) {
+    sqlx::query("UPDATE sessions SET workspace_ref='/tmp' WHERE session_id=?")
+        .bind(session_id)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    if let Some(existing) = SqliteSessionRuntimeRepository::new(state.db())
+        .runtime_id(session_id)
+        .await
+        .unwrap()
+        && existing != runtime_id
+    {
+        sqlx::query("UPDATE session_runtimes SET runtime_id=? WHERE runtime_id=?")
+            .bind(runtime_id)
+            .bind(existing)
+            .execute(&state.db())
+            .await
+            .unwrap();
+    }
+    SqliteSessionRuntimeRepository::new(state.db())
+        .upsert_binding(SessionRuntimeRecord {
             session_id: session_id.to_string(),
-            runtime_kind: "tmux".to_string(),
-            runtime_instance_id: Some(runtime_instance_id.to_string()),
-            binding_state: "confirmed".to_string(),
-            runtime_handle: None,
+            runtime_id: runtime_id.to_string(),
             start_command: None,
-            launch_cwd: Some("/tmp".to_string()),
-            started_at: None,
-            last_seen_at: None,
-            restart_count: 0,
             tmux_socket_path: None,
             tmux_pane_id: None,
             process_fingerprint: None,
-            capabilities: "{}".to_string(),
-            diagnostics: "{}".to_string(),
-            adapter_details: "{}".to_string(),
+            role: "tui".into(),
+            state: "running".into(),
+            created_at: "2026-10-01T00:00:00Z".into(),
         })
         .await
         .expect("bind runtime");

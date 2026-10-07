@@ -20,7 +20,6 @@ pub struct RuntimeBindingUpsertService {
     pub(super) clients: crate::clients::ClientRegistry,
     pub(super) pool: SqlitePool,
     pub(super) events: crate::EventIngestService,
-    pub(super) pontia_home: PathBuf,
 }
 
 impl RuntimeBindingUpsertService {
@@ -31,13 +30,12 @@ impl RuntimeBindingUpsertService {
 
     pub(crate) fn new(
         pool: SqlitePool,
-        pontia_home: PathBuf,
+        _pontia_home: PathBuf,
         clients: crate::clients::ClientRegistry,
         events: crate::EventIngestService,
     ) -> Self {
         Self {
             pool,
-            pontia_home,
             clients,
             events,
             session_identity_hint: None,

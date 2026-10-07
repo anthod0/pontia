@@ -10,7 +10,7 @@ use pontia_core::{
     domain::{DomainEvent, EventType},
 };
 use pontia_runtime::GenericRuntimeManager;
-use pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository;
+use pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository;
 
 pub(super) async fn clear_exited_session_tmux_markers(
     pool: &sqlx::SqlitePool,
@@ -20,22 +20,31 @@ pub(super) async fn clear_exited_session_tmux_markers(
     if event.event_type != EventType::SessionExited {
         return;
     }
-    let repository = SqliteRuntimeBindingRepository::new(pool.clone());
-    let runtime_instance_id = match event
+    // Retried historical exits must not clean up a restarted TUI with the same ID.
+    if !sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND state='exited')",
+    )
+    .bind(&event.session_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false)
+    {
+        return;
+    }
+    let repository = SqliteSessionRuntimeRepository::new(pool.clone());
+    let runtime_id = match event
         .payload
-        .get("runtime_instance_id")
+        .get("runtime_id")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        Some(runtime_instance_id) => runtime_instance_id.to_string(),
+        Some(runtime_id) => runtime_id.to_string(),
         None if allow_bound_runtime_fallback => {
-            let Ok(Some(runtime_instance_id)) =
-                repository.runtime_instance_id(&event.session_id).await
-            else {
+            let Ok(Some(runtime_id)) = repository.runtime_id(&event.session_id).await else {
                 return;
             };
-            runtime_instance_id
+            runtime_id
         }
         None => return,
     };
@@ -51,7 +60,7 @@ pub(super) async fn clear_exited_session_tmux_markers(
         socket_path,
         pane_id,
         &event.session_id,
-        &runtime_instance_id,
+        &runtime_id,
     );
 }
 

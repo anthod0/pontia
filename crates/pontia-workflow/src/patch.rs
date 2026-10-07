@@ -90,7 +90,7 @@ impl WorkflowPatchService {
             .request_patch(RequestWorkflowPatchRecord {
                 patch_id: patch_id.clone(),
                 session_id: request.session_id,
-                runtime_instance_id: request.runtime_instance_id,
+                runtime_id: request.runtime_id,
                 request_document_ref,
                 request_size_bytes: i64::try_from(document.len()).map_err(|_| {
                     Error::InvalidDefinition("Workflow Patch request document is too large".into())
@@ -117,7 +117,7 @@ impl WorkflowPatchService {
         validate_pontia_home_boundary(&self.pontia_home)?;
         let patch = self
             .repository
-            .get_active_patch_for_replanner(&request.session_id, &request.runtime_instance_id)
+            .get_active_patch_for_replanner(&request.session_id, &request.runtime_id)
             .await?
             .ok_or_else(|| {
                 pontia_core::Error::StateConflict(format!(
@@ -214,7 +214,7 @@ impl WorkflowPatchService {
             .repository
             .apply_patch(ApplyWorkflowPatchRecord {
                 session_id: request.session_id,
-                runtime_instance_id: request.runtime_instance_id,
+                runtime_id: request.runtime_id,
                 decision_document_ref,
                 decision_size_bytes,
                 decision_summary,
@@ -261,7 +261,7 @@ impl WorkflowPatchService {
         validate_pontia_home_boundary(&self.pontia_home)?;
         let patch = self
             .repository
-            .get_active_patch_for_replanner(&request.session_id, &request.runtime_instance_id)
+            .get_active_patch_for_replanner(&request.session_id, &request.runtime_id)
             .await?
             .ok_or_else(|| {
                 pontia_core::Error::StateConflict(format!(
@@ -303,7 +303,7 @@ impl WorkflowPatchService {
             .repository
             .block_patch(BlockWorkflowPatchRecord {
                 session_id: request.session_id,
-                runtime_instance_id: request.runtime_instance_id,
+                runtime_id: request.runtime_id,
                 reason_document_ref,
                 blocked_draft_ref,
                 event_id: Uuid::now_v7().to_string(),

@@ -62,16 +62,20 @@ impl ClientAdapter {
                 return client.exit(self.events.clone(), target).await;
             }
             match self.spec.adapter.terminate {
-                TerminateBehavior::Connected => self.control
-                    .shutdown(&target.session_id, target.instance()?).await,
+                TerminateBehavior::Connected => {
+                    self.control
+                        .shutdown(&target.session_id, target.instance()?)
+                        .await
+                }
                 TerminateBehavior::RuntimeManager => {
-                    if let Some(handle) = pontia_storage_sqlite::repositories::runtime_bindings::SqliteRuntimeBindingRepository::new(self.pool.clone()).runtime_handle(&target.session_id).await? {
-                        GenericRuntimeManager.terminate_session(&handle)?;
+                    if let Some(handle) = &target.runtime_id {
+                        GenericRuntimeManager.terminate_session(handle)?;
                     }
                     Ok(())
                 }
             }
-        }.await;
+        }
+        .await;
         ControlResult::from_result(result)
     }
 

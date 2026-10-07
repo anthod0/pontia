@@ -15,21 +15,21 @@ pub struct SessionModel {
 pub struct SessionModels {
     pub models: Vec<SessionModel>,
     pub current_model: Option<String>,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SetSessionModelRequest {
     pub model: String,
-    pub runtime_instance_id: String,
+    pub runtime_id: String,
 }
 
 impl SessionCommandService {
     pub async fn list_session_models(&self, session_id: &str) -> Result<SessionModels> {
         let session = self.model_session(session_id, false).await?;
         let target = ControlTarget::resolve(&self.pool, session_id, None).await?;
-        let runtime_instance_id = target.instance()?.to_owned();
+        let runtime_id = target.instance()?.to_owned();
         let models = self
             .clients
             .for_client(&session.client_type)?
@@ -43,7 +43,7 @@ impl SessionCommandService {
         Ok(SessionModels {
             models,
             current_model,
-            runtime_instance_id,
+            runtime_id,
         })
     }
 
@@ -52,15 +52,14 @@ impl SessionCommandService {
         session_id: &str,
         request: SetSessionModelRequest,
     ) -> Result<()> {
-        if request.model.trim().is_empty() || request.runtime_instance_id.trim().is_empty() {
+        if request.model.trim().is_empty() || request.runtime_id.trim().is_empty() {
             return Err(Error::Domain(
-                "model and runtime_instance_id must be non-empty".into(),
+                "model and runtime_id must be non-empty".into(),
             ));
         }
         let session = self.model_session(session_id, true).await?;
         let target =
-            ControlTarget::resolve(&self.pool, session_id, Some(&request.runtime_instance_id))
-                .await?;
+            ControlTarget::resolve(&self.pool, session_id, Some(&request.runtime_id)).await?;
         self.clients
             .for_client(&session.client_type)?
             .set_model(&target, &request.model)

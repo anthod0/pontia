@@ -68,7 +68,7 @@ async function fixture(failInitialModelReport = false) {
             if (method === "session.context") return { session_context: null };
             return {
               session: { session_id: "sess_models" },
-              runtime: { runtime_instance_id: "rt_models" },
+              runtime: { runtime_id: "rt_models" },
             };
           },
         };
@@ -106,7 +106,7 @@ test("Pi model catalog distinguishes providers and reports startup, native, exte
   ]);
   expect(f.events.at(-1)).toMatchObject({
     type: "session.model_updated",
-    data: { model: "one/shared/name", runtime_instance_id: "rt_models" },
+    data: { model: "one/shared/name", runtime_id: "rt_models" },
   });
   await control.setModel("two/shared/name");
   expect(f.current).toBe(f.available[1]);

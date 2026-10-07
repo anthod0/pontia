@@ -66,7 +66,7 @@ async fn request(
 #[ignore = "Codex integration is frozen pending session-runtimes migration"]
 async fn model_routes_enforce_authentication_capabilities_and_runtime_identity() {
     let (_root, state, session) = fixture().await;
-    let change = json!({"model":"model-b","runtime_instance_id":"old"});
+    let change = json!({"model":"model-b","runtime_id":"old"});
     for (method, path) in [("GET", "/models"), ("PATCH", "/model")] {
         assert_eq!(
             request(&state, &session, method, path, change.clone(), false)
@@ -91,20 +91,20 @@ async fn model_routes_enforce_authentication_capabilities_and_runtime_identity()
             .0,
         StatusCode::CONFLICT
     );
-    sqlx::query("UPDATE runtime_bindings SET runtime_instance_id='current',binding_state='confirmed',adapter_details=json_set(adapter_details,'$.codex.connection','available') WHERE session_id=?").bind(&session).execute(&state.db()).await.unwrap();
+    sqlx::query("UPDATE session_runtimes SET runtime_id='current',binding_state='confirmed',adapter_details=json_set(adapter_details,'$.codex.connection','available') WHERE session_id=?").bind(&session).execute(&state.db()).await.unwrap();
     state
         .event_ingest_service()
         .report_fact(ReportedFact {
             session_id: session.clone(),
             turn_id: None,
             fact_type: EventType::SessionReady,
-            data: json!({"runtime_instance_id":"current","client_session_key":"thread"}),
+            data: json!({"runtime_id":"current","client_session_key":"thread"}),
         })
         .await
         .unwrap();
     let (status, _) = request(&state, &session, "PATCH", "/model", change.clone(), true).await;
     assert_eq!(status, StatusCode::CONFLICT);
-    sqlx::query("UPDATE runtime_bindings SET capabilities=json_set(capabilities,'$.list_models',json('false'),'$.set_model',json('false')) WHERE session_id=?").bind(&session).execute(&state.db()).await.unwrap();
+    sqlx::query("UPDATE session_runtimes SET capabilities=json_set(capabilities,'$.list_models',json('false'),'$.set_model',json('false')) WHERE session_id=?").bind(&session).execute(&state.db()).await.unwrap();
     for (method, path) in [("GET", "/models"), ("PATCH", "/model")] {
         let (status, body) = request(&state, &session, method, path, change.clone(), true).await;
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);

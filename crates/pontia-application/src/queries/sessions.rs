@@ -68,6 +68,7 @@ impl ExternalQueryService {
                 _ => "The native history format is unsupported or invalid.".into(),
             });
         }
+        session.runtimes = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).list(&session.session_id).await?;
         session.lineage = self.session_lineage(&session.session_id).await?;
         if let Some(client) = self
             .clients
@@ -94,34 +95,34 @@ impl ExternalQueryService {
         if self.clients.spec(client_type).is_none() {
             return Ok(SessionCapabilities::default());
         }
-        let row = SqliteSessionRepository::new(self.pool.clone())
-            .get_runtime_binding_capabilities(session_id)
-            .await?;
-        let Some(row) = row else {
+        let repository = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone());
+        let runtimes = repository.list(session_id).await?;
+        if runtimes.is_empty() {
             return Ok(SessionCapabilities::default());
-        };
-        let capabilities: SessionCapabilities = serde_json::from_str(&row.capabilities)?;
-        Ok(
-            if self
-                .clients
-                .spec(client_type)
-                .and_then(|spec| spec.tmux_runtime())
-                .is_some()
-            {
-                crate::runtime::bindings::writable_capabilities(
-                    capabilities,
-                    row.tmux_socket_path
-                        .as_deref()
-                        .is_some_and(|value| !value.trim().is_empty())
-                        && row
-                            .tmux_pane_id
-                            .as_deref()
-                            .is_some_and(|value| !value.trim().is_empty()),
-                )
-            } else {
-                capabilities
-            },
-        )
+        }
+        let entry = self.clients.get(client_type).expect("checked client");
+        let capabilities = entry
+            .in_process
+            .as_ref()
+            .map(|client| client.capabilities())
+            .unwrap_or_else(|| entry.spec.capabilities.clone());
+        if self
+            .clients
+            .spec(client_type)
+            .and_then(|spec| spec.tmux_runtime())
+            .is_some()
+        {
+            Ok(crate::runtime::bindings::writable_capabilities(
+                capabilities,
+                runtimes.iter().any(|runtime| {
+                    runtime.role == "tui"
+                        && runtime.tmux_socket_path.is_some()
+                        && runtime.tmux_pane_id.is_some()
+                }),
+            ))
+        } else {
+            Ok(capabilities)
+        }
     }
 
     async fn session_lineage(&self, session_id: &str) -> Result<Option<SessionLineageView>> {

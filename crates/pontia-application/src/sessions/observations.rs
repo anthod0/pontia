@@ -21,9 +21,7 @@ pub struct NativeSessionIdentity {
 pub struct NativeSessionObservation {
     pub identity: NativeSessionIdentity,
     pub provisioned_runtime: RuntimeStartResult,
-    pub instance_id: String,
-    pub capabilities: crate::views::SessionCapabilities,
-    pub details: Value,
+    pub runtime_id: String,
 }
 
 impl NativeSessionService {
@@ -40,13 +38,10 @@ impl NativeSessionService {
     pub async fn confirm(
         &self,
         binding: UpsertAgentBindingRequest,
-        instance: &str,
-        expected_instance: Option<&str>,
-        capabilities: &crate::views::SessionCapabilities,
-        details: Value,
+        runtime_id: &str,
     ) -> Result<()> {
         crate::runtime::NativeRuntimeBindings::new(self.pool.clone())
-            .confirm(binding, instance, expected_instance, capabilities, details)
+            .confirm(binding, runtime_id)
             .await
     }
 
@@ -76,10 +71,7 @@ impl NativeSessionService {
                 client_session_file: identity.client_session_file,
                 metadata: json!({}),
             },
-            &observation.instance_id,
-            None,
-            &observation.capabilities,
-            observation.details,
+            &observation.runtime_id,
         )
         .await?;
         Ok(session)
@@ -124,11 +116,11 @@ impl NativeSessionService {
                     PontiaEventSource::RuntimeManager,
                     session_row.client_type,
                     PontiaEventType::SessionResuming,
-                    json!({"runtime_instance_id":instance}),
+                    json!({"runtime_id":instance}),
                 ))
                 .await?;
         }
-        let already: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id=? AND event_type='session.ready' AND json_extract(payload,'$.runtime_instance_id')=?").bind(session).bind(instance).fetch_one(&self.pool).await?;
+        let already: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE session_id=? AND event_type='session.ready' AND json_extract(payload,'$.runtime_id')=?").bind(session).bind(instance).fetch_one(&self.pool).await?;
         if already == 0 || needs_ready {
             self.events
                 .report_native_fact(session, instance, EventType::SessionReady, data)

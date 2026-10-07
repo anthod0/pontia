@@ -121,20 +121,17 @@ async fn submit_turn(state: AppState, session_id: &str, input: &str) -> (String,
     )
 }
 
-async fn runtime_instance_id(state: &AppState, session_id: &str) -> String {
-    sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+async fn runtime_id(state: &AppState, session_id: &str) -> String {
+    sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id = ?")
         .bind(session_id)
         .fetch_one(&state.db())
         .await
         .expect("runtime instance id")
 }
 
-fn runtime_payload(runtime_instance_id: &str, payload: Value) -> Value {
+fn runtime_payload(runtime_id: &str, payload: Value) -> Value {
     let mut payload = payload.as_object().expect("payload object").clone();
-    payload.insert(
-        "runtime_instance_id".to_string(),
-        json!(runtime_instance_id),
-    );
+    payload.insert("runtime_id".to_string(), json!(runtime_id));
     Value::Object(payload)
 }
 
@@ -155,12 +152,12 @@ async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime(
     assert_eq!(session["capabilities"]["stream_output"], true);
 
     let runtime_kind: String =
-        sqlx::query_scalar("SELECT runtime_kind FROM runtime_bindings WHERE session_id = ?")
+        sqlx::query_scalar("SELECT role FROM session_runtimes WHERE session_id = ?")
             .bind(&session_id)
             .fetch_one(&state.db())
             .await
             .expect("runtime kind");
-    assert_eq!(runtime_kind, "in_process");
+    assert_eq!(runtime_kind, "tui");
 }
 
 #[tokio::test]
@@ -239,7 +236,7 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
     let state = test_state("generic_contract_event_source").await;
     let session_id = create_session(state.clone()).await;
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "run to completion").await;
-    let runtime_instance_id = runtime_instance_id(&state, &session_id).await;
+    let runtime_id = runtime_id(&state, &session_id).await;
 
     for (_idx, event_type, payload) in [
         (1, "turn.started", json!({})),
@@ -252,7 +249,7 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
                 "session_id": session_id,
                 "turn_id": turn_id,
                 "type": event_type,
-                "data": runtime_payload(&runtime_instance_id, payload)
+                "data": runtime_payload(&runtime_id, payload)
             }),
         )
         .await;
@@ -298,7 +295,7 @@ async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() 
     let state = test_state("generic_contract_workflow_resume").await;
     let session_id = create_session(state.clone()).await;
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "initial workflow work").await;
-    let runtime_instance_id = runtime_instance_id(&state, &session_id).await;
+    let runtime_id = runtime_id(&state, &session_id).await;
     for event_type in ["turn.started", "turn.interrupted"] {
         let (status, body) = crate::common::reporting::report_fact(
             state.clone(),
@@ -306,7 +303,7 @@ async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() 
                 "session_id": session_id,
                 "turn_id": turn_id,
                 "type": event_type,
-                "data": { "runtime_instance_id": runtime_instance_id }
+                "data": { "runtime_id": runtime_id }
             }),
         )
         .await;
@@ -367,7 +364,7 @@ async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
     let state = test_state("generic_contract_degradation").await;
     let session_id = create_session(state.clone()).await;
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "cannot interrupt").await;
-    let runtime_instance_id = runtime_instance_id(&state, &session_id).await;
+    let runtime_id = runtime_id(&state, &session_id).await;
 
     let (started_status, _) = crate::common::reporting::report_fact(
         state.clone(),
@@ -375,7 +372,7 @@ async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
             "session_id":session_id,
             "turn_id":turn_id,
             "type":"turn.started",
-            "data":{"runtime_instance_id":runtime_instance_id}
+            "data":{"runtime_id":runtime_id}
         }),
     )
     .await;

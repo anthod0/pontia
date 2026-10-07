@@ -6,7 +6,7 @@ use time::format_description::well_known::Rfc3339;
 use crate::TmuxLaunchOptions;
 use pontia_core::{
     error::{Error, Result},
-    ids::{new_event_id, new_runtime_instance_id},
+    ids::{new_event_id, new_runtime_id},
     time::utc_now,
 };
 
@@ -42,7 +42,7 @@ impl GenericRuntimeManager {
         let tmux_session = if reuse_target.is_some() {
             base_tmux_session.clone()
         } else if restart_count > 0 && tmux::is_alive(&base_tmux_session) {
-            format!("{base_tmux_session}_r{restart_count}")
+            format!("{base_tmux_session}_{}", new_event_id())
         } else {
             base_tmux_session
         };
@@ -51,7 +51,10 @@ impl GenericRuntimeManager {
         std::fs::create_dir_all(&log_paths.log_dir)?;
         let log_path = log_paths.runtime_log.clone();
         let launch_id = format!("launch_{}", new_event_id());
-        let runtime_instance_id = new_runtime_instance_id().to_string();
+        let runtime_id = request
+            .runtime_id
+            .clone()
+            .unwrap_or_else(|| new_runtime_id().to_string());
         std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -64,7 +67,7 @@ impl GenericRuntimeManager {
             &runtime_paths,
             &request,
             &launch_id,
-            &runtime_instance_id,
+            &runtime_id,
         )?;
         let quoted_launch_script_path = script::shell_quote_path(&launch_script_path);
         let launch_command =
@@ -111,7 +114,7 @@ impl GenericRuntimeManager {
             "started_at": started_at,
             "restart_count": restart_count,
             "launch_id": launch_id,
-            "runtime_instance_id": runtime_instance_id,
+            "runtime_id": runtime_id,
             "binding_confirmed": false,
             "start_command": start_command,
         });
@@ -149,9 +152,9 @@ impl GenericRuntimeManager {
         socket_path: &str,
         pane_id: &str,
         session_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> Result<()> {
-        tmux::mark_pontia_pane(socket_path, pane_id, session_id, runtime_instance_id)
+        tmux::mark_pontia_pane(socket_path, pane_id, session_id, runtime_id)
     }
 
     pub fn clear_tmux_pane_markers(
@@ -159,13 +162,13 @@ impl GenericRuntimeManager {
         socket_path: &str,
         pane_id: &str,
         expected_session_id: &str,
-        expected_runtime_instance_id: &str,
+        expected_runtime_id: &str,
     ) -> Result<()> {
         tmux::clear_pontia_pane_markers(
             socket_path,
             pane_id,
             expected_session_id,
-            expected_runtime_instance_id,
+            expected_runtime_id,
         )
     }
 
@@ -186,15 +189,12 @@ impl GenericRuntimeManager {
         tmux::capture_fingerprint(socket_path, pane_id, process_names)
     }
 
-    pub fn validate_tmux_process_fingerprint(
+    pub fn observe_tmux_process_fingerprint(
         &self,
-        socket_path: &str,
-        pane_id: &str,
         fingerprint: &crate::TmuxProcessFingerprint,
-    ) -> bool {
-        tmux::validate_fingerprint(socket_path, pane_id, fingerprint)
+    ) -> crate::ProcessObservation {
+        tmux::observe_fingerprint(fingerprint)
     }
-
     pub fn is_alive(&self, runtime_handle: &str) -> bool {
         if let Some(alive) = in_process::is_alive(runtime_handle) {
             return alive;

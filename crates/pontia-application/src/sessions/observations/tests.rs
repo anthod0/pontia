@@ -39,13 +39,14 @@ impl Fixture {
             .observed_session("native-test", root.path().to_str().unwrap())
             .await
             .unwrap();
-        sqlx::query("INSERT INTO runtime_bindings(session_id,runtime_kind,runtime_instance_id,binding_state) VALUES (?,'external','runtime','confirmed')").bind(&session).execute(&state.db()).await.unwrap();
+        sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES (?, 'runtime', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+.bind(&session).execute(&state.db()).await.unwrap();
         events
             .report_fact(ReportedFact {
                 session_id: session.clone(),
                 turn_id: None,
                 fact_type: EventType::SessionReady,
-                data: json!({"runtime_instance_id":"runtime"}),
+                data: json!({"runtime_id":"runtime"}),
             })
             .await
             .unwrap();
@@ -71,7 +72,7 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
             .bind(id).bind(&fixture.session).execute(&fixture.state.db()).await.unwrap();
         let receipt = crate::control::InputReceipt {
             native_turn_id: Some(id.into()),
-            runtime_instance_id: Some("runtime".into()),
+            runtime_id: Some("runtime".into()),
         };
         let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns")
             .fetch_one(&fixture.state.db())
@@ -149,7 +150,7 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
             "stale",
             &crate::control::InputReceipt {
                 native_turn_id: Some("fact-first".into()),
-                runtime_instance_id: Some("old-runtime".into()),
+                runtime_id: Some("old-runtime".into()),
             },
         )
         .await
@@ -177,11 +178,9 @@ async fn observed_native_identity_reuses_its_session_without_reprovisioning() {
             runtime_kind: "external".into(),
             runtime_handle: fixture._root.path().display().to_string(),
             capabilities: crate::views::SessionCapabilities::default(),
-            metadata: json!({"launch_cwd":fixture._root.path()}),
+            metadata: json!({"launch_cwd":fixture._root.path(),"runtime_id":"observed-runtime"}),
         },
-        instance_id: "observed-runtime".into(),
-        capabilities: crate::views::SessionCapabilities::default(),
-        details: json!({"connection":"reconciling"}),
+        runtime_id: "observed-runtime".into(),
     };
     let session = fixture
         .service
@@ -230,7 +229,7 @@ fn binding(fixture: &Fixture) -> UpsertAgentBindingRequest {
 }
 
 async fn instance(fixture: &Fixture) -> String {
-    sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id=?")
+    sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id=?")
         .bind(&fixture.session)
         .fetch_one(&fixture.state.db())
         .await
@@ -238,20 +237,14 @@ async fn instance(fixture: &Fixture) -> String {
 }
 
 #[tokio::test]
-async fn confirmation_rolls_back_runtime_when_identity_write_fails() {
+async fn failed_identity_confirmation_does_not_change_runtime_or_bind_native_identity() {
     let fixture = Fixture::new().await;
     sqlx::query("CREATE TRIGGER reject_binding BEFORE INSERT ON agent_bindings BEGIN SELECT RAISE(ABORT, 'binding write failed'); END")
         .execute(&fixture.state.db()).await.unwrap();
     assert!(
         fixture
             .service
-            .confirm(
-                binding(&fixture),
-                "replacement",
-                Some("runtime"),
-                &Default::default(),
-                json!({})
-            )
+            .confirm(binding(&fixture), "runtime",)
             .await
             .is_err()
     );
@@ -266,52 +259,26 @@ async fn confirmation_rolls_back_runtime_when_identity_write_fails() {
 }
 
 #[tokio::test]
-async fn concurrent_confirmations_cannot_overwrite_a_replacement() {
+async fn confirmation_cannot_change_stable_runtime_identity() {
     let fixture = Fixture::new().await;
-    let capabilities = Default::default();
     let (first, second) = tokio::join!(
-        fixture.service.confirm(
-            binding(&fixture),
-            "first",
-            Some("runtime"),
-            &capabilities,
-            json!({"owner":"first"})
-        ),
-        fixture.service.confirm(
-            binding(&fixture),
-            "second",
-            Some("runtime"),
-            &capabilities,
-            json!({"owner":"second"})
-        ),
+        fixture.service.confirm(binding(&fixture), "first",),
+        fixture.service.confirm(binding(&fixture), "second",),
     );
-    assert_ne!(first.is_ok(), second.is_ok());
-    assert!(matches!(
-        first.as_ref().err().or(second.as_ref().err()),
-        Some(Error::StateConflict(_))
-    ));
-    let winner = instance(&fixture).await;
-    let owner: String = sqlx::query_scalar("SELECT json_extract(adapter_details,'$.\"native-test\".owner') FROM runtime_bindings WHERE session_id=?")
-        .bind(&fixture.session).fetch_one(&fixture.state.db()).await.unwrap();
-    assert_eq!(winner, owner);
+    assert!(first.is_err() && second.is_err());
+    assert_eq!(instance(&fixture).await, "runtime");
     fixture
         .service
-        .confirm(
-            binding(&fixture),
-            "reconnected",
-            Some(&winner),
-            &capabilities,
-            json!({}),
-        )
+        .confirm(binding(&fixture), "runtime")
         .await
         .unwrap();
-    assert_eq!(instance(&fixture).await, "reconnected");
+    assert_eq!(instance(&fixture).await, "runtime");
 }
 
 #[tokio::test]
 async fn missing_runtime_cannot_leave_an_agent_binding() {
     let fixture = Fixture::new().await;
-    sqlx::query("DELETE FROM runtime_bindings WHERE session_id=?")
+    sqlx::query("DELETE FROM session_runtimes WHERE session_id=?")
         .bind(&fixture.session)
         .execute(&fixture.state.db())
         .await
@@ -319,13 +286,7 @@ async fn missing_runtime_cannot_leave_an_agent_binding() {
     assert!(matches!(
         fixture
             .service
-            .confirm(
-                binding(&fixture),
-                "replacement",
-                None,
-                &Default::default(),
-                json!({})
-            )
+            .confirm(binding(&fixture), "replacement",)
             .await,
         Err(Error::StateConflict(_))
     ));
@@ -364,7 +325,7 @@ async fn obsolete_ready_cannot_resume_an_exited_session() {
                 PontiaEventSource::RuntimeManager,
                 "native-test",
                 PontiaEventType::SessionResuming,
-                json!({"runtime_instance_id":"obsolete"})
+                json!({"runtime_id":"obsolete"})
             ))
             .await
             .is_err()
@@ -419,7 +380,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
         .unwrap();
     sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,metadata) VALUES ('pending',?,'dispatching','after_idle','input','{\"codex_turn_id\":\"native\"}')")
         .bind(&fixture.session).execute(&fixture.state.db()).await.unwrap();
-    sqlx::query("UPDATE runtime_bindings SET runtime_instance_id='replacement' WHERE session_id=?")
+    sqlx::query("UPDATE session_runtimes SET runtime_id='replacement' WHERE session_id=?")
         .bind(&fixture.session)
         .execute(&fixture.state.db())
         .await
@@ -437,7 +398,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
             "pending",
             &crate::control::InputReceipt {
                 native_turn_id: Some("native".into()),
-                runtime_instance_id: Some("runtime".into()),
+                runtime_id: Some("runtime".into()),
             },
         )
         .await
@@ -480,7 +441,7 @@ async fn native_terminal_fact_is_fenced_again_when_committing() {
             session_id: fixture.session.clone(),
             turn_id: None,
             fact_type: EventType::TurnStarted,
-            data: json!({"native_turn_id":"native","runtime_instance_id":"runtime"}),
+            data: json!({"native_turn_id":"native","runtime_id":"runtime"}),
         })
         .await
         .unwrap();
@@ -490,12 +451,12 @@ async fn native_terminal_fact_is_fenced_again_when_committing() {
             session_id: fixture.session.clone(),
             turn_id: None,
             fact_type: EventType::TurnCompleted,
-            data: json!({"native_turn_id":"native","runtime_instance_id":"runtime"}),
+            data: json!({"native_turn_id":"native","runtime_id":"runtime"}),
         })
         .await
         .unwrap();
     let turn = terminal.turn_id.clone().unwrap();
-    sqlx::query("UPDATE runtime_bindings SET runtime_instance_id='replacement' WHERE session_id=?")
+    sqlx::query("UPDATE session_runtimes SET runtime_id='replacement' WHERE session_id=?")
         .bind(&fixture.session)
         .execute(&fixture.state.db())
         .await
@@ -515,33 +476,5 @@ async fn native_terminal_fact_is_fenced_again_when_committing() {
     assert_eq!(
         events.list_events(&fixture.session).await.unwrap().len(),
         before
-    );
-}
-
-#[tokio::test]
-async fn failed_runtime_confirmation_cannot_leave_an_agent_binding() {
-    let fixture = Fixture::new().await;
-    sqlx::query("CREATE TRIGGER reject_confirmation BEFORE UPDATE ON runtime_bindings BEGIN SELECT RAISE(ABORT, 'runtime write failed'); END")
-        .execute(&fixture.state.db()).await.unwrap();
-    assert!(
-        fixture
-            .service
-            .confirm(
-                binding(&fixture),
-                "replacement",
-                Some("runtime"),
-                &Default::default(),
-                json!({})
-            )
-            .await
-            .is_err()
-    );
-    assert_eq!(instance(&fixture).await, "runtime");
-    assert!(
-        crate::AgentBindingService::new(fixture.state.db())
-            .binding_for_session(&fixture.session)
-            .await
-            .unwrap()
-            .is_none()
     );
 }

@@ -20,7 +20,7 @@ where
         node: &WorkflowNodeRow,
         session_id: &str,
         terminal: AgentTerminal,
-        runtime_instance_id: Option<String>,
+        runtime_id: Option<String>,
         cause_event_id: &str,
     ) -> Result<()> {
         match terminal {
@@ -30,7 +30,7 @@ where
                         &workflow.workflow_id,
                         &node.node_id,
                         &Uuid::now_v7().to_string(),
-                        runtime_instance_id.as_deref(),
+                        runtime_id.as_deref(),
                     )
                     .await?;
             }
@@ -49,14 +49,14 @@ where
                         &Uuid::now_v7().to_string(),
                         &failure_message,
                         cause_event_id,
-                        runtime_instance_id.as_deref(),
+                        runtime_id.as_deref(),
                     )
                     .await?;
                 if terminal != AgentTerminal::SessionExited {
-                    if let Some(runtime_instance_id) = runtime_instance_id {
+                    if let Some(runtime_id) = runtime_id {
                         if let Err(error) = self
                             .exits
-                            .request_graceful_exit(session_id, &runtime_instance_id)
+                            .request_graceful_exit(session_id, &runtime_id)
                             .await
                         {
                             tracing::warn!(workflow_id = %workflow.workflow_id, node_id = %node.node_id, session_id, %error, "failed to request graceful Session cleanup");
@@ -103,7 +103,7 @@ where
         let Some(terminal) = AgentTerminal::from_event_type(&event.event_type) else {
             return Ok(());
         };
-        let runtime_instance_id = event.runtime_instance_id.clone();
+        let runtime_id = event.runtime_id.clone();
         if terminal == AgentTerminal::TurnInterrupted
             && (self
                 .repository
@@ -123,7 +123,7 @@ where
                 node,
                 session_id,
                 terminal,
-                runtime_instance_id,
+                runtime_id,
                 &event.event_id,
             )
             .await?;
@@ -131,21 +131,20 @@ where
         }
 
         if terminal != AgentTerminal::SessionExited {
-            let Some(submitted_runtime_instance_id) = node.submitted_runtime_instance_id.as_deref()
-            else {
+            let Some(submitted_runtime_id) = node.submitted_runtime_id.as_deref() else {
                 tracing::error!(workflow_id, node_id = %node.node_id, "submitted Workflow Agent Node has no fenced runtime identity");
                 return Ok(());
             };
             if !self
                 .repository
-                .claim_node_exit_request(&node.node_id, submitted_runtime_instance_id)
+                .claim_node_exit_request(&node.node_id, submitted_runtime_id)
                 .await?
             {
                 return Ok(());
             }
             if let Err(error) = self
                 .exits
-                .request_graceful_exit(session_id, submitted_runtime_instance_id)
+                .request_graceful_exit(session_id, submitted_runtime_id)
                 .await
             {
                 let failure_message = format!(

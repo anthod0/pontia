@@ -5,6 +5,9 @@ pub type ClientControlOperation<'a, T = ()> = Pin<Box<dyn Future<Output = Result
 
 pub trait ClientControlChannel: Send + Sync {
     fn available(&self) -> bool;
+    fn process_id(&self) -> Option<u32> {
+        None
+    }
     fn invalidate(&self);
     fn list_models(&self) -> ClientControlOperation<'_, Vec<crate::sessions::SessionModel>>;
     fn set_model<'a>(&'a self, model: &'a str) -> ClientControlOperation<'a>;

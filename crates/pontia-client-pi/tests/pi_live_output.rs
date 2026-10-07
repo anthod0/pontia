@@ -41,16 +41,16 @@ impl Session {
             .as_str()
             .unwrap()
             .to_owned();
-        let runtime = registered["runtime"]["runtime_instance_id"]
+        let runtime = registered["runtime"]["runtime_id"]
             .as_str()
             .unwrap()
             .to_owned();
         peer.call(
             "event.report",
             json!({
-                "runtime_instance_id": runtime,
+                "runtime_id": runtime,
                 "event": {"session_id": session, "type": "session.ready", "data": {
-                    "runtime_instance_id": runtime, "client_session_key": "native"
+                    "runtime_id": runtime, "client_session_key": "native"
                 }}
             }),
         )
@@ -60,9 +60,9 @@ impl Session {
             .call(
                 "event.report",
                 json!({
-                    "runtime_instance_id": runtime,
+                    "runtime_id": runtime,
                     "event": {"session_id": session, "type": "turn.started", "data": {
-                        "runtime_instance_id": runtime, "input_summary": "test"
+                        "runtime_id": runtime, "input_summary": "test"
                     }}
                 }),
             )
@@ -81,7 +81,7 @@ impl Session {
 
     fn request(&self, operation: Value) -> Value {
         let mut params = json!({
-            "session_id": self.session, "runtime_instance_id": self.runtime,
+            "session_id": self.session, "runtime_id": self.runtime,
             "turn_id": self.turn, "stream_id": "stream_live"
         });
         params
@@ -214,7 +214,7 @@ async fn rejects_invalid_tool_payloads_and_unregistered_or_mismatched_identities
     unregistered.close();
     for overrides in [
         json!({"session_id": "another_session"}),
-        json!({"runtime_instance_id": "stale_runtime"}),
+        json!({"runtime_id": "stale_runtime"}),
         json!({"turn_id": "missing_turn"}),
         json!({"sequence": "invalid"}),
         json!({"unexpected": true}),
@@ -252,7 +252,7 @@ async fn rejects_invalid_tool_payloads_and_unregistered_or_mismatched_identities
 #[tokio::test]
 async fn checks_current_runtime_even_when_connection_identity_matches() {
     let session = Session::new().await;
-    sqlx::query("UPDATE runtime_bindings SET runtime_instance_id='replacement' WHERE session_id=?")
+    sqlx::query("UPDATE session_runtimes SET runtime_id='replacement' WHERE session_id=?")
         .bind(&session.session)
         .execute(&session.state.db())
         .await
@@ -281,7 +281,7 @@ async fn terminal_facts_clear_live_output_and_reject_further_updates() {
         .call(
             "event.report",
             json!({
-                "runtime_instance_id": session.runtime,
+                "runtime_id": session.runtime,
                 "event": {"session_id": session.session, "turn_id": session.turn,
                     "type": "turn.completed", "data": {"terminal_leaf_id": null}}
             }),

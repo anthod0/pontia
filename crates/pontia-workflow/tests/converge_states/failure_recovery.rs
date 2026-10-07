@@ -35,7 +35,7 @@ async fn fixture() -> (
         .await
         .unwrap();
     sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key) VALUES ('binding','failed','pi','/workspace','native-session')").execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO runtime_bindings(session_id,runtime_kind,runtime_instance_id,binding_state) VALUES ('failed','pi_tui','old-runtime','confirmed')").execute(&pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('failed', 'old-runtime', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
     exit(&pool, "old-exit", "old-runtime").await;
     repo.fail_unsubmitted_workflow_node(
         "wf_retry",
@@ -59,7 +59,7 @@ async fn fixture() -> (
 
 async fn exit(pool: &sqlx::SqlitePool, id: &str, runtime: &str) {
     sqlx::query("INSERT INTO events(event_id,session_id,source,client_type,event_type,occurred_at,payload) VALUES (?,'failed','runtime_manager','pi','session.exited','2026-09-24T00:00:00Z',?)")
-        .bind(id).bind(serde_json::json!({"runtime_instance_id":runtime}).to_string()).execute(pool).await.unwrap();
+        .bind(id).bind(serde_json::json!({"runtime_id":runtime}).to_string()).execute(pool).await.unwrap();
 }
 
 async fn ready(
@@ -76,12 +76,10 @@ async fn ready(
         .execute(&app.db())
         .await
         .unwrap();
-    sqlx::query(
-        "UPDATE runtime_bindings SET runtime_instance_id='new-runtime' WHERE session_id='failed'",
-    )
-    .execute(&app.db())
-    .await
-    .unwrap();
+    sqlx::query("UPDATE session_runtimes SET runtime_id='new-runtime' WHERE session_id='failed'")
+        .execute(&app.db())
+        .await
+        .unwrap();
     sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES (?,'failed','resuming','after_idle','recover')").bind(&row.message_id).execute(&app.db()).await.unwrap();
     repo.start_recovery_delivery(&row.recovery_id)
         .await

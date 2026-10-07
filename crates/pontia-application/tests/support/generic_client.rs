@@ -57,7 +57,7 @@ impl GenericClientTestScope {
     }
 
     pub async fn runtime_metadata(&self, state: &AppState, session_id: &str) -> Value {
-        let row = sqlx::query("SELECT runtime_handle FROM runtime_bindings WHERE session_id = ?")
+        let row = sqlx::query("SELECT runtime_handle FROM session_runtimes WHERE session_id = ?")
             .bind(session_id)
             .fetch_one(&state.db())
             .await

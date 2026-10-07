@@ -236,7 +236,7 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
     return {
       session_id: this.context.sessionId,
       turn_id: this.context.turnId,
-      runtime_instance_id: this.context.runtimeInstanceId,
+      runtime_id: this.context.runtimeId,
       stream_id: this.streamId,
     };
   }

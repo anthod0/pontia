@@ -18,12 +18,15 @@ impl SqliteWorkflowRepository {
             r#"SELECT EXISTS (
                  SELECT 1 FROM events e
                  JOIN workflow_nodes n ON n.session_id = e.session_id
-                 JOIN runtime_bindings r ON r.session_id = n.session_id
+                 JOIN session_runtimes r ON r.session_id = n.session_id
                  WHERE n.workflow_id = ? AND n.node_id = ?
                    AND e.event_type = 'session.error' AND e.source = 'runtime_manager'
                    AND json_extract(e.payload, '$.reason') = 'turn_start_reporting_failed'
-                   AND json_extract(e.payload, '$.runtime_instance_id') = r.runtime_instance_id
-                   AND r.binding_state = 'confirmed'
+                   AND json_extract(e.payload, '$.runtime_id') = r.runtime_id
+                   AND e.rowid > COALESCE((SELECT MAX(startup.rowid) FROM events startup
+                       WHERE startup.session_id=e.session_id
+                         AND startup.event_type IN ('session.starting','session.resuming')),0)
+                   AND r.state IN ('starting','running') AND r.role = 'tui'
                )"#,
         )
         .bind(workflow_id)
@@ -40,18 +43,21 @@ impl SqliteWorkflowRepository {
             return Ok(false);
         }
         let failure: Option<(String, String, String)> = sqlx::query_as(
-            r#"SELECT json_extract(e.payload, '$.failure.message'), n.session_id, r.runtime_instance_id
+            r#"SELECT json_extract(e.payload, '$.failure.message'), n.session_id, r.runtime_id
                FROM workflow_nodes n
                JOIN workflows w ON w.workflow_id = n.workflow_id
-               JOIN runtime_bindings r ON r.session_id = n.session_id
+               JOIN session_runtimes r ON r.session_id = n.session_id
                JOIN events e ON e.session_id = n.session_id
                WHERE n.workflow_id = ? AND n.node_id = ?
                  AND n.introduced_revision <= w.current_revision
                  AND (n.retired_revision IS NULL OR n.retired_revision > w.current_revision)
                  AND e.event_type = 'session.error' AND e.source = 'runtime_manager'
                  AND json_extract(e.payload, '$.reason') = 'turn_start_reporting_failed'
-                 AND json_extract(e.payload, '$.runtime_instance_id') = r.runtime_instance_id
-                 AND r.binding_state = 'confirmed'
+                 AND json_extract(e.payload, '$.runtime_id') = r.runtime_id
+                   AND e.rowid > COALESCE((SELECT MAX(startup.rowid) FROM events startup
+                       WHERE startup.session_id=e.session_id
+                         AND startup.event_type IN ('session.starting','session.resuming')),0)
+                 AND r.state IN ('starting','running') AND r.role = 'tui'
                  AND NOT EXISTS (
                      SELECT 1 FROM workflow_nodes child
                      WHERE child.parent_node_id = n.node_id AND child.session_id IS NOT NULL
@@ -60,7 +66,7 @@ impl SqliteWorkflowRepository {
                  )
                ORDER BY e.rowid DESC LIMIT 1"#,
         ).bind(workflow_id).bind(node_id).fetch_optional(&mut *tx).await?;
-        let Some((message, session_id, runtime_instance_id)) = failure else {
+        let Some((message, session_id, runtime_id)) = failure else {
             tx.commit().await?;
             return Ok(false);
         };
@@ -69,7 +75,7 @@ impl SqliteWorkflowRepository {
         let payload = json!({
             "node_id": node_id,
             "session_id": session_id,
-            "runtime_instance_id": runtime_instance_id,
+            "runtime_id": runtime_id,
             "failure_message": message,
             "reason": "turn_start_reporting_failed",
         });

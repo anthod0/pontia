@@ -26,7 +26,7 @@ async fn app() -> (tempfile::TempDir, AppState, String) {
         .await
         .unwrap();
     let session = created.session_id().unwrap().to_string();
-    sqlx::query("UPDATE runtime_bindings SET runtime_instance_id='instance',binding_state='confirmed' WHERE session_id=?").bind(&session).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE session_runtimes SET runtime_id='instance',binding_state='confirmed' WHERE session_id=?").bind(&session).execute(&pool).await.unwrap();
     AgentBindingService::new(pool.clone())
         .upsert_binding(UpsertAgentBindingRequest {
             session_id: session.clone(),
@@ -53,7 +53,7 @@ async fn report(state: &AppState, session: &str, kind: &str, data: Value) -> (St
 #[ignore = "Codex integration is frozen pending session-runtimes migration"]
 async fn native_turns_are_deduplicated_and_old_instances_cannot_report() {
     let (_root, state, session) = app().await;
-    let data = json!({"runtime_instance_id":"instance","native_turn_id":"native-one","input":{"summary":"manual input"}});
+    let data = json!({"runtime_id":"instance","native_turn_id":"native-one","input":{"summary":"manual input"}});
     let ((status, first), (second_status, second)) = tokio::join!(
         report(&state, &session, "turn.started", data.clone()),
         report(&state, &session, "turn.started", data)
@@ -66,11 +66,11 @@ async fn native_turns_are_deduplicated_and_old_instances_cannot_report() {
         &state,
         &session,
         "turn.completed",
-        json!({"runtime_instance_id":"old","native_turn_id":"native-one"}),
+        json!({"runtime_id":"old","native_turn_id":"native-one"}),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    let (status,end)=report(&state,&session,"turn.interrupted",json!({"runtime_instance_id":"instance","native_turn_id":"native-one","native_completed_at":null,"observation":"snapshot"})).await;
+    let (status,end)=report(&state,&session,"turn.interrupted",json!({"runtime_id":"instance","native_turn_id":"native-one","native_completed_at":null,"observation":"snapshot"})).await;
     assert_eq!(status, StatusCode::OK, "{end}");
     let turns = pontia_application::ExternalQueryService::new(state.db())
         .list_turns(&session)
@@ -90,7 +90,7 @@ async fn archive_does_not_invent_a_turn_terminal_and_late_native_terminal_conver
             &state,
             &session,
             "turn.started",
-            json!({"runtime_instance_id":"instance","native_turn_id":"native-one"})
+            json!({"runtime_id":"instance","native_turn_id":"native-one"})
         )
         .await
         .0,
@@ -101,7 +101,7 @@ async fn archive_does_not_invent_a_turn_terminal_and_late_native_terminal_conver
             &state,
             &session,
             "session.exited",
-            json!({"runtime_instance_id":"instance","reason":"thread_archived"})
+            json!({"runtime_id":"instance","reason":"thread_archived"})
         )
         .await
         .0,
@@ -112,7 +112,7 @@ async fn archive_does_not_invent_a_turn_terminal_and_late_native_terminal_conver
         query.list_turns(&session).await.unwrap()[0].state,
         "running"
     );
-    assert_eq!(report(&state,&session,"turn.interrupted",json!({"runtime_instance_id":"instance","native_turn_id":"native-one","native_completed_at":null})).await.0,StatusCode::OK);
+    assert_eq!(report(&state,&session,"turn.interrupted",json!({"runtime_id":"instance","native_turn_id":"native-one","native_completed_at":null})).await.0,StatusCode::OK);
     assert_eq!(
         query.list_turns(&session).await.unwrap()[0].state,
         "interrupted"

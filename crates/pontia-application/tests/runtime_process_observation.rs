@@ -47,22 +47,17 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
     sqlx::query(
-        "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_observed', 'generic', 'idle')",
+        "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_observed', 'pi', 'idle')",
     )
     .execute(&db)
     .await
     .expect("insert session");
-    sqlx::query(
-        r#"INSERT INTO runtime_bindings (
-               session_id, runtime_kind, runtime_instance_id, binding_state,
-               tmux_socket_path, tmux_pane_id, process_fingerprint
-           ) VALUES (?, 'pi_tui', ?, 'confirmed', ?, ?, ?)"#,
-    )
-    .bind("sess_observed")
-    .bind("rtinst_observed")
-    .bind(&socket_path)
-    .bind(&pane_id)
-    .bind(json!(fingerprint).to_string())
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, process_fingerprint, role, state, created_at) VALUES (?, ?, ?, ?, ?, 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+.bind("sess_observed")
+.bind("rtinst_observed")
+.bind(&socket_path)
+.bind(&pane_id)
+.bind(json!(fingerprint).to_string())
     .execute(&db)
     .await
     .expect("insert binding");
@@ -77,7 +72,14 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
     AppState::builder(db.clone(), temp.path().into())
         .clients({
             let mut clients = pontia_application::clients::ClientRegistry::default();
-            clients.register(pontia_application::client_contract::test_registration());
+            static SPEC: pontia_application::client_contract::AgentClientSpec =
+                pontia_application::client_contract::AgentClientSpec {
+                    client_type: "pi",
+                    ..pontia_application::client_contract::TEST_SPEC
+                };
+            let mut entry = pontia_application::client_contract::test_registration();
+            entry.spec = &SPEC;
+            clients.register(entry);
             clients
         })
         .build()
@@ -104,7 +106,7 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
 }
 
 #[tokio::test]
-async fn active_tmux_session_without_a_fingerprint_exits_immediately() {
+async fn active_tmux_session_without_a_fingerprint_remains_unknown() {
     let temp = tempfile::tempdir().expect("tempdir");
     let database_url = format!(
         "sqlite://{}?mode=rwc",
@@ -113,21 +115,16 @@ async fn active_tmux_session_without_a_fingerprint_exits_immediately() {
     let db = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&db).await.expect("migrate");
     sqlx::query(
-        "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_without_fingerprint', 'generic', 'idle')",
+        "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_without_fingerprint', 'pi', 'idle')",
     )
     .execute(&db)
     .await
     .expect("insert session");
-    sqlx::query(
-        r#"INSERT INTO runtime_bindings (
-               session_id, runtime_kind, runtime_instance_id, binding_state,
-               tmux_socket_path, tmux_pane_id
-           ) VALUES (?, 'pi_tui', ?, 'confirmed', ?, ?)"#,
-    )
-    .bind("sess_without_fingerprint")
-    .bind("rtinst_without_fingerprint")
-    .bind(temp.path().join("missing-tmux-socket").to_str().unwrap())
-    .bind("%404")
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, ?, ?, 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+.bind("sess_without_fingerprint")
+.bind("rtinst_without_fingerprint")
+.bind(temp.path().join("missing-tmux-socket").to_str().unwrap())
+.bind("%404")
     .execute(&db)
     .await
     .expect("insert binding");
@@ -135,7 +132,14 @@ async fn active_tmux_session_without_a_fingerprint_exits_immediately() {
     AppState::builder(db.clone(), temp.path().into())
         .clients({
             let mut clients = pontia_application::clients::ClientRegistry::default();
-            clients.register(pontia_application::client_contract::test_registration());
+            static SPEC: pontia_application::client_contract::AgentClientSpec =
+                pontia_application::client_contract::AgentClientSpec {
+                    client_type: "pi",
+                    ..pontia_application::client_contract::TEST_SPEC
+                };
+            let mut entry = pontia_application::client_contract::test_registration();
+            entry.spec = &SPEC;
+            clients.register(entry);
             clients
         })
         .build()
@@ -149,16 +153,16 @@ async fn active_tmux_session_without_a_fingerprint_exits_immediately() {
         .fetch_one(&db)
         .await
         .expect("load session state");
-    assert_eq!(state, "exited");
-
-    let reason: String = sqlx::query_scalar(
-        "SELECT json_extract(payload, '$.reason') FROM events WHERE session_id = ? AND event_type = 'session.exited'",
-    )
-    .bind("sess_without_fingerprint")
-    .fetch_one(&db)
-    .await
-    .expect("load exit reason");
-    assert_eq!(reason, "agent_process_fingerprint_unavailable");
+    assert_eq!(state, "idle");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM events WHERE event_type='session.exited'"
+        )
+        .fetch_one(&db)
+        .await
+        .unwrap(),
+        0
+    );
 }
 
 fn tmux_value(socket: &std::path::Path, session: &str, format: &str) -> String {

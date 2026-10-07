@@ -331,8 +331,8 @@ async fn restart_rejects_replacing_the_runtime_while_a_turn_is_active() {
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
     let turn_id = submit_turn(state.clone(), &session_id).await;
-    let original_runtime_instance_id: String =
-        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+    let original_runtime_id: String =
+        sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id = ?")
             .bind(&session_id)
             .fetch_one(&state.db())
             .await
@@ -350,13 +350,13 @@ async fn restart_rejects_replacing_the_runtime_while_a_turn_is_active() {
     assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
     assert_eq!(body["error"]["code"], "state_conflict");
 
-    let persisted_runtime_instance_id: String =
-        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+    let persisted_runtime_id: String =
+        sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id = ?")
             .bind(&session_id)
             .fetch_one(&state.db())
             .await
             .expect("runtime binding");
-    assert_eq!(persisted_runtime_instance_id, original_runtime_instance_id);
+    assert_eq!(persisted_runtime_id, original_runtime_id);
     let (turn_status, turn_body) = request(
         state,
         "GET",

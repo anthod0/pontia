@@ -23,9 +23,7 @@ impl SessionCreator for ReplannerCreator {
         .execute(&self.0)
         .await
         .expect("create dedicated Re-planner Session");
-        sqlx::query(
-            "INSERT INTO runtime_bindings (session_id, runtime_kind, runtime_instance_id, binding_state) VALUES ('sess_patch_replanner', 'pi_tui', 'runtime_patch_replanner', 'confirmed')",
-        )
+        sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('sess_patch_replanner', 'runtime_patch_replanner', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
         .execute(&self.0)
         .await
         .expect("bind Re-planner Runtime");
@@ -43,11 +41,11 @@ impl TurnInterruptionRequester for RuntimeControl {
         &self,
         session_id: &str,
         turn_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> pontia_workflow::Result<()> {
         assert_eq!(session_id, "sess_patch_request");
         assert_eq!(turn_id, "turn_patch_request");
-        assert_eq!(runtime_instance_id, "runtime_patch_request");
+        assert_eq!(runtime_id, "runtime_patch_request");
         Ok(())
     }
 }
@@ -78,7 +76,7 @@ async fn reported_requester_interruption_starts_one_replanner() {
     report_requester_fact(
         &app,
         "turn.started",
-        json!({ "runtime_instance_id": "runtime_patch_request" }),
+        json!({ "runtime_id": "runtime_patch_request" }),
     )
     .await;
     let (status, requested) = request_patch(&app, "runtime_patch_request").await;
@@ -158,7 +156,7 @@ async fn submitted_current_node_remains_exiting_after_interruption() {
     report_requester_fact(
         &app,
         "turn.started",
-        json!({ "runtime_instance_id": "runtime_patch_request" }),
+        json!({ "runtime_id": "runtime_patch_request" }),
     )
     .await;
     SqliteWorkflowRepository::new(app.db.clone())
@@ -222,7 +220,7 @@ async fn planning_patch(app: &TestApp, control: RuntimeControl) -> (String, Coor
     report_requester_fact(
         app,
         "turn.started",
-        json!({ "runtime_instance_id": "runtime_patch_request" }),
+        json!({ "runtime_id": "runtime_patch_request" }),
     )
     .await;
     let (status, requested) = request_patch(app, "runtime_patch_request").await;
@@ -242,7 +240,7 @@ async fn planning_patch(app: &TestApp, control: RuntimeControl) -> (String, Coor
         "sess_patch_replanner",
         None,
         "turn.started",
-        json!({ "runtime_instance_id": "runtime_patch_replanner" }),
+        json!({ "runtime_id": "runtime_patch_replanner" }),
     )
     .await;
     (

@@ -229,9 +229,10 @@ impl AppState {
             self.db(),
             self.clients(),
             self.event_ingest_service(),
+            self.client_control(),
         )
     }
-    pub fn runtime_bindings(&self) -> crate::RuntimeBindingUpsertService {
+    pub fn session_runtimes(&self) -> crate::RuntimeBindingUpsertService {
         crate::RuntimeBindingUpsertService::new(
             self.db(),
             self.pontia_home().into(),

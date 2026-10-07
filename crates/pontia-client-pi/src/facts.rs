@@ -19,7 +19,7 @@ pub fn normalize_payload(event_type: EventType, data: Value) -> Result<Value> {
                 .cloned()
                 .unwrap_or(Value::Null);
             let mut payload = json!({
-                "runtime_instance_id": object.get("runtime_instance_id").cloned().unwrap_or(Value::Null),
+                "runtime_id": object.get("runtime_id").cloned().unwrap_or(Value::Null),
                 "input": { "summary": input_summary },
                 "timeline_anchor": { "previous_leaf_id": previous_leaf_id },
             });

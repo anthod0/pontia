@@ -20,13 +20,6 @@ pub struct SessionRow {
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct RuntimeBindingCapabilitiesRow {
-    pub capabilities: String,
-    pub tmux_socket_path: Option<String>,
-    pub tmux_pane_id: Option<String>,
-}
-
-#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct SessionProjectionRow {
     pub session_id: String,
     pub client_type: String,

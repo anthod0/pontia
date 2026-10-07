@@ -59,7 +59,7 @@ impl SqliteWorkflowRepository {
                  ON p.workflow_id = ? AND p.requesting_session_id = e.session_id
                 AND p.requesting_turn_id = e.turn_id
                 AND p.state IN ('applied', 'rejected')
-                AND e.runtime_instance_id = p.requesting_runtime_instance_id
+                AND e.runtime_id = p.requesting_runtime_id
                WHERE e.event_id = ? AND e.event_type = 'turn.interrupted'"#,
         ))
         .bind(workflow_id)

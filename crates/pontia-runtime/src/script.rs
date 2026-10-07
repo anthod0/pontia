@@ -18,7 +18,7 @@ pub(super) fn write_ephemeral_launch_script(
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
     launch_id: &str,
-    runtime_instance_id: &str,
+    runtime_id: &str,
 ) -> Result<PathBuf> {
     let launch_dir = pontia_home.join("state/launch");
     std::fs::create_dir_all(&launch_dir)?;
@@ -29,7 +29,7 @@ pub(super) fn write_ephemeral_launch_script(
         runtime_paths,
         request,
         launch_id,
-        runtime_instance_id,
+        runtime_id,
     )?;
     let mut permissions = std::fs::metadata(&path)?.permissions();
     permissions.set_mode(0o700);
@@ -43,7 +43,7 @@ pub(super) fn write_launch_script(
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
     launch_id: &str,
-    runtime_instance_id: &str,
+    runtime_id: &str,
 ) -> Result<()> {
     let runtime_environment = render_runtime_environment(request)?;
     let command = request
@@ -65,7 +65,7 @@ unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WOR
 export PONTIA_HOME={}
 {}if [ -n "${{TMUX:-}}" ] && [ -n "${{TMUX_PANE:-}}" ]; then
   tmux set-option -p -t "$TMUX_PANE" @pontia_session_id {} || exit 1
-  tmux set-option -p -t "$TMUX_PANE" @pontia_runtime_instance_id {} || exit 1
+  tmux set-option -p -t "$TMUX_PANE" @pontia_runtime_id {} || exit 1
 fi
 PONTIA_LAUNCH_SCRIPT=${{0:-}}
 cleanup_pontia_launch_script() {{
@@ -81,7 +81,7 @@ cleanup_pontia_launch_script
         shell_quote(&pontia_home.display().to_string()),
         runtime_environment,
         shell_quote(&request.session_id),
-        shell_quote(runtime_instance_id),
+        shell_quote(runtime_id),
         log_setup,
         runtime_body,
     );
@@ -132,6 +132,7 @@ mod tests {
             log_path: &log_path,
         };
         let request = RuntimeStartRequest {
+            runtime_id: None,
             session_id: "sess_resume_1".to_string(),
             client_type: "pi".to_string(),
             workspace: Some(tempdir.path().display().to_string()),
@@ -190,7 +191,7 @@ mod tests {
             )
         );
         assert!(script.contains(
-            "tmux set-option -p -t \"$TMUX_PANE\" @pontia_runtime_instance_id 'runtime_instance_1'"
+            "tmux set-option -p -t \"$TMUX_PANE\" @pontia_runtime_id 'runtime_instance_1'"
         ));
         assert!(
             script.contains("session=sess_resume_1 launch=launch_1"),
@@ -205,6 +206,7 @@ mod tests {
             log_path: &tempdir.path().join("runtime.log"),
         };
         let request = RuntimeStartRequest {
+            runtime_id: None,
             session_id: "sess_explicit_start".to_string(),
             client_type: "pi".to_string(),
             workspace: Some(tempdir.path().display().to_string()),

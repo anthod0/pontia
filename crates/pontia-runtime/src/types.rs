@@ -8,6 +8,7 @@ pub use pontia_core::client_capabilities::{AgentClientCapabilities, AgentInput};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeStartRequest {
     pub session_id: String,
+    pub runtime_id: Option<String>,
     pub client_type: String,
     pub workspace: Option<String>,
     pub workspace_name: Option<String>,
@@ -27,8 +28,8 @@ pub struct RuntimeStartResult {
 }
 
 impl RuntimeStartResult {
-    pub fn runtime_instance_id(&self) -> Option<&str> {
-        self.metadata["runtime_instance_id"].as_str()
+    pub fn runtime_id(&self) -> Option<&str> {
+        self.metadata["runtime_id"].as_str()
     }
 
     pub fn launch_cwd(&self) -> Option<&str> {

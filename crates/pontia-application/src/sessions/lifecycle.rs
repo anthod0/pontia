@@ -25,22 +25,15 @@ impl SessionCommandService {
             .await
     }
 
-    pub async fn ensure_current_runtime(
-        &self,
-        session_id: &str,
-        runtime_instance_id: &str,
-    ) -> Result<()> {
+    pub async fn ensure_current_runtime(&self, session_id: &str, runtime_id: &str) -> Result<()> {
         let session = self
             .queries
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let target = crate::runtime::ControlTarget::resolve(
-            &self.pool,
-            session_id,
-            Some(runtime_instance_id),
-        )
-        .await?;
+        let target =
+            crate::runtime::ControlTarget::resolve(&self.pool, session_id, Some(runtime_id))
+                .await?;
         self.clients
             .for_client(&session.client_type)?
             .ensure_exit_available(&target)
@@ -96,6 +89,7 @@ impl SessionCommandService {
         session_id: &str,
         pontia_home: &Path,
     ) -> Result<ControlCommandOutcome> {
+        let _launch_guard = self.control.lock_identity().await;
         let query = &self.queries;
         let session = query
             .get_session_control(session_id)
@@ -110,7 +104,7 @@ impl SessionCommandService {
         let adapter = self.clients.for_client(&session.client_type)?;
         let target = crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
         adapter.validate_resume(&target).await?;
-        let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
+        self.control.retire_connection_locked(session_id).await;
         let ingest = self.event_ingest.clone();
         ingest
             .ingest_pontia_event(PontiaEvent::new(
@@ -119,7 +113,7 @@ impl SessionCommandService {
                 PontiaEventSource::ExternalApi,
                 session.client_type.clone(),
                 PontiaEventType::SessionResuming,
-                json!({}),
+                json!({"runtime_id": target.runtime_id}),
             ))
             .await?;
         let runtime_workspace_name = if let Some(workspace_id) = session.workspace_id.as_deref() {
@@ -135,6 +129,7 @@ impl SessionCommandService {
                 &target,
                 pontia_home,
                 RuntimeStartRequest {
+                    runtime_id: target.runtime_id.clone(),
                     session_id: session_id.to_string(),
                     client_type: session.client_type.clone(),
                     workspace: session.workspace.clone(),
@@ -144,9 +139,17 @@ impl SessionCommandService {
                     start_command: persisted_start_command,
                     environment: self.workflow_runtime_environment(session_id).await?,
                 },
-                prior_restart_count + 1,
+                1,
             )
-            .await?;
+            .await;
+        let runtime = match runtime {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                ingest.ingest_pontia_event(PontiaEvent::new(session_id, None, PontiaEventSource::RuntimeManager, &session.client_type, PontiaEventType::SessionError,
+                    json!({"runtime_id": target.runtime_id, "reason": "startup_failed", "failure": {"message": error.to_string()}}))).await?;
+                return Err(error);
+            }
+        };
         let Some(runtime) = runtime else {
             return Ok(ControlCommandOutcome {
                 data: json!({"session":query.get_session(session_id).await?}),
@@ -166,11 +169,7 @@ impl SessionCommandService {
             ))
             .await?;
         ingest
-            .ingest_in_process_ready_event(
-                &session.client_type,
-                session_id,
-                runtime.runtime_instance_id(),
-            )
+            .ingest_in_process_ready_event(&session.client_type, session_id, runtime.runtime_id())
             .await?;
 
         let session = query
@@ -199,6 +198,43 @@ impl SessionCommandService {
                 "terminal session {session_id} cannot be restarted"
             )));
         }
+        if session.client_type == "pi" {
+            if SqliteTurnRepository::new(self.pool.clone())
+                .active_turn(session_id)
+                .await?
+                .is_some()
+            {
+                return Err(Error::StateConflict(format!(
+                    "session {session_id} has an active Turn and its runtime cannot be replaced"
+                )));
+            }
+            let target =
+                crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
+            self.clients
+                .for_client("pi")?
+                .validate_resume(&target)
+                .await?;
+            self.request_exit(session_id, target.runtime_id.as_deref())
+                .await?;
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+            loop {
+                if self
+                    .queries
+                    .get_session_control(session_id)
+                    .await?
+                    .is_some_and(|session| session.state == "exited")
+                {
+                    break;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(Error::ControlUnknown(
+                        "Pi has not confirmed exit before restart".into(),
+                    ));
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+            return self.resume_session(session_id, pontia_home).await;
+        }
         let adapter = self.clients.for_client(&session.client_type)?;
         if !adapter.supports_restart() {
             return Err(Error::CapabilityUnavailable(
@@ -206,7 +242,7 @@ impl SessionCommandService {
             ));
         }
         let target = crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
-        let prior_restart_count = self.restart_count(session_id).await?.unwrap_or(0);
+        let prior_restart_count = 0;
         let mut runtime_replacement_tx = self.pool.begin().await?;
         SqliteTurnRepository::serialize_session_turn_writes_in_tx(
             &mut runtime_replacement_tx,
@@ -233,6 +269,7 @@ impl SessionCommandService {
                 &target,
                 pontia_home,
                 RuntimeStartRequest {
+                    runtime_id: target.runtime_id.clone(),
                     session_id: session_id.to_string(),
                     client_type: session.client_type.clone(),
                     workspace: session.workspace.clone(),
@@ -270,11 +307,7 @@ impl SessionCommandService {
             ))
             .await?;
         ingest
-            .ingest_in_process_ready_event(
-                &session.client_type,
-                session_id,
-                runtime.runtime_instance_id(),
-            )
+            .ingest_in_process_ready_event(&session.client_type, session_id, runtime.runtime_id())
             .await?;
 
         let session = query

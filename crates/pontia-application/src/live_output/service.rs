@@ -3,7 +3,7 @@ use pontia_core::{
     error::{Error, Result},
 };
 use pontia_storage_sqlite::repositories::{
-    runtime_bindings::SqliteRuntimeBindingRepository, sessions::SqliteSessionRepository,
+    session_runtimes::SqliteSessionRuntimeRepository, sessions::SqliteSessionRepository,
     turns::SqliteTurnRepository,
 };
 use sqlx::SqlitePool;
@@ -77,7 +77,7 @@ impl LiveOutputService {
     ) -> Result<()> {
         let identity = &producer.identity;
         validate_identity(identity)?;
-        validate_non_empty("runtime_instance_id", &producer.runtime_instance_id)?;
+        validate_non_empty("runtime_id", &producer.runtime_id)?;
 
         let session = SqliteSessionRepository::new(self.pool.clone())
             .get_session(&identity.session_id)
@@ -94,12 +94,12 @@ impl LiveOutputService {
             )));
         }
 
-        let expected_runtime = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .runtime_instance_id(&identity.session_id)
+        let expected_runtime = SqliteSessionRuntimeRepository::new(self.pool.clone())
+            .runtime_id(&identity.session_id)
             .await?;
-        if expected_runtime.as_deref() != Some(producer.runtime_instance_id.as_str()) {
+        if expected_runtime.as_deref() != Some(producer.runtime_id.as_str()) {
             return Err(Error::StateConflict(format!(
-                "runtime_instance_id does not match session {} runtime binding",
+                "runtime_id does not match session {} runtime binding",
                 identity.session_id
             )));
         }

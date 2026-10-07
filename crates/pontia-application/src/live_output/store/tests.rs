@@ -15,6 +15,6 @@ fn identity() -> LiveOutputIdentity {
 fn producer() -> LiveOutputProducer {
     LiveOutputProducer {
         identity: identity(),
-        runtime_instance_id: "rtinst_1".into(),
+        runtime_id: "rtinst_1".into(),
     }
 }

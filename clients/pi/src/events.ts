@@ -329,7 +329,7 @@ export function buildTurnStartedEvent(
   topologyContext?: PiTopologyContext,
 ): InternalEvent {
   const data: Record<string, unknown> = {
-    runtime_instance_id: context.runtimeInstanceId,
+    runtime_id: context.runtimeId,
     input_summary:
       context.input === undefined
         ? undefined
@@ -378,7 +378,7 @@ export function buildTurnInterruptedEvent(
 
 export function buildSessionReadyEvent(context: SessionContext): InternalEvent {
   const payload: Record<string, unknown> = {
-    runtime_instance_id: context.runtimeInstanceId,
+    runtime_id: context.runtimeId,
   };
   if (context.clientSessionKey) payload.client_session_key = context.clientSessionKey;
   if (context.clientSessionFile) payload.client_session_file = context.clientSessionFile;
@@ -398,7 +398,7 @@ export function buildSessionExitedEvent(context: SessionContext, reason: string)
     type: "session.exited",
     data: {
       reason,
-      runtime_instance_id: context.runtimeInstanceId,
+      runtime_id: context.runtimeId,
     },
   };
 }

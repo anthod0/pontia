@@ -1,6 +1,6 @@
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
-use crate::models::sessions::{RuntimeBindingCapabilitiesRow, SessionProjectionRow, SessionRow};
+use crate::models::sessions::{SessionProjectionRow, SessionRow};
 
 use pontia_core::Result;
 
@@ -24,10 +24,12 @@ pub struct SessionProjectionUpsertRecord {
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct StartingSessionRow {
+    pub startup_event_id: String,
     pub session_id: String,
     pub client_type: String,
-    pub runtime_instance_id: Option<String>,
-    pub runtime_handle: Option<String>,
+    pub runtime_id: Option<String>,
+    pub tmux_socket_path: Option<String>,
+    pub tmux_pane_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -195,9 +197,12 @@ impl SqliteSessionRepository {
     pub async fn starting_sessions_before(&self, cutoff: &str) -> Result<Vec<StartingSessionRow>> {
         Ok(sqlx::query_as::<_, StartingSessionRow>(
             r#"SELECT s.session_id, s.client_type,
-                      r.runtime_instance_id, r.runtime_handle
+                      r.runtime_id, r.tmux_socket_path, r.tmux_pane_id,
+                      (SELECT e.event_id FROM events e WHERE e.session_id=s.session_id
+                       AND e.event_type IN ('session.starting','session.resuming')
+                       ORDER BY e.rowid DESC LIMIT 1) AS startup_event_id
                FROM sessions s
-               LEFT JOIN runtime_bindings r ON r.session_id = s.session_id
+               LEFT JOIN session_runtimes r ON r.session_id = s.session_id AND r.role = 'tui'
                WHERE s.state = 'starting'
                  AND (
                      SELECT e.created_at
@@ -221,18 +226,6 @@ impl SqliteSessionRepository {
                 .fetch_one(&self.pool)
                 .await?;
         Ok(exists != 0)
-    }
-
-    pub async fn get_runtime_binding_capabilities(
-        &self,
-        session_id: &str,
-    ) -> Result<Option<RuntimeBindingCapabilitiesRow>> {
-        Ok(sqlx::query_as::<_, RuntimeBindingCapabilitiesRow>(
-            "SELECT capabilities, tmux_socket_path, tmux_pane_id FROM runtime_bindings WHERE session_id = ?",
-        )
-        .bind(session_id)
-        .fetch_optional(&self.pool)
-        .await?)
     }
 
     pub async fn active_session_id_for_handle(

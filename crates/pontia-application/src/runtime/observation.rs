@@ -6,9 +6,9 @@ use tokio::sync::watch;
 
 use crate::client_contract::RuntimeBehavior;
 use pontia_core::error::{Error, Result};
-use pontia_runtime::{GenericRuntimeManager, TmuxProcessFingerprint};
+use pontia_runtime::{GenericRuntimeManager, ProcessObservation, TmuxProcessFingerprint};
 use pontia_storage_sqlite::repositories::{
-    runtime_bindings::{ActiveTmuxProcessBindingRow, SqliteRuntimeBindingRepository},
+    session_runtimes::{ActiveTmuxProcessBindingRow, SqliteSessionRuntimeRepository},
     sessions::SqliteSessionRepository,
     turns::SqliteTurnRepository,
 };
@@ -29,6 +29,7 @@ pub struct RuntimeObservationService {
     runtime: GenericRuntimeManager,
     clients: crate::clients::ClientRegistry,
     event_ingest: EventIngestService,
+    control: crate::ClientControlService,
 }
 
 impl RuntimeObservationService {
@@ -36,12 +37,14 @@ impl RuntimeObservationService {
         pool: SqlitePool,
         clients: crate::clients::ClientRegistry,
         event_ingest: EventIngestService,
+        control: crate::ClientControlService,
     ) -> Self {
         Self {
             pool,
             clients,
             runtime: GenericRuntimeManager,
             event_ingest,
+            control,
         }
     }
 
@@ -84,12 +87,14 @@ impl RuntimeObservationService {
             .await?;
 
         for session in sessions {
+            let _identity_guard = self.control.lock_identity().await;
             if self.clients.spec(&session.client_type).is_none() {
                 continue;
             }
             let timeout_seconds = STARTUP_TIMEOUT.as_secs();
             let mut payload = json!({
                 "reason": "startup_timeout",
+                "startup_event_id": session.startup_event_id,
                 "timeout_seconds": timeout_seconds,
                 "failure": {
                     "message": format!(
@@ -97,8 +102,8 @@ impl RuntimeObservationService {
                     )
                 }
             });
-            if let Some(runtime_instance_id) = session.runtime_instance_id {
-                payload["runtime_instance_id"] = json!(runtime_instance_id);
+            if let Some(runtime_id) = session.runtime_id {
+                payload["runtime_id"] = json!(runtime_id);
             }
             let transitioned = self
                 .ingest_service()
@@ -112,8 +117,8 @@ impl RuntimeObservationService {
                 ))
                 .await?;
             if transitioned
-                && let Some(runtime_handle) = session.runtime_handle
-                && let Err(error) = self.runtime.terminate_session(&runtime_handle)
+                && let Some((socket, pane)) = session.tmux_socket_path.zip(session.tmux_pane_id)
+                && let Err(error) = self.runtime.kill_tmux_pane(&socket, &pane)
             {
                 tracing::warn!(
                     session_id = %session.session_id,
@@ -126,7 +131,7 @@ impl RuntimeObservationService {
     }
 
     pub async fn sweep_active_tmux_sessions(&self) -> Result<()> {
-        let bindings = SqliteRuntimeBindingRepository::new(self.pool.clone())
+        let bindings = SqliteSessionRuntimeRepository::new(self.pool.clone())
             .active_tmux_process_bindings()
             .await?;
         for binding in bindings {
@@ -154,8 +159,9 @@ impl RuntimeObservationService {
             return Ok(());
         };
         match client_spec.adapter.runtime {
+            RuntimeBehavior::Tmux(_) if session.client_type != "pi" => return Ok(()),
             RuntimeBehavior::Tmux(_) => {
-                let repository = SqliteRuntimeBindingRepository::new(self.pool.clone());
+                let repository = SqliteSessionRuntimeRepository::new(self.pool.clone());
                 let Some(row) = repository.tmux_pane_binding(session_id).await? else {
                     return Ok(());
                 };
@@ -168,14 +174,14 @@ impl RuntimeObservationService {
                 else {
                     return Ok(());
                 };
-                let Some(runtime_instance_id) = row.runtime_instance_id else {
+                let Some(runtime_id) = row.runtime_id else {
                     return Ok(());
                 };
                 return self
                     .observe_tmux_process(ActiveTmuxProcessBindingRow {
                         session_id: session_id.to_string(),
                         client_type: session.client_type,
-                        runtime_instance_id,
+                        runtime_id,
                         socket_path,
                         pane_id,
                         process_fingerprint: row.process_fingerprint,
@@ -184,8 +190,8 @@ impl RuntimeObservationService {
             }
             RuntimeBehavior::External => return Ok(()),
             RuntimeBehavior::InProcess => {
-                let Some(runtime_target) = SqliteRuntimeBindingRepository::new(self.pool.clone())
-                    .runtime_handle(session_id)
+                let Some(runtime_target) = SqliteSessionRuntimeRepository::new(self.pool.clone())
+                    .runtime_id(session_id)
                     .await?
                 else {
                     return Ok(());
@@ -206,24 +212,15 @@ impl RuntimeObservationService {
             .as_deref()
             .and_then(|value| serde_json::from_str::<TmuxProcessFingerprint>(value).ok())
         else {
-            return self
-                .record_process_exit(binding, "agent_process_fingerprint_unavailable")
-                .await;
+            return Ok(());
         };
-        if self.runtime.validate_tmux_process_fingerprint(
-            &binding.socket_path,
-            &binding.pane_id,
-            &fingerprint,
-        ) {
+        if self.runtime.observe_tmux_process_fingerprint(&fingerprint) != ProcessObservation::Exited
+        {
             return Ok(());
         }
-
         tokio::time::sleep(PROCESS_OBSERVATION_RETRY_DELAY).await;
-        if self.runtime.validate_tmux_process_fingerprint(
-            &binding.socket_path,
-            &binding.pane_id,
-            &fingerprint,
-        ) {
+        if self.runtime.observe_tmux_process_fingerprint(&fingerprint) != ProcessObservation::Exited
+        {
             return Ok(());
         }
 
@@ -236,6 +233,7 @@ impl RuntimeObservationService {
         binding: ActiveTmuxProcessBindingRow,
         reason: &str,
     ) -> Result<()> {
+        let _identity_guard = self.control.lock_identity().await;
         self.ingest_service()
             .ingest_runtime_observation_event(PontiaEvent::new(
                 binding.session_id,
@@ -244,8 +242,9 @@ impl RuntimeObservationService {
                 binding.client_type,
                 PontiaEventType::SessionExited,
                 json!({
-                    "runtime_instance_id": binding.runtime_instance_id,
+                    "runtime_id": binding.runtime_id,
                     "reason": reason,
+                    "process_fingerprint": binding.process_fingerprint,
                 }),
             ))
             .await?;

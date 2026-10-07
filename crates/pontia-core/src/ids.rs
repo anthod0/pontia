@@ -35,8 +35,8 @@ pub fn new_dispatch_id() -> ExternalId {
     prefixed_id("dispatch")
 }
 
-pub fn new_runtime_instance_id() -> ExternalId {
-    prefixed_id("rtinst")
+pub fn new_runtime_id() -> ExternalId {
+    prefixed_id("runtime")
 }
 
 pub fn new_workspace_id() -> ExternalId {

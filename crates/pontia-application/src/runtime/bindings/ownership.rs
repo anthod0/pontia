@@ -1,6 +1,6 @@
 use pontia_core::error::{Error, Result};
 use pontia_storage_sqlite::repositories::{
-    runtime_bindings::SqliteRuntimeBindingRepository, turns::SqliteTurnRepository,
+    session_runtimes::SqliteSessionRuntimeRepository, turns::SqliteTurnRepository,
 };
 use sqlx::{Sqlite, Transaction};
 
@@ -48,10 +48,10 @@ impl RuntimeBindingUpsertService {
             // confirmed its native client identity for the first time.
             return Ok(());
         };
-        let existing_runtime_instance_id = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .runtime_instance_id(session_id)
+        let existing_runtime_id = SqliteSessionRuntimeRepository::new(self.pool.clone())
+            .runtime_id(session_id)
             .await?;
-        let existing_tmux = SqliteRuntimeBindingRepository::new(self.pool.clone())
+        let existing_tmux = SqliteSessionRuntimeRepository::new(self.pool.clone())
             .tmux_pane_binding(session_id)
             .await?;
         let incoming_tmux = request.tmux.as_ref().and_then(|tmux| {
@@ -60,8 +60,8 @@ impl RuntimeBindingUpsertService {
                 non_empty(tmux.pane_id.as_deref())?,
             ))
         });
-        let same_runtime = non_empty(request.runtime_instance_id.as_deref())
-            .zip(existing_runtime_instance_id.as_deref())
+        let same_runtime = non_empty(request.runtime_id.as_deref())
+            .zip(existing_runtime_id.as_deref())
             .is_some_and(|(incoming, existing)| incoming == existing);
         let same_pane = match (existing_tmux, incoming_tmux) {
             (Some(existing), Some((incoming_socket, incoming_pane))) => {
@@ -86,13 +86,9 @@ impl RuntimeBindingUpsertService {
 pub(super) async fn fence_runtime_binding_write(
     tx: &mut Transaction<'_, Sqlite>,
     session_id: &str,
-    runtime_instance_id: Option<&str>,
+    runtime_id: Option<&str>,
 ) -> Result<()> {
     SqliteTurnRepository::serialize_session_turn_writes_in_tx(tx, session_id).await?;
-    SqliteRuntimeBindingRepository::ensure_runtime_owner_may_write_in_tx(
-        tx,
-        session_id,
-        runtime_instance_id,
-    )
-    .await
+    SqliteSessionRuntimeRepository::ensure_runtime_owner_may_write_in_tx(tx, session_id, runtime_id)
+        .await
 }

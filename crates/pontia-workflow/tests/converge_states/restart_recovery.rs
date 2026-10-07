@@ -33,7 +33,7 @@ async fn startup_recovers_a_running_workflow_from_persisted_session_exit() {
            (event_id, session_id, source, client_type, event_type, occurred_at, payload)
            VALUES ('evt_session_exited', 'session_root', 'agent_client', 'pi',
                    'session.exited', '2026-07-31T00:00:00Z',
-                   '{"runtime_instance_id":"runtime_session_root"}')"#,
+                   '{"runtime_id":"runtime_session_root"}')"#,
     )
     .execute(&pool)
     .await
@@ -171,7 +171,7 @@ async fn restart_recovery_does_not_treat_a_pause_interruption_as_failure() {
            (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload)
            VALUES ('evt_turn_interrupted', 'session_root', 'turn_root', 'agent_adapter', 'pi',
                    'turn.interrupted', '2026-07-31T00:00:00Z',
-                   '{"runtime_instance_id":"runtime_session_root"}')"#,
+                   '{"runtime_id":"runtime_session_root"}')"#,
     )
     .execute(&pool)
     .await

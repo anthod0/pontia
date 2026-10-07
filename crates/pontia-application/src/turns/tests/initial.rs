@@ -17,7 +17,11 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO runtime_bindings (session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities) VALUES ('sess_pi','pi_tui','rtinst_pi','confirmed','/unused/tmux','%1','{\"accept_task\":true}')").execute(&pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES ('sess_pi', 'rtinst_pi', '/unused/tmux', '%1', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE session_runtimes SET state='starting' WHERE session_id='sess_pi'")
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding_pi','sess_pi','test-channel','/unused','native_pi','{}')").execute(&pool).await.unwrap();
     let state = crate::AppState::builder(pool.clone(), root.path().into())
         .clients(crate::clients::testing::clients())
@@ -42,7 +46,7 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
             .dispatch_initial(
                 &crate::runtime::ControlTarget {
                     session_id: "sess_pi".into(),
-                    runtime_instance_id: Some("rtinst_pi".into()),
+                    runtime_id: Some("rtinst_pi".into()),
                 },
                 "initial input",
                 &json!({}),
@@ -52,6 +56,11 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
     });
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     assert!(!dispatch.is_finished());
+    // This fake adapter owns its runtime projection; Pi projects it in ingestion.
+    sqlx::query("UPDATE session_runtimes SET state='running' WHERE runtime_id='rtinst_pi'")
+        .execute(&pool)
+        .await
+        .unwrap();
     events
         .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
             "evt_ready".into(),
@@ -60,7 +69,7 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
             pontia_core::domain::EventSource::AgentClient,
             "test-channel".into(),
             pontia_core::domain::EventType::SessionReady,
-            json!({"runtime_instance_id":"rtinst_pi"}),
+            json!({"runtime_id":"rtinst_pi"}),
         ))
         .await
         .unwrap();
@@ -79,6 +88,22 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
     state
         .runtime_observer()
         .observe_session("sess_pi")
+        .await
+        .unwrap();
+    assert!(
+        scheduler.awaiting_initial("sess_pi"),
+        "missing evidence is unknown"
+    );
+    events
+        .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
+            "evt_exit".into(),
+            "sess_pi".into(),
+            None,
+            pontia_core::domain::EventSource::AgentClient,
+            "test-channel".into(),
+            pontia_core::domain::EventType::SessionExited,
+            json!({"runtime_id":"rtinst_pi", "reason":"quit"}),
+        ))
         .await
         .unwrap();
     assert!(

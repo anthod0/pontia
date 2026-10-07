@@ -146,7 +146,7 @@ async fn fresh_schema_enforces_one_active_patch_per_workflow() {
         let result = sqlx::query(
             r#"INSERT INTO workflow_patches
                (patch_id, workflow_id, requesting_node_id, requesting_session_id,
-                requesting_turn_id, requesting_runtime_instance_id, replanner_creation_token,
+                requesting_turn_id, requesting_runtime_id, replanner_creation_token,
                 base_revision, state, request_document_ref, request_size_bytes)
                VALUES (?, 'wf_patch', 'node_requester', 'sess_requester', 'turn_requester',
                        'runtime_requester', ?, 1, 'requested', 'patches/request.md', 1)"#,

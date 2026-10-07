@@ -94,7 +94,7 @@ test("dispatches daemon requests while a registration request is awaiting its re
     } else {
       expect(message.id).toBe("daemon:1");
       expect(message.result).toEqual({ accepted: true });
-      reply(socket, registrationId, { session_id: "s", runtime_instance_id: "r" });
+      reply(socket, registrationId, { session_id: "s", runtime_id: "r" });
     }
   });
   const submit = vi.fn();
@@ -102,7 +102,7 @@ test("dispatches daemon requests while a registration request is awaiting its re
   onTestFinished(() => client.close());
   await expect(client.request("runtime.register", {})).resolves.toEqual({
     session_id: "s",
-    runtime_instance_id: "r",
+    runtime_id: "r",
   });
   expect(submit).toHaveBeenCalledWith({ input: "你好", inboxMessageId: "msg_1" });
 });
@@ -117,10 +117,10 @@ test("reconnect attaches the confirmed identity without repeating registration",
       expect(message.method).toBe("runtime.attach");
       expect(message.params).toMatchObject({
         session_id: "s",
-        runtime_instance_id: "r",
+        runtime_id: "r",
         client_session_key: "native",
       });
-      reply(socket, message.id, { session_id: "s", runtime_instance_id: "r" });
+      reply(socket, message.id, { session_id: "s", runtime_id: "r" });
     }
   });
   const client = await connectPi(
@@ -130,7 +130,7 @@ test("reconnect attaches the confirmed identity without repeating registration",
   );
   onTestFinished(() => client.close());
   await client.request("runtime.register", {});
-  client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
+  client.registered({ sessionId: "s", runtimeId: "r", clientSessionKey: "native" });
   await expect(client.request("break", {})).rejects.toThrow();
   await vi.waitFor(() => expect(methods).toEqual(["runtime.register", "break", "runtime.attach"]));
 });
@@ -197,10 +197,7 @@ test("lost acknowledgements retry only the failure notification over a fresh con
         `${JSON.stringify({ jsonrpc: "2.0", id: "daemon:submit", method: "submit", params: { input: "next" } })}\n`,
       );
     } else if (message.method === "runtime.attach") {
-      setTimeout(
-        () => reply(socket, message.id, { session_id: "s", runtime_instance_id: "r" }),
-        400,
-      );
+      setTimeout(() => reply(socket, message.id, { session_id: "s", runtime_id: "r" }), 400);
     } else {
       expect(message.params.client_session_key).toBe("native");
       if (methods.filter((method) => method === "turn.startFailure").length === 1) socket.destroy();
@@ -210,9 +207,9 @@ test("lost acknowledgements retry only the failure notification over a fresh con
   const submit = vi.fn();
   const client = await connectPi(root, () => {}, submit);
   onTestFinished(() => client.close());
-  client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
+  client.registered({ sessionId: "s", runtimeId: "r", clientSessionKey: "native" });
   const reporter = new EventReporter({ connection: client, logFile: join(root, "hook.log") });
-  const context = { sessionId: "s", runtimeInstanceId: "r", clientType: "pi" as const };
+  const context = { sessionId: "s", runtimeId: "r", clientType: "pi" as const };
   expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({
     accepted: false,
   });
@@ -253,7 +250,7 @@ test("new event reports wait for reconnect attachment before they are sent", asy
     if (message.method === "runtime.attach") {
       setTimeout(() => {
         attached = true;
-        reply(socket, message.id, { session_id: "s", runtime_instance_id: "r" });
+        reply(socket, message.id, { session_id: "s", runtime_id: "r" });
       }, 100);
       return;
     }
@@ -266,7 +263,7 @@ test("new event reports wait for reconnect attachment before they are sent", asy
     () => {},
   );
   onTestFinished(() => client.close());
-  client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
+  client.registered({ sessionId: "s", runtimeId: "r", clientSessionKey: "native" });
   await expect(client.request("break", {})).rejects.toThrow();
   await vi.waitFor(() => expect(methods).toContain("runtime.attach"));
   await expect(client.request("event.report", {})).resolves.toEqual({ accepted: true });
@@ -296,7 +293,7 @@ test("model control can report a confirmed fact before replying and refreshes it
       socket,
       message.id,
       message.method === "runtime.attach"
-        ? { session_id: "s", runtime_instance_id: "r" }
+        ? { session_id: "s", runtime_id: "r" }
         : { accepted: true },
     );
   });
@@ -319,7 +316,7 @@ test("model control can report a confirmed fact before replying and refreshes it
     },
   );
   onTestFinished(() => client.close());
-  client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
+  client.registered({ sessionId: "s", runtimeId: "r", clientSessionKey: "native" });
   await client.request("begin", {});
   await vi.waitFor(() => expect(responses).toHaveLength(2));
   expect(responses).toContainEqual({ jsonrpc: "2.0", id: "list", result: { models: [model] } });
@@ -369,7 +366,7 @@ test("live output recovers a lost acknowledgement after attaching and keeps cont
     }
     methods.push(message.method);
     if (message.method === "runtime.attach") {
-      reply(socket, message.id, { session_id: "s", runtime_instance_id: "r" });
+      reply(socket, message.id, { session_id: "s", runtime_id: "r" });
       return;
     }
     expect(message.method).toBe("liveOutput.publish");
@@ -394,11 +391,11 @@ test("live output recovers a lost acknowledgement after attaching and keeps cont
     () => {},
   );
   onTestFinished(() => client.close());
-  client.registered({ sessionId: "s", runtimeInstanceId: "r", clientSessionKey: "native" });
+  client.registered({ sessionId: "s", runtimeId: "r", clientSessionKey: "native" });
   const publisher = new LiveOutputPublisher(
     {
       sessionId: "s",
-      runtimeInstanceId: "r",
+      runtimeId: "r",
       turnId: "t",
       clientType: "pi",
     },
@@ -448,7 +445,7 @@ test("oversized live output stops retrying without closing the shared control co
   const publisher = new LiveOutputPublisher(
     {
       sessionId: "s",
-      runtimeInstanceId: "r",
+      runtimeId: "r",
       turnId: "t",
       clientType: "pi",
     },

@@ -1,9 +1,6 @@
 use std::time::Duration;
 
-use pontia_storage_sqlite::repositories::{
-    events::SqliteEventRepository, runtime_bindings::SqliteRuntimeBindingRepository,
-};
-use serde_json::Value;
+use pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository;
 use sqlx::SqlitePool;
 use tokio::time::{Instant, sleep};
 
@@ -40,23 +37,10 @@ impl RuntimeReadinessService {
         &self,
         session_id: &str,
         client_type: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> Result<bool> {
-        let payloads = SqliteEventRepository::new(self.pool.clone())
-            .ready_payloads(session_id, client_type)
-            .await?;
-
-        for payload in payloads {
-            let value: Value = serde_json::from_str(&payload)?;
-            if value
-                .get("runtime_instance_id")
-                .and_then(Value::as_str)
-                .is_some_and(|value| value == runtime_instance_id)
-            {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+        Ok(sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id = ? AND r.session_id = ? AND r.role = 'tui' AND r.state = 'running' AND s.client_type = ?)")
+            .bind(runtime_id).bind(session_id).bind(client_type).fetch_one(&self.pool).await?)
     }
 
     pub async fn wait_until_bound_and_ready(
@@ -66,15 +50,12 @@ impl RuntimeReadinessService {
     ) -> Result<String> {
         let deadline = Instant::now() + self.timeout;
         loop {
-            if let Some(runtime_instance_id) =
-                SqliteRuntimeBindingRepository::new(self.pool.clone())
-                    .runtime_instance_id(session_id)
-                    .await?
-                && self
-                    .is_ready(session_id, client_type, &runtime_instance_id)
-                    .await?
+            if let Some(runtime_id) = SqliteSessionRuntimeRepository::new(self.pool.clone())
+                .runtime_id(session_id)
+                .await?
+                && self.is_ready(session_id, client_type, &runtime_id).await?
             {
-                return Ok(runtime_instance_id);
+                return Ok(runtime_id);
             }
             if Instant::now() >= deadline {
                 return Err(Error::Domain(
@@ -90,14 +71,11 @@ impl RuntimeReadinessService {
         &self,
         session_id: &str,
         client_type: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> Result<()> {
         let deadline = Instant::now() + self.timeout;
         loop {
-            if self
-                .is_ready(session_id, client_type, runtime_instance_id)
-                .await?
-            {
+            if self.is_ready(session_id, client_type, runtime_id).await? {
                 return Ok(());
             }
             if Instant::now() >= deadline {
@@ -113,14 +91,7 @@ impl RuntimeReadinessService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pontia_core::{
-        domain::{EventSource, EventType, ReportedEvent},
-        ids::new_event_id,
-    };
-
-    use crate::EventIngestService;
     use pontia_storage_sqlite::{connect_sqlite, run_migrations};
-    use serde_json::json;
 
     async fn pool() -> (SqlitePool, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -132,49 +103,40 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn readiness_matches_current_runtime_instance_id() {
-        let (pool, _pontia_home) = pool().await;
-        let service = EventIngestService::for_projection_tests(pool.clone());
-        service
-            .ingest_reported_event(ReportedEvent::new(
-                new_event_id().to_string(),
-                "sess_ready".to_string(),
-                None,
-                EventSource::RuntimeManager,
-                "pi".to_string(),
-                EventType::SessionReady,
-                json!({"runtime_instance_id":"rtinst_new"}),
-            ))
-            .await
-            .unwrap();
-        service
-            .ingest_reported_event(ReportedEvent::new(
-                new_event_id().to_string(),
-                "sess_ready".to_string(),
-                None,
-                EventSource::AgentClient,
-                "pi".to_string(),
-                EventType::SessionReady,
-                json!({"runtime_instance_id":"rtinst_old"}),
-            ))
-            .await
-            .unwrap();
-
-        let readiness = RuntimeReadinessService::with_options(
-            pool,
-            Duration::from_millis(10),
-            Duration::from_millis(1),
-        );
-
+    async fn readiness_uses_current_state_when_reusing_a_runtime() {
+        let (pool, _root) = pool().await;
+        sqlx::query(
+            "INSERT INTO sessions(session_id,client_type,state) VALUES ('session','pi','starting')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('runtime','session','tui','starting','2000-01-01T00:00:00Z')").execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO events(event_id,session_id,client_type,event_type,source,occurred_at,payload) VALUES ('historical-ready','session','pi','session.ready','agent_client','2000-01-01T00:00:00Z','{\"runtime_id\":\"runtime\"}')").execute(&pool).await.unwrap();
+        let readiness = RuntimeReadinessService::new(pool.clone());
         assert!(
             !readiness
-                .is_ready("sess_ready", "pi", "rtinst_new")
+                .is_ready("session", "pi", "runtime")
                 .await
                 .unwrap()
         );
+        sqlx::query("UPDATE session_runtimes SET state='running' WHERE runtime_id='runtime'")
+            .execute(&pool)
+            .await
+            .unwrap();
         assert!(
             readiness
-                .is_ready("sess_ready", "pi", "rtinst_old")
+                .is_ready("session", "pi", "runtime")
+                .await
+                .unwrap()
+        );
+        sqlx::query("UPDATE session_runtimes SET state='starting' WHERE runtime_id='runtime'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(
+            !readiness
+                .is_ready("session", "pi", "runtime")
                 .await
                 .unwrap()
         );

@@ -1,7 +1,7 @@
 use pontia_core::error::{Error, Result};
 use pontia_runtime::RuntimeStartResult;
 use pontia_storage_sqlite::repositories::{
-    runtime_bindings::SqliteRuntimeBindingRepository, sessions::SqliteSessionRepository,
+    session_runtimes::SqliteSessionRuntimeRepository, sessions::SqliteSessionRepository,
 };
 
 use super::SessionCommandService;
@@ -34,7 +34,7 @@ impl SessionCommandService {
         session_id: &str,
         runtime: &RuntimeStartResult,
     ) -> Result<()> {
-        let result = SqliteRuntimeBindingRepository::new(self.pool.clone())
+        let result = SqliteSessionRuntimeRepository::new(self.pool.clone())
             .upsert_binding_guarded(crate::runtime::runtime_binding_record(session_id, runtime)?)
             .await;
         if result.is_err() {

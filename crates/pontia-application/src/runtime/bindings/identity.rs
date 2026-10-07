@@ -50,50 +50,20 @@ impl RuntimeBindingUpsertService {
         Ok(sqlx::query_scalar(
             r#"SELECT s.session_id
                FROM sessions s
-               JOIN runtime_bindings r ON r.session_id = s.session_id
+               JOIN session_runtimes r ON r.session_id = s.session_id
                LEFT JOIN agent_bindings a ON a.session_id = s.session_id
                WHERE s.client_type = ?
                  AND s.state != 'exited'
                  AND a.id IS NULL
                  AND r.tmux_socket_path = ?
                  AND r.tmux_pane_id = ?
-                 AND r.binding_state = 'provisioned'"#,
+                 AND r.state = 'starting'"#,
         )
         .bind(&request.client_type)
         .bind(socket_path)
         .bind(pane_id)
         .fetch_optional(&self.pool)
         .await?)
-    }
-
-    pub(super) async fn unconfirmed_runtime_instance_id_for_pane(
-        &self,
-        session_id: &str,
-        request: &RuntimeBindingUpsertRequest,
-    ) -> Result<Option<String>> {
-        let Some(tmux) = request.tmux.as_ref() else {
-            return Ok(None);
-        };
-        let Some(socket_path) = non_empty(tmux.socket_path.as_deref()) else {
-            return Ok(None);
-        };
-        let Some(pane_id) = non_empty(tmux.pane_id.as_deref()) else {
-            return Ok(None);
-        };
-        Ok(sqlx::query_scalar(
-            r#"SELECT runtime_instance_id
-               FROM runtime_bindings
-               WHERE session_id = ?
-                 AND tmux_socket_path = ?
-                 AND tmux_pane_id = ?
-                 AND binding_state = 'provisioned'"#,
-        )
-        .bind(session_id)
-        .bind(socket_path)
-        .bind(pane_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .flatten())
     }
 
     pub(super) async fn ensure_requested_session(

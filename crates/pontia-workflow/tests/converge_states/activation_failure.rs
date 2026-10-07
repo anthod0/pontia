@@ -107,7 +107,7 @@ async fn downstream_session_creation_failure_stops_the_workflow() {
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_root".to_string(),
-            runtime_instance_id: "runtime_session_root".to_string(),
+            runtime_id: "runtime_session_root".to_string(),
         })
         .await
         .expect("submit root output");

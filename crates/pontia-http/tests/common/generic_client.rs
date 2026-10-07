@@ -3,8 +3,6 @@ use std::sync::{Arc, OnceLock};
 use pontia_application::AppState;
 use pontia_application::client_contract::{AgentClientCapabilities, GenericTestClient};
 use pontia_runtime::{AgentInput, GenericRuntimeManager};
-use serde_json::Value;
-use sqlx::Row;
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 pub(crate) struct GenericClientTestScope {
@@ -38,10 +36,11 @@ impl GenericClientTestScope {
     }
 
     pub(crate) async fn runtime_handle(&self, state: &AppState, session_id: &str) -> String {
-        self.runtime_metadata(state, session_id).await["in_process"]["runtime_handle"]
-            .as_str()
-            .expect("runtime handle")
-            .to_string()
+        sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id=?")
+            .bind(session_id)
+            .fetch_one(&state.db())
+            .await
+            .unwrap()
     }
 
     #[allow(dead_code)]
@@ -54,16 +53,6 @@ impl GenericClientTestScope {
         .execute(&state.db())
         .await
         .expect("enable generic builtin profiles");
-    }
-
-    pub(crate) async fn runtime_metadata(&self, state: &AppState, session_id: &str) -> Value {
-        let row = sqlx::query("SELECT runtime_handle FROM runtime_bindings WHERE session_id = ?")
-            .bind(session_id)
-            .fetch_one(&state.db())
-            .await
-            .expect("runtime binding");
-        let runtime_handle: Option<String> = row.try_get("runtime_handle").expect("runtime handle");
-        serde_json::json!({ "in_process": { "runtime_handle": runtime_handle } })
     }
 }
 

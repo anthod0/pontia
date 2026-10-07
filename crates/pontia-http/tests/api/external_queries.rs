@@ -272,21 +272,8 @@ async fn external_api_reads_runtime_binding_capabilities_column() {
         ))
         .await
         .unwrap();
-    sqlx::query(
-        r#"INSERT INTO runtime_bindings
-           (session_id, runtime_kind, runtime_instance_id, start_command, launch_cwd, last_seen_at,
-            tmux_socket_path, tmux_pane_id, capabilities)
-           VALUES (?, 'tmux', 'rtinst_legacy_cap', 'pi --approve', '/tmp', '2026-06-22T00:00:00Z',
-                   '/tmp/tmux-1000/default', '%150', ?)"#,
-    )
-    .bind("sess_external_queries_legacy_cap")
-    .bind(
-        json!({
-            "accept_task": true,
-            "interrupt": true
-        })
-        .to_string(),
-    )
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, start_command, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, 'rtinst_legacy_cap', 'pi --approve', '/tmp/tmux-1000/default', '%150', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+.bind("sess_external_queries_legacy_cap")
     .execute(&state.db())
     .await
     .unwrap();

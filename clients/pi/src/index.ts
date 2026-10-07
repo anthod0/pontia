@@ -53,7 +53,7 @@ import { isActiveRegisteredWorkspace } from "./workspace.js";
 
 interface ReporterLike {
   report(
-    context: { runtimeInstanceId: string },
+    context: { runtimeId: string },
     event: InternalEvent,
   ): Promise<EventReportResult | boolean>;
 }
@@ -205,7 +205,7 @@ export function createPontiaPiExtension(
     const result = await makeReporter(currentHookLogFile()).report(context, {
       session_id: context.sessionId,
       type: "session.model_updated",
-      data: { model: modelId(model), runtime_instance_id: context.runtimeInstanceId },
+      data: { model: modelId(model), runtime_id: context.runtimeId },
     });
     if (!reportAccepted(result)) throw new Error("Pi model observation was not accepted");
   }
@@ -361,7 +361,7 @@ export function createPontiaPiExtension(
     if (!runtimeIdentity) return undefined;
     return {
       sessionId: runtimeIdentity.sessionId,
-      runtimeInstanceId: runtimeIdentity.runtimeInstanceId,
+      runtimeId: runtimeIdentity.runtimeId,
       clientType: "pi",
     };
   }
@@ -399,7 +399,7 @@ export function createPontiaPiExtension(
         const body = await connection.request("branch.resolve", {
           inbox_message_id: inboxMessageId,
           session_id: commandContext.sessionId,
-          runtime_instance_id: commandContext.runtimeInstanceId,
+          runtime_id: commandContext.runtimeId,
           client_type: "pi",
         });
         const replay = asRecord(asRecord(body)?.branch_replay);
@@ -408,7 +408,7 @@ export function createPontiaPiExtension(
         if (
           optionalString(replay?.inbox_message_id) !== inboxMessageId ||
           optionalString(replay?.session_id) !== commandContext.sessionId ||
-          optionalString(replay?.runtime_instance_id) !== commandContext.runtimeInstanceId ||
+          optionalString(replay?.runtime_id) !== commandContext.runtimeId ||
           optionalString(replay?.client_type) !== "pi" ||
           !replacementInput ||
           !targetEntryId
@@ -452,7 +452,7 @@ export function createPontiaPiExtension(
         const current = await currentManagedSessionContext();
         if (
           current?.sessionId !== commandContext.sessionId ||
-          current?.runtimeInstanceId !== commandContext.runtimeInstanceId
+          current?.runtimeId !== commandContext.runtimeId
         ) {
           throw new Error("branch replay Runtime is no longer current");
         }
@@ -636,15 +636,15 @@ export function createPontiaPiExtension(
         }
 
         context = await bindSession(await registrationConnection(), env, sessionDetails, {
-          runtimeInstanceId:
+          runtimeId:
             reason === "reload" || existingSession?.sessionState === "starting"
-              ? existingSession?.runtimeInstanceId
+              ? existingSession?.runtimeId
               : undefined,
         });
         if (
           reason === "reload" &&
           (context?.sessionId !== existingSession!.sessionId ||
-            context.runtimeInstanceId !== existingSession!.runtimeInstanceId)
+            context.runtimeId !== existingSession!.runtimeId)
         ) {
           reportingDisabled = true;
           deferredManualSessionDetails = undefined;
@@ -770,7 +770,7 @@ export function createPontiaPiExtension(
       }
       const turnContext: TurnContext = {
         sessionId: boundSessionContext.sessionId,
-        runtimeInstanceId: boundSessionContext.runtimeInstanceId,
+        runtimeId: boundSessionContext.runtimeId,
         clientType: "pi",
         ...(submission ?? { input: pendingPrompt }),
       };

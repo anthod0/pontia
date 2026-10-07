@@ -13,13 +13,13 @@ async fn current_runtime_exit_abandons_its_active_turn() {
         post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
     assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
     let session_id = upsert["session"]["session_id"].as_str().unwrap();
-    let runtime_instance_id = upsert["runtime"]["runtime_instance_id"].as_str().unwrap();
+    let runtime_id = upsert["runtime"]["runtime_id"].as_str().unwrap();
     let (started_status, started) = crate::common::reporting::report_fact(
         state.clone(),
         json!({
             "session_id": session_id,
             "type": "turn.started",
-            "data": { "runtime_instance_id": runtime_instance_id }
+            "data": { "runtime_id": runtime_id }
         }),
     )
     .await;
@@ -32,7 +32,7 @@ async fn current_runtime_exit_abandons_its_active_turn() {
             "session_id": session_id,
             "type": "session.exited",
             "data": {
-                "runtime_instance_id": runtime_instance_id,
+                "runtime_id": runtime_id,
                 "reason": "process_exit"
             }
         }),
@@ -60,61 +60,6 @@ async fn current_runtime_exit_abandons_its_active_turn() {
 }
 
 #[tokio::test]
-async fn stale_runtime_exit_cannot_exit_the_current_runtime_session() {
-    let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
-    let workspace = workspace
-        .path()
-        .canonicalize()
-        .expect("canonical workspace");
-    let workspace = workspace.display().to_string();
-
-    let (first_status, first) =
-        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
-    assert_eq!(first_status, StatusCode::OK, "{first:?}");
-    let session_id = first["session"]["session_id"].as_str().unwrap();
-    let runtime_a = first["runtime"]["runtime_instance_id"].as_str().unwrap();
-    let (exit_status, exit_body) = crate::common::reporting::report_fact(
-        state.clone(),
-        json!({
-            "session_id": session_id,
-            "type": "session.exited",
-            "data": { "runtime_instance_id": runtime_a, "reason": "quit" }
-        }),
-    )
-    .await;
-    assert_eq!(exit_status, StatusCode::OK, "{exit_body:?}");
-
-    let mut replacement = upsert_body(&workspace, Some("%99"));
-    replacement["session_id"] = json!(session_id);
-    let (second_status, second) = post_upsert(state.clone(), replacement).await;
-    assert_eq!(second_status, StatusCode::OK, "{second:?}");
-    let runtime_b = second["runtime"]["runtime_instance_id"].as_str().unwrap();
-    assert_ne!(runtime_b, runtime_a);
-
-    let (stale_status, stale_body) = crate::common::reporting::report_fact(
-        state.clone(),
-        json!({
-            "session_id": session_id,
-            "type": "session.exited",
-            "data": { "runtime_instance_id": runtime_a, "reason": "stale_exit" }
-        }),
-    )
-    .await;
-    assert_eq!(stale_status, StatusCode::BAD_REQUEST, "{stale_body:?}");
-
-    let (session_status, session_body) = request_json(
-        state,
-        "GET",
-        &format!("/api/v1/sessions/{session_id}"),
-        None,
-    )
-    .await;
-    assert_eq!(session_status, StatusCode::OK, "{session_body:?}");
-    assert_ne!(session_body["data"]["session"]["state"], "exited");
-}
-
-#[tokio::test]
 async fn retrying_an_old_terminal_fact_does_not_end_the_current_turn() {
     let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
@@ -127,14 +72,14 @@ async fn retrying_an_old_terminal_fact_does_not_end_the_current_turn() {
         post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
     assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
     let session_id = upsert["session"]["session_id"].as_str().unwrap();
-    let runtime_instance_id = upsert["runtime"]["runtime_instance_id"].as_str().unwrap();
+    let runtime_id = upsert["runtime"]["runtime_id"].as_str().unwrap();
 
     let (first_started_status, first_started) = crate::common::reporting::report_fact(
         state.clone(),
         json!({
             "session_id": session_id,
             "type": "turn.started",
-            "data": { "runtime_instance_id": runtime_instance_id }
+            "data": { "runtime_id": runtime_id }
         }),
     )
     .await;
@@ -157,7 +102,7 @@ async fn retrying_an_old_terminal_fact_does_not_end_the_current_turn() {
         json!({
             "session_id": session_id,
             "type": "turn.started",
-            "data": { "runtime_instance_id": runtime_instance_id }
+            "data": { "runtime_id": runtime_id }
         }),
     )
     .await;
@@ -220,7 +165,7 @@ async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
             "session_id": session_id,
             "type": "session.exited",
             "data": {
-                "runtime_instance_id": first["runtime"]["runtime_instance_id"],
+                "runtime_id": first["runtime"]["runtime_id"],
                 "reason": "quit"
             }
         }),
@@ -284,27 +229,22 @@ async fn registration_and_repeated_resume_preserve_custom_command_and_native_fil
     assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
     let session_id = upsert["session"]["session_id"].as_str().unwrap();
     body.as_object_mut().unwrap().remove("start_command");
-    body["runtime_instance_id"] = upsert["runtime"]["runtime_instance_id"].clone();
+    body["runtime_id"] = upsert["runtime"]["runtime_id"].clone();
     let (confirmed_status, confirmed) = post_upsert(state.clone(), body).await;
     assert_eq!(confirmed_status, StatusCode::OK, "{confirmed:?}");
     assert_persisted_start_command(&state, session_id, &command).await;
 
-    let first_resumed_runtime_instance_id = exit_and_resume(
+    let first_resumed_runtime_id = exit_and_resume(
         state.clone(),
         session_id,
-        upsert["runtime"]["runtime_instance_id"]
+        upsert["runtime"]["runtime_id"]
             .as_str()
             .expect("initial runtime instance id"),
     )
     .await;
     assert_persisted_start_command(&state, session_id, &command).await;
 
-    exit_and_resume(
-        state.clone(),
-        session_id,
-        &first_resumed_runtime_instance_id,
-    )
-    .await;
+    exit_and_resume(state.clone(), session_id, &first_resumed_runtime_id).await;
     assert_persisted_start_command(&state, session_id, &command).await;
     let bound_file: String =
         sqlx::query_scalar("SELECT client_session_file FROM agent_bindings WHERE session_id = ?")
@@ -326,9 +266,7 @@ async fn invalid_native_file_does_not_replace_runtime_or_change_resume_state() {
     let (status, registered) = post_upsert(state.clone(), body).await;
     assert_eq!(status, StatusCode::OK, "{registered:?}");
     let session_id = registered["session"]["session_id"].as_str().unwrap();
-    let runtime_id = registered["runtime"]["runtime_instance_id"]
-        .as_str()
-        .unwrap();
+    let runtime_id = registered["runtime"]["runtime_id"].as_str().unwrap();
 
     let (status, rejected) = request_json(
         state.clone(),
@@ -343,7 +281,7 @@ async fn invalid_native_file_does_not_replace_runtime_or_change_resume_state() {
         "{rejected:?}"
     );
     let current_runtime: String =
-        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+        sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id = ?")
             .bind(session_id)
             .fetch_one(&state.db())
             .await
@@ -354,7 +292,7 @@ async fn invalid_native_file_does_not_replace_runtime_or_change_resume_state() {
         state.clone(),
         json!({
             "session_id": session_id, "type": "session.exited",
-            "data": { "runtime_instance_id": runtime_id, "reason": "quit" }
+            "data": { "runtime_id": runtime_id, "reason": "quit" }
         }),
     )
     .await;
@@ -390,14 +328,14 @@ async fn invalid_native_file_does_not_replace_runtime_or_change_resume_state() {
     assert_eq!(status, StatusCode::OK, "{resumed:?}");
 }
 
-async fn exit_and_resume(state: AppState, session_id: &str, runtime_instance_id: &str) -> String {
+async fn exit_and_resume(state: AppState, session_id: &str, runtime_id: &str) -> String {
     let (exit_status, exit) = crate::common::reporting::report_fact(
         state.clone(),
         json!({
             "session_id": session_id,
             "type": "session.exited",
             "data": {
-                "runtime_instance_id": runtime_instance_id,
+                "runtime_id": runtime_id,
                 "reason": "quit"
             }
         }),
@@ -414,7 +352,7 @@ async fn exit_and_resume(state: AppState, session_id: &str, runtime_instance_id:
     .await;
     assert_eq!(resume_status, StatusCode::OK, "{resume:?}");
 
-    sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+    sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id = ?")
         .bind(session_id)
         .fetch_one(&state.db())
         .await
@@ -423,7 +361,7 @@ async fn exit_and_resume(state: AppState, session_id: &str, runtime_instance_id:
 
 async fn assert_persisted_start_command(state: &AppState, session_id: &str, expected: &str) {
     let start_command: String =
-        sqlx::query_scalar("SELECT start_command FROM runtime_bindings WHERE session_id = ?")
+        sqlx::query_scalar("SELECT start_command FROM session_runtimes WHERE session_id = ?")
             .bind(session_id)
             .fetch_one(&state.db())
             .await

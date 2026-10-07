@@ -35,20 +35,10 @@ pub(super) fn validate_codex_templates(system: Option<&str>, turn: Option<&str>)
 impl AgentProfileService {
     /// Records an adapter-confirmed native configuration against the fixed binding.
     pub async fn confirm_codex_configuration(&self, session: &str, native_key: &str) -> Result<()> {
-        if self.codex_binding(session).await?.is_none() {
-            return Err(Error::StateConflict(
-                "Session has no Codex Profile to configure".into(),
-            ));
-        }
-        let updated = sqlx::query(
-            "UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex_profile_thread',?) WHERE session_id=? AND EXISTS(SELECT 1 FROM agent_bindings a WHERE a.session_id=runtime_bindings.session_id AND a.client_type='codex' AND a.client_session_key=?)",
-        ).bind(native_key).bind(session).bind(native_key).execute(&self.pool).await?;
-        if updated.rows_affected() != 1 {
-            return Err(Error::StateConflict(
-                "Codex Profile configuration does not match the Session's native binding".into(),
-            ));
-        }
-        Ok(())
+        let _ = (session, native_key);
+        Err(Error::CapabilityUnavailable(
+            "Codex integration is disabled".into(),
+        ))
     }
 
     pub async fn codex_profile_for_thread(
@@ -145,12 +135,7 @@ impl AgentProfileService {
     ) -> Result<Option<CodexProfileBinding>> {
         let profile = self.codex_binding(session).await?;
         if profile.is_some() {
-            let configured: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM agent_bindings a JOIN runtime_bindings r USING(session_id) WHERE a.session_id=? AND json_extract(r.adapter_details,'$.codex_profile_thread')=a.client_session_key)",
-            ).bind(session).fetch_one(&self.pool).await?;
-            if !configured {
-                return Err(unverified());
-            }
+            return Err(unverified());
         }
         Ok(profile)
     }

@@ -53,11 +53,10 @@ async fn disabled_codex_sessions_remain_readable_without_control_or_exit_facts()
             .execute(&app.db)
             .await
             .unwrap();
-        sqlx::query("INSERT INTO runtime_bindings(session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities,adapter_details) VALUES (?,'codex',?,'confirmed',?,'%404',?,?)")
-            .bind(state).bind(format!("instance-{state}"))
-            .bind(app.pontia_home().path().join("missing.sock").to_str().unwrap())
-            .bind(json!({"accept_task":true,"interrupt":true,"list_models":true,"set_model":true,"timeline":true}).to_string())
-            .bind(json!({"codex":{"connection":"available"}}).to_string())
+        sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, ?, '%404', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+.bind(state)
+.bind(format!("instance-{state}"))
+.bind(app.pontia_home().path().join("missing.sock").to_str().unwrap())
             .execute(&app.db).await.unwrap();
     }
     sqlx::query("INSERT INTO events(event_id,session_id,source,client_type,event_type,occurred_at,created_at) VALUES ('starting','starting','external_api','codex','session.starting','2000-01-01T00:00:00.000Z','2000-01-01T00:00:00.000Z')")
@@ -128,6 +127,4 @@ async fn disabled_codex_sessions_remain_readable_without_control_or_exit_facts()
     .await
     .unwrap();
     assert!(connected);
-    let connection: String = sqlx::query_scalar("SELECT json_extract(adapter_details,'$.codex.connection') FROM runtime_bindings WHERE session_id='idle'").fetch_one(&app.db).await.unwrap();
-    assert_eq!(connection, "available");
 }

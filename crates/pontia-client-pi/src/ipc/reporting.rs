@@ -8,7 +8,7 @@ use std::str::FromStr;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct EventRequest {
-    runtime_instance_id: String,
+    runtime_id: String,
     event: Event,
 }
 
@@ -27,7 +27,7 @@ struct Event {
 struct StartFailure {
     client_session_key: String,
     session_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
     reason: FailureReason,
 }
 
@@ -43,16 +43,16 @@ async fn validate_identity(
     state: &AppState,
     identity: &Attach,
     session_id: &str,
-    runtime_instance_id: &str,
+    runtime_id: &str,
 ) -> Result<()> {
-    if identity.session_id != session_id || identity.runtime_instance_id != runtime_instance_id {
+    if identity.session_id != session_id || identity.runtime_id != runtime_id {
         return Err(Error::StateConflict(
             "Pi report does not match its connection identity".into(),
         ));
     }
     state
         .client_control()
-        .validate_runtime(session_id, runtime_instance_id)
+        .validate_runtime(session_id, runtime_id)
         .await
 }
 
@@ -62,14 +62,17 @@ pub(super) async fn report_event(
     params: Value,
 ) -> Result<Value> {
     let request: EventRequest = serde_json::from_value(params)?;
-    let event = request.event;
-    validate_identity(
-        state,
-        identity,
-        &event.session_id,
-        &request.runtime_instance_id,
-    )
-    .await?;
+    let mut event = request.event;
+    if event.data["runtime_id"]
+        .as_str()
+        .is_some_and(|id| id != request.runtime_id)
+    {
+        return Err(Error::StateConflict(
+            "Pi fact payload has a different runtime identity".into(),
+        ));
+    }
+    event.data["runtime_id"] = json!(request.runtime_id);
+    validate_identity(state, identity, &event.session_id, &request.runtime_id).await?;
     let fact_type = EventType::from_str(&event.fact_type)?;
     let result = state
         .event_ingest_service()
@@ -91,17 +94,20 @@ pub(super) async fn report_event(
     }))
 }
 
-pub(super) async fn start_failure(state: &AppState, params: Value) -> Result<Value> {
+pub(super) async fn start_failure(
+    state: &AppState,
+    identity: &Attach,
+    params: Value,
+) -> Result<Value> {
     let request: StartFailure = serde_json::from_value(params)?;
-    // Failure acknowledgement can be retried after control has been invalidated.
-    // Authenticate the native binding without attaching a control channel.
+    validate_identity(state, identity, &request.session_id, &request.runtime_id).await?;
     state
         .client_control()
         .validate_identity(
             "pi",
             &request.client_session_key,
             &request.session_id,
-            &request.runtime_instance_id,
+            &request.runtime_id,
         )
         .await?;
     let reason = match request.reason {
@@ -111,7 +117,7 @@ pub(super) async fn start_failure(state: &AppState, params: Value) -> Result<Val
     };
     state
         .event_ingest_service()
-        .report_turn_start_failure(&request.session_id, &request.runtime_instance_id, reason)
+        .report_turn_start_failure(&request.session_id, &request.runtime_id, reason)
         .await?;
     Ok(json!({"accepted": true}))
 }

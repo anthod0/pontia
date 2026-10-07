@@ -90,7 +90,7 @@ async fn turn_start_reporting_failure_fails_workflow_without_fabricating_turn_fa
         state.clone(),
         session_id,
         json!({
-            "runtime_instance_id": "rtinst_stale", "reason": "event_rejected"
+            "runtime_id": "rtinst_stale", "reason": "event_rejected"
         }),
     )
     .await
@@ -115,7 +115,7 @@ async fn turn_start_reporting_failure_fails_workflow_without_fabricating_turn_fa
             "session_id": "sess_reporting",
             "type": "turn.started",
             "data": {
-                "runtime_instance_id": "rtinst_reporting",
+                "runtime_id": "rtinst_reporting",
                 "topology_context": { "oversized": "x".repeat(70_000) }
             }
         }),
@@ -148,7 +148,7 @@ async fn turn_start_reporting_failure_fails_workflow_without_fabricating_turn_fa
             state.clone(),
             session_id,
             json!({
-                "runtime_instance_id": "rtinst_reporting", "reason": "event_rejected"
+                "runtime_id": "rtinst_reporting", "reason": "event_rejected"
             }),
         )
         .await
@@ -195,7 +195,7 @@ async fn turn_start_failure_notification_fails_workflow_when_original_event_neve
         report_start_failure(
             state.clone(),
             "sess_reporting",
-            json!({ "runtime_instance_id": "rtinst_reporting", "reason": reason }),
+            json!({ "runtime_id": "rtinst_reporting", "reason": reason }),
         )
         .await
         .unwrap();
@@ -218,7 +218,7 @@ async fn reporting_failure_before_node_binding_is_recovered_from_persisted_event
     report_start_failure(
         state.clone(),
         "sess_reporting",
-        json!({ "runtime_instance_id": "rtinst_reporting", "reason": "transport_failed" }),
+        json!({ "runtime_id": "rtinst_reporting", "reason": "transport_failed" }),
     )
     .await
     .unwrap();
@@ -248,7 +248,7 @@ async fn lost_started_response_administratively_abandons_the_committed_turn() {
         state.clone(),
         json!({
             "session_id": "sess_reporting", "type": "turn.started",
-            "data": { "runtime_instance_id": "rtinst_reporting", "input_summary": "task" }
+            "data": { "runtime_id": "rtinst_reporting", "input_summary": "task" }
         }),
     )
     .await
@@ -257,7 +257,7 @@ async fn lost_started_response_administratively_abandons_the_committed_turn() {
     report_start_failure(
         state.clone(),
         "sess_reporting",
-        json!({"runtime_instance_id": "rtinst_reporting", "reason": "transport_failed"}),
+        json!({"runtime_id": "rtinst_reporting", "reason": "transport_failed"}),
     )
     .await
     .unwrap();
@@ -287,7 +287,7 @@ async fn reporting_failure_also_fails_a_submitted_node_waiting_for_exit() {
     report_start_failure(
         state.clone(),
         "sess_reporting",
-        json!({"runtime_instance_id": "rtinst_reporting", "reason": "transport_failed"}),
+        json!({"runtime_id": "rtinst_reporting", "reason": "transport_failed"}),
     )
     .await
     .unwrap();
@@ -318,7 +318,7 @@ async fn reporting_failure_notifications_persist_only_one_error_per_runtime() {
         report_start_failure(
             state.clone(),
             "sess_reporting",
-            json!({"runtime_instance_id": "rtinst_reporting", "reason": "transport_failed"}),
+            json!({"runtime_id": "rtinst_reporting", "reason": "transport_failed"}),
         )
         .await
         .unwrap();
@@ -343,7 +343,7 @@ async fn reporting_failure_from_an_old_runtime_cannot_fail_its_replacement() {
     report_start_failure(
         state.clone(),
         "sess_reporting",
-        json!({"runtime_instance_id": "rtinst_reporting", "reason": "transport_failed"}),
+        json!({"runtime_id": "rtinst_reporting", "reason": "transport_failed"}),
     )
     .await
     .unwrap();

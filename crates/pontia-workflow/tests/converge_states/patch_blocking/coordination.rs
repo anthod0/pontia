@@ -24,7 +24,7 @@ async fn crash_gap_recovers_the_session_with_the_persisted_creation_token() {
     let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .request_patch(RequestWorkflowPatch {
             session_id: "sess_requester".into(),
-            runtime_instance_id: "runtime_requester".into(),
+            runtime_id: "runtime_requester".into(),
         })
         .await
         .unwrap()
@@ -119,11 +119,11 @@ async fn simultaneous_patch_requests_accept_exactly_one_active_patch() {
     let (first, second) = tokio::join!(
         first.request_patch(RequestWorkflowPatch {
             session_id: "sess_requester".into(),
-            runtime_instance_id: "runtime_requester".into(),
+            runtime_id: "runtime_requester".into(),
         }),
         second.request_patch(RequestWorkflowPatch {
             session_id: "sess_requester".into(),
-            runtime_instance_id: "runtime_requester".into(),
+            runtime_id: "runtime_requester".into(),
         })
     );
     assert_eq!(usize::from(first.is_ok()) + usize::from(second.is_ok()), 1);

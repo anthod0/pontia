@@ -83,15 +83,14 @@ impl WorkflowRecoveryService {
                 )
                 .await?;
         } else {
-            if row.runtime_instance_id.is_none() {
-                row.runtime_instance_id =
-                    self.repository.recovered_node_runtime(&row.node_id).await?;
+            if row.runtime_id.is_none() {
+                row.runtime_id = self.repository.recovered_node_runtime(&row.node_id).await?;
             }
             self.inbox
                 .release_prepared_message(
                     &row.session_id,
                     &row.message_id,
-                    row.runtime_instance_id.as_deref().ok_or_else(|| {
+                    row.runtime_id.as_deref().ok_or_else(|| {
                         pontia_core::Error::Domain("Recovery runtime is missing".into())
                     })?,
                 )

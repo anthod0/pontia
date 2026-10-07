@@ -41,8 +41,8 @@ async fn upsert_marks_bound_tmux_pane_as_pontia_owned() {
         session_id
     );
     assert_eq!(
-        tmux_display(&test_socket, &pane_id, "#{@pontia_runtime_instance_id}"),
-        body["runtime"]["runtime_instance_id"].as_str().unwrap()
+        tmux_display(&test_socket, &pane_id, "#{@pontia_runtime_id}"),
+        body["runtime"]["runtime_id"].as_str().unwrap()
     );
 }
 
@@ -81,14 +81,14 @@ async fn session_exit_clears_matching_pontia_markers_from_the_bound_tmux_pane() 
     .await;
     assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
     let session_id = upsert["session"]["session_id"].as_str().unwrap();
-    let runtime_instance_id = upsert["runtime"]["runtime_instance_id"].as_str().unwrap();
+    let runtime_id = upsert["runtime"]["runtime_id"].as_str().unwrap();
 
     let (exit_status, exit) = crate::common::reporting::report_fact(
-        state,
+        state.clone(),
         json!({
             "session_id": session_id,
             "type": "session.exited",
-            "data": { "runtime_instance_id": runtime_instance_id, "reason": "quit" }
+            "data": { "runtime_id": runtime_id, "reason": "quit" }
         }),
     )
     .await;
@@ -99,8 +99,58 @@ async fn session_exit_clears_matching_pontia_markers_from_the_bound_tmux_pane() 
         ""
     );
     assert_eq!(
-        tmux_display(&test_socket, &pane_id, "#{@pontia_runtime_instance_id}"),
+        tmux_display(&test_socket, &pane_id, "#{@pontia_runtime_id}"),
         ""
+    );
+    let events = state.event_ingest_service();
+    events
+        .ingest_pontia_event(pontia_application::PontiaEvent::new(
+            session_id,
+            None,
+            pontia_application::PontiaEventSource::ExternalApi,
+            "pi",
+            pontia_application::PontiaEventType::SessionResuming,
+            json!({"runtime_id":runtime_id}),
+        ))
+        .await
+        .unwrap();
+    pontia_runtime::GenericRuntimeManager
+        .mark_tmux_pane_for_session(&socket_path, &pane_id, session_id, runtime_id)
+        .unwrap();
+    let native_key = pontia_application::AgentBindingService::new(state.db())
+        .binding_for_session(session_id)
+        .await
+        .unwrap()
+        .unwrap()
+        .client_session_key;
+    crate::common::reporting::report_fact_result(
+        state.clone(),
+        json!({
+            "session_id":session_id,"type":"session.ready","data":{"runtime_id":runtime_id,"client_session_key":native_key}
+        }),
+    )
+    .await
+    .unwrap();
+    let retried = events
+        .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
+            exit["event_id"].as_str().unwrap().into(),
+            session_id.into(),
+            None,
+            pontia_core::domain::EventSource::AgentClient,
+            "pi".into(),
+            pontia_core::domain::EventType::SessionExited,
+            json!({"runtime_id":runtime_id,"reason":"quit"}),
+        ))
+        .await
+        .unwrap();
+    assert!(retried.duplicate);
+    assert_eq!(
+        tmux_display(&test_socket, &pane_id, "#{@pontia_session_id}"),
+        session_id
+    );
+    assert_eq!(
+        tmux_display(&test_socket, &pane_id, "#{@pontia_runtime_id}"),
+        runtime_id
     );
 }
 
@@ -132,7 +182,7 @@ async fn terminate_manually_bound_tui_without_pane_binding_is_rejected() {
     let session_id = upsert["session"]["session_id"].as_str().unwrap();
 
     sqlx::query(
-        "UPDATE runtime_bindings SET tmux_socket_path = NULL, tmux_pane_id = NULL WHERE session_id = ?",
+        "UPDATE session_runtimes SET tmux_socket_path = NULL, tmux_pane_id = NULL WHERE session_id = ?",
     )
     .bind(session_id)
     .execute(&state.db())

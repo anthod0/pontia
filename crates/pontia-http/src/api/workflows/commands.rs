@@ -50,28 +50,28 @@ struct WorkflowRunNode {
 #[serde(deny_unknown_fields)]
 pub struct WorkflowSubmissionRequest {
     session_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkflowPatchRequest {
     session_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkflowPatchApplyRequest {
     session_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkflowPatchBlockRequest {
     session_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
 }
 
 pub async fn run_workflow(
@@ -130,7 +130,7 @@ pub async fn request_workflow_patch(
     let outcome = WorkflowPatchService::new(state.db(), state.pontia_home().to_path_buf())
         .request_patch(RequestWorkflowPatch {
             session_id: request.session_id,
-            runtime_instance_id: request.runtime_instance_id,
+            runtime_id: request.runtime_id,
         })
         .await
         .map_err(map_command_error)?;
@@ -148,7 +148,7 @@ pub async fn apply_workflow_patch(
     let outcome = WorkflowPatchService::new(state.db(), state.pontia_home().to_path_buf())
         .apply_patch(ApplyWorkflowPatch {
             session_id: request.session_id,
-            runtime_instance_id: request.runtime_instance_id,
+            runtime_id: request.runtime_id,
         })
         .await
         .map_err(map_command_error)?;
@@ -168,7 +168,7 @@ pub async fn block_workflow_patch(
     let outcome = WorkflowPatchService::new(state.db(), state.pontia_home().to_path_buf())
         .block_patch(BlockWorkflowPatch {
             session_id: request.session_id,
-            runtime_instance_id: request.runtime_instance_id,
+            runtime_id: request.runtime_id,
         })
         .await
         .map_err(map_command_error)?;
@@ -192,7 +192,7 @@ pub async fn submit_workflow_output(
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: request.session_id,
-            runtime_instance_id: request.runtime_instance_id,
+            runtime_id: request.runtime_id,
         })
         .await
         .map_err(map_command_error)?;

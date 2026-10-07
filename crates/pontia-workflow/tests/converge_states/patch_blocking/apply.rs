@@ -24,7 +24,7 @@ async fn changed_apply_revises_the_graph_and_queues_one_continuation_without_pla
     let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .request_patch(RequestWorkflowPatch {
             session_id: "sess_requester".into(),
-            runtime_instance_id: "runtime_requester".into(),
+            runtime_id: "runtime_requester".into(),
         })
         .await
         .unwrap()
@@ -68,7 +68,7 @@ async fn changed_apply_revises_the_graph_and_queues_one_continuation_without_pla
     let invalid = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .apply_patch(ApplyWorkflowPatch {
             session_id: "sess_replanner".into(),
-            runtime_instance_id: "runtime_replanner".into(),
+            runtime_id: "runtime_replanner".into(),
         })
         .await;
     assert!(invalid.is_err());
@@ -128,7 +128,7 @@ output = "replacement.md"
     let applied = service
         .apply_patch(ApplyWorkflowPatch {
             session_id: "sess_replanner".into(),
-            runtime_instance_id: "runtime_replanner".into(),
+            runtime_id: "runtime_replanner".into(),
         })
         .await
         .expect("apply changed Patch");
@@ -163,7 +163,7 @@ output = "replacement.md"
     let duplicate = service
         .apply_patch(ApplyWorkflowPatch {
             session_id: "sess_replanner".into(),
-            runtime_instance_id: "runtime_replanner".into(),
+            runtime_id: "runtime_replanner".into(),
         })
         .await;
     assert!(duplicate.is_err());
@@ -232,7 +232,7 @@ output = "replacement.md"
     let second_patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .request_patch(RequestWorkflowPatch {
             session_id: "sess_requester".into(),
-            runtime_instance_id: "runtime_requester".into(),
+            runtime_id: "runtime_requester".into(),
         })
         .await
         .unwrap()
@@ -297,7 +297,7 @@ output = "final.md"
     let second_outcome = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .apply_patch(ApplyWorkflowPatch {
             session_id: "sess_replanner_second".into(),
-            runtime_instance_id: "runtime_replanner_second".into(),
+            runtime_id: "runtime_replanner_second".into(),
         })
         .await
         .unwrap();
@@ -339,7 +339,7 @@ async fn unchanged_apply_rejects_without_advancing_the_revision() {
     let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .request_patch(RequestWorkflowPatch {
             session_id: "sess_requester".into(),
-            runtime_instance_id: "runtime_requester".into(),
+            runtime_id: "runtime_requester".into(),
         })
         .await
         .unwrap()
@@ -376,7 +376,7 @@ async fn unchanged_apply_rejects_without_advancing_the_revision() {
     let outcome = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .apply_patch(ApplyWorkflowPatch {
             session_id: "sess_replanner".into(),
-            runtime_instance_id: "runtime_replanner".into(),
+            runtime_id: "runtime_replanner".into(),
         })
         .await
         .expect("reject unchanged Patch");

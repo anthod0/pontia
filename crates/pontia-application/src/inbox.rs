@@ -376,7 +376,7 @@ impl InboxCommandService {
         let Some(row) = inbox_repository.next_pending_message(session_id).await? else {
             return Ok(());
         };
-        if let Some(expected) = row.required_runtime_instance_id.as_deref()
+        if let Some(expected) = row.required_runtime_id.as_deref()
             && let Err(error) =
                 crate::runtime::ControlTarget::resolve(&self.pool, session_id, Some(expected)).await
         {
@@ -449,7 +449,7 @@ impl InboxCommandService {
                     input,
                     metadata,
                     intent,
-                    row.required_runtime_instance_id.as_deref(),
+                    row.required_runtime_id.as_deref(),
                 )
                 .await
         };

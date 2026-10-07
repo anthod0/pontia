@@ -71,7 +71,7 @@ where
             .request_turn_interruption(
                 &patch.requesting_session_id,
                 &patch.requesting_turn_id,
-                &patch.requesting_runtime_instance_id,
+                &patch.requesting_runtime_id,
             )
             .await
         {
@@ -208,7 +208,7 @@ where
             .persisted_events
             .latest_workflow_terminal_event(
                 &patch.requesting_session_id,
-                Some(&patch.requesting_runtime_instance_id),
+                Some(&patch.requesting_runtime_id),
                 Some(&patch.requesting_turn_id),
             )
             .await?
@@ -231,15 +231,15 @@ where
     }
 
     async fn reconcile_unresolved_replanner(&self, patch: &WorkflowPatchRow) -> Result<()> {
-        let (Some(session_id), Some(runtime_instance_id)) = (
+        let (Some(session_id), Some(runtime_id)) = (
             patch.replanner_session_id.as_deref(),
-            patch.replanner_runtime_instance_id.as_deref(),
+            patch.replanner_runtime_id.as_deref(),
         ) else {
             return Ok(());
         };
         let Some(event) = self
             .persisted_events
-            .latest_workflow_terminal_event(session_id, Some(runtime_instance_id), None)
+            .latest_workflow_terminal_event(session_id, Some(runtime_id), None)
             .await?
         else {
             return Ok(());

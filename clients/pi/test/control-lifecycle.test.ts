@@ -48,7 +48,7 @@ test("session switches register a fresh connection and failed registration never
             if (id === "failed") throw new Error("Registration rejected");
             return {
               session: { session_id: `sess_${id}` },
-              runtime: { runtime_instance_id: `rt_${id}` },
+              runtime: { runtime_id: `rt_${id}` },
             };
           },
         };
@@ -126,7 +126,7 @@ test("a disconnected deferred registration can initialize on the next manual tur
           managed = true;
           result = {
             session: { session_id: "sess_recovered" },
-            runtime: { runtime_instance_id: "rt_recovered" },
+            runtime: { runtime_id: "rt_recovered" },
           };
         }
         socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
@@ -195,7 +195,7 @@ test("the default extension streams over its registered connection and closes th
       if (method === "runtime.register")
         return {
           session: { session_id: "sess_live" },
-          runtime: { runtime_instance_id: "rt_live" },
+          runtime: { runtime_id: "rt_live" },
         };
       if (method === "liveOutput.publish")
         return {
@@ -243,7 +243,7 @@ test("the default extension streams over its registered connection and closes th
     expect(liveCalls.map((call) => call.params)).toEqual([
       expect.objectContaining({
         session_id: "sess_live",
-        runtime_instance_id: "rt_live",
+        runtime_id: "rt_live",
         turn_id: "turn_canonical",
         type: "snapshot",
         sequence: 1,

@@ -110,25 +110,25 @@ struct RunWorkflowResponseData {
 #[derive(Debug, Serialize)]
 struct WorkflowSubmissionRequest {
     session_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
 }
 
 #[derive(Debug, Serialize)]
 struct WorkflowPatchRequest {
     session_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
 }
 
 #[derive(Debug, Serialize)]
 struct WorkflowPatchApplyRequest {
     session_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
 }
 
 #[derive(Debug, Serialize)]
 struct WorkflowPatchBlockRequest {
     session_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -414,7 +414,7 @@ fn resolve_existing_path(base: &Path, path: &Path, description: &str) -> Result<
 }
 
 async fn submit_workflow(config: &AppConfig) -> Result<(), String> {
-    let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
+    let (session_id, runtime_id) = current_managed_pane_identity()?;
     let token = config
         .external_api_token
         .as_deref()
@@ -428,7 +428,7 @@ async fn submit_workflow(config: &AppConfig) -> Result<(), String> {
         .bearer_auth(token)
         .json(&WorkflowSubmissionRequest {
             session_id,
-            runtime_instance_id,
+            runtime_id,
         })
         .send()
         .await
@@ -444,7 +444,7 @@ async fn submit_workflow(config: &AppConfig) -> Result<(), String> {
 }
 
 async fn request_workflow_patch(config: &AppConfig) -> Result<(), String> {
-    let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
+    let (session_id, runtime_id) = current_managed_pane_identity()?;
     let token = config
         .external_api_token
         .as_deref()
@@ -458,7 +458,7 @@ async fn request_workflow_patch(config: &AppConfig) -> Result<(), String> {
         .bearer_auth(token)
         .json(&WorkflowPatchRequest {
             session_id,
-            runtime_instance_id,
+            runtime_id,
         })
         .send()
         .await
@@ -479,7 +479,7 @@ async fn request_workflow_patch(config: &AppConfig) -> Result<(), String> {
 }
 
 async fn apply_workflow_patch(config: &AppConfig) -> Result<(), String> {
-    let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
+    let (session_id, runtime_id) = current_managed_pane_identity()?;
     let token = config
         .external_api_token
         .as_deref()
@@ -493,7 +493,7 @@ async fn apply_workflow_patch(config: &AppConfig) -> Result<(), String> {
         .bearer_auth(token)
         .json(&WorkflowPatchApplyRequest {
             session_id,
-            runtime_instance_id,
+            runtime_id,
         })
         .send()
         .await
@@ -522,7 +522,7 @@ async fn apply_workflow_patch(config: &AppConfig) -> Result<(), String> {
 }
 
 async fn block_workflow_patch(config: &AppConfig) -> Result<(), String> {
-    let (session_id, runtime_instance_id) = current_managed_pane_identity()?;
+    let (session_id, runtime_id) = current_managed_pane_identity()?;
     let token = config
         .external_api_token
         .as_deref()
@@ -536,7 +536,7 @@ async fn block_workflow_patch(config: &AppConfig) -> Result<(), String> {
         .bearer_auth(token)
         .json(&WorkflowPatchBlockRequest {
             session_id,
-            runtime_instance_id,
+            runtime_id,
         })
         .send()
         .await
@@ -569,8 +569,8 @@ fn current_managed_pane_identity() -> Result<(String, String), String> {
         return Err("not running in a Pontia-managed tmux pane".to_string());
     }
     let session_id = pane_option("@pontia_session_id")?;
-    let runtime_instance_id = pane_option("@pontia_runtime_instance_id")?;
-    Ok((session_id, runtime_instance_id))
+    let runtime_id = pane_option("@pontia_runtime_id")?;
+    Ok((session_id, runtime_id))
 }
 
 fn pane_option(option: &str) -> Result<String, String> {

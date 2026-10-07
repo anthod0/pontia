@@ -41,7 +41,7 @@ pub(crate) async fn report_start_failure(
         .event_ingest_service()
         .report_turn_start_failure(
             session,
-            body["runtime_instance_id"].as_str().unwrap(),
+            body["runtime_id"].as_str().unwrap(),
             body["reason"].as_str().unwrap(),
         )
         .await

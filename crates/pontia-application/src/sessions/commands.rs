@@ -111,6 +111,7 @@ impl SessionCommandService {
             .and_then(|workspace| workspace.name.clone());
 
         let session_id = new_session_id().to_string();
+        let runtime_id = pontia_core::ids::new_runtime_id().to_string();
         let initial_slot = if request.initial_task.is_some() {
             Some(self.inbox.reserve_initial_input(&session_id).await)
         } else {
@@ -138,6 +139,7 @@ impl SessionCommandService {
                 }),
             ))
             .await?;
+        let _launch_guard = self.control.lock_identity().await;
         let adapter = self.clients.for_client(&request.client_type)?;
         if !adapter.prepares_on_input() {
             ingest
@@ -147,7 +149,7 @@ impl SessionCommandService {
                     PontiaEventSource::ExternalApi,
                     request.client_type.clone(),
                     PontiaEventType::SessionStarting,
-                    json!({}),
+                    json!({"runtime_id": runtime_id}),
                 ))
                 .await?;
         }
@@ -156,6 +158,7 @@ impl SessionCommandService {
             .start(
                 &self.pontia_home,
                 RuntimeStartRequest {
+                    runtime_id: Some(runtime_id.clone()),
                     session_id: session_id.clone(),
                     client_type: request.client_type.clone(),
                     workspace: runtime_workspace.clone(),
@@ -166,7 +169,15 @@ impl SessionCommandService {
                     environment: request.runtime_environment.clone(),
                 },
             )
-            .await?;
+            .await;
+        let runtime = match runtime {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                ingest.ingest_pontia_event(PontiaEvent::new(&session_id, None, PontiaEventSource::RuntimeManager, &request.client_type, PontiaEventType::SessionError,
+                    json!({"runtime_id": runtime_id, "reason": "startup_failed", "failure": {"message": error.to_string()}}))).await?;
+                return Err(error);
+            }
+        };
         let Some(runtime) = runtime else {
             drop(initial_slot);
             self.update_session_workspace(&session_id, workspace_record.as_ref())
@@ -204,13 +215,10 @@ impl SessionCommandService {
             ))
             .await?;
         ingest
-            .ingest_in_process_ready_event(
-                &request.client_type,
-                &session_id,
-                runtime.runtime_instance_id(),
-            )
+            .ingest_in_process_ready_event(&request.client_type, &session_id, runtime.runtime_id())
             .await?;
 
+        drop(_launch_guard);
         let turns = self.turns.clone();
         let initial_turn = if let Some(task) = &request.initial_task {
             turns
@@ -229,7 +237,7 @@ impl SessionCommandService {
         if let Some(task) = request.initial_task {
             let target = crate::runtime::ControlTarget {
                 session_id: session_id.clone(),
-                runtime_instance_id: runtime.runtime_instance_id().map(str::to_string),
+                runtime_id: runtime.runtime_id().map(str::to_string),
             };
             tokio::spawn(async move {
                 let _initial_slot = initial_slot;

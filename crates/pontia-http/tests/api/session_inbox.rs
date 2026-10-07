@@ -118,14 +118,14 @@ async fn started_event_body(
     session_id: &str,
     turn_id: &str,
 ) -> Value {
-    let runtime_instance_id: String =
-        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+    let runtime_id: String =
+        sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id = ?")
             .bind(session_id)
             .fetch_one(&state.db())
             .await
             .expect("runtime instance id");
     let mut event = event_body(event_id, "turn.started", session_id, turn_id);
-    event["data"] = json!({"runtime_instance_id": runtime_instance_id});
+    event["data"] = json!({"runtime_id": runtime_id});
     event
 }
 
@@ -747,12 +747,13 @@ async fn retry_restores_exited_session_once_and_links_original_failure() {
     assert_eq!(again.0, StatusCode::OK);
     assert_eq!(again.1["data"], first.1["data"]);
     assert_eq!(scope.recorded_inputs().len(), 1);
-    let count: i64 =
-        sqlx::query_scalar("SELECT restart_count FROM runtime_bindings WHERE session_id=?")
-            .bind(&session)
-            .fetch_one(&state.db())
-            .await
-            .unwrap();
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM events WHERE session_id=? AND event_type='session.resuming'",
+    )
+    .bind(&session)
+    .fetch_one(&state.db())
+    .await
+    .unwrap();
     assert_eq!(count, 1);
     assert_eq!(
         state

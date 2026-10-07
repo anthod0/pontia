@@ -49,6 +49,14 @@ pub(crate) struct Channel {
     pub started: tokio::sync::Notify,
     pub finish: tokio::sync::Notify,
 }
+impl Channel {
+    async fn await_receipt(&self) {
+        if self.delayed {
+            self.started.notify_one();
+            self.finish.notified().await;
+        }
+    }
+}
 impl ClientControlChannel for Channel {
     fn available(&self) -> bool {
         !self.closed.load(Ordering::SeqCst)
@@ -65,10 +73,7 @@ impl ClientControlChannel for Channel {
                 return Err(error);
             }
             self.input.lock().unwrap().push(input.to_owned());
-            if self.delayed {
-                self.started.notify_one();
-                self.finish.notified().await;
-            }
+            self.await_receipt().await;
             Ok(())
         })
     }
@@ -82,7 +87,10 @@ impl ClientControlChannel for Channel {
         Box::pin(async { Ok(()) })
     }
     fn shutdown(&self) -> ClientControlOperation<'_> {
-        Box::pin(async { Ok(()) })
+        Box::pin(async {
+            self.await_receipt().await;
+            Ok(())
+        })
     }
     fn ping(&self) -> ClientControlOperation<'_> {
         Box::pin(async { Ok(()) })

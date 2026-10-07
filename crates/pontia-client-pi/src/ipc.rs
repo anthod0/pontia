@@ -125,9 +125,15 @@ impl Drop for ClosePeer {
 }
 
 pub async fn serve_connection(state: AppState, stream: UnixStream) {
+    let process_id = stream
+        .peer_cred()
+        .ok()
+        .and_then(|credentials| credentials.pid())
+        .and_then(|pid| u32::try_from(pid).ok());
     let (peer, mut requests) = PiRpcPeer::new(stream);
     let _close = ClosePeer(peer.clone());
     let channel = Arc::new(PiChannel {
+        process_id,
         peer: peer.clone(),
         handling: AtomicBool::new(false),
         invalidated: AtomicBool::new(false),
@@ -208,7 +214,7 @@ struct Registration {
 struct Attach {
     version: u32,
     session_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
     client_session_key: String,
 }
 #[derive(Deserialize)]
@@ -223,6 +229,14 @@ async fn dispatch(
     request: &RpcRequest,
     registered: &mut Option<Attach>,
 ) -> Result<Value> {
+    let _identity_guard = state.client_control().lock_identity().await;
+    if let Some(identity) = registered.as_ref() {
+        let current: Arc<dyn pontia_application::ClientControlChannel> = channel.clone();
+        state
+            .client_control()
+            .validate_connection(&identity.session_id, &identity.runtime_id, &current)
+            .await?;
+    }
     if matches!(
         request.method.as_str(),
         "session.get" | "profile.get" | "workspaces.list"
@@ -242,7 +256,7 @@ async fn dispatch(
         let query: pontia_application::ResolveBranchReplayRequest =
             serde_json::from_value(request.params.clone())?;
         if query.session_id != identity.session_id
-            || query.runtime_instance_id != identity.runtime_instance_id
+            || query.runtime_id != identity.runtime_id
             || query.client_type != "pi"
         {
             return Err(Error::StateConflict(
@@ -256,7 +270,10 @@ async fn dispatch(
         return Ok(json!({"branch_replay": replay}));
     }
     if request.method == "turn.startFailure" {
-        return reporting::start_failure(state, request.params.clone()).await;
+        let identity = registered.as_ref().ok_or_else(|| {
+            Error::StateConflict("Pi failure report requires registration".into())
+        })?;
+        return reporting::start_failure(state, identity, request.params.clone()).await;
     }
     if request.method == "event.report" {
         let identity = registered
@@ -290,7 +307,7 @@ async fn dispatch(
             }
             let client_session_key = registration.binding.client_session_key.clone();
             let result = state
-                .runtime_bindings()
+                .session_runtimes()
                 .with_session_identity_hint(client_session_key.clone())
                 .upsert(registration.binding)
                 .await?;
@@ -298,7 +315,7 @@ async fn dispatch(
                 .as_str()
                 .ok_or_else(|| Error::Domain("Registration returned no session identity".into()))?
                 .to_owned();
-            let runtime_instance_id = result["runtime"]["runtime_instance_id"]
+            let runtime_id = result["runtime"]["runtime_id"]
                 .as_str()
                 .ok_or_else(|| Error::Domain("Registration returned no runtime identity".into()))?
                 .to_owned();
@@ -306,7 +323,7 @@ async fn dispatch(
                 Attach {
                     version: registration.version,
                     session_id,
-                    runtime_instance_id,
+                    runtime_id,
                     client_session_key,
                 },
                 result,
@@ -315,17 +332,18 @@ async fn dispatch(
         "runtime.attach" => {
             let identity: Attach = serde_json::from_value(request.params.clone())?;
             version(identity.version)?;
-            let result = json!({"session_id":identity.session_id,"runtime_instance_id":identity.runtime_instance_id});
+            let result = json!({"session_id":identity.session_id,"runtime_id":identity.runtime_id});
             (identity, result)
         }
         _ => return Err(Error::Domain("Unknown Pi RPC method".into())),
     };
     state
         .client_control()
-        .attach(
+        .attach_locked(
+            &_identity_guard,
             "pi",
             &identity.session_id,
-            &identity.runtime_instance_id,
+            &identity.runtime_id,
             &identity.client_session_key,
             channel.clone(),
         )
@@ -339,6 +357,7 @@ async fn dispatch(
 }
 
 struct PiChannel {
+    process_id: Option<u32>,
     peer: Arc<PiRpcPeer>,
     handling: AtomicBool,
     invalidated: AtomicBool,
@@ -356,6 +375,9 @@ impl Drop for ReplyGuard<'_> {
 }
 
 impl pontia_application::ClientControlChannel for PiChannel {
+    fn process_id(&self) -> Option<u32> {
+        self.process_id
+    }
     fn available(&self) -> bool {
         !self.invalidated.load(Ordering::SeqCst) && !self.peer.is_closed()
     }

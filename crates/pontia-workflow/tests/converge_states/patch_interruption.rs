@@ -5,7 +5,7 @@ use std::{
 };
 
 use pontia_storage_sqlite::repositories::{
-    runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
+    session_runtimes::{SessionRuntimeRecord, SqliteSessionRuntimeRepository},
     workflows::SqliteWorkflowRepository,
 };
 use pontia_workflow::{
@@ -28,12 +28,12 @@ impl TurnInterruptionRequester for RecordingInterrupter {
         &self,
         session_id: &str,
         turn_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> impl Future<Output = pontia_workflow::Result<()>> + Send {
         self.requests.lock().expect("interruptions lock").push((
             session_id.to_string(),
             turn_id.to_string(),
-            runtime_instance_id.to_string(),
+            runtime_id.to_string(),
         ));
         async { Ok(()) }
     }
@@ -68,24 +68,17 @@ async fn only_the_exact_client_confirmed_interruption_unlocks_replanning() {
     .execute(&pool)
     .await
     .expect("create active Turn");
-    SqliteRuntimeBindingRepository::new(pool.clone())
-        .upsert_binding(RuntimeBindingUpsertRecord {
+    SqliteSessionRuntimeRepository::new(pool.clone())
+        .upsert_binding(SessionRuntimeRecord {
             session_id: "sess_patch_interrupt".into(),
-            runtime_kind: "pi_tui".into(),
-            runtime_instance_id: Some("runtime_patch_interrupt".into()),
-            binding_state: "confirmed".into(),
-            runtime_handle: None,
+            runtime_id: "runtime_patch_interrupt".into(),
             start_command: None,
-            launch_cwd: None,
-            started_at: None,
-            last_seen_at: None,
-            restart_count: 0,
             tmux_socket_path: None,
             tmux_pane_id: None,
             process_fingerprint: None,
-            capabilities: "{}".into(),
-            diagnostics: "{}".into(),
-            adapter_details: "{}".into(),
+            role: "tui".into(),
+            state: "running".into(),
+            created_at: "2026-10-01T00:00:00Z".into(),
         })
         .await
         .expect("runtime binding");
@@ -103,7 +96,7 @@ async fn only_the_exact_client_confirmed_interruption_unlocks_replanning() {
     let outcome = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
         .request_patch(RequestWorkflowPatch {
             session_id: "sess_patch_interrupt".into(),
-            runtime_instance_id: "runtime_patch_interrupt".into(),
+            runtime_id: "runtime_patch_interrupt".into(),
         })
         .await
         .expect("request Patch");
@@ -205,7 +198,7 @@ async fn insert_started_and_interrupted_facts(
         (
             format!("{event_id}_started"),
             "turn.started",
-            json!({ "runtime_instance_id": runtime }),
+            json!({ "runtime_id": runtime }),
         ),
         (event_id.into(), "turn.interrupted", json!({})),
     ] {

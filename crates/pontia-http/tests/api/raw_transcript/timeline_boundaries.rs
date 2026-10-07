@@ -37,7 +37,7 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
             "turn_id": "turn_delayed_first",
             "type": "turn.started",
             "data": {
-                "runtime_instance_id": "rtinst_projected_timeline",
+                "runtime_id": format!("runtime_{session_id}"),
                 "timeline_anchor": { "previous_leaf_id": "previous" },
                 "topology_context": { "entries": [
                     {"id": "previous", "kind": "model_change"}
@@ -142,13 +142,11 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
         })
         .await
         .unwrap();
-    sqlx::query(
-        "UPDATE runtime_bindings SET runtime_kind='pi_tui',runtime_instance_id='rtinst_a' WHERE session_id=?",
-    )
-    .bind(session_id)
-    .execute(&state.db())
-    .await
-    .unwrap();
+    sqlx::query("UPDATE session_runtimes SET runtime_id='rtinst_a' WHERE session_id=?")
+        .bind(session_id)
+        .execute(&state.db())
+        .await
+        .unwrap();
 
     fs::write(
         &transcript,
@@ -164,7 +162,7 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
             "turn_id": turn_id,
             "type": "turn.started",
             "data": {
-                "runtime_instance_id": "rtinst_a",
+                "runtime_id": "rtinst_a",
                 "previous_leaf_id": "previous",
                 "topology_context": { "entries": [
                     {"id": "previous", "kind": "model_change"}
@@ -184,13 +182,11 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
         ),
     )
     .unwrap();
-    sqlx::query(
-        "UPDATE runtime_bindings SET runtime_instance_id = 'rtinst_b' WHERE session_id = ?",
-    )
-    .bind(session_id)
-    .execute(&state.db())
-    .await
-    .unwrap();
+    sqlx::query("UPDATE session_runtimes SET runtime_id = 'rtinst_b' WHERE session_id = ?")
+        .bind(session_id)
+        .execute(&state.db())
+        .await
+        .unwrap();
 
     let (output_status, output_body) = post_internal_event(
         state.clone(),
@@ -211,7 +207,7 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
             "turn_id": turn_id,
             "type": "turn.completed",
             "data": {
-                "runtime_instance_id": "rtinst_a",
+                "runtime_id": "rtinst_a",
                 "terminal_leaf_id": "answer"
             }
         }),
@@ -275,7 +271,7 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
         "turn_id": turn_id,
         "type": "turn.started",
         "data": {
-            "runtime_instance_id": "rtinst_pi_boundary",
+            "runtime_id": format!("runtime_{session_id}"),
             "timeline_anchor": { "previous_leaf_id": "previous_leaf" }
         }
     });
@@ -303,7 +299,7 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
         "turn_id": turn_id,
         "type": "turn.completed",
         "data": {
-            "runtime_instance_id": "rtinst_pi_boundary",
+            "runtime_id": format!("runtime_{session_id}"),
             "timeline_anchor": { "terminal_leaf_id": "terminal_leaf" }
         }
     });
@@ -401,7 +397,7 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
             "turn_id": turn_id,
             "type": "turn.started",
             "data": {
-                "runtime_instance_id": "rtinst_pi_interrupted_boundary",
+                "runtime_id": format!("runtime_{session_id}"),
                 "previous_leaf_id": "previous_leaf"
             }
         }),
@@ -430,7 +426,7 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
             "turn_id": turn_id,
             "type": "turn.interrupted",
             "data": {
-                "runtime_instance_id": "rtinst_pi_interrupted_boundary",
+                "runtime_id": format!("runtime_{session_id}"),
                 "terminal_leaf_id": "terminal_leaf"
             }
         }),
@@ -533,7 +529,7 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
         "turn_id": "turn_pi_boundary_missing",
         "type": "turn.started",
         "data": {
-            "runtime_instance_id": "rtinst_pi_boundary_missing",
+            "runtime_id": format!("runtime_{session_id}"),
             "timeline_anchor": { "previous_leaf_id": null }
         }
     });

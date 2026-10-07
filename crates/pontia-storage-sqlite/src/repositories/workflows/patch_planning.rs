@@ -20,7 +20,7 @@ impl SqliteWorkflowRepository {
             r#"SELECT n.workflow_id, n.node_id, t.turn_id, w.current_revision
                FROM workflow_nodes AS n
                JOIN workflows AS w ON w.workflow_id = n.workflow_id
-               JOIN runtime_bindings AS r ON r.session_id = n.session_id
+               JOIN session_runtimes AS r ON r.session_id = n.session_id
                JOIN turns AS t ON t.session_id = n.session_id
                WHERE n.session_id = ?
                  AND n.submitted_at IS NULL
@@ -29,8 +29,8 @@ impl SqliteWorkflowRepository {
                  AND w.state = 'running'
                  AND w.active_patch_id IS NULL
                  AND w.activating_node_id IS NULL
-                 AND r.binding_state = 'confirmed'
-                 AND r.runtime_instance_id = ?
+                 AND r.state IN ('starting','running') AND r.role = 'tui'
+                 AND r.runtime_id = ?
                  AND t.state IN ('queued', 'running')
                  AND NOT EXISTS (
                      SELECT 1 FROM workflow_nodes AS child
@@ -45,7 +45,7 @@ impl SqliteWorkflowRepository {
                LIMIT 2"#,
         )
         .bind(&request.session_id)
-        .bind(&request.runtime_instance_id)
+        .bind(&request.runtime_id)
         .fetch_all(&mut *tx)
         .await?;
         let [(workflow_id, node_id, turn_id, base_revision)] = context.as_slice() else {
@@ -58,7 +58,7 @@ impl SqliteWorkflowRepository {
         sqlx::query(
             r#"INSERT INTO workflow_patches
                (patch_id, workflow_id, requesting_node_id, requesting_session_id,
-                requesting_turn_id, requesting_runtime_instance_id, replanner_creation_token,
+                requesting_turn_id, requesting_runtime_id, replanner_creation_token,
                 base_revision, state, request_document_ref, request_size_bytes)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?)"#,
         )
@@ -67,7 +67,7 @@ impl SqliteWorkflowRepository {
         .bind(node_id)
         .bind(&request.session_id)
         .bind(turn_id)
-        .bind(&request.runtime_instance_id)
+        .bind(&request.runtime_id)
         .bind(&request.replanner_creation_token)
         .bind(base_revision)
         .bind(&request.request_document_ref)
@@ -142,7 +142,7 @@ impl SqliteWorkflowRepository {
                      WHERE e.session_id = workflow_patches.requesting_session_id
                        AND e.turn_id = workflow_patches.requesting_turn_id
                        AND e.event_type = 'turn.interrupted'
-                       AND e.runtime_instance_id = workflow_patches.requesting_runtime_instance_id
+                       AND e.runtime_id = workflow_patches.requesting_runtime_id
                  )"#,
         ))
         .bind(patch_id)
@@ -166,22 +166,22 @@ impl SqliteWorkflowRepository {
         event_id: &str,
     ) -> Result<bool> {
         let mut tx = self.pool.begin().await?;
-        let runtime_instance_id: Option<String> = sqlx::query_scalar(
-            r#"SELECT runtime_instance_id FROM runtime_bindings
-               WHERE session_id = ? AND binding_state = 'confirmed'
-                 AND runtime_instance_id IS NOT NULL"#,
+        let runtime_id: Option<String> = sqlx::query_scalar(
+            r#"SELECT runtime_id FROM session_runtimes
+               WHERE session_id = ? AND state = 'running' AND role = 'tui'
+                 AND runtime_id IS NOT NULL"#,
         )
         .bind(session_id)
         .fetch_optional(&mut *tx)
         .await?
         .flatten();
-        let Some(runtime_instance_id) = runtime_instance_id else {
+        let Some(runtime_id) = runtime_id else {
             return Ok(false);
         };
         let result = sqlx::query(
             r#"UPDATE workflow_patches
                SET state = 'planning', replanner_session_id = ?,
-                   replanner_runtime_instance_id = ?,
+                   replanner_runtime_id = ?,
                    planning_at = COALESCE(planning_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                WHERE patch_id = ? AND state = 'requested'
@@ -189,7 +189,7 @@ impl SqliteWorkflowRepository {
                  AND replanner_session_id IS NULL"#,
         )
         .bind(session_id)
-        .bind(&runtime_instance_id)
+        .bind(&runtime_id)
         .bind(patch_id)
         .execute(&mut *tx)
         .await?;
@@ -226,7 +226,7 @@ impl SqliteWorkflowRepository {
         let payload = serde_json::json!({
             "patch_id": patch_id,
             "replanner_session_id": session_id,
-            "replanner_runtime_instance_id": runtime_instance_id,
+            "replanner_runtime_id": runtime_id,
         });
         sqlx::query(
             r#"INSERT INTO workflow_events (event_id, workflow_id, sequence, event_type, payload)

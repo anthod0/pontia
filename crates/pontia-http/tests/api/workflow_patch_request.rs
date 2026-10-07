@@ -9,7 +9,7 @@ use axum::{
 use http_body_util::BodyExt;
 use pontia_http as http;
 use pontia_storage_sqlite::repositories::{
-    runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
+    session_runtimes::{SessionRuntimeRecord, SqliteSessionRuntimeRepository},
     workflows::{CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository},
 };
 use serde_json::{Value, json};
@@ -60,24 +60,17 @@ async fn seed_requester(app: &TestApp) {
     .execute(&app.db)
     .await
     .expect("create active Turn");
-    SqliteRuntimeBindingRepository::new(app.db.clone())
-        .upsert_binding(RuntimeBindingUpsertRecord {
+    SqliteSessionRuntimeRepository::new(app.db.clone())
+        .upsert_binding(SessionRuntimeRecord {
             session_id: "sess_patch_request".into(),
-            runtime_kind: "pi_tui".into(),
-            runtime_instance_id: Some("runtime_patch_request".into()),
-            binding_state: "confirmed".into(),
-            runtime_handle: None,
+            runtime_id: "runtime_patch_request".into(),
             start_command: None,
-            launch_cwd: None,
-            started_at: None,
-            last_seen_at: None,
-            restart_count: 0,
             tmux_socket_path: None,
             tmux_pane_id: None,
             process_fingerprint: None,
-            capabilities: r#"{"interrupt":true}"#.into(),
-            diagnostics: "{}".into(),
-            adapter_details: "{}".into(),
+            role: "tui".into(),
+            state: "running".into(),
+            created_at: "2026-10-01T00:00:00Z".into(),
         })
         .await
         .expect("create Runtime binding");
@@ -127,7 +120,7 @@ async fn request_patch(app: &TestApp, runtime: &str) -> (StatusCode, Value) {
                 .body(Body::from(
                     json!({
                         "session_id": "sess_patch_request",
-                        "runtime_instance_id": runtime
+                        "runtime_id": runtime
                     })
                     .to_string(),
                 ))
@@ -174,7 +167,7 @@ async fn apply_patch(app: &TestApp, runtime: &str, decision: &str) -> (StatusCod
                 .body(Body::from(
                     json!({
                         "session_id": "sess_patch_replanner",
-                        "runtime_instance_id": runtime
+                        "runtime_id": runtime
                     })
                     .to_string(),
                 ))
@@ -213,7 +206,7 @@ async fn block_patch(app: &TestApp, runtime: &str, reason: &str) -> (StatusCode,
                 .body(Body::from(
                     json!({
                         "session_id": "sess_patch_replanner",
-                        "runtime_instance_id": runtime
+                        "runtime_id": runtime
                     })
                     .to_string(),
                 ))
@@ -231,28 +224,21 @@ async fn seed_active_replanner(app: &TestApp, patch_id: &str) {
         .execute(&app.db).await.unwrap();
     sqlx::query("INSERT INTO turns (turn_id, session_id, state, topology_status) VALUES ('turn_patch_replanner', 'sess_patch_replanner', 'running', 'root')")
         .execute(&app.db).await.unwrap();
-    SqliteRuntimeBindingRepository::new(app.db.clone())
-        .upsert_binding(RuntimeBindingUpsertRecord {
+    SqliteSessionRuntimeRepository::new(app.db.clone())
+        .upsert_binding(SessionRuntimeRecord {
             session_id: "sess_patch_replanner".into(),
-            runtime_kind: "pi_tui".into(),
-            runtime_instance_id: Some("runtime_patch_replanner".into()),
-            binding_state: "confirmed".into(),
-            runtime_handle: None,
+            runtime_id: "runtime_patch_replanner".into(),
             start_command: None,
-            launch_cwd: None,
-            started_at: None,
-            last_seen_at: None,
-            restart_count: 0,
             tmux_socket_path: None,
             tmux_pane_id: None,
             process_fingerprint: None,
-            capabilities: "{}".into(),
-            diagnostics: "{}".into(),
-            adapter_details: "{}".into(),
+            role: "tui".into(),
+            state: "running".into(),
+            created_at: "2026-10-01T00:00:00Z".into(),
         })
         .await
         .unwrap();
-    sqlx::query("UPDATE workflow_patches SET state = 'planning', replanner_session_id = 'sess_patch_replanner', replanner_runtime_instance_id = 'runtime_patch_replanner' WHERE patch_id = ?")
+    sqlx::query("UPDATE workflow_patches SET state = 'planning', replanner_session_id = 'sess_patch_replanner', replanner_runtime_id = 'runtime_patch_replanner' WHERE patch_id = ?")
         .bind(patch_id).execute(&app.db).await.unwrap();
     sqlx::query("UPDATE workflows SET active_replanner_session_id = 'sess_patch_replanner' WHERE workflow_id = 'wf_patch_request'")
         .execute(&app.db).await.unwrap();
@@ -295,10 +281,7 @@ async fn request_is_durable_before_the_coordinator_interrupts() {
         .expect("load Patch")
         .expect("Patch");
     assert_eq!(patch.requesting_turn_id, "turn_patch_request");
-    assert_eq!(
-        patch.requesting_runtime_instance_id,
-        "runtime_patch_request"
-    );
+    assert_eq!(patch.requesting_runtime_id, "runtime_patch_request");
     assert!(patch.interruption_attempted_at.is_none());
     assert_eq!(
         fs::read_to_string(

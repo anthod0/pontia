@@ -22,13 +22,10 @@ export class EventReporter {
     this.logFile = options.logFile;
   }
 
-  async report(
-    context: { runtimeInstanceId: string },
-    event: InternalEvent,
-  ): Promise<EventReportResult> {
+  async report(context: { runtimeId: string }, event: InternalEvent): Promise<EventReportResult> {
     try {
       const body = await this.connection.request("event.report", {
-        runtime_instance_id: context.runtimeInstanceId,
+        runtime_id: context.runtimeId,
         event,
       });
       const record =
@@ -69,7 +66,7 @@ export class EventReporter {
     event: InternalEvent,
     reason: "event_rejected" | "transport_failed" | "missing_turn_id",
   ): Promise<void> {
-    if (event.type !== "turn.started" || typeof event.data.runtime_instance_id !== "string") return;
+    if (event.type !== "turn.started" || typeof event.data.runtime_id !== "string") return;
     // A lost turn.started response is ambiguous: retrying it could create a
     // second Turn. Only this fenced, idempotent failure notification is retried.
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -77,7 +74,7 @@ export class EventReporter {
       try {
         const result = (await this.connection.request("turn.startFailure", {
           session_id: event.session_id,
-          runtime_instance_id: event.data.runtime_instance_id,
+          runtime_id: event.data.runtime_id,
           reason,
         })) as { accepted?: unknown } | null;
         if (result?.accepted === true) return;

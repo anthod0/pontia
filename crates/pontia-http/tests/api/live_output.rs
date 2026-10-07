@@ -13,8 +13,8 @@ use pontia_core::{
     ids::new_event_id,
 };
 use pontia_http as http;
-use pontia_storage_sqlite::repositories::runtime_bindings::{
-    RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository,
+use pontia_storage_sqlite::repositories::session_runtimes::{
+    SessionRuntimeRecord, SqliteSessionRuntimeRepository,
 };
 use serde_json::json;
 use tower::ServiceExt;
@@ -44,24 +44,17 @@ async fn seed_running_turn(state: &AppState, session_id: &str, turn_id: &str, ru
         ))
         .await
         .unwrap();
-    SqliteRuntimeBindingRepository::new(state.db())
-        .upsert_binding(RuntimeBindingUpsertRecord {
+    SqliteSessionRuntimeRepository::new(state.db())
+        .upsert_binding(SessionRuntimeRecord {
             session_id: session_id.into(),
-            runtime_kind: "tmux".into(),
-            runtime_instance_id: Some(runtime_id.into()),
-            binding_state: "confirmed".into(),
-            runtime_handle: None,
+            runtime_id: runtime_id.into(),
             start_command: None,
-            launch_cwd: Some("/tmp".into()),
-            started_at: None,
-            last_seen_at: None,
-            restart_count: 0,
             tmux_socket_path: None,
             tmux_pane_id: None,
             process_fingerprint: None,
-            capabilities: "{}".into(),
-            diagnostics: "{}".into(),
-            adapter_details: "{}".into(),
+            role: "tui".into(),
+            state: "running".into(),
+            created_at: "2026-10-01T00:00:00Z".into(),
         })
         .await
         .unwrap();
@@ -73,7 +66,7 @@ async fn seed_running_turn(state: &AppState, session_id: &str, turn_id: &str, ru
             EventSource::AgentClient,
             "pi".into(),
             EventType::TurnStarted,
-            json!({"runtime_instance_id": runtime_id, "input_summary": "test"}),
+            json!({"runtime_id": runtime_id, "input_summary": "test"}),
         ))
         .await
         .unwrap();
@@ -83,7 +76,7 @@ fn producer(
     session_id: &str,
     turn_id: &str,
     stream_id: &str,
-    runtime_instance_id: &str,
+    runtime_id: &str,
 ) -> pontia_application::LiveOutputProducer {
     pontia_application::LiveOutputProducer {
         identity: pontia_application::LiveOutputIdentity {
@@ -91,7 +84,7 @@ fn producer(
             turn_id: turn_id.into(),
             stream_id: stream_id.into(),
         },
-        runtime_instance_id: runtime_instance_id.into(),
+        runtime_id: runtime_id.into(),
     }
 }
 

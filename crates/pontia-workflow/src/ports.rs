@@ -47,13 +47,13 @@ pub trait GracefulExitRequester {
     fn ensure_current_runtime(
         &self,
         session_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> impl Future<Output = Result<()>> + Send;
 
     fn request_graceful_exit(
         &self,
         session_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> impl Future<Output = Result<()>> + Send;
 }
 
@@ -62,7 +62,7 @@ pub trait TurnInterruptionRequester {
         &self,
         session_id: &str,
         turn_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> impl Future<Output = Result<()>> + Send;
 }
 
@@ -71,21 +71,17 @@ impl TurnInterruptionRequester for TurnCommandService {
         &self,
         session_id: &str,
         turn_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> Result<()> {
-        self.interrupt_turn_for_runtime(session_id, turn_id, runtime_instance_id)
+        self.interrupt_turn_for_runtime(session_id, turn_id, runtime_id)
             .await?;
         Ok(())
     }
 }
 
 impl GracefulExitRequester for SessionCommandService {
-    async fn ensure_current_runtime(
-        &self,
-        session_id: &str,
-        runtime_instance_id: &str,
-    ) -> Result<()> {
-        SessionCommandService::ensure_current_runtime(self, session_id, runtime_instance_id)
+    async fn ensure_current_runtime(&self, session_id: &str, runtime_id: &str) -> Result<()> {
+        SessionCommandService::ensure_current_runtime(self, session_id, runtime_id)
             .await
             .map_err(|error| match error {
                 pontia_core::Error::CapabilityUnavailable(message)
@@ -97,12 +93,8 @@ impl GracefulExitRequester for SessionCommandService {
             })
     }
 
-    async fn request_graceful_exit(
-        &self,
-        session_id: &str,
-        runtime_instance_id: &str,
-    ) -> Result<()> {
-        self.request_exit(session_id, Some(runtime_instance_id))
+    async fn request_graceful_exit(&self, session_id: &str, runtime_id: &str) -> Result<()> {
+        self.request_exit(session_id, Some(runtime_id))
             .await
             .map(|_| ())
             .map_err(Into::into)

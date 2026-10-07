@@ -20,7 +20,7 @@ async fn reporting_service_normalizes_started_fact_into_a_domain_event() {
             "session_id": "sess_normalized",
             "type": "turn.started",
             "data": {
-                "runtime_instance_id": "rtinst_normalized",
+                "runtime_id": "rtinst_normalized",
                 "input_summary": "hello",
                 "previous_leaf_id": null,
                 "inbox_message_id": "msg_1"
@@ -92,7 +92,7 @@ async fn reporting_service_allows_started_fact_to_reference_an_existing_turn() {
             "session_id": "sess_existing_started_turn",
             "turn_id": turn_id,
             "type": "turn.started",
-            "data": { "runtime_instance_id": "rtinst_existing_started_turn" }
+            "data": { "runtime_id": "rtinst_existing_started_turn" }
         }),
     )
     .await
@@ -111,7 +111,7 @@ async fn reporting_service_uses_returned_turn_id_for_followup_facts() {
         json!({
             "session_id": "sess_followup",
             "type": "turn.started",
-            "data": { "runtime_instance_id": "rtinst_followup" }
+            "data": { "runtime_id": "rtinst_followup" }
         }),
     )
     .await
@@ -122,7 +122,7 @@ async fn reporting_service_uses_returned_turn_id_for_followup_facts() {
         ("turn.output", json!({"output_summary":"answer"})),
         (
             "turn.completed",
-            json!({"runtime_instance_id":"rtinst_followup","terminal_leaf_id":null}),
+            json!({"runtime_id":"rtinst_followup","terminal_leaf_id":null}),
         ),
     ] {
         let body = report_fact(
@@ -161,7 +161,7 @@ async fn reporting_service_accepts_agent_client_reported_turn_interrupted() {
         json!({
             "session_id": "sess_interrupted",
             "type": "turn.started",
-            "data": { "runtime_instance_id": "rtinst_interrupted" }
+            "data": { "runtime_id": "rtinst_interrupted" }
         }),
     )
     .await
@@ -175,7 +175,7 @@ async fn reporting_service_accepts_agent_client_reported_turn_interrupted() {
             "session_id": "sess_interrupted",
             "turn_id": turn_id,
             "type": "turn.interrupted",
-            "data": { "runtime_instance_id": "rtinst_interrupted" }
+            "data": { "runtime_id": "rtinst_interrupted" }
         }),
     )
     .await
@@ -202,7 +202,7 @@ async fn reporting_service_derives_client_type_and_source_from_session_and_fact(
             "session_id": "sess_ready",
             "type": "session.ready",
             "data": {
-                "runtime_instance_id": "rtinst_ready",
+                "runtime_id": "rtinst_ready",
                 "client_session_key": "native-pi-session"
             }
         }),

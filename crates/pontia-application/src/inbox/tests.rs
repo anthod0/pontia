@@ -137,12 +137,10 @@ async fn pending_prepared_input_cannot_follow_a_replacement_runtime_after_restar
         "pending"
     );
 
-    sqlx::query(
-        "UPDATE runtime_bindings SET runtime_instance_id='replacement' WHERE session_id='session'",
-    )
-    .execute(&state.db())
-    .await
-    .unwrap();
+    sqlx::query("UPDATE session_runtimes SET runtime_id='replacement' WHERE session_id='session'")
+        .execute(&state.db())
+        .await
+        .unwrap();
     let restarted = crate::AppState::builder(state.db(), root.path().into())
         .clients(crate::clients::testing::clients())
         .build();
@@ -316,7 +314,7 @@ async fn runtime_scoped_exit_and_interrupt_reject_replaced_instances_before_nati
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO runtime_bindings(session_id,runtime_kind,runtime_instance_id,binding_state) VALUES ('session','pi_tui','replacement','confirmed')").execute(&pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, role, state, created_at) VALUES ('session', 'replacement', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
     let state = crate::AppState::builder(pool.clone(), root.path().into())
         .clients(crate::clients::testing::clients())
         .build();
@@ -343,7 +341,7 @@ async fn runtime_scoped_exit_and_interrupt_reject_replaced_instances_before_nati
         .dispatch_initial(
             &crate::runtime::ControlTarget {
                 session_id: "session".into(),
-                runtime_instance_id: Some("old".into()),
+                runtime_id: Some("old".into()),
             },
             "initial input",
             &json!({}),
@@ -368,7 +366,7 @@ async fn token_override_preserves_initial_input_gate_and_event_wakeup() {
         .clients(crate::clients::testing::clients())
         .build();
     sqlx::query("INSERT INTO sessions(session_id,client_type,state) VALUES ('session','test-channel','idle')").execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO runtime_bindings(session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities) VALUES ('session','test_tui','runtime','confirmed','/unused/tmux','%1','{\"accept_task\":true}')").execute(&pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES ('session', 'runtime', '/unused/tmux', '%1', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding','session','test-channel','/unused','native','{}')").execute(&pool).await.unwrap();
     let channel = crate::clients::testing::channel();
     state
@@ -388,7 +386,7 @@ async fn token_override_preserves_initial_input_gate_and_event_wakeup() {
             session_id: "session".into(),
             turn_id: None,
             fact_type: pontia_core::domain::EventType::SessionReady,
-            data: json!({"runtime_instance_id":"runtime"}),
+            data: json!({"runtime_id":"runtime"}),
         })
         .await
         .unwrap();
@@ -454,7 +452,7 @@ async fn connected_inbox() -> (
         .clients(clients)
         .build();
     sqlx::query("INSERT INTO sessions(session_id,client_type,state) VALUES ('session','test-channel','idle')").execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO runtime_bindings(session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities) VALUES ('session','test_tui','runtime','confirmed','/unused/tmux','%1','{\"accept_task\":true}')").execute(&pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES ('session', 'runtime', '/unused/tmux', '%1', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding','session','test-channel','/unused','native','{}')").execute(&pool).await.unwrap();
     let channel = crate::clients::testing::channel();
     state
@@ -474,7 +472,7 @@ async fn connected_inbox() -> (
             session_id: "session".into(),
             turn_id: None,
             fact_type: pontia_core::domain::EventType::SessionReady,
-            data: json!({"runtime_instance_id":"runtime"}),
+            data: json!({"runtime_id":"runtime"}),
         })
         .await
         .unwrap();
@@ -735,7 +733,7 @@ async fn duplicate_submission_preserves_native_receipt_and_original_contents() {
             "message",
             &crate::control::InputReceipt {
                 native_turn_id: Some("native-turn".into()),
-                runtime_instance_id: Some("runtime".into()),
+                runtime_id: Some("runtime".into()),
             },
         )
         .await

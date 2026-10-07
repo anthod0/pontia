@@ -31,7 +31,7 @@ fn install_fake_tmux(bin_dir: &Path) {
         r#"#!/bin/sh
 case "$*" in
   *"@pontia_session_id") printf 'sess_workflow_cli\n' ;;
-  *"@pontia_runtime_instance_id") printf 'rtinst_workflow_cli\n' ;;
+  *"@pontia_runtime_id") printf 'rtinst_workflow_cli\n' ;;
   *) exit 1 ;;
 esac
 "#,
@@ -403,9 +403,10 @@ fn workflow_submit_discovers_managed_pane_and_posts_identity() {
     assert!(request.starts_with("POST /api/v1/workflow/submissions HTTP/1.1"));
     assert!(request.contains(&format!("host: 127.0.0.1:{}", addr.port())));
     assert!(request.contains("authorization: Bearer cli-test-token"));
-    assert!(request.contains(
-        r#"{"session_id":"sess_workflow_cli","runtime_instance_id":"rtinst_workflow_cli"}"#
-    ));
+    assert!(
+        request
+            .contains(r#"{"session_id":"sess_workflow_cli","runtime_id":"rtinst_workflow_cli"}"#)
+    );
 }
 
 #[test]
@@ -447,9 +448,10 @@ fn workflow_patch_request_posts_identity_and_prints_patch_id() {
     );
     let request = request.join().expect("request capture thread");
     assert!(request.starts_with("POST /api/v1/workflow/patches/request HTTP/1.1"));
-    assert!(request.contains(
-        r#"{"session_id":"sess_workflow_cli","runtime_instance_id":"rtinst_workflow_cli"}"#
-    ));
+    assert!(
+        request
+            .contains(r#"{"session_id":"sess_workflow_cli","runtime_id":"rtinst_workflow_cli"}"#)
+    );
 }
 
 #[test]
@@ -486,9 +488,10 @@ fn workflow_patch_apply_posts_identity_and_prints_outcome() {
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "applied 2\n");
     let request = request.join().unwrap();
     assert!(request.starts_with("POST /api/v1/workflow/patches/apply HTTP/1.1"));
-    assert!(request.contains(
-        r#"{"session_id":"sess_workflow_cli","runtime_instance_id":"rtinst_workflow_cli"}"#
-    ));
+    assert!(
+        request
+            .contains(r#"{"session_id":"sess_workflow_cli","runtime_id":"rtinst_workflow_cli"}"#)
+    );
 }
 
 #[test]
@@ -526,9 +529,10 @@ fn workflow_patch_block_posts_managed_identity() {
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "blocked\n");
     let request = request.join().unwrap();
     assert!(request.starts_with("POST /api/v1/workflow/patches/block HTTP/1.1"));
-    assert!(request.contains(
-        r#"{"session_id":"sess_workflow_cli","runtime_instance_id":"rtinst_workflow_cli"}"#
-    ));
+    assert!(
+        request
+            .contains(r#"{"session_id":"sess_workflow_cli","runtime_id":"rtinst_workflow_cli"}"#)
+    );
 }
 
 #[test]

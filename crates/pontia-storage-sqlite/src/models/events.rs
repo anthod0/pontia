@@ -16,7 +16,7 @@ pub struct WorkflowTerminalEventRow {
     pub event_id: String,
     pub turn_id: Option<String>,
     pub event_type: String,
-    pub runtime_instance_id: Option<String>,
+    pub runtime_id: Option<String>,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]

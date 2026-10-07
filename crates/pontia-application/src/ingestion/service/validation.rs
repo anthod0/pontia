@@ -5,7 +5,7 @@ use pontia_core::{
     error::{Error, Result},
 };
 use pontia_storage_sqlite::repositories::{
-    agent_bindings::SqliteAgentBindingRepository, runtime_bindings::SqliteRuntimeBindingRepository,
+    agent_bindings::SqliteAgentBindingRepository, session_runtimes::SqliteSessionRuntimeRepository,
     sessions::SqliteSessionRepository, turns::SqliteTurnRepository,
 };
 
@@ -42,13 +42,13 @@ pub(super) async fn ensure_runtime_fence_in_tx(
 ) -> Result<()> {
     let native_turn = native_turn_identity && event.event_type.is_turn_event();
     if !is_confirmed_runtime_source(event.source)
-        || !(runtime_instance_id_required_for_event(event.event_type) || native_turn)
+        || !(runtime_id_required_for_event(event.event_type) || native_turn)
     {
         return Ok(());
     }
-    let expected_runtime_instance_id =
-        SqliteRuntimeBindingRepository::runtime_instance_id_in_tx(tx, &event.session_id).await?;
-    let Some(expected_runtime_instance_id) = expected_runtime_instance_id else {
+    let expected_runtime_id =
+        SqliteSessionRuntimeRepository::runtime_id_in_tx(tx, &event.session_id).await?;
+    let Some(expected_runtime_id) = expected_runtime_id else {
         if native_turn
             || matches!(
                 event.event_type,
@@ -65,21 +65,21 @@ pub(super) async fn ensure_runtime_fence_in_tx(
         }
         return Ok(());
     };
-    let provided_runtime_instance_id = event
+    let provided_runtime_id = event
         .payload
-        .get("runtime_instance_id")
+        .get("runtime_id")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
             Error::Domain(format!(
-                "{} from {} requires payload.runtime_instance_id for runtime-bound session {}",
+                "{} from {} requires payload.runtime_id for runtime-bound session {}",
                 event.event_type, event.source, event.session_id
             ))
         })?;
-    if provided_runtime_instance_id != expected_runtime_instance_id {
+    if provided_runtime_id != expected_runtime_id {
         return Err(Error::Domain(format!(
-            "payload.runtime_instance_id does not match session {} runtime binding",
+            "payload.runtime_id does not match session {} runtime binding",
             event.session_id
         )));
     }
@@ -118,11 +118,11 @@ pub(super) async fn ensure_confirmed_event_matches_session_boundary(
         ensure_ready_identity_matches_bindings(pool, event).await?;
     }
 
-    let expected_runtime_instance_id = SqliteRuntimeBindingRepository::new(pool.clone())
-        .runtime_instance_id(&event.session_id)
+    let expected_runtime_id = SqliteSessionRuntimeRepository::new(pool.clone())
+        .runtime_id(&event.session_id)
         .await?;
 
-    let Some(expected_runtime_instance_id) = expected_runtime_instance_id else {
+    let Some(expected_runtime_id) = expected_runtime_id else {
         if matches!(
             event.event_type,
             EventType::SessionReady | EventType::SessionModelUpdated
@@ -135,23 +135,23 @@ pub(super) async fn ensure_confirmed_event_matches_session_boundary(
         return Ok(());
     };
 
-    let provided_runtime_instance_id = event
+    let provided_runtime_id = event
         .payload
-        .get("runtime_instance_id")
+        .get("runtime_id")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    if runtime_instance_id_required_for_event(event.event_type) {
-        let Some(provided_runtime_instance_id) = provided_runtime_instance_id else {
+    if runtime_id_required_for_event(event.event_type) {
+        let Some(provided_runtime_id) = provided_runtime_id else {
             return Err(Error::Domain(format!(
-                "{} from {} requires payload.runtime_instance_id for runtime-bound session {}",
+                "{} from {} requires payload.runtime_id for runtime-bound session {}",
                 event.event_type, event.source, event.session_id
             )));
         };
-        if provided_runtime_instance_id != expected_runtime_instance_id {
+        if provided_runtime_id != expected_runtime_id {
             return Err(Error::Domain(format!(
-                "payload.runtime_instance_id does not match session {} runtime binding",
+                "payload.runtime_id does not match session {} runtime binding",
                 event.session_id
             )));
         }
@@ -207,7 +207,7 @@ fn is_confirmed_runtime_source(source: EventSource) -> bool {
     )
 }
 
-fn runtime_instance_id_required_for_event(event_type: EventType) -> bool {
+fn runtime_id_required_for_event(event_type: EventType) -> bool {
     matches!(
         event_type,
         EventType::SessionReady

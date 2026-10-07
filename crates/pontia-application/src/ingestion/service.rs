@@ -189,13 +189,13 @@ impl EventIngestService {
         &self,
         client_type: &str,
         session_id: &str,
-        runtime_instance_id: Option<&str>,
+        runtime_id: Option<&str>,
     ) -> Result<()> {
-        let Some(event) = runtime_instance_id.and_then(|runtime_instance_id| {
+        let Some(event) = runtime_id.and_then(|runtime_id| {
             self.clients
                 .get(client_type)
                 .and_then(|entry| entry.in_process.as_ref())
-                .map(|client| client.ready(session_id, runtime_instance_id))
+                .map(|client| client.ready(session_id, runtime_id))
         }) else {
             return Ok(());
         };

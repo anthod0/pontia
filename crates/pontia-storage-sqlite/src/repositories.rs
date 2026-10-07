@@ -3,7 +3,7 @@ pub mod agent_profiles;
 pub mod events;
 pub mod git_status;
 pub mod inbox;
-pub mod runtime_bindings;
+pub mod session_runtimes;
 pub mod sessions;
 pub mod tasks;
 pub mod turns;

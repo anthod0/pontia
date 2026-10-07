@@ -1,7 +1,7 @@
 export interface SessionContext {
   sessionId: string;
   clientType: "pi";
-  runtimeInstanceId: string;
+  runtimeId: string;
   clientSessionKey?: string;
   clientSessionFile?: string;
   clientSessionDir?: string;

@@ -122,7 +122,7 @@ async fn workflow_retry_is_authenticated_and_persistently_deduplicated_by_failur
     repo.bind_node_session("node_control", "failed-session")
         .await
         .unwrap();
-    sqlx::query("INSERT INTO events(event_id,session_id,source,client_type,event_type,occurred_at,payload) VALUES ('exit','failed-session','runtime_manager','pi','session.exited','2026-09-24T00:00:00Z','{\"runtime_instance_id\":\"old\"}')").execute(&app.db).await.unwrap();
+    sqlx::query("INSERT INTO events(event_id,session_id,source,client_type,event_type,occurred_at,payload) VALUES ('exit','failed-session','runtime_manager','pi','session.exited','2026-09-24T00:00:00Z','{\"runtime_id\":\"old\"}')").execute(&app.db).await.unwrap();
     repo.fail_unsubmitted_workflow_node(
         "wf_control",
         "node_control",

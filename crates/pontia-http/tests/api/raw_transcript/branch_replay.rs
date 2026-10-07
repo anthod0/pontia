@@ -20,7 +20,7 @@ async fn attach(pi: &PiRpcPeer, session: &str, runtime: &str, native: &str) {
         "runtime.attach",
         json!({
             "version": PROTOCOL_VERSION, "session_id": session,
-            "runtime_instance_id": runtime, "client_session_key": native,
+            "runtime_id": runtime, "client_session_key": native,
         }),
     )
     .await
@@ -60,7 +60,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     let temp = tempdir().unwrap();
     let state = test_state().await;
     let session_id = "sess_branch_resolve";
-    let runtime_instance_id = "rtinst_branch_resolve";
+    let runtime_id = "runtime_sess_branch_resolve";
     let cwd = temp.path().join("workspace");
     fs::create_dir_all(&cwd).unwrap();
     let cwd = cwd.canonicalize().unwrap();
@@ -184,15 +184,9 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         .unwrap();
         offset = tail;
     }
-    let capabilities = pontia_client_pi::CAPABILITIES;
-    sqlx::query(
-        r#"INSERT INTO runtime_bindings
-           (session_id, runtime_kind, runtime_instance_id, binding_state, tmux_socket_path, tmux_pane_id, capabilities)
-           VALUES (?, 'pi_tui', ?, 'confirmed', '/unused/branch-resolve.sock', '%1', ?) ON CONFLICT(session_id) DO UPDATE SET runtime_kind=excluded.runtime_kind, runtime_instance_id=excluded.runtime_instance_id, binding_state=excluded.binding_state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id, capabilities=excluded.capabilities"#,
-    )
-    .bind(session_id)
-    .bind(runtime_instance_id)
-    .bind(json!(capabilities).to_string())
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, '/unused/branch-resolve.sock', '%1', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT(runtime_id) DO UPDATE SET state=excluded.state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id"#)
+.bind(session_id)
+.bind(runtime_id)
     .execute(&state.db())
     .await
     .unwrap();
@@ -212,7 +206,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     }
 
     let (pi, _requests) = rpc_client(&state);
-    attach(&pi, session_id, runtime_instance_id, session_key).await;
+    attach(&pi, session_id, runtime_id, session_key).await;
     let before: (i64, i64, i64) = sqlx::query_as(
         "SELECT (SELECT COUNT(*) FROM turns), (SELECT COUNT(*) FROM events), (SELECT COUNT(*) FROM inbox_messages WHERE state = 'dispatching')",
     )
@@ -226,7 +220,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
                 json!({
                     "inbox_message_id": message_id,
                     "session_id": session_id,
-                    "runtime_instance_id": runtime_instance_id,
+                    "runtime_id": runtime_id,
                     "client_type": "pi"
                 }),
             )
@@ -237,7 +231,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
             json!({
                 "inbox_message_id": message_id,
                 "session_id": session_id,
-                "runtime_instance_id": runtime_instance_id,
+                "runtime_id": runtime_id,
                 "client_type": "pi",
                 "replacement_input": replacement_input,
                 "target_entry_id": target_entry_id
@@ -329,39 +323,12 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     .await;
     assert_eq!(missing_boundary_status, StatusCode::CONFLICT);
 
-    let unsupported_capabilities = pontia_client_pi::CAPABILITIES;
-    let mut unsupported_capabilities = unsupported_capabilities;
-    unsupported_capabilities.branch_control = false;
-    sqlx::query("UPDATE runtime_bindings SET capabilities = ? WHERE session_id = ?")
-        .bind(json!(unsupported_capabilities).to_string())
-        .bind(session_id)
-        .execute(&state.db())
-        .await
-        .unwrap();
-    let (non_writable_status, _) = post_external_json(
-        state.clone(),
-        &inbox_uri,
-        None,
-        json!({
-            "input": "replacement",
-            "branch_target_turn_id": "turn_01900000-0000-7000-8000-000000000001"
-        }),
-    )
-    .await;
-    assert_eq!(non_writable_status, StatusCode::UNPROCESSABLE_ENTITY);
-    sqlx::query("UPDATE runtime_bindings SET capabilities = ? WHERE session_id = ?")
-        .bind(json!(capabilities).to_string())
-        .bind(session_id)
-        .execute(&state.db())
-        .await
-        .unwrap();
-
     assert!(
         pi.call(
             "branch.resolve",
             json!({
                 "inbox_message_id": "msg_branch_root", "session_id": session_id,
-                "runtime_instance_id": "rtinst_stale", "client_type": "pi",
+                "runtime_id": "rtinst_stale", "client_type": "pi",
             })
         )
         .await
@@ -371,15 +338,15 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     );
 
     for (session, runtime, client_type) in [
-        (other_session_id, runtime_instance_id, "pi"),
-        (session_id, runtime_instance_id, "codex"),
+        (other_session_id, runtime_id, "pi"),
+        (session_id, runtime_id, "codex"),
     ] {
         assert!(
             pi.call(
                 "branch.resolve",
                 json!({
                     "inbox_message_id": "msg_branch_root", "session_id": session,
-                    "runtime_instance_id": runtime, "client_type": client_type,
+                    "runtime_id": runtime, "client_type": client_type,
                 })
             )
             .await
@@ -388,28 +355,26 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
             .contains("connection identity")
         );
     }
-    sqlx::query(
-        "UPDATE runtime_bindings SET runtime_instance_id = 'rtinst_replaced' WHERE session_id = ?",
-    )
-    .bind(session_id)
-    .execute(&state.db())
-    .await
-    .unwrap();
+    sqlx::query("UPDATE session_runtimes SET runtime_id = 'rtinst_replaced' WHERE session_id = ?")
+        .bind(session_id)
+        .execute(&state.db())
+        .await
+        .unwrap();
     assert!(
         pi.call(
             "branch.resolve",
             json!({
                 "inbox_message_id": "msg_branch_root", "session_id": session_id,
-                "runtime_instance_id": runtime_instance_id, "client_type": "pi",
+                "runtime_id": runtime_id, "client_type": "pi",
             })
         )
         .await
         .unwrap_err()
         .to_string()
-        .contains("Runtime instance does not own")
+        .contains("no longer current")
     );
-    sqlx::query("UPDATE runtime_bindings SET runtime_instance_id = ? WHERE session_id = ?")
-        .bind(runtime_instance_id)
+    sqlx::query("UPDATE session_runtimes SET runtime_id = ? WHERE session_id = ?")
+        .bind(runtime_id)
         .bind(session_id)
         .execute(&state.db())
         .await
@@ -430,7 +395,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
             json!({
                 "inbox_message_id": "msg_branch_root",
                 "session_id": session_id,
-                "runtime_instance_id": runtime_instance_id,
+                "runtime_id": runtime_id,
                 "client_type": "pi"
             }),
         )
@@ -460,7 +425,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         "INSERT INTO events (event_id, session_id, source, client_type, event_type, occurred_at, payload) VALUES ('evt_branch_resolve_ready', ?, 'agent_client', 'pi', 'session.ready', '2026-07-24T00:00:00Z', ?)",
     )
     .bind(session_id)
-    .bind(json!({"runtime_instance_id": runtime_instance_id}).to_string())
+    .bind(json!({"runtime_id": runtime_id}).to_string())
     .execute(&state.db())
     .await
     .unwrap();
@@ -508,7 +473,7 @@ async fn branch_resolution_requires_registered_connection_identity() {
             "branch.resolve",
             json!({
                 "inbox_message_id": "msg_unknown", "session_id": "sess_unknown",
-                "runtime_instance_id": "rtinst_unknown", "client_type": "pi",
+                "runtime_id": "rtinst_unknown", "client_type": "pi",
             }),
         )
         .await
@@ -523,7 +488,7 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
     let state = test_state().await;
     let session_id = "sess_branch_dispatch";
     let target_turn_id = "turn_branch_dispatch_target";
-    let runtime_instance_id = "rtinst_branch_dispatch";
+    let runtime_id = "runtime_sess_branch_dispatch";
     let cwd = temp.path().join("workspace");
     fs::create_dir_all(&cwd).unwrap();
     let cwd = cwd.canonicalize().unwrap();
@@ -574,15 +539,9 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
     .await
     .unwrap();
 
-    let capabilities = pontia_client_pi::CAPABILITIES;
-    sqlx::query(
-        r#"INSERT INTO runtime_bindings
-           (session_id, runtime_kind, runtime_instance_id, binding_state, tmux_socket_path, tmux_pane_id, capabilities)
-           VALUES (?, 'pi_tui', ?, 'confirmed', '/unused/branch-dispatch.sock', '%1', ?) ON CONFLICT(session_id) DO UPDATE SET runtime_kind=excluded.runtime_kind, runtime_instance_id=excluded.runtime_instance_id, binding_state=excluded.binding_state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id, capabilities=excluded.capabilities"#,
-    )
-    .bind(session_id)
-    .bind(runtime_instance_id)
-    .bind(json!(capabilities).to_string())
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, ?, '/unused/branch-dispatch.sock', '%1', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT(runtime_id) DO UPDATE SET state=excluded.state, tmux_socket_path=excluded.tmux_socket_path, tmux_pane_id=excluded.tmux_pane_id"#)
+.bind(session_id)
+.bind(runtime_id)
     .execute(&state.db())
     .await
     .unwrap();
@@ -593,13 +552,13 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
                    '2026-07-24T00:00:00Z', ?)"#,
     )
     .bind(session_id)
-    .bind(json!({"runtime_instance_id": runtime_instance_id}).to_string())
+    .bind(json!({"runtime_id": runtime_id}).to_string())
     .execute(&state.db())
     .await
     .unwrap();
 
     let (pi, mut requests) = rpc_client(&state);
-    attach(&pi, session_id, runtime_instance_id, session_key).await;
+    attach(&pi, session_id, runtime_id, session_key).await;
     let client = pi.clone();
     let delivery = tokio::spawn(async move {
         let request = requests.recv().await.unwrap();
@@ -610,7 +569,7 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
                 "branch.resolve",
                 json!({
                     "inbox_message_id": request.params["inbox_message_id"],
-                    "session_id": session_id, "runtime_instance_id": runtime_instance_id,
+                    "session_id": session_id, "runtime_id": runtime_id,
                     "client_type": "pi",
                 }),
             )

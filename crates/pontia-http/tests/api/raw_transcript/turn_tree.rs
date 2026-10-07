@@ -92,7 +92,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
             "turn_id": turn_id,
             "type": "turn.started",
             "data": {
-                "runtime_instance_id": "rtinst_pi_linear",
+                "runtime_id": format!("runtime_{session_id}"),
                 "timeline_anchor": { "previous_leaf_id": previous_leaf_id },
                 "topology_context": { "entries": entries },
             }
@@ -124,7 +124,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
             "turn_id": turn_id,
             "type": "turn.completed",
             "data": {
-                "runtime_instance_id": "rtinst_pi_linear",
+                "runtime_id": format!("runtime_{session_id}"),
                 "timeline_anchor": { "terminal_leaf_id": assistant_id },
                 "debug_content": user_id,
             }
@@ -179,7 +179,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
             "turn_id": turn_id,
             "type": "turn.started",
             "data": {
-                "runtime_instance_id": "rtinst_pi_linear",
+                "runtime_id": format!("runtime_{session_id}"),
                 "timeline_anchor": { "previous_leaf_id": previous_leaf_id },
                 "topology_context": { "entries": entries },
             }
@@ -208,7 +208,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
             "turn_id": turn_id,
             "type": "turn.completed",
             "data": {
-                "runtime_instance_id": "rtinst_pi_linear",
+                "runtime_id": format!("runtime_{session_id}"),
                 "timeline_anchor": { "terminal_leaf_id": assistant_id },
             }
         });
@@ -314,7 +314,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         "turn_id": "turn_pi_linear_6",
         "type": "turn.started",
         "data": {
-            "runtime_instance_id": "rtinst_pi_linear",
+            "runtime_id": format!("runtime_{session_id}"),
             "timeline_anchor": { "previous_leaf_id": "assistant_5" },
             "topology_context": { "entries": [] },
         }
@@ -345,7 +345,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         "turn_id": "turn_pi_linear_6",
         "type": "turn.completed",
         "data": {
-            "runtime_instance_id": "rtinst_pi_linear",
+            "runtime_id": format!("runtime_{session_id}"),
             "timeline_anchor": { "terminal_leaf_id": "assistant_6" },
         }
     });
@@ -374,7 +374,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         "turn_id": "turn_pi_linear_malformed",
         "type": "turn.started",
         "data": {
-            "runtime_instance_id": "rtinst_pi_linear",
+            "runtime_id": format!("runtime_{session_id}"),
             "timeline_anchor": { "previous_leaf_id": "assistant_6" },
             "topology_context": { "entries": [
                 {"id": "native-secret-entry", "kind": "user_message"},

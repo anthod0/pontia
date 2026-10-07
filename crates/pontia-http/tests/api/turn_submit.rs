@@ -167,8 +167,8 @@ async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
     let session_id = create_session(state.clone()).await;
     let turn_id = submit_inbox_message(state.clone(), &session_id, "run").await;
 
-    let runtime_instance_id: String =
-        sqlx::query_scalar("SELECT runtime_instance_id FROM runtime_bindings WHERE session_id = ?")
+    let runtime_id: String =
+        sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id = ?")
             .bind(&session_id)
             .fetch_one(&state.db())
             .await
@@ -179,7 +179,7 @@ async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
         &session_id,
         &turn_id,
     );
-    started_event["data"] = json!({"runtime_instance_id": runtime_instance_id});
+    started_event["data"] = json!({"runtime_id": runtime_id});
     let (started_status, _) = post_internal_event(state.clone(), started_event).await;
     assert_eq!(started_status, StatusCode::OK);
     let (busy_status, busy_body) = request(

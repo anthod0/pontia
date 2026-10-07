@@ -3,9 +3,9 @@ import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { connectPi, CONTROL_VERSION } from "../src/control-socket.ts";
 
-const [directory, sessionId, runtimeInstanceId, clientSessionKey] = process.argv.slice(2);
+const [directory, sessionId, runtimeId, clientSessionKey] = process.argv.slice(2);
 process.stdin.resume();
-const identity = { sessionId, runtimeInstanceId, clientSessionKey };
+const identity = { sessionId, runtimeId, clientSessionKey };
 const client = await connectPi(
   directory,
   (error) => process.stderr.write(`${error}\n`),
@@ -14,7 +14,7 @@ const client = await connectPi(
 await client.request("runtime.attach", {
   version: CONTROL_VERSION,
   session_id: sessionId,
-  runtime_instance_id: runtimeInstanceId,
+  runtime_id: runtimeId,
   client_session_key: clientSessionKey,
 });
 client.registered(identity);

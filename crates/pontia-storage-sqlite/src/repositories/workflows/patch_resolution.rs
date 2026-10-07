@@ -21,17 +21,17 @@ impl SqliteWorkflowRepository {
                JOIN workflows AS w ON w.active_patch_id = p.patch_id
                JOIN sessions AS s ON s.session_id = p.replanner_session_id
                JOIN turns AS t ON t.turn_id = s.current_turn_id AND t.session_id = s.session_id
-               JOIN runtime_bindings AS r ON r.session_id = s.session_id
+               JOIN session_runtimes AS r ON r.session_id = s.session_id
                WHERE p.state = 'planning' AND w.state = 'replanning'
                  AND w.active_replanner_session_id = ?
-                 AND p.replanner_session_id = ? AND p.replanner_runtime_instance_id = ?
-                 AND r.binding_state = 'confirmed' AND r.runtime_instance_id = ?
+                 AND p.replanner_session_id = ? AND p.replanner_runtime_id = ?
+                 AND r.state IN ('starting','running') AND r.role = 'tui' AND r.runtime_id = ?
                  AND t.state IN ('queued', 'running')"#,
         )
         .bind(&request.session_id)
         .bind(&request.session_id)
-        .bind(&request.runtime_instance_id)
-        .bind(&request.runtime_instance_id)
+        .bind(&request.runtime_id)
+        .bind(&request.runtime_id)
         .fetch_all(&mut *tx)
         .await?;
         let [(patch_id, workflow_id, turn_id, base_revision, current_revision)] =
@@ -105,7 +105,7 @@ impl SqliteWorkflowRepository {
                    resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                WHERE patch_id = ? AND state = 'planning' AND base_revision = ?
-                 AND replanner_session_id = ? AND replanner_runtime_instance_id = ?"#,
+                 AND replanner_session_id = ? AND replanner_runtime_id = ?"#,
         )
         .bind(outcome)
         .bind(result_revision)
@@ -115,7 +115,7 @@ impl SqliteWorkflowRepository {
         .bind(patch_id)
         .bind(current_revision)
         .bind(&request.session_id)
-        .bind(&request.runtime_instance_id)
+        .bind(&request.runtime_id)
         .execute(&mut *tx)
         .await?;
         if patch_result.rows_affected() != 1 {
@@ -214,23 +214,23 @@ impl SqliteWorkflowRepository {
         )
         .await?;
         let context = sqlx::query_as::<_, (String, String, String, String)>(
-            r#"SELECT p.patch_id, p.workflow_id, t.turn_id, r.runtime_instance_id
+            r#"SELECT p.patch_id, p.workflow_id, t.turn_id, r.runtime_id
                FROM workflow_patches AS p
                JOIN workflows AS w ON w.active_patch_id = p.patch_id
                JOIN sessions AS s ON s.session_id = p.replanner_session_id
                JOIN turns AS t ON t.turn_id = s.current_turn_id AND t.session_id = s.session_id
-               JOIN runtime_bindings AS r ON r.session_id = s.session_id
+               JOIN session_runtimes AS r ON r.session_id = s.session_id
                WHERE p.state = 'planning' AND w.state = 'replanning'
                  AND w.active_replanner_session_id = ?
                  AND p.replanner_session_id = ?
-                 AND p.replanner_runtime_instance_id = ?
-                 AND r.binding_state = 'confirmed' AND r.runtime_instance_id = ?
+                 AND p.replanner_runtime_id = ?
+                 AND r.state IN ('starting','running') AND r.role = 'tui' AND r.runtime_id = ?
                  AND t.state IN ('queued', 'running')"#,
         )
         .bind(&request.session_id)
         .bind(&request.session_id)
-        .bind(&request.runtime_instance_id)
-        .bind(&request.runtime_instance_id)
+        .bind(&request.runtime_id)
+        .bind(&request.runtime_id)
         .fetch_all(&mut *tx)
         .await?;
         let [(patch_id, workflow_id, turn_id, _)] = context.as_slice() else {
@@ -245,14 +245,14 @@ impl SqliteWorkflowRepository {
                    blocked_draft_ref = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                WHERE patch_id = ? AND state = 'planning' AND replanner_session_id = ?
-                 AND replanner_runtime_instance_id = ?"#,
+                 AND replanner_runtime_id = ?"#,
         )
         .bind(turn_id)
         .bind(&request.reason_document_ref)
         .bind(&request.blocked_draft_ref)
         .bind(patch_id)
         .bind(&request.session_id)
-        .bind(&request.runtime_instance_id)
+        .bind(&request.runtime_id)
         .execute(&mut *tx)
         .await?;
         if patch_result.rows_affected() != 1 {

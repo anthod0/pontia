@@ -27,8 +27,11 @@ async fn setup() -> (SqlitePool, tempfile::TempDir, AppState) {
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO runtime_bindings (session_id,runtime_kind,runtime_instance_id,binding_state,tmux_socket_path,tmux_pane_id,capabilities) VALUES ('sess_pi','pi_tui','rtinst_pi','confirmed','/unused/tmux','%1',?)")
-        .bind(serde_json::to_string(&pontia_client_pi::CAPABILITIES).unwrap()).execute(&pool).await.unwrap();
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES ('sess_pi', 'rtinst_pi', '/unused/tmux', '%1', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE session_runtimes SET state='starting' WHERE session_id='sess_pi'")
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding_pi','sess_pi','pi','/unused','native_pi','{}')").execute(&pool).await.unwrap();
     let state = AppState::builder(pool.clone(), root.path().into())
         .clients(support::clients())
@@ -46,7 +49,7 @@ async fn ready(pool: &SqlitePool) {
             EventSource::AgentClient,
             "pi".into(),
             EventType::SessionReady,
-            json!({"runtime_instance_id":"rtinst_pi"}),
+            json!({"runtime_id":"rtinst_pi"}),
         ))
         .await
         .unwrap();

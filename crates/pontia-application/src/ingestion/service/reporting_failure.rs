@@ -3,7 +3,7 @@ use pontia_core::{
     domain::{DomainEvent, EventSource, EventType},
 };
 use pontia_storage_sqlite::repositories::{
-    runtime_bindings::SqliteRuntimeBindingRepository, sessions::SqliteSessionRepository,
+    session_runtimes::SqliteSessionRuntimeRepository, sessions::SqliteSessionRepository,
 };
 use serde_json::json;
 
@@ -20,11 +20,11 @@ pub(super) async fn existing_reporting_failure_in_tx(
     {
         return Ok(None);
     }
-    let Some(runtime_instance_id) = event.payload["runtime_instance_id"].as_str() else {
+    let Some(runtime_id) = event.payload["runtime_id"].as_str() else {
         return Ok(None);
     };
     pontia_storage_sqlite::repositories::events::SqliteEventRepository::turn_start_reporting_failure_in_tx(
-        tx, &event.session_id, runtime_instance_id,
+        tx, &event.session_id, runtime_id,
     ).await
 }
 
@@ -35,17 +35,17 @@ impl EventIngestService {
     pub async fn report_turn_start_failure(
         &self,
         session_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
         reason: &str,
     ) -> Result<()> {
         let session = SqliteSessionRepository::new(self.pool.clone())
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let runtime = SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .runtime_instance_id(session_id)
+        let runtime = SqliteSessionRuntimeRepository::new(self.pool.clone())
+            .runtime_id(session_id)
             .await?;
-        if runtime.as_deref() != Some(runtime_instance_id) {
+        if runtime.as_deref() != Some(runtime_id) {
             return Err(Error::StateConflict(
                 "reporting failure does not match the current confirmed runtime".into(),
             ));
@@ -58,7 +58,7 @@ impl EventIngestService {
             session.client_type,
             PontiaEventType::SessionError,
             json!({
-                "runtime_instance_id": runtime_instance_id,
+                "runtime_id": runtime_id,
                 "reason": "turn_start_reporting_failed",
                 "failure": { "message": format!("turn.started reporting failed: {reason}") },
             }),

@@ -31,7 +31,7 @@ async fn runtime_registration_and_resume_publish_to_the_application_broker() {
         "tmux":{"socket_path":root.path().join("missing.sock"),"pane_id":"%1"}
     });
     let registered = state
-        .runtime_bindings()
+        .session_runtimes()
         .upsert(serde_json::from_value(request.clone()).unwrap())
         .await
         .unwrap();
@@ -74,7 +74,7 @@ async fn runtime_registration_and_resume_publish_to_the_application_broker() {
         EventType::SessionExited
     );
     state
-        .runtime_bindings()
+        .session_runtimes()
         .upsert(serde_json::from_value(request).unwrap())
         .await
         .unwrap();

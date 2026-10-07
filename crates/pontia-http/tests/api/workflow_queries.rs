@@ -267,7 +267,7 @@ async fn workflow_detail_and_context_expose_the_active_patch_snapshot() {
     sqlx::query(
         r#"INSERT INTO workflow_patches
            (patch_id, workflow_id, requesting_node_id, requesting_session_id, requesting_turn_id,
-            requesting_runtime_instance_id, replanner_creation_token, base_revision, state,
+            requesting_runtime_id, replanner_creation_token, base_revision, state,
             request_document_ref, request_size_bytes)
            VALUES ('patch_active', 'wf_observe', 'node_a', 'sess_active_patch',
                    'turn_active_patch', 'rt_active_patch', 'token_active_patch', 1,
@@ -374,8 +374,8 @@ async fn multiple_patch_snapshots_reconstruct_history_timeline_and_documents() {
     sqlx::query(
         r#"INSERT INTO workflow_patches
            (patch_id, workflow_id, requesting_node_id, requesting_session_id, requesting_turn_id,
-            requesting_runtime_instance_id, replanner_creation_token, replanner_session_id,
-            replanner_turn_id, replanner_runtime_instance_id, base_revision, result_revision,
+            requesting_runtime_id, replanner_creation_token, replanner_session_id,
+            replanner_turn_id, replanner_runtime_id, base_revision, result_revision,
             state, request_document_ref, request_size_bytes, decision_document_ref,
             requested_at, planning_at, resolved_at)
            VALUES

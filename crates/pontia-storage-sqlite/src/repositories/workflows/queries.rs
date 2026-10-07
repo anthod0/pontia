@@ -66,7 +66,7 @@ impl SqliteWorkflowRepository {
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
                       inputs, output, execution_profile_id, execution_profile_version,
                       introduced_revision, retired_revision, session_id, submitted_at,
-                      submitted_runtime_instance_id, exit_request_started_at, created_at
+                      submitted_runtime_id, exit_request_started_at, created_at
                FROM workflow_nodes
                WHERE workflow_id = ?
                  AND introduced_revision <= ?
@@ -85,7 +85,7 @@ impl SqliteWorkflowRepository {
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
                       inputs, output, execution_profile_id, execution_profile_version,
                       introduced_revision, retired_revision, session_id, submitted_at,
-                      submitted_runtime_instance_id, exit_request_started_at, created_at
+                      submitted_runtime_id, exit_request_started_at, created_at
                FROM workflow_nodes WHERE workflow_id = ? ORDER BY created_at, node_id"#,
         )
         .bind(workflow_id)
@@ -98,7 +98,7 @@ impl SqliteWorkflowRepository {
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
                       inputs, output, execution_profile_id, execution_profile_version,
                       introduced_revision, retired_revision, session_id, submitted_at,
-                      submitted_runtime_instance_id, exit_request_started_at, created_at
+                      submitted_runtime_id, exit_request_started_at, created_at
                FROM workflow_nodes WHERE node_id = ?"#,
         )
         .bind(node_id)
@@ -111,7 +111,7 @@ impl SqliteWorkflowRepository {
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
                       inputs, output, execution_profile_id, execution_profile_version,
                       introduced_revision, retired_revision, session_id, submitted_at,
-                      submitted_runtime_instance_id, exit_request_started_at, created_at
+                      submitted_runtime_id, exit_request_started_at, created_at
                FROM workflow_nodes WHERE session_id = ?
                ORDER BY created_at, node_id
                LIMIT 2"#,

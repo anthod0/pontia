@@ -10,7 +10,7 @@ struct RunningWorkflowTransition<'a> {
     event_type: &'a str,
     failure_message: Option<&'a str>,
     payload: &'a str,
-    runtime_instance_id: Option<&'a str>,
+    runtime_id: Option<&'a str>,
 }
 
 impl SqliteWorkflowRepository {
@@ -156,7 +156,7 @@ impl SqliteWorkflowRepository {
         workflow_id: &str,
         node_id: &str,
         event_id: &str,
-        runtime_instance_id: Option<&str>,
+        runtime_id: Option<&str>,
     ) -> Result<()> {
         self.transition_running_workflow(RunningWorkflowTransition {
             workflow_id,
@@ -166,7 +166,7 @@ impl SqliteWorkflowRepository {
             event_type: "workflow.idle",
             failure_message: None,
             payload: "{}",
-            runtime_instance_id,
+            runtime_id,
         })
         .await
     }
@@ -186,7 +186,7 @@ impl SqliteWorkflowRepository {
             event_type: "workflow.failed",
             failure_message: Some(failure_message),
             payload: &payload,
-            runtime_instance_id: None,
+            runtime_id: None,
         })
         .await
     }
@@ -198,7 +198,7 @@ impl SqliteWorkflowRepository {
         event_id: &str,
         failure_message: &str,
         cause_event_id: &str,
-        runtime_instance_id: Option<&str>,
+        runtime_id: Option<&str>,
     ) -> Result<()> {
         let payload = serde_json::json!({ "failure_message": failure_message, "node_id": node_id, "cause_event_id": cause_event_id }).to_string();
         self.transition_running_workflow(RunningWorkflowTransition {
@@ -209,7 +209,7 @@ impl SqliteWorkflowRepository {
             event_type: "workflow.failed",
             failure_message: Some(failure_message),
             payload: &payload,
-            runtime_instance_id,
+            runtime_id,
         })
         .await
     }
@@ -227,9 +227,9 @@ impl SqliteWorkflowRepository {
                WHERE workflow_id = ?
                  AND state = 'running'
                  AND NOT EXISTS (
-                     SELECT 1 FROM workflow_recoveries r WHERE r.node_id=? AND r.runtime_instance_id IS NOT NULL
-                     AND r.rowid=(SELECT MAX(rowid) FROM workflow_recoveries WHERE node_id=r.node_id AND runtime_instance_id IS NOT NULL)
-                     AND r.runtime_instance_id IS NOT ?
+                     SELECT 1 FROM workflow_recoveries r WHERE r.node_id=? AND r.runtime_id IS NOT NULL
+                     AND r.rowid=(SELECT MAX(rowid) FROM workflow_recoveries WHERE node_id=r.node_id AND runtime_id IS NOT NULL)
+                     AND r.runtime_id IS NOT ?
                  )
                  AND (
                      ? IS NULL
@@ -248,7 +248,7 @@ impl SqliteWorkflowRepository {
         .bind(transition.failure_message)
         .bind(transition.workflow_id)
         .bind(transition.unsubmitted_node_id)
-        .bind(transition.runtime_instance_id)
+        .bind(transition.runtime_id)
         .bind(transition.unsubmitted_node_id)
         .bind(transition.unsubmitted_node_id)
         .execute(&mut *tx)

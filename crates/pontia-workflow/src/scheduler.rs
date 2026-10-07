@@ -233,7 +233,7 @@ where
         }
         if let Err(error) = self
             .exits
-            .ensure_current_runtime(&request.session_id, &request.runtime_instance_id)
+            .ensure_current_runtime(&request.session_id, &request.runtime_id)
             .await
         {
             if is_runtime_control_unavailable(&error) {
@@ -269,7 +269,7 @@ where
         self.repository
             .record_node_submission(
                 &node.node_id,
-                &request.runtime_instance_id,
+                &request.runtime_id,
                 &Uuid::now_v7().to_string(),
             )
             .await?;

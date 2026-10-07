@@ -20,7 +20,7 @@ impl EventIngestService {
         kind: EventType,
         mut data: Value,
     ) -> pontia_core::Result<()> {
-        data["runtime_instance_id"] = json!(instance);
+        data["runtime_id"] = json!(instance);
         self.report_fact(ReportedFact {
             session_id: session.into(),
             turn_id: None,
@@ -62,15 +62,15 @@ impl EventIngestService {
             .into());
         }
         let failure_context = (fact.fact_type == EventType::TurnStarted)
-            .then(|| fact.data.get("runtime_instance_id").and_then(Value::as_str))
+            .then(|| fact.data.get("runtime_id").and_then(Value::as_str))
             .flatten()
             .map(|runtime| (fact.session_id.clone(), runtime.to_owned()));
         let result = self.process_fact(fact).await;
         if let Err(error) = &result
             && error.is_permanent_rejection()
-            && let Some((session_id, runtime_instance_id)) = failure_context
+            && let Some((session_id, runtime_id)) = failure_context
             && let Err(failure) = self
-                .report_turn_start_failure(&session_id, &runtime_instance_id, "event_rejected")
+                .report_turn_start_failure(&session_id, &runtime_id, "event_rejected")
                 .await
         {
             tracing::warn!(%session_id, %failure, "could not record turn start reporting failure");

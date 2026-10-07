@@ -9,7 +9,7 @@ use pontia_core::domain::{DomainEvent, EventSource, EventType};
 use pontia_storage_sqlite::{
     connect_sqlite,
     repositories::{
-        runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
+        session_runtimes::{SessionRuntimeRecord, SqliteSessionRuntimeRepository},
         workflows::{CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository},
     },
     run_migrations,
@@ -25,7 +25,7 @@ use tokio::sync::broadcast;
 struct BoundSessionCreator {
     pool: sqlx::SqlitePool,
     session_id: String,
-    runtime_instance_id: String,
+    runtime_id: String,
 }
 
 impl SessionCreator for BoundSessionCreator {
@@ -40,24 +40,17 @@ impl SessionCreator for BoundSessionCreator {
         .execute(&self.pool)
         .await
         .expect("create workflow session");
-        SqliteRuntimeBindingRepository::new(self.pool.clone())
-            .upsert_binding(RuntimeBindingUpsertRecord {
+        SqliteSessionRuntimeRepository::new(self.pool.clone())
+            .upsert_binding(SessionRuntimeRecord {
                 session_id: self.session_id.clone(),
-                runtime_kind: "pi_tui".to_string(),
-                runtime_instance_id: Some(self.runtime_instance_id.clone()),
-                binding_state: "confirmed".to_string(),
-                runtime_handle: None,
+                runtime_id: self.runtime_id.clone(),
                 start_command: None,
-                launch_cwd: Some("/workspace/project".to_string()),
-                started_at: None,
-                last_seen_at: None,
-                restart_count: 0,
                 tmux_socket_path: Some("/tmp/fake-tmux.sock".to_string()),
                 tmux_pane_id: Some("%42".to_string()),
                 process_fingerprint: None,
-                capabilities: "{}".to_string(),
-                diagnostics: "{}".to_string(),
-                adapter_details: "{}".to_string(),
+                role: "tui".into(),
+                state: "running".into(),
+                created_at: "2026-10-01T00:00:00Z".into(),
             })
             .await
             .expect("bind workflow runtime");
@@ -74,17 +67,17 @@ impl GracefulExitRequester for RecordingExitRequester {
     fn ensure_current_runtime(
         &self,
         session_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> impl Future<Output = pontia_workflow::Result<()>> + Send {
         let session_id = session_id.to_string();
-        let runtime_instance_id = runtime_instance_id.to_string();
+        let runtime_id = runtime_id.to_string();
         async move {
-            if session_id == "session_submit" && runtime_instance_id == "rtinst_submit" {
+            if session_id == "session_submit" && runtime_id == "rtinst_submit" {
                 Ok(())
             } else {
                 Err(pontia_workflow::Error::RuntimeMismatch {
                     session_id,
-                    runtime_instance_id,
+                    runtime_id,
                 })
             }
         }
@@ -93,16 +86,16 @@ impl GracefulExitRequester for RecordingExitRequester {
     fn request_graceful_exit(
         &self,
         session_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> impl Future<Output = pontia_workflow::Result<()>> + Send {
         let requests = self.requests.clone();
         let session_id = session_id.to_string();
-        let runtime_instance_id = runtime_instance_id.to_string();
+        let runtime_id = runtime_id.to_string();
         async move {
             requests
                 .lock()
                 .expect("exit requests lock")
-                .push((session_id, runtime_instance_id));
+                .push((session_id, runtime_id));
             Ok(())
         }
     }
@@ -113,7 +106,7 @@ impl TurnInterruptionRequester for RecordingExitRequester {
         &self,
         _session_id: &str,
         _turn_id: &str,
-        _runtime_instance_id: &str,
+        _runtime_id: &str,
     ) -> pontia_workflow::Result<()> {
         Ok(())
     }
@@ -234,12 +227,7 @@ async fn seed_running_single_node(
         .expect("create node");
 }
 
-fn event(
-    event_id: &str,
-    session_id: &str,
-    event_type: EventType,
-    runtime_instance_id: &str,
-) -> DomainEvent {
+fn event(event_id: &str, session_id: &str, event_type: EventType, runtime_id: &str) -> DomainEvent {
     let source = if event_type.is_turn_event() {
         EventSource::AgentAdapter
     } else {
@@ -252,7 +240,7 @@ fn event(
         source,
         "pi".to_string(),
         event_type,
-        json!({ "runtime_instance_id": runtime_instance_id }),
+        json!({ "runtime_id": runtime_id }),
     )
 }
 
@@ -303,7 +291,7 @@ async fn submission_accepts_the_output_file_and_waits_for_confirmed_session_exit
     let sessions = BoundSessionCreator {
         pool: pool.clone(),
         session_id: "session_submit".to_string(),
-        runtime_instance_id: "rtinst_submit".to_string(),
+        runtime_id: "rtinst_submit".to_string(),
     };
     let exits = RecordingExitRequester::default();
     let events = TestAgentEvents::new(pool.clone());
@@ -323,7 +311,7 @@ async fn submission_accepts_the_output_file_and_waits_for_confirmed_session_exit
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_submit".to_string(),
-            runtime_instance_id: "rtinst_submit".to_string(),
+            runtime_id: "rtinst_submit".to_string(),
         })
         .await
         .expect("submit output");
@@ -382,10 +370,7 @@ async fn submission_accepts_the_output_file_and_waits_for_confirmed_session_exit
         .await
         .expect("load node after Turn completion")
         .expect("node exists");
-    assert_eq!(
-        node.submitted_runtime_instance_id.as_deref(),
-        Some("rtinst_submit")
-    );
+    assert_eq!(node.submitted_runtime_id.as_deref(), Some("rtinst_submit"));
     assert!(node.exit_request_started_at.is_some());
     events
         .publish(event(
@@ -512,7 +497,7 @@ async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownershi
     let sessions = BoundSessionCreator {
         pool: pool.clone(),
         session_id: "session_submit".to_string(),
-        runtime_instance_id: "rtinst_submit".to_string(),
+        runtime_id: "rtinst_submit".to_string(),
     };
     let exits = RecordingExitRequester::default();
     let scheduler = WorkflowScheduler::with_services(
@@ -523,7 +508,7 @@ async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownershi
     );
     scheduler.start("wf_submit").await.expect("start workflow");
 
-    for (session_id, runtime_instance_id, expected) in [
+    for (session_id, runtime_id, expected) in [
         ("session_other", "rtinst_submit", "session_other"),
         ("session_submit", "rtinst_stale", "current runtime"),
         ("session_submit", "rtinst_submit", "is unavailable"),
@@ -531,7 +516,7 @@ async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownershi
         let error = scheduler
             .submit(SubmitWorkflowNodeRequest {
                 session_id: session_id.to_string(),
-                runtime_instance_id: runtime_instance_id.to_string(),
+                runtime_id: runtime_id.to_string(),
             })
             .await
             .expect_err("invalid submission must fail");
@@ -556,7 +541,7 @@ async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownershi
     let error = scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_submit".to_string(),
-            runtime_instance_id: "rtinst_submit".to_string(),
+            runtime_id: "rtinst_submit".to_string(),
         })
         .await
         .expect_err("duplicate output ownership must fail");
@@ -587,7 +572,7 @@ async fn submission_rejects_a_node_whose_workflow_is_not_running() {
     let sessions = BoundSessionCreator {
         pool: pool.clone(),
         session_id: "session_submit".to_string(),
-        runtime_instance_id: "rtinst_submit".to_string(),
+        runtime_id: "rtinst_submit".to_string(),
     };
     sessions
         .create_session(CreateSessionRequest {
@@ -621,7 +606,7 @@ async fn submission_rejects_a_node_whose_workflow_is_not_running() {
     let error = scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_submit".to_string(),
-            runtime_instance_id: "rtinst_submit".to_string(),
+            runtime_id: "rtinst_submit".to_string(),
         })
         .await
         .expect_err("pending workflow submission must fail");

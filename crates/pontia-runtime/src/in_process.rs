@@ -10,11 +10,11 @@ use time::format_description::well_known::Rfc3339;
 use pontia_core::client_capabilities::AgentClientCapabilities;
 use pontia_core::{
     error::{Error, Result},
-    ids::new_runtime_instance_id,
+    ids::new_runtime_id,
     time::utc_now,
 };
 
-use super::{RuntimeStartRequest, RuntimeStartResult, paths, session_identifier::short_session_id};
+use super::{RuntimeStartRequest, RuntimeStartResult, paths};
 
 #[derive(Debug, Clone)]
 struct InProcessRuntimeState {
@@ -27,14 +27,17 @@ pub(super) fn start_session(
     capabilities: AgentClientCapabilities,
     restart_count: i64,
 ) -> Result<RuntimeStartResult> {
-    let runtime_instance_id = new_runtime_instance_id().to_string();
+    let runtime_id = request
+        .runtime_id
+        .clone()
+        .unwrap_or_else(|| new_runtime_id().to_string());
     let started_at = utc_now()
         .format(&Rfc3339)
         .map_err(|err| Error::Domain(format!("invalid runtime timestamp: {err}")))?;
     let log_paths = paths::log_paths(pontia_home);
     let log_dir = log_paths.log_dir.display().to_string();
     let log_path = log_paths.runtime_log.display().to_string();
-    let runtime_handle = runtime_handle(&request);
+    let runtime_handle = runtime_id.clone();
     registry()
         .lock()
         .expect("in-process runtime registry lock")
@@ -60,7 +63,7 @@ pub(super) fn start_session(
             "role": request.role,
             "started_at": started_at,
             "restart_count": restart_count,
-            "runtime_instance_id": runtime_instance_id,
+            "runtime_id": runtime_id,
         }),
     })
 }
@@ -95,43 +98,4 @@ pub(super) fn reset_registry() {
 fn registry() -> &'static Mutex<HashMap<String, InProcessRuntimeState>> {
     static REGISTRY: OnceLock<Mutex<HashMap<String, InProcessRuntimeState>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn sanitize_runtime_handle_component(value: &str) -> String {
-    value
-        .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-        .collect()
-}
-
-fn runtime_handle(request: &RuntimeStartRequest) -> String {
-    let handle = request
-        .handle
-        .as_deref()
-        .map(|value| value.trim_start_matches('@'))
-        .filter(|value| !value.is_empty())
-        .map(sanitize_runtime_handle_component);
-    let role = request
-        .role
-        .as_deref()
-        .filter(|value| !value.is_empty())
-        .map(sanitize_runtime_handle_component);
-    let Some(handle) = handle else {
-        return format!("{}:{}", request.client_type, request.session_id);
-    };
-    let Some(role) = role else {
-        return format!(
-            "{}:{}:{}",
-            request.client_type,
-            handle,
-            short_session_id(&request.session_id)
-        );
-    };
-    format!(
-        "{}:{}:{}:{}",
-        request.client_type,
-        handle,
-        role,
-        short_session_id(&request.session_id)
-    )
 }

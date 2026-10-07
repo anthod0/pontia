@@ -83,7 +83,7 @@ impl GracefulExitRequester for RecordingExitRequester {
     fn ensure_current_runtime(
         &self,
         _session_id: &str,
-        _runtime_instance_id: &str,
+        _runtime_id: &str,
     ) -> impl Future<Output = pontia_workflow::Result<()>> + Send {
         let missing = self.ensure_missing_binding;
         let session_id = _session_id.to_string();
@@ -102,12 +102,12 @@ impl GracefulExitRequester for RecordingExitRequester {
     fn request_graceful_exit(
         &self,
         session_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> impl Future<Output = pontia_workflow::Result<()>> + Send {
         self.requests
             .lock()
             .expect("exit requests lock")
-            .push((session_id.to_string(), runtime_instance_id.to_string()));
+            .push((session_id.to_string(), runtime_id.to_string()));
         let error = self
             .request_error
             .lock()
@@ -122,7 +122,7 @@ impl TurnInterruptionRequester for RecordingExitRequester {
         &self,
         _session_id: &str,
         _turn_id: &str,
-        _runtime_instance_id: &str,
+        _runtime_id: &str,
     ) -> pontia_workflow::Result<()> {
         Ok(())
     }
@@ -155,7 +155,7 @@ impl TestAgentEvents {
             event_type,
             EventType::TurnStarted | EventType::SessionExited
         ) {
-            json!({ "runtime_instance_id": format!("runtime_{session_id}") })
+            json!({ "runtime_id": format!("runtime_{session_id}") })
         } else {
             json!({})
         };

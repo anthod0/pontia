@@ -11,7 +11,7 @@ use pontia_application::{
 use pontia_core::domain::{EventSource, EventType, TurnTopology};
 use pontia_storage_sqlite::{
     connect_sqlite,
-    repositories::runtime_bindings::{RuntimeBindingUpsertRecord, SqliteRuntimeBindingRepository},
+    repositories::session_runtimes::{SessionRuntimeRecord, SqliteSessionRuntimeRepository},
     run_migrations,
 };
 use serde_json::{Value, json};
@@ -57,24 +57,17 @@ impl Fixture {
     }
 
     async fn bind(&self, session: &str, runtime: &str) {
-        SqliteRuntimeBindingRepository::new(self.state.db())
-            .upsert_binding(RuntimeBindingUpsertRecord {
+        SqliteSessionRuntimeRepository::new(self.state.db())
+            .upsert_binding(SessionRuntimeRecord {
                 session_id: session.into(),
-                runtime_kind: "tmux".into(),
-                runtime_instance_id: Some(runtime.into()),
-                binding_state: "confirmed".into(),
-                runtime_handle: None,
+                runtime_id: runtime.into(),
                 start_command: None,
-                launch_cwd: Some(self.root.path().display().to_string()),
-                started_at: None,
-                last_seen_at: None,
-                restart_count: 0,
                 tmux_socket_path: None,
                 tmux_pane_id: None,
                 process_fingerprint: None,
-                capabilities: "{}".into(),
-                diagnostics: "{}".into(),
-                adapter_details: "{}".into(),
+                role: "tui".into(),
+                state: "running".into(),
+                created_at: "2026-10-01T00:00:00Z".into(),
             })
             .await
             .unwrap();
@@ -101,7 +94,7 @@ impl Fixture {
         self.report(
             EventType::TurnStarted,
             None,
-            json!({"runtime_instance_id":"runtime"}),
+            json!({"runtime_id":"runtime"}),
         )
         .await
         .unwrap()
@@ -119,7 +112,7 @@ impl Fixture {
                         turn_id: turn.into(),
                         stream_id: "stream".into(),
                     },
-                    runtime_instance_id: "runtime".into(),
+                    runtime_id: "runtime".into(),
                 },
                 sequence: 1,
                 items: vec![LiveOutputItem::AssistantText {
@@ -142,7 +135,7 @@ async fn normalized_summaries_are_bounded_before_size_validation_and_broadcast_a
         EventType::TurnStarted,
         None,
         json!({
-            "runtime_instance_id":"runtime", "input_summary":"中😀".repeat(30_000),
+            "runtime_id":"runtime", "input_summary":"中😀".repeat(30_000),
             "inbox_message_id":"message", "topology_context":{"kind":"root"},
             "ignored_client_field":"x".repeat(70_000),
         }),
@@ -319,12 +312,12 @@ async fn session_turn_and_ready_identity_boundaries_are_enforced_without_http() 
         (
             EventType::SessionReady,
             None,
-            json!({"runtime_instance_id":"runtime"}),
+            json!({"runtime_id":"runtime"}),
         ),
         (
             EventType::SessionReady,
             None,
-            json!({"runtime_instance_id":"old","client_session_key":"native"}),
+            json!({"runtime_id":"old","client_session_key":"native"}),
         ),
     ] {
         assert!(matches!(
@@ -347,7 +340,7 @@ async fn session_turn_and_ready_identity_boundaries_are_enforced_without_http() 
         .report(
             EventType::SessionReady,
             None,
-            json!({"runtime_instance_id":"runtime","client_session_key":"different"}),
+            json!({"runtime_id":"runtime","client_session_key":"different"}),
         )
         .await
         .unwrap_err();
@@ -379,11 +372,7 @@ async fn rejected_start_only_fails_its_current_runtime_and_publishes_the_committ
     let mut subscriber = fixture.state.agent_events().subscribe();
     let service = fixture.state.event_ingest_service();
     let error = fixture
-        .report(
-            EventType::TurnStarted,
-            None,
-            json!({"runtime_instance_id":"old"}),
-        )
+        .report(EventType::TurnStarted, None, json!({"runtime_id":"old"}))
         .await
         .unwrap_err();
     assert!(error.is_permanent_rejection());
@@ -406,9 +395,16 @@ async fn rejected_start_only_fails_its_current_runtime_and_publishes_the_committ
     );
     assert!(matches!(subscriber.try_recv(), Err(TryRecvError::Empty)));
     for _ in 0..2 {
-        let error = fixture.report(EventType::TurnStarted, None, json!({
-            "runtime_instance_id":"runtime", "topology_context":{"oversized":"x".repeat(70_000)}
-        })).await.unwrap_err();
+        let error = fixture
+            .report(
+                EventType::TurnStarted,
+                None,
+                json!({
+                    "runtime_id":"runtime", "topology_context":{"oversized":"x".repeat(70_000)}
+                }),
+            )
+            .await
+            .unwrap_err();
         assert!(matches!(error, EventReportError::InvalidFact(_)));
     }
     let event = subscriber.try_recv().unwrap();
@@ -503,7 +499,7 @@ async fn terminal_reports_clear_shared_live_output() {
             .report(
                 kind,
                 kind.is_turn_event().then_some(turn.as_str()),
-                json!({"runtime_instance_id":"runtime"}),
+                json!({"runtime_id":"runtime"}),
             )
             .await
             .unwrap();
@@ -528,7 +524,7 @@ async fn failed_transaction_is_not_a_permanent_rejection_or_a_committed_event() 
         .report(
             EventType::TurnStarted,
             None,
-            json!({"runtime_instance_id":"runtime"}),
+            json!({"runtime_id":"runtime"}),
         )
         .await
         .unwrap_err();

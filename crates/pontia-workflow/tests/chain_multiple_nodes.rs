@@ -61,17 +61,17 @@ impl GracefulExitRequester for RecordingExitRequester {
     fn ensure_current_runtime(
         &self,
         session_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> impl Future<Output = pontia_workflow::Result<()>> + Send {
         let session_id = session_id.to_string();
-        let runtime_instance_id = runtime_instance_id.to_string();
+        let runtime_id = runtime_id.to_string();
         async move {
-            if runtime_instance_id == format!("runtime_{session_id}") {
+            if runtime_id == format!("runtime_{session_id}") {
                 Ok(())
             } else {
                 Err(pontia_workflow::Error::RuntimeMismatch {
                     session_id,
-                    runtime_instance_id,
+                    runtime_id,
                 })
             }
         }
@@ -80,16 +80,16 @@ impl GracefulExitRequester for RecordingExitRequester {
     fn request_graceful_exit(
         &self,
         session_id: &str,
-        runtime_instance_id: &str,
+        runtime_id: &str,
     ) -> impl Future<Output = pontia_workflow::Result<()>> + Send {
         let requests = self.requests.clone();
         let session_id = session_id.to_string();
-        let runtime_instance_id = runtime_instance_id.to_string();
+        let runtime_id = runtime_id.to_string();
         async move {
             requests
                 .lock()
                 .expect("exit requests lock")
-                .push((session_id, runtime_instance_id));
+                .push((session_id, runtime_id));
             Ok(())
         }
     }
@@ -100,7 +100,7 @@ impl TurnInterruptionRequester for RecordingExitRequester {
         &self,
         _session_id: &str,
         _turn_id: &str,
-        _runtime_instance_id: &str,
+        _runtime_id: &str,
     ) -> pontia_workflow::Result<()> {
         Ok(())
     }
@@ -128,7 +128,7 @@ impl TestAgentEvents {
         } else {
             EventSource::AgentClient
         };
-        let payload = json!({ "runtime_instance_id": format!("runtime_{session_id}") });
+        let payload = json!({ "runtime_id": format!("runtime_{session_id}") });
         let turn_id = event_type.is_turn_event().then_some("turn_root");
         sqlx::query(
             r#"INSERT OR IGNORE INTO events
@@ -355,7 +355,7 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_research".to_string(),
-            runtime_instance_id: "runtime_session_research".to_string(),
+            runtime_id: "runtime_session_research".to_string(),
         })
         .await
         .expect("submit research");
@@ -389,7 +389,7 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_draft".to_string(),
-            runtime_instance_id: "runtime_session_draft".to_string(),
+            runtime_id: "runtime_session_draft".to_string(),
         })
         .await
         .expect("submit draft");
@@ -448,7 +448,7 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_review".to_string(),
-            runtime_instance_id: "runtime_session_review".to_string(),
+            runtime_id: "runtime_session_review".to_string(),
         })
         .await
         .expect("submit review");
@@ -584,7 +584,7 @@ async fn paused_coordinator_ignores_expected_interrupt_and_defers_downstream_dis
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_paused_root".to_string(),
-            runtime_instance_id: "runtime_session_paused_root".to_string(),
+            runtime_id: "runtime_session_paused_root".to_string(),
         })
         .await
         .expect("submit root");
@@ -683,7 +683,7 @@ async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_lagged".to_string(),
-            runtime_instance_id: "runtime_session_lagged".to_string(),
+            runtime_id: "runtime_session_lagged".to_string(),
         })
         .await
         .expect("submit output");
