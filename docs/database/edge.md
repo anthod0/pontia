@@ -1,4 +1,0 @@
-# Edge database
-
-```sql
-```
