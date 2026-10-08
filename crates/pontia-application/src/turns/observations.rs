@@ -28,10 +28,10 @@ impl NativeTurnService {
     pub async fn observe_turn(
         &self,
         session: &str,
-        instance: &str,
+        runtime_id: Option<&str>,
         turn: NativeTurnObservation,
     ) -> Result<()> {
-        crate::runtime::ControlTarget::resolve(&self.pool, session, Some(instance)).await?;
+        crate::runtime::ControlTarget::resolve(&self.pool, session, runtime_id).await?;
         let native = &turn.native_turn_id;
         let existing: Option<(String,String)> = sqlx::query_as("SELECT t.turn_id,t.state FROM native_turn_bindings b JOIN turns t ON t.turn_id=b.turn_id WHERE b.session_id=? AND b.client_turn_id=?").bind(session).bind(native).fetch_optional(&self.pool).await?;
         if existing.as_ref().is_some_and(|(_, state)| {
@@ -47,10 +47,10 @@ impl NativeTurnService {
                 .input_summary
                 .as_deref()
                 .or_else(|| dispatch.as_ref().map(|(_, input)| input.as_str()));
-            self.events.report_native_fact(session, instance, EventType::TurnStarted, json!({"native_turn_id":native,"input":{"summary":summary.map(|s| s.chars().take(200).collect::<String>())},"metadata":{"native_turn_id":native,"native_started_at":turn.started_at,"observation":turn.origin,"inbox_message_id":dispatch.map(|(id,_)|id)}})).await?;
+            self.events.report_client_fact(session, runtime_id, EventType::TurnStarted, json!({"native_turn_id":native,"input":{"summary":summary.map(|s| s.chars().take(200).collect::<String>())},"metadata":{"native_turn_id":native,"native_started_at":turn.started_at,"observation":turn.origin,"inbox_message_id":dispatch.map(|(id,_)|id)}})).await?;
         }
         crate::inbox::InboxAssociations::new(self.pool.clone())
-            .link_native_turn(session, native, Some(instance))
+            .link_native_turn(session, native, runtime_id)
             .await?;
         if let Some(kind) = turn.terminal? {
             if !matches!(
@@ -61,15 +61,15 @@ impl NativeTurnService {
             }
             if let Some(text) = turn.output_summary {
                 self.events
-                    .report_native_fact(
+                    .report_client_fact(
                         session,
-                        instance,
+                        runtime_id,
                         EventType::TurnOutput,
                         json!({"native_turn_id":native,"output":{"summary":text}}),
                     )
                     .await?;
             }
-            self.events.report_native_fact(session, instance, kind, json!({"native_turn_id":native,"native_completed_at":turn.completed_at,"observation":turn.origin,"failure":{"message":turn.failure}})).await?;
+            self.events.report_client_fact(session, runtime_id, kind, json!({"native_turn_id":native,"native_completed_at":turn.completed_at,"observation":turn.origin,"failure":{"message":turn.failure}})).await?;
         }
         Ok(())
     }

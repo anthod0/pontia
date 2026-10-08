@@ -133,6 +133,40 @@ async fn looks_up_both_sides_of_the_one_to_one_binding() {
 }
 
 #[tokio::test]
+async fn rejects_rebinding_either_side_of_the_native_session_relationship() {
+    let (pool, _pontia_home) = test_pool().await;
+    insert_session(&pool, "session-one").await;
+    insert_session(&pool, "session-two").await;
+    let repository = SqliteAgentBindingRepository::new(pool);
+    let record = |id: &str, session: &str, key: &str| AgentBindingUpsertRecord {
+        id: id.into(),
+        session_id: session.into(),
+        client_type: "pi".into(),
+        launch_cwd: "/workspace".into(),
+        client_session_key: key.into(),
+        client_session_file: None,
+        metadata: "{}".into(),
+    };
+    repository
+        .upsert_binding(record("first", "session-one", "native-one"))
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        repository
+            .upsert_binding(record("second", "session-two", "native-one"))
+            .await,
+        Err(pontia_core::Error::StateConflict(_))
+    ));
+    assert!(matches!(
+        repository
+            .upsert_binding(record("third", "session-one", "native-two"))
+            .await,
+        Err(pontia_core::Error::StateConflict(_))
+    ));
+}
+
+#[tokio::test]
 async fn agent_binding_can_be_upserted_inside_transaction() {
     let (pool, _pontia_home) = test_pool().await;
     insert_session(&pool, "sess_tx_agent_binding").await;

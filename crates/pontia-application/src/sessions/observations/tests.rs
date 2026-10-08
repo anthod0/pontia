@@ -108,7 +108,7 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
         NativeTurnService::new(fixture.state.db(), fixture.state.event_ingest_service())
             .observe_turn(
                 &fixture.session,
-                "runtime",
+                Some("runtime"),
                 NativeTurnObservation {
                     native_turn_id: id.into(),
                     input_summary: Some("input".into()),
@@ -375,7 +375,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
         origin: "snapshot".into(),
     };
     NativeTurnService::new(fixture.state.db(), fixture.state.event_ingest_service())
-        .observe_turn(&fixture.session, "runtime", turn())
+        .observe_turn(&fixture.session, Some("runtime"), turn())
         .await
         .unwrap();
     sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,metadata) VALUES ('pending',?,'dispatching','after_idle','input','{\"codex_turn_id\":\"native\"}')")
@@ -388,7 +388,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
     let inbox = fixture.state.inbox_commands();
     assert!(
         NativeTurnService::new(fixture.state.db(), fixture.state.event_ingest_service())
-            .observe_turn(&fixture.session, "runtime", turn())
+            .observe_turn(&fixture.session, Some("runtime"), turn())
             .await
             .is_err()
     );
@@ -418,7 +418,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
             .is_none()
     );
     NativeTurnService::new(fixture.state.db(), fixture.state.event_ingest_service())
-        .observe_turn(&fixture.session, "replacement", turn())
+        .observe_turn(&fixture.session, Some("replacement"), turn())
         .await
         .unwrap();
     assert!(

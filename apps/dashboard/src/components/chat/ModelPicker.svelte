@@ -38,7 +38,7 @@
     submitting = true
     error = null
     try {
-      await setSessionModel(session.session_id, model, catalog.runtime_instance_id)
+      await setSessionModel(session.session_id, model, catalog.runtime_id)
       pendingModel = model
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause)

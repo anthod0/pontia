@@ -32,19 +32,6 @@ pub async fn create_session(
     Ok((status, ok(outcome.data)).into_response())
 }
 
-pub async fn open_codex_tui(
-    State(state): State<AppState>,
-    Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    state
-        .session_commands()
-        .open_client_interface(&session_id)
-        .await?;
-    Ok(ok(
-        json!({"session":state.queries().get_session(&session_id).await?}),
-    ))
-}
-
 #[derive(Debug, Deserialize)]
 pub struct ListSessionsQuery {
     #[serde(default)]

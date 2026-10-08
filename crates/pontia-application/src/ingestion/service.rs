@@ -294,7 +294,11 @@ impl EventIngestService {
         &self,
         event: &DomainEvent,
     ) -> Result<()> {
-        ensure_confirmed_event_matches_session_boundary(&self.pool, event).await
+        let runtime_bound = self
+            .clients
+            .spec(&event.client_type)
+            .is_none_or(|spec| spec.adapter.runtime_binding.requires_session_runtime());
+        ensure_confirmed_event_matches_session_boundary(&self.pool, event, runtime_bound).await
     }
 
     pub async fn get_session(&self, session_id: &str) -> Result<Option<SessionProjection>> {

@@ -1,4 +1,8 @@
-use crate::{CodexService, rollout::CodexRollout};
+use crate::{
+    CodexService,
+    rollout::CodexRollout,
+    runtime::{CodexRuntime, SubscriptionState},
+};
 use pontia_application::client_contract::{
     TimelineBoundaryBackend, TurnTimelineBackend, TurnTopologyBackend,
 };
@@ -18,8 +22,7 @@ use pontia_core::{
     domain::{DomainEvent, EventType},
 };
 use pontia_runtime::RuntimeStartRequest;
-use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use std::{path::Path, sync::Arc};
 
@@ -34,15 +37,18 @@ pub fn registration() -> ClientRegistration {
         steer: true,
     }
 }
+
 struct CodexData;
 impl ClientData for CodexData {
     fn normalize_payload(&self, kind: EventType, data: Value) -> Result<Value> {
-        if kind.is_turn_event() {
-            for field in ["native_turn_id", "runtime_instance_id"] {
-                if !data[field].as_str().is_some_and(|value| !value.is_empty()) {
-                    return Err(Error::Domain(format!("Codex response missing {field}")));
-                }
-            }
+        if kind.is_turn_event()
+            && !data["native_turn_id"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+        {
+            return Err(Error::Domain(
+                "Codex response missing native_turn_id".into(),
+            ));
         }
         Ok(data)
     }
@@ -80,6 +86,7 @@ impl ClientData for CodexData {
         ))
     }
 }
+
 struct CodexClient;
 impl ClientSession for CodexClient {
     fn provision<'a>(
@@ -94,12 +101,9 @@ impl ClientSession for CodexClient {
                 .as_deref()
                 .map(std::path::PathBuf::from)
                 .unwrap_or(std::env::current_dir()?);
-            CodexService::new(events.clone())
-                .provision(&request.session_id, root, &cwd)
-                .await?;
-            sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex_environment',json(?)) WHERE session_id=?")
-                .bind(serde_json::to_string(&request.environment)?).bind(&request.session_id).execute(&events.db()).await?;
-            Ok(())
+            CodexService::new(events)
+                .provision(&request.session_id, root, &cwd, &request.environment)
+                .await
         })
     }
     fn input<'a>(
@@ -129,7 +133,7 @@ impl ClientSession for CodexClient {
         events: EventIngestService,
         target: &'a ControlTarget,
     ) -> ClientOperation<'a, ()> {
-        Box::pin(async move { CodexService::new(events).archive(target).await })
+        Box::pin(async move { CodexService::new(events).unsubscribe(target).await })
     }
     fn resume<'a>(
         &'a self,
@@ -155,19 +159,33 @@ impl ClientSession for CodexClient {
     }
     fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
         Box::pin(async move {
-            let state: Option<String> = sqlx::query_scalar("SELECT json_extract(adapter_details,'$.codex.connection') FROM runtime_bindings WHERE session_id=?").bind(session).fetch_optional(&pool).await?.flatten();
-            Ok(matches!(
-                state.as_deref(),
-                Some("available" | "awaiting_input")
-            ))
+            let root: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?")
+                .bind(session).fetch_optional(&pool).await?.flatten();
+            let Some(root) = root else { return Ok(false) };
+            let Some(runtime) = CodexRuntime::existing(Path::new(&root)).await else {
+                return Ok(false);
+            };
+            let bound = pontia_application::AgentBindingService::new(pool)
+                .binding_for_session(session)
+                .await?
+                .is_some();
+            Ok(if bound {
+                runtime.subscription(session).await == Some(SubscriptionState::Available)
+            } else {
+                runtime.connection().await.is_ok()
+            })
         })
     }
     fn open_interface<'a>(
         &'a self,
-        events: EventIngestService,
-        session: &'a str,
+        _events: EventIngestService,
+        _session: &'a str,
     ) -> ClientOperation<'a, ()> {
-        Box::pin(async move { CodexService::new(events).open_tui(session).await })
+        Box::pin(async {
+            Err(Error::CapabilityUnavailable(
+                "Codex TUI management is not supported".into(),
+            ))
+        })
     }
     fn details<'a>(
         &'a self,
@@ -175,56 +193,53 @@ impl ClientSession for CodexClient {
         session: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async move {
-            let details: Option<String> = sqlx::query_scalar("SELECT json_extract(adapter_details,'$.codex') FROM runtime_bindings WHERE session_id=?")
+            let binding = pontia_application::AgentBindingService::new(pool.clone())
+                .binding_for_session(session)
+                .await?;
+            let root: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?")
                 .bind(session).fetch_optional(&pool).await?.flatten();
-            let mut details: serde_json::Value = details
-                .map(|value| serde_json::from_str(&value))
-                .transpose()?
-                .unwrap_or_else(|| serde_json::json!({"connection":"awaiting_input"}));
-            let profiles = pontia_application::AgentProfileService::new(pool.clone());
-            let profile_status = async {
-                let Some(profile) = profiles.codex_binding(session).await? else {
-                    return Ok::<_, Error>(Value::Null);
-                };
-                let bound = pontia_application::AgentBindingService::new(pool.clone())
-                    .binding_for_session(session).await?.is_some();
-                if bound { profiles.configured_codex_binding(session).await?; }
-                Ok(serde_json::json!({"profile_id":profile.profile_id,"version":profile.version,"status":if bound {"configured"} else {"awaiting_input"}}))
-            }.await;
-            details["profile"] = match profile_status {
-                Ok(status) => status,
-                Err(error @ (Error::StateConflict(_) | Error::Domain(_))) => {
-                    serde_json::json!({"status":"unverified","error":error.to_string()})
+            let connection = if let Some(root) = root {
+                match CodexRuntime::existing(Path::new(&root)).await {
+                    Some(runtime) => match runtime.subscription(session).await {
+                        Some(SubscriptionState::Available) => "available",
+                        Some(SubscriptionState::Reconciling) => "reconciling",
+                        Some(SubscriptionState::ExitPending) => "unavailable",
+                        None if binding.is_none() && runtime.connection().await.is_ok() => {
+                            "awaiting_input"
+                        }
+                        None => "unavailable",
+                    },
+                    None => "unavailable",
                 }
-                Err(error) => return Err(error),
+            } else {
+                "unavailable"
             };
-            let tuis: Vec<CodexTuiView> = sqlx::query_as("SELECT owner_session_id,target_session_id,connected,tmux_socket_path AS socket_path,tmux_pane_id AS pane_id FROM codex_tui_bindings WHERE owner_session_id=? OR target_session_id=? ORDER BY connected DESC, (target_session_id=?) DESC")
-                .bind(session).bind(session).bind(session).fetch_all(&pool).await?;
-            if let Some(tui) = tuis.iter().find(|tui| tui.owner_session_id == session) {
-                details["owned_tui"] = serde_json::to_value(tui)?;
-            }
-            if let Some(tui) = tuis.first() {
-                details["tui"] = serde_json::to_value(tui)?;
-            }
-            let model_control_unavailable_reason = match details["connection"].as_str() {
-                Some("available") => None,
-                Some("awaiting_input") => Some(
-                    "Send the first message to start this session before choosing a model.".into(),
-                ),
-                _ => Some("The agent control connection is unavailable.".into()),
+            let profiles = pontia_application::AgentProfileService::new(pool.clone());
+            let profile = match profiles.codex_binding(session).await {
+                Ok(Some(profile)) => {
+                    let status = if binding.is_some() {
+                        match profiles.configured_codex_binding(session).await {
+                            Ok(_) => "configured",
+                            Err(_) => "unverified",
+                        }
+                    } else {
+                        "awaiting_input"
+                    };
+                    json!({"profile_id":profile.profile_id,"version":profile.version,"status":status})
+                }
+                Ok(None) => Value::Null,
+                Err(_) => {
+                    let selected: Option<(String, String)> = sqlx::query_as("SELECT execution_profile_id, execution_profile_version FROM sessions WHERE session_id=? AND execution_profile_id IS NOT NULL AND execution_profile_version IS NOT NULL")
+                        .bind(session).fetch_optional(&pool).await?;
+                    selected.map_or(Value::Null, |(profile_id, version)| json!({"profile_id":profile_id,"version":version,"status":"unverified"}))
+                }
             };
+            let model_control_unavailable_reason = (connection != "available")
+                .then(|| "The agent control connection is unavailable.".into());
             Ok(ClientSessionDetails {
-                data: details,
+                data: json!({"thread_id":binding.map(|binding| binding.client_session_key),"profile":profile,"connection":connection}),
                 model_control_unavailable_reason,
             })
         })
     }
-}
-#[derive(Debug, Serialize, sqlx::FromRow)]
-struct CodexTuiView {
-    pub owner_session_id: String,
-    pub target_session_id: String,
-    pub connected: bool,
-    pub socket_path: Option<String>,
-    pub pane_id: Option<String>,
 }

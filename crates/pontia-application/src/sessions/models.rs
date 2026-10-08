@@ -15,21 +15,21 @@ pub struct SessionModel {
 pub struct SessionModels {
     pub models: Vec<SessionModel>,
     pub current_model: Option<String>,
-    pub runtime_id: String,
+    pub runtime_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SetSessionModelRequest {
     pub model: String,
-    pub runtime_id: String,
+    pub runtime_id: Option<String>,
 }
 
 impl SessionCommandService {
     pub async fn list_session_models(&self, session_id: &str) -> Result<SessionModels> {
         let session = self.model_session(session_id, false).await?;
         let target = ControlTarget::resolve(&self.pool, session_id, None).await?;
-        let runtime_id = target.instance()?.to_owned();
+        let runtime_id = target.runtime_id.clone();
         let models = self
             .clients
             .for_client(&session.client_type)?
@@ -52,14 +52,22 @@ impl SessionCommandService {
         session_id: &str,
         request: SetSessionModelRequest,
     ) -> Result<()> {
-        if request.model.trim().is_empty() || request.runtime_id.trim().is_empty() {
-            return Err(Error::Domain(
-                "model and runtime_id must be non-empty".into(),
-            ));
+        if request.model.trim().is_empty() {
+            return Err(Error::Domain("model must be non-empty".into()));
         }
         let session = self.model_session(session_id, true).await?;
+        let runtime_bound = self
+            .clients
+            .for_client(&session.client_type)?
+            .spec
+            .adapter
+            .runtime_binding
+            .requires_session_runtime();
+        if runtime_bound && request.runtime_id.as_deref().is_none_or(str::is_empty) {
+            return Err(Error::Domain("runtime_id must be non-empty".into()));
+        }
         let target =
-            ControlTarget::resolve(&self.pool, session_id, Some(&request.runtime_id)).await?;
+            ControlTarget::resolve(&self.pool, session_id, request.runtime_id.as_deref()).await?;
         self.clients
             .for_client(&session.client_type)?
             .set_model(&target, &request.model)

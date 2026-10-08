@@ -33,12 +33,22 @@ pub(super) fn validate_codex_templates(system: Option<&str>, turn: Option<&str>)
 }
 
 impl AgentProfileService {
-    /// Records an adapter-confirmed native configuration against the fixed binding.
+    /// Confirms that the adapter-bound native thread carries the fixed creation-time Profile.
     pub async fn confirm_codex_configuration(&self, session: &str, native_key: &str) -> Result<()> {
-        let _ = (session, native_key);
-        Err(Error::CapabilityUnavailable(
-            "Codex integration is disabled".into(),
-        ))
+        if self.codex_binding(session).await?.is_none() {
+            return Err(unverified());
+        }
+        let binding = crate::AgentBindingService::new(self.pool.clone())
+            .binding_for_session(session)
+            .await?;
+        match binding {
+            Some(binding)
+                if binding.client_type == "codex" && binding.client_session_key == native_key =>
+            {
+                Ok(())
+            }
+            _ => Err(unverified()),
+        }
     }
 
     pub async fn codex_profile_for_thread(
@@ -134,10 +144,16 @@ impl AgentProfileService {
         session: &str,
     ) -> Result<Option<CodexProfileBinding>> {
         let profile = self.codex_binding(session).await?;
-        if profile.is_some() {
-            return Err(unverified());
+        let Some(profile) = profile else {
+            return Ok(None);
+        };
+        let binding = crate::AgentBindingService::new(self.pool.clone())
+            .binding_for_session(session)
+            .await?;
+        match binding {
+            Some(binding) if binding.client_type == "codex" => Ok(Some(profile)),
+            _ => Err(unverified()),
         }
-        Ok(profile)
     }
 }
 

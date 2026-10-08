@@ -306,18 +306,6 @@ CHECK `(tmux_socket_path IS NULL) = (tmux_pane_id IS NULL)`.
 
 Primary key: (`session_id`, `client_turn_id`).
 
-## `codex_tui_bindings`
-
-| Column | Type | Constraints |
-|---|---|---|
-| `owner_session_id` | TEXT | NOT NULL, primary key, foreign key → `sessions.session_id` ON DELETE CASCADE |
-| `target_session_id` | TEXT | NOT NULL, foreign key → `sessions.session_id` ON DELETE CASCADE |
-| `runtime_instance_id` | TEXT | NOT NULL |
-| `connected` | BOOLEAN | NOT NULL, default FALSE |
-| `connection_id` | TEXT | |
-| `tmux_socket_path` | TEXT | |
-| `tmux_pane_id` | TEXT | |
-
 ## `session_lineage`
 
 | Column | Type | Constraints / default |

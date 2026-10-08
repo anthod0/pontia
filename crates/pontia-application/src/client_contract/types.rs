@@ -53,8 +53,15 @@ pub enum TurnLifecycleBehavior {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeBindingBehavior {
     Named { runtime_kind: &'static str },
+    SharedBackend,
     Unsupported,
     Tmux { runtime_kind: &'static str },
+}
+
+impl RuntimeBindingBehavior {
+    pub fn requires_session_runtime(self) -> bool {
+        self != Self::SharedBackend
+    }
 }
 
 /// Rust-side adapter strategy for one agent client.
@@ -109,7 +116,7 @@ impl AgentClientSpec {
     pub fn runtime_binding_kind(&self) -> Option<&'static str> {
         match self.adapter.runtime_binding {
             RuntimeBindingBehavior::Named { runtime_kind } => Some(runtime_kind),
-            RuntimeBindingBehavior::Unsupported => None,
+            RuntimeBindingBehavior::SharedBackend | RuntimeBindingBehavior::Unsupported => None,
             RuntimeBindingBehavior::Tmux { runtime_kind } => Some(runtime_kind),
         }
     }

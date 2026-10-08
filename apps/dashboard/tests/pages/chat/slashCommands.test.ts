@@ -198,7 +198,7 @@ test.each([
 });
 
 const modelCatalog = {
-  runtime_instance_id: "runtime-1",
+  runtime_id: "runtime-1",
   current_model: "model-a",
   models: [
     { id: "model-a", name: "Model A", description: "First model" },
@@ -209,7 +209,10 @@ const modelCatalog = {
 test.each(["codex", "pi"])(
   "/model searches and changes the %s model, waiting for a client fact before updating",
   async (client_type) => {
-    vi.spyOn(api, "listSessionModels").mockResolvedValue(modelCatalog);
+    vi.spyOn(api, "listSessionModels").mockResolvedValue({
+      ...modelCatalog,
+      runtime_id: client_type === "codex" ? null : modelCatalog.runtime_id,
+    });
     const change = vi.spyOn(api, "setSessionModel").mockResolvedValue();
     const selected = renderChat("/model", {
       client_type,
@@ -225,7 +228,11 @@ test.each(["codex", "pi"])(
     expect(screen.queryByRole("button", { name: "Model A" })).not.toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Model B" }));
     await waitFor(() =>
-      expect(change).toHaveBeenCalledExactlyOnceWith(selected.session_id, "model-b", "runtime-1"),
+      expect(change).toHaveBeenCalledExactlyOnceWith(
+        selected.session_id,
+        "model-b",
+        client_type === "codex" ? null : "runtime-1",
+      ),
     );
     expect(mocks.sessionDetail.get()?.session.model).toBe("model-a");
     expect(screen.getByRole("dialog")).toBeInTheDocument();

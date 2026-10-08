@@ -253,14 +253,6 @@ export interface SessionLineageView {
   created_at: string;
 }
 
-export interface CodexTuiView {
-  owner_session_id: string;
-  target_session_id: string;
-  connected: boolean;
-  socket_path: string | null;
-  pane_id: string | null;
-}
-
 export interface SessionView {
   codex?: {
     profile?: {
@@ -271,8 +263,6 @@ export interface SessionView {
     } | null;
     connection: "awaiting_input" | "available" | "reconciling" | "unavailable" | "archived";
     thread_id?: string;
-    tui?: CodexTuiView;
-    owned_tui?: CodexTuiView;
   };
   session_id: string;
   client_type: string;
@@ -552,5 +542,5 @@ export interface SessionModel {
 export interface SessionModels {
   models: SessionModel[];
   current_model: string | null;
-  runtime_instance_id: string;
+  runtime_id: string | null;
 }

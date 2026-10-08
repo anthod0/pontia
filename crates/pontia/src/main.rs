@@ -16,7 +16,9 @@ use std::{
 use clap::{Parser, Subcommand};
 use dialoguer::Confirm;
 use pontia::{
-    codex::CodexSetup,
+    codex::{
+        CodexDaemonProbe, CodexSetup, initialize as initialize_codex, inspect as inspect_codex,
+    },
     init::{self, InitPlatform},
     lifecycle::{EnabledState, Lifecycle, LifecycleStatus, RunState, ServiceManager, UpOptions},
     manager::ProcessCommandRunner,
@@ -291,13 +293,29 @@ fn start_with_lifecycle<M: ServiceManager>(
 
 struct RealInitPlatform;
 
+struct RealCodexDaemonProbe;
+
+impl CodexDaemonProbe for RealCodexDaemonProbe {
+    fn probe(&self, codex_home: &Path) -> Result<(), String> {
+        let codex_home = codex_home.to_path_buf();
+        std::thread::spawn(move || {
+            tokio::runtime::Runtime::new()
+                .map_err(|error| format!("failed to create Codex probe runtime: {error}"))?
+                .block_on(pontia_client_codex::runtime::probe_daemon(&codex_home))
+                .map_err(|error| error.to_string())
+        })
+        .join()
+        .map_err(|_| "Codex daemon probe panicked".to_string())?
+    }
+}
+
 impl InitPlatform for RealInitPlatform {
     fn inspect_codex(
         &self,
-        _vars: &HashMap<String, String>,
-        _user_home: &Path,
+        vars: &HashMap<String, String>,
+        user_home: &Path,
     ) -> Result<CodexSetup, String> {
-        Err("Codex integration is currently unavailable".into())
+        inspect_codex(vars, user_home, &ProcessCommandRunner)
     }
 
     fn preflight(&self, install_pi: bool) -> Result<(), String> {
@@ -334,8 +352,13 @@ impl InitPlatform for RealInitPlatform {
         }
     }
 
-    fn initialize_codex(&self, _setup: &CodexSetup) -> Result<(), String> {
-        Err("Codex integration is currently unavailable".into())
+    fn initialize_codex(&self, setup: &CodexSetup) -> Result<(), String> {
+        initialize_codex(
+            setup,
+            &ProcessCommandRunner,
+            &FileDefinitionStore,
+            &RealCodexDaemonProbe,
+        )
     }
 
     fn start_service(

@@ -39,7 +39,11 @@ pub(super) async fn ensure_runtime_fence_in_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event: &DomainEvent,
     native_turn_identity: bool,
+    runtime_bound: bool,
 ) -> Result<()> {
+    if !runtime_bound {
+        return Ok(());
+    }
     let native_turn = native_turn_identity && event.event_type.is_turn_event();
     if !is_confirmed_runtime_source(event.source)
         || !(runtime_id_required_for_event(event.event_type) || native_turn)
@@ -89,6 +93,7 @@ pub(super) async fn ensure_runtime_fence_in_tx(
 pub(super) async fn ensure_confirmed_event_matches_session_boundary(
     pool: &sqlx::SqlitePool,
     event: &DomainEvent,
+    runtime_bound: bool,
 ) -> Result<()> {
     if !is_confirmed_runtime_source(event.source) || event.event_type == EventType::SessionCreated {
         return Ok(());
@@ -116,6 +121,10 @@ pub(super) async fn ensure_confirmed_event_matches_session_boundary(
 
     if event.event_type == EventType::SessionReady {
         ensure_ready_identity_matches_bindings(pool, event).await?;
+    }
+
+    if !runtime_bound {
+        return Ok(());
     }
 
     let expected_runtime_id = SqliteSessionRuntimeRepository::new(pool.clone())

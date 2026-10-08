@@ -18,9 +18,22 @@ impl EventIngestService {
         session: &str,
         instance: &str,
         kind: EventType,
+        data: Value,
+    ) -> pontia_core::Result<()> {
+        self.report_client_fact(session, Some(instance), kind, data)
+            .await
+    }
+
+    pub async fn report_client_fact(
+        &self,
+        session: &str,
+        runtime_id: Option<&str>,
+        kind: EventType,
         mut data: Value,
     ) -> pontia_core::Result<()> {
-        data["runtime_id"] = json!(instance);
+        if let Some(runtime_id) = runtime_id {
+            data["runtime_id"] = json!(runtime_id);
+        }
         self.report_fact(ReportedFact {
             session_id: session.into(),
             turn_id: None,

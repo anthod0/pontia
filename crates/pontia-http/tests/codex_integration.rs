@@ -1,0 +1,76 @@
+mod common;
+
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
+use http_body_util::BodyExt;
+use serde_json::{Value, json};
+use tower::ServiceExt;
+
+use common::test_app::TestApp;
+
+async fn request(app: &TestApp, request: Request<Body>) -> (StatusCode, Value) {
+    let response = pontia_http::router(app.state.clone())
+        .oneshot(request)
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let body = if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes).unwrap()
+    };
+    (status, body)
+}
+
+#[tokio::test]
+async fn codex_sessions_are_created_without_a_runtime() {
+    let app = TestApp::new().await;
+    assert!(app.state.clients().spec("codex").is_some());
+    let (status, body) = request(
+        &app,
+        Request::post("/api/v1/sessions")
+            .header("authorization", "Bearer test-token")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({"client_type":"codex","workspace":app.workspace().path()}).to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let session = body["data"]["session"]["session_id"].as_str().unwrap();
+    assert_eq!(body["data"]["session"]["client_type"], "codex");
+    assert_eq!(body["data"]["session"]["capabilities"]["accept_task"], true);
+    let runtimes: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM session_runtimes WHERE session_id=?")
+            .bind(session)
+            .fetch_one(&app.db)
+            .await
+            .unwrap();
+    assert_eq!(runtimes, 0);
+}
+
+#[tokio::test]
+async fn codex_tui_control_route_is_absent() {
+    let app = TestApp::new().await;
+    let (status, _) = request(
+        &app,
+        Request::post("/api/v1/sessions/session/tui")
+            .header("authorization", "Bearer test-token")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn legacy_codex_tui_binding_table_is_absent() {
+    let app = TestApp::new().await;
+    let table_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='codex_tui_bindings')")
+        .fetch_one(&app.db).await.unwrap();
+    assert!(!table_exists);
+}

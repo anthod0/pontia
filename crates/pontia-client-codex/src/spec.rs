@@ -29,8 +29,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         client_session_identity: ClientSessionIdentityBehavior::RequiredOnReady,
         terminate: TerminateBehavior::Connected,
         turn_lifecycle: TurnLifecycleBehavior::ClientManaged,
-        runtime_binding: RuntimeBindingBehavior::Named {
-            runtime_kind: "codex_app_server",
-        },
+        runtime_binding: RuntimeBindingBehavior::SharedBackend,
     },
 };

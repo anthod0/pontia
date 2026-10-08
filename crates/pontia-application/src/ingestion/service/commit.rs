@@ -118,12 +118,14 @@ impl EventCommitter {
                 .await?;
             }
             if enforce_runtime_fence {
+                let spec = self.clients.spec(&event.client_type);
                 ensure_runtime_fence_in_tx(
                     &mut tx,
                     &event,
-                    self.clients
-                        .spec(&event.client_type)
-                        .is_some_and(|spec| spec.adapter.native_turn_identity),
+                    spec.is_some_and(|spec| spec.adapter.native_turn_identity),
+                    spec.is_some_and(|spec| {
+                        spec.adapter.runtime_binding.requires_session_runtime()
+                    }),
                 )
                 .await?;
             }

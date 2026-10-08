@@ -4,7 +4,6 @@
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { navigate } from '$lib/navigation'
-  import { getSession, openCodexTui } from '../api/client'
   import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -113,38 +112,6 @@
   const BRANCH_INTERRUPT_TIMEOUT_MS = 30_000
   const SCROLL_DOWN_BUTTON_ANIMATION_MS = 200
   const INITIAL_SCROLL_SETTLE_PASSES = 2
-
-  let codexRefreshing = false
-  async function refreshCodex(): Promise<void> {
-    if (codexRefreshing || selectedSession?.client_type !== 'codex') return
-    codexRefreshing = true
-    const id = selectedSessionId
-    try {
-      const detail = await loadSessionDetail(id, { showLoading: false })
-      if (destroyed || selectedSessionId !== id) return
-      const owner = new URLSearchParams(window.location.search).get('tui')
-      const tui = owner
-        ? (owner === id ? detail?.session.codex?.owned_tui : (await getSession(owner)).codex?.owned_tui)
-        : detail?.session.codex?.tui
-      if (destroyed || selectedSessionId !== id) return
-      if (tui?.connected && tui.target_session_id !== id) {
-        await navigate(`/chat/${tui.target_session_id}`, { tui: tui.owner_session_id })
-      }
-      if (detail?.session.capabilities.timeline && !hasTimelineSnapshot(get(timelineState), id)) {
-        await loadSessionTimeline(id)
-      }
-    } catch (error) {
-      actionError = error instanceof Error ? error.message : String(error)
-    } finally { codexRefreshing = false }
-  }
-  async function openSelectedTui(): Promise<void> {
-    if (!selectedSessionId || actionBusy) return
-    actionBusy = true
-    actionError = null
-    try { await openCodexTui(selectedSessionId); await refreshCodex() }
-    catch (error) { actionError = error instanceof Error ? error.message : String(error) }
-    finally { actionBusy = false }
-  }
 
   onMount(() => {
     selectedSessionId = requestedSessionIdFromLocation()
@@ -910,16 +877,11 @@
   {#if selectedSession?.codex && selectedSession.capabilities.accept_task}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
       <span>Control: {selectedSession.codex.connection.replaceAll('_', ' ')}</span>
-      <span>TUI: {selectedSession.codex.tui?.connected ? 'connected' : 'disconnected'}</span>
       {#if selectedSession.codex.profile}
         <span>Profile: {selectedSession.codex.profile.profile_id}{selectedSession.codex.profile.version ? `@${selectedSession.codex.profile.version}` : ''} ({selectedSession.codex.profile.status.replaceAll('_', ' ')})</span>
         {#if selectedSession.codex.profile.error}
           <span class="text-destructive" role="alert">{selectedSession.codex.profile.error}</span>
         {/if}
-      {/if}
-      <Button variant="outline" size="sm" disabled={!selectedSession.codex.thread_id || actionBusy || selectedSession.state === 'exited'} onclick={() => void openSelectedTui()}>Open TUI</Button>
-      {#if selectedSession.codex.tui?.pane_id}
-        <code class="min-w-0 break-all">tmux attach -t pontia_codex_{(selectedSession.codex.tui.owner_session_id ?? selectedSession.session_id).replaceAll('-', '_')}</code>
       {/if}
       {#if !selectedSession.capabilities.timeline}<span>Native history is currently unavailable.</span>{/if}
     </div>

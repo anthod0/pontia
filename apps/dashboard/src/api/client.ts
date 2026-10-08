@@ -758,14 +758,6 @@ export async function terminateSession(sessionId: string): Promise<unknown> {
   });
 }
 
-export async function openCodexTui(sessionId: string): Promise<{ session: SessionView }> {
-  return request(`/sessions/${encodeURIComponent(sessionId)}/tui`, {
-    method: "POST",
-    body: {},
-    mutating: true,
-  });
-}
-
 export async function listSessionModels(
   sessionId: string,
   options: ReadRequestOptions = {},
@@ -779,11 +771,11 @@ export async function listSessionModels(
 export async function setSessionModel(
   sessionId: string,
   model: string,
-  runtimeInstanceId: string,
+  runtimeId: string | null,
 ): Promise<void> {
   await request<{ accepted: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/model`, {
     method: "PATCH",
-    body: { model, runtime_instance_id: runtimeInstanceId },
+    body: runtimeId ? { model, runtime_id: runtimeId } : { model },
     retryNetworkErrors: false,
   });
 }

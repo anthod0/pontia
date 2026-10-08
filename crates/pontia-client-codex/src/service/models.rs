@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::runtime::{CodexRuntime, protocol::Connection};
+use crate::runtime::{CodexRuntime, SubscriptionState, protocol::Connection};
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 
@@ -14,7 +14,7 @@ impl CodexService {
         self.model_target(target, &runtime).await?;
         let connection = runtime.connection().await?;
         let models = list_models(&connection).await?;
-        target.validate(&self.pool).await?;
+        runtime.current_guard().await?;
         Ok(models)
     }
 
@@ -30,22 +30,16 @@ impl CodexService {
         {
             return Err(Error::Domain("The selected model is not available.".into()));
         }
-        self.model_target(target, &runtime).await?;
         update_model(&connection, &thread, model).await?;
-        target
-            .validate(&self.pool)
-            .await
-            .map_err(|error| Error::ControlUnknown(error.to_string()))?;
-        // The acknowledgement is not a model observation. The observer ingests
-        // thread/settings/updated, including changes made by the native TUI.
+        runtime.current_guard().await?;
         Ok(())
     }
 
     async fn model_target(&self, target: &ControlTarget, runtime: &CodexRuntime) -> Result<String> {
         self.confirm_control_connection(target, runtime).await?;
-        let available: bool = sqlx::query_scalar("SELECT s.state IN ('idle','busy') AND json_extract(r.adapter_details,'$.codex.connection')='available' FROM sessions s JOIN runtime_bindings r USING(session_id) WHERE s.session_id=?")
-            .bind(&target.session_id).fetch_one(&self.pool).await?;
-        if !available {
+        if !self.session_accepts_control(&target.session_id).await?
+            || runtime.subscription(&target.session_id).await != Some(SubscriptionState::Available)
+        {
             return Err(Error::CapabilityUnavailable(
                 "Codex model control is unavailable".into(),
             ));
@@ -59,20 +53,16 @@ impl CodexService {
             })
     }
 
-    pub(super) async fn model_fact(
-        &self,
-        session: &str,
-        runtime_instance_id: &str,
-        settings: &Value,
-    ) -> Result<()> {
+    pub(super) async fn model_fact(&self, session: &str, settings: &Value) -> Result<()> {
         let model = string(settings, "model")?;
-        self.report(
-            session,
-            runtime_instance_id,
-            EventType::SessionModelUpdated,
-            json!({"model":model}),
-        )
-        .await
+        self.event_ingest
+            .report_client_fact(
+                session,
+                None,
+                EventType::SessionModelUpdated,
+                json!({"model":model}),
+            )
+            .await
     }
 
     pub(super) async fn model_snapshot(
@@ -81,9 +71,8 @@ impl CodexService {
         runtime: &CodexRuntime,
         settings: &Value,
     ) -> Result<()> {
-        let _current = runtime.current_guard().await?;
-        self.model_fact(session, &runtime.instance_id, settings)
-            .await
+        runtime.current_guard().await?;
+        self.model_fact(session, settings).await
     }
 }
 
@@ -136,6 +125,3 @@ async fn list_models(connection: &Connection) -> Result<Vec<SessionModel>> {
     }
     Ok(models)
 }
-
-#[cfg(test)]
-mod tests;

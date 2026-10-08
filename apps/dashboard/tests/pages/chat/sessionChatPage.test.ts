@@ -22,54 +22,6 @@ const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).defa
 const SessionChatPage = (await import("../../../src/pages/SessionChatPage.svelte")).default;
 const TopBarHost = (await import("../../components/layout/TopBarHost.svelte")).default;
 
-// Codex integration is frozen pending session-runtimes migration.
-test.skip("continues following the original Codex TUI after a second thread switch", async () => {
-  const selected = session({
-    session_id: "session-b",
-    client_type: "codex",
-    codex: { connection: "available", thread_id: "native-b" },
-  });
-  window.history.pushState({}, "", "/dashboard/chat/session-b?tui=session-a");
-  mocks.pathParams = { sessionId: "session-b" };
-  mocks.sessions.set([selected]);
-  mocks.loadedSessions = [selected];
-  const detail = { session: selected, turns: [], inboxMessages: [], events: [] };
-  mocks.sessionDetail.set(detail);
-  mocks.loadSessionDetail.mockResolvedValue(detail);
-  const owner = session({
-    session_id: "session-a",
-    client_type: "codex",
-    codex: {
-      connection: "available",
-      owned_tui: {
-        owner_session_id: "session-a",
-        target_session_id: "session-c",
-        connected: true,
-        socket_path: "/tmp/test.sock",
-        pane_id: "%1",
-      },
-      tui: {
-        owner_session_id: "session-d",
-        target_session_id: "session-a",
-        connected: true,
-        socket_path: "/tmp/test.sock",
-        pane_id: "%2",
-      },
-    },
-  });
-  const lookup = vi.spyOn(api, "getSession").mockResolvedValue(owner);
-  try {
-    render(SessionChatPage);
-    await waitFor(
-      () => expect(mocks.navigate).toHaveBeenCalledWith("/chat/session-c", { tui: "session-a" }),
-      { timeout: 4000 },
-    );
-    expect(lookup).toHaveBeenCalledWith("session-a");
-  } finally {
-    lookup.mockRestore();
-  }
-});
-
 class TestIntersectionObserver implements IntersectionObserver {
   static instances: TestIntersectionObserver[] = [];
 

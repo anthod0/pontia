@@ -1,50 +1,38 @@
 mod daemon;
-mod gateway;
 pub mod protocol;
-mod tui;
 
 use pontia_core::{Error, Result};
 use protocol::Connection;
-use serde_json::Value;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::Mutex;
 
 fn registry() -> &'static Mutex<HashMap<PathBuf, Arc<CodexRuntime>>> {
     static RUNTIMES: OnceLock<Mutex<HashMap<PathBuf, Arc<CodexRuntime>>>> = OnceLock::new();
     RUNTIMES.get_or_init(Default::default)
 }
 
-pub(crate) struct CurrentRuntimeGuard {
+pub(crate) struct CurrentConnectionGuard {
     _registry: tokio::sync::MutexGuard<'static, HashMap<PathBuf, Arc<CodexRuntime>>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SubscriptionState {
+    Reconciling,
+    Available,
+    ExitPending,
 }
 
 pub struct CodexRuntime {
     pub root: PathBuf,
-    pub instance_id: String,
-    pub connection_id: String,
     pub socket_path: PathBuf,
     connection: Arc<Connection>,
-    pub targets: broadcast::Sender<TuiTarget>,
-    gateways: Mutex<HashMap<String, gateway::Gateway>>,
     operations: Mutex<HashMap<String, Arc<Mutex<()>>>>,
-    pub(crate) interfaces: Mutex<()>,
-    tui_command: String,
-    pub tui_targets: Mutex<HashMap<String, TuiTarget>>,
+    subscriptions: Mutex<HashMap<String, SubscriptionState>>,
     pub(crate) profile_service: OnceLock<pontia_application::AgentProfileService>,
-}
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct TuiTarget {
-    pub connection_id: String,
-    pub peer_identity: String,
-    pub owner_session_id: String,
-    pub thread: Value,
-    pub connected: bool,
-    pub error: Option<String>,
 }
 
 pub async fn probe_daemon(codex_home: &Path) -> Result<()> {
@@ -68,6 +56,23 @@ pub async fn probe_daemon(codex_home: &Path) -> Result<()> {
 }
 
 impl CodexRuntime {
+    pub async fn existing(root: &Path) -> Option<Arc<Self>> {
+        let root = root.canonicalize().ok()?;
+        registry().lock().await.get(&root).cloned()
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn install_for_test(root: &Path, socket: PathBuf) -> Result<Arc<Self>> {
+        let root = root.canonicalize()?;
+        let mut runtimes = registry().lock().await;
+        Self::connect(
+            &mut runtimes,
+            root.clone(),
+            daemon::Endpoint { socket, home: root },
+        )
+        .await
+    }
+
     pub async fn ensure(root: &Path) -> Result<Arc<Self>> {
         let root = root.canonicalize()?;
         let mut registry = registry().lock().await;
@@ -98,52 +103,32 @@ impl CodexRuntime {
                 "daemon Codex home does not match the selected environment",
             ));
         }
-        let instance_id = connection.identity.instance_id.clone();
-        let socket_path = endpoint.socket;
-        let (targets, _) = broadcast::channel(128);
         let runtime = Arc::new(Self {
             root: root.clone(),
-            instance_id,
-            connection_id: pontia_core::ids::new_runtime_instance_id().to_string(),
-            socket_path,
+            socket_path: endpoint.socket,
             connection,
-            targets,
-            gateways: Mutex::new(HashMap::new()),
             operations: Mutex::new(HashMap::new()),
-            interfaces: Mutex::new(()),
-            tui_command: std::env::var("PONTIA_CODEX_COMMAND").unwrap_or_else(|_| "codex".into()),
-            tui_targets: Mutex::new(HashMap::new()),
+            subscriptions: Mutex::new(HashMap::new()),
             profile_service: OnceLock::new(),
         });
         if let Some(old) = registry.insert(root, runtime.clone()) {
-            old.close_gateways().await;
             old.connection.close().await;
         }
         Ok(runtime)
     }
 
-    // Hold replacement/shutdown off until the binding transaction commits.
-    pub(crate) async fn current_guard(&self) -> Result<CurrentRuntimeGuard> {
-        let guard = self.registered_guard().await?;
-        if !self.connection.is_connected() {
-            return Err(protocol::protocol_error(
-                "daemon connection is no longer live",
-            ));
-        }
-        Ok(guard)
-    }
-
-    pub(crate) async fn registered_guard(&self) -> Result<CurrentRuntimeGuard> {
+    pub(crate) async fn current_guard(&self) -> Result<CurrentConnectionGuard> {
         let registry = registry().lock().await;
         if !registry
             .get(&self.root)
             .is_some_and(|runtime| std::ptr::eq(runtime.as_ref(), self))
+            || !self.connection.is_connected()
         {
-            return Err(Error::StateConflict(
-                "Codex runtime has been replaced".into(),
+            return Err(Error::ControlUnknown(
+                "Codex app-server connection was replaced".into(),
             ));
         }
-        Ok(CurrentRuntimeGuard {
+        Ok(CurrentConnectionGuard {
             _registry: registry,
         })
     }
@@ -151,7 +136,7 @@ impl CodexRuntime {
     pub async fn connection(&self) -> Result<Arc<Connection>> {
         if !self.connection.is_connected() {
             return Err(protocol::protocol_error(
-                "daemon disconnected; awaiting instance verification and reconciliation",
+                "daemon disconnected; awaiting reconciliation",
             ));
         }
         Ok(self.connection.clone())
@@ -168,31 +153,29 @@ impl CodexRuntime {
             .await
     }
 
-    pub async fn ensure_tui_gateway(self: &Arc<Self>, owner: &str) -> Result<()> {
-        self.gateway(owner).await.map(|_| ())
+    pub(crate) async fn set_subscription(&self, session: &str, state: SubscriptionState) {
+        self.subscriptions
+            .lock()
+            .await
+            .insert(session.into(), state);
+    }
+
+    pub(crate) async fn clear_subscription(&self, session: &str) {
+        self.subscriptions.lock().await.remove(session);
+    }
+
+    pub(crate) async fn clear_subscriptions(&self) {
+        self.subscriptions.lock().await.clear();
+    }
+
+    pub(crate) async fn subscription(&self, session: &str) -> Option<SubscriptionState> {
+        self.subscriptions.lock().await.get(session).copied()
     }
 
     pub async fn shutdown(root: &Path) {
         let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         if let Some(runtime) = registry().lock().await.remove(&root) {
-            runtime.close_gateways().await;
             runtime.connection.close().await;
         }
     }
-
-    async fn close_gateways(&self) {
-        let gateways: Vec<_> = self
-            .gateways
-            .lock()
-            .await
-            .drain()
-            .map(|(_, gateway)| gateway)
-            .collect();
-        for gateway in gateways {
-            gateway.close().await;
-        }
-    }
 }
-
-#[cfg(test)]
-mod tests;

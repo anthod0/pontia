@@ -1,4 +1,4 @@
-use pontia_core::Result;
+use pontia_core::{Error, Result};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
 use crate::models::agent_bindings::AgentBindingRow;
@@ -38,6 +38,36 @@ impl SqliteAgentBindingRepository {
         tx: &mut Transaction<'_, Sqlite>,
         binding: AgentBindingUpsertRecord,
     ) -> Result<AgentBindingRow> {
+        let existing_session: Option<String> = sqlx::query_scalar(
+            "SELECT session_id FROM agent_bindings WHERE client_type=? AND client_session_key=?",
+        )
+        .bind(&binding.client_type)
+        .bind(&binding.client_session_key)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if existing_session
+            .as_deref()
+            .is_some_and(|session| session != binding.session_id)
+        {
+            return Err(Error::StateConflict(format!(
+                "native {} session {} is already bound to another Session",
+                binding.client_type, binding.client_session_key
+            )));
+        }
+        let existing_key: Option<String> =
+            sqlx::query_scalar("SELECT client_session_key FROM agent_bindings WHERE session_id=?")
+                .bind(&binding.session_id)
+                .fetch_optional(&mut **tx)
+                .await?;
+        if existing_key
+            .as_deref()
+            .is_some_and(|key| key != binding.client_session_key)
+        {
+            return Err(Error::StateConflict(format!(
+                "Session {} is already bound to another native session",
+                binding.session_id
+            )));
+        }
         Ok(sqlx::query_as::<_, AgentBindingRow>(
             r#"INSERT INTO agent_bindings
                (id, session_id, client_type, launch_cwd, client_session_key, client_session_file, metadata)

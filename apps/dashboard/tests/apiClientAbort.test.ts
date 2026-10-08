@@ -228,7 +228,7 @@ test("does not replay an uncertain model change after a network failure", async 
     "/api/v1/sessions/session-1/model",
     expect.objectContaining({
       method: "PATCH",
-      body: JSON.stringify({ model: "model-b", runtime_instance_id: "runtime-1" }),
+      body: JSON.stringify({ model: "model-b", runtime_id: "runtime-1" }),
     }),
   );
 });

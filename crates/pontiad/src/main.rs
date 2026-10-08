@@ -25,6 +25,12 @@ async fn main() -> Result<()> {
     let client_control = app_state.client_control();
     let runtime_observer = app_state.runtime_observer();
     tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
+    let codex_observer = pontia_client_codex::CodexObserver::new(
+        app_state.event_ingest_service(),
+        config.pontia_home.clone(),
+    );
+    codex_observer.prepare().await?;
+    tokio::spawn(codex_observer.run(app_state.shutdown().subscribe()));
     let workflow_coordinator = pontia_workflow::WorkflowCoordinator::new(
         &app_state,
         app_state.session_commands(),

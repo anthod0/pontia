@@ -453,7 +453,6 @@ async fn missing_agent_profile_returns_not_found() {
 }
 
 #[tokio::test]
-#[ignore = "Codex integration is frozen pending session-runtimes migration"]
 async fn codex_profile_binding_pins_content_before_first_input_and_rejects_invalid_contracts() {
     let app = TestApp::new().await;
     let state = app.state.clone();

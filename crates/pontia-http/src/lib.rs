@@ -257,10 +257,6 @@ fn external_api_router(state: HttpState) -> Router {
             "/api/v1/sessions/{session_id}/resume",
             post(api::resume_session),
         )
-        .route(
-            "/api/v1/sessions/{session_id}/tui",
-            post(api::open_codex_tui),
-        )
         // Read-only turn history. Direct turn dispatch via POST is intentionally not exposed:
         // Web input is submitted through the inbox API, and reported Agent facts own turn lifecycle.
         .route("/api/v1/sessions/{session_id}/turns", get(api::list_turns))

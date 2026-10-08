@@ -3,15 +3,10 @@ mod models;
 mod observer;
 pub(crate) mod profile;
 #[cfg(test)]
-mod tests;
-mod tui;
-
-use crate::runtime::CodexRuntime;
-use pontia_application::{
-    AgentBindingService, UpsertAgentBindingRequest, sessions::NativeSessionService,
-};
-use pontia_core::{Error, Result};
-use pontia_runtime::RuntimeStartResult;
+mod subscription_tests;
+use crate::runtime::{CodexRuntime, SubscriptionState};
+use pontia_application::{AgentBindingService, UpsertAgentBindingRequest};
+use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use std::{
@@ -35,71 +30,39 @@ impl CodexService {
         }
     }
 
-    pub async fn reset_connections(&self) -> Result<()> {
-        sqlx::query("UPDATE codex_tui_bindings SET connected=FALSE")
-            .execute(&self.pool)
-            .await?;
-        // Persisted status is not evidence of a live connection owned by this daemon.
-        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','unavailable') WHERE runtime_kind='codex_app_server'")
+    pub async fn provision(
+        &self,
+        session_id: &str,
+        root: &Path,
+        cwd: &Path,
+        environment: &std::collections::BTreeMap<String, String>,
+    ) -> Result<()> {
+        let root = root.canonicalize()?;
+        sqlx::query("UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_control_root',?,'$.codex_environment',json(?),'$.codex_launch_cwd',?) WHERE session_id=?")
+            .bind(root.display().to_string())
+            .bind(serde_json::to_string(environment)?)
+            .bind(cwd.display().to_string())
+            .bind(session_id)
             .execute(&self.pool).await?;
         Ok(())
     }
 
-    pub async fn provision(&self, session_id: &str, root: &Path, cwd: &Path) -> Result<()> {
-        let runtime = Self::provisioned_runtime(root, cwd);
-        NativeSessionService::new(self.pool.clone(), self.event_ingest.clone())
-            .provision(session_id, &runtime)
-            .await
-    }
-
-    fn provisioned_runtime(root: &Path, cwd: &Path) -> RuntimeStartResult {
-        RuntimeStartResult {
-            runtime_kind: "codex_app_server".into(),
-            runtime_handle: root.display().to_string(),
-            capabilities: crate::CAPABILITIES,
-            metadata: json!({"launch_cwd":cwd,"adapter_details":{"codex":{"connection":"awaiting_input"}}}),
-        }
-    }
-
     pub(super) async fn root(&self, session_id: &str) -> Result<PathBuf> {
-        let root: String = sqlx::query_scalar("SELECT runtime_handle FROM runtime_bindings WHERE session_id=? AND runtime_kind='codex_app_server'")
-            .bind(session_id).fetch_one(&self.pool).await?;
-        Ok(root.into())
+        let root: Option<String> = sqlx::query_scalar(
+            "SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?",
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten();
+        root.map(Into::into)
+            .ok_or_else(|| Error::StateConflict("Codex control root is missing".into()))
     }
 
     pub(super) async fn runtime(&self, session_id: &str) -> Result<Arc<CodexRuntime>> {
-        let result = CodexRuntime::ensure(&self.root(session_id).await?).await;
-        if let Ok(runtime) = &result {
-            self.prepare_connection(runtime).await?;
-        } else {
-            sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','unavailable') WHERE session_id=?")
-                .bind(session_id).execute(&self.pool).await?;
-        }
-        result
-    }
-
-    pub(super) fn observed_session(
-        &self,
-        root: &Path,
-        runtime: &CodexRuntime,
-        thread: &Value,
-    ) -> Result<pontia_application::sessions::NativeSessionObservation> {
-        let id = string(thread, "id")?;
-        let cwd = string(thread, "cwd")?;
-        let mut capabilities = crate::CAPABILITIES;
-        capabilities.timeline = thread["path"].as_str().is_some_and(|path| {
-            crate::rollout::identity(Path::new(path)).is_ok_and(|native| native == id)
-        });
-        Ok(pontia_application::sessions::NativeSessionObservation {
-            identity: pontia_application::sessions::NativeSessionIdentity {
-                launch_cwd: cwd.into(),
-                client_session_file: thread["path"].as_str().map(str::to_owned),
-            },
-            provisioned_runtime: Self::provisioned_runtime(root, Path::new(cwd)),
-            instance_id: runtime.instance_id.clone(),
-            capabilities,
-            details: json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection_id":runtime.connection_id,"connection":"reconciling"}),
-        })
+        let runtime = CodexRuntime::ensure(&self.root(session_id).await?).await?;
+        runtime.profile_service.get_or_init(|| self.profiles());
+        Ok(runtime)
     }
 
     pub(super) async fn bind(
@@ -107,32 +70,19 @@ impl CodexService {
         session_id: &str,
         runtime: &CodexRuntime,
         thread: &Value,
-        expected_instance: Option<&str>,
     ) -> Result<()> {
         let _current = runtime.current_guard().await?;
         let id = string(thread, "id")?;
-        let cwd = thread["cwd"]
-            .as_str()
-            .ok_or_else(|| Error::Domain("Codex thread has no cwd".into()))?;
-        let mut capabilities = crate::CAPABILITIES;
-        capabilities.timeline = thread["path"].as_str().is_some_and(|path| {
-            crate::rollout::identity(Path::new(path)).is_ok_and(|native| native == id)
-        });
-        NativeSessionService::new(self.pool.clone(), self.event_ingest.clone())
-            .confirm(
-                UpsertAgentBindingRequest {
-                    session_id: session_id.into(),
-                    client_type: "codex".into(),
-                    launch_cwd: cwd.into(),
-                    client_session_key: id.into(),
-                    client_session_file: thread["path"].as_str().map(str::to_string),
-                    metadata: json!({}),
-                },
-                &runtime.instance_id,
-                expected_instance,
-                &capabilities,
-                json!({"thread_id":id,"endpoint":format!("unix://{}",runtime.socket_path.display()),"connection_id":runtime.connection_id,"connection":"reconciling"}),
-            )
+        let cwd = string(thread, "cwd")?;
+        AgentBindingService::new(self.pool.clone())
+            .upsert_binding(UpsertAgentBindingRequest {
+                session_id: session_id.into(),
+                client_type: "codex".into(),
+                launch_cwd: cwd.into(),
+                client_session_key: id.into(),
+                client_session_file: thread["path"].as_str().map(str::to_owned),
+                metadata: json!({}),
+            })
             .await?;
         Ok(())
     }
@@ -148,75 +98,63 @@ impl CodexService {
         let runtime = self.runtime(session_id).await?;
         let _operation = runtime.lock_session(session_id).await;
         target.validate(&self.pool).await?;
-        if target
-            .runtime_instance_id
-            .as_deref()
-            .is_some_and(|id| id != runtime.instance_id)
-        {
-            return Err(Error::StateConflict(
-                "Codex runtime requires reconciliation before input".into(),
-            ));
-        }
         let connection = runtime.connection().await?;
         let binding = AgentBindingService::new(self.pool.clone())
             .binding_for_session(session_id)
             .await?;
-        let new_thread = binding.is_none();
         let profile = self.profiles().codex_binding(session_id).await?;
-        let response = match binding {
+        let (thread, turns) = match binding {
             Some(binding) => {
-                connection
+                if runtime.subscription(session_id).await != Some(SubscriptionState::Available) {
+                    self.subscribe(session_id, &runtime, &binding.client_session_key)
+                        .await?;
+                }
+                let snapshot = connection
                     .call(
-                        "thread/resume",
-                        self.resume_params(session_id, &binding.client_session_key)
-                            .await?,
+                        "thread/read",
+                        json!({"threadId":binding.client_session_key,"includeTurns":false}),
                     )
-                    .await?
+                    .await?;
+                let turns = self.turns(&connection, &binding.client_session_key).await?;
+                (snapshot["thread"].clone(), turns)
             }
             None => {
-                let cwd: String = sqlx::query_scalar(
-                    "SELECT launch_cwd FROM runtime_bindings WHERE session_id=?",
-                )
-                .bind(session_id)
-                .fetch_one(&self.pool)
-                .await?;
-                let environment: Option<String> = sqlx::query_scalar("SELECT json_extract(adapter_details,'$.codex_environment') FROM runtime_bindings WHERE session_id=?").bind(session_id).fetch_one(&self.pool).await?;
+                runtime
+                    .set_subscription(session_id, SubscriptionState::Reconciling)
+                    .await;
+                let row: (Option<String>, Option<String>) = sqlx::query_as("SELECT workspace_ref,json_extract(metadata,'$.codex_launch_cwd') FROM sessions WHERE session_id=?")
+                    .bind(session_id).fetch_one(&self.pool).await?;
+                let cwd = row
+                    .0
+                    .or(row.1)
+                    .ok_or_else(|| Error::StateConflict("Codex launch cwd is missing".into()))?;
+                let environment: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_environment') FROM sessions WHERE session_id=?")
+                    .bind(session_id).fetch_one(&self.pool).await?;
                 let environment: Value = environment
                     .map(|value| serde_json::from_str(&value))
                     .transpose()?
                     .unwrap_or_else(|| json!({}));
                 let mut params = json!({"cwd":cwd,"historyMode":"legacy","config":{"shell_environment_policy.set":environment}});
                 profile::apply_profile(&mut params, profile.as_ref())?;
-                connection.call("thread/start", params).await?
+                let response = connection.call("thread/start", params).await?;
+                runtime.current_guard().await?;
+                let thread = response["thread"].clone();
+                self.bind(session_id, &runtime, &thread).await?;
+                if profile.is_some() {
+                    self.profiles()
+                        .confirm_codex_configuration(session_id, string(&thread, "id")?)
+                        .await?;
+                }
+                self.model_snapshot(session_id, &runtime, &response).await?;
+                runtime
+                    .set_subscription(session_id, SubscriptionState::Available)
+                    .await;
+                self.ready(session_id, &runtime, &thread).await?;
+                (thread, Vec::new())
             }
         };
-        let thread = response["thread"].clone();
-        target.validate(&self.pool).await?;
-        self.bind(
-            session_id,
-            &runtime,
-            &thread,
-            target.runtime_instance_id.as_deref(),
-        )
-        .await?;
-        if new_thread && profile.is_some() {
-            self.profiles()
-                .confirm_codex_configuration(session_id, string(&thread, "id")?)
-                .await?;
-        }
-        self.model_snapshot(session_id, &runtime, &response).await?;
-        let thread_id = string(&thread, "id")?;
-        // thread/start subscribes this connection. A resumed thread needs its actual turns,
-        // because excludeTurns intentionally returned no execution history.
-        let turns = if new_thread {
-            Vec::new()
-        } else {
-            self.turns(&connection, thread_id).await?
-        };
         self.reconcile_turns(session_id, &runtime, &turns).await?;
-        self.ready(session_id, &runtime, &thread).await?;
-        self.connection_state(session_id, &runtime, "available")
-            .await?;
+        let thread_id = string(&thread, "id")?;
         let active = turns.iter().find(|turn| turn["status"] == "inProgress");
         let mut params = json!({"threadId":thread_id,"input":[{"type":"text","text":input}]});
         if let Some(message_id) = message_id {
@@ -227,8 +165,8 @@ impl CodexService {
             pontia_application::turns::InputIntent::Steer { turn_id } => {
                 let native: Option<String> = sqlx::query_scalar("SELECT client_turn_id FROM native_turn_bindings WHERE session_id=? AND turn_id=?")
                     .bind(session_id).bind(turn_id).fetch_optional(&self.pool).await?;
-                if active.and_then(|turn| turn["id"].as_str()) != native.as_deref()
-                    || native.is_none()
+                if native.is_none()
+                    || active.and_then(|turn| turn["id"].as_str()) != native.as_deref()
                 {
                     return Err(Error::StateConflict(
                         "Codex active turn changed before steer".into(),
@@ -244,44 +182,17 @@ impl CodexService {
                 });
             }
         };
-        let execution_target = pontia_application::runtime::ControlTarget {
-            session_id: session_id.clone(),
-            runtime_instance_id: Some(runtime.instance_id.clone()),
-        };
-        execution_target.validate(&self.pool).await?;
         let result = connection.call(method, params).await;
-        if execution_target.validate(&self.pool).await.is_err() {
-            return Err(Error::ControlUnknown(
-                "Codex runtime changed during input".into(),
-            ));
-        }
-        match result {
-            Ok(accepted) => {
-                let native_turn_id = accepted
-                    .get("turnId")
-                    .or_else(|| accepted.pointer("/turn/id"))
-                    .and_then(Value::as_str)
-                    .map(str::to_string);
-                if let Err(error) = self
-                    .open_tui_with_runtime(session_id, &runtime, &thread)
-                    .await
-                {
-                    tracing::warn!(%session_id, %error, "Codex input delivered but TUI could not attach");
-                }
-                Ok(pontia_application::control::InputReceipt {
-                    native_turn_id,
-                    runtime_instance_id: Some(runtime.instance_id.clone()),
-                })
-            }
-            Err(error) => {
-                if !connection.is_connected() {
-                    let _ = self
-                        .connection_state(session_id, &runtime, "unavailable")
-                        .await;
-                }
-                Err(error)
-            }
-        }
+        runtime.current_guard().await?;
+        let accepted = result?;
+        Ok(pontia_application::control::InputReceipt {
+            native_turn_id: accepted
+                .get("turnId")
+                .or_else(|| accepted.pointer("/turn/id"))
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            runtime_id: None,
+        })
     }
 
     pub(crate) async fn interrupt(
@@ -289,18 +200,14 @@ impl CodexService {
         target: &pontia_application::runtime::ControlTarget,
         turn_id: &str,
     ) -> Result<()> {
-        let session_id = &target.session_id;
-        let runtime = self.runtime(session_id).await?;
-        let _operation = runtime.lock_session(session_id).await;
+        let runtime = self.runtime(&target.session_id).await?;
+        let _operation = runtime.lock_session(&target.session_id).await;
         self.confirm_control_connection(target, &runtime).await?;
-        let binding = AgentBindingService::new(self.pool.clone())
-            .binding_for_session(session_id)
-            .await?
-            .ok_or_else(|| Error::StateConflict("Codex has not received its first input".into()))?;
+        let binding = self.binding(&target.session_id).await?;
         let native: String = sqlx::query_scalar(
             "SELECT client_turn_id FROM native_turn_bindings WHERE session_id=? AND turn_id=?",
         )
-        .bind(session_id)
+        .bind(&target.session_id)
         .bind(turn_id)
         .fetch_one(&self.pool)
         .await?;
@@ -314,103 +221,136 @@ impl CodexService {
                 "Codex active turn changed before interrupt".into(),
             ));
         }
-        target.validate(&self.pool).await?;
-        let result = connection
+        connection
             .call(
                 "turn/interrupt",
                 json!({"threadId":binding.client_session_key,"turnId":native}),
             )
-            .await;
-        if target.validate(&self.pool).await.is_err() {
-            return Err(Error::ControlUnknown(
-                "Codex runtime changed during interrupt".into(),
-            ));
-        }
-        result.map(|_| ())
+            .await?;
+        runtime.current_guard().await?;
+        Ok(())
     }
 
-    pub(crate) async fn archive(
+    pub(crate) async fn unsubscribe(
         &self,
         target: &pontia_application::runtime::ControlTarget,
     ) -> Result<()> {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;
         let _operation = runtime.lock_session(session_id).await;
-        self.confirm_control_connection(target, &runtime).await?;
+        target.validate(&self.pool).await?;
         let binding = AgentBindingService::new(self.pool.clone())
             .binding_for_session(session_id)
-            .await?
-            .ok_or_else(|| Error::StateConflict("Codex has not created a thread yet".into()))?;
-        let result = runtime
-            .connection()
-            .await?
-            .call(
-                "thread/archive",
-                json!({"threadId":binding.client_session_key}),
-            )
-            .await;
-        if target.validate(&self.pool).await.is_err() {
-            return Err(Error::ControlUnknown(
-                "Codex runtime changed during archive".into(),
-            ));
-        }
-        result?;
-        // Only the archived notification or a verified archived listing confirms exit.
-        self.check_archived(session_id, &runtime, &binding.client_session_key)
             .await?;
-        Ok(())
+        let Some(binding) = binding else {
+            if runtime.subscription(session_id).await.is_some() {
+                return Err(Error::ControlUnknown(
+                    "unbound Codex Session still has subscription state".into(),
+                ));
+            }
+            self.exited(session_id).await?;
+            return Ok(());
+        };
+        self.set_exit_pending(session_id, true).await?;
+        self.confirm_unsubscribe(session_id, &runtime, &binding.client_session_key)
+            .await?;
+        self.persist_confirmed_exit(session_id).await
     }
 
     pub(crate) async fn resume(
         &self,
         target: &pontia_application::runtime::ControlTarget,
     ) -> Result<()> {
-        let session_id = &target.session_id;
-        let runtime = self.runtime(session_id).await?;
-        let _operation = runtime.lock_session(session_id).await;
+        let runtime = self.runtime(&target.session_id).await?;
+        let _operation = runtime.lock_session(&target.session_id).await;
         target.validate(&self.pool).await?;
-        let binding = AgentBindingService::new(self.pool.clone())
-            .binding_for_session(session_id)
-            .await?
-            .ok_or_else(|| Error::StateConflict("Codex thread binding is missing".into()))?;
-        let connection = runtime.connection().await?;
-        let resume_params = self
-            .resume_params(session_id, &binding.client_session_key)
-            .await?;
-        connection
-            .call(
-                "thread/unarchive",
-                json!({"threadId":binding.client_session_key}),
-            )
-            .await?;
-        let result = connection.call("thread/resume", resume_params).await?;
-        target
-            .validate(&self.pool)
-            .await
-            .map_err(|error| Error::ControlUnknown(error.to_string()))?;
-        self.bind(
-            session_id,
-            &runtime,
-            &result["thread"],
-            target.runtime_instance_id.as_deref(),
-        )
-        .await?;
-        self.model_snapshot(session_id, &runtime, &result).await?;
-        let turns = self.turns(&connection, &binding.client_session_key).await?;
-        self.reconcile_turns(session_id, &runtime, &turns).await?;
-        self.ready(session_id, &runtime, &result["thread"]).await?;
-        self.connection_state(session_id, &runtime, "available")
-            .await?;
-        self.event_ingest.control_available(session_id);
-        self.open_tui_with_runtime(session_id, &runtime, &result["thread"])
+        let binding = self.binding(&target.session_id).await?;
+        self.set_exit_pending(&target.session_id, false).await?;
+        self.subscribe(&target.session_id, &runtime, &binding.client_session_key)
             .await
     }
 
-    pub(super) async fn prepare_connection(&self, runtime: &CodexRuntime) -> Result<()> {
-        runtime.profile_service.get_or_init(|| self.profiles());
-        let _current = runtime.current_guard().await?;
-        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection','reconciling') WHERE runtime_kind='codex_app_server' AND json_extract(adapter_details,'$.codex.connection_id') IS NOT ?")
-            .bind(&runtime.connection_id).execute(&self.pool).await?;
+    async fn set_exit_pending(&self, session: &str, pending: bool) -> Result<()> {
+        sqlx::query("UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_exit_pending',json(?)) WHERE session_id=?")
+            .bind(if pending { "true" } else { "false" })
+            .bind(session)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn confirm_unsubscribe(
+        &self,
+        session: &str,
+        runtime: &CodexRuntime,
+        thread: &str,
+    ) -> Result<()> {
+        let response = runtime
+            .connection()
+            .await?
+            .call("thread/unsubscribe", json!({"threadId":thread}))
+            .await?;
+        runtime.current_guard().await?;
+        if !unsubscribe_confirmed(&response) {
+            return Err(Error::ControlUnknown(
+                "Codex returned an invalid unsubscribe postcondition".into(),
+            ));
+        }
+        runtime
+            .set_subscription(session, SubscriptionState::ExitPending)
+            .await;
+        Ok(())
+    }
+
+    async fn persist_confirmed_exit(&self, session: &str) -> Result<()> {
+        self.exited(session).await?;
+        self.set_exit_pending(session, false).await
+    }
+
+    pub(super) async fn reconcile_pending_exit(
+        &self,
+        session: &str,
+        runtime: &CodexRuntime,
+        thread: &str,
+    ) -> Result<()> {
+        let _operation = runtime.lock_session(session).await;
+        if runtime.subscription(session).await != Some(SubscriptionState::ExitPending) {
+            self.confirm_unsubscribe(session, runtime, thread).await?;
+        }
+        self.persist_confirmed_exit(session).await
+    }
+
+    pub(super) async fn subscribe(
+        &self,
+        session: &str,
+        runtime: &CodexRuntime,
+        thread_id: &str,
+    ) -> Result<()> {
+        runtime
+            .set_subscription(session, SubscriptionState::Reconciling)
+            .await;
+        let connection = runtime.connection().await?;
+        let result = connection
+            .call(
+                "thread/resume",
+                self.resume_params(session, thread_id).await?,
+            )
+            .await?;
+        runtime.current_guard().await?;
+        if string(&result["thread"], "id")? != thread_id {
+            return Err(Error::ControlUnknown(
+                "Codex resumed a different thread".into(),
+            ));
+        }
+        self.bind(session, runtime, &result["thread"]).await?;
+        self.model_snapshot(session, runtime, &result).await?;
+        let turns = self.turns(&connection, thread_id).await?;
+        self.reconcile_turns(session, runtime, &turns).await?;
+        self.ready(session, runtime, &result["thread"]).await?;
+        runtime
+            .set_subscription(session, SubscriptionState::Available)
+            .await;
+        self.event_ingest.control_available(session);
         Ok(())
     }
 
@@ -420,32 +360,49 @@ impl CodexService {
         runtime: &CodexRuntime,
     ) -> Result<()> {
         target.validate(&self.pool).await?;
-        if target.instance()? != runtime.instance_id {
-            return Err(Error::StateConflict(
-                "Codex runtime requires reconciliation before control".into(),
-            ));
-        }
-        let confirmed: bool = sqlx::query_scalar("SELECT COALESCE(json_extract(adapter_details,'$.codex.connection')='available' AND json_extract(adapter_details,'$.codex.connection_id')=?,FALSE) FROM runtime_bindings WHERE session_id=?")
-            .bind(&runtime.connection_id).bind(&target.session_id).fetch_one(&self.pool).await?;
-        if !confirmed {
+        runtime.current_guard().await?;
+        if runtime.subscription(&target.session_id).await != Some(SubscriptionState::Available) {
             return Err(Error::CapabilityUnavailable(
-                "Codex control awaits thread subscription and state reconciliation".into(),
+                "Codex control awaits thread subscription and snapshot reconciliation".into(),
             ));
         }
         Ok(())
     }
 
-    pub(super) async fn connection_state(
-        &self,
-        session_id: &str,
-        runtime: &CodexRuntime,
-        state: &str,
-    ) -> Result<()> {
-        let _current = runtime.registered_guard().await?;
-        sqlx::query("UPDATE runtime_bindings SET adapter_details=json_set(adapter_details,'$.codex.connection',?) WHERE session_id=? AND runtime_instance_id=? AND json_extract(adapter_details,'$.codex.connection_id')=?")
-            .bind(state).bind(session_id).bind(&runtime.instance_id).bind(&runtime.connection_id).execute(&self.pool).await?;
-        Ok(())
+    async fn session_accepts_control(&self, session: &str) -> Result<bool> {
+        let state: String = sqlx::query_scalar("SELECT state FROM sessions WHERE session_id=?")
+            .bind(session)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(matches!(state.as_str(), "idle" | "busy"))
     }
+
+    async fn binding(&self, session: &str) -> Result<pontia_application::AgentBinding> {
+        AgentBindingService::new(self.pool.clone())
+            .binding_for_session(session)
+            .await?
+            .ok_or_else(|| Error::StateConflict("Codex thread binding is missing".into()))
+    }
+
+    async fn exited(&self, session: &str) -> Result<()> {
+        self.event_ingest
+            .report_client_fact(
+                session,
+                None,
+                EventType::SessionExited,
+                json!({"reason":"thread_unsubscribed"}),
+            )
+            .await
+    }
+}
+
+fn unsubscribe_confirmed(value: &Value) -> bool {
+    let status = value
+        .as_str()
+        .or_else(|| value.get("status").and_then(Value::as_str))
+        .or_else(|| value.get("subscriptionStatus").and_then(Value::as_str))
+        .or_else(|| value.get("type").and_then(Value::as_str));
+    matches!(status, Some("unsubscribed" | "notSubscribed" | "notLoaded"))
 }
 
 pub(super) fn string<'a>(value: &'a Value, field: &str) -> Result<&'a str> {

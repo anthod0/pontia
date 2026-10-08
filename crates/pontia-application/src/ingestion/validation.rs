@@ -22,17 +22,20 @@ impl InternalEventValidationService {
 
     pub fn validate(&self, event: &DomainEvent) -> Result<()> {
         if event.event_type == EventType::SessionReady && event.source == EventSource::AgentClient {
+            let spec = self.clients.spec(&event.client_type);
             let runtime_id = event
                 .payload
                 .get("runtime_id")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            if runtime_id.trim().is_empty() {
+            if spec.is_none_or(|spec| spec.adapter.runtime_binding.requires_session_runtime())
+                && runtime_id.trim().is_empty()
+            {
                 return Err(Error::Domain(
                     "session.ready from agent_client requires payload.runtime_id".to_string(),
                 ));
             }
-            if self.clients.spec(&event.client_type).is_some_and(|spec| {
+            if spec.is_some_and(|spec| {
                 spec.adapter.client_session_identity
                     == crate::client_contract::ClientSessionIdentityBehavior::RequiredOnReady
             }) {

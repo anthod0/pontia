@@ -118,6 +118,27 @@ async fn migration_preserves_sessions_native_identity_history_and_runtime_refere
         .unwrap(),
         1
     );
+
+    sqlx::raw_sql(include_str!(
+        "../migrations/0029_remove_codex_tui_bindings.sql"
+    ))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let legacy_table_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='codex_tui_bindings')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(!legacy_table_exists);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sessions WHERE session_id='codex'")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
 }
 
 #[tokio::test]

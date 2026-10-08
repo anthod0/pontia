@@ -16,28 +16,6 @@ impl CodexService {
     }
 }
 
-/// A TUI may resume any thread, including a legacy Profile binding. Resolve the
-/// target identity for each request rather than inheriting the TUI owner's Profile.
-pub(crate) async fn guard_tui_request(
-    profiles: &AgentProfileService,
-    request: &mut Value,
-) -> Result<()> {
-    if !matches!(
-        request["method"].as_str(),
-        Some("thread/resume" | "turn/start" | "turn/steer")
-    ) {
-        return Ok(());
-    }
-    let Some(thread) = request["params"]["threadId"].as_str() else {
-        return Ok(());
-    };
-    let profile = profiles.codex_profile_for_thread(thread).await?;
-    if request["method"] == "thread/resume" {
-        apply_profile(&mut request["params"], profile.as_ref())?;
-    }
-    Ok(())
-}
-
 pub(super) fn apply_profile(
     params: &mut Value,
     profile: Option<&CodexProfileBinding>,

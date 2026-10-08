@@ -83,7 +83,11 @@ impl EventReportNormalizer {
             fact.data = data.normalize_payload(fact.fact_type, fact.data)?;
         }
         let native_turn_id = if has_native_turn {
-            Some(crate::turns::native_turn_identity(&self.pool, &fact).await?)
+            let runtime_bound = self
+                .clients
+                .spec(&session.client_type)
+                .is_some_and(|spec| spec.adapter.runtime_binding.requires_session_runtime());
+            Some(crate::turns::native_turn_identity(&self.pool, &fact, runtime_bound).await?)
         } else {
             None
         };

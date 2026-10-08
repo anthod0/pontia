@@ -23,11 +23,16 @@ impl InboxAssociations {
         message: &str,
         receipt: &InputReceipt,
     ) -> Result<()> {
-        let (Some(native), Some(_)) = (&receipt.native_turn_id, &receipt.runtime_id) else {
+        let Some(native) = &receipt.native_turn_id else {
             return Ok(());
         };
-        sqlx::query("UPDATE inbox_messages SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_turn_id',?) WHERE message_id=? AND session_id=? AND EXISTS (SELECT 1 FROM session_runtimes WHERE session_id=? AND runtime_id=?)")
-            .bind(native).bind(message).bind(session).bind(session).bind(&receipt.runtime_id).execute(&self.pool).await?;
+        if let Some(runtime_id) = &receipt.runtime_id {
+            sqlx::query("UPDATE inbox_messages SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_turn_id',?) WHERE message_id=? AND session_id=? AND EXISTS (SELECT 1 FROM session_runtimes WHERE session_id=? AND runtime_id=?)")
+                .bind(native).bind(message).bind(session).bind(session).bind(runtime_id).execute(&self.pool).await?;
+        } else {
+            sqlx::query("UPDATE inbox_messages SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_turn_id',?) WHERE message_id=? AND session_id=?")
+                .bind(native).bind(message).bind(session).execute(&self.pool).await?;
+        }
         self.link_native_turn(session, native, receipt.runtime_id.as_deref())
             .await
     }

@@ -1,51 +1,21 @@
 use super::{CodexService, string};
-use crate::runtime::{CodexRuntime, protocol::Connection};
-use pontia_application::{
-    EventReportError, ReportedFact,
-    sessions::NativeSessionService,
-    turns::{NativeTurnObservation, NativeTurnService},
-};
-use pontia_core::domain::EventType;
-use pontia_core::{Error, Result};
+use crate::runtime::CodexRuntime;
+use pontia_application::turns::{NativeTurnObservation, NativeTurnService};
+use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 use std::collections::HashSet;
 
 impl CodexService {
-    pub(super) async fn report(
-        &self,
-        session: &str,
-        runtime_instance_id: &str,
-        kind: EventType,
-        mut data: Value,
-    ) -> Result<()> {
-        data["runtime_instance_id"] = json!(runtime_instance_id);
-        self.event_ingest
-            .report_fact(ReportedFact {
-                session_id: session.into(),
-                turn_id: None,
-                fact_type: kind,
-                data,
-            })
-            .await
-            .map_err(|error| match error {
-                EventReportError::InvalidFact(message) => Error::Domain(message),
-                EventReportError::Ingestion(error) => error,
-            })?;
-        Ok(())
-    }
-
     pub(super) async fn ready(
         &self,
         session: &str,
         runtime: &CodexRuntime,
         thread: &Value,
     ) -> Result<()> {
-        let _current = runtime.current_guard().await?;
+        runtime.current_guard().await?;
         if thread["canAcceptDirectInput"].as_bool() != Some(true)
             || !matches!(
                 thread.pointer("/status/type").and_then(Value::as_str),
-                // Native systemError records the last failure; this version still
-                // accepts new input when canAcceptDirectInput explicitly says so.
                 Some("idle" | "active" | "systemError")
             )
         {
@@ -53,16 +23,23 @@ impl CodexService {
                 "Codex thread is not ready to accept input".into(),
             ));
         }
-        NativeSessionService::new(self.pool.clone(), self.event_ingest.clone()).ready(session, &runtime.instance_id, json!({"client_session_key":thread["id"],"launch_cwd":thread["cwd"],"client_session_file":thread["path"]})).await?;
+        if !self.session_accepts_control(session).await? {
+            self.event_ingest.report_client_fact(session, None, EventType::SessionReady,
+                json!({"client_session_key":thread["id"],"launch_cwd":thread["cwd"],"client_session_file":thread["path"]})).await?;
+        }
         Ok(())
     }
 
-    pub(super) async fn turns(&self, connection: &Connection, thread: &str) -> Result<Vec<Value>> {
+    pub(super) async fn turns(
+        &self,
+        connection: &crate::runtime::protocol::Connection,
+        thread: &str,
+    ) -> Result<Vec<Value>> {
         let mut cursor = Value::Null;
         let mut seen = HashSet::new();
         let mut turns = Vec::new();
         loop {
-            let response = connection.call("thread/turns/list",json!({"threadId":thread,"cursor":cursor,"limit":100,"sortDirection":"asc","itemsView":"full"})).await?;
+            let response = connection.call("thread/turns/list", json!({"threadId":thread,"cursor":cursor,"limit":100,"sortDirection":"asc","itemsView":"full"})).await?;
             let page = response["data"]
                 .as_array()
                 .ok_or_else(|| Error::Domain("Codex turns/list has no data".into()))?;
@@ -86,19 +63,12 @@ impl CodexService {
     ) -> Result<()> {
         let _current = runtime.current_guard().await?;
         for turn in turns {
-            self.turn_fact(session, &runtime.instance_id, turn, "snapshot")
-                .await?;
+            self.turn_fact(session, turn, "snapshot").await?;
         }
         Ok(())
     }
 
-    pub(super) async fn turn_fact(
-        &self,
-        session: &str,
-        runtime_instance_id: &str,
-        turn: &Value,
-        origin: &str,
-    ) -> Result<()> {
+    pub(super) async fn turn_fact(&self, session: &str, turn: &Value, origin: &str) -> Result<()> {
         let native_id = string(turn, "id")?;
         let items = turn["items"].as_array().cloned().unwrap_or_default();
         let input = items
@@ -112,7 +82,7 @@ impl CodexService {
                     .collect::<Vec<_>>()
                     .join("\n")
             });
-        let kind = match turn["status"].as_str() {
+        let terminal = match turn["status"].as_str() {
             Some("completed") => Ok(Some(EventType::TurnCompleted)),
             Some("failed") => Ok(Some(EventType::TurnFailed)),
             Some("interrupted") => Ok(Some(EventType::TurnInterrupted)),
@@ -132,12 +102,12 @@ impl CodexService {
         NativeTurnService::new(self.pool.clone(), self.event_ingest.clone())
             .observe_turn(
                 session,
-                runtime_instance_id,
+                None,
                 NativeTurnObservation {
                     native_turn_id: native_id.into(),
                     input_summary: bounded(input.as_deref()),
                     output_summary: bounded(final_message.and_then(|item| item["text"].as_str())),
-                    terminal: kind,
+                    terminal,
                     started_at: turn["startedAt"].clone(),
                     completed_at: turn["completedAt"].clone(),
                     failure: bounded(turn.pointer("/error/message").and_then(Value::as_str)),
@@ -145,77 +115,6 @@ impl CodexService {
                 },
             )
             .await
-    }
-
-    pub(super) async fn check_archived(
-        &self,
-        session: &str,
-        runtime: &CodexRuntime,
-        thread: &str,
-    ) -> Result<bool> {
-        let connection = runtime.connection().await?;
-        let mut cursor = Value::Null;
-        let mut seen = HashSet::new();
-        loop {
-            let response = connection
-                .call(
-                    "thread/list",
-                    json!({"archived":true,"cursor":cursor,"limit":100,"sourceKinds":[]}),
-                )
-                .await?;
-            if response["data"]
-                .as_array()
-                .is_some_and(|threads| threads.iter().any(|item| item["id"] == thread))
-            {
-                self.archived(session, runtime).await?;
-                return Ok(true);
-            }
-            cursor = response["nextCursor"].clone();
-            if cursor.is_null() {
-                return Ok(false);
-            }
-            if !seen.insert(cursor.to_string()) {
-                return Err(Error::Domain("Codex repeated thread list cursor".into()));
-            }
-        }
-    }
-
-    pub(super) async fn archived(&self, session: &str, runtime: &CodexRuntime) -> Result<()> {
-        let target = pontia_application::runtime::ControlTarget::resolve(
-            &self.pool,
-            session,
-            Some(&runtime.instance_id),
-        )
-        .await?;
-        if let Some(binding) = pontia_application::AgentBindingService::new(self.pool.clone())
-            .binding_for_session(session)
-            .await?
-        {
-            let snapshot = runtime
-                .connection()
-                .await?
-                .call(
-                    "thread/read",
-                    json!({"threadId":binding.client_session_key,"includeTurns":false}),
-                )
-                .await?;
-            self.bind(
-                session,
-                runtime,
-                &snapshot["thread"],
-                target.runtime_instance_id.as_deref(),
-            )
-            .await?;
-            let connection = runtime.connection().await?;
-            let turns = self.turns(&connection, &binding.client_session_key).await?;
-            self.reconcile_turns(session, runtime, &turns).await?;
-        }
-        let _current = runtime.current_guard().await?;
-        NativeSessionService::new(self.pool.clone(), self.event_ingest.clone())
-            .exited(session, &runtime.instance_id, "thread_archived")
-            .await?;
-        drop(_current);
-        self.connection_state(session, runtime, "archived").await
     }
 }
 

@@ -97,10 +97,16 @@ impl ExternalQueryService {
         }
         let repository = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone());
         let runtimes = repository.list(session_id).await?;
-        if runtimes.is_empty() {
+        let entry = self.clients.get(client_type).expect("checked client");
+        if runtimes.is_empty()
+            && entry
+                .spec
+                .adapter
+                .runtime_binding
+                .requires_session_runtime()
+        {
             return Ok(SessionCapabilities::default());
         }
-        let entry = self.clients.get(client_type).expect("checked client");
         let capabilities = entry
             .in_process
             .as_ref()
