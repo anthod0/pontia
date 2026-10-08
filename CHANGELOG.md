@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-08
+
+### Added
+
+- Added automatic stable release updates for Edge deployments.
+- Added explicit runtime lifecycle events and stable session runtime identities across Agent Client integrations.
+- Restored native Codex thread integration and added managed Codex TUI runtime lifecycle support.
+
+### Changed
+
+- Consolidated Public Dashboard device connection bootstrap into a single capability exchange.
+- Updated the Pi extension to use stable session runtimes.
+
+### Fixed
+
+- Closed Codex subscription lifecycle gaps during session and Workflow execution.
+- Waited for workspace loading to settle before showing new-chat onboarding.
+
 ## [0.4.0] - 2026-10-06
 
 ### Added

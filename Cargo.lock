@@ -2203,7 +2203,7 @@ dependencies = [
 
 [[package]]
 name = "pontia"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -2231,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-application"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "ignore",
  "nucleo-matcher",
@@ -2253,7 +2253,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-client-codex"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "futures-util",
  "libc",
@@ -2273,7 +2273,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-client-pi"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "pontia-application",
  "pontia-config",
@@ -2289,7 +2289,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-config"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "pontia-core",
  "serde",
@@ -2300,7 +2300,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-core"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2312,7 +2312,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-e2e"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "bhttp",
  "chacha20poly1305",
@@ -2335,7 +2335,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-edge"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -2368,7 +2368,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-http"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-stream",
  "axum",
@@ -2402,7 +2402,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-runtime"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "libc",
  "pontia-core",
@@ -2415,7 +2415,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-storage-sqlite"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "pontia-core",
  "serde",
@@ -2427,7 +2427,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-tunnel"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -2454,7 +2454,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-update"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek 3.0.0",
@@ -2471,7 +2471,7 @@ dependencies = [
 
 [[package]]
 name = "pontia-workflow"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "pontia-application",
  "pontia-core",
@@ -2490,7 +2490,7 @@ dependencies = [
 
 [[package]]
 name = "pontiad"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "axum",
  "base64 0.22.1",
