@@ -1,6 +1,6 @@
 # Pontia
 
-> **Your device. Your agents. Anywhere.**
+> **Your device. Your agent cloud.**
 
 Pontia is a remote control plane for coding agents. Your agents, development tools, and project files stay on your device while you can view and control agent sessions from a web dashboard wherever you are.
 

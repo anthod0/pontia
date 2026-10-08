@@ -1,0 +1,19 @@
+<svelte:head>
+	<title>Documentation — Pontia</title>
+	<meta name="description" content="Install Pontia and turn your device into an agent cloud you can control from anywhere." />
+</svelte:head>
+
+# Pontia documentation
+
+Pontia turns your device into an agent cloud. Coding agents run with the tools and project files on your device while you monitor and control their sessions from a local or remote dashboard.
+
+## Start here
+
+- [Getting started](/docs/getting-started) — install Pontia, choose your agent integrations, and initialize the local service.
+- [Remote access](/docs/remote-access) — sign in, register your device, and control its agent sessions from the web.
+
+## How Pontia works
+
+Agent execution stays on your device. Pontia runs a local service that manages sessions and serves the local dashboard. When remote access is enabled, the public dashboard connects through an official or self-hosted Edge.
+
+Traffic between the remote dashboard and your device is encrypted end to end. The Edge provides connectivity and relays ciphertext; it does not run your agents or hold your project files.

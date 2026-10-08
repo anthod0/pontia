@@ -1,0 +1,48 @@
+<svelte:head>
+	<title>Remote access — Pontia</title>
+	<meta name="description" content="Connect your Pontia device and control agent sessions remotely." />
+</svelte:head>
+
+# Remote access
+
+Remote access lets you monitor and control agent sessions on your device through the Pontia web dashboard. Agents, development tools, and project files continue to run and remain on that device.
+
+## Enable remote access during setup
+
+`pontia init` asks whether you want to sign in and enable remote access. If you accept, it completes login, registers the device, restarts the local service with the remote configuration, and opens the dashboard for that device.
+
+## Enable remote access later
+
+First, sign in:
+
+```sh
+pontia login
+```
+
+Pontia prints a verification address and a one-time code. Open the address in a browser, sign in with Google or GitHub, and approve the code. The CLI stores the resulting credential under your Pontia home directory.
+
+Then register the current device:
+
+```sh
+pontia remote enable
+```
+
+Choose an available Edge and confirm the device name when prompted. Pontia generates the device identity used for end-to-end encrypted access and updates the running service when needed.
+
+Open [app.pontia.dev](https://app.pontia.dev) to access your registered device.
+
+## Security model
+
+The browser and your device establish an end-to-end encrypted session. The Edge carries the connection and relays ciphertext, while Pontia Cloud manages login, device registration, and access authorization.
+
+Agent execution and project files remain on your device. Enabling remote access does not move the execution environment into Pontia Cloud.
+
+## Disable remote access
+
+To unregister the current device and disable its remote access:
+
+```sh
+pontia remote disable
+```
+
+Local access remains available after remote access is disabled.

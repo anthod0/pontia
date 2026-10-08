@@ -35,11 +35,6 @@
 			>
 		</form>
 	</div>
-	<p class="hint">
-		New here? Your account is created when you first sign in. If both providers
-		share a verified email, you can verify the existing sign-in method and link
-		them.
-	</p>
 	{#if data.hasCredential}
 		<form method="POST" action="/api/auth/logout">
 			<Button type="submit" class="button button-secondary">Sign out</Button>
@@ -50,8 +45,5 @@
 <style>
 	.providers {
 		margin-block: 28px;
-	}
-	.hint {
-		font-size: 12px !important;
 	}
 </style>

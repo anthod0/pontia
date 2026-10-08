@@ -1,0 +1,57 @@
+<svelte:head>
+	<title>Getting started — Pontia</title>
+	<meta name="description" content="Install Pontia and initialize your local agent cloud." />
+</svelte:head>
+
+# Getting started
+
+Install Pontia, select the coding agent integrations you use, and initialize the local service.
+
+## Requirements
+
+The release installer currently supports **x86_64 and ARM64 Linux** systems. Managed service lifecycle commands require a running systemd user service manager.
+
+The installer requires `curl`, `grep`, `install`, `jq`, `mktemp`, `mv`, `openssl`, `rm`, `sha256sum`, `tar`, and `uname`.
+
+Install the clients you plan to use before initialization:
+
+- **pi:** install the `pi` CLI and `tmux`.
+- **Codex:** install the `codex` CLI. Automatic Codex startup requires Linux and systemd.
+
+## Install Pontia
+
+Run the signed release installer:
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | sh
+```
+
+The installer places `pontia` and `pontiad` in `$HOME/.local/bin` by default. Make sure that directory is included in your `PATH`.
+
+## Initialize your device
+
+Run the interactive initializer:
+
+```sh
+pontia init
+```
+
+The initializer lets you:
+
+1. Select the pi integration, Codex integration, or both.
+2. Choose the workspace roots Pontia can display.
+3. Generate the local dashboard credential.
+4. Start the Pontia background service.
+5. Sign in and enable remote access, or continue with local access only.
+
+When setup completes, Pontia opens the appropriate dashboard. If you skip remote access, you can enable it later.
+
+## Check the service
+
+```sh
+pontia status
+```
+
+Use `pontia down` to stop the service and `pontia up` to start it again.
+
+Next, learn how to [enable remote access](/docs/remote-access).
