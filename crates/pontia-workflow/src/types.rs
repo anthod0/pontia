@@ -88,7 +88,7 @@ pub struct RunWorkflowOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubmitWorkflowNodeRequest {
     pub session_id: String,
-    pub runtime_id: String,
+    pub runtime_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

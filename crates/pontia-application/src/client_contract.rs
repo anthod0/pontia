@@ -6,7 +6,9 @@ pub use channel::{ClientControlChannel, ClientControlOperation};
 pub use data::{
     BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, NativeEventEvidence,
 };
-pub use session::{ClientOperation, ClientSession, ClientSessionDetails, InProcessClient};
+pub use session::{
+    ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails, InProcessClient,
+};
 #[cfg(any(test, feature = "generic-test-client"))]
 mod generic_test;
 pub mod raw_transcripts;

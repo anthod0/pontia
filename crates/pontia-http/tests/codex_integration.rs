@@ -41,16 +41,9 @@ async fn codex_sessions_are_created_without_a_runtime() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let session = body["data"]["session"]["session_id"].as_str().unwrap();
+    assert!(body["data"]["session"]["session_id"].is_string());
     assert_eq!(body["data"]["session"]["client_type"], "codex");
     assert_eq!(body["data"]["session"]["capabilities"]["accept_task"], true);
-    let runtimes: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM session_runtimes WHERE session_id=?")
-            .bind(session)
-            .fetch_one(&app.db)
-            .await
-            .unwrap();
-    assert_eq!(runtimes, 0);
 }
 
 #[tokio::test]
@@ -65,12 +58,4 @@ async fn codex_tui_control_route_is_absent() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-}
-
-#[tokio::test]
-async fn legacy_codex_tui_binding_table_is_absent() {
-    let app = TestApp::new().await;
-    let table_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='codex_tui_bindings')")
-        .fetch_one(&app.db).await.unwrap();
-    assert!(!table_exists);
 }

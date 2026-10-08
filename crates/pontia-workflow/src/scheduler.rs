@@ -233,7 +233,7 @@ where
         }
         if let Err(error) = self
             .exits
-            .ensure_current_runtime(&request.session_id, &request.runtime_id)
+            .ensure_control_target(&request.session_id, request.runtime_id.as_deref())
             .await
         {
             if is_runtime_control_unavailable(&error) {
@@ -267,9 +267,9 @@ where
             });
         }
         self.repository
-            .record_node_submission(
+            .record_node_submission_for_target(
                 &node.node_id,
-                &request.runtime_id,
+                request.runtime_id.as_deref(),
                 &Uuid::now_v7().to_string(),
             )
             .await?;

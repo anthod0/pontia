@@ -9,7 +9,11 @@ use serde_json::json;
 
 use super::SessionCommandService;
 use crate::ControlCommandOutcome;
-use crate::{PontiaEvent, PontiaEventSource, PontiaEventType, get_workspace_record};
+use crate::{
+    PontiaEvent, PontiaEventSource, PontiaEventType, client_contract::ClientExitOutcome,
+    get_workspace_record,
+};
+use pontia_core::domain::EventType;
 
 impl SessionCommandService {
     pub async fn open_client_interface(&self, session_id: &str) -> Result<()> {
@@ -26,14 +30,22 @@ impl SessionCommandService {
     }
 
     pub async fn ensure_current_runtime(&self, session_id: &str, runtime_id: &str) -> Result<()> {
+        self.ensure_control_target(session_id, Some(runtime_id))
+            .await
+    }
+
+    pub async fn ensure_control_target(
+        &self,
+        session_id: &str,
+        runtime_id: Option<&str>,
+    ) -> Result<()> {
         let session = self
             .queries
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
         let target =
-            crate::runtime::ControlTarget::resolve(&self.pool, session_id, Some(runtime_id))
-                .await?;
+            crate::runtime::ControlTarget::resolve(&self.pool, session_id, runtime_id).await?;
         self.clients
             .for_client(&session.client_type)?
             .ensure_exit_available(&target)
@@ -58,11 +70,22 @@ impl SessionCommandService {
             crate::runtime::ControlTarget::resolve(&self.pool, session_id, expected_runtime)
                 .await?;
         if !matches!(session.state.as_str(), "exited" | "error") {
-            self.clients
+            let outcome = self
+                .clients
                 .for_client(&session.client_type)?
                 .exit(&target)
                 .await
                 .into_result()?;
+            if let ClientExitOutcome::Confirmed { reason } = outcome {
+                self.event_ingest
+                    .report_client_fact(
+                        session_id,
+                        None,
+                        EventType::SessionExited,
+                        json!({"reason":reason}),
+                    )
+                    .await?;
+            }
         }
         Ok(ControlCommandOutcome {
             data: json!({"session":query.get_session(session_id).await?}),

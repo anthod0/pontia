@@ -50,7 +50,7 @@ struct WorkflowRunNode {
 #[serde(deny_unknown_fields)]
 pub struct WorkflowSubmissionRequest {
     session_id: String,
-    runtime_id: String,
+    runtime_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

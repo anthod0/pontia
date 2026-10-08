@@ -25,14 +25,13 @@ impl CodexObserver {
             .bind(root.display().to_string())
             .execute(&self.service.pool)
             .await?;
+        sqlx::query("UPDATE sessions SET metadata=json_set(metadata,'$.codex_launch_cwd',COALESCE(workspace_ref,(SELECT launch_cwd FROM agent_bindings WHERE agent_bindings.session_id=sessions.session_id),(SELECT json_extract(payload,'$.workspace') FROM events WHERE events.session_id=sessions.session_id AND event_type='session.created' LIMIT 1))) WHERE client_type='codex' AND json_extract(metadata,'$.codex_launch_cwd') IS NULL AND COALESCE(workspace_ref,(SELECT launch_cwd FROM agent_bindings WHERE agent_bindings.session_id=sessions.session_id),(SELECT json_extract(payload,'$.workspace') FROM events WHERE events.session_id=sessions.session_id AND event_type='session.created' LIMIT 1)) IS NOT NULL")
+            .execute(&self.service.pool)
+            .await?;
         Ok(())
     }
 
     pub async fn run(self, mut shutdown: watch::Receiver<bool>) {
-        if let Err(error) = self.prepare().await {
-            tracing::warn!(%error, "Codex Session migration preparation failed");
-            return;
-        }
         loop {
             if *shutdown.borrow() {
                 break;
@@ -86,18 +85,12 @@ impl CodexObserver {
                     for session in unbound {
                         self.service.event_ingest.control_available(&session);
                     }
-                    let bindings: Vec<(String,String,bool)> = sqlx::query_as("SELECT a.session_id,a.client_session_key,COALESCE(json_extract(s.metadata,'$.codex_exit_pending'),0) FROM agent_bindings a JOIN sessions s USING(session_id) WHERE a.client_type='codex' AND s.state<>'exited'")
+                    let bindings: Vec<(String,String)> = sqlx::query_as("SELECT a.session_id,a.client_session_key FROM agent_bindings a JOIN sessions s USING(session_id) WHERE a.client_type='codex' AND s.state<>'exited'")
                         .fetch_all(&self.service.pool).await?;
-                    for (session, thread, exit_pending) in bindings {
+                    for (session, thread) in bindings {
                         threads.insert(thread.clone(), session.clone());
-                        if exit_pending {
-                            if let Err(error) = self.service.reconcile_pending_exit(&session, &runtime, &thread).await {
-                                if !connection.is_connected() { return Err(error); }
-                                tracing::warn!(%session, %error, "Codex unsubscribe reconciliation failed");
-                            }
-                            continue;
-                        }
-                        if runtime.subscription(&session).await == Some(SubscriptionState::Available) { continue; }
+                        if CodexService::has_confirmed_unsubscribe(&session).await { continue; }
+                        if matches!(runtime.subscription(&session).await, Some(SubscriptionState::Available | SubscriptionState::ExitPending)) { continue; }
                         let _operation = runtime.lock_session(&session).await;
                         if let Err(error) = self.service.subscribe(&session, &runtime, &thread).await {
                             runtime.clear_subscription(&session).await;
@@ -107,7 +100,10 @@ impl CodexObserver {
                     }
                     let exited: Vec<String> = sqlx::query_scalar("SELECT session_id FROM sessions WHERE client_type='codex' AND state='exited'")
                         .fetch_all(&self.service.pool).await?;
-                    for session in exited { runtime.clear_subscription(&session).await; }
+                    for session in exited {
+                        runtime.clear_subscription(&session).await;
+                        CodexService::clear_confirmed_unsubscribe(&session).await;
+                    }
                 }
                 event = events.recv() => {
                     let event = match event {
@@ -127,7 +123,7 @@ impl CodexObserver {
                             None => continue,
                         },
                     };
-                    if runtime.subscription(&session).await != Some(SubscriptionState::Available) { continue; }
+                    if !matches!(runtime.subscription(&session).await, Some(SubscriptionState::Available | SubscriptionState::Reconciling)) { continue; }
                     match event["method"].as_str() {
                         Some("thread/settings/updated") => {
                             let _current = runtime.current_guard().await?;

@@ -101,6 +101,37 @@ impl GracefulExitRequester for RecordingExitRequester {
     }
 }
 
+#[derive(Clone, Default)]
+struct SharedBackendExitRequester;
+
+impl GracefulExitRequester for SharedBackendExitRequester {
+    async fn ensure_current_runtime(
+        &self,
+        _session_id: &str,
+        _runtime_id: &str,
+    ) -> pontia_workflow::Result<()> {
+        panic!("shared-backend control must not require a runtime")
+    }
+
+    async fn ensure_control_target(
+        &self,
+        session_id: &str,
+        runtime_id: Option<&str>,
+    ) -> pontia_workflow::Result<()> {
+        assert_eq!(session_id, "session_submit");
+        assert!(runtime_id.is_none());
+        Ok(())
+    }
+
+    async fn request_graceful_exit(
+        &self,
+        _session_id: &str,
+        _runtime_id: &str,
+    ) -> pontia_workflow::Result<()> {
+        panic!("unexpected exit request")
+    }
+}
+
 impl TurnInterruptionRequester for RecordingExitRequester {
     async fn request_turn_interruption(
         &self,
@@ -311,7 +342,7 @@ async fn submission_accepts_the_output_file_and_waits_for_confirmed_session_exit
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_submit".to_string(),
-            runtime_id: "rtinst_submit".to_string(),
+            runtime_id: Some("rtinst_submit".to_string()),
         })
         .await
         .expect("submit output");
@@ -489,6 +520,43 @@ async fn submission_accepts_the_output_file_and_waits_for_confirmed_session_exit
 }
 
 #[tokio::test]
+async fn shared_backend_submission_does_not_require_a_runtime_identity() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let pool = test_pool(&temp.path().join("shared-backend.db")).await;
+    let repository = SqliteWorkflowRepository::new(pool.clone());
+    seed_running_single_node(&repository, "wf_submit", "node_submit").await;
+    let sessions = BoundSessionCreator {
+        pool: pool.clone(),
+        session_id: "session_submit".to_string(),
+        runtime_id: "unused-runtime".to_string(),
+    };
+    let scheduler = WorkflowScheduler::with_services(
+        pool,
+        sessions,
+        SharedBackendExitRequester,
+        temp.path().join("pontia-home"),
+    );
+    scheduler.start("wf_submit").await.expect("start workflow");
+    write_output(&temp.path().join("pontia-home"), "wf_submit", "result");
+
+    scheduler
+        .submit(SubmitWorkflowNodeRequest {
+            session_id: "session_submit".to_string(),
+            runtime_id: None,
+        })
+        .await
+        .expect("submit without runtime");
+
+    let node = repository
+        .get_node("node_submit")
+        .await
+        .expect("load node")
+        .expect("node exists");
+    assert!(node.submitted_at.is_some());
+    assert!(node.submitted_runtime_id.is_none());
+}
+
+#[tokio::test]
 async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownership() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("reject.db")).await;
@@ -516,7 +584,7 @@ async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownershi
         let error = scheduler
             .submit(SubmitWorkflowNodeRequest {
                 session_id: session_id.to_string(),
-                runtime_id: runtime_id.to_string(),
+                runtime_id: Some(runtime_id.to_string()),
             })
             .await
             .expect_err("invalid submission must fail");
@@ -541,7 +609,7 @@ async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownershi
     let error = scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_submit".to_string(),
-            runtime_id: "rtinst_submit".to_string(),
+            runtime_id: Some("rtinst_submit".to_string()),
         })
         .await
         .expect_err("duplicate output ownership must fail");
@@ -606,7 +674,7 @@ async fn submission_rejects_a_node_whose_workflow_is_not_running() {
     let error = scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_submit".to_string(),
-            runtime_id: "rtinst_submit".to_string(),
+            runtime_id: Some("rtinst_submit".to_string()),
         })
         .await
         .expect_err("pending workflow submission must fail");

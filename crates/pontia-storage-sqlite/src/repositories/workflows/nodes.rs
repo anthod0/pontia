@@ -143,6 +143,16 @@ impl SqliteWorkflowRepository {
         runtime_id: &str,
         event_id: &str,
     ) -> Result<()> {
+        self.record_node_submission_for_target(node_id, Some(runtime_id), event_id)
+            .await
+    }
+
+    pub async fn record_node_submission_for_target(
+        &self,
+        node_id: &str,
+        runtime_id: Option<&str>,
+        event_id: &str,
+    ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
         let context: Option<(String, Option<String>, Option<String>)> = sqlx::query_as(
             r#"SELECT n.workflow_id, n.session_id, s.current_turn_id
@@ -162,7 +172,7 @@ impl SqliteWorkflowRepository {
                  AND NOT EXISTS (
                      SELECT 1 FROM workflow_recoveries r WHERE r.node_id=workflow_nodes.node_id AND r.runtime_id IS NOT NULL
                      AND r.rowid=(SELECT MAX(rowid) FROM workflow_recoveries WHERE node_id=r.node_id AND runtime_id IS NOT NULL)
-                     AND r.runtime_id<>?
+                     AND (? IS NULL OR r.runtime_id<>?)
                  )
                  AND NOT EXISTS (
                      SELECT 1 FROM sessions
@@ -180,6 +190,7 @@ impl SqliteWorkflowRepository {
         )
         .bind(runtime_id)
         .bind(node_id)
+        .bind(runtime_id)
         .bind(runtime_id)
         .execute(&mut *tx)
         .await?;
@@ -220,12 +231,16 @@ impl SqliteWorkflowRepository {
         Ok(())
     }
 
-    pub async fn claim_node_exit_request(&self, node_id: &str, runtime_id: &str) -> Result<bool> {
+    pub async fn claim_node_exit_request(
+        &self,
+        node_id: &str,
+        runtime_id: Option<&str>,
+    ) -> Result<bool> {
         let result = sqlx::query(
             r#"UPDATE workflow_nodes
                SET exit_request_started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                WHERE node_id = ?
-                 AND submitted_runtime_id = ?
+                 AND submitted_runtime_id IS ?
                  AND exit_request_started_at IS NULL
                  AND EXISTS (
                      SELECT 1 FROM workflows

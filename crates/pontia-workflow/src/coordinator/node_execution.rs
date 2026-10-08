@@ -52,18 +52,13 @@ where
                         runtime_id.as_deref(),
                     )
                     .await?;
-                if terminal != AgentTerminal::SessionExited {
-                    if let Some(runtime_id) = runtime_id {
-                        if let Err(error) = self
-                            .exits
-                            .request_graceful_exit(session_id, &runtime_id)
-                            .await
-                        {
-                            tracing::warn!(workflow_id = %workflow.workflow_id, node_id = %node.node_id, session_id, %error, "failed to request graceful Session cleanup");
-                        }
-                    } else {
-                        tracing::warn!(workflow_id = %workflow.workflow_id, node_id = %node.node_id, session_id, "cannot request graceful Session cleanup because the Agent fact has no runtime binding identity");
-                    }
+                if terminal != AgentTerminal::SessionExited
+                    && let Err(error) = self
+                        .exits
+                        .request_graceful_session_exit(session_id, runtime_id.as_deref())
+                        .await
+                {
+                    tracing::warn!(workflow_id = %workflow.workflow_id, node_id = %node.node_id, session_id, %error, "failed to request graceful Session cleanup");
                 }
             }
         }
@@ -131,10 +126,7 @@ where
         }
 
         if terminal != AgentTerminal::SessionExited {
-            let Some(submitted_runtime_id) = node.submitted_runtime_id.as_deref() else {
-                tracing::error!(workflow_id, node_id = %node.node_id, "submitted Workflow Agent Node has no fenced runtime identity");
-                return Ok(());
-            };
+            let submitted_runtime_id = node.submitted_runtime_id.as_deref();
             if !self
                 .repository
                 .claim_node_exit_request(&node.node_id, submitted_runtime_id)
@@ -144,7 +136,7 @@ where
             }
             if let Err(error) = self
                 .exits
-                .request_graceful_exit(session_id, submitted_runtime_id)
+                .request_graceful_session_exit(session_id, submitted_runtime_id)
                 .await
             {
                 let failure_message = format!(

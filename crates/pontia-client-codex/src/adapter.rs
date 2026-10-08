@@ -9,8 +9,8 @@ use pontia_application::client_contract::{
 use pontia_application::{
     EventIngestService,
     clients::{
-        BranchTargetRequest, ClientData, ClientOperation, ClientRegistration, ClientSession,
-        ClientSessionDetails, NativeEventEvidence,
+        BranchTargetRequest, ClientData, ClientExitOutcome, ClientOperation, ClientRegistration,
+        ClientSession, ClientSessionDetails, NativeEventEvidence,
     },
     control::InputReceipt,
     runtime::ControlTarget,
@@ -132,7 +132,7 @@ impl ClientSession for CodexClient {
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-    ) -> ClientOperation<'a, ()> {
+    ) -> ClientOperation<'a, ClientExitOutcome> {
         Box::pin(async move { CodexService::new(events).unsubscribe(target).await })
     }
     fn resume<'a>(

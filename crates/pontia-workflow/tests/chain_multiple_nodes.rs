@@ -355,7 +355,7 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_research".to_string(),
-            runtime_id: "runtime_session_research".to_string(),
+            runtime_id: Some("runtime_session_research".to_string()),
         })
         .await
         .expect("submit research");
@@ -389,7 +389,7 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_draft".to_string(),
-            runtime_id: "runtime_session_draft".to_string(),
+            runtime_id: Some("runtime_session_draft".to_string()),
         })
         .await
         .expect("submit draft");
@@ -448,7 +448,7 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_review".to_string(),
-            runtime_id: "runtime_session_review".to_string(),
+            runtime_id: Some("runtime_session_review".to_string()),
         })
         .await
         .expect("submit review");
@@ -584,7 +584,7 @@ async fn paused_coordinator_ignores_expected_interrupt_and_defers_downstream_dis
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_paused_root".to_string(),
-            runtime_id: "runtime_session_paused_root".to_string(),
+            runtime_id: Some("runtime_session_paused_root".to_string()),
         })
         .await
         .expect("submit root");
@@ -683,7 +683,7 @@ async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
     scheduler
         .submit(SubmitWorkflowNodeRequest {
             session_id: "session_lagged".to_string(),
-            runtime_id: "runtime_session_lagged".to_string(),
+            runtime_id: Some("runtime_session_lagged".to_string()),
         })
         .await
         .expect("submit output");

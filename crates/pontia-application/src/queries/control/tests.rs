@@ -1,6 +1,6 @@
 use crate::{
     AppState, EventIngestService,
-    client_contract::{ClientOperation, ClientSession, ClientSessionDetails},
+    client_contract::{ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails},
     control::InputReceipt,
     runtime::ControlTarget,
     sessions::SessionModel,
@@ -59,7 +59,11 @@ impl ClientSession for Client {
     ) -> ClientOperation<'a, ()> {
         panic!("unexpected interrupt")
     }
-    fn exit<'a>(&'a self, _: EventIngestService, _: &'a ControlTarget) -> ClientOperation<'a, ()> {
+    fn exit<'a>(
+        &'a self,
+        _: EventIngestService,
+        _: &'a ControlTarget,
+    ) -> ClientOperation<'a, ClientExitOutcome> {
         panic!("unexpected exit")
     }
     fn resume<'a>(

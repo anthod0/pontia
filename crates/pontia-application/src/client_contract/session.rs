@@ -10,6 +10,12 @@ use std::{future::Future, path::Path, pin::Pin};
 
 pub type ClientOperation<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClientExitOutcome {
+    Requested,
+    Confirmed { reason: String },
+}
+
 /// Session operations for clients whose execution lifetime is independent of a local pane.
 pub trait ClientSession: Send + Sync {
     fn provision<'a>(
@@ -36,7 +42,7 @@ pub trait ClientSession: Send + Sync {
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-    ) -> ClientOperation<'a, ()>;
+    ) -> ClientOperation<'a, ClientExitOutcome>;
     fn resume<'a>(
         &'a self,
         events: EventIngestService,

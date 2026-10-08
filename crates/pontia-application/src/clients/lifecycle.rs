@@ -1,5 +1,5 @@
 use super::ClientAdapter;
-use crate::client_contract::TerminateBehavior;
+use crate::client_contract::{ClientExitOutcome, TerminateBehavior};
 use crate::{control::ControlResult, runtime::ControlTarget};
 use pontia_core::{Error, Result};
 use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
@@ -55,7 +55,7 @@ impl ClientAdapter {
         self.start_in_process(root, request, 0).map(Some)
     }
 
-    pub async fn exit(&self, target: &ControlTarget) -> ControlResult<()> {
+    pub async fn exit(&self, target: &ControlTarget) -> ControlResult<ClientExitOutcome> {
         let result = async {
             target.validate(&self.pool.clone()).await?;
             if let Some(client) = self.session_client() {
@@ -65,13 +65,14 @@ impl ClientAdapter {
                 TerminateBehavior::Connected => {
                     self.control
                         .shutdown(&target.session_id, target.instance()?)
-                        .await
+                        .await?;
+                    Ok(ClientExitOutcome::Requested)
                 }
                 TerminateBehavior::RuntimeManager => {
                     if let Some(handle) = &target.runtime_id {
                         GenericRuntimeManager.terminate_session(handle)?;
                     }
-                    Ok(())
+                    Ok(ClientExitOutcome::Requested)
                 }
             }
         }

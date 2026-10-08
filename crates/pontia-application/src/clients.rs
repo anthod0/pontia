@@ -1,7 +1,7 @@
 mod input;
 pub use crate::client_contract::{
-    BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, ClientOperation,
-    ClientSession, ClientSessionDetails, InProcessClient, NativeEventEvidence,
+    BranchTargetRequest, ClientData, ClientExitOutcome, ClientLaunchRequest, ClientLauncher,
+    ClientOperation, ClientSession, ClientSessionDetails, InProcessClient, NativeEventEvidence,
 };
 mod connections;
 pub use connections::ClientControlService;

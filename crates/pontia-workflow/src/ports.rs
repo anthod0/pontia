@@ -43,18 +43,46 @@ impl SessionCreator for SessionCommandService {
     }
 }
 
-pub trait GracefulExitRequester {
+pub trait GracefulExitRequester: Sync {
     fn ensure_current_runtime(
         &self,
         session_id: &str,
         runtime_id: &str,
     ) -> impl Future<Output = Result<()>> + Send;
 
+    fn ensure_control_target(
+        &self,
+        session_id: &str,
+        runtime_id: Option<&str>,
+    ) -> impl Future<Output = Result<()>> + Send {
+        async move {
+            let runtime_id = runtime_id.ok_or_else(|| Error::RuntimeControlUnavailable {
+                session_id: session_id.to_string(),
+                message: "runtime identity is required".into(),
+            })?;
+            self.ensure_current_runtime(session_id, runtime_id).await
+        }
+    }
+
     fn request_graceful_exit(
         &self,
         session_id: &str,
         runtime_id: &str,
     ) -> impl Future<Output = Result<()>> + Send;
+
+    fn request_graceful_session_exit(
+        &self,
+        session_id: &str,
+        runtime_id: Option<&str>,
+    ) -> impl Future<Output = Result<()>> + Send {
+        async move {
+            let runtime_id = runtime_id.ok_or_else(|| Error::RuntimeControlUnavailable {
+                session_id: session_id.to_string(),
+                message: "runtime identity is required".into(),
+            })?;
+            self.request_graceful_exit(session_id, runtime_id).await
+        }
+    }
 }
 
 pub trait TurnInterruptionRequester {
@@ -93,8 +121,36 @@ impl GracefulExitRequester for SessionCommandService {
             })
     }
 
+    async fn ensure_control_target(
+        &self,
+        session_id: &str,
+        runtime_id: Option<&str>,
+    ) -> Result<()> {
+        SessionCommandService::ensure_control_target(self, session_id, runtime_id)
+            .await
+            .map_err(|error| match error {
+                pontia_core::Error::CapabilityUnavailable(message)
+                | pontia_core::Error::NotFound(message) => Error::RuntimeControlUnavailable {
+                    session_id: session_id.to_string(),
+                    message,
+                },
+                error => error.into(),
+            })
+    }
+
     async fn request_graceful_exit(&self, session_id: &str, runtime_id: &str) -> Result<()> {
         self.request_exit(session_id, Some(runtime_id))
+            .await
+            .map(|_| ())
+            .map_err(Into::into)
+    }
+
+    async fn request_graceful_session_exit(
+        &self,
+        session_id: &str,
+        runtime_id: Option<&str>,
+    ) -> Result<()> {
+        self.request_exit(session_id, runtime_id)
             .await
             .map(|_| ())
             .map_err(Into::into)

@@ -5,14 +5,22 @@ pub(crate) mod profile;
 #[cfg(test)]
 mod subscription_tests;
 use crate::runtime::{CodexRuntime, SubscriptionState};
+use pontia_application::client_contract::ClientExitOutcome;
 use pontia_application::{AgentBindingService, UpsertAgentBindingRequest};
-use pontia_core::{Error, Result, domain::EventType};
+use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use std::{
+    collections::HashSet,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
+use tokio::sync::Mutex;
+
+fn confirmed_unsubscribes() -> &'static Mutex<HashSet<String>> {
+    static SESSIONS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    SESSIONS.get_or_init(Default::default)
+}
 
 pub use observer::CodexObserver;
 
@@ -146,10 +154,15 @@ impl CodexService {
                         .await?;
                 }
                 self.model_snapshot(session_id, &runtime, &response).await?;
+                let thread_id = string(&thread, "id")?;
+                let snapshot_turns = self.turns(&connection, thread_id).await?;
+                self.reconcile_turns(session_id, &runtime, &snapshot_turns)
+                    .await?;
+                self.ready(session_id, &runtime, &thread).await?;
                 runtime
                     .set_subscription(session_id, SubscriptionState::Available)
                     .await;
-                self.ready(session_id, &runtime, &thread).await?;
+                self.event_ingest.control_available(session_id);
                 (thread, Vec::new())
             }
         };
@@ -234,7 +247,7 @@ impl CodexService {
     pub(crate) async fn unsubscribe(
         &self,
         target: &pontia_application::runtime::ControlTarget,
-    ) -> Result<()> {
+    ) -> Result<ClientExitOutcome> {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;
         let _operation = runtime.lock_session(session_id).await;
@@ -248,13 +261,15 @@ impl CodexService {
                     "unbound Codex Session still has subscription state".into(),
                 ));
             }
-            self.exited(session_id).await?;
-            return Ok(());
+            return Ok(ClientExitOutcome::Confirmed {
+                reason: "thread_unsubscribed".into(),
+            });
         };
-        self.set_exit_pending(session_id, true).await?;
         self.confirm_unsubscribe(session_id, &runtime, &binding.client_session_key)
             .await?;
-        self.persist_confirmed_exit(session_id).await
+        Ok(ClientExitOutcome::Confirmed {
+            reason: "thread_unsubscribed".into(),
+        })
     }
 
     pub(crate) async fn resume(
@@ -265,18 +280,12 @@ impl CodexService {
         let _operation = runtime.lock_session(&target.session_id).await;
         target.validate(&self.pool).await?;
         let binding = self.binding(&target.session_id).await?;
-        self.set_exit_pending(&target.session_id, false).await?;
+        confirmed_unsubscribes()
+            .lock()
+            .await
+            .remove(&target.session_id);
         self.subscribe(&target.session_id, &runtime, &binding.client_session_key)
             .await
-    }
-
-    async fn set_exit_pending(&self, session: &str, pending: bool) -> Result<()> {
-        sqlx::query("UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_exit_pending',json(?)) WHERE session_id=?")
-            .bind(if pending { "true" } else { "false" })
-            .bind(session)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
     }
 
     async fn confirm_unsubscribe(
@@ -290,7 +299,7 @@ impl CodexService {
             .await?
             .call("thread/unsubscribe", json!({"threadId":thread}))
             .await?;
-        runtime.current_guard().await?;
+        let _current = runtime.current_guard().await?;
         if !unsubscribe_confirmed(&response) {
             return Err(Error::ControlUnknown(
                 "Codex returned an invalid unsubscribe postcondition".into(),
@@ -299,25 +308,19 @@ impl CodexService {
         runtime
             .set_subscription(session, SubscriptionState::ExitPending)
             .await;
+        confirmed_unsubscribes()
+            .lock()
+            .await
+            .insert(session.to_string());
         Ok(())
     }
 
-    async fn persist_confirmed_exit(&self, session: &str) -> Result<()> {
-        self.exited(session).await?;
-        self.set_exit_pending(session, false).await
+    pub(super) async fn has_confirmed_unsubscribe(session: &str) -> bool {
+        confirmed_unsubscribes().lock().await.contains(session)
     }
 
-    pub(super) async fn reconcile_pending_exit(
-        &self,
-        session: &str,
-        runtime: &CodexRuntime,
-        thread: &str,
-    ) -> Result<()> {
-        let _operation = runtime.lock_session(session).await;
-        if runtime.subscription(session).await != Some(SubscriptionState::ExitPending) {
-            self.confirm_unsubscribe(session, runtime, thread).await?;
-        }
-        self.persist_confirmed_exit(session).await
+    pub(super) async fn clear_confirmed_unsubscribe(session: &str) {
+        confirmed_unsubscribes().lock().await.remove(session);
     }
 
     pub(super) async fn subscribe(
@@ -382,17 +385,6 @@ impl CodexService {
             .binding_for_session(session)
             .await?
             .ok_or_else(|| Error::StateConflict("Codex thread binding is missing".into()))
-    }
-
-    async fn exited(&self, session: &str) -> Result<()> {
-        self.event_ingest
-            .report_client_fact(
-                session,
-                None,
-                EventType::SessionExited,
-                json!({"reason":"thread_unsubscribed"}),
-            )
-            .await
     }
 }
 
