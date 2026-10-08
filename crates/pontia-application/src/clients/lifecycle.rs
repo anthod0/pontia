@@ -6,11 +6,18 @@ use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, RuntimeStartRes
 use std::path::Path;
 
 impl ClientAdapter {
-    pub(crate) async fn open_interface(&self, session_id: &str) -> Result<()> {
+    pub(crate) async fn open_interface(
+        &self,
+        root: &Path,
+        session_id: &str,
+        runtime_id: &str,
+    ) -> Result<RuntimeStartResult> {
         let client = self.session_client().ok_or_else(|| {
             Error::CapabilityUnavailable("Client interface is unavailable".into())
         })?;
-        client.open_interface(self.events.clone(), session_id).await
+        client
+            .open_interface(self.events.clone(), root, session_id, runtime_id)
+            .await
     }
 
     fn start_in_process(

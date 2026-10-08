@@ -182,6 +182,7 @@ impl RuntimeObservationService {
                         session_id: session_id.to_string(),
                         client_type: session.client_type,
                         runtime_id,
+                        role: "tui".into(),
                         socket_path,
                         pane_id,
                         process_fingerprint: row.process_fingerprint,
@@ -224,8 +225,12 @@ impl RuntimeObservationService {
             return Ok(());
         }
 
-        self.record_process_exit(binding, "agent_process_fingerprint_missing")
-            .await
+        let reason = if binding.client_type == "codex" {
+            "interface_process_fingerprint_missing"
+        } else {
+            "agent_process_fingerprint_missing"
+        };
+        self.record_process_exit(binding, reason).await
     }
 
     async fn record_process_exit(
@@ -234,15 +239,21 @@ impl RuntimeObservationService {
         reason: &str,
     ) -> Result<()> {
         let _identity_guard = self.control.lock_identity().await;
+        let event_type = if binding.client_type == "codex" {
+            PontiaEventType::RuntimeExited
+        } else {
+            PontiaEventType::SessionExited
+        };
         self.ingest_service()
             .ingest_runtime_observation_event(PontiaEvent::new(
                 binding.session_id,
                 None,
                 PontiaEventSource::RuntimeManager,
                 binding.client_type,
-                PontiaEventType::SessionExited,
+                event_type,
                 json!({
                     "runtime_id": binding.runtime_id,
+                    "role": binding.role,
                     "reason": reason,
                     "process_fingerprint": binding.process_fingerprint,
                 }),

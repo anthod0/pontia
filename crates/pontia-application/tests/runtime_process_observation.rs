@@ -106,6 +106,108 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
 }
 
 #[tokio::test]
+async fn missing_managed_codex_tui_only_exits_the_interface_runtime() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let test_socket = temp.path().join("codex-tui-tmux.sock");
+    let _server = TmuxServer(&test_socket);
+    let tmux_session = format!("pontia_test_codex_tui_observation_{}", std::process::id());
+    let status = Command::new("tmux")
+        .arg("-S")
+        .arg(&test_socket)
+        .args(["new-session", "-d", "-s", &tmux_session, "sleep 60"])
+        .stderr(Stdio::null())
+        .status()
+        .expect("spawn tmux session");
+    assert!(status.success());
+
+    let socket_path = tmux_value(&test_socket, &tmux_session, "#{socket_path}");
+    let pane_id = tmux_value(&test_socket, &tmux_session, "#{pane_id}");
+    let fingerprint = (0..50)
+        .find_map(|_| {
+            let fingerprint = GenericRuntimeManager.capture_tmux_process_fingerprint(
+                &socket_path,
+                &pane_id,
+                &["sleep"],
+            );
+            if fingerprint.is_none() {
+                thread::sleep(Duration::from_millis(20));
+            }
+            fingerprint
+        })
+        .expect("capture sleep fingerprint");
+
+    let database_url = format!(
+        "sqlite://{}?mode=rwc",
+        temp.path().join("codex-tui-test.db").display()
+    );
+    let db = connect_sqlite(&database_url).await.expect("connect");
+    run_migrations(&db).await.expect("migrate");
+    sqlx::query(
+        "INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_codex_tui', 'codex', 'idle')",
+    )
+    .execute(&db)
+    .await
+    .expect("insert session");
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, process_fingerprint, role, state, created_at) VALUES (?, ?, ?, ?, ?, 'interface', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+        .bind("sess_codex_tui")
+        .bind("rtinst_codex_tui")
+        .bind(&socket_path)
+        .bind(&pane_id)
+        .bind(json!(fingerprint).to_string())
+        .execute(&db)
+        .await
+        .expect("insert binding");
+
+    let _ = Command::new("tmux")
+        .arg("-S")
+        .arg(&test_socket)
+        .args(["kill-session", "-t", &tmux_session])
+        .stderr(Stdio::null())
+        .status();
+
+    AppState::builder(db.clone(), temp.path().into())
+        .clients({
+            let mut clients = pontia_application::clients::ClientRegistry::default();
+            static SPEC: pontia_application::client_contract::AgentClientSpec =
+                pontia_application::client_contract::AgentClientSpec {
+                    client_type: "codex",
+                    ..pontia_application::client_contract::TEST_SPEC
+                };
+            let mut entry = pontia_application::client_contract::test_registration();
+            entry.spec = &SPEC;
+            clients.register(entry);
+            clients
+        })
+        .build()
+        .runtime_observer()
+        .sweep_active_tmux_sessions()
+        .await
+        .expect("sweep runtime bindings");
+
+    let runtime_state: String =
+        sqlx::query_scalar("SELECT state FROM session_runtimes WHERE runtime_id = ?")
+            .bind("rtinst_codex_tui")
+            .fetch_one(&db)
+            .await
+            .expect("load runtime state");
+    assert_eq!(runtime_state, "exited");
+    let session_state: String =
+        sqlx::query_scalar("SELECT state FROM sessions WHERE session_id = ?")
+            .bind("sess_codex_tui")
+            .fetch_one(&db)
+            .await
+            .expect("load session state");
+    assert_eq!(session_state, "idle");
+    let event_types: Vec<String> =
+        sqlx::query_scalar("SELECT event_type FROM events WHERE session_id = ? ORDER BY rowid")
+            .bind("sess_codex_tui")
+            .fetch_all(&db)
+            .await
+            .expect("load events");
+    assert_eq!(event_types, vec!["runtime.exited"]);
+}
+
+#[tokio::test]
 async fn active_tmux_session_without_a_fingerprint_remains_unknown() {
     let temp = tempfile::tempdir().expect("tempdir");
     let database_url = format!(

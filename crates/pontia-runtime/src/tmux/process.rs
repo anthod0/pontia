@@ -5,6 +5,7 @@ use std::{
     process::{Command, Stdio},
 };
 
+use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,6 +72,60 @@ pub enum ProcessObservation {
     Unknown,
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) fn terminate_fingerprinted_process(
+    fingerprint: &TmuxProcessFingerprint,
+) -> Result<ProcessObservation> {
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+
+    let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, fingerprint.agent_pid, 0) };
+    if fd < 0 {
+        return match observe_fingerprint(fingerprint) {
+            ProcessObservation::Exited => Ok(ProcessObservation::Exited),
+            _ => Err(std::io::Error::last_os_error().into()),
+        };
+    }
+    let fd = unsafe { OwnedFd::from_raw_fd(fd as i32) };
+    if read_boot_id().ok().as_deref() != Some(fingerprint.boot_id.as_str()) {
+        return Ok(ProcessObservation::Exited);
+    }
+    match observe_process_identity(fingerprint.agent_pid, fingerprint.agent_start_time_ticks) {
+        ProcessObservation::Alive => {}
+        ProcessObservation::Exited => return Ok(ProcessObservation::Exited),
+        ProcessObservation::Unknown => {
+            return Err(Error::ControlUnknown(
+                "TUI process ownership could not be verified".into(),
+            ));
+        }
+    }
+    if unsafe {
+        libc::syscall(
+            libc::SYS_pidfd_send_signal,
+            fd.as_raw_fd(),
+            libc::SIGTERM,
+            std::ptr::null::<libc::siginfo_t>(),
+            0,
+        )
+    } < 0
+    {
+        let error = std::io::Error::last_os_error();
+        return match observe_fingerprint(fingerprint) {
+            ProcessObservation::Exited => Ok(ProcessObservation::Exited),
+            _ => Err(error.into()),
+        };
+    }
+    Ok(ProcessObservation::Alive)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn terminate_fingerprinted_process(
+    _fingerprint: &TmuxProcessFingerprint,
+) -> Result<ProcessObservation> {
+    Err(Error::CapabilityUnavailable(
+        "verified TUI termination requires Linux".into(),
+    ))
+}
+
 pub(crate) fn observe_fingerprint(fingerprint: &TmuxProcessFingerprint) -> ProcessObservation {
     let Ok(boot_id) = read_boot_id() else {
         return ProcessObservation::Unknown;
@@ -78,25 +133,17 @@ pub(crate) fn observe_fingerprint(fingerprint: &TmuxProcessFingerprint) -> Proce
     if boot_id != fingerprint.boot_id {
         return ProcessObservation::Exited;
     }
-    // Reading the confirmed process directly distinguishes ENOENT/PID reuse
-    // from permission errors, incomplete snapshots and unavailable tmux servers.
-    for (pid, expected_ticks) in [
-        (fingerprint.pane_pid, fingerprint.pane_start_time_ticks),
-        (fingerprint.agent_pid, fingerprint.agent_start_time_ticks),
-    ] {
-        let stat = match fs::read_to_string(format!("/proc/{pid}/stat")) {
-            Ok(stat) => stat,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return ProcessObservation::Exited;
-            }
-            Err(_) => return ProcessObservation::Unknown,
-        };
-        let Some((_, ticks, state)) = parse_stat(&stat) else {
-            return ProcessObservation::Unknown;
-        };
-        if ticks != expected_ticks || state == 'Z' {
-            return ProcessObservation::Exited;
-        }
+    // The agent identity owns liveness. Losing the pane while that process still
+    // exists is uncertain ownership, not evidence that the process exited.
+    match observe_process_identity(fingerprint.agent_pid, fingerprint.agent_start_time_ticks) {
+        ProcessObservation::Alive => {}
+        observation => return observation,
+    }
+    if fingerprint.pane_pid != fingerprint.agent_pid
+        && observe_process_identity(fingerprint.pane_pid, fingerprint.pane_start_time_ticks)
+            != ProcessObservation::Alive
+    {
+        return ProcessObservation::Unknown;
     }
     if pane_pid(&fingerprint.tmux_socket_path, &fingerprint.tmux_pane_id)
         != Some(fingerprint.pane_pid)
@@ -110,6 +157,24 @@ pub(crate) fn observe_fingerprint(fingerprint: &TmuxProcessFingerprint) -> Proce
         ProcessObservation::Alive
     } else {
         ProcessObservation::Unknown
+    }
+}
+
+fn observe_process_identity(pid: u32, expected_ticks: u64) -> ProcessObservation {
+    let stat = match fs::read_to_string(format!("/proc/{pid}/stat")) {
+        Ok(stat) => stat,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return ProcessObservation::Exited;
+        }
+        Err(_) => return ProcessObservation::Unknown,
+    };
+    let Some((_, ticks, state)) = parse_stat(&stat) else {
+        return ProcessObservation::Unknown;
+    };
+    if ticks != expected_ticks || state == 'Z' {
+        ProcessObservation::Exited
+    } else {
+        ProcessObservation::Alive
     }
 }
 

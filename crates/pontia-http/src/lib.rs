@@ -225,6 +225,14 @@ fn external_api_router(state: HttpState) -> Router {
             post(api::exit_session),
         )
         .route(
+            "/api/v1/sessions/{session_id}/tui/start",
+            post(api::start_session_tui),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/tui/stop",
+            post(api::stop_session_tui),
+        )
+        .route(
             "/api/v1/sessions/{session_id}/models",
             get(api::list_session_models),
         )

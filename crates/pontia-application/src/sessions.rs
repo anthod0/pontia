@@ -20,6 +20,7 @@ mod models;
 pub use models::{SessionModel, SessionModels, SetSessionModelRequest};
 mod lifecycle;
 mod runtime_binding;
+mod tui;
 
 mod persistence;
 mod validation;
@@ -77,6 +78,7 @@ pub struct SessionCommandService {
     inbox: std::sync::Arc<crate::InboxCommandService>,
     pontia_home: PathBuf,
     control: crate::ClientControlService,
+    tui_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
 
 impl SessionCommandService {
@@ -92,6 +94,7 @@ impl SessionCommandService {
         let control = clients.control_service();
         Self {
             control,
+            tui_gate: std::sync::Arc::default(),
             pool,
             event_ingest,
             queries,

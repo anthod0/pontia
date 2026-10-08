@@ -21,10 +21,10 @@ use pontia_core::{
     Error, Result,
     domain::{DomainEvent, EventType},
 };
-use pontia_runtime::RuntimeStartRequest;
+use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
-use std::{path::Path, sync::Arc};
+use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
 
 pub fn registration() -> ClientRegistration {
     ClientRegistration {
@@ -178,13 +178,95 @@ impl ClientSession for CodexClient {
     }
     fn open_interface<'a>(
         &'a self,
-        _events: EventIngestService,
-        _session: &'a str,
-    ) -> ClientOperation<'a, ()> {
-        Box::pin(async {
-            Err(Error::CapabilityUnavailable(
-                "Codex TUI management is not supported".into(),
-            ))
+        events: EventIngestService,
+        root: &'a Path,
+        session: &'a str,
+        runtime_id: &'a str,
+    ) -> ClientOperation<'a, RuntimeStartResult> {
+        Box::pin(async move {
+            let service = CodexService::new(events);
+            let binding = pontia_application::AgentBindingService::new(service.pool.clone())
+                .binding_for_session(session)
+                .await?
+                .ok_or_else(|| {
+                    Error::StateConflict(
+                        "Send the first message before opening the Codex TUI".into(),
+                    )
+                })?;
+            let codex_runtime = service.runtime(session).await?;
+            let endpoint = format!("unix://{}", codex_runtime.socket_path.display());
+            let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+            let start_command = format!(
+                "exec codex resume --remote {} {}",
+                quote(&endpoint),
+                quote(&binding.client_session_key)
+            );
+            let mut environment = BTreeMap::new();
+            environment.insert(
+                "CODEX_HOME".into(),
+                codex_runtime.codex_home().display().to_string(),
+            );
+            let result = GenericRuntimeManager.start_tmux(
+                root,
+                RuntimeStartRequest {
+                    session_id: session.into(),
+                    runtime_id: Some(runtime_id.into()),
+                    client_type: "codex".into(),
+                    workspace: Some(binding.launch_cwd),
+                    workspace_name: None,
+                    handle: None,
+                    role: Some("interface".into()),
+                    start_command: Some(start_command),
+                    environment,
+                },
+                1,
+                None,
+                &crate::SPEC.launch_options(),
+            )?;
+            let Some(socket) = result.tmux_socket_path() else {
+                let _ = GenericRuntimeManager.terminate_session(&result.runtime_handle);
+                return Err(Error::Domain(
+                    "Codex TUI launch returned no tmux socket".into(),
+                ));
+            };
+            let Some(pane) = result.tmux_pane_id() else {
+                let _ = GenericRuntimeManager.terminate_session(&result.runtime_handle);
+                return Err(Error::Domain(
+                    "Codex TUI launch returned no tmux pane".into(),
+                ));
+            };
+            let fingerprint = match tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    if let Some(fingerprint) = GenericRuntimeManager
+                        .capture_tmux_process_fingerprint(socket, pane, &["codex"])
+                    {
+                        break Ok(fingerprint);
+                    }
+                    if !GenericRuntimeManager.is_tmux_pane_alive(socket, pane) {
+                        break Err(Error::StateConflict(
+                            "Codex TUI exited during startup".into(),
+                        ));
+                    }
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+            })
+            .await
+            {
+                Ok(Ok(fingerprint)) => fingerprint,
+                Ok(Err(error)) => {
+                    let _ = GenericRuntimeManager.terminate_session(&result.runtime_handle);
+                    return Err(error);
+                }
+                Err(_) => {
+                    let _ = GenericRuntimeManager.terminate_session(&result.runtime_handle);
+                    return Err(Error::ControlUnknown(
+                        "Codex TUI process was not observable".into(),
+                    ));
+                }
+            };
+            let mut result = result;
+            result.metadata["tmux_process_fingerprint"] = serde_json::to_value(fingerprint)?;
+            Ok(result)
         })
     }
     fn details<'a>(

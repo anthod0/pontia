@@ -124,6 +124,22 @@ pub async fn interrupt_session(
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 
+pub async fn start_session_tui(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let outcome = state.session_commands().start_tui(&session_id).await?;
+    Ok(ok(outcome.data))
+}
+
+pub async fn stop_session_tui(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let outcome = state.session_commands().stop_tui(&session_id).await?;
+    Ok(ok(outcome.data))
+}
+
 pub async fn exit_session(
     State(state): State<AppState>,
     headers: HeaderMap,

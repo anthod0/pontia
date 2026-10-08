@@ -16,19 +16,6 @@ use crate::{
 use pontia_core::domain::EventType;
 
 impl SessionCommandService {
-    pub async fn open_client_interface(&self, session_id: &str) -> Result<()> {
-        let session = pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository::new(
-            self.pool.clone(),
-        )
-        .get_session(session_id)
-        .await?
-        .ok_or_else(|| Error::NotFound("session not found".into()))?;
-        self.clients
-            .for_client(&session.client_type)?
-            .open_interface(session_id)
-            .await
-    }
-
     pub async fn ensure_current_runtime(&self, session_id: &str, runtime_id: &str) -> Result<()> {
         self.ensure_control_target(session_id, Some(runtime_id))
             .await

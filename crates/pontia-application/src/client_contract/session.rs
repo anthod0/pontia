@@ -63,8 +63,10 @@ pub trait ClientSession: Send + Sync {
     fn open_interface<'a>(
         &'a self,
         events: EventIngestService,
+        root: &'a Path,
         session: &'a str,
-    ) -> ClientOperation<'a, ()>;
+        runtime_id: &'a str,
+    ) -> ClientOperation<'a, pontia_runtime::RuntimeStartResult>;
     fn details<'a>(
         &'a self,
         pool: SqlitePool,

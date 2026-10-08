@@ -47,15 +47,17 @@ async fn codex_sessions_are_created_without_a_runtime() {
 }
 
 #[tokio::test]
-async fn codex_tui_control_route_is_absent() {
+async fn codex_tui_control_routes_address_a_session() {
     let app = TestApp::new().await;
-    let (status, _) = request(
-        &app,
-        Request::post("/api/v1/sessions/session/tui")
-            .header("authorization", "Bearer test-token")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    for action in ["start", "stop"] {
+        let (status, _) = request(
+            &app,
+            Request::post(format!("/api/v1/sessions/missing/tui/{action}"))
+                .header("authorization", "Bearer test-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
 }

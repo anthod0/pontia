@@ -133,6 +133,10 @@ impl CodexRuntime {
         })
     }
 
+    pub fn codex_home(&self) -> &Path {
+        &self.connection.codex_home
+    }
+
     pub async fn connection(&self) -> Result<Arc<Connection>> {
         if !self.connection.is_connected() {
             return Err(protocol::protocol_error(

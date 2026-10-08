@@ -8,7 +8,9 @@ pub(crate) use marker::{clear_pontia_pane_markers, is_reusable_shell_pane, mark_
 pub use pane::{TmuxPaneBinding, pane_binding};
 pub(crate) use pane::{is_pane_alive, kill_pane, run_launch_command_in_pane};
 pub use process::{ProcessObservation, TmuxProcessFingerprint};
-pub(crate) use process::{capture_fingerprint, observe_fingerprint};
+pub(crate) use process::{
+    capture_fingerprint, observe_fingerprint, terminate_fingerprinted_process,
+};
 pub use session::{is_alive, spawn_tmux_session};
 pub(crate) use session::{terminate_session, tmux_session_name};
 

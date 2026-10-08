@@ -35,7 +35,8 @@ pub use response::{ApiError, ApiResponse};
 pub use sessions::{
     archive_session, create_session, exit_session, get_session, interrupt_session,
     list_session_models, list_sessions, pin_session, restart_session, resume_session,
-    set_session_model, unarchive_session, unpin_session, update_session,
+    set_session_model, start_session_tui, stop_session_tui, unarchive_session, unpin_session,
+    update_session,
 };
 pub use tasks::{cancel_task, create_task, get_task, interrupt_task, list_task_events, list_tasks};
 pub use timeline::{get_turn_timeline, get_turn_tree_history, get_turn_tree_updates};

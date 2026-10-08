@@ -28,6 +28,7 @@ pub struct ActiveTmuxProcessBindingRow {
     pub session_id: String,
     pub client_type: String,
     pub runtime_id: String,
+    pub role: String,
     pub socket_path: String,
     pub pane_id: String,
     pub process_fingerprint: Option<String>,
@@ -59,6 +60,25 @@ impl SqliteSessionRuntimeRepository {
                 .fetch_optional(&self.pool)
                 .await?,
         )
+    }
+
+    pub async fn interface_runtime(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<SessionRuntimeRecord>> {
+        let runtimes: Vec<SessionRuntimeRecord> = sqlx::query_as(
+            "SELECT * FROM session_runtimes WHERE session_id = ? AND role = 'interface'",
+        )
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await?;
+        match runtimes.len() {
+            0 => Ok(None),
+            1 => Ok(runtimes.into_iter().next()),
+            _ => Err(Error::StateConflict(
+                "Session has multiple managed interface runtimes".into(),
+            )),
+        }
     }
 
     /// Writes exactly one stable runtime; ownership and creation time cannot change.
@@ -163,10 +183,13 @@ impl SqliteSessionRuntimeRepository {
 
     pub async fn active_tmux_process_bindings(&self) -> Result<Vec<ActiveTmuxProcessBindingRow>> {
         Ok(sqlx::query_as(
-            r#"SELECT s.session_id, s.client_type, r.runtime_id, r.tmux_socket_path AS socket_path,
-            r.tmux_pane_id AS pane_id, r.process_fingerprint FROM sessions s
+            r#"SELECT s.session_id, s.client_type, r.runtime_id, r.role,
+            r.tmux_socket_path AS socket_path, r.tmux_pane_id AS pane_id, r.process_fingerprint
+            FROM sessions s
             JOIN session_runtimes r ON r.session_id = s.session_id
-            WHERE s.client_type = 'pi' AND r.role = 'tui' AND r.state = 'running'
+            WHERE ((s.client_type = 'pi' AND r.role = 'tui' AND r.state = 'running')
+                OR (s.client_type = 'codex' AND r.role = 'interface'
+                    AND r.state IN ('starting', 'running')))
               AND r.tmux_socket_path IS NOT NULL AND r.tmux_pane_id IS NOT NULL"#,
         )
         .fetch_all(&self.pool)

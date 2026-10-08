@@ -171,7 +171,11 @@ impl EventCommitter {
                 },
             });
         }
-        if let Some(fingerprint) = event.payload["process_fingerprint"].as_str() {
+        if matches!(
+            event.event_type,
+            EventType::RuntimeExited | EventType::SessionExited
+        ) && let Some(fingerprint) = event.payload["process_fingerprint"].as_str()
+        {
             let current: Option<String> = sqlx::query_scalar("SELECT process_fingerprint FROM session_runtimes WHERE runtime_id = ? AND session_id = ?")
                 .bind(event.payload["runtime_id"].as_str()).bind(&event.session_id).fetch_optional(&mut *tx).await?.flatten();
             if current.as_deref() != Some(fingerprint) {
@@ -221,6 +225,32 @@ impl EventCommitter {
                 .bind(&event.session_id).fetch_optional(&mut *tx).await?;
             if let Some(existing) = existing {
                 return duplicate_without_effects(&mut tx, event, existing).await;
+            }
+        }
+        if event.event_type == EventType::RuntimeExited {
+            let runtime_id = event.payload["runtime_id"]
+                .as_str()
+                .expect("runtime event shape was validated");
+            let role = event.payload["role"].as_str().unwrap_or("tui");
+            let already_exited: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM session_runtimes WHERE runtime_id=? AND session_id=? AND role=? AND state='exited')",
+            )
+            .bind(runtime_id)
+            .bind(&event.session_id)
+            .bind(role)
+            .fetch_one(&mut *tx)
+            .await?;
+            if already_exited {
+                let existing: Option<String> = sqlx::query_scalar(
+                    "SELECT event_id FROM events WHERE session_id=? AND event_type='runtime.exited' AND json_extract(payload,'$.runtime_id')=? ORDER BY rowid DESC LIMIT 1",
+                )
+                .bind(&event.session_id)
+                .bind(runtime_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+                if let Some(existing) = existing {
+                    return duplicate_without_effects(&mut tx, event, existing).await;
+                }
             }
         }
         let turns = SqliteTurnRepository::load_projection_rows_in_tx(&mut tx, &event.session_id)
@@ -347,23 +377,37 @@ async fn project_runtime_in_tx(
     let runtime_id = event.payload["runtime_id"]
         .as_str()
         .expect("runtime event shape was validated");
+    let role = event.payload["role"].as_str().unwrap_or("tui");
     if matches!(
         event.event_type,
         EventType::RuntimeStarting | EventType::RuntimeReady
     ) {
-        sqlx::query("INSERT INTO session_runtimes(runtime_id, session_id, role, state, created_at) VALUES (?, ?, 'tui', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT(runtime_id) DO NOTHING")
+        sqlx::query("INSERT INTO session_runtimes(runtime_id, session_id, role, state, created_at) VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ON CONFLICT(runtime_id) DO NOTHING")
             .bind(runtime_id)
             .bind(&event.session_id)
+            .bind(role)
             .bind(state)
             .execute(&mut **tx)
             .await?;
     }
     if event.event_type == EventType::RuntimeStarting {
-        sqlx::query("UPDATE session_runtimes SET process_fingerprint=NULL WHERE runtime_id=? AND session_id=?")
-            .bind(runtime_id)
-            .bind(&event.session_id)
-            .execute(&mut **tx)
-            .await?;
+        sqlx::query(
+            r#"UPDATE session_runtimes
+               SET start_command = COALESCE(?, start_command),
+                   tmux_socket_path = COALESCE(?, tmux_socket_path),
+                   tmux_pane_id = COALESCE(?, tmux_pane_id),
+                   process_fingerprint = ?
+               WHERE runtime_id = ? AND session_id = ? AND role = ?"#,
+        )
+        .bind(event.payload["start_command"].as_str())
+        .bind(event.payload["tmux_socket_path"].as_str())
+        .bind(event.payload["tmux_pane_id"].as_str())
+        .bind(event.payload["process_fingerprint"].as_str())
+        .bind(runtime_id)
+        .bind(&event.session_id)
+        .bind(role)
+        .execute(&mut **tx)
+        .await?;
     }
     let allowed_prior_states = match event.event_type {
         EventType::RuntimeReady => " AND state IN ('starting', 'running')",
@@ -371,11 +415,12 @@ async fn project_runtime_in_tx(
         _ => unreachable!(),
     };
     let updated = sqlx::query(&format!(
-        "UPDATE session_runtimes SET state = ? WHERE runtime_id = ? AND session_id = ?{allowed_prior_states}"
+        "UPDATE session_runtimes SET state = ? WHERE runtime_id = ? AND session_id = ? AND role = ?{allowed_prior_states}"
     ))
     .bind(state)
     .bind(runtime_id)
     .bind(&event.session_id)
+    .bind(role)
     .execute(&mut **tx)
     .await?;
     if updated.rows_affected() != 1 {
