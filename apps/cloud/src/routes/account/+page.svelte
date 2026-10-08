@@ -21,6 +21,7 @@
 <AuthLayout>
 	<h1>{data.user.display_name ?? 'Your account'}</h1>
 	<p>Manage the accounts you use to sign in to Pontia.</p>
+	<a class="button dashboard-link" href="https://app.pontia.dev">Open Dashboard</a>
 	{#if message}<p class="auth-error" role="alert">{message}</p>{/if}
 	<ul>
 		{#each providers as provider}
@@ -73,5 +74,8 @@
 	.email {
 		overflow-wrap: anywhere;
 		font-size: 12px !important;
+	}
+	.dashboard-link {
+		margin-top: 28px;
 	}
 </style>

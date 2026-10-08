@@ -1,9 +1,8 @@
 <script lang="ts">
+	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
+	import RocketLaunchIcon from 'phosphor-svelte/lib/RocketLaunchIcon';
 	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
-	import GithubLogoIcon from 'phosphor-svelte/lib/GithubLogoIcon';
-
-	let { repository }: { repository: string } = $props();
 
 	const installCommand = 'curl -fsSL https://get.pontia.dev/install.sh | sh';
 	let copyStatus = $state<'idle' | 'copied' | 'error'>('idle');
@@ -32,8 +31,8 @@
 			{copyStatus === 'copied' ? 'Copied to clipboard.' : copyStatus === 'error' ? 'Could not copy. Select the command above to copy manually.' : ''}
 		</p>
 		<div class="hero-actions">
-			<a class="button" href="/docs/getting-started">Get started</a>
-			<a class="button button-secondary" href={repository}><GithubLogoIcon size={18} />View on GitHub</a>
+			<a class="button" href="/docs/getting-started">Get started<ArrowRightIcon size={18} /></a>
+			<a class="button button-secondary" href="https://app.pontia.dev">Open Dashboard<RocketLaunchIcon size={18} /></a>
 		</div>
 	</div>
 
