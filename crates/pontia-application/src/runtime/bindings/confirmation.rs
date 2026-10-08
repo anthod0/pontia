@@ -4,7 +4,10 @@ use super::{
     service::RuntimeBindingUpsertService,
 };
 use crate::client_contract::AgentClientSpec;
-use crate::{ExternalQueryService, UpsertAgentBindingRequest, WorkspaceRecord};
+use crate::{
+    ExternalQueryService, PontiaEvent, PontiaEventSource, PontiaEventType,
+    UpsertAgentBindingRequest, WorkspaceRecord,
+};
 use pontia_core::{Error, Result, ids::new_runtime_id, time::utc_now};
 use pontia_runtime::GenericRuntimeManager;
 use pontia_storage_sqlite::repositories::session_runtimes::{
@@ -20,6 +23,7 @@ impl RuntimeBindingUpsertService {
         request: &RuntimeBindingUpsertRequest,
         workspace: &WorkspaceRecord,
         client_spec: &AgentClientSpec,
+        created_session: bool,
     ) -> Result<Value> {
         let existing = SqliteSessionRuntimeRepository::new(self.pool.clone())
             .runtime_id(session_id)
@@ -30,7 +34,20 @@ impl RuntimeBindingUpsertService {
                 "registration runtime does not belong to this Session".into(),
             ));
         }
+        let runtime_needs_ready = existing.is_none() || created_session;
         let runtime_id = existing.unwrap_or_else(|| new_runtime_id().to_string());
+        if runtime_needs_ready {
+            self.events
+                .ingest_pontia_event(PontiaEvent::new(
+                    session_id,
+                    None,
+                    PontiaEventSource::RuntimeManager,
+                    request.client_type.clone(),
+                    PontiaEventType::RuntimeReady,
+                    json!({"runtime_id": runtime_id.clone()}),
+                ))
+                .await?;
+        }
         let socket = request
             .tmux
             .as_ref()
@@ -52,12 +69,12 @@ impl RuntimeBindingUpsertService {
         };
         let mut tx = self.pool.begin().await?;
         fence_runtime_binding_write(&mut tx, session_id, Some(&runtime_id)).await?;
-        // Registration confirms identity and location. Only session.ready advances
-        // a managed startup; manual already-running clients can attach directly.
-        let prior_state: Option<String> =
+        // Binding confirmation only adds identity and location. Runtime events own
+        // every lifecycle transition, including an already-running attachment.
+        let prior_state: String =
             sqlx::query_scalar("SELECT state FROM session_runtimes WHERE runtime_id = ?")
                 .bind(&runtime_id)
-                .fetch_optional(&mut *tx)
+                .fetch_one(&mut *tx)
                 .await?;
         SqliteSessionRuntimeRepository::upsert_binding_in_tx(
             &mut tx,
@@ -65,12 +82,7 @@ impl RuntimeBindingUpsertService {
                 runtime_id: runtime_id.clone(),
                 session_id: session_id.into(),
                 role: "tui".into(),
-                state: if prior_state.as_deref() == Some("starting") {
-                    "starting"
-                } else {
-                    "running"
-                }
-                .into(),
+                state: prior_state,
                 start_command: non_empty(request.start_command.as_deref()),
                 tmux_socket_path: socket.clone(),
                 tmux_pane_id: pane.clone(),

@@ -109,13 +109,16 @@ async fn lifecycle_reuses_runtime_and_execution_facts_keep_it_running() {
     }
     assert_eq!(states(&app).await, ("exited".into(), "exited".into()));
     assert_eq!(
-        sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM events WHERE event_type='session.exited'"
+        sqlx::query_as::<_, (String, i64)>(
+            "SELECT event_type, COUNT(*) FROM events WHERE event_type IN ('session.exited', 'runtime.exited') GROUP BY event_type ORDER BY event_type"
         )
-        .fetch_one(&app.db())
+        .fetch_all(&app.db())
         .await
         .unwrap(),
-        1
+        vec![
+            ("runtime.exited".to_string(), 1),
+            ("session.exited".to_string(), 1),
+        ]
     );
     app.event_ingest_service()
         .ingest_pontia_event(PontiaEvent::new(
@@ -152,6 +155,29 @@ async fn lifecycle_reuses_runtime_and_execution_facts_keep_it_running() {
             .unwrap(),
         1
     );
+    let lifecycle_types: Vec<String> = sqlx::query_scalar(
+        "SELECT event_type FROM events WHERE event_type IN ('session.starting', 'session.resuming', 'session.ready', 'session.exited', 'runtime.starting', 'runtime.ready', 'runtime.exited') ORDER BY rowid",
+    )
+    .fetch_all(&app.db())
+    .await
+    .unwrap();
+    assert_eq!(
+        lifecycle_types,
+        vec![
+            "session.starting",
+            "runtime.starting",
+            "session.ready",
+            "runtime.ready",
+            "session.ready",
+            "runtime.ready",
+            "session.exited",
+            "runtime.exited",
+            "session.resuming",
+            "runtime.starting",
+            "session.ready",
+            "runtime.ready",
+        ]
+    );
 }
 
 #[tokio::test]
@@ -163,7 +189,7 @@ async fn ready_rolls_back_both_projections_and_event_when_either_write_fails() {
         assert_eq!(states(&app).await, ("starting".into(), "starting".into()));
         assert_eq!(
             sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM events WHERE event_type='session.ready'"
+                "SELECT COUNT(*) FROM events WHERE event_type IN ('session.ready', 'runtime.ready')"
             )
             .fetch_one(&app.db())
             .await
@@ -191,15 +217,25 @@ async fn startup_failure_ends_runtime_and_preserves_reason() {
     let (app, _root) = fixture().await;
     app.event_ingest_service().ingest_pontia_event(PontiaEvent::new("session",None,PontiaEventSource::RuntimeManager,"pi",PontiaEventType::SessionError,json!({"runtime_id":"runtime","reason":"startup_failed","failure":{"message":"launcher failed"}}))).await.unwrap();
     assert_eq!(states(&app).await, ("error".into(), "exited".into()));
-    let payload: String =
-        sqlx::query_scalar("SELECT payload FROM events WHERE event_type='session.error'")
-            .fetch_one(&app.db())
-            .await
-            .unwrap();
+    let events: Vec<(String, String)> = sqlx::query_as(
+        "SELECT event_type, payload FROM events WHERE event_type IN ('session.error', 'runtime.exited') ORDER BY rowid",
+    )
+    .fetch_all(&app.db())
+    .await
+    .unwrap();
     assert_eq!(
-        serde_json::from_str::<Value>(&payload).unwrap()["reason"],
-        "startup_failed"
+        events
+            .iter()
+            .map(|(event_type, _)| event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec!["session.error", "runtime.exited"]
     );
+    for (_, payload) in events {
+        assert_eq!(
+            serde_json::from_str::<Value>(&payload).unwrap()["reason"],
+            "startup_failed"
+        );
+    }
 }
 
 #[tokio::test]
@@ -252,6 +288,15 @@ async fn startup_timeout_uses_current_start_event_instead_of_runtime_creation() 
         .await
         .unwrap();
     assert_eq!(states(&app).await, ("error".into(), "exited".into()));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM events WHERE event_type = 'runtime.exited' AND json_extract(payload, '$.reason') = 'startup_timeout'"
+        )
+        .fetch_one(&app.db())
+        .await
+        .unwrap(),
+        1
+    );
 }
 
 #[tokio::test]

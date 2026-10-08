@@ -67,6 +67,12 @@ pub enum EventType {
     SessionContextUsageUpdated,
     #[serde(rename = "session.model_updated")]
     SessionModelUpdated,
+    #[serde(rename = "runtime.starting")]
+    RuntimeStarting,
+    #[serde(rename = "runtime.ready")]
+    RuntimeReady,
+    #[serde(rename = "runtime.exited")]
+    RuntimeExited,
     #[serde(rename = "turn.timeline_boundary_recovered")]
     TurnTimelineBoundaryRecovered,
     #[serde(rename = "turn.topology_recovered")]
@@ -126,6 +132,13 @@ impl EventType {
         )
     }
 
+    pub fn is_runtime_event(self) -> bool {
+        matches!(
+            self,
+            Self::RuntimeStarting | Self::RuntimeReady | Self::RuntimeExited
+        )
+    }
+
     pub fn requires_turn_id(self) -> bool {
         self.is_turn_event()
     }
@@ -161,6 +174,9 @@ impl std::fmt::Display for EventType {
             Self::SessionMessageUpdated => "session.message_updated",
             Self::SessionModelUpdated => "session.model_updated",
             Self::SessionContextUsageUpdated => "session.context_usage_updated",
+            Self::RuntimeStarting => "runtime.starting",
+            Self::RuntimeReady => "runtime.ready",
+            Self::RuntimeExited => "runtime.exited",
             Self::TurnTopologyRecovered => "turn.topology_recovered",
             Self::TurnTimelineBoundaryRecovered => "turn.timeline_boundary_recovered",
             Self::TurnCreated => "turn.created",
@@ -200,6 +216,9 @@ impl std::str::FromStr for EventType {
             "session.message_updated" => Ok(Self::SessionMessageUpdated),
             "session.model_updated" => Ok(Self::SessionModelUpdated),
             "session.context_usage_updated" => Ok(Self::SessionContextUsageUpdated),
+            "runtime.starting" => Ok(Self::RuntimeStarting),
+            "runtime.ready" => Ok(Self::RuntimeReady),
+            "runtime.exited" => Ok(Self::RuntimeExited),
             "turn.topology_recovered" => Ok(Self::TurnTopologyRecovered),
             "turn.timeline_boundary_recovered" => Ok(Self::TurnTimelineBoundaryRecovered),
             "turn.created" => Ok(Self::TurnCreated),

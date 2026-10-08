@@ -260,6 +260,11 @@ async fn external_api_reads_runtime_binding_capabilities_column() {
         ))
         .await
         .unwrap();
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, start_command, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, 'rtinst_legacy_cap', 'pi --approve', '/tmp/tmux-1000/default', '%150', 'tui', 'starting', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+        .bind("sess_external_queries_legacy_cap")
+        .execute(&state.db())
+        .await
+        .unwrap();
     service
         .ingest_reported_event(ReportedEvent::new(
             "evt_external_queries_legacy_cap_ready".to_string(),
@@ -268,15 +273,10 @@ async fn external_api_reads_runtime_binding_capabilities_column() {
             EventSource::RuntimeManager,
             "pi".to_string(),
             EventType::SessionReady,
-            json!({}),
+            json!({"runtime_id":"rtinst_legacy_cap"}),
         ))
         .await
         .unwrap();
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, start_command, tmux_socket_path, tmux_pane_id, role, state, created_at) VALUES (?, 'rtinst_legacy_cap', 'pi --approve', '/tmp/tmux-1000/default', '%150', 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
-.bind("sess_external_queries_legacy_cap")
-    .execute(&state.db())
-    .await
-    .unwrap();
 
     let (status, body) = get(
         state,

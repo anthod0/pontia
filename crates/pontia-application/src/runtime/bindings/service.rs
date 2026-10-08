@@ -89,6 +89,7 @@ impl RuntimeBindingUpsertService {
                 None => self.unbound_session_id_for_client_session(&request).await?,
             }
         };
+        let created_session = existing_session_id.is_none();
         let session_id = match existing_session_id {
             Some(session_id) => {
                 self.ensure_existing_binding_agrees(&session_id, &request)
@@ -114,7 +115,14 @@ impl RuntimeBindingUpsertService {
             )
             .await?;
 
-        self.confirm_binding(&session_id, runtime_kind, &request, &workspace, client_spec)
-            .await
+        self.confirm_binding(
+            &session_id,
+            runtime_kind,
+            &request,
+            &workspace,
+            client_spec,
+            created_session,
+        )
+        .await
     }
 }

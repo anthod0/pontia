@@ -293,7 +293,7 @@ impl SessionCommandService {
                 PontiaEventSource::ExternalApi,
                 session.client_type.clone(),
                 PontiaEventType::SessionStarting,
-                json!({}),
+                json!({"runtime_id": target.runtime_id}),
             ))
             .await?;
         ingest

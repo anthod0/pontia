@@ -40,6 +40,7 @@ async fn runtime_registration_and_resume_publish_to_the_application_broker() {
         EventType::SessionCreated,
         EventType::SessionStarting,
         EventType::SessionStarted,
+        EventType::RuntimeReady,
     ] {
         let event = notices
             .try_recv()

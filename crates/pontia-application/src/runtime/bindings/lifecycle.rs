@@ -1,4 +1,7 @@
-use pontia_core::{error::Result, ids::new_session_id};
+use pontia_core::{
+    error::Result,
+    ids::{new_runtime_id, new_session_id},
+};
 use serde_json::json;
 
 use super::{
@@ -24,6 +27,10 @@ impl RuntimeBindingUpsertService {
             return Ok(());
         }
 
+        let runtime_id = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone())
+            .runtime_id(session_id)
+            .await?
+            .ok_or_else(|| pontia_core::Error::StateConflict("Session runtime is missing".into()))?;
         let ingest = &self.events;
         ingest
             .ingest_pontia_event(PontiaEvent::new(
@@ -32,7 +39,7 @@ impl RuntimeBindingUpsertService {
                 PontiaEventSource::RuntimeManager,
                 request.client_type.clone(),
                 PontiaEventType::SessionResuming,
-                json!({}),
+                json!({"runtime_id": runtime_id}),
             ))
             .await?;
         ingest
@@ -81,6 +88,11 @@ impl RuntimeBindingUpsertService {
                 },
             )
             .await?;
+        let startup_payload = if request.client_type == "pi" {
+            json!({"runtime_id": new_runtime_id().to_string()})
+        } else {
+            json!({})
+        };
         ingest
             .ingest_pontia_event(PontiaEvent::new(
                 session_id.clone(),
@@ -88,7 +100,7 @@ impl RuntimeBindingUpsertService {
                 PontiaEventSource::RuntimeManager,
                 request.client_type.clone(),
                 PontiaEventType::SessionStarting,
-                json!({}),
+                startup_payload,
             ))
             .await?;
         ingest

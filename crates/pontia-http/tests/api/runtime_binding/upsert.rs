@@ -205,7 +205,12 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
                 "session.starting".to_string(),
                 "runtime_manager".to_string()
             ),
+            (
+                "runtime.starting".to_string(),
+                "runtime_manager".to_string()
+            ),
             ("session.started".to_string(), "runtime_manager".to_string()),
+            ("runtime.ready".to_string(), "runtime_manager".to_string()),
         ]
     );
 }

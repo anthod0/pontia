@@ -71,7 +71,7 @@ impl Fixture {
                 PontiaEventSource::ExternalApi,
                 "pi",
                 PontiaEventType::SessionResuming,
-                json!({}),
+                json!({"runtime_id":"runtime"}),
             ))
             .await
             .unwrap();

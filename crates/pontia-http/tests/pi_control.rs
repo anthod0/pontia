@@ -118,11 +118,12 @@ async fn replacement_and_exit_fence_connections_without_synthesizing_facts() {
         .await
         .unwrap();
     assert!(!state.client_control().available("sess_pi").await.unwrap());
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
-        .fetch_one(&state.db())
-        .await
-        .unwrap();
-    assert_eq!(count, 1);
+    let event_types: Vec<String> =
+        sqlx::query_scalar("SELECT event_type FROM events ORDER BY rowid")
+            .fetch_all(&state.db())
+            .await
+            .unwrap();
+    assert_eq!(event_types, vec!["session.exited", "runtime.exited"]);
 }
 
 #[tokio::test]

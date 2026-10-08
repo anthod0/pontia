@@ -187,7 +187,7 @@ async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
     assert_eq!(state_after_upsert, "starting");
 
     let lifecycle_events: Vec<(String, String)> = sqlx::query_as(
-        "SELECT event_type, source FROM events WHERE session_id = ? ORDER BY rowid DESC LIMIT 2",
+        "SELECT event_type, source FROM events WHERE session_id = ? ORDER BY rowid DESC LIMIT 3",
     )
     .bind(&session_id)
     .fetch_all(&state.db())
@@ -197,6 +197,10 @@ async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
         lifecycle_events,
         vec![
             ("session.started".to_string(), "runtime_manager".to_string()),
+            (
+                "runtime.starting".to_string(),
+                "runtime_manager".to_string()
+            ),
             (
                 "session.resuming".to_string(),
                 "runtime_manager".to_string()

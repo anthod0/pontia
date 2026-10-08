@@ -274,14 +274,16 @@ impl EventIngestService {
                 }
                 Ok(Some(result))
             }
-            commit::CommitOutcome::Committed { result, event } => {
-                self.effects.apply(&self.pool, &event).await?;
-                if event.event_type == pontia_core::domain::EventType::TurnStarted {
-                    Box::pin(
-                        crate::TurnTimelineService::new(self.clone())
-                            .try_recover_history(&event.session_id),
-                    )
-                    .await;
+            commit::CommitOutcome::Committed { result, events } => {
+                for event in events {
+                    self.effects.apply(&self.pool, &event).await?;
+                    if event.event_type == pontia_core::domain::EventType::TurnStarted {
+                        Box::pin(
+                            crate::TurnTimelineService::new(self.clone())
+                                .try_recover_history(&event.session_id),
+                        )
+                        .await;
+                    }
                 }
                 Ok(Some(result))
             }
