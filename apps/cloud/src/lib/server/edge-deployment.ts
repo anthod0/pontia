@@ -54,7 +54,7 @@ async function unusedHeroName(db: Database, dependencies: DeploymentDependencies
     }
     const payload = JSON.stringify({ name });
     const [edge, ticket] = await Promise.all([
-      db.select({ id: edges.id }).from(edges).where(eq(edges.name, name)).get(),
+      db.select({ id: edges.id }).from(edges).where(eq(edges.dnsLabel, name)).get(),
       db
         .select({ id: edgeTickets.id })
         .from(edgeTickets)
@@ -117,6 +117,7 @@ function storedEdge(db: Database, edgeId: string) {
       edgeId: edges.id,
       userId: edges.userId,
       name: edges.name,
+      dnsLabel: edges.dnsLabel,
       tunnelUrl: edges.tunnelUrl,
       accessScope: edges.accessScope,
       serviceCredentialHash: edges.serviceCredentialHash,
@@ -131,7 +132,7 @@ function matchesDeployment(edge: StoredEdge, deployment: DeploymentAuthorization
     edge !== undefined &&
     edge.edgeId === deployment.identity.edgeId &&
     edge.userId === deployment.userId &&
-    edge.name === deployment.identity.name &&
+    edge.dnsLabel === deployment.identity.name &&
     edge.accessScope === "private" &&
     edge.serviceCredentialHash === deployment.serviceCredentialHash
   );
@@ -290,6 +291,7 @@ export async function confirmEdgeDeployment(
               userId: edgeTickets.userId,
               accessScope: sql<"private">`'private'`.as("access_scope"),
               name: sql<string>`${deployment.identity.name}`.as("name"),
+              dnsLabel: sql<string>`${deployment.identity.name}`.as("dns_label"),
               tunnelUrl: sql<string>`${deployment.identity.tunnelUrl}`.as("tunnel_url"),
               serviceCredentialHash: sql<string>`${deployment.serviceCredentialHash}`.as(
                 "service_credential_hash",

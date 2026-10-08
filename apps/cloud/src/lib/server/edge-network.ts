@@ -315,6 +315,45 @@ export class CloudflareDnsProvider implements DnsProvider {
     }
   }
 
+  private async records(name: string, type: "A" | "TXT") {
+    const records: { id: string }[] = [];
+    for (let page = 1; ; page++) {
+      const body = await this.txtRequest(
+        "lookup",
+        `?type=${type}&name=${encodeURIComponent(name)}&per_page=20&page=${page}`,
+      );
+      if (!Array.isArray(body.result)) {
+        throw new DnsProviderError("lookup", "invalid_provider_response");
+      }
+      for (const record of body.result as Record<string, unknown>[]) {
+        if (
+          record.name !== name ||
+          record.type !== type ||
+          typeof record.id !== "string" ||
+          typeof record.content !== "string"
+        ) {
+          throw new DnsProviderError("lookup", "invalid_provider_response");
+        }
+        records.push({ id: record.id });
+      }
+      if (body.result.length < 20) break;
+    }
+    return records;
+  }
+
+  async cleanupHostname(hostname: string) {
+    if (!edgeHostname(`wss://${hostname}/tunnel`)) {
+      throw new DnsProviderError("lookup", "local_validation_error");
+    }
+    const records = [
+      ...(await this.records(hostname, "A")),
+      ...(await this.records(`_acme-challenge.${hostname}`, "TXT")),
+    ];
+    for (const record of records) {
+      await this.txtRequest("delete", `/${encodeURIComponent(record.id)}`, { method: "DELETE" });
+    }
+  }
+
   async ensureA(hostname: string, address: string) {
     const base = `https://api.cloudflare.com./client/v4/zones/${encodeURIComponent(this.zoneId)}/dns_records`;
     const headers = { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" };

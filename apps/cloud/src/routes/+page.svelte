@@ -4,6 +4,7 @@
 	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
 	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
 	import HeroSection from '$lib/components/HeroSection.svelte';
+	import SiteHeader from '$lib/components/SiteHeader.svelte';
 
 	const repository = 'https://github.com/anthod0/pontia';
 </script>
@@ -19,15 +20,7 @@
 
 <a class="skip-link" href="#main">Skip to content</a>
 
-<header class="site-header page-width">
-	<a class="brand" href="/" aria-label="Pontia home"><img src="/logo.svg" alt="" /><span>Pontia</span></a>
-	<nav aria-label="Primary navigation">
-		<a class="nav-link" href="/docs">Docs</a>
-		<a class="nav-link source-link" href={repository}>GitHub<ArrowUpRightIcon size={13} /></a>
-		<a class="nav-link sign-in-link" href="/login">Sign in</a>
-		<a class="button button-small" href="https://app.pontia.dev">Open Dashboard</a>
-	</nav>
-</header>
+<SiteHeader />
 
 <main id="main">
 	<HeroSection />

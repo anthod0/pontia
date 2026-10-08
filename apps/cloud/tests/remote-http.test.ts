@@ -62,6 +62,7 @@ async function authenticatedRecords() {
     id: edgeId,
     userId: "user-http",
     name: "HTTP Edge",
+    dnsLabel: "http-edge",
     tunnelUrl: "wss://http-edge.example/tunnel",
     serviceCredentialHash: "hash",
   });

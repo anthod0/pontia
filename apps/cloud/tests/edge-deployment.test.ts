@@ -281,7 +281,8 @@ test("a failed registration batch does not consume the deployment ticket", async
   await database.db.insert(edges).values({
     id: "0199791c-6600-7000-8000-000000000002",
     userId: "user-owner",
-    name: "conflicting-edge",
+    name: "Conflicting edge",
+    dnsLabel: "conflicting-edge",
     tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
     serviceCredentialHash: "unrelated",
   });
@@ -291,6 +292,22 @@ test("a failed registration batch does not consume the deployment ticket", async
   });
   expect(await database.db.select().from(edges)).toHaveLength(1);
   expect((await database.db.select().from(edgeTickets).get())?.consumedAt).toBeNull();
+});
+
+test("a renamed edge continues to reserve its immutable DNS label", async () => {
+  await database.db.insert(users).values({ id: "user-owner" });
+  await database.db.insert(edges).values({
+    id: "0199791c-6600-7000-8000-000000000002",
+    userId: "user-owner",
+    name: "Home server",
+    dnsLabel: "brave-atlas",
+    tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
+    serviceCredentialHash: "unrelated",
+  });
+
+  await expect(
+    issueEdgeDeployment(database.db, "user-owner", "https://pontia.example", dependencies()),
+  ).rejects.toThrow("Unable to allocate an edge name");
 });
 
 test("expired deployment records reserve their DNS names until cron deletes them", async () => {

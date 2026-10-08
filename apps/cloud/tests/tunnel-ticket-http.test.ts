@@ -53,6 +53,7 @@ async function seedHttpTicketFixture() {
     id: edgeId,
     userId: "user-http",
     name: "HTTP Edge",
+    dnsLabel: "edge-http",
     tunnelUrl: "wss://edge-http.example/tunnel",
     serviceCredentialHash: await sha256Base64url(edgeSecret),
   });

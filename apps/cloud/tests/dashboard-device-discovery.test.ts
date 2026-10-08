@@ -80,6 +80,7 @@ async function seedDashboardFixtureAndLogin() {
       id: "0195e7e1-1b22-7c33-9d44-123456789abc",
       userId: ownerId,
       name: "Owner edge",
+      dnsLabel: "brave-atlas",
       tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
       serviceCredentialHash: "owner-hash",
     },
@@ -87,6 +88,7 @@ async function seedDashboardFixtureAndLogin() {
       id: "0195e7e2-1b22-7c33-9d44-123456789abc",
       userId: otherId,
       name: "Other edge",
+      dnsLabel: "calm-arthur",
       tunnelUrl: "wss://calm-arthur.edge.pontia.dev/tunnel",
       serviceCredentialHash: "other-hash",
     },
@@ -234,6 +236,7 @@ test("connect rejects invalid tunnel URLs", async () => {
     id: edgeId,
     userId: ownerId,
     name: "Invalid edge",
+    dnsLabel: "invalid-edge",
     tunnelUrl: "wss://attacker.example/tunnel",
     serviceCredentialHash: "invalid-hash",
   });

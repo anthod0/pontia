@@ -4,7 +4,6 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { deploymentModeCommand } from "$lib/edge-deployment-command";
-  import AuthLayout from "$lib/components/AuthLayout.svelte";
   import type { ActionData } from "./$types";
 
   let { form }: { form: ActionData } = $props();
@@ -28,8 +27,7 @@
   <meta name="robots" content="noindex" />
 </svelte:head>
 
-<AuthLayout wide>
-  <h1>Deploy a self-hosted edge</h1>
+<h1>Deploy a self-hosted edge</h1>
 
   {#if form?.error}
     <p class="auth-error" role="alert">{form.error}</p>
@@ -89,12 +87,15 @@
     <p>Generate a deployment command from the edges page to get started.</p>
   {/if}
 
-  <p><a href="/edges">Back to edges</a></p>
-</AuthLayout>
+<p class="back-link"><a href="/settings/edges">Back to edges</a></p>
 
 <style>
   section {
     margin-block: 28px;
+  }
+
+  .back-link {
+    margin-top: 28px;
   }
 
   h2 {

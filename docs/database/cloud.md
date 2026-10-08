@@ -31,6 +31,7 @@ CREATE TABLE `edges` (
 	`user_id` text NOT NULL,
 	`access_scope` text DEFAULT 'private' NOT NULL,
 	`name` text NOT NULL,
+	`dns_label` text NOT NULL,
 	`tunnel_url` text NOT NULL,
 	`service_credential_hash` text NOT NULL,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
@@ -109,6 +110,7 @@ CREATE INDEX `idx_auth_sessions_user_id` ON `auth_sessions` (`user_id`);
 CREATE UNIQUE INDEX `idx_auth_sessions_token_hash` ON `auth_sessions` (`token_hash`);
 CREATE INDEX `idx_edges_user_id` ON `edges` (`user_id`);
 CREATE INDEX `idx_edges_access_scope` ON `edges` (`access_scope`);
+CREATE UNIQUE INDEX `idx_edges_dns_label` ON `edges` (`dns_label`);
 CREATE UNIQUE INDEX `idx_edges_tunnel_url` ON `edges` (`tunnel_url`);
 CREATE INDEX `idx_devices_user_id` ON `devices` (`user_id`);
 CREATE INDEX `idx_devices_edge_id` ON `devices` (`edge_id`);

@@ -39,7 +39,7 @@ beforeAll(async () => {
   await db.batch([
     db.prepare(`CREATE TABLE edges (
       id TEXT PRIMARY KEY NOT NULL,
-      name TEXT NOT NULL
+      dns_label TEXT NOT NULL
     )`),
     db.prepare(`CREATE TABLE edge_tickets (
       id INTEGER PRIMARY KEY NOT NULL,
@@ -113,7 +113,7 @@ test("D1 repository applies the inclusive expiration boundary and ownership chec
   });
 
   await db
-    .prepare("INSERT INTO edges (id, name) VALUES (?1, ?2)")
+    .prepare("INSERT INTO edges (id, dns_label) VALUES (?1, ?2)")
     .bind("edge-formal", "brave-silver-atlas")
     .run();
   expect(

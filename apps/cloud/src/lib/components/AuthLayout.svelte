@@ -1,14 +1,10 @@
 <script lang="ts">
+	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import type { Snippet } from 'svelte';
 	let { children, wide = false }: { children: Snippet; wide?: boolean } = $props();
 </script>
 
-<header class="site-header page-width">
-	<a class="brand" href="/" aria-label="Pontia home"
-		><img src="/logo.svg" alt="" /><span>Pontia</span></a
-	>
-	<a class="nav-link" href="/">Back to home</a>
-</header>
+<SiteHeader />
 <main class:wide class="auth-content">{@render children()}</main>
 
 <style>

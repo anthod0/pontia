@@ -4,7 +4,7 @@ import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async (event) => {
   const returnTo = loginReturnTo(event);
-  if (await currentLogin(event)) redirect(303, returnTo ?? "/account");
+  if (await currentLogin(event)) redirect(303, returnTo ?? "/settings/account");
   return {
     error: event.url.searchParams.get("error"),
     hasCredential: !!event.cookies.get("_at"),

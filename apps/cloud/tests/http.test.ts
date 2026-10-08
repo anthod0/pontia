@@ -118,7 +118,7 @@ async function signedIn(client: ReturnType<typeof browser>) {
     maxAge: 600,
   });
   const path = `/api/auth/google/callback?code=code&state=${authUrl.searchParams.get("state")}`;
-  expect(await location(callback(client.event(path, "GET")))).toBe("/account");
+  expect(await location(callback(client.event(path, "GET")))).toBe("/settings/account");
   return await verifyLogin(client.cookies.get("_at")!, config.JWT_SECRET);
 }
 
@@ -161,7 +161,7 @@ test("HTTP login, linking and logout persist identity and set and clear protecte
         ),
       ),
     ),
-  ).toBe("/account");
+  ).toBe("/settings/account");
   expect(await database.db.select().from(accounts)).toHaveLength(2);
   expect(await database.db.select().from(users)).toHaveLength(1);
   const oldToken = client.cookies.get("_at")!;
@@ -305,7 +305,7 @@ test("verified email conflict can create an independent user", async () => {
   const client = browser();
   await beginVerifiedConflict(client);
   expect(await location(createIndependentAccount(client.event("/api/auth/pending/create")))).toBe(
-    "/account",
+    "/settings/account",
   );
   expect(await database.db.select().from(users)).toHaveLength(2);
   expect(await database.db.select().from(accounts)).toHaveLength(2);
@@ -393,7 +393,7 @@ test("binding callback rejects logout in another request and a browser switched 
           ),
         ),
       ),
-    ).toBe("/account?error=invalid_credentials");
+    ).toBe("/settings/account?error=invalid_credentials");
   }
   expect(
     (await database.db.select().from(accounts)).some((account) => account.provider === "github"),
@@ -420,7 +420,7 @@ test("an expired access JWT is refreshed during the OAuth round trip", async () 
         ),
       ),
     ),
-  ).toBe("/account");
+  ).toBe("/settings/account");
   expect(client.cookies.get("_at")).not.toBe(expired);
   expect((client.options.get("_rt")!.expires as Date).getTime() - Date.now()).toBeGreaterThan(
     29 * 86_400_000,

@@ -62,7 +62,7 @@ export class D1TicketRepository implements TicketRepository {
            ) AS current_ticket_exists,
            EXISTS(
              SELECT 1 FROM edges
-             WHERE id = ?3 OR name = ?4
+             WHERE id = ?3 OR dns_label = ?4
            ) AS registered_edge_exists,
            EXISTS(
              SELECT 1 FROM edge_tickets

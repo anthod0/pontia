@@ -196,6 +196,51 @@ test("Cloudflare DNS adapter identifies lookup transport and provider failures",
   });
 });
 
+test("Cloudflare DNS adapter removes the managed A and ACME challenge records", async () => {
+  const requests: Array<[string, RequestInit]> = [];
+  mockGlobalFetch(async (input, init) => {
+    const url = String(input);
+    requests.push([url, (init as RequestInit | undefined) ?? {}]);
+    if (url.includes("?type=A")) {
+      return Response.json({
+        success: true,
+        result: [
+          {
+            id: "address-record",
+            name: "brave-atlas.edge.pontia.dev",
+            type: "A",
+            content: "8.8.8.8",
+          },
+        ],
+      });
+    }
+    if (url.includes("?type=TXT")) {
+      return Response.json({
+        success: true,
+        result: [
+          {
+            id: "challenge-record",
+            name: "_acme-challenge.brave-atlas.edge.pontia.dev",
+            type: "TXT",
+            content: '"challenge"',
+          },
+        ],
+      });
+    }
+    return Response.json({ success: true, result: {} });
+  });
+
+  await new CloudflareDnsProvider("secret", "zone").cleanupHostname("brave-atlas.edge.pontia.dev");
+
+  expect(requests.map(([url]) => url)).toEqual([
+    "https://api.cloudflare.com./client/v4/zones/zone/dns_records?type=A&name=brave-atlas.edge.pontia.dev&per_page=20&page=1",
+    "https://api.cloudflare.com./client/v4/zones/zone/dns_records?type=TXT&name=_acme-challenge.brave-atlas.edge.pontia.dev&per_page=20&page=1",
+    "https://api.cloudflare.com./client/v4/zones/zone/dns_records/address-record",
+    "https://api.cloudflare.com./client/v4/zones/zone/dns_records/challenge-record",
+  ]);
+  expect(requests.slice(2).every(([, init]) => init.method === "DELETE")).toBe(true);
+});
+
 test("Cloudflare DNS adapter updates only the exact A record", async () => {
   const requests: Array<[string, RequestInit]> = [];
   mockGlobalFetch(async (input, init) => {

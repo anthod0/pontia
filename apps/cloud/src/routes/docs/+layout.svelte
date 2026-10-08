@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
+	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import { tick, type Snippet } from 'svelte';
 
 	let { children }: { children: Snippet } = $props();
@@ -40,13 +41,7 @@
 
 <a class="skip-link" href="#docs-content">Skip to content</a>
 
-<header class="docs-header page-width">
-	<a class="brand" href="/" aria-label="Pontia home"><img src="/logo.svg" alt="" /><span>Pontia</span></a>
-	<nav aria-label="Documentation navigation">
-		<a href="/">Home</a>
-		<a class="button button-small" href="/login">Sign in</a>
-	</nav>
-</header>
+<SiteHeader />
 
 <div class="docs-shell page-width">
 	<aside>
@@ -60,9 +55,6 @@
 </div>
 
 <style>
-	.docs-header { display: flex; height: 90px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
-	.docs-header nav { display: flex; align-items: center; gap: 24px; font-size: 13px; }
-	.docs-header nav > a:first-child:hover { color: var(--primary); }
 	.docs-shell { display: grid; grid-template-columns: 190px minmax(0, 720px); gap: 72px; padding-block: 64px 96px; }
 	aside { position: sticky; top: 32px; align-self: start; }
 	.docs-title { display: block; margin-bottom: 20px; color: var(--heading); font-size: 14px; font-weight: 600; }
@@ -90,7 +82,6 @@
 	.docs-content :global(hr) { margin: 40px 0; border: 0; border-top: 1px solid var(--border); }
 
 	@media (max-width: 760px) {
-		.docs-header { height: 76px; }
 		.docs-shell { grid-template-columns: 1fr; gap: 36px; padding-block: 36px 64px; }
 		aside { position: static; }
 		aside nav { display: flex; flex-wrap: wrap; gap: 10px 20px; }
@@ -98,8 +89,6 @@
 	}
 
 	@media (max-width: 600px) {
-		.docs-header { height: 72px; }
-		.docs-header nav { gap: 14px; font-size: 11px; }
 		.docs-content :global(p), .docs-content :global(li) { font-size: 14px; }
 	}
 </style>

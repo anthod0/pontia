@@ -33,6 +33,7 @@ export const edges = sqliteTable(
       .notNull()
       .default("private"),
     name: text().notNull(),
+    dnsLabel: text("dns_label").notNull(),
     tunnelUrl: text("tunnel_url").notNull(),
     serviceCredentialHash: text("service_credential_hash").notNull(),
     createdAt: text("created_at").notNull().default(timestamp),
@@ -42,6 +43,7 @@ export const edges = sqliteTable(
     primaryKey({ columns: [table.id] }),
     index("idx_edges_user_id").on(table.userId),
     index("idx_edges_access_scope").on(table.accessScope),
+    uniqueIndex("idx_edges_dns_label").on(table.dnsLabel),
     uniqueIndex("idx_edges_tunnel_url").on(table.tunnelUrl),
     check("edges_access_scope_check", sql`${table.accessScope} IN ('private', 'public')`),
   ],

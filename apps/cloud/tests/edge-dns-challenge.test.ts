@@ -49,7 +49,8 @@ async function registered() {
     id: edgeId,
     userId: "owner",
     accessScope: "private",
-    name: "brave-atlas",
+    name: "Brave Atlas",
+    dnsLabel: "brave-atlas",
     tunnelUrl: `wss://${hostname}:8443/tunnel`,
     serviceCredentialHash: await sha256Base64url(secret),
   });

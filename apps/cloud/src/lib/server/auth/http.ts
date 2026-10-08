@@ -235,7 +235,7 @@ export async function createIndependentAccount(event: RequestEvent) {
     const loginId = await completeIndependentAccount(db, pending.profile);
     await establishBrowserLogin(event, db, loginId, env.JWT_SECRET);
     clearPendingAccount(event.cookies);
-    redirect(303, pending.returnTo ?? "/account");
+    redirect(303, pending.returnTo ?? "/settings/account");
   } catch (cause) {
     clearPendingAccount(event.cookies);
     if (!(cause instanceof AuthError)) throw cause;
@@ -259,7 +259,7 @@ export async function callback(event: RequestEvent) {
       event.url.searchParams.get("state") ?? "",
       callbackUri,
     );
-    destination = oauth.intent.kind === "bind" ? "/account" : "/login";
+    destination = oauth.intent.kind === "bind" ? "/settings/account" : "/login";
     const code = event.url.searchParams.get("code");
     if (!code || event.url.searchParams.has("error")) throw new AuthError("invalid_oauth");
     const db = database(env.DB);
@@ -288,7 +288,7 @@ export async function callback(event: RequestEvent) {
       );
       await establishBrowserLogin(event, db, loginId, env.JWT_SECRET);
       clearPendingAccount(event.cookies);
-      destination = pending.returnTo ?? "/account";
+      destination = pending.returnTo ?? "/settings/account";
     } else {
       const profile = await exchangeAccount(env, oauth, code);
       if (!(await accountForProfile(db, profile))) {
@@ -309,7 +309,7 @@ export async function callback(event: RequestEvent) {
       }
       const loginId = await login(db, profile);
       await establishBrowserLogin(event, db, loginId, env.JWT_SECRET);
-      destination = oauth.intent.returnTo ?? "/account";
+      destination = oauth.intent.returnTo ?? "/settings/account";
     }
   } catch (cause) {
     if (isRedirect(cause)) throw cause;

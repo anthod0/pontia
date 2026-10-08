@@ -27,6 +27,7 @@ async function seedDevice(publicKey: string) {
     id: "0195e7b9-91c2-73d4-a560-2f78b90c1234",
     userId: "user-owner",
     name: "Tokyo",
+    dnsLabel: "brave-atlas",
     tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
     serviceCredentialHash: "hash",
   });

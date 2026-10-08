@@ -3,13 +3,19 @@ import type { RequestEvent } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 import { issueLogin } from "../src/lib/server/auth/jwt";
 import { authSessions, edges, users } from "../src/lib/server/db/schema";
-import { load } from "../src/routes/edges/+page.server";
-import { actions, load as loadDeployment } from "../src/routes/edges/deploy/+page.server";
+import { actions as edgeActions, load } from "../src/routes/settings/edges/+page.server";
+import {
+  actions as deploymentActions,
+  load as loadDeployment,
+} from "../src/routes/settings/edges/deploy/+page.server";
 import { testDatabase } from "./database";
 
-const issueDeployment = actions.default as (event: RequestEvent) => Promise<unknown>;
+const issueDeployment = deploymentActions.default as (event: RequestEvent) => Promise<unknown>;
+const renameEdge = edgeActions.rename as (event: RequestEvent) => Promise<unknown>;
 const database = testDatabase();
-const loadEdges = load as unknown as (event: RequestEvent) => Promise<{ edges: unknown[] }>;
+const loadEdges = load as unknown as (
+  event: RequestEvent,
+) => Promise<{ ownedEdges: unknown[]; publicEdges: unknown[] }>;
 const ownerId = "0199791c-6600-7000-8000-000000000011";
 
 async function authenticatedEvent(userId: string): Promise<RequestEvent> {
@@ -31,7 +37,7 @@ async function authenticatedEvent(userId: string): Promise<RequestEvent> {
         JWT_SECRET: secret,
       },
     },
-    url: new URL("https://pontia.example/edges"),
+    url: new URL("https://pontia.example/settings/edges"),
   } as unknown as RequestEvent;
 }
 
@@ -50,12 +56,14 @@ test("the deployment page requires sign-in", async () => {
   ).rejects.toMatchObject({ status: 303, location: "/login" });
 });
 
-test("a user without edges receives an empty list", async () => {
+test("a user without edges receives empty owned and public lists", async () => {
   const event = await authenticatedEvent(ownerId);
-  expect((await loadEdges(event)).edges).toEqual([]);
+  const result = await loadEdges(event);
+  expect(result.ownedEdges).toEqual([]);
+  expect(result.publicEdges).toEqual([]);
 });
 
-test("the page lists only owned edges in stable order without credentials", async () => {
+test("the page separates owned and public edges in stable order without credentials", async () => {
   const event = await authenticatedEvent(ownerId);
   await database.db.insert(users).values({ id: "user-other" });
   const createdAt = "2026-01-01T00:00:00.000Z";
@@ -68,17 +76,67 @@ test("the page lists only owned edges in stable order without credentials", asyn
       { id: "edge-public", userId: "user-other", name: "Public", accessScope: "public" as const },
     ].map((edge) => ({
       ...edge,
+      dnsLabel: edge.id,
       tunnelUrl: `wss://${edge.id}.example/tunnel`,
       serviceCredentialHash: "secret-hash",
       createdAt,
     })),
   );
-
-  expect((await loadEdges(event)).edges).toEqual([
-    { id: "edge-a", name: "Singapore", tunnelUrl: "wss://edge-a.example/tunnel", createdAt },
-    { id: "edge-b", name: "Singapore", tunnelUrl: "wss://edge-b.example/tunnel", createdAt },
-    { id: "edge-z", name: "Tokyo", tunnelUrl: "wss://edge-z.example/tunnel", createdAt },
+  const result = await loadEdges(event);
+  expect(result.ownedEdges).toEqual([
+    {
+      id: "edge-a",
+      name: "Singapore",
+      tunnelUrl: "wss://edge-a.example/tunnel",
+      createdAt,
+    },
+    {
+      id: "edge-b",
+      name: "Singapore",
+      tunnelUrl: "wss://edge-b.example/tunnel",
+      createdAt,
+    },
+    {
+      id: "edge-z",
+      name: "Tokyo",
+      tunnelUrl: "wss://edge-z.example/tunnel",
+      createdAt,
+    },
   ]);
+  expect(result.publicEdges).toEqual([
+    {
+      id: "edge-public",
+      name: "Public",
+      tunnelUrl: "wss://edge-public.example/tunnel",
+      createdAt,
+    },
+  ]);
+});
+
+test("an owner can rename an edge without changing its DNS label", async () => {
+  const event = await authenticatedEvent(ownerId);
+  const edgeId = "edge-owned";
+  await database.db.insert(edges).values({
+    id: edgeId,
+    userId: ownerId,
+    name: "brave-atlas",
+    dnsLabel: "brave-atlas",
+    tunnelUrl: "wss://brave-atlas.edge.pontia.dev/tunnel",
+    serviceCredentialHash: "secret-hash",
+  });
+  event.request = new Request(event.url, {
+    method: "POST",
+    body: new URLSearchParams({ edge_id: edgeId, name: "  Home server  " }),
+  });
+
+  expect(await renameEdge(event)).toEqual({ success: "edge_renamed" });
+  expect(
+    await database.db
+      .select({ name: edges.name, dnsLabel: edges.dnsLabel })
+      .from(edges)
+      .where(eq(edges.id, edgeId))
+      .get(),
+  ).toEqual({ name: "Home server", dnsLabel: "brave-atlas" });
 });
 
 test("an unauthenticated browser cannot issue an edge deployment", async () => {
@@ -112,7 +170,7 @@ test("an issued access JWT remains usable until it expires", async () => {
         JWT_SECRET: secret,
       },
     },
-    url: new URL("https://pontia.example/edges/deploy"),
+    url: new URL("https://pontia.example/settings/edges/deploy"),
   } as unknown as RequestEvent)) as { deployment: { command: string } };
 
   expect(result.deployment.command).toContain("sudo pontia-edge init");
@@ -140,7 +198,7 @@ test("an authenticated user can issue an edge deployment", async () => {
         JWT_SECRET: secret,
       },
     },
-    url: new URL("https://pontia.example/edges"),
+    url: new URL("https://pontia.example/settings/edges"),
   } as unknown as RequestEvent)) as { deployment: { command: string } };
 
   expect(result.deployment.command).toContain("sudo pontia-edge init");
