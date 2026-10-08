@@ -26,7 +26,7 @@ Open the Pontia dashboard and create a pi session. You can then view the session
 
 You can also start pi in a tmux pane inside a workspace registered with Pontia.
 
-For Pontia installation and setup, see the [getting started guide](../../README.md#get-started).
+For Pontia installation and setup, see the [quick start guide](../../README.md#quick-start).
 
 ## Troubleshooting
 

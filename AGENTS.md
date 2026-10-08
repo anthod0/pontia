@@ -38,7 +38,7 @@ Triage uses the five canonical status strings. See `docs/agents/triage-labels.md
 
 ### Domain docs
 
-Domain documentation uses the single-context layout. See `docs/agents/domain.md`.
+Domain documentation uses the single-context layout. See `../pontia-docs/domain.md`.
 
 ### Workspaces
 

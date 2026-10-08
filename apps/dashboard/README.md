@@ -1,6 +1,6 @@
 # Pontia Dashboard
 
-View and control your coding-agent sessions from the web. For installation and setup, see the [getting started guide](../../README.md#get-started).
+View and control your coding-agent sessions from the web. For installation and setup, see the [quick start guide](../../README.md#quick-start).
 
 ## Development
 
