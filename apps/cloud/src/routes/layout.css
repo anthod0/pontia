@@ -367,7 +367,8 @@ h2 {
   .site-header nav {
     gap: 15px;
   }
-  .site-header .source-link {
+  .site-header .source-link,
+  .site-header .sign-in-link {
     display: none;
   }
   .nav-link {
