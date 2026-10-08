@@ -1,15 +1,11 @@
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createInterface } from "node:readline/promises";
-import { validate as validateUuid, version as uuidVersion } from "uuid";
+#!/usr/bin/env bun
 
-export type TargetEnvironment = "production" | "staging";
+import { dirname, join } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { fileURLToPath } from "node:url";
 
 export interface CommandInput {
   edgeId: string;
-  environment: TargetEnvironment;
 }
 
 export interface EdgeRecord {
@@ -20,8 +16,8 @@ export interface EdgeRecord {
 }
 
 export interface D1Client {
-  findEdge(environment: TargetEnvironment, edgeId: string): Promise<EdgeRecord | null>;
-  makeEdgePublic(environment: TargetEnvironment, edgeId: string): Promise<void>;
+  findEdge(edgeId: string): Promise<EdgeRecord | null>;
+  makeEdgePublic(edgeId: string): Promise<void>;
 }
 
 export interface Prompter {
@@ -36,20 +32,19 @@ export interface CommandDependencies {
   writeError(message: string): void;
 }
 
-const CLOUD_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const REPOSITORY_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const CLOUD_ROOT = join(REPOSITORY_ROOT, "apps", "cloud");
+const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export function parseCommandInput(args: readonly string[]): CommandInput {
-  if (args.length !== 2) {
-    throw new Error("Usage: bun run scripts/make-edge-public.ts <edge-id> <production|staging>");
+  if (args.length !== 1) {
+    throw new Error("Usage: ./scripts/make-edge-public.ts <edge-id>");
   }
-  const [edgeId, environment] = args;
-  if (!validateUuid(edgeId) || uuidVersion(edgeId) !== 7 || edgeId !== edgeId.toLowerCase()) {
+  const [edgeId] = args;
+  if (!UUID_V7_PATTERN.test(edgeId)) {
     throw new Error("Edge ID must be a canonical lowercase UUIDv7.");
   }
-  if (environment !== "production" && environment !== "staging") {
-    throw new Error("Environment must be production or staging.");
-  }
-  return { edgeId, environment };
+  return { edgeId };
 }
 
 function sqlString(value: string): string {
@@ -122,8 +117,8 @@ function parseEdgeRow(value: unknown): EdgeRecord {
 }
 
 export class WranglerD1Client implements D1Client {
-  async findEdge(environment: TargetEnvironment, edgeId: string): Promise<EdgeRecord | null> {
-    const result = await this.execute(environment, buildEdgeLookupSql(edgeId));
+  async findEdge(edgeId: string): Promise<EdgeRecord | null> {
+    const result = await this.execute(buildEdgeLookupSql(edgeId));
     if (!Array.isArray(result.results)) {
       throw new Error("Wrangler returned an invalid query result.");
     }
@@ -134,8 +129,8 @@ export class WranglerD1Client implements D1Client {
     return parseEdgeRow(result.results[0]);
   }
 
-  async makeEdgePublic(environment: TargetEnvironment, edgeId: string): Promise<void> {
-    const result = await this.execute(environment, buildMakePublicSql(edgeId));
+  async makeEdgePublic(edgeId: string): Promise<void> {
+    const result = await this.execute(buildMakePublicSql(edgeId));
     if (!Array.isArray(result.results) || result.results.length !== 1) {
       throw new Error("The edge changed before it could be made public; no update was confirmed.");
     }
@@ -151,59 +146,44 @@ export class WranglerD1Client implements D1Client {
     }
   }
 
-  private async execute(environment: TargetEnvironment, sql: string): Promise<WranglerResult> {
-    const temporaryDirectory = await mkdtemp(join(tmpdir(), "pontia-make-edge-public-"));
-    const sqlPath = join(temporaryDirectory, "statement.sql");
+  private async execute(sql: string): Promise<WranglerResult> {
+    const config = join(CLOUD_ROOT, "wrangler.toml");
+    const executable = join(
+      CLOUD_ROOT,
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "wrangler.cmd" : "wrangler",
+    );
+    let child;
     try {
-      await chmod(temporaryDirectory, 0o700);
-      await writeFile(sqlPath, sql, { encoding: "utf8", mode: 0o600 });
-      const config =
-        environment === "production"
-          ? join(CLOUD_ROOT, "wrangler.toml")
-          : join(CLOUD_ROOT, "wrangler.preview-migrations.toml");
-      const executable = join(
-        CLOUD_ROOT,
-        "node_modules",
-        ".bin",
-        process.platform === "win32" ? "wrangler.cmd" : "wrangler",
+      child = Bun.spawn(
+        [
+          executable,
+          "d1",
+          "execute",
+          "DB",
+          "--remote",
+          "--config",
+          config,
+          "--command",
+          sql,
+          "--json",
+          "--yes",
+        ],
+        { cwd: CLOUD_ROOT, stdout: "pipe", stderr: "pipe" },
       );
-      let child;
-      try {
-        child = Bun.spawn(
-          [
-            executable,
-            "d1",
-            "execute",
-            "DB",
-            "--remote",
-            "--config",
-            config,
-            "--file",
-            sqlPath,
-            "--json",
-            "--yes",
-          ],
-          { cwd: CLOUD_ROOT, stdout: "pipe", stderr: "pipe" },
-        );
-      } catch (error) {
-        throw new Error(`Wrangler could not be started: ${errorMessage(error)}`);
-      }
-      const [exitCode, stdout, stderr] = await Promise.all([
-        child.exited,
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ]);
-      if (exitCode !== 0) {
-        throw new Error(`Wrangler failed: ${stderr.trim() || `exit code ${exitCode}`}`);
-      }
-      return parseWranglerOutput(stdout);
-    } finally {
-      const resolvedDirectory = resolve(temporaryDirectory);
-      if (!resolvedDirectory.startsWith(resolve(tmpdir()) + sep)) {
-        throw new Error("Refusing to clean an invalid temporary directory.");
-      }
-      await rm(temporaryDirectory, { recursive: true, force: true });
+    } catch (error) {
+      throw new Error(`Wrangler could not be started: ${errorMessage(error)}`);
     }
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    if (exitCode !== 0) {
+      throw new Error(`Wrangler failed: ${stderr.trim() || `exit code ${exitCode}`}`);
+    }
+    return parseWranglerOutput(stdout);
   }
 }
 
@@ -213,11 +193,11 @@ export async function runCommand(
 ): Promise<number> {
   const { d1, prompter, write, writeError } = dependencies;
   try {
-    const edge = await d1.findEdge(input.environment, input.edgeId);
-    if (!edge) throw new Error(`Edge ${input.edgeId} was not found in ${input.environment}.`);
+    const edge = await d1.findEdge(input.edgeId);
+    if (!edge) throw new Error(`Edge ${input.edgeId} was not found in production.`);
 
     write("Edge:");
-    write(`  Environment: ${input.environment}`);
+    write("  Environment: production");
     write(`  ID: ${edge.id}`);
     write(`  Name: ${edge.name}`);
     write(`  Tunnel URL: ${edge.tunnelUrl}`);
@@ -236,7 +216,7 @@ export async function runCommand(
       return 0;
     }
 
-    await d1.makeEdgePublic(input.environment, input.edgeId);
+    await d1.makeEdgePublic(input.edgeId);
     write("\nEdge is now public.");
     return 0;
   } catch (error) {
