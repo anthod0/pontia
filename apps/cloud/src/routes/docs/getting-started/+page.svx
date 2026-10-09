@@ -55,4 +55,14 @@ pontia status
 
 Use `pontia down` to stop the service and `pontia up` to start it again.
 
+## Update Pontia
+
+Update `pontia` and `pontiad` to the latest signed stable release on Linux or macOS:
+
+```sh
+pontia update
+```
+
+If the managed service is running, Pontia restarts it and waits for it to become healthy. If replacement or restart fails, Pontia restores the previous binaries and attempts to recover the service.
+
 Next, learn how to [enable remote access](/docs/remote-access).

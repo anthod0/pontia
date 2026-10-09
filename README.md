@@ -27,12 +27,14 @@ Pontia currently supports:
 
 ### Requirements
 
-Pontia's release installer supports x86_64 and ARM64 Linux systems with a systemd user service manager. The installer requires `curl`, `jq`, `openssl`, and common GNU command-line tools.
+- x86_64 and ARM64 Linux, or macOS 11 and later on Intel and Apple Silicon.
+- a systemd user service manager on Linux; a per-user LaunchAgent on macOS.
+- `curl`, `jq`, an OpenSSL implementation with Ed25519 support, and standard platform command-line tools.
 
 Install the clients you plan to use before initialization:
 
 - **pi:** the `pi` CLI and `tmux`;
-- **Codex:** the `codex` CLI. Codex integration requires Linux and systemd.
+- **Codex:** the `codex` CLI.
 
 ### Install
 
