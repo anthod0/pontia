@@ -102,7 +102,7 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_returns_d
     let pontia_home = dir.path().join("pontia");
     fs::create_dir(&user_home).expect("create home");
     let platform = FakePlatform::default();
-    let mut input = Cursor::new(b"\n\n\n".to_vec());
+    let mut input = Cursor::new(b"\n\n".to_vec());
     let mut output = Vec::new();
 
     let outcome = run(
@@ -147,7 +147,7 @@ fn codex_can_be_initialized_without_pi() {
     let pontia_home = dir.path().join("pontia");
     fs::create_dir(&user_home).expect("create home");
     let platform = FakePlatform::default();
-    let mut input = Cursor::new(b"codex\n\n\n".to_vec());
+    let mut input = Cursor::new(b"codex\n\n".to_vec());
     let mut output = Vec::new();
 
     run(
@@ -182,7 +182,7 @@ fn codex_can_be_combined_with_pi_during_initialization() {
     let pontia_home = dir.path().join("pontia");
     fs::create_dir(&user_home).expect("create home");
     let platform = FakePlatform::default();
-    let mut input = Cursor::new(b"pi,codex\n\n\n".to_vec());
+    let mut input = Cursor::new(b"pi,codex\n\n".to_vec());
     let mut output = Vec::new();
 
     run(
@@ -221,7 +221,7 @@ fn rerunning_preserves_the_token_comments_and_unknown_config_without_requesting_
     let platform = FakePlatform::default();
 
     for _ in 0..2 {
-        let mut input = Cursor::new(b"\n\n\n".to_vec());
+        let mut input = Cursor::new(b"\n\n".to_vec());
         let mut output = Vec::new();
         run(
             &mut input,
@@ -257,6 +257,42 @@ fn rerunning_preserves_the_token_comments_and_unknown_config_without_requesting_
 }
 
 #[test]
+fn rerunning_preserves_an_empty_workspace_root_configuration() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let user_home = dir.path().join("home");
+    let pontia_home = dir.path().join("pontia");
+    fs::create_dir(&user_home).expect("create home");
+    fs::create_dir(&pontia_home).expect("create pontia home");
+    fs::write(
+        pontia_home.join("config.toml"),
+        "[workspace_browser]\nroots = []\n",
+    )
+    .expect("write existing config");
+    let platform = FakePlatform::default();
+    let mut input = Cursor::new(b"\n\n".to_vec());
+    let mut output = Vec::new();
+
+    run(
+        &mut input,
+        &mut output,
+        &vars(&user_home, &pontia_home),
+        &platform,
+    )
+    .expect("rerun initialization")
+    .expect("initialization completed");
+
+    let config_text = fs::read_to_string(pontia_home.join("config.toml")).expect("read config");
+    let config: toml::Value = toml::from_str(&config_text).expect("valid TOML");
+    assert_eq!(
+        config["workspace_browser"]["roots"]
+            .as_array()
+            .expect("workspace roots")
+            .len(),
+        0
+    );
+}
+
+#[test]
 fn existing_token_is_query_encoded_in_the_dashboard_url() {
     let dir = tempfile::tempdir().expect("temp dir");
     let user_home = dir.path().join("home");
@@ -269,7 +305,7 @@ fn existing_token_is_query_encoded_in_the_dashboard_url() {
     )
     .expect("write config");
     let platform = FakePlatform::default();
-    let mut input = Cursor::new(b"\n\n\n".to_vec());
+    let mut input = Cursor::new(b"\n\n".to_vec());
     let mut output = Vec::new();
 
     let outcome = run(
@@ -300,7 +336,7 @@ fn command_scoped_token_is_warned_about_and_never_used_as_daemon_credential() {
         "PONTIA_EXTERNAL_API_TOKEN".to_string(),
         "command-only-secret".to_string(),
     );
-    let mut input = Cursor::new(b"\n\n\n".to_vec());
+    let mut input = Cursor::new(b"\n\n".to_vec());
     let mut output = Vec::new();
 
     let outcome = run(&mut input, &mut output, &environment, &platform)
@@ -379,7 +415,7 @@ fn cancellation_before_confirmation_has_no_side_effects() {
     let pontia_home = dir.path().join("pontia");
     fs::create_dir(&user_home).expect("create home");
     let platform = FakePlatform::default();
-    let mut input = Cursor::new(b"\n\nn\n".to_vec());
+    let mut input = Cursor::new(b"\nn\n".to_vec());
     let mut output = Vec::new();
 
     run(
@@ -404,7 +440,7 @@ fn failed_pi_install_does_not_write_config_or_start_service() {
         install_error: Some("pi install failed"),
         ..FakePlatform::default()
     };
-    let mut input = Cursor::new(b"\n\n\n".to_vec());
+    let mut input = Cursor::new(b"\n\n".to_vec());
     let mut output = Vec::new();
 
     let error = run(
@@ -433,7 +469,7 @@ fn unavailable_dashboard_keeps_started_service_without_returning_a_token_url() {
         dashboard_ready: false,
         ..FakePlatform::default()
     };
-    let mut input = Cursor::new(b"\n\n\n".to_vec());
+    let mut input = Cursor::new(b"\n\n".to_vec());
     let mut output = Vec::new();
 
     let error = run(
@@ -460,13 +496,13 @@ fn unavailable_dashboard_keeps_started_service_without_returning_a_token_url() {
 }
 
 #[test]
-fn initialization_returns_without_waiting_for_dashboard_reopen_input() {
+fn initialization_only_consumes_agent_selection_and_confirmation_input() {
     let dir = tempfile::tempdir().expect("temp dir");
     let user_home = dir.path().join("home");
     let pontia_home = dir.path().join("pontia");
     fs::create_dir(&user_home).expect("create home");
     let platform = FakePlatform::default();
-    let mut input = Cursor::new(b"\n\n\nnot consumed\n".to_vec());
+    let mut input = Cursor::new(b"\n\nnot consumed\n".to_vec());
     let mut output = Vec::new();
 
     let outcome = run(
@@ -483,5 +519,5 @@ fn initialization_returns_without_waiting_for_dashboard_reopen_input() {
             .local_dashboard_url
             .starts_with("http://127.0.0.1:8080/dashboard?token=")
     );
-    assert_eq!(input.position(), 3);
+    assert_eq!(input.position(), 2);
 }

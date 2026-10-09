@@ -89,14 +89,18 @@ where
         );
     }
     let user_home = validated_user_home(vars)?;
-    let initial_roots = if existing.workspace_browser.roots.is_empty() {
+    let config_path = existing.pontia_home.join("config.toml");
+    let config_exists = config_path
+        .try_exists()
+        .map_err(|error| format!("failed to inspect {}: {error}", config_path.display()))?;
+    let initial_roots = if config_exists {
+        existing.workspace_browser.roots.clone()
+    } else {
         vec![WorkspaceRootConfig {
             root_id: "home".to_string(),
             label: "Home".to_string(),
             path: user_home.display().to_string(),
         }]
-    } else {
-        existing.workspace_browser.roots.clone()
     };
 
     writeln!(output, "Pontia initialization\n").map_err(io_error)?;
@@ -105,18 +109,6 @@ where
         .codex
         .then(|| platform.inspect_codex(vars, &user_home))
         .transpose()?;
-
-    writeln!(output, "\nWorkspace Browser roots:").map_err(io_error)?;
-    for root in &initial_roots {
-        writeln!(output, "  [x] {}", root.path).map_err(io_error)?;
-    }
-    write!(
-        output,
-        "Press Enter to keep these roots, type comma-separated absolute paths to replace them, or 'none': "
-    )
-    .map_err(io_error)?;
-    let root_answer = read_answer(input, output)?;
-    let roots = selected_roots(root_answer.trim(), &initial_roots)?;
 
     let token = match existing.external_api_token.as_deref() {
         Some(token) => token.to_string(),
@@ -156,7 +148,7 @@ where
     } else {
         writeln!(output, "  Codex integration: skip").map_err(io_error)?;
     }
-    writeln!(output, "  Workspace Browser roots: {}", roots.len()).map_err(io_error)?;
+    writeln!(output, "  Workspace Browser roots: {}", initial_roots.len()).map_err(io_error)?;
     writeln!(
         output,
         "  External API token: {}",
@@ -195,12 +187,11 @@ where
         .map_err(io_error)?;
     }
 
-    let config_path = existing.pontia_home.join("config.toml");
     let config_changed = write_config(
         &config_path,
         existing.bind_addr,
         &token,
-        &roots,
+        &initial_roots,
         existing.external_api_token.as_deref(),
         &existing.workspace_browser.roots,
     )?;
@@ -319,45 +310,6 @@ fn read_answer<R: BufRead, W: Write>(input: &mut R, output: &mut W) -> Result<St
     Ok(answer)
 }
 
-fn selected_roots(
-    answer: &str,
-    initial: &[WorkspaceRootConfig],
-) -> Result<Vec<WorkspaceRootConfig>, String> {
-    if answer.is_empty() {
-        for root in initial {
-            validate_root_path(Path::new(&root.path))?;
-        }
-        return Ok(initial.to_vec());
-    }
-    if answer == "none" {
-        return Ok(Vec::new());
-    }
-
-    let mut used_ids = HashSet::new();
-    answer
-        .split(',')
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
-        .map(PathBuf::from)
-        .map(|path| {
-            validate_root_path(&path)?;
-            let existing = initial.iter().find(|root| Path::new(&root.path) == path);
-            let label = existing
-                .map(|root| root.label.clone())
-                .unwrap_or_else(|| root_label(&path));
-            let base_id = existing
-                .map(|root| root.root_id.clone())
-                .unwrap_or_else(|| root_id(&label));
-            let root_id = unique_id(base_id, &mut used_ids);
-            Ok(WorkspaceRootConfig {
-                root_id,
-                label,
-                path: path.display().to_string(),
-            })
-        })
-        .collect()
-}
-
 fn validate_root_path(path: &Path) -> Result<(), String> {
     if !path.is_absolute() || !path.is_dir() {
         return Err(format!(
@@ -366,47 +318,6 @@ fn validate_root_path(path: &Path) -> Result<(), String> {
         ));
     }
     Ok(())
-}
-
-fn root_label(path: &Path) -> String {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.is_empty())
-        .unwrap_or("Root")
-        .to_string()
-}
-
-fn root_id(label: &str) -> String {
-    let value = label
-        .chars()
-        .flat_map(char::to_lowercase)
-        .map(|character| {
-            if character.is_ascii_alphanumeric() {
-                character
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>();
-    let value = value.trim_matches('-');
-    if value.is_empty() {
-        "root".to_string()
-    } else {
-        value.to_string()
-    }
-}
-
-fn unique_id(base: String, used: &mut HashSet<String>) -> String {
-    if used.insert(base.clone()) {
-        return base;
-    }
-    for suffix in 2.. {
-        let candidate = format!("{base}-{suffix}");
-        if used.insert(candidate.clone()) {
-            return candidate;
-        }
-    }
-    unreachable!()
 }
 
 fn generate_token<P: InitPlatform>(platform: &P) -> Result<String, String> {
