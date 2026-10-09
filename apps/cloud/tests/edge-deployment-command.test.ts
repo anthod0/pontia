@@ -3,7 +3,7 @@ import { deploymentModeCommand } from "../src/lib/edge-deployment-command";
 import { deploymentCommand } from "../src/lib/server/edge-deployment";
 import unsafePorts from "../../../config/edge-unsafe-ports.json";
 
-const command = deploymentCommand("https://pontia.example", "edge-id", "deployment-ticket");
+const command = deploymentCommand("edge-id", "deployment-ticket");
 
 test("default mode preserves the existing HTTP-01 command regardless of custom port input", () => {
   for (const port of [undefined, 0, 25, 8443]) {

@@ -30,7 +30,7 @@ function dependencies(): DeploymentDependencies {
 
 async function issuedDeployment() {
   await database.db.insert(users).values({ id: "user-owner" });
-  return issueEdgeDeployment(database.db, "user-owner", "https://pontia.example", dependencies());
+  return issueEdgeDeployment(database.db, "user-owner", dependencies());
 }
 
 function ticketFrom(command: string) {
@@ -67,7 +67,7 @@ test("issuing a deployment creates a one-hour bound ticket and copyable command"
   expect(deployment.command).toContain(
     "curl -fsSL 'https://get.pontia.dev/install-edge.sh' | sudo sh",
   );
-  expect(deployment.command).toContain("--cloud-origin 'https://pontia.example'");
+  expect(deployment.command).not.toContain("--cloud-origin");
   expect(deployment.command).toContain(`--edge-id '${edgeId}'`);
   expect(deployment.command).toContain(`--ticket '${ticket}'`);
   const stored = await database.db.select().from(edgeTickets).get();
@@ -305,9 +305,9 @@ test("a renamed edge continues to reserve its immutable DNS label", async () => 
     serviceCredentialHash: "unrelated",
   });
 
-  await expect(
-    issueEdgeDeployment(database.db, "user-owner", "https://pontia.example", dependencies()),
-  ).rejects.toThrow("Unable to allocate an edge name");
+  await expect(issueEdgeDeployment(database.db, "user-owner", dependencies())).rejects.toThrow(
+    "Unable to allocate an edge name",
+  );
 });
 
 test("expired deployment records reserve their DNS names until cron deletes them", async () => {
@@ -317,7 +317,7 @@ test("expired deployment records reserve their DNS names until cron deletes them
     .set({ expiresAt: "2000-01-01T00:00:00.000Z" })
     .where(eq(edgeTickets.purpose, "edge_deployment"));
 
-  await expect(
-    issueEdgeDeployment(database.db, "user-owner", "https://pontia.example", dependencies()),
-  ).rejects.toThrow("Unable to allocate an edge name");
+  await expect(issueEdgeDeployment(database.db, "user-owner", dependencies())).rejects.toThrow(
+    "Unable to allocate an edge name",
+  );
 });

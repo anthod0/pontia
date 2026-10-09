@@ -22,12 +22,7 @@ async function deploymentTicket() {
     edgeId: () => edgeId,
     heroName: async () => "brave-atlas",
   };
-  const deployment = await issueEdgeDeployment(
-    database.db,
-    "network-owner",
-    "https://pontia.example",
-    dependencies,
-  );
+  const deployment = await issueEdgeDeployment(database.db, "network-owner", dependencies);
   const ticket = /--ticket '(pet_v1_[A-Za-z0-9_-]{43})'/.exec(deployment.command)?.[1];
   if (!ticket) throw new Error("Expected deployment ticket");
   return ticket;

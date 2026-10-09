@@ -44,12 +44,7 @@ async function ticket() {
     edgeId: () => edgeId,
     heroName: async () => "silent-orion",
   };
-  const deployment = await issueEdgeDeployment(
-    database.db,
-    "user-http",
-    "https://pontia.example",
-    dependencies,
-  );
+  const deployment = await issueEdgeDeployment(database.db, "user-http", dependencies);
   const match = /--ticket '(pet_v1_[A-Za-z0-9_-]{43})'/.exec(deployment.command);
   if (!match) throw new Error("Expected ticket");
   return match[1];

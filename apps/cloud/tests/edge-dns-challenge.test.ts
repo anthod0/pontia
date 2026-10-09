@@ -111,7 +111,7 @@ test("renewal authenticates before edge-ID rate limiting and derives its own TXT
 
 test("pending deployment can clean its own TXT but cannot bypass network verification to publish", async () => {
   await database.db.insert(users).values({ id: "owner" });
-  const deployment = await issueEdgeDeployment(database.db, "owner", "https://pontia.example", {
+  const deployment = await issueEdgeDeployment(database.db, "owner", {
     now: () => new Date("2099-01-01"),
     randomBytes: () => new Uint8Array(32).fill(32),
     edgeId: () => edgeId,

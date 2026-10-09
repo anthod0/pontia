@@ -9,6 +9,7 @@ pub mod enrollment;
 mod files;
 pub mod network;
 mod online;
+pub mod pending_init;
 pub mod port;
 pub mod systemd;
 mod tickets;

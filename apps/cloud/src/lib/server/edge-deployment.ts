@@ -42,8 +42,8 @@ function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
-export function deploymentCommand(origin: string, edgeId: string, ticket: string) {
-  return `curl -fsSL ${shellQuote("https://get.pontia.dev/install-edge.sh")} | sudo sh &&\nsudo pontia-edge init \\\n  --cloud-origin ${shellQuote(origin)} \\\n  --edge-id ${shellQuote(edgeId)} \\\n  --ticket ${shellQuote(ticket)}`;
+export function deploymentCommand(edgeId: string, ticket: string) {
+  return `curl -fsSL ${shellQuote("https://get.pontia.dev/install-edge.sh")} | sudo sh &&\nsudo pontia-edge init \\\n  --edge-id ${shellQuote(edgeId)} \\\n  --ticket ${shellQuote(ticket)}`;
 }
 
 async function unusedHeroName(db: Database, dependencies: DeploymentDependencies) {
@@ -69,7 +69,6 @@ async function unusedHeroName(db: Database, dependencies: DeploymentDependencies
 export async function issueEdgeDeployment(
   db: Database,
   userId: string,
-  origin: string,
   dependencies: DeploymentDependencies = defaultDependencies,
 ) {
   const edgeId = dependencies.edgeId();
@@ -94,7 +93,7 @@ export async function issueEdgeDeployment(
     edgeId,
     name,
     expiresAt: expiresAt.toISOString(),
-    command: deploymentCommand(origin, edgeId, ticket),
+    command: deploymentCommand(edgeId, ticket),
   };
 }
 

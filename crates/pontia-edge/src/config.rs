@@ -10,6 +10,7 @@ fn default_port() -> u16 {
     443
 }
 
+pub const CLOUD_ORIGIN: &str = "https://pontia.dev";
 pub const CONFIG_PATH: &str = "/etc/pontia/edge/config.json";
 fn default_dashboard_origin() -> String {
     "https://app.pontia.dev".to_owned()
@@ -17,7 +18,6 @@ fn default_dashboard_origin() -> String {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ServiceConfig {
-    pub cloud_origin: String,
     pub hostname: String,
     #[serde(default = "default_port")]
     pub port: u16,
@@ -41,12 +41,6 @@ impl ServiceConfig {
         .context("edge service config is invalid")?;
         validate_edge_port(config.port).map_err(anyhow::Error::msg)?;
         hostname_from_tunnel_url(&format!("wss://{}/tunnel", config.hostname))?;
-        let origin =
-            Url::parse(&config.cloud_origin).context("configured Cloud origin is invalid")?;
-        anyhow::ensure!(
-            origin.scheme() == "https" && origin.path() == "/",
-            "configured Cloud origin is invalid"
-        );
         validate_browser_origin(&config.browser_dashboard_origin)?;
         Ok(config)
     }
@@ -109,7 +103,6 @@ mod tests {
         for port in [443, 8443] {
             for acme_challenge in [AcmeChallenge::Http01, AcmeChallenge::Dns01] {
                 let config = ServiceConfig {
-                    cloud_origin: "https://pontia.dev".to_owned(),
                     hostname: "brave-atlas.edge.pontia.dev".to_owned(),
                     port,
                     acme_challenge,
@@ -119,14 +112,23 @@ mod tests {
                 assert_eq!(ServiceConfig::read(&path).unwrap(), config);
             }
         }
-        std::fs::write(
-            &path,
-            br#"{"cloud_origin":"https://pontia.dev","hostname":"brave-atlas.edge.pontia.dev"}"#,
-        )
-        .unwrap();
+        std::fs::write(&path, br#"{"hostname":"brave-atlas.edge.pontia.dev"}"#).unwrap();
         let config = ServiceConfig::read(&path).unwrap();
         assert_eq!(config.port, 443);
         assert_eq!(config.acme_challenge, AcmeChallenge::Http01);
+
+        std::fs::write(
+            &path,
+            br#"{"cloud_origin":"https://old.example","hostname":"brave-atlas.edge.pontia.dev"}"#,
+        )
+        .unwrap();
+        let config = ServiceConfig::read(&path).unwrap();
+        config.save(&path).unwrap();
+        assert!(
+            !std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("cloud_origin")
+        );
     }
 
     #[test]

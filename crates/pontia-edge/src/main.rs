@@ -15,10 +15,11 @@ use pontia_edge::{
         complete_dns_and_save, issue_dns_and_save, issue_http_and_save,
     },
     challenge::ChallengeServer,
-    config::{CONFIG_PATH, ServiceConfig, hostname_from_tunnel_url},
+    config::{CLOUD_ORIGIN, CONFIG_PATH, ServiceConfig, hostname_from_tunnel_url},
     credential::{CREDENTIAL_PATH, ensure_managed_directory, ensure_root, read_edge_credential},
     enrollment::{EdgeNetworkClient, HttpCloudClient, InitializationResult, initialize_and_enroll},
     network::{discover_public_ipv4, system_dns_resolver},
+    pending_init::{self, PENDING_INIT_PATH, PendingInit},
     port::{parse_edge_port, tunnel_url},
     systemd::{Systemd, UNIT_DIRECTORY, UNIT_PATH},
     tls::AcmeAcceptor,
@@ -54,6 +55,8 @@ struct Cli {
 enum Command {
     /// Initialize this edge, configure its public endpoint, and install its service.
     Init(InitArgs),
+    /// Retry the last incomplete initialization.
+    Retry,
     /// Update pontia-edge to the latest stable release.
     Update {
         /// Skip updates while the Edge service is stopped.
@@ -69,8 +72,6 @@ enum Command {
 
 #[derive(Args)]
 struct InitArgs {
-    #[arg(long)]
-    cloud_origin: String,
     #[arg(long, value_parser = parse_edge_id)]
     edge_id: Uuid,
     #[arg(long)]
@@ -91,6 +92,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Some(Command::Init(args)) => run_until_shutdown(init(args)).await,
+        Some(Command::Retry) => run_until_shutdown(retry()).await,
         Some(Command::Update { automatic }) => update::run(automatic).await,
         Some(Command::AutoUpdate { command }) => auto_update::run(command).await,
         None => serve().await,
@@ -105,19 +107,60 @@ fn parse_edge_id(value: &str) -> std::result::Result<Uuid, String> {
     Ok(id)
 }
 
+impl From<InitArgs> for PendingInit {
+    fn from(args: InitArgs) -> Self {
+        Self {
+            edge_id: args.edge_id,
+            ticket: args.ticket,
+            acme_staging: args.acme_staging,
+            port: args.port,
+            acme_challenge: args.acme_challenge,
+        }
+    }
+}
+
 async fn init(args: InitArgs) -> Result<()> {
     // Do not hold the global stdout lock across network waits or cancellation.
     let mut output = std::io::stdout();
-    init_with_output(args, &mut output).await
+    prepare_initialization(&mut output)?;
+    let pending = PendingInit::from(args);
+    pending.save(Path::new(PENDING_INIT_PATH))?;
+    run_pending_initialization(pending, &mut output).await
 }
 
-async fn init_with_output<W: Write + ?Sized>(args: InitArgs, output: &mut W) -> Result<()> {
+async fn retry() -> Result<()> {
+    let mut output = std::io::stdout();
+    prepare_initialization(&mut output)?;
+    let pending = PendingInit::read(Path::new(PENDING_INIT_PATH))?;
+    status(&mut output, "Retrying the pending edge initialization...")?;
+    run_pending_initialization(pending, &mut output).await
+}
+
+fn prepare_initialization(output: &mut (impl Write + ?Sized)) -> Result<()> {
     status(output, "Checking local requirements...")?;
     ensure_root(rustix::process::geteuid().as_raw())?;
-    ensure_managed_directory()?;
+    ensure_managed_directory()
+}
 
+async fn run_pending_initialization<W: Write + ?Sized>(
+    args: PendingInit,
+    output: &mut W,
+) -> Result<()> {
+    complete_pending_initialization(Path::new(PENDING_INIT_PATH), init_with_output(args, output))
+        .await
+}
+
+async fn complete_pending_initialization(
+    path: &Path,
+    operation: impl std::future::Future<Output = Result<()>>,
+) -> Result<()> {
+    operation.await?;
+    pending_init::remove(path)
+}
+
+async fn init_with_output<W: Write + ?Sized>(args: PendingInit, output: &mut W) -> Result<()> {
     status(output, "Preparing edge deployment with Pontia Cloud...")?;
-    let client = HttpCloudClient::new(&args.cloud_origin)?;
+    let client = HttpCloudClient::new(CLOUD_ORIGIN)?;
     let enrollment = initialize_and_enroll(
         &client,
         CREDENTIAL_PATH.as_ref(),
@@ -125,39 +168,78 @@ async fn init_with_output<W: Write + ?Sized>(args: InitArgs, output: &mut W) -> 
         &args.ticket,
     )
     .await?;
-    let identity = match enrollment {
-        InitializationResult::AlreadyRegistered(identity) => {
-            status(
-                output,
-                &format!(
-                    "Edge {} is already registered and available at {}.",
-                    identity.name, identity.tunnel_url
-                ),
-            )?;
-            return Ok(());
-        }
-        InitializationResult::Enrolled(identity) => identity,
+    let (identity, already_registered) = match enrollment {
+        InitializationResult::AlreadyRegistered(identity) => (identity, true),
+        InitializationResult::Enrolled(identity) => (identity, false),
     };
+    anyhow::ensure!(
+        identity.edge_id == args.edge_id,
+        "Cloud returned a different edge identity"
+    );
     let hostname = hostname_from_tunnel_url(&identity.tunnel_url)?;
-    status(
-        output,
-        &format!("Deployment authorized for {} ({hostname}).", identity.name),
-    )?;
-
-    let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
-    status(output, "Detecting the public IPv4 address...")?;
-    let candidate_ipv4 = discover_public_ipv4(client.origin()).await?;
-    status(output, &format!("Public IPv4 address: {candidate_ipv4}"))?;
-
     let expected_config = ServiceConfig {
-        cloud_origin: args.cloud_origin,
         hostname: hostname.clone(),
         port: args.port.unwrap_or(443),
         acme_challenge: args.acme_challenge,
         browser_dashboard_origin: "https://app.pontia.dev".to_owned(),
     };
-    let reusable_certificate = existing_certificate_matches(&expected_config).await;
+    let credential = read_edge_credential(CREDENTIAL_PATH.as_ref())?;
     let systemd = Systemd::default();
+
+    if already_registered {
+        anyhow::ensure!(
+            identity.tunnel_url == tunnel_url(&hostname, expected_config.port),
+            "registered edge endpoint does not match the pending initialization"
+        );
+        status(
+            output,
+            &format!(
+                "Edge {} is already registered; completing local setup.",
+                identity.name
+            ),
+        )?;
+        anyhow::ensure!(
+            saved_certificate_is_usable(Path::new(TLS_PATH), &hostname).await,
+            "registered edge TLS certificate is missing or invalid"
+        );
+        expected_config.save(Path::new(CONFIG_PATH))?;
+        systemd.install_and_start(Path::new(UNIT_PATH)).await?;
+        wait_for_health(
+            &client,
+            &args.ticket,
+            &credential.value,
+            (&hostname, expected_config.port),
+            output,
+            HEALTH_WAIT_ATTEMPTS,
+            RETRY_DELAY,
+        )
+        .await?;
+        systemd
+            .enable_auto_update(Path::new(UNIT_DIRECTORY))
+            .await?;
+        status(
+            output,
+            &format!(
+                "Edge {} is available at {}.",
+                identity.name, identity.tunnel_url
+            ),
+        )?;
+        status(
+            output,
+            "Manage this Edge at https://pontia.dev/settings/edges",
+        )?;
+        return Ok(());
+    }
+
+    status(
+        output,
+        &format!("Deployment authorized for {} ({hostname}).", identity.name),
+    )?;
+    status(output, "Detecting the public IPv4 address...")?;
+    let candidate_ipv4 = discover_public_ipv4(client.origin()).await?;
+    status(output, &format!("Public IPv4 address: {candidate_ipv4}"))?;
+
+    let reusable_certificate = existing_certificate_matches(&expected_config).await;
     let probe_port = args.port.unwrap_or(80);
     status(
         output,
@@ -241,6 +323,10 @@ async fn init_with_output<W: Write + ?Sized>(args: InitArgs, output: &mut W) -> 
             tunnel_url(&hostname, expected_config.port)
         ),
     )?;
+    status(
+        output,
+        "Manage this Edge at https://pontia.dev/settings/edges",
+    )?;
     Ok(())
 }
 
@@ -252,13 +338,13 @@ fn status(output: &mut (impl Write + ?Sized), message: &str) -> Result<()> {
 }
 
 async fn existing_certificate_matches(expected: &ServiceConfig) -> bool {
-    if ServiceConfig::read(Path::new(CONFIG_PATH)).ok().as_ref() != Some(expected) {
-        return false;
-    }
-    certificate_matches_hostname(Path::new(TLS_PATH), &expected.hostname)
-        && RustlsConfig::from_pem_file(TLS_PATH, TLS_PATH)
-            .await
-            .is_ok()
+    ServiceConfig::read(Path::new(CONFIG_PATH)).ok().as_ref() == Some(expected)
+        && saved_certificate_is_usable(Path::new(TLS_PATH), &expected.hostname).await
+}
+
+async fn saved_certificate_is_usable(path: &Path, hostname: &str) -> bool {
+    certificate_matches_hostname(path, hostname)
+        && RustlsConfig::from_pem_file(path, path).await.is_ok()
 }
 
 fn certificate_matches_hostname(path: &Path, hostname: &str) -> bool {
@@ -426,7 +512,7 @@ async fn serve() -> Result<()> {
         dashboard: config.browser_dashboard_origin.clone(),
     };
     let edge = Edge::new(
-        TicketRedeemer::new(&config.cloud_origin, service_credential.clone())?,
+        TicketRedeemer::new(CLOUD_ORIGIN, service_credential.clone())?,
         origins,
         ConnectionLimits::default(),
     );
@@ -481,7 +567,7 @@ async fn renew_certificates(
         let issuer = InstantAcmeIssuer::production(ACCOUNT_PATH);
         let result = async {
             if config.acme_challenge == AcmeChallenge::Dns01 {
-                let client = HttpCloudClient::new(&config.cloud_origin)?;
+                let client = HttpCloudClient::new(CLOUD_ORIGIN)?;
                 let dns = CloudDnsChallenges {
                     client: &client,
                     credential: &credential,
@@ -713,6 +799,41 @@ mod tests {
         assert!(!error.contains("secret-credential"));
     }
 
+    #[tokio::test]
+    async fn failed_initialization_keeps_pending_parameters_for_retry() {
+        let test_root = tempfile::tempdir().unwrap();
+        let path = test_root.path().join("pending-init.json");
+        std::fs::write(&path, "pending").unwrap();
+
+        let result = complete_pending_initialization(&path, async {
+            anyhow::bail!("initialization failed")
+        })
+        .await;
+
+        assert!(result.is_err());
+        assert!(path.exists());
+    }
+
+    #[tokio::test]
+    async fn successful_initialization_removes_pending_parameters() {
+        let test_root = tempfile::tempdir().unwrap();
+        let path = test_root.path().join("pending-init.json");
+        std::fs::write(&path, "pending").unwrap();
+
+        complete_pending_initialization(&path, async { Ok(()) })
+            .await
+            .unwrap();
+
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn retry_is_a_standalone_command() {
+        let cli = Cli::try_parse_from(["pontia-edge", "retry"]).unwrap();
+        assert!(matches!(cli.command, Some(Command::Retry)));
+        assert!(Cli::try_parse_from(["pontia-edge", "retry", "--ticket", "secret"]).is_err());
+    }
+
     #[test]
     fn update_is_a_standalone_command() {
         let cli = Cli::try_parse_from(["pontia-edge", "update"]).unwrap();
@@ -776,8 +897,6 @@ mod tests {
         let base = [
             "pontia-edge",
             "init",
-            "--cloud-origin",
-            "https://pontia.example",
             "--edge-id",
             "0199791c-6600-7000-8000-000000000001",
             "--ticket",
@@ -819,8 +938,6 @@ mod tests {
         let init = Cli::try_parse_from([
             "pontia-edge",
             "init",
-            "--cloud-origin",
-            "https://pontia.example",
             "--edge-id",
             "0199791c-6600-7000-8000-000000000001",
             "--ticket",
@@ -832,8 +949,19 @@ mod tests {
             Cli::try_parse_from([
                 "pontia-edge",
                 "init",
+                "--edge-id",
+                "0199791c-6600-7000-8000-000000000001",
+                "--ticket",
+                "pet_v1_example",
                 "--cloud-origin",
                 "https://pontia.example",
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "pontia-edge",
+                "init",
                 "--edge-id",
                 "0199791c-6600-7000-8000-000000000001",
                 "--ticket",

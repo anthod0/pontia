@@ -61,15 +61,15 @@ pub struct HttpCloudClient {
 
 impl HttpCloudClient {
     pub fn new(origin: &str) -> Result<Self> {
-        let parsed = Url::parse(origin).context("--cloud-origin must be a valid URL")?;
-        anyhow::ensure!(parsed.scheme() == "https", "--cloud-origin must use HTTPS");
+        let parsed = Url::parse(origin).context("Cloud origin must be a valid URL")?;
+        anyhow::ensure!(parsed.scheme() == "https", "Cloud origin must use HTTPS");
         anyhow::ensure!(
             parsed.username().is_empty()
                 && parsed.password().is_none()
                 && parsed.query().is_none()
                 && parsed.fragment().is_none()
                 && parsed.path() == "/",
-            "--cloud-origin must contain only an HTTPS origin"
+            "Cloud origin must contain only an HTTPS origin"
         );
         Ok(Self {
             client: Client::builder()

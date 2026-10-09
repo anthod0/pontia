@@ -1,5 +1,5 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { currentLogin, environment, origin } from "$lib/server/auth/http";
+import { currentLogin, environment } from "$lib/server/auth/http";
 import { database } from "$lib/server/db";
 import { issueEdgeDeployment } from "$lib/server/edge-deployment";
 import type { Actions, PageServerLoad } from "./$types";
@@ -14,11 +14,7 @@ export const actions: Actions = {
     if (!user) return fail(401, { error: "Sign in to create an edge deployment." });
     try {
       return {
-        deployment: await issueEdgeDeployment(
-          database(environment(event).DB),
-          user.user_id,
-          origin(event),
-        ),
+        deployment: await issueEdgeDeployment(database(environment(event).DB), user.user_id),
       };
     } catch {
       return fail(503, { error: "Edge deployment is temporarily unavailable." });
