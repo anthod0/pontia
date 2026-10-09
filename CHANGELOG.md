@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-10
+
+### Added
+
+- Added macOS support for running, installing, and updating the Pontia control plane.
+- Added live health status to Edge deployment settings in Cloud.
+- Added a sitemap for public Cloud pages.
+
+### Changed
+
+- Moved Agent Client setup, profiles, lifecycle handling, configuration, and Dashboard behavior behind client-owned contracts.
+- Centralized Agent Client registration and background service startup.
+
+### Fixed
+
+- Showed total chat duration in completed work summaries.
+- Limited queued-message displays to pending and failed Inbox messages.
+- Restricted platform-specific service helpers to supported operating systems.
+- Verified the local Edge process after updates before reporting success.
+
 ## [0.4.3] - 2026-10-09
 
 ### Added
