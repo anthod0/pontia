@@ -47,7 +47,7 @@ async function fixture(script: string) {
     ["prepare-release", releases, "--version", "v1.2.3"],
     ["prepare-installers", root],
   ]) {
-    const prepared = Bun.spawnSync(["python3", "scripts/publish-release.py", ...args], {
+    const prepared = Bun.spawnSync(["python3", ".github/scripts/publish-release.py", ...args], {
       cwd: repository,
       env: signingEnvironment,
     });
@@ -104,7 +104,7 @@ test("publisher rejects mismatched Ed25519 signing keys", async () => {
   const result = Bun.spawnSync(
     [
       "python3",
-      "scripts/publish-release.py",
+      ".github/scripts/publish-release.py",
       "prepare-release",
       context.releases,
       "--version",
@@ -134,7 +134,7 @@ test("installer preparation rejects non-Ed25519 public keys", async () => {
     publicKeyEncoding: { type: "spki", format: "pem" },
   });
   const result = Bun.spawnSync(
-    ["python3", "scripts/publish-release.py", "prepare-installers", root],
+    ["python3", ".github/scripts/publish-release.py", "prepare-installers", root],
     {
       cwd: repository,
       env: { ...process.env, RELEASE_PUBLIC_KEY: wrongKeys.publicKey },

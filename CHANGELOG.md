@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-10-09
+
+### Added
+
+- Added live and completed turn durations to Dashboard conversations.
+
+### Changed
+
+- Unified binaries, the Pi client, and Cloudflare applications under the root product version and a single production release workflow.
+
+### Fixed
+
+- Accepted URL-safe credential secrets containing underscores when Edge connects to Cloud.
+- Hid injected Pi skill instructions from Dashboard conversation messages and generated session titles.
+- Allowed managed Codex threads to receive their first input and recover before Codex materializes their rollout history.
+
 ## [0.4.2] - 2026-10-09
 
 ### Added

@@ -131,13 +131,13 @@ fn update_help_has_no_version_selection() {
 }
 
 #[test]
-fn version_reports_the_workspace_version() {
+fn version_reports_the_product_version() {
     let output = pontia().arg("--version").output().expect("run pontia");
 
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8(output.stdout).expect("version is utf-8"),
-        format!("pontia {}\n", env!("CARGO_PKG_VERSION"))
+        format!("pontia {}\n", pontia_version::version())
     );
 }
 

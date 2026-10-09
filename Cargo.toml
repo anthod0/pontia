@@ -3,6 +3,7 @@ members = [
     "crates/pontia-e2e",
     "crates/pontia-edge",
     "crates/pontia-update",
+    "crates/pontia-version",
     "crates/pontia-tunnel",
     "crates/pontiad",
     "crates/pontia-core",
@@ -20,7 +21,7 @@ default-members = ["crates/pontiad"]
 resolver = "2"
 
 [workspace.package]
-version = "0.4.2"
+version = "0.0.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/anthod0/pontia"
@@ -36,6 +37,7 @@ pontia-http = { path = "crates/pontia-http" }
 pontia-runtime = { path = "crates/pontia-runtime", default-features = false }
 pontia-storage-sqlite = { path = "crates/pontia-storage-sqlite" }
 pontia-tunnel = { path = "crates/pontia-tunnel" }
+pontia-version = { path = "crates/pontia-version" }
 pontia-workflow = { path = "crates/pontia-workflow" }
 
 serde = "1"

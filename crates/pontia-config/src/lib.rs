@@ -30,12 +30,6 @@ pub struct RemoteConfig {
     pub device_id: Option<String>,
 }
 
-const DEFAULT_DASHBOARD_SOURCE: &str = concat!(
-    "https://get.pontia.dev/releases/v",
-    env!("CARGO_PKG_VERSION"),
-    "/pontia-dashboard.tar.gz"
-);
-
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct DashboardConfig {
     #[serde(default = "default_dashboard_source")]
@@ -51,7 +45,10 @@ impl Default for DashboardConfig {
 }
 
 fn default_dashboard_source() -> Option<String> {
-    Some(DEFAULT_DASHBOARD_SOURCE.to_string())
+    Some(format!(
+        "https://get.pontia.dev/releases/v{}/pontia-dashboard.tar.gz",
+        pontia_version::version()
+    ))
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]

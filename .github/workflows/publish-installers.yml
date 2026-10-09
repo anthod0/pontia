@@ -6,7 +6,7 @@ on:
     paths:
       - scripts/install.sh
       - scripts/install-edge.sh
-      - scripts/publish-release.py
+      - .github/scripts/publish-release.py
       - .github/workflows/publish-installers.yml
   workflow_dispatch:
 
@@ -29,7 +29,7 @@ jobs:
       - name: Embed the release verification key
         env:
           RELEASE_PUBLIC_KEY: ${{ vars.RELEASE_PUBLIC_KEY }}
-        run: python3 scripts/publish-release.py prepare-installers installers
+        run: python3 .github/scripts/publish-release.py prepare-installers installers
       - name: Publish installers to R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -37,4 +37,4 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: python3 scripts/publish-release.py publish-installers installers
+        run: python3 .github/scripts/publish-release.py publish-installers installers

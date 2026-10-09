@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 
 ORIGIN = "https://get.pontia.dev"
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 TARGETS = ("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu")
 
 

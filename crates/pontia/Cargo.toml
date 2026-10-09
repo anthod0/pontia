@@ -17,6 +17,7 @@ pontia-client-codex.workspace = true
 pontia-config.workspace = true
 pontia-e2e.workspace = true
 pontia-update = { path = "../pontia-update" }
+pontia-version.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

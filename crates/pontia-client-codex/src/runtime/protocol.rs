@@ -65,7 +65,7 @@ impl Connection {
         socket
             .send(Message::Text(
                 json!({"id":0,"method":"initialize","params":{
-                    "clientInfo":{"name":"pontia","version":env!("CARGO_PKG_VERSION")},
+                    "clientInfo":{"name":"pontia","version":pontia_version::version()},
                     "capabilities":{"experimentalApi":true}
                 }})
                 .to_string()

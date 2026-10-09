@@ -9,6 +9,7 @@ pontia-application.workspace = true
 pontia-core.workspace = true
 pontia-runtime.workspace = true
 pontia-storage-sqlite.workspace = true
+pontia-version.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sqlx.workspace = true

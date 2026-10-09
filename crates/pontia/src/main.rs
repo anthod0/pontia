@@ -34,7 +34,7 @@ use pontia::manager::{CommandRunner, LaunchdManager};
 #[derive(Debug, Parser)]
 #[command(
     name = "pontia",
-    version,
+    version = pontia_version::version(),
     about = "Control Pontia from the command line"
 )]
 struct Cli {

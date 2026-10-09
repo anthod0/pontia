@@ -15,6 +15,7 @@ hickory-resolver = { version = "0.25", default-features = false, features = ["sy
 instant-acme = { version = "=0.8.5", default-features = false, features = ["hyper-rustls", "ring", "rcgen"] }
 pontia-tunnel.workspace = true
 pontia-update = { path = "../pontia-update" }
+pontia-version.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rustix = { version = "1", features = ["process"] }
 rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12"] }

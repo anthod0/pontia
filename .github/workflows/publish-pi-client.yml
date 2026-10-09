@@ -1,59 +1,20 @@
 name: Publish Pi client
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - clients/pi/package.json
+  workflow_call:
+    inputs:
+      version:
+        description: Product version to publish
+        required: true
+        type: string
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
-  version:
-    runs-on: ubuntu-latest
-    outputs:
-      changed: ${{ steps.version.outputs.changed }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - id: version
-        name: Detect package version change
-        shell: bash
-        env:
-          BEFORE_COMMIT: ${{ github.event.before }}
-        run: |
-          set -euo pipefail
-          package_path=clients/pi/package.json
-          if [[ -z "$BEFORE_COMMIT" || "$BEFORE_COMMIT" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE_COMMIT:$package_path"; then
-            echo "Cannot read package.json from the commit before this push" >&2
-            exit 1
-          fi
-
-          version_filter='.version | select(type == "string" and length > 0)'
-          previous_version="$(git show "$BEFORE_COMMIT:$package_path" | jq -er "$version_filter")"
-          version="$(jq -er "$version_filter" "$package_path")"
-          if [[ "$previous_version" == "$version" ]]; then
-            echo "Package version remains $version; skipping publish"
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Package version changed from $previous_version to $version"
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
   publish:
-    needs: version
-    if: ${{ needs.version.outputs.changed == 'true' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    defaults:
-      run:
-        working-directory: clients/pi
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
         with:
@@ -63,17 +24,25 @@ jobs:
           node-version: '24'
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      - name: Typecheck
-        run: bun run typecheck
-      - name: Test
-        run: bun run test
       - name: Install npm with Trusted Publishing support
-        # OIDC requires npm >= 11.5.1; do not rely on the runner's bundled npm.
         run: npm install --global npm@11
+      - name: Stage package with the product version
+        env:
+          STAGING: ${{ runner.temp }}/pi-client
+        run: |
+          mkdir "$STAGING"
+          cp clients/pi/package.json clients/pi/README.md clients/pi/LICENSE "$STAGING/"
+          cp -a clients/pi/src "$STAGING/src"
+          python3 scripts/release-version.py materialize-npm "$STAGING/package.json"
+          test "$(jq -r .version "$STAGING/package.json")" = "${{ inputs.version }}"
+          npm pack --dry-run "$STAGING"
       - name: Publish with Trusted Publishing
-        run: npm publish --access public
+        env:
+          VERSION: ${{ inputs.version }}
+          STAGING: ${{ runner.temp }}/pi-client
+        run: |
+          if npm view "@pontia/pi-client-plugin@$VERSION" version >/dev/null 2>&1; then
+            echo "@pontia/pi-client-plugin@$VERSION is already published"
+          else
+            npm publish "$STAGING" --access public
+          fi

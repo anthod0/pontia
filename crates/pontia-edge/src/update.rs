@@ -33,7 +33,7 @@ pub async fn run(automatic: bool) -> Result<()> {
     let Some(update) = pontia_update::prepare(
         "pontia-edge",
         &["pontia-edge"],
-        Some(env!("CARGO_PKG_VERSION")),
+        Some(pontia_version::version()),
     )
     .await
     .map_err(anyhow::Error::msg)?

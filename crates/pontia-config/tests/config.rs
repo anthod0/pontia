@@ -393,13 +393,13 @@ fn provides_development_defaults_for_optional_values() {
         )
     );
     assert_eq!(config.external_api_token, None);
+    let dashboard_source = format!(
+        "https://get.pontia.dev/releases/v{}/pontia-dashboard.tar.gz",
+        pontia_version::version()
+    );
     assert_eq!(
         config.dashboard.source.as_deref(),
-        Some(concat!(
-            "https://get.pontia.dev/releases/v",
-            env!("CARGO_PKG_VERSION"),
-            "/pontia-dashboard.tar.gz"
-        ))
+        Some(dashboard_source.as_str())
     );
     assert!(config.run_migrations);
     assert_eq!(config.default_client_type, "pi");

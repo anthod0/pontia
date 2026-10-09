@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 pontia-core.workspace = true
+pontia-version.workspace = true
 serde = { workspace = true, features = ["derive"] }
 toml = "0.9"
 url = "2"

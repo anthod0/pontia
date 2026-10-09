@@ -43,7 +43,7 @@ const RENEW_AFTER: Duration = Duration::from_secs(50 * 24 * 60 * 60);
 #[derive(Parser)]
 #[command(
     about = "Pontia device connection service",
-    version,
+    version = pontia_version::version(),
     args_conflicts_with_subcommands = true
 )]
 struct Cli {
