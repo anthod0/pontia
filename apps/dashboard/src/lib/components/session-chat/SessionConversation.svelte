@@ -12,7 +12,6 @@
   import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
-  import TurnDuration from './TurnDuration.svelte'
   import type { TurnView } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
 
@@ -51,7 +50,7 @@
   let editedInput = $state('')
   let copiedMessageResetTimer: ReturnType<typeof setTimeout> | null = null
   const displayMessages = $derived(messages)
-  const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState))
+  const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState, activeTurnId))
   const displayTurns = $derived(conversationDisplayTurns(displayItems))
   const turnsById = $derived(new Map(turns.map((turn) => [turn.turn_id, turn])))
   const activeLoadingMessageId = $derived(activePendingAssistantMessageId(displayMessages, activeTurnId))
@@ -144,7 +143,7 @@
     | { kind: 'user_message'; id: string; item: Extract<ConversationDisplayItem, { kind: 'message' }> }
     | { kind: 'assistant_group'; id: string; items: ConversationDisplayItem[] }
 
-  function conversationDisplayItems(chatMessages: SessionChatMessage[], state: string | null): ConversationDisplayItem[] {
+  function conversationDisplayItems(chatMessages: SessionChatMessage[], state: string | null, turnId: string | null): ConversationDisplayItem[] {
     const showBottomStatus = state === 'starting' || state === 'exited' || state === 'interrupted'
     const showStatus = Boolean(state && state !== 'idle' && !showBottomStatus)
     const latestAssistantId = chatMessages.at(-1)?.role === 'assistant' ? chatMessages.at(-1)?.id : null
@@ -155,7 +154,7 @@
       showAgentStatus: showStatus && message.id === latestAssistantId,
     }))
     if (showBottomStatus) return [...items, { kind: 'agent_bottom_status', id: `agent-bottom-status:${state}` }]
-    if (!showStatus || latestAssistantId) return items
+    if (!showStatus || latestAssistantId || (state === 'busy' && activePendingAssistantMessageId(chatMessages, turnId))) return items
     return [...items, { kind: 'agent_status', id: `agent-status:${state}` }]
   }
 
@@ -290,7 +289,11 @@
   {#if displayItem.kind === 'agent_status'}
     <Message.Root from="assistant" data-chat-agent-status>
       <Message.Content>
-        <AgentStatus state={sessionState} />
+        {#if sessionState === 'busy'}
+          <ThoughtSummary steps={[]} active turn={turns.find((turn) => turn.turn_id === activeTurnId) ?? turns.find((turn) => turn.state === 'running')} />
+        {:else}
+          <AgentStatus state={sessionState} />
+        {/if}
       </Message.Content>
     </Message.Root>
   {:else if displayItem.kind === 'agent_bottom_status'}
@@ -305,11 +308,16 @@
       data-chat-role={chatMessage.role}
     >
       <Message.Content class={`${chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''} ${editingMessageId === chatMessage.id ? 'w-full' : ''}`}>
-        {#if displayItem.showAgentStatus}
+        {#if displayItem.showAgentStatus && sessionState !== 'busy'}
           <AgentStatus state={sessionState} />
         {/if}
-        {#if chatMessage.role === 'assistant' && chatMessage.thoughtSteps?.length}
-          <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps} active={(sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId} />
+        {#if chatMessage.role === 'assistant'}
+          {@const turn = chatMessage.turnId ? turnsById.get(chatMessage.turnId) : undefined}
+          {@const active = (sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId}
+          {@const firstAssistant = displayMessages.find((message) => message.turnId === chatMessage.turnId && message.role === 'assistant')?.id === chatMessage.id}
+          {#if chatMessage.thoughtSteps?.length || active || (displayItem.showAgentStatus && sessionState === 'busy') || (firstAssistant && turn?.state === 'completed')}
+            <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps ?? []} {turn} active={active || (displayItem.showAgentStatus && sessionState === 'busy')} />
+          {/if}
         {/if}
         {#if chatMessage.content.trim()}
           {#if chatMessage.role === 'user' && editingMessageId === chatMessage.id}
@@ -446,9 +454,6 @@
               </div>
             {/if}
           {/each}
-          {#if displayTurn.turnId && turnsById.get(displayTurn.turnId)}
-            <TurnDuration turn={turnsById.get(displayTurn.turnId)!} />
-          {/if}
         </div>
       {/each}
     </Conversation.Content>

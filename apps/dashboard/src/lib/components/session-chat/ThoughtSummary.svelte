@@ -4,6 +4,8 @@
   import * as Message from '$lib/components/ai-elements/message/index.js'
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import { cn } from '$lib/utils.js'
+  import TurnDuration from './TurnDuration.svelte'
+  import type { TurnView } from '../../../api/types'
   import ThoughtCommandStep from './ThoughtCommandStep.svelte'
   import ThoughtFallbackStep from './ThoughtFallbackStep.svelte'
   import ThoughtFileStep from './ThoughtFileStep.svelte'
@@ -12,6 +14,7 @@
   interface Props {
     steps: SessionChatThoughtStep[]
     active?: boolean
+    turn?: TurnView
     class?: string
   }
 
@@ -26,7 +29,7 @@
 
   type DisplayStep = SessionChatThoughtStep | GroupedFileSteps
 
-  let { steps, active = false, class: className }: Props = $props()
+  let { steps, active = false, turn, class: className }: Props = $props()
   let open = $state(false)
 
   const visibleSteps = $derived(groupFileSteps(steps))
@@ -78,7 +81,7 @@
       class="group inline-flex min-w-0 items-center gap-1.5 py-2.5 pr-3 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={open ? 'Hide agent work steps' : 'Show agent work steps'}
     >
-      <span class="truncate">{active ? 'Working' : 'Agent work'}</span>
+      <span class="truncate"><TurnDuration {turn} {active} /></span>
       <CaretRightIcon class={cn('size-4 shrink-0 transition-transform', open && 'rotate-90')} aria-hidden="true" />
     </Collapsible.Trigger>
 
@@ -120,4 +123,8 @@
       </div>
     </Collapsible.Content>
   </Collapsible.Root>
+{:else if active || turn?.state === 'completed'}
+  <div class={cn('not-prose py-2.5 text-sm leading-5 text-muted-foreground', className)}>
+    <TurnDuration {turn} {active} />
+  </div>
 {/if}

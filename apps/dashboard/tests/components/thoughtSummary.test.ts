@@ -42,7 +42,6 @@ test("completed work expands inline from its summary heading", async () => {
   });
 
   const trigger = screen.getByRole("button", { name: "Show agent work steps" });
-  expect(trigger).toHaveTextContent("Agent work");
   expect(screen.getByText("Inspecting the project.")).not.toBeVisible();
 
   await user.click(trigger);

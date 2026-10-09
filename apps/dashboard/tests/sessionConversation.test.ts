@@ -123,7 +123,7 @@ test("conversation groups each Turn’s user and assistant messages with its sta
   expect(turns[1]).toHaveAttribute("data-chat-turn-id", "turn-2");
   expect(turns[1]).toContainElement(screen.getByText("Next question."));
   expect(turns[1]).toContainElement(screen.getByText("Streaming reply."));
-  expect(turns[1]).toContainElement(screen.getByLabelText("Agent status: Agent working"));
+  expect(turns[1]).toContainElement(screen.getByRole("timer", { name: "Turn running time" }));
 });
 
 test("conversation shows duration for an earlier completed Turn", () => {
@@ -188,9 +188,17 @@ test("conversation updates the running Turn duration while output is streaming",
     turnId: "turn-running",
     createdAt: "2026-06-11T00:00:00Z",
     status: message.role === "assistant" ? ("pending" as const) : message.status,
+    thoughtSteps: message.role === "assistant" ? [{
+      id: "running-thought",
+      kind: "thinking" as const,
+      title: "Thinking",
+      status: "started" as const,
+      content: "Inspecting the repo.",
+      occurredAt: null,
+    }] : undefined,
   }));
 
-  render(SessionConversation, {
+  const { rerender } = render(SessionConversation, {
     props: {
       messages: runningMessages,
       turns: [
@@ -212,6 +220,25 @@ test("conversation updates the running Turn duration while output is streaming",
   await vi.advanceTimersByTimeAsync(2000);
 
   expect(timer.querySelector("time")).toHaveAttribute("datetime", "PT122S");
+  const trigger = screen.getByRole("button", { name: "Show agent work steps" });
+  expect(trigger).toHaveAttribute("aria-expanded", "false");
+  expect(trigger).toContainElement(timer);
+  expect(screen.getAllByRole("timer")).toHaveLength(1);
+
+  await rerender({
+    messages: runningMessages.map((message) => ({ ...message, status: "sent" as const })),
+    turns: [durationTurn({
+      turn_id: "turn-running",
+      completed_at: "2026-06-11T00:02:03Z",
+    })],
+    sessionState: "idle",
+    activeTurnId: null,
+  });
+  await vi.advanceTimersByTimeAsync(5000);
+
+  const duration = screen.getByRole("status", { name: "Turn completed duration" });
+  expect(duration.querySelector("time")).toHaveAttribute("datetime", "PT123S");
+  expect(screen.queryByRole("timer")).not.toBeInTheDocument();
 });
 
 test("conversation groups assistant-side items after each user message", () => {
@@ -260,18 +287,11 @@ test("conversation shows the current agent status above only the latest assistan
     },
   });
 
-  expect(screen.getAllByText("Agent working")).toHaveLength(1);
+  const timer = screen.getByRole("timer", { name: "Turn running time" });
   const latestAssistantMessage = screen
     .getByText("I checked it.")
     .closest("[data-chat-message-id]");
-  expect(latestAssistantMessage).toContainElement(screen.getByText("Agent working"));
-  expect(
-    screen
-      .queryByText("Agent working")
-      ?.compareDocumentPosition(screen.getByText("I checked it.")) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-  expect(screen.getByLabelText("Agent status: Agent working")).toBeInTheDocument();
+  expect(latestAssistantMessage).toContainElement(timer);
 });
 
 test("conversation hides the agent status component while the session is idle", () => {
@@ -492,7 +512,7 @@ test("conversation shows agent status for a busy pending assistant message with 
     },
   });
 
-  expect(screen.getByLabelText("Agent status: Agent working")).toBeInTheDocument();
+  expect(screen.getAllByRole("timer", { name: "Turn running time" })).toHaveLength(1);
   expect(screen.queryByLabelText("Thinking in progress")).not.toBeInTheDocument();
   expect(screen.getByText("bash")).toBeInTheDocument();
   expect(screen.getByText("read")).toBeInTheDocument();
@@ -502,7 +522,7 @@ test("conversation shows agent status for a busy pending assistant message with 
   expect(screen.queryByText("Working…")).not.toBeInTheDocument();
 });
 
-test("conversation keeps the active Turn work collapsed and labeled Working when a queued user message follows it", () => {
+test("conversation keeps active Turn work collapsed when a queued user message follows it", () => {
   render(SessionConversation, {
     props: {
       sessionState: "busy",
@@ -541,7 +561,7 @@ test("conversation keeps the active Turn work collapsed and labeled Working when
 
   const trigger = screen.getByRole("button", { name: "Show agent work steps" });
   expect(trigger).toHaveAttribute("aria-expanded", "false");
-  expect(trigger).toHaveTextContent("Working");
+  expect(trigger).toContainElement(screen.getAllByRole("timer", { name: "Turn running time" })[0]);
   expect(screen.getByText("Inspecting the active turn.")).not.toBeVisible();
 });
 
@@ -581,7 +601,7 @@ test("conversation shows agent working only once after an interrupted pending th
     },
   });
 
-  expect(screen.getAllByText("Agent working")).toHaveLength(1);
+  expect(screen.getAllByRole("timer", { name: "Turn running time" })).toHaveLength(1);
   expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
   expect(screen.queryByText("Thought for 1 step")).not.toBeInTheDocument();
   expect(screen.getByText("Interrupted work")).not.toBeVisible();
@@ -631,7 +651,7 @@ test("conversation keeps non-trailing empty pending thought summaries idle while
     },
   });
 
-  expect(screen.getByText("Agent working")).toBeInTheDocument();
+  expect(screen.getAllByRole("timer", { name: "Turn running time" })).toHaveLength(1);
   expect(screen.queryByLabelText("Thinking in progress")).not.toBeInTheDocument();
   expect(screen.queryByText("Thought for 2 steps")).not.toBeInTheDocument();
   expect(screen.getByText("Reading old file")).not.toBeVisible();
@@ -654,7 +674,7 @@ test("conversation renders agent status without an assistant loading placeholder
     },
   });
 
-  expect(screen.getByLabelText("Agent status: Agent working")).toBeInTheDocument();
+  expect(screen.getAllByRole("timer", { name: "Turn running time" })).toHaveLength(1);
   expect(
     document.querySelector('[data-chat-message-id="busy:assistant-loading-placeholder"]'),
   ).not.toBeInTheDocument();

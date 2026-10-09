@@ -172,7 +172,7 @@ test("replaces Send with Interrupt in the empty composer for a busy interruptibl
 
   render(SessionChatPage);
 
-  const agentStatus = await screen.findByLabelText("Agent status: Agent working");
+  const agentStatus = await screen.findByRole("timer", { name: "Turn running time" });
   expect(
     within(agentStatus).queryByRole("button", { name: /interrupt agent/i }),
   ).not.toBeInTheDocument();

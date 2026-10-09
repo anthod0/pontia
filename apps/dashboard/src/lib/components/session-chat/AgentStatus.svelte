@@ -2,7 +2,6 @@
   import CircleHalfIcon from 'phosphor-svelte/lib/CircleHalfIcon'
   import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon'
   import { cn } from '$lib/utils.js'
-  import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon'
 
   interface Props {
     state: string | null
@@ -17,7 +16,7 @@
     if (!value) return null
     switch (value) {
       case 'created': return { label: 'Session created', tone: 'idle' }
-      case 'busy': return { label: 'Agent working', tone: 'active' }
+      case 'busy': return null
       case 'idle': return null
       case 'exited': return null
       case 'error': return { label: 'Session error', tone: 'error' }
@@ -33,9 +32,7 @@
     role="status"
   >
     <span class="inline-flex size-5 shrink-0 items-center justify-center text-muted-foreground" aria-hidden="true">
-      {#if state === 'busy'}
-        <SpinnerGapIcon class="size-5 animate-spin motion-reduce:animate-none text-success" />
-      {:else if status.tone === 'error'}
+      {#if status.tone === 'error'}
         <XCircleIcon class="size-4 text-destructive" />
       {:else}
         <CircleHalfIcon class="size-4" />

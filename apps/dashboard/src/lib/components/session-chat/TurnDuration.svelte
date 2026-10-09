@@ -4,17 +4,18 @@
   type DurationTurn = Pick<TurnView, 'state' | 'started_at' | 'completed_at'>
 
   interface Props {
-    turn: DurationTurn
+    turn?: DurationTurn
+    active?: boolean
   }
 
-  let { turn }: Props = $props()
+  let { turn, active = false }: Props = $props()
   let now = $state(Date.now())
-  const running = $derived(turn.state === 'running')
-  const startedAt = $derived(timestamp(turn.started_at))
-  const completedAt = $derived(timestamp(turn.completed_at))
+  const running = $derived(turn ? turn.state === 'running' : active)
+  const startedAt = $derived(timestamp(turn?.started_at ?? null))
+  const completedAt = $derived(timestamp(turn?.completed_at ?? null))
   const endAt = $derived(running ? now : completedAt)
   const visible = $derived(
-    startedAt !== null && endAt !== null && (running || turn.state === 'completed'),
+    startedAt !== null && endAt !== null && (running || turn?.state === 'completed'),
   )
   const elapsedSeconds = $derived(
     visible ? Math.max(0, Math.floor((endAt! - startedAt!) / 1000)) : 0,
@@ -45,16 +46,17 @@
   }
 </script>
 
-{#if visible}
-  <div
-    class="not-prose -mt-3 flex items-center gap-1.5 text-xs text-muted-foreground"
-    role={running ? 'timer' : 'status'}
-    aria-label={running ? 'Turn running time' : 'Turn completed duration'}
-    aria-live={running ? 'off' : 'polite'}
-    data-chat-turn-duration
-  >
-    <span>{running ? 'Running' : 'Completed'}</span>
-    <span aria-hidden="true">·</span>
+<span
+  class="inline-flex items-center gap-1"
+  role={running ? 'timer' : 'status'}
+  aria-label={running ? 'Turn running time' : 'Turn completed duration'}
+  aria-live={running ? 'off' : 'polite'}
+  data-chat-turn-duration
+>
+  <span>{running ? 'working for' : 'worked for'}</span>
+  {#if visible}
     <time datetime={`PT${elapsedSeconds}S`}>{formatDuration(elapsedSeconds)}</time>
-  </div>
-{/if}
+  {:else}
+    <span>…</span>
+  {/if}
+</span>
