@@ -44,17 +44,15 @@ curl -fsSL https://get.pontia.dev/install.sh | sh
 
 The script installs Pontia to `$HOME/.local/bin` by default. Make sure this directory is included in your `PATH`.
 
-### First-time setup
-
-Run the interactive initializer:
+### Initialize Pontia
 
 ```bash
 pontia init
 ```
 
-Choose the pi integration, Codex integration, or both, then follow the prompts. The initializer configures workspace roots and authentication, installs or registers the selected integrations, starts the background service, and asks whether to enable remote access before opening the dashboard.
+This command initializes local and remote configuration and starts the Pontia daemon.
 
-The pi integration is selected by default. Exiting the initializer does not stop Pontia.
+## Configuration and management
 
 ### Start and stop
 
@@ -66,11 +64,9 @@ pontia status
 pontia down
 ```
 
-## Remote access
+### Remote access
 
 Pontia connects your local service to the public dashboard through an official or self-hosted Edge. Dashboard traffic between the browser and your device is end-to-end encrypted, and the Edge relays only ciphertext. Your agents, development tools, and project files remain on your device.
-
-A self-hosted Edge manages the connectivity layer, while Pontia Cloud continues to provide account, device registration, and dashboard services.
 
 First, sign in to Pontia:
 
@@ -84,7 +80,7 @@ Then register the current device and enable remote access:
 pontia remote enable
 ```
 
-Once connected, [open the remote dashboard](https://app.pontia.dev). To learn more about Pontia Cloud or manage your account, [visit the website](https://pontia.dev).
+Once connected, [open the remote dashboard](https://app.pontia.dev). To manage your Pontia Cloud account, [open settings](https://pontia.dev/settings).
 
 Check the service status with:
 
@@ -92,15 +88,15 @@ Check the service status with:
 pontia status
 ```
 
-## Local access
+### Local access
 
 Open the local dashboard on the device running Pontia. The default address is:
 
 <http://127.0.0.1:8080/dashboard>
 
-`pontia init` opens the dashboard automatically and passes the access token. If you open the address manually, sign in with the `external_api_token` from `$HOME/.pontia/config.toml`.
+`pontia init` automatically generates an access token. To view it, check `external_api_token` in `$HOME/.pontia/config.toml`.
 
-## Updates
+### Updates
 
 Update the CLI and background service to the latest signed stable release:
 
@@ -108,11 +104,9 @@ Update the CLI and background service to the latest signed stable release:
 pontia update
 ```
 
-## Configuration
+### Configuration
 
 Pontia stores its configuration in `$HOME/.pontia/config.toml` by default. To use another directory, set `PONTIA_HOME` to an absolute path before running the initializer and subsequent commands.
-
-See [`config.example.toml`](config.example.toml) for the configuration file structure. Environment variables can override selected settings, but Pontia does not automatically load `.env` files.
 
 ## License
 
