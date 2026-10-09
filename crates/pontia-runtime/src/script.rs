@@ -58,7 +58,7 @@ pub(super) fn write_launch_script(
         )),
         shell_quote_path(runtime_paths.log_path)
     );
-    let runtime_body = format!("exec sh -lc {}\n", shell_quote(command));
+    let runtime_body = format!("exec sh -c {}\n", shell_quote(command));
     let content = format!(
         r#"#!/usr/bin/env sh
 unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_PATCH_ID

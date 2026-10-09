@@ -38,7 +38,7 @@ pub struct DaemonIdentity {
 }
 
 impl DaemonIdentity {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub fn capture(stream: &UnixStream) -> Result<Self> {
         let credentials = stream.peer_cred().map_err(protocol_error)?;
         let pid = credentials
@@ -49,23 +49,22 @@ impl DaemonIdentity {
         if credentials.uid() != unsafe { libc::geteuid() } {
             return Err(protocol_error("daemon belongs to another user"));
         }
-        let boot =
-            std::fs::read_to_string("/proc/sys/kernel/random/boot_id").map_err(protocol_error)?;
-        let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).map_err(protocol_error)?;
-        let start = stat
-            .rsplit_once(')')
-            .and_then(|(_, fields)| fields.split_whitespace().nth(19))
-            .and_then(|value| value.parse::<u64>().ok())
+        let identity = pontia_runtime::process::process_identity(pid as u32)
             .ok_or_else(|| protocol_error("cannot read daemon process start time"))?;
+        let boot_time = pontia_runtime::process::system_boot_time_seconds()
+            .ok_or_else(|| protocol_error("cannot read system boot time"))?;
         Ok(Self {
-            instance_id: format!("codex_{}_{}_{}", boot.trim(), pid, start),
+            instance_id: format!(
+                "codex_{}_{}_{}",
+                boot_time, identity.pid, identity.start_time_seconds
+            ),
         })
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     pub fn capture(_stream: &UnixStream) -> Result<Self> {
         Err(protocol_error(
-            "daemon instance verification requires Linux",
+            "daemon instance verification requires Linux or macOS",
         ))
     }
 }

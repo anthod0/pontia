@@ -6,10 +6,11 @@ use std::{
 
 use pontia_application::client_contract::{ClientIntegration, PreparedClientIntegration};
 use pontia_runtime::local_service::{
-    CommandOutput, CommandRunner, DefinitionStore, absolute_utf8_path, systemd_quote,
+    CommandOutput, CommandRunner, DefinitionStore, absolute_utf8_path, systemd_quote, xml_escape,
 };
 
 pub const CODEX_SYSTEMD_SERVICE_NAME: &str = "pontia-codex.service";
+pub const CODEX_LAUNCHD_LABEL: &str = "dev.pontia.codex-daemon";
 
 pub fn integration() -> std::sync::Arc<dyn ClientIntegration> {
     std::sync::Arc::new(CodexIntegration)
@@ -42,13 +43,17 @@ impl ClientIntegration for CodexIntegration {
 
 impl PreparedClientIntegration for CodexSetup {
     fn summary(&self) -> Vec<String> {
-        vec![
+        let mut summary = vec![
             "Codex integration: register autostart".into(),
             format!("Codex executable: {}", self.executable.display()),
             format!("CODEX_HOME: {}", self.home.display()),
             format!("Codex service: {}", self.service_path.display()),
-            format!("user linger: enable for {}", self.username),
-        ]
+        ];
+        #[cfg(target_os = "linux")]
+        if let ServiceUserIdentity::SystemdUsername(username) = &self.service_user {
+            summary.push(format!("user linger: enable for {username}"));
+        }
+        summary
     }
     fn preflight(&self, _runner: &dyn CommandRunner) -> Result<(), String> {
         Ok(())
@@ -94,12 +99,96 @@ pub fn render_codex_systemd(codex: &Path, codex_home: &Path) -> Result<String, S
     ))
 }
 
+pub fn render_codex_launchd(codex: &Path, codex_home: &Path) -> Result<String, String> {
+    let search_path = codex
+        .parent()
+        .into_iter()
+        .map(Path::to_path_buf)
+        .collect::<Vec<_>>();
+    render_codex_launchd_with_search_path(codex, codex_home, &search_path)
+}
+
+fn render_codex_launchd_with_search_path(
+    codex: &Path,
+    codex_home: &Path,
+    executable_search_path: &[PathBuf],
+) -> Result<String, String> {
+    let codex = xml_escape(absolute_utf8_path(codex, "Codex executable")?)?;
+    let codex_home = xml_escape(absolute_utf8_path(codex_home, "CODEX_HOME")?)?;
+    for path in executable_search_path {
+        absolute_utf8_path(path, "Codex executable search directory")?;
+    }
+    let search_path = std::env::join_paths(executable_search_path)
+        .map_err(|error| format!("Codex executable search path cannot be represented: {error}"))?;
+    let search_path = xml_escape(
+        search_path
+            .to_str()
+            .ok_or_else(|| "Codex executable search path is not valid UTF-8".to_string())?,
+    )?;
+    Ok(format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{CODEX_LAUNCHD_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{codex}</string>
+    <string>app-server</string>
+    <string>daemon</string>
+    <string>start</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CODEX_HOME</key>
+    <string>{codex_home}</string>
+    <key>PATH</key>
+    <string>{search_path}</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
+"#
+    ))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ServiceUserIdentity {
+    SystemdUsername(String),
+    LaunchdUid(u32),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CodexSetup {
     pub executable: PathBuf,
     pub home: PathBuf,
-    pub username: String,
+    pub service_user: ServiceUserIdentity,
     pub service_path: PathBuf,
+    pub executable_search_path: Vec<PathBuf>,
+}
+
+impl CodexSetup {
+    #[cfg(target_os = "linux")]
+    fn systemd_username(&self) -> Result<&str, String> {
+        match &self.service_user {
+            ServiceUserIdentity::SystemdUsername(username) => Ok(username),
+            ServiceUserIdentity::LaunchdUid(_) => {
+                Err("Codex setup does not contain a systemd username".into())
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn launchd_uid(&self) -> Result<u32, String> {
+        match &self.service_user {
+            ServiceUserIdentity::LaunchdUid(uid) => Ok(*uid),
+            ServiceUserIdentity::SystemdUsername(_) => {
+                Err("Codex setup does not contain a launchd user ID".into())
+            }
+        }
+    }
 }
 
 pub trait CodexDaemonProbe {
@@ -111,13 +200,13 @@ pub fn inspect<R: CommandRunner + ?Sized>(
     user_home: &Path,
     runner: &R,
 ) -> Result<CodexSetup, String> {
-    if !cfg!(target_os = "linux") {
-        return Err("Codex automatic startup is supported only on Linux with systemd".to_string());
+    if !cfg!(any(target_os = "linux", target_os = "macos")) {
+        return Err("Codex automatic startup is supported only on Linux and macOS".to_string());
     }
 
     let executable = resolve_executable(vars)?;
     let home = resolve_codex_home(vars, user_home)?;
-    let username = current_username(runner)?;
+    let service_user = current_service_user(runner)?;
     let environment = codex_environment(&home)?;
     let program = utf8_path(&executable, "Codex executable")?;
 
@@ -142,13 +231,13 @@ pub fn inspect<R: CommandRunner + ?Sized>(
         )?;
     }
 
+    let executable_search_path = executable_search_path(vars, user_home, &executable)?;
     Ok(CodexSetup {
         executable,
         home,
-        username,
-        service_path: user_home
-            .join(".config/systemd/user")
-            .join(CODEX_SYSTEMD_SERVICE_NAME),
+        service_user,
+        service_path: codex_service_path(user_home),
+        executable_search_path,
     })
 }
 
@@ -163,23 +252,7 @@ where
     S: DefinitionStore + ?Sized,
     P: CodexDaemonProbe + ?Sized,
 {
-    let definition = render_codex_systemd(&setup.executable, &setup.home)?;
-    definitions
-        .install(&setup.service_path, &definition)
-        .map_err(|error| format!("Codex service definition installation failed: {error}"))?;
-
-    require_systemctl(runner, &["daemon-reload"], "Codex service reload")?;
-    require_plain(
-        runner,
-        "loginctl",
-        &["enable-linger", &setup.username],
-        "Codex linger enablement",
-    )?;
-    require_systemctl(
-        runner,
-        &["enable", "--now", CODEX_SYSTEMD_SERVICE_NAME],
-        "Codex service enablement",
-    )?;
+    install_and_start_service(setup, runner, definitions)?;
 
     let environment = codex_environment(&setup.home)?;
     let program = utf8_path(&setup.executable, "Codex executable")?;
@@ -204,6 +277,120 @@ where
         ));
     }
 
+    verify_service(setup, runner)?;
+
+    probe
+        .probe(&setup.home)
+        .map_err(|error| format!("Codex protocol connection check failed: {error}"))
+}
+
+#[cfg(target_os = "linux")]
+fn codex_service_path(user_home: &Path) -> PathBuf {
+    user_home
+        .join(".config/systemd/user")
+        .join(CODEX_SYSTEMD_SERVICE_NAME)
+}
+
+#[cfg(target_os = "macos")]
+fn codex_service_path(user_home: &Path) -> PathBuf {
+    user_home
+        .join("Library/LaunchAgents")
+        .join(format!("{CODEX_LAUNCHD_LABEL}.plist"))
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn codex_service_path(user_home: &Path) -> PathBuf {
+    user_home.join("pontia-codex.unsupported")
+}
+
+#[cfg(target_os = "linux")]
+fn install_and_start_service<R, S>(
+    setup: &CodexSetup,
+    runner: &R,
+    definitions: &S,
+) -> Result<(), String>
+where
+    R: CommandRunner + ?Sized,
+    S: DefinitionStore + ?Sized,
+{
+    let definition = render_codex_systemd(&setup.executable, &setup.home)?;
+    definitions
+        .install(&setup.service_path, &definition)
+        .map_err(|error| format!("Codex service definition installation failed: {error}"))?;
+    require_systemctl(runner, &["daemon-reload"], "Codex service reload")?;
+    require_plain(
+        runner,
+        "loginctl",
+        &["enable-linger", setup.systemd_username()?],
+        "Codex linger enablement",
+    )?;
+    require_systemctl(
+        runner,
+        &["enable", "--now", CODEX_SYSTEMD_SERVICE_NAME],
+        "Codex service enablement",
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn install_and_start_service<R, S>(
+    setup: &CodexSetup,
+    runner: &R,
+    definitions: &S,
+) -> Result<(), String>
+where
+    R: CommandRunner + ?Sized,
+    S: DefinitionStore + ?Sized,
+{
+    let definition = render_codex_launchd_with_search_path(
+        &setup.executable,
+        &setup.home,
+        &setup.executable_search_path,
+    )?;
+    definitions
+        .install(&setup.service_path, &definition)
+        .map_err(|error| format!("Codex service definition installation failed: {error}"))?;
+    let domain = format!("gui/{}", setup.launchd_uid()?);
+    let target = format!("{domain}/{CODEX_LAUNCHD_LABEL}");
+    let bootout_args = ["bootout".to_string(), target.clone()];
+    let bootout = runner.run("launchctl", &bootout_args)?;
+    if bootout.code != 0 && !launchctl_service_missing(&bootout) {
+        return require_command(
+            bootout,
+            "launchctl",
+            &["bootout", &target],
+            "Codex service unload",
+        );
+    }
+    require_plain(
+        runner,
+        "launchctl",
+        &["enable", &target],
+        "Codex service enablement",
+    )?;
+    let service_path = utf8_path(&setup.service_path, "Codex service path")?;
+    require_plain(
+        runner,
+        "launchctl",
+        &["bootstrap", &domain, service_path],
+        "Codex service load",
+    )
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn install_and_start_service<R, S>(
+    _setup: &CodexSetup,
+    _runner: &R,
+    _definitions: &S,
+) -> Result<(), String>
+where
+    R: CommandRunner + ?Sized,
+    S: DefinitionStore + ?Sized,
+{
+    Err("Codex automatic startup is supported only on Linux and macOS".into())
+}
+
+#[cfg(target_os = "linux")]
+fn verify_service<R: CommandRunner + ?Sized>(setup: &CodexSetup, runner: &R) -> Result<(), String> {
     let enabled = systemctl(runner, &["is-enabled", CODEX_SYSTEMD_SERVICE_NAME])?;
     require_command(
         enabled.clone(),
@@ -217,10 +404,9 @@ where
             enabled.stdout.trim()
         ));
     }
-
     let linger_args = [
         "show-user".to_string(),
-        setup.username.clone(),
+        setup.systemd_username()?.to_string(),
         "--property=Linger".to_string(),
         "--value".to_string(),
     ];
@@ -228,7 +414,12 @@ where
     require_command(
         linger.clone(),
         "loginctl",
-        &["show-user", &setup.username, "--property=Linger", "--value"],
+        &[
+            "show-user",
+            setup.systemd_username()?,
+            "--property=Linger",
+            "--value",
+        ],
         "Codex linger state check",
     )?;
     if linger.stdout.trim() != "yes" {
@@ -237,10 +428,49 @@ where
             linger.stdout.trim()
         ));
     }
+    Ok(())
+}
 
-    probe
-        .probe(&setup.home)
-        .map_err(|error| format!("Codex protocol connection check failed: {error}"))
+#[cfg(target_os = "macos")]
+fn verify_service<R: CommandRunner + ?Sized>(setup: &CodexSetup, runner: &R) -> Result<(), String> {
+    let domain = format!("gui/{}", setup.launchd_uid()?);
+    let target = format!("{domain}/{CODEX_LAUNCHD_LABEL}");
+    require_plain(
+        runner,
+        "launchctl",
+        &["print", &target],
+        "Codex service loaded-state check",
+    )?;
+    let args = ["print-disabled".to_string(), domain.clone()];
+    let disabled = runner.run("launchctl", &args)?;
+    require_command(
+        disabled.clone(),
+        "launchctl",
+        &["print-disabled", &domain],
+        "Codex service enabled-state check",
+    )?;
+    if disabled.stdout.lines().any(|line| {
+        line.contains(&format!("\"{CODEX_LAUNCHD_LABEL}\"")) && line.contains("=> true")
+    }) {
+        return Err("Codex service is disabled in the launchd user domain".into());
+    }
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn verify_service<R: CommandRunner + ?Sized>(
+    _setup: &CodexSetup,
+    _runner: &R,
+) -> Result<(), String> {
+    Err("Codex automatic startup is supported only on Linux and macOS".into())
+}
+
+#[cfg(target_os = "macos")]
+fn launchctl_service_missing(output: &CommandOutput) -> bool {
+    let text = format!("{}\n{}", output.stdout, output.stderr).to_ascii_lowercase();
+    text.contains("could not find service")
+        || text.contains("no such process")
+        || text.contains("does not exist")
 }
 
 fn resolve_executable(vars: &HashMap<String, String>) -> Result<PathBuf, String> {
@@ -261,6 +491,47 @@ fn resolve_executable(vars: &HashMap<String, String>) -> Result<PathBuf, String>
         }
     }
     Err("Codex must be installed and executable on PATH".to_string())
+}
+
+fn executable_search_path(
+    vars: &HashMap<String, String>,
+    user_home: &Path,
+    executable: &Path,
+) -> Result<Vec<PathBuf>, String> {
+    let current_dir = env::current_dir()
+        .map_err(|error| format!("failed to resolve the current directory: {error}"))?;
+    let mut paths = Vec::new();
+    if let Some(parent) = executable.parent() {
+        paths.push(parent.to_path_buf());
+    }
+    if let Some(path) = vars.get("PATH") {
+        for directory in env::split_paths(path) {
+            let directory = if directory.is_absolute() {
+                directory
+            } else {
+                current_dir.join(directory)
+            };
+            if !paths.contains(&directory) {
+                paths.push(directory);
+            }
+        }
+    }
+    for directory in [
+        user_home.join(".local/bin"),
+        user_home.join(".bun/bin"),
+        user_home.join(".cargo/bin"),
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/bin"),
+        PathBuf::from("/bin"),
+        PathBuf::from("/usr/sbin"),
+        PathBuf::from("/sbin"),
+    ] {
+        if !paths.contains(&directory) {
+            paths.push(directory);
+        }
+    }
+    Ok(paths)
 }
 
 fn resolve_codex_home(vars: &HashMap<String, String>, user_home: &Path) -> Result<PathBuf, String> {
@@ -294,14 +565,38 @@ fn resolve_codex_home(vars: &HashMap<String, String>, user_home: &Path) -> Resul
     }
 }
 
-fn current_username<R: CommandRunner + ?Sized>(runner: &R) -> Result<String, String> {
+#[cfg(target_os = "linux")]
+fn current_service_user<R: CommandRunner + ?Sized>(
+    runner: &R,
+) -> Result<ServiceUserIdentity, String> {
     let output = runner.run("id", &["-un".to_string()])?;
     require_command(output.clone(), "id", &["-un"], "current username check")?;
     let username = output.stdout.trim();
     if username.is_empty() || username.chars().any(char::is_whitespace) {
         return Err("id -un returned an invalid username".to_string());
     }
-    Ok(username.to_string())
+    Ok(ServiceUserIdentity::SystemdUsername(username.to_string()))
+}
+
+#[cfg(target_os = "macos")]
+fn current_service_user<R: CommandRunner + ?Sized>(
+    runner: &R,
+) -> Result<ServiceUserIdentity, String> {
+    let output = runner.run("id", &["-u".to_string()])?;
+    require_command(output.clone(), "id", &["-u"], "current user ID check")?;
+    output
+        .stdout
+        .trim()
+        .parse::<u32>()
+        .map(ServiceUserIdentity::LaunchdUid)
+        .map_err(|_| "id -u returned an invalid user ID".to_string())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn current_service_user<R: CommandRunner + ?Sized>(
+    _runner: &R,
+) -> Result<ServiceUserIdentity, String> {
+    Err("Codex automatic startup is supported only on Linux and macOS".into())
 }
 
 fn codex_environment(home: &Path) -> Result<Vec<(String, String)>, String> {

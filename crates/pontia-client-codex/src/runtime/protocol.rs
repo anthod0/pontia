@@ -107,8 +107,11 @@ impl Connection {
             .map(PathBuf::from)
             .filter(|path| path.is_absolute())
             .ok_or_else(|| protocol_error("daemon did not identify its Codex home"))?;
-        if metadata["platformOs"] != "linux" || metadata["platformFamily"] != "unix" {
-            return Err(protocol_error("daemon must run locally on Linux"));
+        if metadata["platformOs"] != std::env::consts::OS || metadata["platformFamily"] != "unix" {
+            return Err(protocol_error(format!(
+                "daemon must run locally on {}",
+                std::env::consts::OS
+            )));
         }
         if DaemonIdentity::capture(socket.get_ref())? != identity {
             return Err(protocol_error("daemon changed during initialization"));

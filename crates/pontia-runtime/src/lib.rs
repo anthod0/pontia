@@ -7,6 +7,7 @@ mod in_process;
 pub mod local_service;
 mod manager;
 mod paths;
+pub mod process;
 mod script;
 mod session_identifier;
 mod tmux;

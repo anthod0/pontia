@@ -72,17 +72,40 @@ async fn runtime_cannot_move_to_another_session() {
 }
 
 #[tokio::test]
-async fn rejects_invalid_lifecycle_location_and_fingerprint() {
+async fn rejects_invalid_runtime_lifecycle_state() {
     let (pool, _root) = test_pool().await;
     let repository = SqliteSessionRuntimeRepository::new(pool);
     let mut invalid = runtime("invalid");
     invalid.state = "busy".into();
-    assert!(repository.upsert_binding(invalid).await.is_err());
-    let mut invalid = runtime("invalid");
-    invalid.tmux_pane_id = None;
-    assert!(repository.upsert_binding(invalid).await.is_err());
-    let mut invalid = runtime("invalid");
-    invalid.process_fingerprint = Some("{\"agent_pid\":42}".into());
+
     assert!(repository.upsert_binding(invalid).await.is_err());
     assert!(repository.list("session").await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn rejects_a_partial_tmux_location() {
+    let (pool, _root) = test_pool().await;
+    let repository = SqliteSessionRuntimeRepository::new(pool);
+    let mut invalid = runtime("invalid");
+    invalid.tmux_pane_id = None;
+
+    assert!(repository.upsert_binding(invalid).await.is_err());
+    assert!(repository.list("session").await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn stores_fingerprint_text_without_database_json_validation() {
+    let (pool, _root) = test_pool().await;
+    let repository = SqliteSessionRuntimeRepository::new(pool);
+    let mut fingerprinted = runtime("fingerprinted");
+    fingerprinted.process_fingerprint = Some("{\"agent_pid\":42}".into());
+
+    repository
+        .upsert_binding(fingerprinted.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        repository.get("fingerprinted").await.unwrap(),
+        Some(fingerprinted)
+    );
 }

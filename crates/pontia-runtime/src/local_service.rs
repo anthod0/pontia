@@ -104,6 +104,24 @@ pub fn absolute_utf8_path<'a>(path: &'a Path, description: &str) -> Result<&'a s
         .ok_or_else(|| format!("{description} is not valid UTF-8: {}", path.display()))
 }
 
+pub fn xml_escape(value: &str) -> Result<String, String> {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        if character.is_control() && !matches!(character, '\t' | '\n' | '\r') {
+            return Err("value contains a character that XML 1.0 cannot represent".into());
+        }
+        match character {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&apos;"),
+            character => escaped.push(character),
+        }
+    }
+    Ok(escaped)
+}
+
 pub fn systemd_quote(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {

@@ -1,6 +1,4 @@
 use std::{
-    collections::HashMap,
-    fs,
     path::Path,
     process::{Command, Stdio},
 };
@@ -8,28 +6,25 @@ use std::{
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_os = "macos")]
+use crate::process::TerminateResult;
+use crate::process::{
+    ProcessIdentity, ProcessIdentityObservation, ProcessInfo, ProcessTable,
+    system_boot_time_seconds,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TmuxProcessFingerprint {
-    pub boot_id: String,
+    pub boot_time_seconds: u64,
     pub tmux_socket_path: String,
     pub tmux_pane_id: String,
     pub pane_pid: u32,
-    pub pane_start_time_ticks: u64,
+    pub pane_start_time_seconds: u64,
     pub agent_pid: u32,
-    pub agent_start_time_ticks: u64,
+    pub agent_start_time_seconds: u64,
     pub agent_comm: String,
     pub agent_argv0: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-struct ProcessInfo {
-    pid: u32,
-    parent_pid: u32,
-    start_time_ticks: u64,
-    state: char,
-    comm: String,
-    argv0: Option<String>,
 }
 
 pub(crate) fn capture_fingerprint(
@@ -38,30 +33,30 @@ pub(crate) fn capture_fingerprint(
     process_names: &[&str],
 ) -> Option<TmuxProcessFingerprint> {
     let pane_pid = pane_pid(socket_path, pane_id)?;
-    let first = process_table().ok()?;
-    let pane = first.get(&pane_pid)?;
+    let first = ProcessTable::refresh_all();
+    let pane = first.get(pane_pid)?;
     let (agent, _) = first
         .values()
-        .filter(|process| process.state != 'Z' && process_matches(process, process_names))
+        .filter(|process| process_matches(process, process_names))
         .filter_map(|process| {
             descendant_depth(&first, process.pid, pane_pid).map(|depth| (process, depth))
         })
         .min_by_key(|(process, depth)| (*depth, process.pid))?;
 
     let fingerprint = TmuxProcessFingerprint {
-        boot_id: read_boot_id().ok()?,
+        boot_time_seconds: system_boot_time_seconds()?,
         tmux_socket_path: socket_path.into(),
         tmux_pane_id: pane_id.into(),
         pane_pid,
-        pane_start_time_ticks: pane.start_time_ticks,
+        pane_start_time_seconds: pane.start_time_seconds,
         agent_pid: agent.pid,
-        agent_start_time_ticks: agent.start_time_ticks,
-        agent_comm: agent.comm.clone(),
+        agent_start_time_seconds: agent.start_time_seconds,
+        agent_comm: agent.name.clone(),
         agent_argv0: agent.argv0.clone(),
     };
 
-    // Re-read identity fields so a process exit/PID reuse during capture cannot
-    // produce a fingerprint assembled from two different processes.
+    // Refresh identity and ownership fields so an exit or PID reuse during capture
+    // cannot produce a fingerprint assembled from different process instances.
     (observe_fingerprint(&fingerprint) == ProcessObservation::Alive).then_some(fingerprint)
 }
 
@@ -78,6 +73,16 @@ pub(crate) fn terminate_fingerprinted_process(
 ) -> Result<ProcessObservation> {
     use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
+    match observe_fingerprint(fingerprint) {
+        ProcessObservation::Alive => {}
+        ProcessObservation::Exited => return Ok(ProcessObservation::Exited),
+        ProcessObservation::Unknown => {
+            return Err(Error::ControlUnknown(
+                "TUI process ownership could not be verified".into(),
+            ));
+        }
+    }
+
     let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, fingerprint.agent_pid, 0) };
     if fd < 0 {
         return match observe_fingerprint(fingerprint) {
@@ -86,10 +91,7 @@ pub(crate) fn terminate_fingerprinted_process(
         };
     }
     let fd = unsafe { OwnedFd::from_raw_fd(fd as i32) };
-    if read_boot_id().ok().as_deref() != Some(fingerprint.boot_id.as_str()) {
-        return Ok(ProcessObservation::Exited);
-    }
-    match observe_process_identity(fingerprint.agent_pid, fingerprint.agent_start_time_ticks) {
+    match observe_process_identity(fingerprint.agent_pid, fingerprint.agent_start_time_seconds) {
         ProcessObservation::Alive => {}
         ProcessObservation::Exited => return Ok(ProcessObservation::Exited),
         ProcessObservation::Unknown => {
@@ -117,31 +119,66 @@ pub(crate) fn terminate_fingerprinted_process(
     Ok(ProcessObservation::Alive)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+pub(crate) fn terminate_fingerprinted_process(
+    fingerprint: &TmuxProcessFingerprint,
+) -> Result<ProcessObservation> {
+    match observe_fingerprint(fingerprint) {
+        ProcessObservation::Alive => {}
+        ProcessObservation::Exited => return Ok(ProcessObservation::Exited),
+        ProcessObservation::Unknown => {
+            return Err(Error::ControlUnknown(
+                "TUI process ownership could not be verified".into(),
+            ));
+        }
+    }
+    let identity = ProcessIdentity {
+        pid: fingerprint.agent_pid,
+        start_time_seconds: fingerprint.agent_start_time_seconds,
+    };
+    match ProcessTable::refresh_all().terminate(identity) {
+        TerminateResult::Signalled => Ok(ProcessObservation::Alive),
+        TerminateResult::Exited => Ok(ProcessObservation::Exited),
+        TerminateResult::Unknown => Err(Error::ControlUnknown(
+            "TUI process identity changed or SIGTERM could not be delivered".into(),
+        )),
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub(crate) fn terminate_fingerprinted_process(
     _fingerprint: &TmuxProcessFingerprint,
 ) -> Result<ProcessObservation> {
     Err(Error::CapabilityUnavailable(
-        "verified TUI termination requires Linux".into(),
+        "verified TUI termination requires Linux or macOS".into(),
     ))
 }
 
 pub(crate) fn observe_fingerprint(fingerprint: &TmuxProcessFingerprint) -> ProcessObservation {
-    let Ok(boot_id) = read_boot_id() else {
+    let Some(boot_time) = system_boot_time_seconds() else {
         return ProcessObservation::Unknown;
     };
-    if boot_id != fingerprint.boot_id {
+    if boot_time != fingerprint.boot_time_seconds {
         return ProcessObservation::Exited;
     }
+
+    let processes = ProcessTable::refresh_all();
     // The agent identity owns liveness. Losing the pane while that process still
     // exists is uncertain ownership, not evidence that the process exited.
-    match observe_process_identity(fingerprint.agent_pid, fingerprint.agent_start_time_ticks) {
+    match observe_identity(
+        &processes,
+        fingerprint.agent_pid,
+        fingerprint.agent_start_time_seconds,
+    ) {
         ProcessObservation::Alive => {}
         observation => return observation,
     }
     if fingerprint.pane_pid != fingerprint.agent_pid
-        && observe_process_identity(fingerprint.pane_pid, fingerprint.pane_start_time_ticks)
-            != ProcessObservation::Alive
+        && observe_identity(
+            &processes,
+            fingerprint.pane_pid,
+            fingerprint.pane_start_time_seconds,
+        ) != ProcessObservation::Alive
     {
         return ProcessObservation::Unknown;
     }
@@ -150,9 +187,6 @@ pub(crate) fn observe_fingerprint(fingerprint: &TmuxProcessFingerprint) -> Proce
     {
         return ProcessObservation::Unknown;
     }
-    let Ok(processes) = process_table() else {
-        return ProcessObservation::Unknown;
-    };
     if descendant_depth(&processes, fingerprint.agent_pid, fingerprint.pane_pid).is_some() {
         ProcessObservation::Alive
     } else {
@@ -160,21 +194,26 @@ pub(crate) fn observe_fingerprint(fingerprint: &TmuxProcessFingerprint) -> Proce
     }
 }
 
-fn observe_process_identity(pid: u32, expected_ticks: u64) -> ProcessObservation {
-    let stat = match fs::read_to_string(format!("/proc/{pid}/stat")) {
-        Ok(stat) => stat,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return ProcessObservation::Exited;
-        }
-        Err(_) => return ProcessObservation::Unknown,
-    };
-    let Some((_, ticks, state)) = parse_stat(&stat) else {
-        return ProcessObservation::Unknown;
-    };
-    if ticks != expected_ticks || state == 'Z' {
-        ProcessObservation::Exited
-    } else {
-        ProcessObservation::Alive
+fn observe_process_identity(pid: u32, expected_start_time_seconds: u64) -> ProcessObservation {
+    observe_identity(
+        &ProcessTable::refresh_all(),
+        pid,
+        expected_start_time_seconds,
+    )
+}
+
+fn observe_identity(
+    processes: &ProcessTable,
+    pid: u32,
+    expected_start_time_seconds: u64,
+) -> ProcessObservation {
+    match processes.observe(ProcessIdentity {
+        pid,
+        start_time_seconds: expected_start_time_seconds,
+    }) {
+        ProcessIdentityObservation::Alive => ProcessObservation::Alive,
+        ProcessIdentityObservation::Exited => ProcessObservation::Exited,
+        ProcessIdentityObservation::Unknown => ProcessObservation::Unknown,
     }
 }
 
@@ -199,8 +238,11 @@ fn pane_pid(socket_path: &str, pane_id: &str) -> Option<u32> {
 }
 
 fn process_matches(process: &ProcessInfo, process_names: &[&str]) -> bool {
-    process_names.iter().any(|expected| {
-        process.comm == *expected
+    !matches!(
+        process.status,
+        sysinfo::ProcessStatus::Zombie | sysinfo::ProcessStatus::Dead
+    ) && process_names.iter().any(|expected| {
+        process.name == *expected
             || process
                 .argv0
                 .as_deref()
@@ -211,7 +253,7 @@ fn process_matches(process: &ProcessInfo, process_names: &[&str]) -> bool {
 }
 
 fn descendant_depth(
-    processes: &HashMap<u32, ProcessInfo>,
+    processes: &ProcessTable,
     candidate_pid: u32,
     ancestor_pid: u32,
 ) -> Option<usize> {
@@ -222,111 +264,12 @@ fn descendant_depth(
         if pid == ancestor_pid {
             return Some(depth);
         }
-        let process = processes.get(&pid)?;
-        if process.parent_pid == 0 || process.parent_pid == pid {
+        let process = processes.get(pid)?;
+        let parent_pid = process.parent_pid?;
+        if parent_pid == 0 || parent_pid == pid {
             return None;
         }
-        pid = process.parent_pid;
+        pid = parent_pid;
     }
     None
-}
-
-fn process_table() -> std::io::Result<HashMap<u32, ProcessInfo>> {
-    let mut processes = HashMap::new();
-    for entry in fs::read_dir("/proc")? {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(_) => continue,
-        };
-        let Some(pid) = entry
-            .file_name()
-            .to_str()
-            .and_then(|name| name.parse().ok())
-        else {
-            continue;
-        };
-        let stat = match fs::read_to_string(entry.path().join("stat")) {
-            Ok(stat) => stat,
-            Err(_) => continue,
-        };
-        let Some((parent_pid, start_time_ticks, state)) = parse_stat(&stat) else {
-            continue;
-        };
-        let comm = match fs::read_to_string(entry.path().join("comm")) {
-            Ok(comm) => comm.trim_end().to_string(),
-            Err(_) => continue,
-        };
-        let argv0 = fs::read(entry.path().join("cmdline"))
-            .ok()
-            .and_then(|bytes| bytes.split(|byte| *byte == 0).next().map(Vec::from))
-            .filter(|bytes| !bytes.is_empty())
-            .and_then(|bytes| String::from_utf8(bytes).ok());
-        processes.insert(
-            pid,
-            ProcessInfo {
-                pid,
-                parent_pid,
-                start_time_ticks,
-                state,
-                comm,
-                argv0,
-            },
-        );
-    }
-    Ok(processes)
-}
-
-fn parse_stat(stat: &str) -> Option<(u32, u64, char)> {
-    let close_paren = stat.rfind(')')?;
-    let fields = stat
-        .get(close_paren + 1..)?
-        .split_whitespace()
-        .collect::<Vec<_>>();
-    // fields starts at proc(5) field 3 (`state`); starttime is field 22.
-    let state = fields.first()?.chars().next()?;
-    let parent_pid = fields.get(1)?.parse().ok()?;
-    let start_time_ticks = fields.get(19)?.parse().ok()?;
-    Some((parent_pid, start_time_ticks, state))
-}
-
-fn read_boot_id() -> std::io::Result<String> {
-    Ok(fs::read_to_string("/proc/sys/kernel/random/boot_id")?
-        .trim()
-        .to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_proc_stat_with_spaces_and_parentheses_in_comm() {
-        let mut fields = vec!["S".to_string(), "42".to_string()];
-        fields.extend((5..22).map(|field| field.to_string()));
-        fields.push("987654".to_string());
-        let stat = format!("123 (agent (worker)) {}", fields.join(" "));
-
-        assert_eq!(parse_stat(&stat), Some((42, 987654, 'S')));
-    }
-
-    #[test]
-    fn descendant_depth_accepts_root_and_descendants() {
-        let process = |pid, parent_pid| ProcessInfo {
-            pid,
-            parent_pid,
-            start_time_ticks: 1,
-            state: 'S',
-            comm: String::new(),
-            argv0: None,
-        };
-        let processes = HashMap::from([
-            (10, process(10, 1)),
-            (11, process(11, 10)),
-            (12, process(12, 11)),
-        ]);
-
-        assert_eq!(descendant_depth(&processes, 10, 10), Some(0));
-        assert_eq!(descendant_depth(&processes, 12, 10), Some(2));
-        assert_eq!(descendant_depth(&processes, 10, 12), None);
-    }
 }

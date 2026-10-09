@@ -282,12 +282,12 @@ Table constraint: `UNIQUE(session_id, client_type, client_session_key)`.
 | `start_command` | TEXT | |
 | `tmux_socket_path` | TEXT | |
 | `tmux_pane_id` | TEXT | |
-| `process_fingerprint` | TEXT | NULL or valid JSON object satisfying the field constraints below |
+| `process_fingerprint` | TEXT | |
 | `created_at` | TEXT | NOT NULL |
 
 CHECK `(tmux_socket_path IS NULL) = (tmux_pane_id IS NULL)`.
 
-`process_fingerprint` has exactly these keys: `boot_id`, `tmux_socket_path`, `tmux_pane_id`, `agent_comm` (JSON text); `pane_pid`, `pane_start_time_ticks`, `agent_pid`, `agent_start_time_ticks` (JSON integers); `agent_argv0` (JSON text or null). Missing or additional keys fail the CHECK.
+`process_fingerprint` has no JSON validity, field, type, or additional-field CHECK constraint.
 
 **Indexes**
 

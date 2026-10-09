@@ -411,6 +411,49 @@ fn systemd_sets_and_preserves_codex_home() {
 }
 
 #[test]
+fn launchd_sets_and_preserves_client_home_and_search_paths() {
+    let runner = FakeRunner::default();
+    let configured = LaunchdManager::with_environment_paths(
+        &runner,
+        501,
+        vec!["CODEX_HOME"],
+        &[("CODEX_HOME".into(), "/Users/alice/Codex Home".into())],
+        vec!["/opt/homebrew/bin".into()],
+    );
+    let definition = configured
+        .render_definition(
+            Path::new("/opt/pontiad"),
+            Path::new("/Users/alice/.pontia"),
+            "https://pontia.dev",
+            None,
+        )
+        .unwrap();
+
+    let preserved = LaunchdManager::with_environment_paths(
+        &runner,
+        501,
+        vec!["CODEX_HOME"],
+        &[],
+        vec!["/usr/local/bin".into()],
+    )
+    .render_definition(
+        Path::new("/opt/pontiad"),
+        Path::new("/Users/alice/.pontia"),
+        "https://pontia.dev",
+        Some(&definition),
+    )
+    .unwrap();
+
+    assert!(
+        preserved.contains("<key>CODEX_HOME</key>\n    <string>/Users/alice/Codex Home</string>")
+    );
+    assert!(
+        preserved
+            .contains("<key>PATH</key>\n    <string>/usr/local/bin:/opt/homebrew/bin</string>")
+    );
+}
+
+#[test]
 fn managers_extract_persisted_home_from_their_rendered_definition() {
     let runner = FakeRunner::default();
     let systemd = SystemdManager::new(&runner);

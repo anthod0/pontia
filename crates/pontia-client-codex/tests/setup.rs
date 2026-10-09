@@ -5,7 +5,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pontia_client_codex::setup::{CodexDaemonProbe, CodexSetup, initialize, inspect};
+use pontia_client_codex::setup::{
+    CodexDaemonProbe, CodexSetup, ServiceUserIdentity, initialize, inspect,
+};
 use pontia_runtime::local_service::{CommandOutput, CommandRunner, DefinitionStore};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -110,6 +112,7 @@ fn make_executable(path: &Path) {
     fs::set_permissions(path, fs::Permissions::from_mode(0o755)).expect("set executable mode");
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn inspection_resolves_absolute_paths_and_checks_required_commands() {
     let test_root = tempfile::tempdir().expect("temp dir");
@@ -135,7 +138,11 @@ fn inspection_resolves_absolute_paths_and_checks_required_commands() {
 
     assert_eq!(setup.executable, bin.join("codex"));
     assert_eq!(setup.home, codex_home.canonicalize().unwrap());
-    assert_eq!(setup.username, "alice");
+    assert_eq!(
+        setup.service_user,
+        ServiceUserIdentity::SystemdUsername("alice".into())
+    );
+    assert_eq!(setup.executable_search_path.first(), Some(&bin));
     assert_eq!(
         setup.service_path,
         user_home.join(".config/systemd/user/pontia-codex.service")
@@ -152,6 +159,7 @@ fn inspection_resolves_absolute_paths_and_checks_required_commands() {
     assert_eq!(calls[3].args, ["app-server", "daemon", "version", "--help"]);
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn inspection_accepts_a_fresh_default_codex_home() {
     let test_root = tempfile::tempdir().expect("temp dir");
@@ -174,6 +182,7 @@ fn inspection_accepts_a_fresh_default_codex_home() {
     assert!(!setup.home.exists());
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn inspection_reports_missing_executable_and_unsupported_daemon_commands() {
     let test_root = tempfile::tempdir().expect("temp dir");
@@ -198,14 +207,16 @@ fn inspection_reports_missing_executable_and_unsupported_daemon_commands() {
     assert!(error.contains("unknown command start"));
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn initialization_installs_enables_and_verifies_codex_without_restarting_it() {
     let test_root = tempfile::tempdir().expect("temp dir");
     let setup = CodexSetup {
         executable: PathBuf::from("/opt/codex/bin/codex"),
         home: test_root.path().to_path_buf(),
-        username: "alice".to_string(),
+        service_user: ServiceUserIdentity::SystemdUsername("alice".into()),
         service_path: test_root.path().join("pontia-codex.service"),
+        executable_search_path: Vec::new(),
     };
     let runner = FakeRunner::with_outputs(vec![
         output(0, "", ""),
@@ -255,14 +266,16 @@ fn initialization_installs_enables_and_verifies_codex_without_restarting_it() {
     );
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn initialization_reports_service_definition_and_linger_failures() {
     let test_root = tempfile::tempdir().expect("temp dir");
     let setup = CodexSetup {
         executable: PathBuf::from("/opt/codex"),
         home: test_root.path().to_path_buf(),
-        username: "alice".to_string(),
+        service_user: ServiceUserIdentity::SystemdUsername("alice".into()),
         service_path: test_root.path().join("pontia-codex.service"),
+        executable_search_path: Vec::new(),
     };
     let store = FakeStore {
         error: Some("read-only filesystem"),
@@ -306,14 +319,16 @@ fn initialization_reports_service_definition_and_linger_failures() {
     assert!(error.contains("unit could not be enabled"));
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn initialization_reports_the_failed_verification_step() {
     let test_root = tempfile::tempdir().expect("temp dir");
     let setup = CodexSetup {
         executable: PathBuf::from("/opt/codex"),
         home: test_root.path().to_path_buf(),
-        username: "alice".to_string(),
+        service_user: ServiceUserIdentity::SystemdUsername("alice".into()),
         service_path: test_root.path().join("pontia-codex.service"),
+        executable_search_path: Vec::new(),
     };
     let runner = FakeRunner::with_outputs(vec![
         output(0, "", ""),
@@ -333,6 +348,56 @@ fn initialization_reports_the_failed_verification_step() {
 
     assert!(error.contains("Codex protocol connection check failed"));
     assert!(error.contains("handshake rejected"));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn initialization_installs_enables_and_verifies_launch_agent() {
+    let test_root = tempfile::tempdir().expect("temp dir");
+    let setup = CodexSetup {
+        executable: PathBuf::from("/opt/homebrew/bin/codex"),
+        home: test_root.path().to_path_buf(),
+        service_user: ServiceUserIdentity::LaunchdUid(501),
+        service_path: test_root.path().join("dev.pontia.codex-daemon.plist"),
+        executable_search_path: vec![PathBuf::from("/opt/homebrew/bin")],
+    };
+    let runner = FakeRunner::with_outputs(vec![
+        output(113, "", "Could not find service"),
+        output(0, "", ""),
+        output(0, "", ""),
+        output(0, r#"{"status":"running"}"#, ""),
+        output(0, "state = exited", ""),
+        output(0, "disabled services = {}", ""),
+    ]);
+    let store = FakeStore::default();
+    let probe = FakeProbe::default();
+
+    initialize(&setup, &runner, &store, &probe).expect("initialize Codex launch agent");
+
+    let installed = store.installs.into_inner();
+    assert_eq!(installed[0].0, setup.service_path);
+    assert!(installed[0].1.contains("<key>PATH</key>"));
+    assert_eq!(
+        probe.homes.borrow().as_slice(),
+        std::slice::from_ref(&setup.home)
+    );
+}
+
+#[test]
+fn renders_codex_launch_agent_with_literal_arguments_and_environment() {
+    let rendered = pontia_client_codex::setup::render_codex_launchd(
+        Path::new("/Applications/Codex & Co/codex"),
+        Path::new("/Users/alice/Codex <home>"),
+    )
+    .expect("valid paths");
+
+    assert!(rendered.contains("<string>/Applications/Codex &amp; Co/codex</string>"));
+    assert!(rendered.contains("<string>app-server</string>"));
+    assert!(rendered.contains("<string>/Users/alice/Codex &lt;home&gt;</string>"));
+    assert!(
+        rendered.contains("<key>PATH</key>\n    <string>/Applications/Codex &amp; Co</string>")
+    );
+    assert!(rendered.contains("<key>RunAtLoad</key>"));
 }
 
 #[test]

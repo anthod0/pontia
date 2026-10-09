@@ -23,5 +23,5 @@ tracing = "0.1"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 libc = "0.2.189"

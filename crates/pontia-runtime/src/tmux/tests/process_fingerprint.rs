@@ -5,7 +5,26 @@ use std::{
     time::Duration,
 };
 
-use super::super::{ProcessObservation, capture_fingerprint, observe_fingerprint};
+use super::super::{
+    ProcessObservation, TmuxProcessFingerprint, capture_fingerprint, observe_fingerprint,
+};
+
+#[test]
+fn legacy_tick_fingerprint_is_not_treated_as_epoch_seconds() {
+    let legacy = serde_json::json!({
+        "boot_id": "boot",
+        "tmux_socket_path": "/tmp/tmux.sock",
+        "tmux_pane_id": "%1",
+        "pane_pid": 10,
+        "pane_start_time_ticks": 20,
+        "agent_pid": 11,
+        "agent_start_time_ticks": 21,
+        "agent_comm": "pi",
+        "agent_argv0": "pi"
+    });
+
+    assert!(serde_json::from_value::<TmuxProcessFingerprint>(legacy).is_err());
+}
 
 struct TestServer(PathBuf);
 impl Drop for TestServer {
@@ -61,6 +80,8 @@ fn process_fingerprint_tracks_the_exact_agent_process() {
             fingerprint
         })
         .expect("capture sleep process fingerprint");
+    assert!(fingerprint.pane_start_time_seconds >= fingerprint.boot_time_seconds);
+    assert!(fingerprint.agent_start_time_seconds >= fingerprint.boot_time_seconds);
     assert_eq!(observe_fingerprint(&fingerprint), ProcessObservation::Alive);
     let mut unavailable_source = fingerprint.clone();
     unavailable_source.tmux_socket_path =

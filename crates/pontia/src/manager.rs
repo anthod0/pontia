@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     definition::{
-        LAUNCHD_LABEL, SYSTEMD_SERVICE_NAME, render_launchd, render_systemd_with_environment,
+        LAUNCHD_LABEL, SYSTEMD_SERVICE_NAME, render_launchd_with_environment,
+        render_systemd_with_environment,
     },
     lifecycle::{EnabledState, RunState, ServiceManager, ServiceStatus},
 };
@@ -190,11 +191,30 @@ impl<R: CommandRunner> ServiceManager for SystemdManager<'_, R> {
 pub struct LaunchdManager<'a, R> {
     runner: &'a R,
     uid: u32,
+    environment_names: Vec<&'static str>,
+    environment_paths: Vec<(String, PathBuf)>,
+    executable_search_path: Vec<PathBuf>,
 }
 
 impl<'a, R: CommandRunner> LaunchdManager<'a, R> {
     pub fn new(runner: &'a R, uid: u32) -> Self {
-        Self { runner, uid }
+        Self::with_environment_paths(runner, uid, Vec::new(), &[], Vec::new())
+    }
+
+    pub fn with_environment_paths(
+        runner: &'a R,
+        uid: u32,
+        environment_names: Vec<&'static str>,
+        paths: &[(String, PathBuf)],
+        executable_search_path: Vec<PathBuf>,
+    ) -> Self {
+        Self {
+            runner,
+            uid,
+            environment_names,
+            environment_paths: paths.to_vec(),
+            executable_search_path,
+        }
     }
 
     fn domain(&self) -> String {
@@ -230,9 +250,33 @@ impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {
         pontiad: &Path,
         pontia_home: &Path,
         auth_origin: &str,
-        _previous_definition: Option<&str>,
+        previous_definition: Option<&str>,
     ) -> Result<String, String> {
-        render_launchd(pontiad, pontia_home, auth_origin)
+        let mut paths = Vec::new();
+        for name in &self.environment_names {
+            let path = match self.environment_paths.iter().find(|(key, _)| key == name) {
+                Some((_, path)) => Some(path.clone()),
+                None => previous_definition
+                    .map(|definition| parse_launchd_environment_path(definition, name))
+                    .transpose()?
+                    .flatten(),
+            };
+            if let Some(path) = path {
+                paths.push(((*name).to_string(), path));
+            }
+        }
+
+        let mut search_path = self.executable_search_path.clone();
+        if let Some(previous) = previous_definition
+            && let Some(previous_path) = parse_launchd_environment_value(previous, "PATH")?
+        {
+            for path in std::env::split_paths(&previous_path) {
+                if !search_path.contains(&path) {
+                    search_path.push(path);
+                }
+            }
+        }
+        render_launchd_with_environment(pontiad, pontia_home, auth_origin, &paths, &search_path)
     }
 
     fn persisted_home(&self, definition: &str) -> Result<PathBuf, String> {
@@ -460,23 +504,34 @@ fn systemd_unescape(value: &str) -> Result<String, String> {
 }
 
 fn parse_launchd_home(definition: &str) -> Result<PathBuf, String> {
+    parse_launchd_environment_path(definition, "PONTIA_HOME")?
+        .ok_or_else(|| "launchd definition is missing PONTIA_HOME".to_string())
+}
+
+fn parse_launchd_environment_path(definition: &str, name: &str) -> Result<Option<PathBuf>, String> {
+    parse_launchd_environment_value(definition, name).map(|value| value.map(PathBuf::from))
+}
+
+fn parse_launchd_environment_value(definition: &str, name: &str) -> Result<Option<String>, String> {
     if !definition.starts_with("<?xml ") || !definition.trim_end().ends_with("</plist>") {
         return Err("launchd definition is not a complete XML plist".to_string());
     }
-    let marker = "<key>PONTIA_HOME</key>\n    <string>";
-    let mut matches = definition.match_indices(marker);
-    let (marker_index, _) = matches
-        .next()
-        .ok_or_else(|| "launchd definition is missing PONTIA_HOME".to_string())?;
+    let marker = format!("<key>{name}</key>\n    <string>");
+    let mut matches = definition.match_indices(&marker);
+    let Some((marker_index, _)) = matches.next() else {
+        return Ok(None);
+    };
     if matches.next().is_some() {
-        return Err("launchd definition contains multiple PONTIA_HOME values".to_string());
+        return Err(format!(
+            "launchd definition contains multiple {name} values"
+        ));
     }
     let value = &definition[marker_index + marker.len()..];
     let value = value
         .split_once("</string>")
         .map(|(value, _)| value)
-        .ok_or_else(|| "launchd PONTIA_HOME value is malformed".to_string())?;
-    Ok(PathBuf::from(xml_unescape(value)?))
+        .ok_or_else(|| format!("launchd {name} value is malformed"))?;
+    xml_unescape(value).map(Some)
 }
 
 fn xml_unescape(value: &str) -> Result<String, String> {

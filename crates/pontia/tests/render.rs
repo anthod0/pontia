@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use pontia::definition::{render_launchd, render_systemd_with_environment};
+use pontia::definition::{
+    render_launchd, render_launchd_with_environment, render_systemd_with_environment,
+};
 
 const AUTH_ORIGIN: &str = "https://dev.pontia.example";
 
@@ -63,12 +65,34 @@ fn renders_launch_agent_plist_with_xml_escaping() {
     <key>PONTIA_AUTH_ORIGIN</key>
     <string>https://dev.pontia.example</string>
   </dict>
+  <key>RunAtLoad</key>
+  <true/>
   <key>KeepAlive</key>
   <true/>
 </dict>
 </plist>
 "#
     );
+}
+
+#[test]
+fn launchd_rendering_preserves_client_paths_and_executable_search_path() {
+    let rendered = render_launchd_with_environment(
+        Path::new("/Applications/Pontia App/pontiad"),
+        Path::new("/Users/alice/Pontia Home"),
+        AUTH_ORIGIN,
+        &[("CODEX_HOME".into(), "/Users/alice/Codex & Data".into())],
+        &["/opt/homebrew/bin".into(), "/Users/alice/.local/bin".into()],
+    )
+    .expect("valid launchd environment");
+
+    assert!(
+        rendered
+            .contains("<key>CODEX_HOME</key>\n    <string>/Users/alice/Codex &amp; Data</string>")
+    );
+    assert!(rendered.contains(
+        "<key>PATH</key>\n    <string>/opt/homebrew/bin:/Users/alice/.local/bin</string>"
+    ));
 }
 
 #[test]

@@ -190,8 +190,8 @@ fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
 
     #[cfg(target_os = "macos")]
     {
-        let uid = current_uid(&runner)?;
-        run_with_manager(command, &LaunchdManager::new(&runner, uid))
+        let manager = launchd_manager(&runner, &[])?;
+        run_with_manager(command, &manager)
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -221,7 +221,7 @@ fn restart_service_for_remote_config() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let runner = ProcessCommandRunner;
-        restart_with_manager_if_running(&LaunchdManager::new(&runner, current_uid(&runner)?))
+        restart_with_manager_if_running(&launchd_manager(&runner, &[])?)
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -383,11 +383,11 @@ fn start_init_service(
 fn start_init_service(
     config: &AppConfig,
     config_changed: bool,
-    _environment_paths: &[(String, PathBuf)],
+    environment_paths: &[(String, PathBuf)],
 ) -> Result<(), String> {
     let runner = ProcessCommandRunner;
     start_init_with_manager(
-        &LaunchdManager::new(&runner, current_uid(&runner)?),
+        &launchd_manager(&runner, environment_paths)?,
         config,
         config_changed,
     )
@@ -616,6 +616,54 @@ fn is_executable(path: &Path) -> Result<bool, String> {
 #[cfg(not(unix))]
 fn is_executable(path: &Path) -> Result<bool, String> {
     Ok(path.is_file())
+}
+
+#[cfg(target_os = "macos")]
+fn launchd_manager<'a, R: CommandRunner>(
+    runner: &'a R,
+    environment_paths: &[(String, PathBuf)],
+) -> Result<LaunchdManager<'a, R>, String> {
+    Ok(LaunchdManager::with_environment_paths(
+        runner,
+        current_uid(runner)?,
+        pontia_clients::service_path_variables(),
+        environment_paths,
+        launchd_executable_search_path(&user_home()?)?,
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn launchd_executable_search_path(user_home: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut paths = Vec::new();
+    if let Some(path) = env::var_os("PATH") {
+        for directory in env::split_paths(&path) {
+            if !directory.is_absolute() {
+                return Err(format!(
+                    "PATH contains a non-absolute directory that launchd cannot use safely: {}",
+                    directory.display()
+                ));
+            }
+            if !paths.contains(&directory) {
+                paths.push(directory);
+            }
+        }
+    }
+    for directory in [
+        user_home.join(".local/bin"),
+        user_home.join(".bun/bin"),
+        user_home.join(".cargo/bin"),
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/bin"),
+        PathBuf::from("/bin"),
+        PathBuf::from("/usr/sbin"),
+        PathBuf::from("/sbin"),
+    ] {
+        if !paths.contains(&directory) {
+            paths.push(directory);
+        }
+    }
+    Ok(paths)
 }
 
 #[cfg(target_os = "macos")]
