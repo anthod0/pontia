@@ -590,27 +590,6 @@ fn remote_disable_requires_login_without_removing_the_device_id() {
 }
 
 #[test]
-fn remote_disable_is_idempotent_when_remote_access_is_not_configured() {
-    let dir = temp_dir("remote-already-disabled");
-    let output = pontia()
-        .args(["remote", "disable"])
-        .env("PONTIA_HOME", dir.path())
-        .output()
-        .expect("run remote disable");
-
-    assert!(
-        output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        String::from_utf8(output.stdout).unwrap(),
-        "Remote access is already disabled.\n"
-    );
-    assert!(!dir.path().join("config.toml").exists());
-}
-
-#[test]
 fn workflow_submit_rejects_a_pane_without_pontia_identity() {
     let dir = temp_dir("unmanaged-pane");
     let bin_dir = dir.path().join("bin");

@@ -716,6 +716,34 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    // Exercise remote configuration directly: successful CLI commands also manage
+    // the user's real service, which a temporary PONTIA_HOME does not isolate.
+    #[tokio::test]
+    async fn disabling_unconfigured_remote_access_does_not_create_configuration() {
+        let root = tempdir().unwrap();
+        let vars = HashMap::from([("PONTIA_HOME".to_string(), root.path().display().to_string())]);
+
+        disable(&vars).await.unwrap();
+        disable(&vars).await.unwrap();
+
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+
+    #[tokio::test]
+    async fn disabling_unconfigured_remote_access_preserves_existing_configuration() {
+        let root = tempdir().unwrap();
+        let path = root.path().join("config.toml");
+        let original = "# existing settings\nbind_addr = '127.0.0.1:9000'\n";
+        fs::write(&path, original).unwrap();
+        let vars = HashMap::from([("PONTIA_HOME".to_string(), root.path().display().to_string())]);
+
+        disable(&vars).await.unwrap();
+        disable(&vars).await.unwrap();
+
+        assert_eq!(fs::read_to_string(path).unwrap(), original);
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+
     #[test]
     fn device_id_is_written_once_without_replacing_other_configuration() {
         let root = tempdir().unwrap();
