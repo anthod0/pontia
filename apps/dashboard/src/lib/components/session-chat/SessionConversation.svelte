@@ -12,10 +12,13 @@
   import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
+  import TurnDuration from './TurnDuration.svelte'
+  import type { TurnView } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
 
   interface Props {
     messages: SessionChatMessage[]
+    turns?: TurnView[]
     sessionState?: string | null
     activeTurnId?: string | null
     loading?: boolean
@@ -30,6 +33,7 @@
 
   let {
     messages,
+    turns = [],
     sessionState = null,
     activeTurnId = null,
     loading = false,
@@ -49,6 +53,7 @@
   const displayMessages = $derived(messages)
   const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState))
   const displayTurns = $derived(conversationDisplayTurns(displayItems))
+  const turnsById = $derived(new Map(turns.map((turn) => [turn.turn_id, turn])))
   const activeLoadingMessageId = $derived(activePendingAssistantMessageId(displayMessages, activeTurnId))
   const branchActionMessageIdSet = $derived(new Set(Object.keys(branchActionInputs)))
   let topHistoryLoadInFlight = false
@@ -423,14 +428,14 @@
           {topHistoryPullDistance >= TOP_HISTORY_PULL_THRESHOLD_PX ? 'Release to load earlier messages' : 'Keep scrolling up to load earlier messages'}
         </div>
       {/if}
-      {#each displayTurns as turn, index (turn.id)}
+      {#each displayTurns as displayTurn, index (displayTurn.id)}
         <div
           data-chat-turn
-          data-chat-turn-id={turn.turnId}
+          data-chat-turn-id={displayTurn.turnId}
           class="flex min-w-0 flex-col gap-6"
           class:latest-turn={index === displayTurns.length - 1}
         >
-          {#each conversationDisplayGroups(turn.items) as displayGroup (displayGroup.id)}
+          {#each conversationDisplayGroups(displayTurn.items) as displayGroup (displayGroup.id)}
             {#if displayGroup.kind === 'user_message'}
               {@render conversationItem(displayGroup.item)}
             {:else}
@@ -441,6 +446,9 @@
               </div>
             {/if}
           {/each}
+          {#if displayTurn.turnId && turnsById.get(displayTurn.turnId)}
+            <TurnDuration turn={turnsById.get(displayTurn.turnId)!} />
+          {/if}
         </div>
       {/each}
     </Conversation.Content>

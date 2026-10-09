@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { expect, test, vi } from "vitest";
 import SessionConversation from "../src/lib/components/session-chat/SessionConversation.svelte";
+import type { TurnView } from "../src/api/types";
 import type { SessionChatMessage } from "../src/lib/session-chat/sessionChat";
 
 class TestIntersectionObserver implements IntersectionObserver {
@@ -48,6 +49,24 @@ function installIntersectionObserverMock(): void {
     writable: true,
     value: TestIntersectionObserver,
   });
+}
+
+function durationTurn(overrides: Partial<TurnView>): TurnView {
+  return {
+    turn_id: "turn-1",
+    session_id: "session-1",
+    parent_turn_id: null,
+    topology_status: "root",
+    state: "completed",
+    input: null,
+    output: null,
+    failure: null,
+    created_at: "2026-06-11T00:00:00Z",
+    started_at: "2026-06-11T00:00:00Z",
+    completed_at: "2026-06-11T00:00:10Z",
+    metadata: {},
+    ...overrides,
+  };
 }
 
 const messages: SessionChatMessage[] = [
@@ -105,6 +124,94 @@ test("conversation groups each Turn’s user and assistant messages with its sta
   expect(turns[1]).toContainElement(screen.getByText("Next question."));
   expect(turns[1]).toContainElement(screen.getByText("Streaming reply."));
   expect(turns[1]).toContainElement(screen.getByLabelText("Agent status: Agent working"));
+});
+
+test("conversation shows duration for an earlier completed Turn", () => {
+  const firstTurnMessages = messages.map((message) => ({
+    ...message,
+    turnId: "turn-completed",
+    createdAt: "2026-06-11T00:00:00Z",
+  }));
+  const activeTurnMessages: SessionChatMessage[] = [
+    {
+      id: "turn-running:user",
+      turnId: "turn-running",
+      role: "user",
+      content: "Continue.",
+      status: "sent",
+      createdAt: "2026-06-11T00:02:00Z",
+    },
+    {
+      id: "turn-running:assistant",
+      turnId: "turn-running",
+      role: "assistant",
+      content: "In progress",
+      status: "pending",
+      createdAt: "2026-06-11T00:02:00Z",
+    },
+  ];
+
+  render(SessionConversation, {
+    props: {
+      messages: [...firstTurnMessages, ...activeTurnMessages],
+      turns: [
+        durationTurn({
+          turn_id: "turn-completed",
+          started_at: "2026-06-11T00:00:00Z",
+          completed_at: "2026-06-11T00:01:30Z",
+        }),
+        durationTurn({
+          turn_id: "turn-running",
+          state: "running",
+          started_at: "2026-06-11T00:02:00Z",
+          completed_at: null,
+        }),
+      ],
+      sessionState: "busy",
+      activeTurnId: "turn-running",
+    },
+  });
+
+  const completedDuration = screen.getByRole("status", { name: "Turn completed duration" });
+  expect(completedDuration.closest("[data-chat-turn]")).toHaveAttribute(
+    "data-chat-turn-id",
+    "turn-completed",
+  );
+  expect(completedDuration.querySelector("time")).toHaveAttribute("datetime", "PT90S");
+});
+
+test("conversation updates the running Turn duration while output is streaming", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-06-11T00:02:00Z"));
+  const runningMessages = messages.map((message) => ({
+    ...message,
+    turnId: "turn-running",
+    createdAt: "2026-06-11T00:00:00Z",
+    status: message.role === "assistant" ? ("pending" as const) : message.status,
+  }));
+
+  render(SessionConversation, {
+    props: {
+      messages: runningMessages,
+      turns: [
+        durationTurn({
+          turn_id: "turn-running",
+          state: "running",
+          started_at: "2026-06-11T00:00:00Z",
+          completed_at: null,
+        }),
+      ],
+      sessionState: "busy",
+      activeTurnId: "turn-running",
+    },
+  });
+
+  const timer = screen.getByRole("timer", { name: "Turn running time" });
+  expect(timer.querySelector("time")).toHaveAttribute("datetime", "PT120S");
+
+  await vi.advanceTimersByTimeAsync(2000);
+
+  expect(timer.querySelector("time")).toHaveAttribute("datetime", "PT122S");
 });
 
 test("conversation groups assistant-side items after each user message", () => {

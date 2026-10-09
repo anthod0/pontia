@@ -978,6 +978,7 @@
               {#key selectedSessionId}
                 <SessionConversation
                   {messages}
+                  turns={selectedTurns}
                   sessionState={selectedSession.state}
                   activeTurnId={selectedSession.current_turn_id}
                   loading={(initialChatScrollPending || transcriptResolving || $sessionDetailLoading || $timelineState.loading) && !messages.length}
