@@ -68,8 +68,9 @@ test("device authorization is rate limited, approved once, and stores only crede
   );
   expect(result.status).toBe("authorized");
   if (result.status !== "authorized") throw new Error("expected authorization");
-  expect(result.token).toMatch(/^ptr_v1_[0-9a-f-]+_[A-Za-z0-9_-]{43}$/);
-  const secret = result.token.split("_")[3];
+  const token = /^ptr_v1_[0-9a-f-]+_([A-Za-z0-9_-]{43})$/.exec(result.token);
+  expect(token).not.toBeNull();
+  const secret = token![1];
   const [session] = await database.db
     .select()
     .from(authSessions)

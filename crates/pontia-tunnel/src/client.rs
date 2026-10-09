@@ -316,12 +316,18 @@ async fn wait_for_credential_change(path: &Path, previous: CredentialFingerprint
 }
 
 fn valid_credential(value: &str) -> bool {
-    let mut parts = value.split('_');
-    parts.next() == Some("ptr")
-        && parts.next() == Some("v1")
-        && parts.next().is_some_and(|id| !id.is_empty())
-        && parts.next().is_some_and(|secret| secret.len() >= 43)
-        && parts.next().is_none()
+    let Some(value) = value.strip_prefix("ptr_v1_") else {
+        return false;
+    };
+    let Some((session_id, secret)) = value.split_once('_') else {
+        return false;
+    };
+    let valid_session_id = Uuid::parse_str(session_id)
+        .is_ok_and(|parsed| parsed.get_version_num() == 7 && parsed.to_string() == session_id);
+    let valid_secret = URL_SAFE_NO_PAD
+        .decode(secret)
+        .is_ok_and(|decoded| decoded.len() == 32 && URL_SAFE_NO_PAD.encode(decoded) == secret);
+    valid_session_id && valid_secret
 }
 
 fn valid_ticket(value: &str) -> bool {
@@ -377,7 +383,8 @@ mod tests {
     #[test]
     fn credentials_and_tickets_use_distinct_strict_formats() {
         let secret = "v7-_".repeat(10) + "v78";
-        let credential = format!("ptr_v1_session_{}", "A".repeat(43));
+        let credential =
+            format!("ptr_v1_0199791c-6600-7000-8000-000000000001_{secret}");
         let ticket = format!("pet_v1_{secret}");
         assert!(valid_credential(&credential));
         assert!(!valid_credential(&ticket));
