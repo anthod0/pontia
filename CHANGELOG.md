@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-09
+
+### Added
+
+- Added Cloud settings for managing sign-in methods, registered devices, browser and CLI sessions, and Edge deployments.
+- Added Cloud documentation for setup, remote access, and Pontia's architecture.
+- Added resumable Edge initialization with `pontia-edge retry`.
+
+### Changed
+
+- Redesigned the Cloud landing page and added direct entry points to the Dashboard and documentation.
+- Simplified `pontia init` by using the home directory for first-time workspace access and preserving existing roots without prompting.
+- Reused Cloudflare build artifacts across deployment jobs and prerendered Cloud documentation routes.
+
+### Fixed
+
+- Made the Edge administration script directly executable.
+
 ## [0.4.1] - 2026-10-08
 
 ### Added
