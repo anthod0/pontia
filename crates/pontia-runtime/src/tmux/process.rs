@@ -194,6 +194,7 @@ pub(crate) fn observe_fingerprint(fingerprint: &TmuxProcessFingerprint) -> Proce
     }
 }
 
+#[cfg(target_os = "linux")]
 fn observe_process_identity(pid: u32, expected_start_time_seconds: u64) -> ProcessObservation {
     observe_identity(
         &ProcessTable::refresh_all(),

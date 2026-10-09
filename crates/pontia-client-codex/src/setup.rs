@@ -43,16 +43,20 @@ impl ClientIntegration for CodexIntegration {
 
 impl PreparedClientIntegration for CodexSetup {
     fn summary(&self) -> Vec<String> {
-        let mut summary = vec![
+        let summary = vec![
             "Codex integration: register autostart".into(),
             format!("Codex executable: {}", self.executable.display()),
             format!("CODEX_HOME: {}", self.home.display()),
             format!("Codex service: {}", self.service_path.display()),
         ];
         #[cfg(target_os = "linux")]
-        if let ServiceUserIdentity::SystemdUsername(username) = &self.service_user {
-            summary.push(format!("user linger: enable for {username}"));
-        }
+        let summary = {
+            let mut summary = summary;
+            if let ServiceUserIdentity::SystemdUsername(username) = &self.service_user {
+                summary.push(format!("user linger: enable for {username}"));
+            }
+            summary
+        };
         summary
     }
     fn preflight(&self, _runner: &dyn CommandRunner) -> Result<(), String> {
@@ -606,6 +610,7 @@ fn codex_environment(home: &Path) -> Result<Vec<(String, String)>, String> {
     )])
 }
 
+#[cfg(target_os = "linux")]
 fn require_systemctl<R: CommandRunner + ?Sized>(
     runner: &R,
     args: &[&str],
@@ -618,6 +623,7 @@ fn require_systemctl<R: CommandRunner + ?Sized>(
     require_command(output, "systemctl", &display_args, step)
 }
 
+#[cfg(target_os = "linux")]
 fn systemctl<R: CommandRunner + ?Sized>(
     runner: &R,
     args: &[&str],
