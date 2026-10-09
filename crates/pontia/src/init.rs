@@ -11,13 +11,10 @@ use dialoguer::{MultiSelect, console::Term};
 use pontia_config::{AppConfig, WorkspaceRootConfig};
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
 
-use crate::{codex::CodexSetup, private_file};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AgentSelection {
-    pub pi: bool,
-    pub codex: bool,
-}
+use crate::private_file;
+use pontia_application::client_contract::ClientIntegration;
+use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitOutcome {
@@ -25,20 +22,16 @@ pub struct InitOutcome {
 }
 
 pub trait InitPlatform {
-    fn inspect_codex(
-        &self,
-        vars: &HashMap<String, String>,
-        user_home: &Path,
-    ) -> Result<CodexSetup, String>;
-    fn preflight(&self, install_pi: bool) -> Result<(), String>;
+    fn integrations(&self) -> Vec<Arc<dyn ClientIntegration>>;
+    fn command_runner(&self) -> &dyn CommandRunner;
+    fn definition_store(&self) -> &dyn DefinitionStore;
+    fn preflight(&self) -> Result<(), String>;
     fn fill_random(&self, bytes: &mut [u8]) -> Result<(), String>;
-    fn install_pi(&self) -> Result<(), String>;
-    fn initialize_codex(&self, setup: &CodexSetup) -> Result<(), String>;
     fn start_service(
         &self,
         config: &AppConfig,
         config_changed: bool,
-        codex_home: Option<&Path>,
+        environment_paths: &[(String, PathBuf)],
     ) -> Result<(), String>;
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String>;
 }
@@ -78,7 +71,7 @@ where
     R: BufRead,
     W: Write,
     P: InitPlatform,
-    S: FnOnce(&mut R, &mut W) -> Result<AgentSelection, String>,
+    S: FnOnce(&mut R, &mut W, &[Arc<dyn ClientIntegration>]) -> Result<Vec<usize>, String>,
 {
     let persistent_vars = persistent_vars(vars);
     let existing = load_persistent_config(&persistent_vars)?;
@@ -104,11 +97,18 @@ where
     };
 
     writeln!(output, "Pontia initialization\n").map_err(io_error)?;
-    let agents = select_agents(input, output)?;
-    let codex = agents
-        .codex
-        .then(|| platform.inspect_codex(vars, &user_home))
-        .transpose()?;
+    let integrations = platform.integrations();
+    let selected = select_agents(input, output, &integrations)?;
+    let prepared = integrations
+        .iter()
+        .enumerate()
+        .map(|(index, client)| {
+            selected
+                .contains(&index)
+                .then(|| client.prepare(vars, &user_home, platform.command_runner()))
+                .transpose()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let token = match existing.external_api_token.as_deref() {
         Some(token) => token.to_string(),
@@ -133,20 +133,13 @@ where
     }
 
     writeln!(output, "\nInitialization summary:").map_err(io_error)?;
-    writeln!(
-        output,
-        "  pi integration: {}",
-        if agents.pi { "install" } else { "skip" }
-    )
-    .map_err(io_error)?;
-    if let Some(codex) = &codex {
-        writeln!(output, "  Codex integration: register autostart").map_err(io_error)?;
-        writeln!(output, "  Codex executable: {}", codex.executable.display()).map_err(io_error)?;
-        writeln!(output, "  CODEX_HOME: {}", codex.home.display()).map_err(io_error)?;
-        writeln!(output, "  Codex service: {}", codex.service_path.display()).map_err(io_error)?;
-        writeln!(output, "  user linger: enable for {}", codex.username).map_err(io_error)?;
-    } else {
-        writeln!(output, "  Codex integration: skip").map_err(io_error)?;
+    for (client, setup) in integrations.iter().zip(&prepared) {
+        let summary = setup
+            .as_ref()
+            .map_or_else(|| client.skipped_summary(), |setup| setup.summary());
+        for line in summary {
+            writeln!(output, "  {line}").map_err(io_error)?;
+        }
     }
     writeln!(output, "  Workspace Browser roots: {}", initial_roots.len()).map_err(io_error)?;
     writeln!(
@@ -173,18 +166,13 @@ where
         answer => return Err(format!("expected yes or no, got {answer:?}")),
     }
 
-    platform.preflight(agents.pi)?;
-    if agents.pi {
-        platform.install_pi()?;
-        writeln!(output, "✓ Installed pi integration").map_err(io_error)?;
+    platform.preflight()?;
+    for setup in prepared.iter().flatten() {
+        setup.preflight(platform.command_runner())?;
     }
-    if let Some(codex) = &codex {
-        platform.initialize_codex(codex)?;
-        writeln!(
-            output,
-            "✓ Configured Codex autostart and control connection"
-        )
-        .map_err(io_error)?;
+    for setup in prepared.iter().flatten() {
+        setup.install(platform.command_runner(), platform.definition_store())?;
+        writeln!(output, "✓ {}", setup.completion()).map_err(io_error)?;
     }
 
     let config_changed = write_config(
@@ -198,11 +186,12 @@ where
     writeln!(output, "✓ Wrote {}", config_path.display()).map_err(io_error)?;
 
     let config = load_persistent_config(&persistent_vars)?;
-    platform.start_service(
-        &config,
-        config_changed,
-        codex.as_ref().map(|setup| setup.home.as_path()),
-    )?;
+    let environment_paths = prepared
+        .iter()
+        .flatten()
+        .flat_map(|setup| setup.service_environment_paths())
+        .collect::<Vec<_>>();
+    platform.start_service(&config, config_changed, &environment_paths)?;
     writeln!(output, "✓ Started Pontia service").map_err(io_error)?;
 
     let dashboard_addr = local_addr(config.bind_addr);
@@ -222,64 +211,90 @@ where
 fn line_agent_selection<R: BufRead, W: Write>(
     input: &mut R,
     output: &mut W,
-) -> Result<AgentSelection, String> {
-    writeln!(output, "Select Agent Clients:\n  [x] pi\n  [ ] codex").map_err(io_error)?;
+    clients: &[Arc<dyn ClientIntegration>],
+) -> Result<Vec<usize>, String> {
+    writeln!(output, "Select Agent Clients:").map_err(io_error)?;
+    for client in clients {
+        writeln!(
+            output,
+            "  [{}] {}",
+            if client.selected_by_default() {
+                "x"
+            } else {
+                " "
+            },
+            client.client_type()
+        )
+        .map_err(io_error)?;
+    }
+    let names = clients
+        .iter()
+        .map(|client| client.client_type())
+        .collect::<Vec<_>>();
+    let choices = names
+        .iter()
+        .map(|name| format!("'{name}'"))
+        .chain([format!("'{}'", names.join(",")), "'none'".into()])
+        .collect::<Vec<_>>()
+        .join(", ");
     write!(
         output,
-        "Press Enter to keep the defaults, or type a selection ('pi', 'codex', 'pi,codex', or 'none'): "
+        "Press Enter to keep the defaults, or type a selection ({choices}): "
     )
     .map_err(io_error)?;
     let answer = read_answer(input, output)?;
     let answer = answer.trim();
-    if answer.is_empty() || answer == "pi" {
-        return Ok(AgentSelection {
-            pi: true,
-            codex: false,
-        });
+    if answer.is_empty() {
+        return Ok(clients
+            .iter()
+            .enumerate()
+            .filter_map(|(index, client)| client.selected_by_default().then_some(index))
+            .collect());
     }
     if answer == "none" {
-        return Ok(AgentSelection {
-            pi: false,
-            codex: false,
-        });
+        return Ok(Vec::new());
     }
     let selected = answer
         .split(',')
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .collect::<HashSet<_>>();
-    if selected.is_empty()
-        || selected
-            .iter()
-            .any(|value| !matches!(*value, "pi" | "codex"))
-    {
+    if selected.is_empty() || selected.iter().any(|value| !names.contains(value)) {
         return Err(format!("unsupported Agent Client selection: {answer}"));
     }
-    Ok(AgentSelection {
-        pi: selected.contains("pi"),
-        codex: selected.contains("codex"),
-    })
+    Ok(names
+        .iter()
+        .enumerate()
+        .filter_map(|(index, name)| selected.contains(name).then_some(index))
+        .collect())
 }
 
 fn interactive_agent_selection<R: BufRead, W: Write>(
     _input: &mut R,
     output: &mut W,
-) -> Result<AgentSelection, String> {
+    clients: &[Arc<dyn ClientIntegration>],
+) -> Result<Vec<usize>, String> {
     output.flush().map_err(io_error)?;
-    let selected = MultiSelect::new()
+    MultiSelect::new()
         .with_prompt("Select Agent Clients (Space to toggle, Enter to confirm)")
-        .items(["pi", "codex"])
-        .defaults(&[true, false])
+        .items(
+            clients
+                .iter()
+                .map(|client| client.client_type())
+                .collect::<Vec<_>>(),
+        )
+        .defaults(
+            &clients
+                .iter()
+                .map(|client| client.selected_by_default())
+                .collect::<Vec<_>>(),
+        )
         .interact_on(&Term::stdout())
-        .map_err(|error| format!("Agent Client selection failed: {error}"))?;
-    Ok(AgentSelection {
-        pi: selected.contains(&0),
-        codex: selected.contains(&1),
-    })
+        .map_err(|error| format!("Agent Client selection failed: {error}"))
 }
 
 fn load_persistent_config(vars: &HashMap<String, String>) -> Result<AppConfig, String> {
-    AppConfig::from_vars(vars).map_err(|_| {
+    pontia_clients::config_from_vars(vars).map_err(|_| {
         "failed to load Pontia configuration; verify PONTIA_HOME, config.toml syntax, and configured values"
             .to_string()
     })

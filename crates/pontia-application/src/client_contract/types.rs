@@ -71,7 +71,9 @@ impl RuntimeBindingBehavior {
 /// describe how a client extension reports facts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentClientAdapter {
+    pub lifecycle: super::SessionLifecycleBehavior,
     pub native_turn_identity: bool,
+    pub native_turn_metadata_key: Option<&'static str>,
     pub runtime: RuntimeBehavior,
     pub dispatch: DispatchBehavior,
     pub client_session_identity: ClientSessionIdentityBehavior,
@@ -89,6 +91,7 @@ pub struct AgentClientAdapter {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentClientSpec {
     pub client_type: &'static str,
+    pub default_for_creation: bool,
     pub capabilities: AgentClientCapabilities,
     pub adapter: AgentClientAdapter,
 }

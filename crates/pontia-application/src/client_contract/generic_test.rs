@@ -32,9 +32,15 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
 
 pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "generic",
+    default_for_creation: true,
     capabilities: CAPABILITIES,
     adapter: AgentClientAdapter {
+        lifecycle: super::SessionLifecycleBehavior {
+            confirmed_exit_recovery: true,
+            ..super::SessionLifecycleBehavior::DEFAULT
+        },
         native_turn_identity: false,
+        native_turn_metadata_key: Some("native_turn_receipt"),
         runtime: RuntimeBehavior::InProcess,
         dispatch: DispatchBehavior::InProcessRecorded,
         client_session_identity: ClientSessionIdentityBehavior::Unsupported,
@@ -122,6 +128,8 @@ impl crate::clients::InProcessClient for GenericTestClient {
 pub fn registration() -> crate::clients::ClientRegistration {
     crate::clients::ClientRegistration {
         service: None,
+        profile: None,
+        events: None,
         spec: &SPEC,
         data: None,
         launcher: None,

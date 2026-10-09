@@ -5,7 +5,27 @@ use std::{
     sync::{Mutex, MutexGuard},
 };
 
-use pontia_config::{AppConfig, FilePickerConfig, RuntimeClientConfig, RuntimeConfig};
+use pontia_config::{
+    ClientConfigDefaults, FilePickerConfig, RuntimeClientConfig, RuntimeCommandOverride,
+    RuntimeConfig,
+};
+
+struct AppConfig;
+impl AppConfig {
+    const CLIENTS: ClientConfigDefaults = ClientConfigDefaults {
+        default_client_type: "pi",
+        runtime_commands: &[RuntimeCommandOverride {
+            client_type: "pi",
+            environment_variable: "PONTIA_PI_TUI_COMMAND",
+        }],
+    };
+    fn from_vars(vars: &HashMap<String, String>) -> pontia_core::Result<pontia_config::AppConfig> {
+        pontia_config::AppConfig::from_vars(vars, &Self::CLIENTS)
+    }
+    fn from_env() -> pontia_core::Result<pontia_config::AppConfig> {
+        pontia_config::AppConfig::from_env(&Self::CLIENTS)
+    }
+}
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 

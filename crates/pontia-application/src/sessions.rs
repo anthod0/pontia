@@ -13,8 +13,6 @@ use serde::Deserialize;
 use serde_json::Value;
 use sqlx::SqlitePool;
 
-use crate::default_client_type;
-
 mod commands;
 mod models;
 pub use models::{SessionModel, SessionModels, SetSessionModelRequest};
@@ -27,7 +25,7 @@ mod validation;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct CreateSessionRequest {
-    #[serde(default = "default_client_type")]
+    #[serde(default, deserialize_with = "deserialize_client_type")]
     pub client_type: String,
     pub title: Option<String>,
     pub workspace: Option<String>,
@@ -42,6 +40,16 @@ pub struct CreateSessionRequest {
     pub initial_task: Option<InitialTaskRequest>,
     #[serde(skip)]
     pub runtime_environment: BTreeMap<String, String>,
+}
+
+fn deserialize_client_type<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<String, D::Error> {
+    let client = String::deserialize(deserializer)?;
+    if client.is_empty() {
+        return Err(serde::de::Error::custom("client_type cannot be empty"));
+    }
+    Ok(client)
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]

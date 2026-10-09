@@ -5,11 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pontia::{
-    codex::{CodexDaemonProbe, CodexSetup, initialize, inspect},
-    lifecycle::DefinitionStore,
-    manager::{CommandOutput, CommandRunner},
-};
+use pontia_client_codex::setup::{CodexDaemonProbe, CodexSetup, initialize, inspect};
+use pontia_runtime::local_service::{CommandOutput, CommandRunner, DefinitionStore};
 
 #[derive(Debug, PartialEq, Eq)]
 struct Call {
@@ -336,4 +333,18 @@ fn initialization_reports_the_failed_verification_step() {
 
     assert!(error.contains("Codex protocol connection check failed"));
     assert!(error.contains("handshake rejected"));
+}
+
+#[test]
+fn renders_codex_oneshot_user_service() {
+    let rendered = pontia_client_codex::setup::render_codex_systemd(
+        Path::new("/home/alice/Codex App/bin/codex"),
+        Path::new("/home/alice/.codex%dev"),
+    )
+    .expect("valid paths");
+    assert_eq!(
+        rendered,
+        "[Unit]\nDescription=Codex App Server Daemon Startup\nAfter=network.target\n\n[Service]\nType=oneshot\nExecStart=\"/home/alice/Codex App/bin/codex\" app-server daemon start\nEnvironment=\"CODEX_HOME=/home/alice/.codex%%dev\"\n\n[Install]\nWantedBy=default.target\n"
+    );
+    assert!(!rendered.contains("RemainAfterExit"));
 }

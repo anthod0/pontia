@@ -90,7 +90,12 @@ impl PostCommitEffects {
         }
     }
 
-    pub(super) async fn apply(&self, pool: &sqlx::SqlitePool, event: &DomainEvent) -> Result<()> {
+    pub(super) async fn apply(
+        &self,
+        pool: &sqlx::SqlitePool,
+        clients: crate::clients::ClientRegistry,
+        event: &DomainEvent,
+    ) -> Result<()> {
         if matches!(
             event.event_type,
             EventType::SessionExited | EventType::SessionError
@@ -121,7 +126,7 @@ impl PostCommitEffects {
         }
 
         clear_exited_session_tmux_markers(pool, event, true).await;
-        InboxAssociations::new(pool.clone())
+        InboxAssociations::new(pool.clone(), clients)
             .observe_committed(&self.scheduler, event)
             .await?;
         Ok(())

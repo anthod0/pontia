@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { defaultClientType } from '../../clients'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -18,7 +19,7 @@
 
   let {
     workspaceId = $bindable(''),
-    clientType = $bindable('pi'),
+    clientType = $bindable(defaultClientType),
     workspaces,
     workspacesLoading = false,
     selectedWorkspace,

@@ -1,11 +1,11 @@
 use super::CodexService;
-use pontia_application::{AgentProfileService, CodexProfileBinding};
+use crate::profiles::{CodexProfileBinding, CodexProfiles};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 
 impl CodexService {
-    pub(super) fn profiles(&self) -> AgentProfileService {
-        AgentProfileService::new(self.pool.clone())
+    pub(super) fn profiles(&self) -> CodexProfiles {
+        CodexProfiles::new(self.pool.clone())
     }
 
     pub(super) async fn resume_params(&self, session: &str, thread: &str) -> Result<Value> {

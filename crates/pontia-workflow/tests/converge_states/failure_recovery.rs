@@ -14,7 +14,7 @@ async fn fixture() -> (
 ) {
     let root = tempfile::tempdir().unwrap();
     let pool = test_pool(&root.path().join("recovery.db")).await;
-    let repo = SqliteWorkflowRepository::new(pool.clone());
+    let repo = SqliteWorkflowRepository::new(pool.clone()).with_recovery_client_types(["pi"]);
     seed_linear_workflow(&repo, "wf_retry", "[]", true).await;
     repo.start_workflow("wf_retry", "started").await.unwrap();
     for (id, state) in [("upstream", "exited"), ("failed", "exited")] {

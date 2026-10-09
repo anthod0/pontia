@@ -16,12 +16,15 @@ const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8080";
 const DEFAULT_AUTH_ORIGIN: &str = "https://pontia.dev";
 
 impl AppConfig {
-    pub fn from_env() -> Result<Self> {
+    pub fn from_env(defaults: &super::ClientConfigDefaults) -> Result<Self> {
         let vars: HashMap<String, String> = env::vars().collect();
-        Self::from_vars(&vars)
+        Self::from_vars(&vars, defaults)
     }
 
-    pub fn from_vars(vars: &HashMap<String, String>) -> Result<Self> {
+    pub fn from_vars(
+        vars: &HashMap<String, String>,
+        defaults: &super::ClientConfigDefaults,
+    ) -> Result<Self> {
         let pontia_home = pontia_home(vars)?;
         let config_path = config_path(&pontia_home);
         let file = if config_path.exists() {
@@ -57,9 +60,13 @@ impl AppConfig {
 
         let default_client_type = get(vars, "PONTIA_DEFAULT_CLIENT_TYPE")
             .or_else(|| file.and_then(|config| config.default_client_type.as_deref()))
-            .unwrap_or("pi")
+            .unwrap_or(defaults.default_client_type)
             .to_string();
-        validate_real_default_client_type("PONTIA_DEFAULT_CLIENT_TYPE", &default_client_type)?;
+        validate_real_default_client_type(
+            "PONTIA_DEFAULT_CLIENT_TYPE",
+            &default_client_type,
+            defaults.default_client_type,
+        )?;
 
         let workspace_browser = match get(vars, "PONTIA_WORKSPACE_ROOTS") {
             Some(value) => WorkspaceBrowserConfig {
@@ -84,7 +91,7 @@ impl AppConfig {
         let mut runtime = file
             .and_then(|config| config.runtime.clone())
             .unwrap_or_default();
-        apply_runtime_overrides(vars, &mut runtime);
+        apply_runtime_overrides(vars, &mut runtime, defaults);
 
         Ok(Self {
             pontia_home,

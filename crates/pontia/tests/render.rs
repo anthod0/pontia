@@ -1,16 +1,16 @@
 use std::path::Path;
 
-use pontia::definition::{render_codex_systemd, render_launchd, render_systemd_with_codex};
+use pontia::definition::{render_launchd, render_systemd_with_environment};
 
 const AUTH_ORIGIN: &str = "https://dev.pontia.example";
 
 #[test]
 fn renders_systemd_user_service() {
-    let rendered = render_systemd_with_codex(
+    let rendered = render_systemd_with_environment(
         Path::new("/opt/Pontia App/bin/pontiad"),
         Path::new("/home/alice/Pontia Home%dev"),
         AUTH_ORIGIN,
-        None,
+        &[],
     )
     .expect("valid paths");
 
@@ -22,32 +22,17 @@ fn renders_systemd_user_service() {
 
 #[test]
 fn systemd_rendering_escapes_unit_syntax() {
-    let rendered = render_systemd_with_codex(
+    let rendered = render_systemd_with_environment(
         Path::new("/opt/pontia\\build/\"pontiad\""),
         Path::new("/home/alice/pontia\\\"home"),
         AUTH_ORIGIN,
-        Some(Path::new("/home/alice/codex%home")),
+        &[("CODEX_HOME".into(), "/home/alice/codex%home".into())],
     )
     .expect("valid paths");
 
     assert!(rendered.contains("ExecStart=\"/opt/pontia\\\\build/\\\"pontiad\\\"\""));
     assert!(rendered.contains("Environment=\"PONTIA_HOME=/home/alice/pontia\\\\\\\"home\""));
     assert!(rendered.contains("Environment=\"CODEX_HOME=/home/alice/codex%%home\""));
-}
-
-#[test]
-fn renders_codex_oneshot_user_service() {
-    let rendered = render_codex_systemd(
-        Path::new("/home/alice/Codex App/bin/codex"),
-        Path::new("/home/alice/.codex%dev"),
-    )
-    .expect("valid paths");
-
-    assert_eq!(
-        rendered,
-        "[Unit]\nDescription=Codex App Server Daemon Startup\nAfter=network.target\n\n[Service]\nType=oneshot\nExecStart=\"/home/alice/Codex App/bin/codex\" app-server daemon start\nEnvironment=\"CODEX_HOME=/home/alice/.codex%%dev\"\n\n[Install]\nWantedBy=default.target\n"
-    );
-    assert!(!rendered.contains("RemainAfterExit"));
 }
 
 #[test]
@@ -89,11 +74,11 @@ fn renders_launch_agent_plist_with_xml_escaping() {
 #[test]
 fn renderers_reject_relative_paths() {
     assert!(
-        render_systemd_with_codex(
+        render_systemd_with_environment(
             Path::new("bin/pontiad"),
             Path::new("/home/alice"),
             AUTH_ORIGIN,
-            None,
+            &[],
         )
         .is_err()
     );
@@ -115,7 +100,8 @@ fn renderers_reject_non_utf8_paths() {
 
     let path = Path::new(OsStr::from_bytes(b"/home/alice/\xff"));
     assert!(
-        render_systemd_with_codex(Path::new("/usr/bin/pontiad"), path, AUTH_ORIGIN, None).is_err()
+        render_systemd_with_environment(Path::new("/usr/bin/pontiad"), path, AUTH_ORIGIN, &[])
+            .is_err()
     );
     assert!(render_launchd(Path::new("/usr/bin/pontiad"), path, AUTH_ORIGIN).is_err());
 }

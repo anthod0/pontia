@@ -459,7 +459,7 @@ impl InboxCommandService {
         };
         match delivery {
             Ok((turn, receipt)) => {
-                InboxAssociations::new(self.pool.clone())
+                InboxAssociations::new(self.pool.clone(), self.clients.registry().clone())
                     .record_receipt(session_id, &message_id, &receipt)
                     .await?;
                 let turn_id = turn.as_ref().map(|turn| turn.turn_id.as_str());

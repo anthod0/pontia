@@ -16,8 +16,11 @@ pub(super) fn validate_request(
                 "unsupported client_type in supported_client_types: {client_type}"
             )));
         }
-        if client_type == "codex" {
-            super::binding::validate_codex_templates(
+        if let Some(policy) = clients
+            .get(client_type)
+            .and_then(|client| client.profile.as_ref())
+        {
+            policy.validate_templates(
                 request.system_prompt_template.as_deref(),
                 request.turn_prompt_template.as_deref(),
             )?;

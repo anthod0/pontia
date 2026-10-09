@@ -205,17 +205,21 @@ impl EventCommitter {
         {
             return Ok(CommitOutcome::Skipped);
         }
-        if event.client_type == "pi"
+        let lifecycle = self.clients.spec(&event.client_type).map_or(
+            crate::client_contract::SessionLifecycleBehavior::DEFAULT,
+            |spec| spec.adapter.lifecycle,
+        );
+        if lifecycle.coupled_runtime
             && event.event_type == EventType::SessionReady
             && sessions
                 .first()
                 .is_some_and(|session| session.state.is_terminal())
         {
             return Err(Error::StateConflict(
-                "Terminal Pi session cannot become ready".into(),
+                "Terminal runtime-coupled session cannot become ready".into(),
             ));
         }
-        if event.client_type == "pi"
+        if lifecycle.coupled_runtime
             && event.event_type == EventType::SessionExited
             && sessions
                 .first()
@@ -265,9 +269,16 @@ impl EventCommitter {
             topology_evidence,
             &turns,
         );
-        let mut projection = ProjectionState::with_existing(sessions, turns);
+        let mut projection = ProjectionState::with_existing(sessions, turns)
+            .with_execution_lifetime(lifecycle.execution_lifetime);
         projection.apply(&event)?;
-        let runtime_event = synchronized_pi_runtime_event(&event)?;
+        let runtime_event = self
+            .clients
+            .get(&event.client_type)
+            .and_then(|client| client.events.as_ref())
+            .map(|interpreter| interpreter.accompanying_runtime_event(&event))
+            .transpose()?
+            .flatten();
         if let Some(runtime_event) = &runtime_event {
             projection.apply(runtime_event)?;
         }
@@ -320,48 +331,6 @@ impl EventCommitter {
             .existing_event_state_version(event_id, session_id)
             .await
     }
-}
-
-fn synchronized_pi_runtime_event(event: &DomainEvent) -> Result<Option<DomainEvent>> {
-    if event.client_type != "pi" {
-        return Ok(None);
-    }
-    let event_type = match event.event_type {
-        EventType::SessionStarting | EventType::SessionResuming => EventType::RuntimeStarting,
-        EventType::SessionReady => EventType::RuntimeReady,
-        EventType::SessionExited => EventType::RuntimeExited,
-        EventType::SessionError
-            if event.payload["reason"] == "startup_timeout"
-                || event.payload["reason"] == "startup_failed" =>
-        {
-            EventType::RuntimeExited
-        }
-        _ => return Ok(None),
-    };
-    let runtime_id = event.payload["runtime_id"]
-        .as_str()
-        .map(str::trim)
-        .filter(|runtime_id| !runtime_id.is_empty())
-        .ok_or_else(|| Error::StateConflict("Pi lifecycle event requires runtime_id".into()))?
-        .to_owned();
-    let mut payload = event.payload.clone();
-    if !payload.is_object() {
-        payload = serde_json::json!({});
-    }
-    payload["runtime_id"] = serde_json::json!(runtime_id);
-    payload["session_event_id"] = serde_json::json!(event.event_id);
-    Ok(Some(DomainEvent {
-        event_id: format!("{}:runtime", event.event_id),
-        session_id: event.session_id.clone(),
-        turn_id: None,
-        source: event.source,
-        client_type: event.client_type.clone(),
-        event_type,
-        occurred_at: event.occurred_at,
-        payload,
-        timeline_boundary: None,
-        topology: None,
-    }))
 }
 
 async fn project_runtime_in_tx(

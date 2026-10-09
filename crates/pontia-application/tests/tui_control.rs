@@ -159,6 +159,13 @@ async fn managed_codex_tui_has_one_restartable_runtime_without_changing_the_sess
     static SPEC: pontia_application::client_contract::AgentClientSpec =
         pontia_application::client_contract::AgentClientSpec {
             client_type: "codex",
+            adapter: pontia_application::client_contract::AgentClientAdapter {
+                lifecycle: pontia_application::client_contract::SessionLifecycleBehavior {
+                    independent_interface: true,
+                    ..pontia_application::client_contract::SessionLifecycleBehavior::DEFAULT
+                },
+                ..pontia_application::client_contract::TEST_SPEC.adapter
+            },
             ..pontia_application::client_contract::TEST_SPEC
         };
     registration.spec = &SPEC;

@@ -5,6 +5,8 @@ import type {
   UpsertAgentProfileInput,
 } from "../../api/types";
 
+import { defaultClientType } from "../../clients";
+
 export interface AgentProfileDraft {
   profile_id: string;
   version: string;
@@ -38,7 +40,7 @@ export function createAgentProfileDraft(): AgentProfileDraft {
     version: "",
     name: "",
     description: "",
-    supported_client_types_text: "pi",
+    supported_client_types_text: defaultClientType,
     agent_kind: "executor",
     system_prompt_template: "",
     turn_prompt_template: "",

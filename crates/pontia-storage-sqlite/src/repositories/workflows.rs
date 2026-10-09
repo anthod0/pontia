@@ -38,6 +38,7 @@ pub struct CreateWorkflowNodeRecord {
 #[derive(Debug, Clone)]
 pub struct SqliteWorkflowRepository {
     pool: SqlitePool,
+    recovery_client_types: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -98,6 +99,17 @@ pub struct ImplicitBlockWorkflowPatchRecord {
 
 impl SqliteWorkflowRepository {
     pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            recovery_client_types: Vec::new(),
+        }
+    }
+
+    pub fn with_recovery_client_types(
+        mut self,
+        clients: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.recovery_client_types = clients.into_iter().map(Into::into).collect();
+        self
     }
 }

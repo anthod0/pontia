@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { defaultClientType, workspaceClientTypes } from '../clients'
   import { navigate, routeParam } from '$lib/navigation'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
@@ -19,10 +20,10 @@
 
   let { routeWorkspaceId = null }: { routeWorkspaceId?: string | null } = $props()
 
-  const CLIENT_TYPE_OPTIONS = ['pi']
+  const CLIENT_TYPE_OPTIONS = workspaceClientTypes
 
   let prompt = $state('')
-  let clientType = $state('pi')
+  let clientType = $state(defaultClientType)
   let creating = $state(false)
   let actionError = $state<string | null>(null)
 

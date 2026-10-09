@@ -19,6 +19,8 @@ use std::sync::Arc;
 pub fn registration(tui_command: Option<String>) -> ClientRegistration {
     ClientRegistration {
         service: Some(Arc::new(crate::service::PiService)),
+        profile: None,
+        events: Some(Arc::new(crate::lifecycle::PiEventInterpreter)),
         in_process: None,
         session: None,
         prepare_on_input: false,

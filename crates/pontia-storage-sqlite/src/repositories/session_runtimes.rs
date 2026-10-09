@@ -146,7 +146,7 @@ impl SqliteSessionRuntimeRepository {
         Ok(())
     }
 
-    /// Pi has one TUI. Ambiguity is an error, never an arbitrary row choice.
+    /// A control TUI must be unambiguous, never an arbitrary row choice.
     pub async fn runtime_id(&self, session_id: &str) -> Result<Option<String>> {
         let ids: Vec<String> = sqlx::query_scalar(
             "SELECT runtime_id FROM session_runtimes WHERE session_id = ? AND role = 'tui'",
@@ -181,17 +181,24 @@ impl SqliteSessionRuntimeRepository {
             .bind(id).fetch_optional(&self.pool).await?)
     }
 
-    pub async fn active_tmux_process_bindings(&self) -> Result<Vec<ActiveTmuxProcessBindingRow>> {
+    pub async fn active_tmux_process_bindings(
+        &self,
+        client_type: &str,
+        role: &str,
+        observe_starting: bool,
+    ) -> Result<Vec<ActiveTmuxProcessBindingRow>> {
         Ok(sqlx::query_as(
             r#"SELECT s.session_id, s.client_type, r.runtime_id, r.role,
             r.tmux_socket_path AS socket_path, r.tmux_pane_id AS pane_id, r.process_fingerprint
             FROM sessions s
             JOIN session_runtimes r ON r.session_id = s.session_id
-            WHERE ((s.client_type = 'pi' AND r.role = 'tui' AND r.state = 'running')
-                OR (s.client_type = 'codex' AND r.role = 'interface'
-                    AND r.state IN ('starting', 'running')))
+            WHERE s.client_type = ? AND r.role = ?
+              AND (r.state = 'running' OR (? AND r.state = 'starting'))
               AND r.tmux_socket_path IS NOT NULL AND r.tmux_pane_id IS NOT NULL"#,
         )
+        .bind(client_type)
+        .bind(role)
+        .bind(observe_starting)
         .fetch_all(&self.pool)
         .await?)
     }

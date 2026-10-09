@@ -41,7 +41,14 @@ impl InboxCommandService {
         let mut metadata = original.metadata;
         if let Some(object) = metadata.as_object_mut() {
             object.remove("inbox_message_id");
-            object.remove("codex_turn_id");
+            if let Some(key) = self
+                .clients
+                .registry()
+                .spec(&session.client_type)
+                .and_then(|spec| spec.adapter.native_turn_metadata_key)
+            {
+                object.remove(key);
+            }
         }
         let outcome = self
             .enqueue_message(

@@ -59,6 +59,9 @@ async fn reporting_workflow_state() -> AppState {
 async fn reconcile_reporting_workflow(state: &AppState) {
     struct NoSessions;
     impl pontia_workflow::SessionCreator for NoSessions {
+        fn default_client_type(&self) -> pontia_workflow::Result<String> {
+            Ok("pi".into())
+        }
         async fn create_session(
             &self,
             _: pontia_application::CreateSessionRequest,

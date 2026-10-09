@@ -28,6 +28,15 @@ pub struct WorkflowQueryService {
 }
 
 impl WorkflowQueryService {
+    pub fn with_clients(mut self, clients: pontia_application::clients::ClientRegistry) -> Self {
+        self.workflows = self.workflows.with_recovery_client_types(
+            clients
+                .registrations()
+                .filter(|client| client.spec.adapter.lifecycle.confirmed_exit_recovery)
+                .map(|client| client.spec.client_type),
+        );
+        self
+    }
     pub fn new(pool: SqlitePool) -> Self {
         Self {
             workflows: SqliteWorkflowRepository::new(pool.clone()),

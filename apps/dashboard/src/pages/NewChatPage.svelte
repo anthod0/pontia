@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { defaultClientType, creationClientTypes } from '../clients'
   import { navigate } from '$lib/navigation'
   import { toast } from 'svelte-sonner'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
@@ -28,7 +29,7 @@
   import { loadSessionTimeline, resetTimelineState } from '../stores/timeline'
 
   let createWorkspaceId = ''
-  let createClientType = 'pi'
+  let createClientType = defaultClientType
   let creating = false
   let actionError: string | null = null
   let lastToastedError: string | null = null
@@ -38,7 +39,7 @@
   let workspaceSetupDecisionPending = true
   let workspaceOnboardingActive = false
 
-  const CLIENT_TYPE_OPTIONS = ['pi', 'codex']
+  const CLIENT_TYPE_OPTIONS = creationClientTypes
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
 
   onMount(() => {

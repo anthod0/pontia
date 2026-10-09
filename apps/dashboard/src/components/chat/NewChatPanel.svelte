@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { defaultClientType } from '../../clients'
   import type { WorkspaceView } from '../../api/types'
   import MessageComposer from './MessageComposer.svelte'
   import SessionTargetSelector from './SessionTargetSelector.svelte'
@@ -26,7 +27,7 @@
   let {
     prompt = $bindable(''),
     workspaceId = $bindable(''),
-    clientType = $bindable('pi'),
+    clientType = $bindable(defaultClientType),
     creating = false,
     canCreate = false,
     workspaces,

@@ -19,15 +19,16 @@ JOIN workflow_events f ON f.workflow_id=w.workflow_id AND f.event_type='workflow
     AND f.sequence=(SELECT MAX(sequence) FROM workflow_events WHERE workflow_id=w.workflow_id AND event_type='workflow.failed')
 JOIN workflow_nodes n ON n.workflow_id=w.workflow_id AND n.submitted_at IS NULL AND n.session_id IS NOT NULL
     AND n.introduced_revision<=w.current_revision AND (n.retired_revision IS NULL OR n.retired_revision>w.current_revision)
-JOIN sessions s ON s.session_id=n.session_id AND s.client_type='pi'
-JOIN agent_bindings b ON b.session_id=s.session_id AND b.client_type='pi'
+JOIN sessions s ON s.session_id=n.session_id
+JOIN agent_bindings b ON b.session_id=s.session_id AND b.client_type=s.client_type
 LEFT JOIN workflow_recoveries previous ON previous.recovery_id=json_extract(f.payload,'$.recovery_id')
 JOIN events e ON e.session_id=s.session_id AND e.event_type='session.exited'
     AND e.source IN ('agent_client','runtime_manager')
     AND e.event_id=COALESCE(json_extract(f.payload,'$.cause_event_id'),previous.exit_event_id,
         (SELECT event_id FROM events WHERE session_id=s.session_id AND event_type='session.exited'
          AND source IN ('agent_client','runtime_manager') AND created_at<=f.created_at ORDER BY rowid DESC LIMIT 1))
-WHERE w.workflow_id=? AND w.state='failed' AND w.activating_node_id IS NULL
+WHERE w.workflow_id=? AND s.client_type IN (SELECT value FROM json_each(?))
+    AND w.state='failed' AND w.activating_node_id IS NULL
     AND (s.state='exited' OR (s.state='idle' AND previous.state='failed'))
     AND (json_extract(f.payload,'$.cause_event_id')=e.event_id
          OR previous.state='failed'
@@ -55,6 +56,7 @@ impl SqliteWorkflowRepository {
     ) -> Result<Option<WorkflowRecoveryCandidate>> {
         Ok(sqlx::query_as(CANDIDATE)
             .bind(workflow_id)
+            .bind(serde_json::to_string(&self.recovery_client_types)?)
             .fetch_optional(&self.pool)
             .await?)
     }
@@ -85,8 +87,8 @@ impl SqliteWorkflowRepository {
         {
             return Ok(existing);
         }
-        let candidate: WorkflowRecoveryCandidate = sqlx::query_as(CANDIDATE).bind(workflow_id).fetch_optional(&mut *tx).await?
-            .ok_or_else(|| Error::StateConflict("Retry requires an unsubmitted Pi node with a confirmed exit, a native Session binding, and no pending or uncertain input".into()))?;
+        let candidate: WorkflowRecoveryCandidate = sqlx::query_as(CANDIDATE).bind(workflow_id).bind(serde_json::to_string(&self.recovery_client_types)?).fetch_optional(&mut *tx).await?
+            .ok_or_else(|| Error::StateConflict("Retry requires an unsubmitted supported node with a confirmed exit, a native Session binding, and no pending or uncertain input".into()))?;
         if candidate.failure_event_id != failure_event_id {
             return Err(Error::StateConflict(
                 "Workflow failure changed; reload before retrying".into(),

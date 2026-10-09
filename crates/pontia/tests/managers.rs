@@ -384,7 +384,11 @@ fn launchd_down_is_idempotent_when_service_is_not_loaded() {
 #[test]
 fn systemd_sets_and_preserves_codex_home() {
     let runner = FakeRunner::default();
-    let configured = SystemdManager::with_codex_home(&runner, Path::new("/srv/codex home"));
+    let configured = SystemdManager::with_environment_paths(
+        &runner,
+        vec!["CODEX_HOME"],
+        &[("CODEX_HOME".into(), "/srv/codex home".into())],
+    );
     let definition = configured
         .render_definition(
             Path::new("/opt/pontiad"),
@@ -395,7 +399,7 @@ fn systemd_sets_and_preserves_codex_home() {
         .expect("render configured CODEX_HOME");
     assert!(definition.contains("Environment=\"CODEX_HOME=/srv/codex home\""));
 
-    let preserved = SystemdManager::new(&runner)
+    let preserved = SystemdManager::with_environment_paths(&runner, vec!["CODEX_HOME"], &[])
         .render_definition(
             Path::new("/opt/pontiad"),
             Path::new("/srv/pontia"),

@@ -43,6 +43,9 @@ impl PersistingSessionCreator {
 }
 
 impl SessionCreator for PersistingSessionCreator {
+    fn default_client_type(&self) -> pontia_workflow::Result<String> {
+        Ok("pi".into())
+    }
     async fn find_session_by_creation_token(
         &self,
         metadata_key: &str,

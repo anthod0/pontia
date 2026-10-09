@@ -29,6 +29,8 @@ use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
 pub fn registration() -> ClientRegistration {
     ClientRegistration {
         service: Some(Arc::new(crate::service::CodexBackgroundService)),
+        profile: Some(Arc::new(crate::profiles::CodexProfilePolicy)),
+        events: None,
         in_process: None,
         spec: &crate::SPEC,
         data: Some(Arc::new(CodexData)),
@@ -301,7 +303,7 @@ impl ClientSession for CodexClient {
             } else {
                 "unavailable"
             };
-            let profiles = pontia_application::AgentProfileService::new(pool.clone());
+            let profiles = crate::profiles::CodexProfiles::new(pool.clone());
             let profile = match profiles.codex_binding(session).await {
                 Ok(Some(profile)) => {
                     let status = if binding.is_some() {

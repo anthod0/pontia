@@ -79,14 +79,14 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
             .await
             .unwrap();
         if response_first {
-            InboxAssociations::new(fixture.state.db())
+            InboxAssociations::new(fixture.state.db(), fixture.state.clients().clone())
                 .record_receipt(&fixture.session, id, &receipt)
                 .await
                 .unwrap();
             // Fact ingestion reserves its identity before committing the Turn projection.
             sqlx::query("INSERT INTO native_turn_bindings(session_id,client_turn_id,turn_id) VALUES (?,?,'reserved-turn')")
                 .bind(&fixture.session).bind(id).execute(&fixture.state.db()).await.unwrap();
-            InboxAssociations::new(fixture.state.db())
+            InboxAssociations::new(fixture.state.db(), fixture.state.clients().clone())
                 .record_receipt(&fixture.session, id, &receipt)
                 .await
                 .unwrap();
@@ -122,11 +122,11 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
             )
             .await
             .unwrap();
-        InboxAssociations::new(fixture.state.db())
+        InboxAssociations::new(fixture.state.db(), fixture.state.clients().clone())
             .record_receipt(&fixture.session, id, &receipt)
             .await
             .unwrap();
-        InboxAssociations::new(fixture.state.db())
+        InboxAssociations::new(fixture.state.db(), fixture.state.clients().clone())
             .record_receipt(&fixture.session, id, &receipt)
             .await
             .unwrap();
@@ -144,7 +144,7 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
     }
     sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,metadata) VALUES ('stale',?,'dispatching','after_idle','input','{}')")
         .bind(&fixture.session).execute(&fixture.state.db()).await.unwrap();
-    InboxAssociations::new(fixture.state.db())
+    InboxAssociations::new(fixture.state.db(), fixture.state.clients().clone())
         .record_receipt(
             &fixture.session,
             "stale",
@@ -378,7 +378,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
         .observe_turn(&fixture.session, Some("runtime"), turn())
         .await
         .unwrap();
-    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,metadata) VALUES ('pending',?,'dispatching','after_idle','input','{\"codex_turn_id\":\"native\"}')")
+    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,metadata) VALUES ('pending',?,'dispatching','after_idle','input','{\"native_turn_receipt\":\"native\"}')")
         .bind(&fixture.session).execute(&fixture.state.db()).await.unwrap();
     sqlx::query("UPDATE session_runtimes SET runtime_id='replacement' WHERE session_id=?")
         .bind(&fixture.session)
@@ -392,7 +392,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
             .await
             .is_err()
     );
-    InboxAssociations::new(fixture.state.db())
+    InboxAssociations::new(fixture.state.db(), fixture.state.clients().clone())
         .record_receipt(
             &fixture.session,
             "pending",
@@ -404,7 +404,7 @@ async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
         .await
         .unwrap();
     // Exercise the write-time guard separately from observe_turn's early check.
-    InboxAssociations::new(fixture.state.db())
+    InboxAssociations::new(fixture.state.db(), fixture.state.clients().clone())
         .link_native_turn(&fixture.session, "native", Some("runtime"))
         .await
         .unwrap();

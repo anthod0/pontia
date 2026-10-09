@@ -33,7 +33,7 @@ pub struct CodexRuntime {
     connection: Arc<Connection>,
     operations: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     subscriptions: Mutex<HashMap<String, SubscriptionState>>,
-    pub(crate) profile_service: OnceLock<pontia_application::AgentProfileService>,
+    pub(crate) profile_service: OnceLock<crate::profiles::CodexProfiles>,
 }
 
 pub async fn probe_daemon(codex_home: &Path) -> Result<()> {

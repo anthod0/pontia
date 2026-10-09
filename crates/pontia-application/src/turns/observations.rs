@@ -40,16 +40,17 @@ impl NativeTurnService {
             return Ok(());
         }
         if existing.is_none() {
-            let dispatch = crate::inbox::InboxAssociations::new(self.pool.clone())
-                .native_dispatch(session, native)
-                .await?;
+            let dispatch =
+                crate::inbox::InboxAssociations::new(self.pool.clone(), self.events.clients())
+                    .native_dispatch(session, native)
+                    .await?;
             let summary = turn
                 .input_summary
                 .as_deref()
                 .or_else(|| dispatch.as_ref().map(|(_, input)| input.as_str()));
             self.events.report_client_fact(session, runtime_id, EventType::TurnStarted, json!({"native_turn_id":native,"input":{"summary":summary.map(|s| s.chars().take(200).collect::<String>())},"metadata":{"native_turn_id":native,"native_started_at":turn.started_at,"observation":turn.origin,"inbox_message_id":dispatch.map(|(id,_)|id)}})).await?;
         }
-        crate::inbox::InboxAssociations::new(self.pool.clone())
+        crate::inbox::InboxAssociations::new(self.pool.clone(), self.events.clients())
             .link_native_turn(session, native, runtime_id)
             .await?;
         if let Some(kind) = turn.terminal? {

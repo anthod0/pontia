@@ -14,6 +14,7 @@
   import { sessionWorkspacePath, sessionWorkspaceTitle } from '../components/chat/sessionMetadata'
   import { loadSessions, unarchiveSession } from '../stores/sessions'
   import { workspaces } from '../stores/workspaces'
+  import { archiveClientNotice } from '../clients'
 
   let archivedSessions = $state<SessionView[]>([])
   let loading = $state(true)
@@ -112,7 +113,7 @@
       <h1 class="text-3xl font-semibold tracking-tight">Archived sessions</h1>
       <p class="text-sm text-muted-foreground">
         Restore a session to the Pontia list and open its history. Restoring does not start the agent or send a message.
-        Exited sessions use the existing resume flow in chat. Codex thread archiving is separate and is not changed here.
+        Exited sessions use the existing resume flow in chat. {archiveClientNotice}
       </p>
     </div>
     <Button variant="outline" disabled={loading || restoringId !== null} onclick={() => void refreshArchive()}>Refresh</Button>

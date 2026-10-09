@@ -16,20 +16,20 @@ use std::{
 use clap::{Parser, Subcommand};
 use dialoguer::Confirm;
 use pontia::{
-    codex::{
-        CodexDaemonProbe, CodexSetup, initialize as initialize_codex, inspect as inspect_codex,
-    },
     init::{self, InitPlatform},
     lifecycle::{EnabledState, Lifecycle, LifecycleStatus, RunState, ServiceManager, UpOptions},
     manager::ProcessCommandRunner,
     runtime_io::{FileDefinitionStore, HttpHealthProbe},
 };
+use pontia_application::client_contract::ClientIntegration;
 use pontia_config::AppConfig;
+use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
+use std::sync::Arc;
 
+#[cfg(target_os = "macos")]
+use pontia::manager::LaunchdManager;
 #[cfg(target_os = "linux")]
 use pontia::manager::SystemdManager;
-#[cfg(target_os = "macos")]
-use pontia::manager::{CommandRunner, LaunchdManager};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -91,7 +91,7 @@ async fn execute(command: Command) -> Result<bool, String> {
             Ok(true)
         }
         Command::Workflow(command) => {
-            let config = AppConfig::from_env().map_err(|error| error.to_string())?;
+            let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
             workflow::run(command, &config).await?;
             Ok(true)
         }
@@ -113,7 +113,11 @@ async fn run_update() -> Result<bool, String> {
     #[cfg(target_os = "linux")]
     {
         let runner = ProcessCommandRunner;
-        let manager = SystemdManager::new(&runner);
+        let manager = SystemdManager::with_environment_paths(
+            &runner,
+            pontia_clients::service_path_variables(),
+            &[],
+        );
         // Resolve the installed service's configuration, not the invoking shell's PONTIA_HOME.
         let config = if Path::new("/run/systemd/system").is_dir() {
             let config = update_service_config(&manager, &user_home()?)?;
@@ -160,7 +164,7 @@ fn update_service_config<M: ServiceManager>(
         RunState::Stopped | RunState::Failed => return Ok(None),
     }
     let pontia_home = manager.persisted_home(&definition)?;
-    AppConfig::from_vars(&HashMap::from([(
+    pontia_clients::config_from_vars(&HashMap::from([(
         "PONTIA_HOME".to_string(),
         pontia_home.display().to_string(),
     )]))
@@ -174,7 +178,14 @@ fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
 
     #[cfg(target_os = "linux")]
     {
-        run_with_manager(command, &SystemdManager::new(&runner))
+        run_with_manager(
+            command,
+            &SystemdManager::with_environment_paths(
+                &runner,
+                pontia_clients::service_path_variables(),
+                &[],
+            ),
+        )
     }
 
     #[cfg(target_os = "macos")]
@@ -200,7 +211,11 @@ fn restart_service_for_remote_config() -> Result<(), String> {
             return Ok(());
         }
         let runner = ProcessCommandRunner;
-        restart_with_manager_if_running(&SystemdManager::new(&runner))
+        restart_with_manager_if_running(&SystemdManager::with_environment_paths(
+            &runner,
+            pontia_clients::service_path_variables(),
+            &[],
+        ))
     }
 
     #[cfg(target_os = "macos")]
@@ -217,7 +232,7 @@ fn restart_with_manager_if_running<M: ServiceManager>(manager: &M) -> Result<(),
     if manager.status()?.run_state != RunState::Running {
         return Ok(());
     }
-    let config = AppConfig::from_env().map_err(|error| error.to_string())?;
+    let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
     let definitions = FileDefinitionStore;
     let health = HttpHealthProbe;
     Lifecycle::new(manager, &definitions, &health).up(
@@ -258,7 +273,7 @@ fn run_with_manager<M: ServiceManager>(
 
     match command {
         LifecycleCommand::Up => {
-            let config = AppConfig::from_env().map_err(|error| error.to_string())?;
+            let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
             eprintln!("Starting Pontia service and waiting for it to become healthy...");
             start_with_lifecycle(
                 &lifecycle,
@@ -293,43 +308,19 @@ fn start_with_lifecycle<M: ServiceManager>(
 
 struct RealInitPlatform;
 
-struct RealCodexDaemonProbe;
-
-impl CodexDaemonProbe for RealCodexDaemonProbe {
-    fn probe(&self, codex_home: &Path) -> Result<(), String> {
-        let codex_home = codex_home.to_path_buf();
-        std::thread::spawn(move || {
-            tokio::runtime::Runtime::new()
-                .map_err(|error| format!("failed to create Codex probe runtime: {error}"))?
-                .block_on(pontia_client_codex::runtime::probe_daemon(&codex_home))
-                .map_err(|error| error.to_string())
-        })
-        .join()
-        .map_err(|_| "Codex daemon probe panicked".to_string())?
-    }
-}
-
 impl InitPlatform for RealInitPlatform {
-    fn inspect_codex(
-        &self,
-        vars: &HashMap<String, String>,
-        user_home: &Path,
-    ) -> Result<CodexSetup, String> {
-        inspect_codex(vars, user_home, &ProcessCommandRunner)
+    fn integrations(&self) -> Vec<Arc<dyn ClientIntegration>> {
+        pontia_clients::integrations()
     }
-
-    fn preflight(&self, install_pi: bool) -> Result<(), String> {
+    fn command_runner(&self) -> &dyn CommandRunner {
+        &ProcessCommandRunner
+    }
+    fn definition_store(&self) -> &dyn DefinitionStore {
+        &FileDefinitionStore
+    }
+    fn preflight(&self) -> Result<(), String> {
         service_manager_preflight()?;
         sibling_pontiad()?;
-        if install_pi {
-            let output = ProcessCommand::new("pi")
-                .arg("--version")
-                .output()
-                .map_err(|error| format!("pi must be installed and executable: {error}"))?;
-            if !output.status.success() {
-                return Err(format!("pi --version failed with {}", output.status));
-            }
-        }
         Ok(())
     }
 
@@ -338,37 +329,14 @@ impl InitPlatform for RealInitPlatform {
             .map_err(|error| format!("failed to generate a secure token: {error}"))
     }
 
-    fn install_pi(&self) -> Result<(), String> {
-        let status = ProcessCommand::new("pi")
-            .args(["install", "npm:@pontia/pi-client-plugin"])
-            .status()
-            .map_err(|error| format!("failed to run pi install: {error}"))?;
-        if status.success() {
-            Ok(())
-        } else {
-            Err(format!(
-                "pi install npm:@pontia/pi-client-plugin failed with {status}"
-            ))
-        }
-    }
-
-    fn initialize_codex(&self, setup: &CodexSetup) -> Result<(), String> {
-        initialize_codex(
-            setup,
-            &ProcessCommandRunner,
-            &FileDefinitionStore,
-            &RealCodexDaemonProbe,
-        )
-    }
-
     fn start_service(
         &self,
         config: &AppConfig,
         config_changed: bool,
-        codex_home: Option<&Path>,
+        environment_paths: &[(String, PathBuf)],
     ) -> Result<(), String> {
         service_manager_preflight()?;
-        start_init_service(config, config_changed, codex_home)
+        start_init_service(config, config_changed, environment_paths)
     }
 
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String> {
@@ -397,24 +365,25 @@ fn start_init_with_manager<M: ServiceManager>(
 fn start_init_service(
     config: &AppConfig,
     config_changed: bool,
-    codex_home: Option<&Path>,
+    environment_paths: &[(String, PathBuf)],
 ) -> Result<(), String> {
     let runner = ProcessCommandRunner;
-    match codex_home {
-        Some(home) => start_init_with_manager(
-            &SystemdManager::with_codex_home(&runner, home),
-            config,
-            config_changed,
+    start_init_with_manager(
+        &SystemdManager::with_environment_paths(
+            &runner,
+            pontia_clients::service_path_variables(),
+            environment_paths,
         ),
-        None => start_init_with_manager(&SystemdManager::new(&runner), config, config_changed),
-    }
+        config,
+        config_changed,
+    )
 }
 
 #[cfg(target_os = "macos")]
 fn start_init_service(
     config: &AppConfig,
     config_changed: bool,
-    _codex_home: Option<&Path>,
+    _environment_paths: &[(String, PathBuf)],
 ) -> Result<(), String> {
     let runner = ProcessCommandRunner;
     start_init_with_manager(
@@ -428,7 +397,7 @@ fn start_init_service(
 fn start_init_service(
     _config: &AppConfig,
     _config_changed: bool,
-    _codex_home: Option<&Path>,
+    _environment_paths: &[(String, PathBuf)],
 ) -> Result<(), String> {
     Err("automatic lifecycle management is unavailable".to_string())
 }

@@ -6,7 +6,9 @@ use std::{collections::HashMap, sync::Arc};
 
 #[derive(Clone)]
 pub struct ClientRegistration {
+    pub events: Option<Arc<dyn crate::client_contract::ClientEventInterpreter>>,
     pub service: Option<Arc<dyn ClientService>>,
+    pub profile: Option<Arc<dyn crate::client_contract::ClientProfile>>,
     pub in_process: Option<Arc<dyn InProcessClient>>,
     pub session: Option<Arc<dyn ClientSession>>,
     pub prepare_on_input: bool,
@@ -98,6 +100,23 @@ impl ClientRegistry {
             }
         }
         Ok(tasks)
+    }
+
+    pub fn default_client_type(&self) -> pontia_core::Result<&'static str> {
+        self.registrations()
+            .find(|client| client.spec.default_for_creation)
+            .map(|client| client.spec.client_type)
+            .ok_or_else(|| {
+                pontia_core::Error::CapabilityUnavailable(
+                    "No default Agent Client is registered".into(),
+                )
+            })
+    }
+
+    pub fn registrations(&self) -> impl Iterator<Item = &ClientRegistration> {
+        self.registration_order
+            .iter()
+            .map(|client| &self.entries[client])
     }
 
     pub fn get(&self, client: &str) -> Option<&ClientRegistration> {

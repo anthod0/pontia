@@ -254,16 +254,7 @@ export interface SessionLineageView {
 }
 
 export interface SessionView {
-  codex?: {
-    profile?: {
-      profile_id?: string;
-      version?: string;
-      status: "configured" | "awaiting_input" | "unverified";
-      error?: string;
-    } | null;
-    connection: "awaiting_input" | "available" | "reconciling" | "unavailable" | "archived";
-    thread_id?: string;
-  };
+  [clientDetail: string]: unknown;
   session_id: string;
   client_type: string;
   title: string | null;

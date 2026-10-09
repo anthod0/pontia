@@ -1,10 +1,97 @@
 use std::{cell::RefCell, collections::HashMap, fs, io::Cursor, net::SocketAddr, path::Path};
 
-use pontia::{
-    codex::CodexSetup,
-    init::{InitPlatform, run},
-};
+use pontia::init::{InitPlatform, run};
+use pontia_application::client_contract::{ClientIntegration, PreparedClientIntegration};
 use pontia_config::AppConfig;
+use pontia_runtime::local_service::{CommandOutput, CommandRunner, DefinitionStore};
+use std::{path::PathBuf, sync::Arc};
+
+struct FakeIntegration {
+    name: &'static str,
+    default: bool,
+}
+struct FakeSetup {
+    name: &'static str,
+    home: PathBuf,
+}
+impl ClientIntegration for FakeIntegration {
+    fn client_type(&self) -> &'static str {
+        self.name
+    }
+    fn selected_by_default(&self) -> bool {
+        self.default
+    }
+    fn skipped_summary(&self) -> Vec<String> {
+        Vec::new()
+    }
+    fn prepare(
+        &self,
+        _vars: &HashMap<String, String>,
+        home: &Path,
+        runner: &dyn CommandRunner,
+    ) -> Result<Box<dyn PreparedClientIntegration>, String> {
+        if self.name == "codex" {
+            runner.run("inspect-codex", &[])?;
+        }
+        Ok(Box::new(FakeSetup {
+            name: self.name,
+            home: home.join(".codex"),
+        }))
+    }
+}
+impl PreparedClientIntegration for FakeSetup {
+    fn summary(&self) -> Vec<String> {
+        Vec::new()
+    }
+    fn preflight(&self, _runner: &dyn CommandRunner) -> Result<(), String> {
+        Ok(())
+    }
+    fn install(
+        &self,
+        runner: &dyn CommandRunner,
+        _definitions: &dyn DefinitionStore,
+    ) -> Result<(), String> {
+        let event = match self.name {
+            "pi" => "install-pi".to_string(),
+            _ => format!("initialize-codex:{}", self.home.display()),
+        };
+        runner.run(&event, &[]).map(|_| ())
+    }
+    fn completion(&self) -> &'static str {
+        "Installed integration"
+    }
+    fn service_environment_paths(&self) -> Vec<(String, PathBuf)> {
+        if self.name == "codex" {
+            vec![("CODEX_HOME".into(), self.home.clone())]
+        } else {
+            Vec::new()
+        }
+    }
+}
+
+impl CommandRunner for FakePlatform {
+    fn run(&self, program: &str, _args: &[String]) -> Result<CommandOutput, String> {
+        self.events.borrow_mut().push(program.into());
+        if program == "install-pi"
+            && let Some(error) = self.install_error
+        {
+            return Err(error.into());
+        }
+        Ok(CommandOutput {
+            code: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+        })
+    }
+}
+impl DefinitionStore for FakePlatform {
+    fn read(&self, _path: &Path) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+    fn install(&self, _path: &Path, _contents: &str) -> Result<bool, String> {
+        Ok(true)
+    }
+}
 
 struct FakePlatform {
     events: RefCell<Vec<String>>,
@@ -23,24 +110,26 @@ impl Default for FakePlatform {
 }
 
 impl InitPlatform for FakePlatform {
-    fn inspect_codex(
-        &self,
-        _vars: &HashMap<String, String>,
-        user_home: &Path,
-    ) -> Result<CodexSetup, String> {
-        self.events.borrow_mut().push("inspect-codex".to_string());
-        Ok(CodexSetup {
-            executable: Path::new("/opt/codex/bin/codex").to_path_buf(),
-            home: user_home.join(".codex"),
-            username: "alice".to_string(),
-            service_path: user_home.join(".config/systemd/user/pontia-codex.service"),
-        })
+    fn integrations(&self) -> Vec<Arc<dyn ClientIntegration>> {
+        vec![
+            Arc::new(FakeIntegration {
+                name: "pi",
+                default: true,
+            }),
+            Arc::new(FakeIntegration {
+                name: "codex",
+                default: false,
+            }),
+        ]
     }
-
-    fn preflight(&self, install_pi: bool) -> Result<(), String> {
-        self.events
-            .borrow_mut()
-            .push(format!("preflight:{install_pi}"));
+    fn command_runner(&self) -> &dyn CommandRunner {
+        self
+    }
+    fn definition_store(&self) -> &dyn DefinitionStore {
+        self
+    }
+    fn preflight(&self) -> Result<(), String> {
+        self.events.borrow_mut().push("preflight".into());
         Ok(())
     }
 
@@ -49,32 +138,18 @@ impl InitPlatform for FakePlatform {
         Ok(())
     }
 
-    fn install_pi(&self) -> Result<(), String> {
-        self.events.borrow_mut().push("install-pi".to_string());
-        match self.install_error {
-            Some(error) => Err(error.to_string()),
-            None => Ok(()),
-        }
-    }
-
-    fn initialize_codex(&self, setup: &CodexSetup) -> Result<(), String> {
-        self.events
-            .borrow_mut()
-            .push(format!("initialize-codex:{}", setup.home.display()));
-        Ok(())
-    }
-
     fn start_service(
         &self,
         config: &AppConfig,
         config_changed: bool,
-        codex_home: Option<&Path>,
+        environment_paths: &[(String, PathBuf)],
     ) -> Result<(), String> {
         self.events.borrow_mut().push(format!(
             "start:{}:{config_changed}:{}",
             config.pontia_home.display(),
-            codex_home
-                .map(|home| home.display().to_string())
+            environment_paths
+                .first()
+                .map(|(_, home)| home.display().to_string())
                 .unwrap_or_else(|| "-".to_string())
         ));
         Ok(())
@@ -130,7 +205,7 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_returns_d
     assert_eq!(
         platform.events.borrow().as_slice(),
         [
-            "preflight:true",
+            "preflight",
             "install-pi",
             &format!("start:{}:true:-", pontia_home.display()),
             "dashboard-ready:127.0.0.1:8080",
@@ -454,7 +529,7 @@ fn failed_pi_install_does_not_write_config_or_start_service() {
     assert_eq!(error, "pi install failed");
     assert_eq!(
         platform.events.borrow().as_slice(),
-        ["preflight:true", "install-pi"]
+        ["preflight", "install-pi"]
     );
     assert!(!pontia_home.join("config.toml").exists());
 }

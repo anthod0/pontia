@@ -1,7 +1,6 @@
 mod e2e_identity;
 mod initialization;
 use pontia_application::client_contract::ClientServicePhase;
-use pontia_config::AppConfig;
 use pontia_core::error::Result;
 use pontia_http as http;
 use std::{
@@ -14,7 +13,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let config = AppConfig::from_env()?;
+    let config = pontia_clients::config_from_env()?;
     init_tracing();
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;

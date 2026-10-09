@@ -50,10 +50,7 @@ impl LifecycleStatus {
     }
 }
 
-pub trait DefinitionStore {
-    fn read(&self, path: &Path) -> Result<Option<String>, String>;
-    fn install(&self, path: &Path, contents: &str) -> Result<bool, String>;
-}
+pub use pontia_runtime::local_service::DefinitionStore;
 
 pub trait ServiceManager {
     fn definition_path(&self, user_home: &Path) -> PathBuf;
@@ -179,7 +176,7 @@ where
             .transpose()?;
         let http_healthy = match persisted_home.as_ref() {
             Some(home) if service.run_state == RunState::Running => {
-                let config = AppConfig::from_vars(&HashMap::from([(
+                let config = pontia_clients::config_from_vars(&HashMap::from([(
                     "PONTIA_HOME".to_string(),
                     home.display().to_string(),
                 )]))

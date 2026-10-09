@@ -2,7 +2,8 @@ import { writable } from "svelte/store";
 import { listAgentProfiles, type ReadRequestOptions } from "../api/client";
 import type { AgentProfileView } from "../api/types";
 
-const FALLBACK_CLIENT_TYPES = ["pi"];
+import { profileClientTypes } from "../clients";
+const FALLBACK_CLIENT_TYPES = profileClientTypes;
 
 export const agentProfiles = writable<AgentProfileView[]>([]);
 export const agentProfilesLoading = writable(false);

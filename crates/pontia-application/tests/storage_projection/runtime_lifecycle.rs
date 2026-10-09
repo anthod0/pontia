@@ -3,6 +3,46 @@ use serde_json::json;
 
 use crate::fixture::{event, service, service_with_agent_events};
 
+struct CoupledEvents;
+impl pontia_application::client_contract::ClientEventInterpreter for CoupledEvents {
+    fn accompanying_runtime_event(
+        &self,
+        event: &pontia_core::domain::DomainEvent,
+    ) -> pontia_core::Result<Option<pontia_core::domain::DomainEvent>> {
+        let kind = match event.event_type {
+            EventType::SessionStarting => EventType::RuntimeStarting,
+            EventType::SessionReady => EventType::RuntimeReady,
+            _ => return Ok(None),
+        };
+        let mut runtime = event.clone();
+        runtime.event_id = format!("{}:runtime", event.event_id);
+        runtime.event_type = kind;
+        runtime.payload["session_event_id"] = json!(event.event_id);
+        Ok(Some(runtime))
+    }
+}
+
+fn coupled_clients() -> pontia_application::clients::ClientRegistry {
+    static SPEC: pontia_application::client_contract::AgentClientSpec =
+        pontia_application::client_contract::AgentClientSpec {
+            client_type: "pi",
+            adapter: pontia_application::client_contract::AgentClientAdapter {
+                lifecycle: pontia_application::client_contract::SessionLifecycleBehavior {
+                    coupled_runtime: true,
+                    ..pontia_application::client_contract::SessionLifecycleBehavior::DEFAULT
+                },
+                ..pontia_application::client_contract::TEST_SPEC.adapter
+            },
+            ..pontia_application::client_contract::TEST_SPEC
+        };
+    let mut client = pontia_application::client_contract::test_registration();
+    client.spec = &SPEC;
+    client.events = Some(std::sync::Arc::new(CoupledEvents));
+    let mut clients = pontia_application::clients::ClientRegistry::default();
+    clients.register(client);
+    clients
+}
+
 fn runtime_event(
     event_id: &str,
     client_type: &str,
@@ -170,7 +210,8 @@ async fn runtime_exit_rejects_an_unknown_runtime_without_changing_the_session() 
 
 #[tokio::test]
 async fn pi_session_fact_persists_and_broadcasts_its_runtime_event_in_order_once() {
-    let (service, broker) = service_with_agent_events().await;
+    let (fixture, broker) = service_with_agent_events().await;
+    let service = (*fixture).clone().with_clients(coupled_clients());
     service
         .ingest_reported_event(ReportedEvent::new(
             "evt_pi_created".to_string(),
@@ -231,7 +272,8 @@ async fn pi_session_fact_persists_and_broadcasts_its_runtime_event_in_order_once
 
 #[tokio::test]
 async fn pi_session_and_runtime_events_roll_back_together() {
-    let service = service().await;
+    let fixture = service().await;
+    let service = (*fixture).clone().with_clients(coupled_clients());
     service
         .ingest_reported_event(ReportedEvent::new(
             "evt_pi_rollback_created".to_string(),

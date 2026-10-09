@@ -1,7 +1,9 @@
 mod adapter;
+pub mod profiles;
 pub mod rollout;
 pub mod runtime;
 mod service;
+pub mod setup;
 mod spec;
 
 pub use adapter::registration;

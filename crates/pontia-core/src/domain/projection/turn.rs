@@ -191,7 +191,9 @@ impl ProjectionState {
             session.title = Some(title);
         }
 
-        if session.state == SessionState::Exited && event.client_type == "codex" {
+        if session.state == SessionState::Exited
+            && self.execution_lifetime == super::SessionExecutionLifetime::Subscription
+        {
             return Ok(());
         }
         match new_state {

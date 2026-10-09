@@ -1,6 +1,22 @@
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
 
+struct ReadyRuntimeEvent;
+impl crate::client_contract::ClientEventInterpreter for ReadyRuntimeEvent {
+    fn accompanying_runtime_event(
+        &self,
+        event: &pontia_core::domain::DomainEvent,
+    ) -> pontia_core::Result<Option<pontia_core::domain::DomainEvent>> {
+        if event.event_type != pontia_core::domain::EventType::SessionReady {
+            return Ok(None);
+        }
+        let mut runtime = event.clone();
+        runtime.event_id = format!("{}:runtime", event.event_id);
+        runtime.event_type = pontia_core::domain::EventType::RuntimeReady;
+        Ok(Some(runtime))
+    }
+}
+
 #[tokio::test]
 async fn initial_input_uses_the_injected_channel_after_ready() {
     let root = tempfile::Builder::new().prefix("pi-").tempdir().unwrap();
@@ -24,7 +40,13 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
         .unwrap();
     sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding_pi','sess_pi','test-channel','/unused','native_pi','{}')").execute(&pool).await.unwrap();
     let state = crate::AppState::builder(pool.clone(), root.path().into())
-        .clients(crate::clients::testing::clients())
+        .clients({
+            let mut clients = crate::clients::testing::clients();
+            let mut registration = clients.get("test-channel").unwrap().clone();
+            registration.events = Some(std::sync::Arc::new(ReadyRuntimeEvent));
+            clients.register(registration);
+            clients
+        })
         .build();
     let control = state.client_control();
     let channel = crate::clients::testing::channel();
@@ -56,11 +78,7 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
     });
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     assert!(!dispatch.is_finished());
-    // This fake adapter owns its runtime projection; Pi projects it in ingestion.
-    sqlx::query("UPDATE session_runtimes SET state='running' WHERE runtime_id='rtinst_pi'")
-        .execute(&pool)
-        .await
-        .unwrap();
+    // The client's ready fact commits Session and runtime readiness together.
     events
         .ingest_reported_event(pontia_core::domain::ReportedEvent::new(
             "evt_ready".into(),

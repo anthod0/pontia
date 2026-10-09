@@ -21,9 +21,16 @@ impl SessionCommandService {
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        if session.client_type != "codex" {
+        if !self
+            .clients
+            .for_client(&session.client_type)?
+            .spec
+            .adapter
+            .lifecycle
+            .independent_interface
+        {
             return Err(Error::CapabilityUnavailable(
-                "TUI control is only available for Codex sessions".into(),
+                "Session does not support an independent TUI".into(),
             ));
         }
 
@@ -48,7 +55,7 @@ impl SessionCommandService {
         if runtime.runtime_id() != Some(runtime_id.as_str()) {
             crate::clients::discard_unbound_runtime(&runtime);
             return Err(Error::StateConflict(
-                "Codex TUI launch returned a different runtime identity".into(),
+                "TUI launch returned a different runtime identity".into(),
             ));
         }
 
@@ -110,9 +117,16 @@ impl SessionCommandService {
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        if session.client_type != "codex" {
+        if !self
+            .clients
+            .for_client(&session.client_type)?
+            .spec
+            .adapter
+            .lifecycle
+            .independent_interface
+        {
             return Err(Error::CapabilityUnavailable(
-                "TUI control is only available for Codex sessions".into(),
+                "Session does not support an independent TUI".into(),
             ));
         }
 
@@ -193,20 +207,20 @@ fn interface_process_binding(
 ) -> Result<SessionRuntimeRecord> {
     let runtime_id = runtime
         .runtime_id()
-        .ok_or_else(|| Error::Domain("Codex TUI launch returned no runtime_id".into()))?;
+        .ok_or_else(|| Error::Domain("TUI launch returned no runtime_id".into()))?;
     let socket = runtime
         .tmux_socket_path()
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| Error::Domain("Codex TUI launch returned no tmux socket".into()))?;
+        .ok_or_else(|| Error::Domain("TUI launch returned no tmux socket".into()))?;
     let pane = runtime
         .tmux_pane_id()
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| Error::Domain("Codex TUI launch returned no tmux pane".into()))?;
+        .ok_or_else(|| Error::Domain("TUI launch returned no tmux pane".into()))?;
     let fingerprint = runtime
         .metadata
         .get("tmux_process_fingerprint")
         .filter(|value| !value.is_null())
-        .ok_or_else(|| Error::ControlUnknown("Codex TUI process was not verified".into()))?;
+        .ok_or_else(|| Error::ControlUnknown("TUI process was not verified".into()))?;
     Ok(SessionRuntimeRecord {
         runtime_id: runtime_id.into(),
         session_id: session_id.into(),

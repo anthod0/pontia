@@ -131,7 +131,7 @@ impl HealthProbe for FakeHealth {
 }
 
 fn config(home: &Path) -> AppConfig {
-    AppConfig::from_vars(&std::collections::HashMap::from([(
+    pontia_clients::config_from_vars(&std::collections::HashMap::from([(
         "PONTIA_HOME".to_string(),
         home.display().to_string(),
     )]))

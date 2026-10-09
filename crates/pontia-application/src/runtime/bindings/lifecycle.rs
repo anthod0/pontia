@@ -88,7 +88,11 @@ impl RuntimeBindingUpsertService {
                 },
             )
             .await?;
-        let startup_payload = if request.client_type == "pi" {
+        let startup_payload = if self
+            .clients
+            .spec(&request.client_type)
+            .is_some_and(|spec| spec.adapter.lifecycle.coupled_runtime)
+        {
             json!({"runtime_id": new_runtime_id().to_string()})
         } else {
             json!({})

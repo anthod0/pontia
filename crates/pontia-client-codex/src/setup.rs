@@ -4,11 +4,95 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{
-    definition::{CODEX_SYSTEMD_SERVICE_NAME, render_codex_systemd},
-    lifecycle::DefinitionStore,
-    manager::{CommandOutput, CommandRunner},
+use pontia_application::client_contract::{ClientIntegration, PreparedClientIntegration};
+use pontia_runtime::local_service::{
+    CommandOutput, CommandRunner, DefinitionStore, absolute_utf8_path, systemd_quote,
 };
+
+pub const CODEX_SYSTEMD_SERVICE_NAME: &str = "pontia-codex.service";
+
+pub fn integration() -> std::sync::Arc<dyn ClientIntegration> {
+    std::sync::Arc::new(CodexIntegration)
+}
+
+struct CodexIntegration;
+
+impl ClientIntegration for CodexIntegration {
+    fn client_type(&self) -> &'static str {
+        "codex"
+    }
+    fn selected_by_default(&self) -> bool {
+        false
+    }
+    fn skipped_summary(&self) -> Vec<String> {
+        vec!["Codex integration: skip".into()]
+    }
+    fn service_path_variables(&self) -> &'static [&'static str] {
+        &["CODEX_HOME"]
+    }
+    fn prepare(
+        &self,
+        vars: &HashMap<String, String>,
+        user_home: &Path,
+        runner: &dyn CommandRunner,
+    ) -> Result<Box<dyn PreparedClientIntegration>, String> {
+        Ok(Box::new(inspect(vars, user_home, runner)?))
+    }
+}
+
+impl PreparedClientIntegration for CodexSetup {
+    fn summary(&self) -> Vec<String> {
+        vec![
+            "Codex integration: register autostart".into(),
+            format!("Codex executable: {}", self.executable.display()),
+            format!("CODEX_HOME: {}", self.home.display()),
+            format!("Codex service: {}", self.service_path.display()),
+            format!("user linger: enable for {}", self.username),
+        ]
+    }
+    fn preflight(&self, _runner: &dyn CommandRunner) -> Result<(), String> {
+        Ok(())
+    }
+    fn install(
+        &self,
+        runner: &dyn CommandRunner,
+        definitions: &dyn DefinitionStore,
+    ) -> Result<(), String> {
+        initialize(self, runner, definitions, &DaemonProbe)
+    }
+    fn completion(&self) -> &'static str {
+        "Configured Codex autostart and control connection"
+    }
+    fn service_environment_paths(&self) -> Vec<(String, PathBuf)> {
+        vec![("CODEX_HOME".into(), self.home.clone())]
+    }
+}
+
+struct DaemonProbe;
+
+impl CodexDaemonProbe for DaemonProbe {
+    fn probe(&self, home: &Path) -> Result<(), String> {
+        let home = home.to_path_buf();
+        std::thread::spawn(move || {
+            tokio::runtime::Runtime::new()
+                .map_err(|error| format!("failed to create Codex probe runtime: {error}"))?
+                .block_on(crate::runtime::probe_daemon(&home))
+                .map_err(|error| error.to_string())
+        })
+        .join()
+        .map_err(|_| "Codex daemon probe panicked".to_string())?
+    }
+}
+
+pub fn render_codex_systemd(codex: &Path, codex_home: &Path) -> Result<String, String> {
+    let codex = absolute_utf8_path(codex, "Codex executable")?;
+    let codex_home = absolute_utf8_path(codex_home, "CODEX_HOME")?;
+    Ok(format!(
+        "[Unit]\nDescription=Codex App Server Daemon Startup\nAfter=network.target\n\n[Service]\nType=oneshot\nExecStart=\"{}\" app-server daemon start\nEnvironment=\"CODEX_HOME={}\"\n\n[Install]\nWantedBy=default.target\n",
+        systemd_quote(codex),
+        systemd_quote(codex_home),
+    ))
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CodexSetup {
@@ -22,7 +106,7 @@ pub trait CodexDaemonProbe {
     fn probe(&self, codex_home: &Path) -> Result<(), String>;
 }
 
-pub fn inspect<R: CommandRunner>(
+pub fn inspect<R: CommandRunner + ?Sized>(
     vars: &HashMap<String, String>,
     user_home: &Path,
     runner: &R,
@@ -75,9 +159,9 @@ pub fn initialize<R, S, P>(
     probe: &P,
 ) -> Result<(), String>
 where
-    R: CommandRunner,
-    S: DefinitionStore,
-    P: CodexDaemonProbe,
+    R: CommandRunner + ?Sized,
+    S: DefinitionStore + ?Sized,
+    P: CodexDaemonProbe + ?Sized,
 {
     let definition = render_codex_systemd(&setup.executable, &setup.home)?;
     definitions
@@ -210,7 +294,7 @@ fn resolve_codex_home(vars: &HashMap<String, String>, user_home: &Path) -> Resul
     }
 }
 
-fn current_username<R: CommandRunner>(runner: &R) -> Result<String, String> {
+fn current_username<R: CommandRunner + ?Sized>(runner: &R) -> Result<String, String> {
     let output = runner.run("id", &["-un".to_string()])?;
     require_command(output.clone(), "id", &["-un"], "current username check")?;
     let username = output.stdout.trim();
@@ -227,7 +311,7 @@ fn codex_environment(home: &Path) -> Result<Vec<(String, String)>, String> {
     )])
 }
 
-fn require_systemctl<R: CommandRunner>(
+fn require_systemctl<R: CommandRunner + ?Sized>(
     runner: &R,
     args: &[&str],
     step: &str,
@@ -239,7 +323,10 @@ fn require_systemctl<R: CommandRunner>(
     require_command(output, "systemctl", &display_args, step)
 }
 
-fn systemctl<R: CommandRunner>(runner: &R, args: &[&str]) -> Result<CommandOutput, String> {
+fn systemctl<R: CommandRunner + ?Sized>(
+    runner: &R,
+    args: &[&str],
+) -> Result<CommandOutput, String> {
     runner.run(
         "systemctl",
         &std::iter::once("--user")
@@ -249,7 +336,7 @@ fn systemctl<R: CommandRunner>(runner: &R, args: &[&str]) -> Result<CommandOutpu
     )
 }
 
-fn require_plain<R: CommandRunner>(
+fn require_plain<R: CommandRunner + ?Sized>(
     runner: &R,
     program: &str,
     args: &[&str],

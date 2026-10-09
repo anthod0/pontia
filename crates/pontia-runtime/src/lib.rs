@@ -4,6 +4,7 @@
 //! module stays independent from HTTP transport details.
 
 mod in_process;
+pub mod local_service;
 mod manager;
 mod paths;
 mod script;

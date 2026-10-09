@@ -30,6 +30,8 @@ pub(crate) fn clients() -> super::ClientRegistry {
     registry.register(crate::client_contract::test_registration());
     registry.register(super::ClientRegistration {
         service: None,
+        profile: None,
+        events: None,
         in_process: None,
         session: None,
         prepare_on_input: false,

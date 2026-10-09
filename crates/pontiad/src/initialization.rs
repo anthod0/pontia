@@ -2,7 +2,7 @@ use pontia_config::AppConfig;
 use pontia_core::error::Result;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
-use pontia_application::{AppState, app::set_default_client_type};
+use pontia_application::AppState;
 
 pub async fn initialize(config: &AppConfig) -> Result<AppState> {
     let clients = pontia_clients::registration(config);
@@ -21,7 +21,6 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
         run_migrations(&db).await?;
     }
 
-    set_default_client_type(config.default_client_type.clone());
     let state = AppState::builder(db, config.pontia_home.clone())
         .clients(clients)
         .external_api_token(config.external_api_token.clone())

@@ -511,7 +511,7 @@ async fn codex_profile_binding_pins_content_before_first_input_and_rejects_inval
             .unwrap()
             .is_none()
     );
-    let profiles = pontia_application::AgentProfileService::new(state.db());
+    let profiles = pontia_client_codex::profiles::CodexProfiles::new(state.db());
     let pinned = profiles.codex_binding(session).await.unwrap().unwrap();
     profile["system_prompt_template"] = json!("Changed after binding");
     let (status, response) = put_json(

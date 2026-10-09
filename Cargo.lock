@@ -2212,9 +2212,11 @@ dependencies = [
  "hkdf",
  "hmac",
  "hostname",
- "pontia-client-codex",
+ "pontia-application",
+ "pontia-clients",
  "pontia-config",
  "pontia-e2e",
+ "pontia-runtime",
  "pontia-update",
  "pontia-version",
  "reqwest",
@@ -2297,6 +2299,7 @@ dependencies = [
  "pontia-client-codex",
  "pontia-client-pi",
  "pontia-config",
+ "pontia-core",
 ]
 
 [[package]]

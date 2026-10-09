@@ -28,7 +28,7 @@ pub mod workspaces;
 
 pub use agent_events::AgentEventBroker;
 pub use agent_profiles::{
-    AgentProfileCommandOutcome, AgentProfileService, CodexProfileBinding, ExecutionProfileView,
+    AgentProfileCommandOutcome, AgentProfileService, ExecutionProfileView,
     UpsertExecutionProfileRequest,
 };
 pub use app::AppState;
@@ -78,7 +78,6 @@ pub use workspaces::{
     WorkspaceDirectoryListingView, WorkspaceRootConfig, WorkspaceRootView,
 };
 
-pub(crate) use app::default_client_type;
 pub use workspaces::{WorkspaceRecord, get_workspace_record, upsert_workspace};
 
 pub mod client_contract;

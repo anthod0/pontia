@@ -9,6 +9,22 @@ use pontia_runtime::GenericRuntimeManager;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
 
+const OBSERVED_AGENT: pontia_application::client_contract::AgentClientAdapter =
+    pontia_application::client_contract::AgentClientAdapter {
+        lifecycle: pontia_application::client_contract::SessionLifecycleBehavior {
+            process_observation: Some(
+                pontia_application::client_contract::ProcessObservationBehavior {
+                    role: "tui",
+                    observe_starting: false,
+                    exit_event: pontia_application::PontiaEventType::SessionExited,
+                    exit_reason: "agent_process_fingerprint_missing",
+                },
+            ),
+            ..pontia_application::client_contract::SessionLifecycleBehavior::DEFAULT
+        },
+        ..pontia_application::client_contract::TEST_SPEC.adapter
+    };
+
 #[tokio::test]
 async fn missing_bound_agent_process_projects_session_exited_after_confirmation() {
     let temp = tempfile::tempdir().expect("tempdir");
@@ -68,6 +84,7 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
         .args(["kill-session", "-t", &tmux_session])
         .stderr(Stdio::null())
         .status();
+    wait_for_process_exit(&fingerprint).await;
 
     AppState::builder(db.clone(), temp.path().into())
         .clients({
@@ -75,6 +92,7 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
             static SPEC: pontia_application::client_contract::AgentClientSpec =
                 pontia_application::client_contract::AgentClientSpec {
                     client_type: "pi",
+                    adapter: OBSERVED_AGENT,
                     ..pontia_application::client_contract::TEST_SPEC
                 };
             let mut entry = pontia_application::client_contract::test_registration();
@@ -164,6 +182,7 @@ async fn missing_managed_codex_tui_only_exits_the_interface_runtime() {
         .args(["kill-session", "-t", &tmux_session])
         .stderr(Stdio::null())
         .status();
+    wait_for_process_exit(&fingerprint).await;
 
     AppState::builder(db.clone(), temp.path().into())
         .clients({
@@ -171,6 +190,20 @@ async fn missing_managed_codex_tui_only_exits_the_interface_runtime() {
             static SPEC: pontia_application::client_contract::AgentClientSpec =
                 pontia_application::client_contract::AgentClientSpec {
                     client_type: "codex",
+                    adapter: pontia_application::client_contract::AgentClientAdapter {
+                        lifecycle: pontia_application::client_contract::SessionLifecycleBehavior {
+                            process_observation: Some(
+                                pontia_application::client_contract::ProcessObservationBehavior {
+                                    role: "interface",
+                                    observe_starting: true,
+                                    exit_event: pontia_application::PontiaEventType::RuntimeExited,
+                                    exit_reason: "interface_process_fingerprint_missing",
+                                },
+                            ),
+                            ..pontia_application::client_contract::SessionLifecycleBehavior::DEFAULT
+                        },
+                        ..pontia_application::client_contract::TEST_SPEC.adapter
+                    },
                     ..pontia_application::client_contract::TEST_SPEC
                 };
             let mut entry = pontia_application::client_contract::test_registration();
@@ -237,6 +270,7 @@ async fn active_tmux_session_without_a_fingerprint_remains_unknown() {
             static SPEC: pontia_application::client_contract::AgentClientSpec =
                 pontia_application::client_contract::AgentClientSpec {
                     client_type: "pi",
+                    adapter: OBSERVED_AGENT,
                     ..pontia_application::client_contract::TEST_SPEC
                 };
             let mut entry = pontia_application::client_contract::test_registration();
@@ -265,6 +299,18 @@ async fn active_tmux_session_without_a_fingerprint_remains_unknown() {
         .unwrap(),
         0
     );
+}
+
+async fn wait_for_process_exit(fingerprint: &pontia_runtime::TmuxProcessFingerprint) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while GenericRuntimeManager.observe_tmux_process_fingerprint(fingerprint)
+            != pontia_runtime::ProcessObservation::Exited
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("test agent process must be confirmed exited before observation");
 }
 
 fn tmux_value(socket: &std::path::Path, session: &str, format: &str) -> String {

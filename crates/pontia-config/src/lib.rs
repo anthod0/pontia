@@ -8,6 +8,16 @@ mod loading;
 mod paths;
 mod workspace_roots;
 
+pub struct RuntimeCommandOverride {
+    pub client_type: &'static str,
+    pub environment_variable: &'static str,
+}
+
+pub struct ClientConfigDefaults {
+    pub default_client_type: &'static str,
+    pub runtime_commands: &'static [RuntimeCommandOverride],
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
     pub pontia_home: PathBuf,

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { clientControlDetails, clientDeliveryPolicy } from '../clients'
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
@@ -133,6 +134,7 @@
   })
 
   $: selectedSession = selectedSessionId ? ($sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : ($sessionDetailError ? null : $sessions.find((session) => session.session_id === selectedSessionId) ?? null)) : null
+  $: controlDetails = selectedSession ? clientControlDetails(selectedSession) : null
   $: liveOutputKey = selectedSession ? `${selectedSession.session_id}:${selectedSession.capabilities.stream_output === true}` : ''
   let activeLiveOutputKey = ''
   $: if (!destroyed && liveOutputKey !== activeLiveOutputKey) {
@@ -858,7 +860,7 @@
       }
       await submitInboxMessage(selectedSessionId, {
         input: message,
-        delivery_policy: selectedSession?.client_type === 'codex' ? 'steer' : 'after_idle',
+        delivery_policy: clientDeliveryPolicy(selectedSession),
         metadata: { source: 'dashboard_chat' },
       })
     } catch (error) {
@@ -874,13 +876,13 @@
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
-  {#if selectedSession?.codex && selectedSession.capabilities.accept_task}
+  {#if controlDetails && selectedSession?.capabilities.accept_task}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-      <span>Control: {selectedSession.codex.connection.replaceAll('_', ' ')}</span>
-      {#if selectedSession.codex.profile}
-        <span>Profile: {selectedSession.codex.profile.profile_id}{selectedSession.codex.profile.version ? `@${selectedSession.codex.profile.version}` : ''} ({selectedSession.codex.profile.status.replaceAll('_', ' ')})</span>
-        {#if selectedSession.codex.profile.error}
-          <span class="text-destructive" role="alert">{selectedSession.codex.profile.error}</span>
+      <span>Control: {controlDetails.connection.replaceAll('_', ' ')}</span>
+      {#if controlDetails.profile}
+        <span>Profile: {controlDetails.profile.profile_id}{controlDetails.profile.version ? `@${controlDetails.profile.version}` : ''} ({controlDetails.profile.status.replaceAll('_', ' ')})</span>
+        {#if controlDetails.profile.error}
+          <span class="text-destructive" role="alert">{controlDetails.profile.error}</span>
         {/if}
       {/if}
       {#if !selectedSession.capabilities.timeline}<span>Native history is currently unavailable.</span>{/if}

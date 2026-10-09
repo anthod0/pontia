@@ -26,6 +26,9 @@ pub(crate) struct ClientExecutionService {
 }
 
 impl ClientExecutionService {
+    pub(crate) fn registry(&self) -> &ClientRegistry {
+        &self.registry
+    }
     pub(crate) fn control_service(&self) -> ClientControlService {
         self.control.clone()
     }

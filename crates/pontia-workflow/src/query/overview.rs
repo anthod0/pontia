@@ -200,7 +200,7 @@ impl WorkflowQueryService {
             })
             .collect();
         let retry_unavailable_reason = (workflow.state == "failed" && candidate.is_none()).then(||
-            "Retry supports an unsubmitted Pi node after a confirmed Session exit. Its native binding must exist, and pending or uncertain input must be resolved first. Other failure causes require intervention.".to_string());
+            "Retry supports an unsubmitted node after a confirmed Session exit. Its native binding must exist, and pending or uncertain input must be resolved first. Other failure causes require intervention.".to_string());
         Ok(Some(WorkflowDetailView {
             retry_failure_event_id: candidate.map(|candidate| candidate.failure_event_id),
             retry_unavailable_reason,

@@ -167,7 +167,7 @@ where
                 );
                 self.sessions
                     .create_session(CreateSessionRequest {
-                        client_type: "pi".into(),
+                        client_type: self.sessions.default_client_type()?,
                         title: Some(format!("Re-plan {}", workflow.title)),
                         workspace: Some(workflow.cwd.clone()),
                         workspace_id: None,

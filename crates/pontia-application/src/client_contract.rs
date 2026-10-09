@@ -1,8 +1,13 @@
 mod channel;
+mod lifecycle;
+pub use lifecycle::{ClientEventInterpreter, ProcessObservationBehavior, SessionLifecycleBehavior};
+mod profile;
+pub use profile::{ClientProfile, ResolvedClientProfile};
 mod data;
 pub mod history;
 mod service;
 mod session;
+mod setup;
 pub use channel::{ClientControlChannel, ClientControlOperation};
 pub use data::{
     BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, NativeEventEvidence,
@@ -11,6 +16,7 @@ pub use service::{ClientService, ClientServicePhase};
 pub use session::{
     ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails, InProcessClient,
 };
+pub use setup::{ClientIntegration, PreparedClientIntegration};
 #[cfg(any(test, feature = "generic-test-client"))]
 mod generic_test;
 pub mod raw_transcripts;

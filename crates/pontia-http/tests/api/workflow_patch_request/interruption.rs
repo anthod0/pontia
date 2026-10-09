@@ -11,6 +11,9 @@ use super::*;
 struct ReplannerCreator(sqlx::SqlitePool);
 
 impl SessionCreator for ReplannerCreator {
+    fn default_client_type(&self) -> pontia_workflow::Result<String> {
+        Ok("pi".into())
+    }
     async fn create_session(
         &self,
         request: CreateSessionRequest,

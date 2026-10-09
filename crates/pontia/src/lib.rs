@@ -1,4 +1,3 @@
-pub mod codex;
 pub mod definition;
 pub mod init;
 pub mod lifecycle;

@@ -17,7 +17,12 @@ pub struct WorkflowRecoveryService {
 impl WorkflowRecoveryService {
     pub fn new(app: &AppState) -> Self {
         Self {
-            repository: SqliteWorkflowRepository::new(app.db()),
+            repository: SqliteWorkflowRepository::new(app.db()).with_recovery_client_types(
+                app.clients()
+                    .registrations()
+                    .filter(|client| client.spec.adapter.lifecycle.confirmed_exit_recovery)
+                    .map(|client| client.spec.client_type),
+            ),
             sessions: app.session_commands(),
             inbox: app.inbox_commands(),
             home: app.pontia_home().to_path_buf(),

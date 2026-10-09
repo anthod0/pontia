@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { defaultClientType } from '../clients'
   import { onMount } from 'svelte'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -323,7 +324,7 @@
           </div>
           <div class="space-y-2">
             <Label for="profile-clients">Supported client types</Label>
-            <Input id="profile-clients" bind:value={draft.supported_client_types_text} placeholder="pi" />
+            <Input id="profile-clients" bind:value={draft.supported_client_types_text} placeholder={defaultClientType} />
             {#if draftErrors.supported_client_types_text}<p class="text-xs text-destructive">{draftErrors.supported_client_types_text}</p>{/if}
           </div>
           <div class="space-y-2">

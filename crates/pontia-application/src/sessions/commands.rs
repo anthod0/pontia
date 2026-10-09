@@ -22,6 +22,9 @@ enum SessionManagementAction {
 }
 
 impl SessionCommandService {
+    pub fn default_client_type(&self) -> Result<&'static str> {
+        self.clients.registry().default_client_type()
+    }
     /// Finds a Session created with a durable metadata token.
     ///
     /// This closes cross-service crash gaps without giving callers control over
@@ -52,18 +55,19 @@ impl SessionCommandService {
         &self,
         mut request: CreateSessionRequest,
     ) -> Result<CreateSessionOutcome> {
+        if request.client_type.is_empty() {
+            request.client_type = self.clients.registry().default_client_type()?.to_string();
+        }
         self.clients.for_client(&request.client_type)?;
 
-        let profile = if request.client_type == "codex" {
-            crate::AgentProfileService::new(self.pool.clone())
-                .resolve_codex_profile(
-                    request.execution_profile_id.as_deref(),
-                    request.execution_profile_version.as_deref(),
-                )
-                .await?
-        } else {
-            None
-        };
+        let profile = crate::AgentProfileService::new(self.pool.clone())
+            .with_clients(self.clients.registry().clone())
+            .resolve_for_client(
+                &request.client_type,
+                request.execution_profile_id.as_deref(),
+                request.execution_profile_version.as_deref(),
+            )
+            .await?;
         if let Some(profile) = &profile {
             request.execution_profile_version = Some(profile.version.clone());
         }
@@ -134,7 +138,7 @@ impl SessionCommandService {
                     "description": request.description,
                     "execution_profile_id": request.execution_profile_id,
                     "execution_profile_version": request.execution_profile_version,
-                    "execution_profile_binding": profile,
+                    "execution_profile_binding": profile.as_ref().map(|profile| &profile.binding),
                     "metadata": request.metadata,
                 }),
             ))

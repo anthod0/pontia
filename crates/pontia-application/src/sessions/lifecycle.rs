@@ -208,7 +208,14 @@ impl SessionCommandService {
                 "terminal session {session_id} cannot be restarted"
             )));
         }
-        if session.client_type == "pi" {
+        if self
+            .clients
+            .for_client(&session.client_type)?
+            .spec
+            .adapter
+            .lifecycle
+            .restart_requires_exit
+        {
             if SqliteTurnRepository::new(self.pool.clone())
                 .active_turn(session_id)
                 .await?
@@ -221,7 +228,7 @@ impl SessionCommandService {
             let target =
                 crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
             self.clients
-                .for_client("pi")?
+                .for_client(&session.client_type)?
                 .validate_resume(&target)
                 .await?;
             self.request_exit(session_id, target.runtime_id.as_deref())
@@ -238,7 +245,7 @@ impl SessionCommandService {
                 }
                 if tokio::time::Instant::now() >= deadline {
                     return Err(Error::ControlUnknown(
-                        "Pi has not confirmed exit before restart".into(),
+                        "Agent client has not confirmed exit before restart".into(),
                     ));
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;

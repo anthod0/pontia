@@ -727,7 +727,7 @@ async fn duplicate_submission_preserves_native_receipt_and_original_contents() {
         .submit_message_once("message", "session", original.clone())
         .await
         .unwrap();
-    InboxAssociations::new(state.db())
+    InboxAssociations::new(state.db(), state.clients().clone())
         .record_receipt(
             "session",
             "message",
@@ -743,7 +743,10 @@ async fn duplicate_submission_preserves_native_receipt_and_original_contents() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(current.metadata, json!({"codex_turn_id":"native-turn"}));
+    assert_eq!(
+        current.metadata,
+        json!({"native_turn_receipt":"native-turn"})
+    );
     for repeated in [
         original,
         SubmitInboxMessageRequest {

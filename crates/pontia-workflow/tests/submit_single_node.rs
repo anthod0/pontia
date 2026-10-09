@@ -29,6 +29,9 @@ struct BoundSessionCreator {
 }
 
 impl SessionCreator for BoundSessionCreator {
+    fn default_client_type(&self) -> pontia_workflow::Result<String> {
+        Ok("pi".into())
+    }
     async fn create_session(
         &self,
         _request: CreateSessionRequest,

@@ -276,7 +276,9 @@ impl EventIngestService {
             }
             commit::CommitOutcome::Committed { result, events } => {
                 for event in events {
-                    self.effects.apply(&self.pool, &event).await?;
+                    self.effects
+                        .apply(&self.pool, self.clients.clone(), &event)
+                        .await?;
                     if event.event_type == pontia_core::domain::EventType::TurnStarted {
                         Box::pin(
                             crate::TurnTimelineService::new(self.clone())

@@ -1,9 +1,12 @@
 mod adapter;
+pub mod config;
 mod facts;
 pub mod ipc;
+mod lifecycle;
 pub mod raw_transcripts;
 pub mod rpc;
 mod service;
+pub mod setup;
 mod spec;
 pub mod topology;
 pub use adapter::registration;

@@ -37,6 +37,9 @@ impl SequencedSessionCreator {
 }
 
 impl SessionCreator for SequencedSessionCreator {
+    fn default_client_type(&self) -> pontia_workflow::Result<String> {
+        Ok("pi".into())
+    }
     async fn create_session(
         &self,
         request: CreateSessionRequest,
@@ -242,6 +245,8 @@ pub(super) fn clients() -> pontia_application::clients::ClientRegistry {
     let mut clients = pontia_application::clients::ClientRegistry::default();
     clients.register(pontia_application::clients::ClientRegistration {
         service: None,
+        profile: None,
+        events: None,
         in_process: None,
         session: None,
         prepare_on_input: false,

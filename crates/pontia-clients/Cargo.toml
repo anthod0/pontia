@@ -9,3 +9,4 @@ pontia-application.workspace = true
 pontia-client-pi.workspace = true
 pontia-client-codex.workspace = true
 pontia-config.workspace = true
+pontia-core.workspace = true

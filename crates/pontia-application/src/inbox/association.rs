@@ -10,11 +10,27 @@ use sqlx::SqlitePool;
 #[derive(Clone)]
 pub(crate) struct InboxAssociations {
     pool: SqlitePool,
+    clients: crate::clients::ClientRegistry,
 }
 
 impl InboxAssociations {
-    pub(crate) fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub(crate) fn new(pool: SqlitePool, clients: crate::clients::ClientRegistry) -> Self {
+        Self { pool, clients }
+    }
+
+    async fn metadata_path(&self, session: &str) -> Result<Option<String>> {
+        let client: Option<String> =
+            sqlx::query_scalar("SELECT client_type FROM sessions WHERE session_id=?")
+                .bind(session)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(client
+            .and_then(|client| {
+                self.clients
+                    .spec(&client)
+                    .and_then(|spec| spec.adapter.native_turn_metadata_key)
+            })
+            .map(|key| format!("$.{key}")))
     }
 
     pub(crate) async fn record_receipt(
@@ -26,12 +42,15 @@ impl InboxAssociations {
         let Some(native) = &receipt.native_turn_id else {
             return Ok(());
         };
+        let Some(path) = self.metadata_path(session).await? else {
+            return Ok(());
+        };
         if let Some(runtime_id) = &receipt.runtime_id {
-            sqlx::query("UPDATE inbox_messages SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_turn_id',?) WHERE message_id=? AND session_id=? AND EXISTS (SELECT 1 FROM session_runtimes WHERE session_id=? AND runtime_id=?)")
-                .bind(native).bind(message).bind(session).bind(session).bind(runtime_id).execute(&self.pool).await?;
+            sqlx::query("UPDATE inbox_messages SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,?,?) WHERE message_id=? AND session_id=? AND EXISTS (SELECT 1 FROM session_runtimes WHERE session_id=? AND runtime_id=?)")
+                .bind(&path).bind(native).bind(message).bind(session).bind(session).bind(runtime_id).execute(&self.pool).await?;
         } else {
-            sqlx::query("UPDATE inbox_messages SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_turn_id',?) WHERE message_id=? AND session_id=?")
-                .bind(native).bind(message).bind(session).execute(&self.pool).await?;
+            sqlx::query("UPDATE inbox_messages SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,?,?) WHERE message_id=? AND session_id=?")
+                .bind(&path).bind(native).bind(message).bind(session).execute(&self.pool).await?;
         }
         self.link_native_turn(session, native, receipt.runtime_id.as_deref())
             .await
@@ -42,8 +61,11 @@ impl InboxAssociations {
         session: &str,
         native: &str,
     ) -> Result<Option<(String, String)>> {
-        Ok(sqlx::query_as("SELECT message_id,input_summary FROM inbox_messages WHERE session_id=? AND json_extract(metadata,'$.codex_turn_id')=? ORDER BY created_at LIMIT 1")
-            .bind(session).bind(native).fetch_optional(&self.pool).await?)
+        let Some(path) = self.metadata_path(session).await? else {
+            return Ok(None);
+        };
+        Ok(sqlx::query_as("SELECT message_id,input_summary FROM inbox_messages WHERE session_id=? AND json_extract(metadata,?)=? ORDER BY created_at LIMIT 1")
+            .bind(session).bind(&path).bind(native).fetch_optional(&self.pool).await?)
     }
 
     pub(crate) async fn link_native_turn(
@@ -52,8 +74,11 @@ impl InboxAssociations {
         native: &str,
         instance: Option<&str>,
     ) -> Result<()> {
-        sqlx::query("UPDATE inbox_messages SET turn_id=(SELECT t.turn_id FROM native_turn_bindings b JOIN turns t ON t.turn_id=b.turn_id AND t.session_id=b.session_id WHERE b.session_id=? AND b.client_turn_id=?) WHERE session_id=? AND json_extract(metadata,'$.codex_turn_id')=? AND turn_id IS NULL AND (? IS NULL OR EXISTS (SELECT 1 FROM session_runtimes WHERE session_id=? AND runtime_id=?))")
-            .bind(session).bind(native).bind(session).bind(native).bind(instance).bind(session).bind(instance).execute(&self.pool).await?;
+        let Some(path) = self.metadata_path(session).await? else {
+            return Ok(());
+        };
+        sqlx::query("UPDATE inbox_messages SET turn_id=(SELECT t.turn_id FROM native_turn_bindings b JOIN turns t ON t.turn_id=b.turn_id AND t.session_id=b.session_id WHERE b.session_id=? AND b.client_turn_id=?) WHERE session_id=? AND json_extract(metadata,?)=? AND turn_id IS NULL AND (? IS NULL OR EXISTS (SELECT 1 FROM session_runtimes WHERE session_id=? AND runtime_id=?))")
+            .bind(session).bind(native).bind(session).bind(&path).bind(native).bind(instance).bind(session).bind(instance).execute(&self.pool).await?;
         sqlx::query("UPDATE inbox_messages SET state='dispatched',failure_message=NULL,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE session_id=? AND state='unknown' AND turn_id IS NOT NULL")
             .bind(session).execute(&self.pool).await?;
         Ok(())

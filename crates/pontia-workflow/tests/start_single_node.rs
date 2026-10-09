@@ -20,6 +20,9 @@ struct RecordingSessionCreator {
 }
 
 impl SessionCreator for RecordingSessionCreator {
+    fn default_client_type(&self) -> pontia_workflow::Result<String> {
+        Ok("pi".into())
+    }
     async fn create_session(
         &self,
         request: CreateSessionRequest,

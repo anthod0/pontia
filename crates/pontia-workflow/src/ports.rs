@@ -8,6 +8,7 @@ use pontia_core::domain::DomainEvent;
 use crate::{Error, Result};
 
 pub trait SessionCreator {
+    fn default_client_type(&self) -> Result<String>;
     fn find_session_by_creation_token(
         &self,
         _metadata_key: &str,
@@ -23,6 +24,9 @@ pub trait SessionCreator {
 }
 
 impl SessionCreator for SessionCommandService {
+    fn default_client_type(&self) -> Result<String> {
+        Ok(SessionCommandService::default_client_type(self)?.to_string())
+    }
     async fn find_session_by_creation_token(
         &self,
         metadata_key: &str,

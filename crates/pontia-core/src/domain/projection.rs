@@ -42,8 +42,16 @@ pub struct TurnProjection {
     pub metadata: Value,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum SessionExecutionLifetime {
+    #[default]
+    Execution,
+    Subscription,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct ProjectionState {
+    execution_lifetime: SessionExecutionLifetime,
     sessions: HashMap<String, SessionProjection>,
     turns: HashMap<String, TurnProjection>,
     session_runtimes: HashMap<String, String>,
@@ -61,7 +69,13 @@ impl ProjectionState {
                 .collect(),
             turns: turns.into_iter().map(|t| (t.turn_id.clone(), t)).collect(),
             session_runtimes: HashMap::new(),
+            execution_lifetime: SessionExecutionLifetime::Execution,
         }
+    }
+
+    pub fn with_execution_lifetime(mut self, lifetime: SessionExecutionLifetime) -> Self {
+        self.execution_lifetime = lifetime;
+        self
     }
 
     pub fn session(&self, session_id: &str) -> Option<&SessionProjection> {
@@ -112,7 +126,8 @@ impl ProjectionState {
             && event.event_type != EventType::SessionTitleUpdated
             && event.event_type != EventType::SessionContextUsageUpdated
             && event.event_type != EventType::SessionModelUpdated
-            && !(event.client_type == "codex" && event.event_type.is_turn_event())
+            && !(self.execution_lifetime == SessionExecutionLifetime::Subscription
+                && event.event_type.is_turn_event())
         {
             if event.topology.is_some() {
                 self.apply_topology_to_existing_turn(event)?;
@@ -128,7 +143,7 @@ impl ProjectionState {
             EventType::SessionStarted => self.apply_session(event, SessionState::Starting),
             EventType::SessionReady => self.apply_session(event, SessionState::Idle),
             EventType::SessionExited => {
-                if event.client_type != "codex" {
+                if self.execution_lifetime == SessionExecutionLifetime::Execution {
                     self.abandon_active_turn_for_terminal_session(
                         event,
                         "session_exited_without_terminal_fact",

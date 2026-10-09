@@ -91,8 +91,17 @@ async fn activate_claimed_node<S: SessionCreator>(
     let problem_report_file = node_dir.join("problem-report.md");
     let initial_task =
         render_initial_task(node, handoff_dir, &output_file, &problem_report_file).await?;
+    let client_type = sessions
+        .default_client_type()
+        .map_err(|error| ActivationFailure {
+            failure_message: format!(
+                "Session client selection failed for Workflow Agent Node {}: {error}",
+                node.node_id
+            ),
+            error,
+        })?;
     let session_id = sessions
-        .create_session(session_request(workflow, node, initial_task))
+        .create_session(session_request(workflow, node, initial_task, client_type))
         .await
         .map_err(|error| ActivationFailure {
             failure_message: format!(
@@ -118,13 +127,14 @@ fn session_request(
     workflow: &WorkflowRow,
     node: &WorkflowNodeRow,
     initial_task: String,
+    client_type: String,
 ) -> CreateSessionRequest {
     let runtime_environment = BTreeMap::from([(
         "PONTIA_WORKFLOW_ID".to_string(),
         workflow.workflow_id.clone(),
     )]);
     CreateSessionRequest {
-        client_type: "pi".to_string(),
+        client_type,
         title: Some(node.title.clone()),
         workspace: Some(workflow.cwd.clone()),
         workspace_id: None,

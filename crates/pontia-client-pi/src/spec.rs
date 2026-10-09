@@ -21,9 +21,25 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
 
 pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "pi",
+    default_for_creation: true,
     capabilities: CAPABILITIES,
     adapter: AgentClientAdapter {
+        lifecycle: pontia_application::client_contract::SessionLifecycleBehavior {
+            coupled_runtime: true,
+            confirmed_exit_recovery: true,
+            restart_requires_exit: true,
+            process_observation: Some(
+                pontia_application::client_contract::ProcessObservationBehavior {
+                    role: "tui",
+                    observe_starting: false,
+                    exit_event: pontia_application::PontiaEventType::SessionExited,
+                    exit_reason: "agent_process_fingerprint_missing",
+                },
+            ),
+            ..pontia_application::client_contract::SessionLifecycleBehavior::DEFAULT
+        },
         native_turn_identity: false,
+        native_turn_metadata_key: None,
         runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
             process_names: &["pi"],
             hook_log: Some(HookLogBehavior {
