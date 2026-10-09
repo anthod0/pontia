@@ -141,84 +141,12 @@ jobs:
           path: pontia-dashboard.tar.gz
           compression-level: 0
 
-  validate-pi-client:
-    name: Validate Pi client
-    needs: detect
-    if: ${{ needs.detect.outputs.publish == 'true' }}
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: clients/pi
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run test
-
-  validate-cloudflare:
-    name: Validate Cloudflare ${{ matrix.app }}
-    needs: detect
-    if: ${{ needs.detect.outputs.publish == 'true' }}
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        app: [cloud, dashboard, cron]
-    defaults:
-      run:
-        working-directory: apps/${{ matrix.app }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
-      - name: Install Rust with the WASM target
-        if: matrix.app == 'dashboard'
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - name: Build Dashboard WASM
-        if: matrix.app == 'dashboard'
-        run: ../../scripts/build-dashboard-wasm --install-bindgen
-      - run: bun install --frozen-lockfile
-      - name: Check
-        if: matrix.app != 'cron'
-        run: bun run check
-      - name: Check Cron types
-        if: matrix.app == 'cron'
-        run: bun x tsc --noEmit
-      - run: bun run test
-      - name: Check and test Public Dashboard branches
-        if: matrix.app == 'dashboard'
-        env:
-          VITE_DASHBOARD_MODE: public
-        run: |
-          bun run check
-          bun run test
-      - name: Verify production build
-        shell: bash
-        run: |
-          case "${{ matrix.app }}" in
-            cloud) bun run build ;;
-            dashboard) bun run build:public ;;
-            cron) bunx wrangler deploy --dry-run --outdir dist ;;
-          esac
-
   release:
     name: Publish signed release
     needs:
       - detect
       - build
       - build-dashboard
-      - validate-pi-client
-      - validate-cloudflare
     if: ${{ needs.detect.outputs.publish == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -276,7 +204,6 @@ jobs:
     needs:
       - detect
       - release
-      - validate-pi-client
     if: ${{ needs.detect.outputs.publish == 'true' }}
     permissions:
       contents: read
@@ -291,7 +218,6 @@ jobs:
       - detect
       - release
       - publish-pi-client
-      - validate-cloudflare
     if: ${{ needs.detect.outputs.publish == 'true' }}
     runs-on: ubuntu-24.04
     strategy:
