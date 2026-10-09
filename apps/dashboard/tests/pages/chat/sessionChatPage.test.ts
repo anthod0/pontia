@@ -1670,7 +1670,7 @@ test("highlights fenced code blocks in assistant markdown and copies their text"
   expect(await screen.findByRole("button", { name: /code block copied/i })).toBeInTheDocument();
 });
 
-test("shows pending, failed, and dispatching messages above the composer without inbox controls", async () => {
+test("only pending and failed inbox messages expose actions in the chat", async () => {
   const selected = session({ session_id: "session-2", state: "idle" });
   window.history.pushState({}, "", "/dashboard/chat/session-2");
   mocks.pathParams = { sessionId: "session-2" };
@@ -1717,33 +1717,17 @@ test("shows pending, failed, and dispatching messages above the composer without
 
   render(SessionChatPage);
 
-  expect(
-    await screen.findByRole("heading", { name: "Inbox · 2 waiting · 1 failed · 0 unknown" }),
-  ).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /open inbox/i })).not.toBeInTheDocument();
-  expect(screen.queryByRole("menuitem", { name: /inbox/i })).not.toBeInTheDocument();
-  expect(screen.getByText("Sending now")).toBeInTheDocument();
-  expect(screen.getByText("Fix the failing dashboard test")).toBeInTheDocument();
-  expect(screen.getByText("Continue implementation")).toBeInTheDocument();
-  expect(screen.getByText("Already sent")).toBeVisible();
-  expect(screen.getByText("Accepted")).toBeVisible();
-  expect(screen.getByText("Failed")).toBeVisible();
-  expect(screen.getByText("runtime unavailable")).toBeVisible();
-
-  const rows = screen.getAllByRole("listitem");
-  expect(rows.map((row) => row.textContent)).toEqual([
-    expect.stringContaining("Sending now"),
-    expect.stringContaining("Fix the failing dashboard test"),
-    expect.stringContaining("Continue implementation"),
-    expect.stringContaining("Already sent"),
-  ]);
-  expect(within(rows[0]).queryByRole("button")).not.toBeInTheDocument();
-  expect(
-    within(rows[1]).queryByRole("button", { name: /cancel inbox message/i }),
-  ).not.toBeInTheDocument();
-  expect(
-    within(rows[2]).getByRole("button", { name: /cancel inbox message/i }),
-  ).toBeInTheDocument();
+  expect(await screen.findByRole("button", {
+    name: "Cancel inbox message Continue implementation",
+  })).toBeEnabled();
+  expect(screen.getByRole("button", {
+    name: "Retry inbox message Fix the failing dashboard test",
+  })).toBeEnabled();
+  expect(screen.getByRole("button", {
+    name: "Remove inbox message Fix the failing dashboard test",
+  })).toBeEnabled();
+  const inbox = screen.getByRole("region", { name: /Inbox/ });
+  expect(within(inbox).getAllByRole("listitem")).toHaveLength(2);
 });
 
 test("supports cancelling pending inbox messages and retrying or removing failed inbox messages", async () => {
@@ -2521,7 +2505,7 @@ test("does not scroll to the document bottom after retrying an inbox message", a
   render(SessionChatPage);
 
   await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
-  await screen.findByRole("heading", { name: "Inbox · 0 waiting · 1 failed · 0 unknown" });
+  await screen.findByRole("button", { name: /retry inbox message/i });
   scrollTo.mockClear();
   await user.click(
     await screen.findByRole("button", {

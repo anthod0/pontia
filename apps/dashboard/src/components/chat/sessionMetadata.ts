@@ -177,8 +177,7 @@ export function visibleChatInboxMessages(messages: InboxMessageView[]): InboxMes
     .filter(
       (message) =>
         !message.retried_by_message_id &&
-        (["pending", "resuming", "dispatching", "failed", "unknown"].includes(message.state) ||
-          (message.state === "dispatched" && !message.turn_id)),
+        ["pending", "failed"].includes(message.state),
     )
     .slice()
     .reverse();

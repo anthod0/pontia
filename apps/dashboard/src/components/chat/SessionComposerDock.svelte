@@ -80,6 +80,7 @@
   <div class="mx-auto w-full max-w-[760px]">
     <InboxSubmissionRecovery sessionId={session.session_id} />
     <QueuedMessages
+      sessionId={session.session_id}
       messages={queuedMessages}
       busyMessageId={inboxBusyMessageId}
       onCancel={onCancelInboxMessage}
