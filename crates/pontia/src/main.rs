@@ -120,7 +120,7 @@ async fn run_update() -> Result<bool, String> {
         );
         // Resolve the installed service's configuration, not the invoking shell's PONTIA_HOME.
         let config = if Path::new("/run/systemd/system").is_dir() {
-            let config = update_service_config(&manager, &user_home()?)?;
+            let config = update_service_config(&manager, &user_home()?, false)?;
             if config.is_some() && manager.running_executable()? != update.daemon_path() {
                 return Err("the running service belongs to another Pontia installation; run its sibling pontia update instead".into());
             }
@@ -140,27 +140,52 @@ async fn run_update() -> Result<bool, String> {
         })?;
         Ok(true)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        let runner = ProcessCommandRunner;
+        let manager = launchd_manager(&runner, &[])?;
+        // A loaded KeepAlive job can restart while its process is temporarily absent,
+        // so keep treating stopped or failed loaded jobs as managed during replacement.
+        let config = update_service_config(&manager, &user_home()?, true)?;
+        if config.is_some() && manager.running_executable()? != update.daemon_path() {
+            return Err("the running service belongs to another Pontia installation; run its sibling pontia update instead".into());
+        }
+        if config.is_none() {
+            update.ensure_no_unmanaged_daemon()?;
+        }
+        update.install(|| {
+            if let Some(config) = &config {
+                eprintln!("Restarting Pontia and waiting for it to become healthy...");
+                Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe).restart(config)?;
+            }
+            Ok(())
+        })?;
+        Ok(true)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let _ = update;
-        Err("pontia update supports only Linux".into())
+        Err("pontia update supports only Linux and macOS".into())
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn update_service_config<M: ServiceManager>(
     manager: &M,
     home: &Path,
+    restart_loaded: bool,
 ) -> Result<Option<AppConfig>, String> {
     use pontia::lifecycle::DefinitionStore;
     let Some(definition) = FileDefinitionStore.read(&manager.definition_path(home))? else {
         return Ok(None);
     };
-    match manager.status()?.run_state {
+    let status = manager.status()?;
+    match status.run_state {
         RunState::Starting => {
             return Err("Pontia is starting; retry the update once it has settled".into());
         }
         RunState::Running => {}
+        RunState::Stopped | RunState::Failed if restart_loaded && status.loaded => {}
         RunState::Stopped | RunState::Failed => return Ok(None),
     }
     let pontia_home = manager.persisted_home(&definition)?;

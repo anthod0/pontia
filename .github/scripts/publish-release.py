@@ -13,7 +13,13 @@ import tempfile
 
 ORIGIN = "https://get.pontia.dev"
 ROOT = Path(__file__).resolve().parents[2]
-TARGETS = ("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu")
+CONTROL_PLANE_TARGETS = (
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+)
+EDGE_TARGETS = ("x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu")
 
 
 def run(*args):
@@ -54,7 +60,12 @@ def version_order(version):
 
 def prepare_release(directory, version):
     version_order(version)
-    expected = {f"{binary}-{target}.tar.gz" for binary in ("pontia", "pontiad", "pontia-edge") for target in TARGETS}
+    expected = {
+        f"{binary}-{target}.tar.gz"
+        for binary in ("pontia", "pontiad")
+        for target in CONTROL_PLANE_TARGETS
+    }
+    expected.update(f"pontia-edge-{target}.tar.gz" for target in EDGE_TARGETS)
     expected.add("pontia-dashboard.tar.gz")
     if {p.name for p in directory.glob("*.tar.gz")} != expected:
         raise ValueError("Release artifact set does not match supported platforms")

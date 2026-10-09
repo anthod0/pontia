@@ -10,7 +10,13 @@ const keys = generateKeyPairSync("ed25519", {
   publicKeyEncoding: { type: "spki", format: "pem" },
   privateKeyEncoding: { type: "pkcs8", format: "pem" },
 });
-const target = process.arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu";
+const linuxArchitecture: "x86_64" | "arm64" = process.arch === "arm64" ? "arm64" : "x86_64";
+const controlPlaneTargets = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+  "aarch64-apple-darwin",
+];
 
 afterAll(async () => {
   for (const root of roots) {
@@ -21,7 +27,13 @@ afterAll(async () => {
   }
 });
 
-async function fixture(script: string) {
+async function fixture(
+  script: string,
+  platform: { system: "Linux" | "Darwin"; architecture: "x86_64" | "arm64" } = {
+    system: "Linux",
+    architecture: linuxArchitecture,
+  },
+) {
   const root = await mkdtemp(join(tmpdir(), "pontia-installer-"));
   roots.push(root);
   const releases = join(root, "releases");
@@ -32,8 +44,10 @@ async function fixture(script: string) {
   await mkdir(payloads);
   for (const binary of ["pontia", "pontiad", "pontia-edge"]) {
     await writeFile(join(payloads, binary), `verified ${binary} release binary\n`, { mode: 0o755 });
-    for (const architecture of ["x86_64", "aarch64"]) {
-      const archive = join(releases, `${binary}-${architecture}-unknown-linux-gnu.tar.gz`);
+    const targets =
+      binary === "pontia-edge" ? controlPlaneTargets.slice(0, 2) : controlPlaneTargets;
+    for (const releaseTarget of targets) {
+      const archive = join(releases, `${binary}-${releaseTarget}.tar.gz`);
       expect(Bun.spawnSync(["tar", "-czf", archive, "-C", payloads, binary]).exitCode).toBe(0);
     }
   }
@@ -74,9 +88,32 @@ esac
 `,
   );
   await chmod(curl, 0o755);
+  const uname = join(mocks, "uname");
+  await writeFile(
+    uname,
+    `#!/bin/sh
+case "$1" in
+  -s) printf '%s\\n' '${platform.system}' ;;
+  -m) printf '%s\\n' '${platform.architecture}' ;;
+  *) exit 1 ;;
+esac
+`,
+  );
+  await chmod(uname, 0o755);
+  const shasum = join(mocks, "shasum");
+  await writeFile(
+    shasum,
+    `#!/bin/sh
+[ "$1" = -a ] && [ "$2" = 256 ]
+sha256sum "$3"
+`,
+  );
+  await chmod(shasum, 0o755);
+  const releaseTarget = `${platform.architecture === "arm64" ? "aarch64" : "x86_64"}-${platform.system === "Darwin" ? "apple-darwin" : "unknown-linux-gnu"}`;
   return {
     root,
     releases,
+    target: releaseTarget,
     run(version: string) {
       return Bun.spawnSync(["sh", join(root, script)], {
         env: {
@@ -145,6 +182,24 @@ test("installer preparation rejects non-Ed25519 public keys", async () => {
   expect(await Bun.file(join(root, "install.sh")).exists()).toBe(false);
 });
 
+for (const architecture of ["x86_64", "arm64"] as const) {
+  test(`install.sh installs macOS ${architecture} releases`, async () => {
+    const context = await fixture("install.sh", { system: "Darwin", architecture });
+    const result = context.run("latest");
+
+    expect(result.stderr.toString()).toBe("");
+    expect(result.exitCode).toBe(0);
+    for (const binary of ["pontia", "pontiad"]) {
+      expect(await readFile(join(context.root, "install", binary), "utf8")).toBe(
+        `verified ${binary} release binary\n`,
+      );
+    }
+    expect(await readFile(join(context.root, "requests"), "utf8")).toContain(
+      `pontia-${context.target}.tar.gz`,
+    );
+  });
+}
+
 for (const script of ["install.sh", "install-edge.sh"]) {
   const binaries = script === "install.sh" ? ["pontia", "pontiad"] : ["pontia-edge"];
   for (const version of ["latest", "v1.2.3"]) {
@@ -164,7 +219,7 @@ for (const script of ["install.sh", "install-edge.sh"]) {
         [
           `https://get.pontia.dev/${manifestPath}`,
           ...binaries.map(
-            (binary) => `https://get.pontia.dev/releases/v1.2.3/${binary}-${target}.tar.gz`,
+            (binary) => `https://get.pontia.dev/releases/v1.2.3/${binary}-${context.target}.tar.gz`,
           ),
           "",
         ].join("\n"),
@@ -193,7 +248,10 @@ for (const script of ["install.sh", "install-edge.sh"]) {
     for (const binary of binaries) {
       await writeFile(join(context.root, "install", binary), "original binary");
     }
-    await writeFile(join(context.releases, `${binaries.at(-1)}-${target}.tar.gz`), "corrupted");
+    await writeFile(
+      join(context.releases, `${binaries.at(-1)}-${context.target}.tar.gz`),
+      "corrupted",
+    );
     expect(context.run("latest").exitCode).not.toBe(0);
     for (const binary of binaries) {
       expect(await readFile(join(context.root, "install", binary), "utf8")).toBe("original binary");

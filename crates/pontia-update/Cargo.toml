@@ -15,5 +15,6 @@ semver = "1"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2 = "0.10"
+sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 tar = "0.4.46"
 tempfile = "3"

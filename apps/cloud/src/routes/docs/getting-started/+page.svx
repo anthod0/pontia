@@ -9,14 +9,14 @@ Install Pontia, select the coding agent integrations you use, and initialize the
 
 ## Requirements
 
-The release installer currently supports **x86_64 and ARM64 Linux** systems. Managed service lifecycle commands require a running systemd user service manager.
+The release installer supports **x86_64 and ARM64 Linux** and **Intel and Apple Silicon macOS 11 or later**. Linux lifecycle commands require a running systemd user service manager; macOS uses a per-user LaunchAgent.
 
-The installer requires `curl`, `grep`, `install`, `jq`, `mktemp`, `mv`, `openssl`, `rm`, `sha256sum`, `tar`, and `uname`.
+The installer requires `curl`, `grep`, `install`, `jq`, `mktemp`, `mv`, `openssl`, `rm`, `tar`, `tr`, `uname`, and `wc`, plus `sha256sum` on Linux or `shasum` on macOS. OpenSSL must support Ed25519 verification; on macOS the installer automatically detects Homebrew's `openssl@3` in its standard Intel and Apple Silicon locations.
 
 Install the clients you plan to use before initialization:
 
 - **pi:** install the `pi` CLI and `tmux`.
-- **Codex:** install the `codex` CLI. Automatic Codex startup requires Linux and systemd.
+- **Codex:** install the `codex` CLI. Automatic Codex startup uses systemd on Linux and a per-user LaunchAgent on macOS.
 
 ## Install Pontia
 

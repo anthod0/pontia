@@ -92,9 +92,24 @@ jobs:
         include:
           - runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            packages: --package pontia --package pontiad --package pontia-edge
+            binaries: pontia pontiad pontia-edge
           - runner: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
+            packages: --package pontia --package pontiad --package pontia-edge
+            binaries: pontia pontiad pontia-edge
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            packages: --package pontia --package pontiad
+            binaries: pontia pontiad
+          - runner: macos-14
+            target: aarch64-apple-darwin
+            packages: --package pontia --package pontiad
+            binaries: pontia pontiad
+            verify_codesign: true
     runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -102,18 +117,28 @@ jobs:
       - name: Build binaries
         env:
           RELEASE_PUBLIC_KEY: ${{ vars.RELEASE_PUBLIC_KEY }}
+          PACKAGES: ${{ matrix.packages }}
+          TARGET: ${{ matrix.target }}
         run: |
           test -n "$RELEASE_PUBLIC_KEY"
-          cargo build --release --locked --package pontia --package pontiad --package pontia-edge
+          cargo build --release --locked --target "$TARGET" $PACKAGES
+      - name: Verify Apple Silicon code signature
+        if: matrix.verify_codesign
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          codesign --verify --strict --verbose=2 "target/$TARGET/release/pontia"
+          codesign --verify --strict --verbose=2 "target/$TARGET/release/pontiad"
       - name: Package binaries
         shell: bash
         env:
+          BINARIES: ${{ matrix.binaries }}
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
           mkdir dist
-          for binary in pontia pontiad pontia-edge; do
-            tar -C target/release -czf "dist/$binary-$TARGET.tar.gz" "$binary"
+          for binary in $BINARIES; do
+            tar -C "target/$TARGET/release" -czf "dist/$binary-$TARGET.tar.gz" "$binary"
           done
       - uses: actions/upload-artifact@v7
         with:

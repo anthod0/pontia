@@ -210,6 +210,32 @@ fn systemd_down_accepts_already_missing_service() {
 }
 
 #[test]
+fn launchd_resolves_the_running_service_executable() {
+    let executable = std::env::current_exe().unwrap().canonicalize().unwrap();
+    let runner = FakeRunner::with_outputs(vec![output(
+        0,
+        &format!(
+            "gui/501/dev.pontia.pontiad = {{\n program = {}\n pid = 42\n}}\n",
+            executable.display()
+        ),
+        "",
+    )]);
+    let manager = LaunchdManager::new(&runner, 501);
+
+    assert_eq!(manager.running_executable().unwrap(), executable);
+    assert_eq!(
+        runner.calls.into_inner(),
+        vec![(
+            "launchctl".to_string(),
+            vec!["print", "gui/501/dev.pontia.pontiad"]
+                .into_iter()
+                .map(String::from)
+                .collect(),
+        )]
+    );
+}
+
+#[test]
 fn launchd_reports_loaded_failed_service_and_disabled_override() {
     let runner = FakeRunner::with_outputs(vec![
         output(

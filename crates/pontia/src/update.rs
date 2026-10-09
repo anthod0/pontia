@@ -17,7 +17,7 @@ impl PreparedUpdate {
         self.0.directory().join("pontiad")
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub fn ensure_no_unmanaged_daemon(&self) -> Result<(), String> {
         pontia_update::ensure_not_running(&self.daemon_path())
     }

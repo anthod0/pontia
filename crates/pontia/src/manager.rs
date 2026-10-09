@@ -238,6 +238,21 @@ impl<'a, R: CommandRunner> LaunchdManager<'a, R> {
             Err(command_failure("launchctl", &refs, &output))
         }
     }
+
+    /// Resolve the actual executable of the running per-user daemon.
+    pub fn running_executable(&self) -> Result<PathBuf, String> {
+        let target = self.target();
+        let args = vec!["print".to_string(), target];
+        let output = self.launchctl(args.clone())?;
+        if output.code != 0 {
+            let refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+            return Err(command_failure("launchctl", &refs, &output));
+        }
+        let path = property_with_spaces(&output.stdout, "program")
+            .ok_or_else(|| "Pontia service has no running executable".to_string())?;
+        std::fs::canonicalize(path)
+            .map_err(|error| format!("cannot resolve the running Pontia daemon: {error}"))
+    }
 }
 
 impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {

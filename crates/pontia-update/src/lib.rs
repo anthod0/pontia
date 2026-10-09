@@ -72,6 +72,8 @@ pub async fn prepare(
             "update requires the executable to be named {executable_name}"
         ));
     }
+    #[cfg(target_os = "macos")]
+    let running_inode = running_executable_inode()?;
     let lock = lock_directory(directory)?;
     #[cfg(target_os = "linux")]
     {
@@ -79,6 +81,14 @@ pub async fn prepare(
         let running = fs::metadata("/proc/self/exe").map_err(io_error)?;
         let installed = fs::metadata(&executable).map_err(io_error)?;
         if (running.dev(), running.ino()) != (installed.dev(), installed.ino()) {
+            return Err("the installation changed before the update lock was acquired; run the installed executable again".into());
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let installed = fs::metadata(&executable).map_err(io_error)?;
+        if running_inode != installed.ino() {
             return Err("the installation changed before the update lock was acquired; run the installed executable again".into());
         }
     }
@@ -144,14 +154,47 @@ pub async fn prepare(
 }
 
 fn target() -> Result<&'static str, String> {
-    if !cfg!(target_env = "gnu") {
-        return Err("update requires a GNU/Linux release build".into());
-    }
     match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("linux", "x86_64") => Ok("x86_64-unknown-linux-gnu"),
-        ("linux", "aarch64") => Ok("aarch64-unknown-linux-gnu"),
-        _ => Err("update supports only Linux x86_64 and aarch64".into()),
+        ("linux", "x86_64") if cfg!(target_env = "gnu") => Ok("x86_64-unknown-linux-gnu"),
+        ("linux", "aarch64") if cfg!(target_env = "gnu") => Ok("aarch64-unknown-linux-gnu"),
+        ("macos", "x86_64") => Ok("x86_64-apple-darwin"),
+        ("macos", "aarch64") => Ok("aarch64-apple-darwin"),
+        _ => Err("update supports only Linux GNU and macOS on x86_64 or aarch64".into()),
     }
+}
+
+#[cfg(target_os = "macos")]
+fn running_executable_inode() -> Result<u64, String> {
+    use std::process::Command;
+
+    let pid = std::process::id().to_string();
+    let output = Command::new("/usr/sbin/lsof")
+        .args(["-a", "-p", &pid, "-d", "txt", "-Fi"])
+        .output()
+        .map_err(|error| format!("cannot inspect the running Pontia executable: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "cannot inspect the running Pontia executable: lsof exited with {}",
+            output.status
+        ));
+    }
+    let output = String::from_utf8(output.stdout)
+        .map_err(|_| "cannot inspect the running Pontia executable: invalid lsof output")?;
+    let mut inodes = output
+        .lines()
+        .filter_map(|line| line.strip_prefix('i'))
+        .map(str::parse::<u64>);
+    let inode = inodes
+        .next()
+        .ok_or("cannot inspect the running Pontia executable: lsof reported no text vnode")?
+        .map_err(|_| "cannot inspect the running Pontia executable: invalid inode")?;
+    if inodes.next().is_some() {
+        return Err(
+            "cannot inspect the running Pontia executable: lsof reported multiple text vnodes"
+                .into(),
+        );
+    }
+    Ok(inode)
 }
 
 fn lock_directory(directory: &Path) -> Result<File, String> {
@@ -313,28 +356,36 @@ impl PreparedUpdate {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub fn ensure_not_running(executable: &Path) -> Result<(), String> {
-    let deleted = PathBuf::from(format!("{} (deleted)", executable.display()));
-    for process in fs::read_dir("/proc").map_err(io_error)? {
-        let process = process.map_err(io_error)?;
-        if !process
-            .file_name()
-            .to_string_lossy()
-            .bytes()
-            .all(|c| c.is_ascii_digit())
-        {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+
+    let executable = fs::canonicalize(executable).map_err(io_error)?;
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing()
+            .with_exe(UpdateKind::Always)
+            .without_tasks(),
+    );
+    let mut readable = 0;
+    for process in system.processes().values() {
+        let Some(path) = process.exe() else {
             continue;
-        }
-        // Processes may exit during enumeration, and other users' executables may be private.
-        if let Ok(path) = fs::read_link(process.path().join("exe"))
-            && (path == executable || path == deleted)
-        {
+        };
+        readable += 1;
+        if path == executable {
             return Err(format!(
                 "an unmanaged process is running from {}; stop it before updating and restart it afterwards",
                 executable.display()
             ));
         }
+    }
+    if system.processes().is_empty() || readable == 0 {
+        return Err(
+            "could not safely determine whether an unmanaged Pontia service is running".into(),
+        );
     }
     Ok(())
 }
@@ -389,12 +440,14 @@ mod tests {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn detects_an_executable_running_outside_the_service_manager() {
         assert!(ensure_not_running(&std::env::current_exe().unwrap()).is_err());
         let root = tempfile::tempdir().unwrap();
-        assert!(ensure_not_running(&root.path().join("pontiad")).is_ok());
+        let inactive = root.path().join("pontiad");
+        fs::write(&inactive, b"not running").unwrap();
+        assert!(ensure_not_running(&inactive).is_ok());
     }
 
     #[test]
