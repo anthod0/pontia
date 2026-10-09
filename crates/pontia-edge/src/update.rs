@@ -1,11 +1,7 @@
-use std::{path::Path, process::Command, time::Duration};
+use std::path::Path;
 
 use anyhow::{Context, Result};
-use pontia_edge::{
-    config::{CONFIG_PATH, ServiceConfig},
-    credential::ensure_root,
-    systemd::Systemd,
-};
+use pontia_edge::{credential::ensure_root, systemd::Systemd};
 
 const EXECUTABLE: &str = "/usr/local/bin/pontia-edge";
 
@@ -46,48 +42,28 @@ pub async fn run(automatic: bool) -> Result<()> {
         println!("Edge service stopped during download; skipping automatic update.");
         return Ok(());
     }
-    let config = if running {
-        let output = Command::new("systemctl")
-            .args([
-                "show",
-                "--property=MainPID",
-                "--value",
-                "pontia-edge.service",
-            ])
-            .output()
-            .context("failed to read edge service PID")?;
-        anyhow::ensure!(output.status.success(), "failed to read edge service PID");
-        let pid: u32 = std::str::from_utf8(&output.stdout)?.trim().parse()?;
+    if running {
+        let running_process = systemd
+            .update_process()
+            .await?
+            .context("edge service has no running process")?;
         anyhow::ensure!(
-            std::fs::read_link(format!("/proc/{pid}/exe"))? == executable,
+            running_process.executable == executable,
             "the running edge service belongs to another installation"
         );
-        Some(ServiceConfig::read(Path::new(CONFIG_PATH))?)
     } else {
         ensure_no_other_edge(&executable)?;
-        None
-    };
-    let client = config.as_ref().map(health_client).transpose()?;
+    }
     tokio::task::block_in_place(|| {
         update
             .install(|| {
-                let (Some(config), Some(client)) = (&config, &client) else {
+                if !running {
                     return Ok(());
-                };
+                }
                 let runtime = tokio::runtime::Handle::current();
                 runtime
-                    .block_on(systemd.restart())
-                    .map_err(|error| error.to_string())?;
-                runtime
-                    .block_on(wait_for_health(client, config))
-                    .map_err(|error| error.to_string())?;
-                if !runtime
-                    .block_on(systemd.update_is_active())
-                    .map_err(|error| error.to_string())?
-                {
-                    return Err("edge service is not active after restart".into());
-                }
-                Ok(())
+                    .block_on(systemd.restart_for_update(&executable))
+                    .map_err(|error| error.to_string())
             })
             .map_err(anyhow::Error::msg)
     })
@@ -111,28 +87,4 @@ fn ensure_no_other_edge(executable: &Path) -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn health_client(config: &ServiceConfig) -> Result<reqwest::Client> {
-    // Probe this machine, not public DNS or a proxy, while verifying the TLS hostname.
-    Ok(reqwest::Client::builder()
-        .no_proxy()
-        .resolve(&config.hostname, ([127, 0, 0, 1], config.port).into())
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(3))
-        .build()?)
-}
-
-async fn wait_for_health(client: &reqwest::Client, config: &ServiceConfig) -> Result<()> {
-    let url = format!("https://{}:{}/healthz", config.hostname, config.port);
-    for _ in 0..20 {
-        if let Ok(response) = client.get(&url).send().await
-            && response.status().is_success()
-            && response.text().await.is_ok_and(|body| body == "ok")
-        {
-            return Ok(());
-        }
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
-    anyhow::bail!("edge did not become healthy at {url} after restart")
 }
