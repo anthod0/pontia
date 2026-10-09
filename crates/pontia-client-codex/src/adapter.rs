@@ -28,6 +28,7 @@ use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
 
 pub fn registration() -> ClientRegistration {
     ClientRegistration {
+        service: Some(Arc::new(crate::service::CodexBackgroundService)),
         in_process: None,
         spec: &crate::SPEC,
         data: Some(Arc::new(CodexData)),

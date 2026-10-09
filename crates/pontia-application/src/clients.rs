@@ -10,7 +10,7 @@ mod models;
 pub(crate) use lifecycle::discard_unbound_runtime;
 mod channel;
 mod registry;
-pub use registry::{ClientRegistration, ClientRegistry};
+pub use registry::{ClientRegistration, ClientRegistry, ClientServiceTasks};
 
 use crate::EventIngestService;
 use crate::client_contract::{AgentClientSpec, DispatchMode};

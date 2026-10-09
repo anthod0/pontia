@@ -241,6 +241,7 @@ pub(super) fn clients() -> pontia_application::clients::ClientRegistry {
     });
     let mut clients = pontia_application::clients::ClientRegistry::default();
     clients.register(pontia_application::clients::ClientRegistration {
+        service: None,
         in_process: None,
         session: None,
         prepare_on_input: false,

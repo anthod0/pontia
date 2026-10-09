@@ -13,6 +13,7 @@ members = [
     "crates/pontia-application",
     "crates/pontia-client-pi",
     "crates/pontia-client-codex",
+    "crates/pontia-clients",
     "crates/pontia-http",
     "crates/pontia",
     "crates/pontia-workflow",
@@ -27,6 +28,7 @@ license = "Apache-2.0"
 repository = "https://github.com/anthod0/pontia"
 
 [workspace.dependencies]
+pontia-clients = { path = "crates/pontia-clients" }
 pontia-client-pi = { path = "crates/pontia-client-pi" }
 pontia-client-codex = { path = "crates/pontia-client-codex" }
 pontia-application = { path = "crates/pontia-application", default-features = false }

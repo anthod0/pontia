@@ -1,3 +1,5 @@
+mod background;
+pub(crate) use background::CodexBackgroundService;
 mod events;
 mod models;
 mod observer;

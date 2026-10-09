@@ -1,5 +1,6 @@
 mod e2e_identity;
 mod initialization;
+use pontia_application::client_contract::ClientServicePhase;
 use pontia_config::AppConfig;
 use pontia_core::error::Result;
 use pontia_http as http;
@@ -18,19 +19,20 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let bound_addr = listener.local_addr()?;
     let app_state = initialization::initialize(&config).await?;
-    let pi_listener = pontia_client_pi::ipc::PiIpcListener::bind(&config.pontia_home).await?;
-    let pi_task =
-        tokio::spawn(pi_listener.run(app_state.clone(), app_state.shutdown().subscribe()));
+    let mut client_tasks = app_state
+        .clients()
+        .start_services(app_state.clone(), ClientServicePhase::Transport)
+        .await?;
     let inbox = app_state.inbox_commands();
     let client_control = app_state.client_control();
     let runtime_observer = app_state.runtime_observer();
     tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
-    let codex_observer = pontia_client_codex::CodexObserver::new(
-        app_state.event_ingest_service(),
-        config.pontia_home.clone(),
+    client_tasks.extend(
+        app_state
+            .clients()
+            .start_services(app_state.clone(), ClientServicePhase::Observation)
+            .await?,
     );
-    codex_observer.prepare().await?;
-    tokio::spawn(codex_observer.run(app_state.shutdown().subscribe()));
     let workflow_coordinator = pontia_workflow::WorkflowCoordinator::new(
         &app_state,
         app_state.session_commands(),
@@ -114,13 +116,13 @@ async fn main() -> Result<()> {
 
     cleanup_shutdown.notify();
     client_control.close().await;
-    let pi_result = pi_task.await;
+    let client_result = client_tasks.join().await;
     inbox.stop_scheduling().await;
     if let Some(task) = remote_task {
         let _ = task.await;
     }
 
-    pi_result.map_err(|error| pontia_core::Error::Domain(error.to_string()))??;
+    client_result?;
 
     server_result?;
 

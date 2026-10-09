@@ -29,6 +29,7 @@ pub(crate) fn clients() -> super::ClientRegistry {
     let mut registry = super::ClientRegistry::default();
     registry.register(crate::client_contract::test_registration());
     registry.register(super::ClientRegistration {
+        service: None,
         in_process: None,
         session: None,
         prepare_on_input: false,

@@ -2290,6 +2290,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pontia-clients"
+version = "0.0.0"
+dependencies = [
+ "pontia-application",
+ "pontia-client-codex",
+ "pontia-client-pi",
+ "pontia-config",
+]
+
+[[package]]
 name = "pontia-config"
 version = "0.0.0"
 dependencies = [
@@ -2504,8 +2514,7 @@ dependencies = [
  "base64 0.22.1",
  "ed25519-dalek 2.2.0",
  "pontia-application",
- "pontia-client-codex",
- "pontia-client-pi",
+ "pontia-clients",
  "pontia-config",
  "pontia-core",
  "pontia-e2e",

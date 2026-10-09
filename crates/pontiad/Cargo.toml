@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-pontia-client-pi.workspace = true
+pontia-clients.workspace = true
 axum = "0.8"
 base64 = "0.22"
 ed25519-dalek = "2"
@@ -30,4 +30,3 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { workspace = true, features = ["v7", "serde"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
-pontia-client-codex.workspace = true

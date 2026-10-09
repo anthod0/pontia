@@ -5,11 +5,7 @@ use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use pontia_application::{AppState, app::set_default_client_type};
 
 pub async fn initialize(config: &AppConfig) -> Result<AppState> {
-    let mut clients = pontia_application::clients::ClientRegistry::default();
-    clients.register(pontia_client_pi::registration(
-        config.runtime.tui_command_for_client_config_key("pi"),
-    ));
-    clients.register(pontia_client_codex::registration());
+    let clients = pontia_clients::registration(config);
     if clients.spec(&config.default_client_type).is_none() {
         return Err(pontia_core::Error::InvalidConfig {
             key: "PONTIA_DEFAULT_CLIENT_TYPE",

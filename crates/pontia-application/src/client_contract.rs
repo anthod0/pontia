@@ -1,11 +1,13 @@
 mod channel;
 mod data;
 pub mod history;
+mod service;
 mod session;
 pub use channel::{ClientControlChannel, ClientControlOperation};
 pub use data::{
     BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, NativeEventEvidence,
 };
+pub use service::{ClientService, ClientServicePhase};
 pub use session::{
     ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails, InProcessClient,
 };
