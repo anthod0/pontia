@@ -47,8 +47,16 @@ export function sessionChatTitle(
   return untitledSessionLabel(session.client_type);
 }
 
+export function userPromptForDisplay(prompt: string): string {
+  const skillBlock = prompt.match(
+    /^<skill name="([^"]+)" location="[^"]+">\r?\n[\s\S]*?\r?\n<\/skill>(?:\r?\n\r?\n([\s\S]*))?$/,
+  );
+  if (!skillBlock) return prompt;
+  return skillBlock[2]?.trim() || `/skill:${skillBlock[1]}`;
+}
+
 export function titleFromInitialPrompt(prompt: string, maxLength = 60): string | null {
-  const normalized = prompt
+  const normalized = userPromptForDisplay(prompt)
     .replace(/^```[\w-]*\s*/i, "")
     .replace(/```$/i, "")
     .split(/\r?\n/)
@@ -88,7 +96,8 @@ export function turnsToChatMessages(turns: TurnView[]): SessionChatMessage[] {
     .sort((a, b) => turnTimestamp(a).localeCompare(turnTimestamp(b)))
     .flatMap((turn) => {
       const input =
-        textFromUnknown(turn.input?.summary ?? turn.input) || "No input summary was reported.";
+        userPromptForDisplay(textFromUnknown(turn.input?.summary ?? turn.input)) ||
+        "No input summary was reported.";
       return [
         {
           id: `${turn.turn_id}:user`,
@@ -171,7 +180,7 @@ export function timelineItemsToChatMessages(
 
     if (item.kind === "user") {
       flushPendingTurn();
-      const content = item.content_preview ?? "";
+      const content = userPromptForDisplay(item.content_preview ?? "");
       messages.push({
         id: item.item_id,
         turnId: item.turn_id ?? item.item_id,

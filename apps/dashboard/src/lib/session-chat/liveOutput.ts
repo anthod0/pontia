@@ -2,6 +2,7 @@ import type { ManagedToolUse, TurnView } from "../../api/types";
 import {
   managedToolUseContent,
   managedToolUseTitle,
+  userPromptForDisplay,
   type SessionChatMessage,
   type SessionChatThoughtStep,
 } from "./sessionChat";
@@ -142,7 +143,7 @@ export function mergeLiveOutputMessages(
       (message) => message.turnId !== overlay.turn_id || message.role === "user",
     );
     if (!userMessages.length) {
-      const input = turn.input?.summary?.trim();
+      const input = userPromptForDisplay(turn.input?.summary ?? "").trim();
       if (input) {
         const insertionIndex = messages.findIndex((message) => message.createdAt > turn.created_at);
         const userMessage: SessionChatMessage = {

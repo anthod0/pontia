@@ -4,6 +4,7 @@ import {
   sessionChatTitle,
   titleFromInitialPrompt,
   timelineItemsToChatMessages,
+  userPromptForDisplay,
   turnsToChatMessages,
   visibleChatSessions,
 } from "../../../src/lib/session-chat/sessionChat";
@@ -86,6 +87,29 @@ test("generates a compact title from the initial prompt", () => {
   );
   expect(titleFromInitialPrompt("```ts\nconst answer = 42\n```")).toBe("const answer = 42");
   expect(titleFromInitialPrompt("")).toBeNull();
+});
+
+test("uses the user request after a Pi skill injection for display and titles", () => {
+  const prompt = `<skill name="implement" location="/home/user/.agents/skills/implement/SKILL.md">
+References are relative to /home/user/.agents/skills/implement.
+
+# Implement
+
+Follow the implementation workflow.
+</skill>
+
+Build the dashboard feature.`;
+
+  expect(userPromptForDisplay(prompt)).toBe("Build the dashboard feature.");
+  expect(titleFromInitialPrompt(prompt)).toBe("Build the dashboard feature.");
+});
+
+test("represents a Pi skill invocation without a user request as its skill command", () => {
+  const prompt = `<skill name="implement" location="/home/user/.agents/skills/implement/SKILL.md">
+Skill instructions
+</skill>`;
+
+  expect(userPromptForDisplay(prompt)).toBe("/skill:implement");
 });
 
 test("filters chat sessions to active sessions and sorts by creation time so output updates do not reorder them", () => {
@@ -180,7 +204,10 @@ test("maps each turn into user and assistant chat messages in chronological orde
     }),
     turn({
       turn_id: "turn-1",
-      input: { summary: "first input" },
+      input: {
+        summary:
+          '<skill name="implement" location="/skills/implement/SKILL.md">\nSkill instructions\n</skill>\n\nfirst input',
+      },
       output: { summary: "first output" },
       created_at: "2026-01-01T00:00:00Z",
     }),
