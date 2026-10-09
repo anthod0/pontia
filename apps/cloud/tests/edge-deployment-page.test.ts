@@ -1,9 +1,10 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import type { RequestEvent } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
 import { issueLogin } from "../src/lib/server/auth/jwt";
 import { authSessions, edges, users } from "../src/lib/server/db/schema";
 import { actions as edgeActions, load } from "../src/routes/settings/edges/+page.server";
+import { GET as getEdgeHealth } from "../src/routes/settings/edges/health/+server";
 import {
   actions as deploymentActions,
   load as loadDeployment,
@@ -17,6 +18,9 @@ const loadEdges = load as unknown as (
   event: RequestEvent,
 ) => Promise<{ ownedEdges: unknown[]; publicEdges: unknown[] }>;
 const ownerId = "0199791c-6600-7000-8000-000000000011";
+const loadEdgeHealth = getEdgeHealth as unknown as (event: RequestEvent) => Promise<Response>;
+
+afterEach(() => mock.restore());
 
 async function authenticatedEvent(userId: string): Promise<RequestEvent> {
   const secret = "test-signing-secret-with-at-least-32-bytes";
@@ -111,6 +115,65 @@ test("the page separates owned and public edges in stable order without credenti
       createdAt,
     },
   ]);
+});
+
+test("the health endpoint checks only edges visible to the signed-in user", async () => {
+  const event = await authenticatedEvent(ownerId);
+  await database.db.insert(users).values({ id: "user-other" });
+  await database.db.insert(edges).values([
+    {
+      id: "edge-owned",
+      userId: ownerId,
+      name: "Owned",
+      dnsLabel: "owned-edge",
+      tunnelUrl: "wss://owned-edge.edge.pontia.dev/tunnel",
+      serviceCredentialHash: "secret-hash",
+    },
+    {
+      id: "edge-public",
+      userId: "user-other",
+      name: "Public",
+      dnsLabel: "public-edge",
+      tunnelUrl: "wss://public-edge.edge.pontia.dev/tunnel",
+      serviceCredentialHash: "secret-hash",
+      accessScope: "public",
+    },
+    {
+      id: "edge-private",
+      userId: "user-other",
+      name: "Private",
+      dnsLabel: "private-edge",
+      tunnelUrl: "wss://private-edge.edge.pontia.dev/tunnel",
+      serviceCredentialHash: "secret-hash",
+    },
+  ]);
+  const requested: string[] = [];
+  spyOn(globalThis, "fetch").mockImplementation((async (input) => {
+    const url = String(input);
+    requested.push(url);
+    return url.includes("owned-edge")
+      ? new Response("ok")
+      : new Response("unavailable", { status: 503 });
+  }) as typeof fetch);
+
+  const response = await loadEdgeHealth(event);
+
+  expect(response.status).toBe(200);
+  expect((await response.json()) as unknown).toEqual({
+    edges: { "edge-owned": "healthy", "edge-public": "unreachable" },
+  });
+  expect(requested.sort()).toEqual([
+    "https://owned-edge.edge.pontia.dev/healthz",
+    "https://public-edge.edge.pontia.dev/healthz",
+  ]);
+});
+
+test("the health endpoint requires sign-in", async () => {
+  const response = await loadEdgeHealth({
+    cookies: { get: () => undefined },
+  } as unknown as RequestEvent);
+
+  expect(response.status).toBe(401);
 });
 
 test("an owner can rename an edge without changing its DNS label", async () => {
