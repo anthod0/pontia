@@ -170,7 +170,10 @@ impl ClientSession for CodexClient {
                 .await?
                 .is_some();
             Ok(if bound {
-                runtime.subscription(session).await == Some(SubscriptionState::Available)
+                matches!(
+                    runtime.subscription(session).await,
+                    Some(SubscriptionState::Available | SubscriptionState::AwaitingFirstInput)
+                )
             } else {
                 runtime.connection().await.is_ok()
             })
@@ -284,6 +287,7 @@ impl ClientSession for CodexClient {
                 match CodexRuntime::existing(Path::new(&root)).await {
                     Some(runtime) => match runtime.subscription(session).await {
                         Some(SubscriptionState::Available) => "available",
+                        Some(SubscriptionState::AwaitingFirstInput) => "awaiting_input",
                         Some(SubscriptionState::Reconciling) => "reconciling",
                         Some(SubscriptionState::ExitPending) => "unavailable",
                         None if binding.is_none() && runtime.connection().await.is_ok() => {

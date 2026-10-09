@@ -123,15 +123,17 @@ impl CodexObserver {
                             None => continue,
                         },
                     };
-                    if !matches!(runtime.subscription(&session).await, Some(SubscriptionState::Available | SubscriptionState::Reconciling)) { continue; }
+                    if !matches!(runtime.subscription(&session).await, Some(SubscriptionState::Available | SubscriptionState::AwaitingFirstInput | SubscriptionState::Reconciling)) { continue; }
                     match event["method"].as_str() {
                         Some("thread/settings/updated") => {
                             let _current = runtime.current_guard().await?;
                             self.service.model_fact(&session, &event["params"]["threadSettings"]).await?;
                         }
                         Some("turn/started") => {
-                            let turns = self.service.turns(&connection, thread).await?;
-                            self.service.reconcile_turns(&session, &runtime, &turns).await?;
+                            if let Some(turns) = self.service.turns(&connection, thread).await? {
+                                self.service.reconcile_turns(&session, &runtime, &turns).await?;
+                                runtime.set_subscription(&session, SubscriptionState::Available).await;
+                            }
                         }
                         Some("turn/completed") => {
                             let _current = runtime.current_guard().await?;

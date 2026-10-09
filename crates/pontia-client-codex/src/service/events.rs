@@ -34,12 +34,26 @@ impl CodexService {
         &self,
         connection: &crate::runtime::protocol::Connection,
         thread: &str,
-    ) -> Result<Vec<Value>> {
+    ) -> Result<Option<Vec<Value>>> {
         let mut cursor = Value::Null;
         let mut seen = HashSet::new();
         let mut turns = Vec::new();
         loop {
-            let response = connection.call("thread/turns/list", json!({"threadId":thread,"cursor":cursor,"limit":100,"sortDirection":"asc","itemsView":"full"})).await?;
+            let response = match connection
+                .call(
+                    "thread/turns/list",
+                    json!({"threadId":thread,"cursor":cursor,"limit":100,"sortDirection":"asc","itemsView":"full"}),
+                )
+                .await
+            {
+                Ok(response) => response,
+                // An unmaterialized thread has not accepted its first user message yet.
+                Err(Error::Conflict {
+                    code: "codex_thread_not_materialized",
+                    ..
+                }) if cursor.is_null() => return Ok(None),
+                Err(error) => return Err(error),
+            };
             let page = response["data"]
                 .as_array()
                 .ok_or_else(|| Error::Domain("Codex turns/list has no data".into()))?;
@@ -52,7 +66,7 @@ impl CodexService {
                 return Err(Error::Domain("Codex repeated history cursor".into()));
             }
         }
-        Ok(turns)
+        Ok(Some(turns))
     }
 
     pub(super) async fn reconcile_turns(

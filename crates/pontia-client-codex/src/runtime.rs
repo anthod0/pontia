@@ -22,6 +22,7 @@ pub(crate) struct CurrentConnectionGuard {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SubscriptionState {
     Reconciling,
+    AwaitingFirstInput,
     Available,
     ExitPending,
 }

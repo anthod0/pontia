@@ -18,7 +18,12 @@ use tokio::{
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 
 pub type Socket = WebSocketStream<UnixStream>;
-type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value>>>>>;
+enum RpcResponse {
+    Success(Value),
+    Rejected(Value),
+}
+
+type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<RpcResponse>>>>>;
 
 pub async fn open(path: &Path) -> Result<Socket> {
     tokio::time::timeout(Duration::from_secs(5), async {
@@ -143,10 +148,10 @@ impl Connection {
                                     let _ = events.send(value);
                                 } else if let Some(id) = value["id"].as_u64()
                                     && let Some(reply) = pending.lock().await.remove(&id) {
-                                    let result = if let Some(error) = value.get("error") {
-                                        Err(Error::StateConflict(format!("Codex RPC: {error}")))
-                                    } else { Ok(value["result"].clone()) };
-                                    let _ = reply.send(result);
+                                    let response = if let Some(error) = value.get("error") {
+                                        RpcResponse::Rejected(error.clone())
+                                    } else { RpcResponse::Success(value["result"].clone()) };
+                                    let _ = reply.send(Ok(response));
                                 }
                             }
                             Some(Ok(Message::Ping(bytes))) => { if socket.send(Message::Pong(bytes)).await.is_err() { break; } }
@@ -190,7 +195,35 @@ impl Connection {
         }
         .await;
         self.pending.lock().await.remove(&id);
-        result
+        match result? {
+            RpcResponse::Success(value) => Ok(value),
+            RpcResponse::Rejected(error) => {
+                // Codex reports this pre-materialization state without a dedicated error code.
+                if error["code"] == -32600
+                    && let Some(thread) = params["threadId"].as_str()
+                {
+                    let rejection = match method {
+                        "thread/turns/list" => Some((
+                            "codex_thread_not_materialized",
+                            format!(
+                                "thread {thread} is not materialized yet; thread/turns/list is unavailable before first user message"
+                            ),
+                        )),
+                        "thread/resume" => Some((
+                            "codex_thread_not_persisted",
+                            format!("no rollout found for thread id {thread}"),
+                        )),
+                        _ => None,
+                    };
+                    if let Some((code, message)) = rejection
+                        && error["message"].as_str() == Some(&message)
+                    {
+                        return Err(Error::Conflict { code, message });
+                    }
+                }
+                Err(Error::StateConflict(format!("Codex RPC: {error}")))
+            }
+        }
     }
 
     pub async fn close(&self) {

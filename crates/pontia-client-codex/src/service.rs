@@ -113,7 +113,10 @@ impl CodexService {
         let profile = self.profiles().codex_binding(session_id).await?;
         let (thread, turns) = match binding {
             Some(binding) => {
-                if runtime.subscription(session_id).await != Some(SubscriptionState::Available) {
+                if !matches!(
+                    runtime.subscription(session_id).await,
+                    Some(SubscriptionState::Available | SubscriptionState::AwaitingFirstInput)
+                ) {
                     self.subscribe(session_id, &runtime, &binding.client_session_key)
                         .await?;
                 }
@@ -123,7 +126,10 @@ impl CodexService {
                         json!({"threadId":binding.client_session_key,"includeTurns":false}),
                     )
                     .await?;
-                let turns = self.turns(&connection, &binding.client_session_key).await?;
+                let turns = self
+                    .turns(&connection, &binding.client_session_key)
+                    .await?
+                    .unwrap_or_default();
                 (snapshot["thread"].clone(), turns)
             }
             None => {
@@ -154,10 +160,7 @@ impl CodexService {
                         .await?;
                 }
                 self.model_snapshot(session_id, &runtime, &response).await?;
-                let thread_id = string(&thread, "id")?;
-                let snapshot_turns = self.turns(&connection, thread_id).await?;
-                self.reconcile_turns(session_id, &runtime, &snapshot_turns)
-                    .await?;
+                // A newly created thread has no turns and cannot list history before first input.
                 self.ready(session_id, &runtime, &thread).await?;
                 runtime
                     .set_subscription(session_id, SubscriptionState::Available)
@@ -198,6 +201,12 @@ impl CodexService {
         let result = connection.call(method, params).await;
         runtime.current_guard().await?;
         let accepted = result?;
+        // turn/start subscribes its connection even when the thread was only loaded in memory.
+        if runtime.subscription(session_id).await == Some(SubscriptionState::AwaitingFirstInput) {
+            runtime
+                .set_subscription(session_id, SubscriptionState::Available)
+                .await;
+        }
         Ok(pontia_application::control::InputReceipt {
             native_turn_id: accepted
                 .get("turnId")
@@ -225,7 +234,10 @@ impl CodexService {
         .fetch_one(&self.pool)
         .await?;
         let connection = runtime.connection().await?;
-        let turns = self.turns(&connection, &binding.client_session_key).await?;
+        let turns = self
+            .turns(&connection, &binding.client_session_key)
+            .await?
+            .unwrap_or_default();
         if !turns
             .iter()
             .any(|turn| turn["status"] == "inProgress" && turn["id"] == native)
@@ -333,12 +345,41 @@ impl CodexService {
             .set_subscription(session, SubscriptionState::Reconciling)
             .await;
         let connection = runtime.connection().await?;
-        let result = connection
+        let resumed = connection
             .call(
                 "thread/resume",
                 self.resume_params(session, thread_id).await?,
             )
-            .await?;
+            .await;
+        let (result, turns, subscription) = match resumed {
+            Ok(result) => {
+                let turns = self
+                    .turns(&connection, thread_id)
+                    .await?
+                    .unwrap_or_default();
+                (result, turns, SubscriptionState::Available)
+            }
+            Err(
+                error @ Error::Conflict {
+                    code: "codex_thread_not_persisted",
+                    ..
+                },
+            ) => {
+                // An existing, loaded thread can accept first input even though it has no rollout
+                // to resume. Reading metadata does not establish a subscription.
+                let result = connection
+                    .call(
+                        "thread/read",
+                        json!({"threadId":thread_id,"includeTurns":false}),
+                    )
+                    .await?;
+                if self.turns(&connection, thread_id).await?.is_some() {
+                    return Err(error);
+                }
+                (result, Vec::new(), SubscriptionState::AwaitingFirstInput)
+            }
+            Err(error) => return Err(error),
+        };
         runtime.current_guard().await?;
         if string(&result["thread"], "id")? != thread_id {
             return Err(Error::ControlUnknown(
@@ -346,13 +387,12 @@ impl CodexService {
             ));
         }
         self.bind(session, runtime, &result["thread"]).await?;
-        self.model_snapshot(session, runtime, &result).await?;
-        let turns = self.turns(&connection, thread_id).await?;
+        if subscription == SubscriptionState::Available {
+            self.model_snapshot(session, runtime, &result).await?;
+        }
         self.reconcile_turns(session, runtime, &turns).await?;
         self.ready(session, runtime, &result["thread"]).await?;
-        runtime
-            .set_subscription(session, SubscriptionState::Available)
-            .await;
+        runtime.set_subscription(session, subscription).await;
         self.event_ingest.control_available(session);
         Ok(())
     }
