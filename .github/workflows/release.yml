@@ -228,21 +228,52 @@ jobs:
     name: Publish Pi client
     needs:
       - detect
-      - release
+      - build
+      - build-dashboard
     if: ${{ needs.detect.outputs.publish == 'true' }}
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/publish-pi-client.yml
-    with:
-      version: ${{ needs.detect.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install npm with Trusted Publishing support
+        run: npm install --global npm@11
+      - name: Stage package with the product version
+        env:
+          STAGING: ${{ runner.temp }}/pi-client
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          mkdir "$STAGING"
+          cp clients/pi/package.json clients/pi/README.md clients/pi/LICENSE "$STAGING/"
+          cp -a clients/pi/src "$STAGING/src"
+          python3 scripts/release-version.py materialize-npm "$STAGING/package.json"
+          test "$(jq -r .version "$STAGING/package.json")" = "$VERSION"
+          npm pack --dry-run "$STAGING"
+      - name: Publish with Trusted Publishing
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+          STAGING: ${{ runner.temp }}/pi-client
+        run: |
+          if npm view "@pontia/pi-client-plugin@$VERSION" version >/dev/null 2>&1; then
+            echo "@pontia/pi-client-plugin@$VERSION is already published"
+          else
+            npm publish "$STAGING" --access public
+          fi
 
   deploy-cloudflare:
     name: Deploy Cloudflare ${{ matrix.app }}
     needs:
       - detect
-      - release
-      - publish-pi-client
+      - build
+      - build-dashboard
     if: ${{ needs.detect.outputs.publish == 'true' }}
     runs-on: ubuntu-24.04
     strategy:
