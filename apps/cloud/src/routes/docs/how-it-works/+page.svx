@@ -1,0 +1,242 @@
+<svelte:head>
+	<title>How Pontia works — Pontia</title>
+	<meta name="description" content="Understand where Pontia runs agents and how local and remote access work." />
+</svelte:head>
+
+# How Pontia works
+
+Pontia separates agent execution from remote access. Coding agents run on your device, alongside your development tools and project files. Pontia adds a local control plane and an optional encrypted path to the remote dashboard.
+
+<figure
+	class="architecture-diagram"
+	role="img"
+	aria-label="A remote browser connects through an Edge over an end-to-end encrypted path. On the device, pontiad coordinates an agent client that works in the project workspace. Pontia Cloud provides identity, device registration, and authorization outside the dashboard traffic path."
+>
+	<div class="cloud-service">
+		<strong>Pontia Cloud</strong>
+		<span>Identity · device registration · authorization</span>
+		<small>Coordinates remote access, but is not in the dashboard traffic path</small>
+	</div>
+	<div class="connection-map">
+		<div class="access-paths">
+			<div class="access-path">
+				<span class="path-label">Remote access</span>
+				<span class="diagram-node">Remote browser</span>
+				<span class="diagram-arrow" aria-hidden="true">→</span>
+				<span class="diagram-node">Edge<small>Encrypted relay</small></span>
+			</div>
+		</div>
+		<span class="diagram-arrow entry-arrow" aria-hidden="true">→</span>
+		<div class="device-boundary">
+			<span class="boundary-label">Your device</span>
+			<div class="device-flow">
+				<span class="diagram-node"><code>pontiad</code><small>Control plane</small></span>
+				<span class="diagram-arrow" aria-hidden="true">→</span>
+				<span class="diagram-node">Agent client</span>
+				<span class="diagram-arrow" aria-hidden="true">→</span>
+				<span class="diagram-node">Workspace<small>Files and tools</small></span>
+			</div>
+		</div>
+	</div>
+	<figcaption>Remote dashboard traffic is encrypted end to end between the browser and your device.</figcaption>
+</figure>
+
+## The local control plane
+
+The `pontiad` service runs on your device. It coordinates agent sessions, communicates with supported agent clients such as pi and Codex, and serves the local dashboard and API.
+
+The agent client executes commands and uses the files and tools installed on the device. Pontia does not move that execution environment to Pontia Cloud.
+
+## Local and remote dashboards
+
+The local dashboard connects directly to `pontiad`, normally through its loopback address. It remains available without a Pontia Cloud account or remote access.
+
+For remote access, the browser signs in through Pontia Cloud and receives authorization to connect to a registered device. The browser and device then establish an end-to-end encrypted session through the selected Edge. The Edge relays the encrypted traffic but cannot decrypt it.
+
+## Pontia Cloud and Edge
+
+Pontia Cloud provides identity and coordination for remote access. It manages user sign-in, registered devices, connection authorization, and Edge discovery. It does not run coding agents or store project files.
+
+An Edge provides connectivity between a remote browser and a device. You can use an official Edge or deploy your own. Self-hosting changes where encrypted traffic is relayed; Pontia Cloud continues to provide account, device registration, and authorization services.
+
+## Sessions and agent clients
+
+A Session is Pontia's persistent view of a unit of agent work. The selected agent client performs the work, while Pontia records enough state to display and control the Session from the dashboard.
+
+This separation lets the dashboard create, observe, continue, and interrupt supported agent sessions without becoming the agent execution environment itself.
+
+## Data boundaries
+
+| Component | Responsibility | Access to project files |
+| --- | --- | --- |
+| Your device and `pontiad` | Runs the local control plane and coordinates agents | Yes, within the workspaces exposed to Pontia |
+| Agent client | Performs agent work with local tools | According to the client's local permissions |
+| Browser | Presents the dashboard and sends controls | No direct filesystem access; it displays data returned by the device |
+| Edge | Relays end-to-end encrypted dashboard traffic | No |
+| Pontia Cloud | Handles identity, device registration, and remote authorization | No |
+
+To set up a device, continue with [Getting started](/docs/getting-started). To connect from another device, see [Remote access](/docs/remote-access).
+
+<style>
+	.architecture-diagram {
+		margin: 32px 0 44px;
+		border: 1px solid var(--border);
+		background: var(--surface);
+		padding: 24px;
+	}
+
+	.cloud-service {
+		display: grid;
+		justify-items: center;
+		max-width: 420px;
+		margin: 0 auto 28px;
+		border: 1px dashed #9ebbbc;
+		background: var(--background);
+		padding: 14px 18px;
+		text-align: center;
+	}
+
+	.cloud-service strong,
+	.diagram-node,
+	.boundary-label {
+		color: var(--heading);
+	}
+
+	.cloud-service span,
+	.cloud-service small,
+	.diagram-node small,
+	figcaption {
+		color: var(--muted-foreground);
+	}
+
+	.cloud-service span {
+		margin-top: 3px;
+		font-size: 13px;
+	}
+
+	.cloud-service small {
+		margin-top: 7px;
+		font-size: 11px;
+	}
+
+	.connection-map {
+		display: grid;
+		grid-template-columns: minmax(230px, 0.85fr) auto minmax(310px, 1.15fr);
+		align-items: center;
+		gap: 18px;
+	}
+
+	.access-paths {
+		display: grid;
+		gap: 20px;
+	}
+
+	.access-path {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+		align-items: center;
+		gap: 8px;
+	}
+
+	.path-label {
+		grid-column: 1 / -1;
+		color: var(--muted-foreground);
+		font-size: 11px;
+		font-weight: 500;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.diagram-node {
+		display: grid;
+		place-items: center;
+		min-height: 58px;
+		border: 1px solid var(--border);
+		background: var(--background);
+		padding: 10px;
+		font-size: 13px;
+		font-weight: 500;
+		text-align: center;
+	}
+
+	.diagram-node small {
+		margin-top: 3px;
+		font-size: 10px;
+		font-weight: 400;
+	}
+
+	.diagram-node :global(code) {
+		border: 0;
+		background: transparent;
+		padding: 0;
+		font-size: 13px;
+	}
+
+	.diagram-arrow {
+		color: var(--primary);
+		font: 18px var(--font-mono);
+	}
+
+	.entry-arrow {
+		transform: translateY(13px);
+	}
+
+	.device-boundary {
+		border: 1px solid var(--primary);
+		padding: 12px;
+	}
+
+	.boundary-label {
+		display: block;
+		margin-bottom: 10px;
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.device-flow {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+		align-items: center;
+		gap: 7px;
+	}
+
+	figcaption {
+		margin-top: 18px;
+		font-size: 12px;
+		text-align: center;
+	}
+
+	@media (max-width: 720px) {
+		.architecture-diagram {
+			padding: 18px;
+		}
+
+		.connection-map {
+			grid-template-columns: 1fr;
+		}
+
+		.entry-arrow {
+			justify-self: center;
+			transform: rotate(90deg);
+		}
+	}
+
+	@media (max-width: 480px) {
+		.access-path,
+		.device-flow {
+			grid-template-columns: 1fr;
+		}
+
+		.access-path .diagram-arrow,
+		.device-flow .diagram-arrow {
+			justify-self: center;
+			transform: rotate(90deg);
+		}
+
+		.path-label {
+			grid-column: 1;
+		}
+	}
+</style>

@@ -10,6 +10,7 @@ Pontia turns your device into an agent cloud. Coding agents run with the tools a
 ## Start here
 
 - [Getting started](/docs/getting-started) — install Pontia, choose your agent integrations, and initialize the local service.
+- [How Pontia works](/docs/how-it-works) — understand local execution, remote connectivity, and the boundaries between your device, Pontia Cloud, and Edge.
 - [Remote access](/docs/remote-access) — sign in, register your device, and control its agent sessions from the web.
 
 ## How Pontia works

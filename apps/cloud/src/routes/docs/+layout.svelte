@@ -48,6 +48,7 @@
 		<a class="docs-title" href="/docs">Documentation</a>
 		<nav aria-label="Documentation sections">
 			<a href="/docs/getting-started">Getting started</a>
+			<a href="/docs/how-it-works">How Pontia works</a>
 			<a href="/docs/remote-access">Remote access</a>
 		</nav>
 	</aside>
@@ -79,6 +80,10 @@
 	.docs-content :global(.code-copy-button:focus-visible) { outline-color: #8ec07c; }
 	.docs-content :global(blockquote) { margin: 24px 0; border-left: 3px solid var(--primary); background: var(--surface); padding: 14px 18px; }
 	.docs-content :global(blockquote p) { margin: 0; }
+	.docs-content :global(table) { width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px; line-height: 1.6; }
+	.docs-content :global(th), .docs-content :global(td) { border-bottom: 1px solid var(--border); padding: 10px 12px; text-align: left; vertical-align: top; }
+	.docs-content :global(th) { color: var(--heading); font-weight: 500; }
+	.docs-content :global(td) { color: var(--muted-foreground); }
 	.docs-content :global(hr) { margin: 40px 0; border: 0; border-top: 1px solid var(--border); }
 
 	@media (max-width: 760px) {
