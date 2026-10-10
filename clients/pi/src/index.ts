@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { HistoryContext } from "./history.js";
 import { connectPi, RpcError, type PiConnection, type ControlInput } from "./control-socket.js";
 import { defaultHookLogFile, type EnvLike, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
@@ -336,6 +337,13 @@ export function createPontiaPiExtension(
           ctx.abort();
           ctx.shutdown();
         },
+      },
+      () => {
+        lifecycleContext();
+        const manager = piContext!.sessionManager;
+        if (manager.getSessionId() !== boundSessionContext?.clientSessionKey)
+          throw new Error("Pi history native Session identity changed");
+        return { generation, sessionManager: manager } satisfies HistoryContext;
       },
     );
     if (generation !== controlGeneration) {

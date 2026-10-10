@@ -1,3 +1,6 @@
+import { RpcError } from "./rpc-error.js";
+export { RpcError } from "./rpc-error.js";
+import { readHistory, type HistoryContext } from "./history.js";
 import { createConnection, type Socket } from "node:net";
 import { isAbsolute, join } from "node:path";
 
@@ -35,13 +38,6 @@ export interface PiConnection {
   registered(identity: ControlIdentity): void;
   close(): Promise<void>;
 }
-export class RpcError extends Error {
-  readonly code: number;
-  constructor(code: number, message: string) {
-    super(message);
-    this.code = code;
-  }
-}
 
 export function piSocketPath(pontiaHome: string): string {
   const path = join(pontiaHome, "state", "pi", "rpc.sock");
@@ -68,6 +64,7 @@ class RpcSocket {
   private onSubmit: (input: ControlInput) => void;
   private models?: ModelControl;
   private lifecycle?: LifecycleControl;
+  private history?: () => HistoryContext;
   private onReplay?: (inboxMessageId: string) => void;
 
   constructor(
@@ -76,12 +73,14 @@ class RpcSocket {
     models?: ModelControl,
     onReplay?: (inboxMessageId: string) => void,
     lifecycle?: LifecycleControl,
+    history?: () => HistoryContext,
   ) {
     this.socket = socket;
     this.onSubmit = onSubmit;
     this.models = models;
     this.onReplay = onReplay;
     this.lifecycle = lifecycle;
+    this.history = history;
     socket.on("data", (chunk: Buffer) => this.receive(chunk));
     socket.on("error", (error) => this.fail(error));
     socket.on("close", () =>
@@ -179,6 +178,17 @@ class RpcSocket {
       const params = message.params === undefined ? {} : message.params;
       if (!params || typeof params !== "object" || Array.isArray(params)) {
         error(-32602, "Expected named parameters");
+        return;
+      }
+      if (message.method === "history.read" && this.history) {
+        try {
+          respond({ result: readHistory(this.history(), params) });
+        } catch (failure) {
+          error(
+            failure instanceof RpcError ? failure.code : -32009,
+            failure instanceof Error ? failure.message : String(failure),
+          );
+        }
         return;
       }
       if (message.method === "ping") {
@@ -299,6 +309,7 @@ export async function connectPi(
   models?: ModelControl,
   onReplay?: (inboxMessageId: string) => void,
   lifecycle?: LifecycleControl,
+  history?: () => HistoryContext,
 ): Promise<PiConnection> {
   const path = piSocketPath(pontiaHome);
   let identity: ControlIdentity | undefined;
@@ -369,6 +380,7 @@ export async function connectPi(
       reportingOnly ? undefined : models,
       reportingOnly ? undefined : onReplay,
       reportingOnly ? undefined : lifecycle,
+      reportingOnly ? undefined : history,
     );
     peers.add(peer);
     socket.once("close", () => {

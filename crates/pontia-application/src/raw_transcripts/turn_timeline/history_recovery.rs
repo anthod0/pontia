@@ -36,9 +36,11 @@ impl TurnTimelineService {
         let Some(data) = self.clients.data(&binding.client_type) else {
             return Ok(());
         };
-        let Some(recoverer) = data.history_recovery() else {
+        let history = self.native_history(&binding).await;
+        let recoverer = data.history_recovery();
+        if history.is_none() && recoverer.is_none() {
             return Ok(());
-        };
+        }
         let rows = SqliteTurnRepository::new(self.pool.clone())
             .list_turns(session_id)
             .await?;
@@ -47,6 +49,7 @@ impl TurnTimelineService {
             .map(|turn| {
                 Ok(TurnHistoryCandidate {
                     turn_id: turn.turn_id,
+                    input_summary: turn.input_summary,
                     head_cursor: turn.head_cursor,
                     tail_cursor: turn.tail_cursor,
                     state: turn.state.parse()?,
@@ -55,31 +58,54 @@ impl TurnTimelineService {
             })
             .collect::<Result<Vec<_>>>()?;
         if !turns.iter().any(|turn| {
-            turn.head_cursor.is_some()
-                && (turn.topology == TurnTopology::Unknown
+            turn.head_cursor.is_none()
+                || (turn.topology == TurnTopology::Unknown
                     || (turn.state == TurnState::Abandoned && turn.tail_cursor.is_none()))
         }) {
             return Ok(());
         }
-        let source = data
-            .timeline()
-            .resolver
-            .resolve(&AgentBindingResolveRequest {
-                id: binding.id.clone(),
-                session_id: binding.session_id.clone(),
-                client_type: binding.client_type.clone(),
-                client_session_key: binding.client_session_key.clone(),
-                client_session_file: binding.client_session_file.clone().map(Into::into),
-            })?;
-        for recovered in recoverer.recover(HistoryRecoveryRequest {
-            source,
-            turns: turns.clone(),
-        })? {
+        let recovered_turns = if let Some(history) = history {
+            history.recover(turns.clone()).await?
+        } else {
+            let source = data
+                .timeline()
+                .resolver
+                .resolve(&AgentBindingResolveRequest {
+                    id: binding.id.clone(),
+                    session_id: binding.session_id.clone(),
+                    client_type: binding.client_type.clone(),
+                    client_session_key: binding.client_session_key.clone(),
+                    client_session_file: binding.client_session_file.clone().map(Into::into),
+                })?;
+            recoverer
+                .expect("history recoverer")
+                .recover(HistoryRecoveryRequest {
+                    source,
+                    turns: turns.clone(),
+                })?
+        };
+        for recovered in recovered_turns {
             let Some(turn) = turns.iter().find(|turn| turn.turn_id == recovered.turn_id) else {
                 return Err(pontia_core::Error::Domain(
                     "History recovery returned an unknown Turn".into(),
                 ));
             };
+            if let Some(cursor) = recovered.head_cursor {
+                if turn.head_cursor.is_some() {
+                    return Err(pontia_core::Error::Domain(
+                        "History recovery cannot replace a Turn head".into(),
+                    ));
+                }
+                self.events
+                    .recover_timeline_boundary(
+                        session_id,
+                        &turn.turn_id,
+                        &binding.client_type,
+                        &binding.id,
+                        TimelineBoundary::head(cursor),
+                    )
+                    .await?;
+            }
             if let Some(cursor) = recovered.tail_cursor {
                 if turn.state != TurnState::Abandoned || turn.tail_cursor.is_some() {
                     return Err(pontia_core::Error::Domain(

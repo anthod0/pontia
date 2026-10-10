@@ -13,7 +13,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -135,16 +135,18 @@ pub async fn serve_connection(state: AppState, stream: UnixStream) {
     let channel = Arc::new(PiChannel {
         process_id,
         peer: peer.clone(),
-        handling: AtomicBool::new(false),
+        handling: AtomicUsize::new(0),
         invalidated: AtomicBool::new(false),
     });
     let mut registered = None;
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let mut reads = JoinSet::new();
     loop {
         let request = tokio::select! {
             biased;
             _ = peer.closed() => break,
             _ = tokio::time::sleep_until(deadline), if registered.is_none() => break,
+            Some(_) = reads.join_next(), if !reads.is_empty() => continue,
             request = requests.recv() => request,
         };
         let Some(request) = request else { break };
@@ -173,32 +175,63 @@ pub async fn serve_connection(state: AppState, stream: UnixStream) {
             }
             continue;
         }
-        channel.handling.store(true, Ordering::SeqCst);
+        if request.method == "branch.resolve" {
+            if reads.len() >= 16 {
+                if peer
+                    .reply_error(request.id, -32009, "Too many outstanding history reads")
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+                continue;
+            }
+            let state = state.clone();
+            let channel = channel.clone();
+            let mut identity = registered.clone();
+            channel.handling.fetch_add(1, Ordering::SeqCst);
+            reads.spawn(async move {
+                let _guard = ReplyGuard(&channel);
+                let result = dispatch(&state, &channel, &request, &mut identity).await;
+                if reply_result(&channel.peer, request.id, result)
+                    .await
+                    .is_err()
+                {
+                    channel.peer.close();
+                }
+            });
+            continue;
+        }
+        channel.handling.fetch_add(1, Ordering::SeqCst);
         let reply_guard = ReplyGuard(&channel);
         let result = dispatch(&state, &channel, &request, &mut registered).await;
-        let response = match result {
-            Ok(value) => peer.reply(request.id, value).await,
-            Err(error) => {
-                let code = match &error {
-                    Error::NotFound(_) => -32004,
-                    Error::StateConflict(_) | Error::CapabilityUnavailable(_) => -32009,
-                    Error::Domain(_) => -32009,
-                    Error::Serialization(_) => -32602,
-                    _ => -32603,
-                };
-                let message = match &error {
-                    Error::Domain(message)
-                    | Error::StateConflict(message)
-                    | Error::NotFound(message)
-                    | Error::CapabilityUnavailable(message) => message.clone(),
-                    _ => error.to_string(),
-                };
-                peer.reply_error(request.id, code, &message).await
-            }
-        };
+        let response = reply_result(&peer, request.id, result).await;
         drop(reply_guard);
         if response.is_err() {
             break;
+        }
+    }
+}
+
+async fn reply_result(peer: &PiRpcPeer, id: Option<Value>, result: Result<Value>) -> Result<()> {
+    match result {
+        Ok(value) => peer.reply(id, value).await,
+        Err(error) => {
+            let code = match &error {
+                Error::NotFound(_) => -32004,
+                Error::StateConflict(_) | Error::CapabilityUnavailable(_) => -32009,
+                Error::Domain(_) => -32009,
+                Error::Serialization(_) => -32602,
+                _ => -32603,
+            };
+            let message = match &error {
+                Error::Domain(message)
+                | Error::StateConflict(message)
+                | Error::NotFound(message)
+                | Error::CapabilityUnavailable(message) => message.clone(),
+                _ => error.to_string(),
+            };
+            peer.reply_error(id, code, &message).await
         }
     }
 }
@@ -209,7 +242,7 @@ struct Registration {
     version: u32,
     binding: RuntimeBindingUpsertRequest,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Attach {
     version: u32,
@@ -263,9 +296,18 @@ async fn dispatch(
                 "Pi branch resolution does not match its connection identity".into(),
             ));
         }
+        // Reverse history calls must not hold the fact/connection identity gate.
+        drop(_identity_guard);
         let replay = pontia_application::BranchReplayService::new(state.db())
             .with_clients(state.clients())
+            .with_history_control(state.client_control().clone())
             .resolve_command(query)
+            .await?;
+        let _guard = state.client_control().lock_identity().await;
+        let current: Arc<dyn pontia_application::ClientControlChannel> = channel.clone();
+        state
+            .client_control()
+            .validate_connection(&identity.session_id, &identity.runtime_id, &current)
             .await?;
         return Ok(json!({"branch_replay": replay}));
     }
@@ -359,7 +401,7 @@ async fn dispatch(
 struct PiChannel {
     process_id: Option<u32>,
     peer: Arc<PiRpcPeer>,
-    handling: AtomicBool,
+    handling: AtomicUsize,
     invalidated: AtomicBool,
 }
 
@@ -367,14 +409,21 @@ struct PiChannel {
 struct ReplyGuard<'a>(&'a PiChannel);
 impl Drop for ReplyGuard<'_> {
     fn drop(&mut self) {
-        self.0.handling.store(false, Ordering::SeqCst);
-        if self.0.invalidated.load(Ordering::SeqCst) {
+        if self.0.handling.fetch_sub(1, Ordering::SeqCst) == 1
+            && self.0.invalidated.load(Ordering::SeqCst)
+        {
             self.0.peer.close();
         }
     }
 }
 
 impl pontia_application::ClientControlChannel for PiChannel {
+    fn native_history(
+        &self,
+        params: Value,
+    ) -> pontia_application::ClientControlOperation<'_, Value> {
+        self.peer.native_history(params)
+    }
     fn process_id(&self) -> Option<u32> {
         self.process_id
     }
@@ -383,7 +432,7 @@ impl pontia_application::ClientControlChannel for PiChannel {
     }
     fn invalidate(&self) {
         self.invalidated.store(true, Ordering::SeqCst);
-        if !self.handling.load(Ordering::SeqCst) {
+        if self.handling.load(Ordering::SeqCst) == 0 {
             self.peer.close();
         }
     }
@@ -423,6 +472,12 @@ impl pontia_application::ClientControlChannel for PiChannel {
 }
 
 impl pontia_application::ClientControlChannel for PiRpcPeer {
+    fn native_history(
+        &self,
+        params: Value,
+    ) -> pontia_application::ClientControlOperation<'_, Value> {
+        Box::pin(async move { self.call("history.read", params).await })
+    }
     fn available(&self) -> bool {
         !self.is_closed()
     }

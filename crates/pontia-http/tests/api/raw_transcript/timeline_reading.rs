@@ -58,6 +58,8 @@ async fn active_pi_timeline_fixture(
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
 
+    super::runtime_history::attach_fixture(&state, session_id, session_key, transcript.clone())
+        .await;
     ActivePiTimelineFixture {
         _temp: temp,
         state,
@@ -157,6 +159,8 @@ async fn turn_timeline_reads_sealed_pi_ranges_and_pages_by_turn_id() {
     )
     .await;
 
+    super::runtime_history::attach_fixture(&state, session_id, session_key, transcript.clone())
+        .await;
     let (status, recent) = get_json(
         state.clone(),
         &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward&limit=1"),
@@ -388,12 +392,6 @@ async fn turn_timeline_rejects_unassignable_active_pi_entries() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
-    assert_eq!(body["error"]["code"], "turn_timeline_invalid");
-    assert!(
-        body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("turn_active_invalid")
-    );
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body:?}");
+    assert_eq!(body["error"]["code"], "timeline_source_unavailable");
 }

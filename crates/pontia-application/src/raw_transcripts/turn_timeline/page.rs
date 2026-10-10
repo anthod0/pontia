@@ -13,7 +13,9 @@ impl TurnTimelineService {
         anchor_turn_id: Option<String>,
         limit: usize,
     ) -> Result<TurnTimelinePage, TurnTimelineServiceError> {
-        if ExternalQueryService::new(self.pool.clone())
+        let scoped = self.request_scope();
+        let service = &scoped;
+        if ExternalQueryService::new(service.pool.clone())
             .get_session(&session_id)
             .await?
             .is_none()
@@ -21,8 +23,8 @@ impl TurnTimelineService {
             return Err(TurnTimelineServiceError::SessionNotFound);
         }
 
-        self.try_recover_history(&session_id).await;
-        let turns = SqliteTurnRepository::new(self.pool.clone())
+        service.try_recover_history(&session_id).await;
+        let turns = SqliteTurnRepository::new(service.pool.clone())
             .list_turns(&session_id)
             .await?;
         if turns.is_empty() {
@@ -57,7 +59,7 @@ impl TurnTimelineService {
         let next_turn_id = directional.get(limit).map(|turn| turn.turn_id.clone());
         let mut selected = directional.into_iter().take(limit).collect::<Vec<_>>();
         selected.sort_by(|left, right| left.turn_id.cmp(&right.turn_id));
-        let items = self
+        let items = service
             .read_selected_turns(&session_id, &turns, &selected)
             .await?;
 

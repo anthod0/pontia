@@ -10,7 +10,7 @@ use pontia_application::client_contract::raw_transcripts::{
     TurnTimelineReader,
 };
 
-use super::mapping::pi_entry_to_items;
+use super::super::mapping::pi_entry_to_items;
 
 const CURSOR_PREFIX: &str = "pi-jsonl-v2";
 

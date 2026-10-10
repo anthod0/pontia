@@ -1,8 +1,5 @@
 use crate::launch::PiLauncher;
-use crate::raw_transcripts::{
-    PiAgentBindingResolver, PiTimelineAdapter, PiTurnUserEntryResolveRequest,
-    PiTurnUserEntryResolver,
-};
+use crate::raw_transcripts::{PiAgentBindingResolver, PiTimelineAdapter};
 use pontia_application::client_contract::{
     TimelineBoundaryBackend, TurnTimelineBackend, TurnTopologyBackend,
 };
@@ -42,8 +39,6 @@ impl ClientData for PiData {
             _ => event.payload.pointer("/timeline_anchor/terminal_leaf_id"),
         }
         .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
         .map(str::to_owned);
         let topology = event.payload.as_object_mut().and_then(|payload| {
             payload.remove("timeline_anchor");
@@ -53,6 +48,75 @@ impl ClientData for PiData {
             entry_anchor,
             topology,
         }
+    }
+    fn native_history(
+        &self,
+        binding: pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
+        control: Option<pontia_application::clients::ClientControlService>,
+    ) -> Option<Arc<dyn pontia_application::client_contract::native_history::NativeHistory>> {
+        Some(crate::history::PiHistory::new(binding, control))
+    }
+    fn capture_native_boundary(
+        &self,
+        binding: &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
+        kind: pontia_application::client_contract::raw_transcripts::TimelineBoundaryCaptureKind,
+        anchor: Option<String>,
+        first: bool,
+        head: Option<&str>,
+    ) -> Option<
+        Result<pontia_application::client_contract::raw_transcripts::CapturedTimelineBoundary>,
+    > {
+        use pontia_application::client_contract::raw_transcripts::{
+            CapturedTimelineBoundary, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
+            TimelineBoundaryCapturer,
+        };
+        Some((|| {
+            if kind == TimelineBoundaryCaptureKind::Tail
+                && head.is_some_and(|h| !crate::history::PiEntryCursor::is_entry(h))
+            {
+                let head = head.unwrap();
+                crate::raw_transcripts::PiJsonlV2Cursor::decode(head, &binding.id)?;
+                use pontia_application::client_contract::raw_transcripts::AgentBindingResolver;
+                let source = PiAgentBindingResolver::new().resolve(binding)?;
+                return PiTimelineAdapter::new().capture_boundary(TimelineBoundaryCaptureRequest {
+                    source,
+                    kind,
+                    native_entry_anchor: anchor,
+                    allow_missing_native_entry_anchor: false,
+                });
+            }
+            if let Some(head) = head {
+                crate::history::PiEntryCursor::decode(
+                    head,
+                    &binding.id,
+                    Some(&binding.client_session_key),
+                )?;
+            }
+            if anchor
+                .as_deref()
+                .is_some_and(|id| id.trim().is_empty() || id.len() > 512)
+                || (anchor.is_none() && !(first && kind == TimelineBoundaryCaptureKind::Head))
+            {
+                return Err(Error::Domain(
+                    "cursor_invalid: native entry anchor required".into(),
+                ));
+            }
+            if binding.client_session_key.trim().is_empty() {
+                return Err(Error::Domain(
+                    "cursor_invalid: native Session identity missing".into(),
+                ));
+            }
+            Ok(CapturedTimelineBoundary {
+                kind,
+                cursor: crate::history::PiEntryCursor {
+                    binding_id: binding.id.clone(),
+                    session_id: binding.client_session_key.clone(),
+                    anchor,
+                    relation: "after".into(),
+                }
+                .encode(),
+            })
+        })())
     }
     fn timeline(&self) -> TurnTimelineBackend {
         TurnTimelineBackend {
@@ -78,34 +142,9 @@ impl ClientData for PiData {
     > {
         Some(Box::new(PiTimelineAdapter::new()))
     }
-    fn branch_target(&self, request: BranchTargetRequest) -> Result<String> {
-        let binding = request.binding;
-        let source = self
-            .timeline()
-            .resolver
-            .resolve(
-                &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest {
-                    client_session_key: binding.client_session_key.clone(),
-                    id: binding.id,
-                    session_id: binding.session_id.clone(),
-                    client_type: binding.client_type,
-                    client_session_file: binding.client_session_file.map(Into::into),
-                },
-            )
-            .map_err(|error| {
-                Error::StateConflict(format!("Pi branch target source unavailable: {error}"))
-            })?;
-        PiTimelineAdapter::new()
-            .resolve_user_entry(PiTurnUserEntryResolveRequest {
-                source,
-                session_id: binding.session_id,
-                turn_session_id: request.turn.session_id,
-                turn_id: request.turn.turn_id,
-                is_first_session_turn: request.is_first_session_turn,
-                head_cursor: request.turn.head_cursor,
-                tail_cursor: request.turn.tail_cursor,
-            })
-            .map(|resolved| resolved.entry_id)
-            .map_err(|error| Error::StateConflict(error.to_string()))
+    fn branch_target(&self, _request: BranchTargetRequest) -> Result<String> {
+        Err(Error::CapabilityUnavailable(
+            "Pi branch target requires an asynchronous history source".into(),
+        ))
     }
 }

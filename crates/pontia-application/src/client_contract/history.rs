@@ -8,6 +8,7 @@ use super::{TopologyResolveResult, raw_transcripts::ResolvedAgentBinding};
 #[derive(Clone)]
 pub struct TurnHistoryCandidate {
     pub turn_id: String,
+    pub input_summary: Option<String>,
     pub head_cursor: Option<String>,
     pub tail_cursor: Option<String>,
     pub state: TurnState,
@@ -22,6 +23,7 @@ pub struct HistoryRecoveryRequest {
 
 pub struct RecoveredTurnHistory {
     pub turn_id: String,
+    pub head_cursor: Option<String>,
     pub tail_cursor: Option<String>,
     pub topology: TopologyResolveResult,
 }

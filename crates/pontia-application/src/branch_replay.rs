@@ -30,6 +30,7 @@ pub struct ResolvedBranchReplay {
 pub struct BranchReplayService {
     clients: crate::clients::ClientRegistry,
     pool: SqlitePool,
+    history_control: Option<crate::clients::ClientControlService>,
 }
 
 impl BranchReplayService {
@@ -38,10 +39,15 @@ impl BranchReplayService {
         self
     }
 
+    pub fn with_history_control(mut self, control: crate::clients::ClientControlService) -> Self {
+        self.history_control = Some(control);
+        self
+    }
     pub fn new(pool: SqlitePool) -> Self {
         Self {
             pool,
             clients: Default::default(),
+            history_control: None,
         }
     }
 
@@ -222,6 +228,30 @@ impl BranchReplayService {
         let is_first_session_turn = all_turns
             .first()
             .is_some_and(|turn| turn.turn_id == target_turn_id);
+        if let Some(history) = self.clients.data(&session.client_type).and_then(|data| {
+            data.native_history(
+                crate::client_contract::raw_transcripts::AgentBindingResolveRequest {
+                    id: binding.id.clone(),
+                    session_id: binding.session_id.clone(),
+                    client_type: binding.client_type.clone(),
+                    client_session_key: binding.client_session_key.clone(),
+                    client_session_file: binding.client_session_file.clone().map(Into::into),
+                },
+                self.history_control.clone(),
+            )
+        }) {
+            return history
+                .branch_target(crate::client_contract::raw_transcripts::TurnTimelineRange {
+                    turn_id: target.turn_id.clone(),
+                    is_first_session_turn,
+                    head_cursor: target
+                        .head_cursor
+                        .clone()
+                        .ok_or_else(|| Error::StateConflict("branch target head missing".into()))?,
+                    tail_cursor: target.tail_cursor.clone(),
+                })
+                .await;
+        }
         self.clients
             .data(&session.client_type)
             .ok_or_else(|| Error::CapabilityUnavailable("branch target source unavailable".into()))?

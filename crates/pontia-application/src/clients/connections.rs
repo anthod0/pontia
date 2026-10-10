@@ -376,3 +376,66 @@ impl ClientControlService {
 
 #[cfg(test)]
 mod tests;
+
+/// Pins a read-only source to one confirmed connection across all pages of a snapshot.
+#[derive(Clone)]
+pub struct NativeHistoryConnection {
+    service: ClientControlService,
+    session_id: String,
+    connection: Arc<Connection>,
+}
+impl NativeHistoryConnection {
+    pub async fn validate(&self) -> Result<()> {
+        if !self
+            .service
+            .connection(&self.session_id)
+            .await?
+            .is_some_and(|current| {
+                Arc::ptr_eq(&current, &self.connection) && !current.retired.load(Ordering::SeqCst)
+            })
+        {
+            return Err(Error::CapabilityUnavailable(
+                "source_unavailable: native history connection changed".into(),
+            ));
+        }
+        Ok(())
+    }
+    pub async fn read(&self, params: serde_json::Value) -> Result<serde_json::Value> {
+        self.validate().await?;
+        let expected = self.connection.channel.clone();
+        let result = self
+            .service
+            .request(
+                &self.session_id,
+                &self.connection.runtime_id,
+                false,
+                |channel| async move {
+                    if !Arc::ptr_eq(&channel, &expected) {
+                        return Err(Error::CapabilityUnavailable(
+                            "native history connection changed".into(),
+                        ));
+                    }
+                    channel.native_history(params).await
+                },
+            )
+            .await;
+        self.validate().await?;
+        result.map_err(|_| {
+            Error::CapabilityUnavailable("source_unavailable: native history request failed".into())
+        })
+    }
+}
+impl ClientControlService {
+    pub async fn history_source(&self, session_id: &str) -> Result<NativeHistoryConnection> {
+        let connection = self.connection(session_id).await?.ok_or_else(|| {
+            Error::CapabilityUnavailable(
+                "source_unavailable: no current native history connection".into(),
+            )
+        })?;
+        Ok(NativeHistoryConnection {
+            service: self.clone(),
+            session_id: session_id.into(),
+            connection,
+        })
+    }
+}

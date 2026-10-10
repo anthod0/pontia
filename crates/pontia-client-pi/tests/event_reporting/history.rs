@@ -21,12 +21,40 @@ impl Fixture {
         path
     }
 
+    async fn attach_history(&self, path: std::path::PathBuf) {
+        use pontia_client_pi::rpc::PiRpcPeer;
+        let (left, right) = tokio::net::UnixStream::pair().unwrap();
+        let (daemon, _) = PiRpcPeer::new(left);
+        let (peer, mut requests) = PiRpcPeer::new(right);
+        self.state
+            .client_control()
+            .attach("pi", "session", "runtime", "native", daemon)
+            .await
+            .unwrap();
+        tokio::spawn(async move {
+            while let Some(request) = requests.recv().await {
+                let entries = std::fs::read_to_string(&path)
+                    .unwrap()
+                    .lines()
+                    .map(|line| {
+                        let mut value: Value = serde_json::from_str(line).unwrap();
+                        value["timestamp"] = json!("2026-10-11T00:00:00Z");
+                        value
+                    })
+                    .collect::<Vec<_>>();
+                let last = entries.last().map(|e| e["id"].clone());
+                peer.reply(request.id,json!({"session_id":"native","snapshot":"fixed","entry_count":entries.len(),"upper_entry_id":last,"leaf_id":last,"entries":entries,"continuation":null})).await.unwrap();
+            }
+        });
+    }
+
     async fn history_start(&self, previous: Option<&str>) -> String {
         self.report(
             EventType::TurnStarted,
             None,
             json!({
-                "runtime_id":"runtime", "timeline_anchor":{"previous_leaf_id":previous}
+                "runtime_id":"runtime", "timeline_anchor":{"previous_leaf_id":previous},
+                "topology_context":{"entries":previous.map(|id| vec![json!({"id":id,"kind":"assistant_message"})]).unwrap_or_default()}
             }),
         )
         .await
@@ -112,13 +140,11 @@ async fn crash_recovery_preserves_facts_and_supports_updates_refresh_pagination_
         published.try_recv().unwrap().event_type,
         EventType::TurnStarted
     );
-    assert_eq!(
-        published.try_recv().unwrap().event_type,
-        EventType::TurnTopologyRecovered
-    );
+
     append(&path, "user1", None, "user");
     append(&path, "answer1", Some("user1"), "assistant");
     fixture.history_complete(&first, "answer1").await;
+    fixture.attach_history(path.clone()).await;
     let crashed = fixture.history_start(Some("answer1")).await;
     append(&path, "crash-user", Some("answer1"), "user");
     append(&path, "tool-call", Some("crash-user"), "assistant");
@@ -126,19 +152,14 @@ async fn crash_recovery_preserves_facts_and_supports_updates_refresh_pagination_
     let abandoned = service.get_turn(&crashed).await.unwrap().unwrap();
     assert_eq!(abandoned.state, TurnState::Abandoned);
     assert!(abandoned.tail_cursor.is_none());
-    let partial = TurnTimelineService::new(service.clone())
-        .tree_history("session".into(), None, 20)
-        .await
-        .unwrap();
-    assert_eq!(
-        partial.groups[0].items.last().unwrap().item.content_preview,
-        "answer1"
-    );
-    assert_eq!(
-        serde_json::to_value(partial.groups.last().unwrap()).unwrap()["history_issue"],
-        "range_unavailable"
-    );
+    assert!(matches!(
+        TurnTimelineService::new(service.clone())
+            .tree_history("session".into(), None, 20)
+            .await,
+        Err(pontia_application::TurnTimelineServiceError::SourceUnavailable)
+    ));
     fixture.history_resume().await;
+    fixture.attach_history(path.clone()).await;
     let mut turns = vec![first.clone(), crashed.clone()];
     let mut previous = "tool-call".to_string();
     for index in 0..21 {
@@ -284,6 +305,7 @@ async fn unresolvable_ancestry_does_not_hide_verified_later_turns() {
     append(&path, "tracked-user", Some("untracked-answer"), "user");
     append(&path, "tracked-answer", Some("tracked-user"), "assistant");
     fixture.history_complete(&turn, "tracked-answer").await;
+    fixture.attach_history(path.clone()).await;
     let history = TurnTimelineService::new(fixture.state.event_ingest_service());
     let page = history
         .tree_history("session".into(), None, 20)

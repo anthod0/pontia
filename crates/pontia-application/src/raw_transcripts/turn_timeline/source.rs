@@ -110,6 +110,40 @@ impl TurnTimelineService {
             .binding_for_session(session_id)
             .await?
             .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
+        if let Some(history) = self.native_history(&binding).await {
+            let mut ranges = Vec::new();
+            for turn in selected {
+                let active = active_turn_id.as_deref() == Some(turn.turn_id.as_str())
+                    && newest_turn_id == Some(turn.turn_id.as_str())
+                    && turn.state.parse::<TurnState>()?.is_active();
+                let head = turn.head_cursor.clone().ok_or_else(|| {
+                    TurnTimelineServiceError::TurnUnavailable {
+                        turn_id: turn.turn_id.clone(),
+                    }
+                })?;
+                if !active && turn.tail_cursor.is_none() {
+                    return Err(TurnTimelineServiceError::TurnUnavailable {
+                        turn_id: turn.turn_id.clone(),
+                    });
+                }
+                ranges.push(TurnTimelineRange {
+                    turn_id: turn.turn_id.clone(),
+                    is_first_session_turn: all_turns
+                        .first()
+                        .is_some_and(|first| first.turn_id == turn.turn_id),
+                    head_cursor: head,
+                    tail_cursor: turn.tail_cursor.clone(),
+                });
+            }
+            let items = history
+                .read_ranges(ranges)
+                .await
+                .map_err(classify_reader_error)?;
+            if !binding.discovered {
+                binding_service.mark_discovered(&binding.id).await?;
+            }
+            return Ok(items);
+        }
         let source_pending = !self
             .clients
             .spec(&binding.client_type)

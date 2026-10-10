@@ -1,14 +1,8 @@
-mod mapping;
-mod recovery;
-mod resolver;
-mod source;
-mod timeline;
+mod legacy;
+pub(crate) mod mapping;
 mod tool_use;
-mod user_entry;
-
-pub use resolver::PiAgentBindingResolver;
-pub use timeline::{PiJsonlV2Cursor, PiTimelineAdapter, TimelineBoundaryRelation};
-pub use user_entry::{
-    PiTurnUserEntryResolveError, PiTurnUserEntryResolveRequest, PiTurnUserEntryResolver,
-    ResolvedPiUserEntry,
+pub use legacy::{
+    PiAgentBindingResolver, PiJsonlV2Cursor, PiTimelineAdapter, PiTurnUserEntryResolveError,
+    PiTurnUserEntryResolveRequest, PiTurnUserEntryResolver, ResolvedPiUserEntry,
+    TimelineBoundaryRelation,
 };

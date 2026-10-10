@@ -130,13 +130,62 @@ pub(super) async fn enrich_timeline_boundary(
     } else {
         false
     };
-    let source = match backend.resolver.resolve(&AgentBindingResolveRequest {
+    let binding_request = AgentBindingResolveRequest {
         client_session_key: binding.client_session_key.clone(),
         id: binding.id.clone(),
         session_id: binding.session_id.clone(),
         client_type: binding.client_type.clone(),
         client_session_file: binding.client_session_file.clone().map(PathBuf::from),
+    };
+    let existing_head: Option<String> = if kind == TimelineBoundaryCaptureKind::Tail {
+        match sqlx::query_scalar::<_, Option<String>>(
+            "SELECT head_cursor FROM turns WHERE session_id=? AND turn_id=?",
+        )
+        .bind(&event.session_id)
+        .bind(turn_id)
+        .fetch_optional(pool)
+        .await
+        {
+            Ok(head) => head.flatten(),
+            Err(_) => {
+                warn_timeline_capture_failure(
+                    event,
+                    turn_id,
+                    Some(&binding.id),
+                    "boundary_lookup_failed",
+                );
+                return;
+            }
+        }
+    } else {
+        None
+    };
+    if let Some(result) = clients.data(&event.client_type).and_then(|data| {
+        data.capture_native_boundary(
+            &binding_request,
+            kind,
+            native_entry_anchor.clone(),
+            is_first_session_turn,
+            existing_head.as_deref(),
+        )
     }) {
+        match result {
+            Ok(boundary) => {
+                event.timeline_boundary = Some(match kind {
+                    TimelineBoundaryCaptureKind::Head => TimelineBoundary::head(boundary.cursor),
+                    TimelineBoundaryCaptureKind::Tail => TimelineBoundary::tail(boundary.cursor),
+                })
+            }
+            Err(error) => warn_timeline_capture_failure(
+                event,
+                turn_id,
+                Some(&binding.id),
+                &safe_timeline_adapter_error(&error),
+            ),
+        }
+        return;
+    }
+    let source = match backend.resolver.resolve(&binding_request) {
         Ok(source) => source,
         Err(error) => {
             let adapter_error = safe_timeline_adapter_error(&error);

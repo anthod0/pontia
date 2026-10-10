@@ -30,6 +30,24 @@ pub trait ClientData: Send + Sync {
     ) -> Option<Result<()>> {
         None
     }
+    fn native_history(
+        &self,
+        _binding: super::raw_transcripts::AgentBindingResolveRequest,
+        _control: Option<crate::clients::ClientControlService>,
+    ) -> Option<std::sync::Arc<dyn super::native_history::NativeHistory>> {
+        None
+    }
+    /// Optional identity-based capture. None retains the client's file boundary backend.
+    fn capture_native_boundary(
+        &self,
+        _binding: &super::raw_transcripts::AgentBindingResolveRequest,
+        _request: super::raw_transcripts::TimelineBoundaryCaptureKind,
+        _anchor: Option<String>,
+        _first_turn: bool,
+        _head: Option<&str>,
+    ) -> Option<Result<super::raw_transcripts::CapturedTimelineBoundary>> {
+        None
+    }
     fn timeline(&self) -> TurnTimelineBackend;
     fn boundaries(&self) -> TimelineBoundaryBackend;
     fn topology(&self) -> Option<TurnTopologyBackend>;

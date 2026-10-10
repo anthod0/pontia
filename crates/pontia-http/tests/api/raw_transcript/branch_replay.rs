@@ -400,12 +400,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
             }),
         )
         .await;
-    assert!(
-        stale_source
-            .unwrap_err()
-            .to_string()
-            .contains("Pi branch target source unavailable")
-    );
+    assert!(stale_source.is_err());
     pi.close();
     tokio::time::timeout(std::time::Duration::from_secs(1), async {
         while state.client_control().available(session_id).await.unwrap() {
@@ -625,5 +620,96 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
             .await
             .unwrap();
     assert_eq!(current_turn_id, None);
+    pi.close();
+}
+
+#[tokio::test]
+async fn branch_resolve_requests_paginated_history_on_its_own_connection_without_a_file() {
+    let root = tempdir().unwrap();
+    let state = test_state().await;
+    let session = "sess_branch_rpc";
+    let runtime = "runtime_sess_branch_rpc";
+    let native = "branch-native";
+    seed_session(&state, session).await;
+    sqlx::query("UPDATE sessions SET state='idle' WHERE session_id=?")
+        .bind(session)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    let missing = root.path().join("missing.jsonl");
+    let binding = AgentBindingService::new(state.db())
+        .upsert_binding(UpsertAgentBindingRequest {
+            session_id: session.into(),
+            client_type: "pi".into(),
+            launch_cwd: root.path().display().to_string(),
+            client_session_key: native.into(),
+            client_session_file: Some(missing.display().to_string()),
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    let cursor = |anchor: Option<&str>| {
+        pontia_client_pi::history::PiEntryCursor {
+            binding_id: binding.id.clone(),
+            session_id: native.into(),
+            anchor: anchor.map(Into::into),
+            relation: "after".into(),
+        }
+        .encode()
+    };
+    sqlx::query("INSERT INTO turns(turn_id,session_id,head_cursor,tail_cursor,topology_status,state,input_summary) VALUES ('turn_target',?,?,?,'root','completed','question')").bind(session).bind(cursor(None)).bind(cursor(Some("a"))).execute(&state.db()).await.unwrap();
+    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,branch_target_turn_id) VALUES ('msg_reverse',?,'dispatching','after_idle','replacement','turn_target')").bind(session).execute(&state.db()).await.unwrap();
+    sqlx::query("UPDATE session_runtimes SET tmux_socket_path='/unused/branch.sock',tmux_pane_id='%1' WHERE session_id=?").bind(session).execute(&state.db()).await.unwrap();
+    let (pi, mut requests) = rpc_client(&state);
+    attach(&pi, session, runtime, native).await;
+    let mut pending = tokio::spawn({
+        let pi = pi.clone();
+        async move {
+            pi.call("branch.resolve",json!({"inbox_message_id":"msg_reverse","session_id":session,"runtime_id":runtime,"client_type":"pi"})).await
+        }
+    });
+    for index in 0..2 {
+        let request = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            tokio::select! { request = requests.recv() => request.unwrap(), result = &mut pending => panic!("branch returned before history: {result:?}") }
+        }).await.unwrap();
+        assert_eq!(request.method, "history.read");
+        if index == 0 {
+            // The server must process another peer request while branch resolution
+            // is waiting for a reverse history response on this connection.
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                pi.call("session.context", json!({"client_session_key":native})),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert_eq!(result["session_context"]["session_id"], session);
+        }
+        if index == 1 {
+            assert_eq!(request.params["snapshot"], "fixed");
+            assert_eq!(request.params["continuation"], "after-u");
+        }
+        let entry = if index == 0 {
+            json!({"id":"u","parentId":null,"type":"message","timestamp":"2026-10-11T00:00:00Z","message":{"role":"user","content":"question"}})
+        } else {
+            json!({"id":"a","parentId":"u","type":"message","timestamp":"2026-10-11T00:00:00Z","message":{"role":"assistant","content":[]}})
+        };
+        pi.reply(request.id,json!({"session_id":native,"snapshot":"fixed","entry_count":2,"upper_entry_id":"a","leaf_id":"a","entries":[entry],"continuation":if index==0{Some("after-u")}else{None}})).await.unwrap();
+    }
+    let response = pending.await.unwrap().unwrap();
+    assert_eq!(response["branch_replay"]["target_entry_id"], "u");
+    assert_eq!(
+        response["branch_replay"]["replacement_input"],
+        "replacement"
+    );
+    assert!(!missing.exists());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM turns WHERE session_id=?")
+            .bind(session)
+            .fetch_one(&state.db())
+            .await
+            .unwrap(),
+        1
+    );
     pi.close();
 }

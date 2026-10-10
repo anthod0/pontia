@@ -14,7 +14,9 @@ impl TurnTimelineService {
         session_id: String,
         from_turn_id: Option<String>,
     ) -> Result<TurnTreeUpdatesPage, TurnTimelineServiceError> {
-        let session = ExternalQueryService::new(self.pool.clone())
+        let scoped = self.request_scope();
+        let service = &scoped;
+        let session = ExternalQueryService::new(service.pool.clone())
             .get_session(&session_id)
             .await?
             .ok_or(TurnTimelineServiceError::SessionNotFound)?;
@@ -27,8 +29,8 @@ impl TurnTimelineService {
             });
         };
 
-        self.try_recover_history(&session_id).await;
-        let turns = SqliteTurnRepository::new(self.pool.clone())
+        service.try_recover_history(&session_id).await;
+        let turns = SqliteTurnRepository::new(service.pool.clone())
             .list_turns(&session_id)
             .await?;
         let by_id = turns_by_id(&turns);
@@ -64,7 +66,7 @@ impl TurnTimelineService {
             }
         };
 
-        let groups = self
+        let groups = service
             .read_selected_groups(&session_id, &turns, &selected)
             .await?;
         Ok(TurnTreeUpdatesPage {

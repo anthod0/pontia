@@ -39,6 +39,9 @@ pub struct EventIngestService {
 }
 
 impl EventIngestService {
+    pub fn history_control(&self) -> Option<crate::clients::ClientControlService> {
+        self.effects.client_control.clone()
+    }
     pub fn clients(&self) -> crate::clients::ClientRegistry {
         self.clients.clone()
     }
@@ -279,13 +282,6 @@ impl EventIngestService {
                     self.effects
                         .apply(&self.pool, self.clients.clone(), &event)
                         .await?;
-                    if event.event_type == pontia_core::domain::EventType::TurnStarted {
-                        Box::pin(
-                            crate::TurnTimelineService::new(self.clone())
-                                .try_recover_history(&event.session_id),
-                        )
-                        .await;
-                    }
                 }
                 Ok(Some(result))
             }

@@ -192,3 +192,51 @@ async fn busy_rejection_is_distinct_from_uncertain_delivery() {
         peer.close();
     }
 }
+
+#[tokio::test]
+async fn cancelling_read_only_history_does_not_break_control_or_accept_a_late_snapshot() {
+    let (left, right) = UnixStream::pair().unwrap();
+    let (peer, _) = PiRpcPeer::new(left);
+    let mut runtime = BufReader::new(right);
+    let pending = tokio::spawn({
+        let peer = peer.clone();
+        async move { peer.call("history.read", json!({})).await }
+    });
+    let mut line = String::new();
+    runtime.read_line(&mut line).await.unwrap();
+    let history: Value = serde_json::from_str(&line).unwrap();
+    pending.abort();
+    assert!(pending.await.unwrap_err().is_cancelled());
+    runtime
+        .get_mut()
+        .write_all(
+            format!(
+                "{}\n",
+                json!({"jsonrpc":"2.0","id":history["id"],"result":{}})
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    let ping = tokio::spawn({
+        let peer = peer.clone();
+        async move { peer.call("ping", json!({})).await }
+    });
+    line.clear();
+    runtime.read_line(&mut line).await.unwrap();
+    let request: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(request["method"], "ping");
+    runtime
+        .get_mut()
+        .write_all(
+            format!(
+                "{}\n",
+                json!({"jsonrpc":"2.0","id":request["id"],"result":{"pong":true}})
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ping.await.unwrap().unwrap(), json!({"pong":true}));
+    peer.close();
+}

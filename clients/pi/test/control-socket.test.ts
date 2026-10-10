@@ -502,3 +502,45 @@ test.each(["interrupt", "shutdown"] as const)(
     expect(responses[2].error.code).toBe(-32007);
   },
 );
+
+test("serves history while branch.resolve awaits a reverse response", async () => {
+  let branchId: unknown;
+  const root = await server((socket, message) => {
+    if (message.method === "branch.resolve") {
+      branchId = message.id;
+      socket.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id: "history", method: "history.read", params: {} })}\n`,
+      );
+    } else if (message.id === "history") {
+      expect(message.result.entries[0].id).toBe("user");
+      reply(socket, branchId, { target_entry_id: "user" });
+    } else reply(socket, message.id, {});
+  });
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+    undefined,
+    undefined,
+    undefined,
+    () => ({
+      generation: 1,
+      sessionManager: {
+        getSessionId: () => "native",
+        getLeafId: () => "user",
+        getEntries: () => [
+          {
+            id: "user",
+            parentId: null,
+            type: "message",
+            timestamp: "2026-10-11T00:00:00Z",
+            message: { role: "user", content: "question" },
+          },
+        ],
+      },
+    }),
+  );
+  onTestFinished(() => client.close());
+  await expect(client.request("branch.resolve", {})).resolves.toEqual({ target_entry_id: "user" });
+  await expect(client.request("ping", {})).resolves.toEqual({});
+});

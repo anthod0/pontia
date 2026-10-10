@@ -157,6 +157,17 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
         .ping("sess_input", "rt_input")
         .await
         .unwrap();
+    let history = state
+        .client_control()
+        .history_source("sess_input")
+        .await
+        .unwrap();
+    let first = history.read(json!({"page_size":1})).await.unwrap();
+    assert_eq!(first["session_id"], "native_sess_input");
+    assert_eq!(first["entries"][0]["id"], "user");
+    let second = history.read(json!({"page_size":1,"snapshot":first["snapshot"],"continuation":first["continuation"]})).await.unwrap();
+    assert_eq!(second["entries"][0]["id"], "answer");
+    assert!(second["continuation"].is_null());
     state.shutdown().notify();
     task.await.unwrap().unwrap();
     state.client_control().close().await;
@@ -215,6 +226,19 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
     })
     .await
     .unwrap();
+    assert!(history.validate().await.is_err());
+    let restored = restarted
+        .client_control()
+        .history_source("sess_input")
+        .await
+        .unwrap();
+    assert_eq!(
+        restored.read(json!({})).await.unwrap()["entries"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
     let delivered: Value =
         serde_json::from_str(&std::fs::read_to_string(root.path().join("messages.jsonl")).unwrap())
             .unwrap();

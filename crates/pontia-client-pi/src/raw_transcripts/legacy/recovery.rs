@@ -50,8 +50,24 @@ impl TurnHistoryRecoverer for PiTimelineAdapter {
             .iter()
             .enumerate()
             .map(|(index, turn)| {
-                let head =
-                    PiJsonlV2Cursor::decode(turn.head_cursor.as_deref()?, &source.id).ok()?;
+                let cursor = turn.head_cursor.as_deref()?;
+                let head = if crate::history::PiEntryCursor::is_entry(cursor) {
+                    let entry =
+                        crate::history::PiEntryCursor::decode(cursor, &source.id, None).ok()?;
+                    let byte_offset = entry
+                        .anchor
+                        .as_deref()
+                        .and_then(|id| by_id.get(id))
+                        .map_or(0, |entry| entry.end);
+                    PiJsonlV2Cursor {
+                        binding_id: source.id.clone(),
+                        byte_offset,
+                        native_entry_anchor: entry.anchor,
+                        relation: TimelineBoundaryRelation::After,
+                    }
+                } else {
+                    PiJsonlV2Cursor::decode(cursor, &source.id).ok()?
+                };
                 if head.byte_offset > complete_end
                     || (head.native_entry_anchor.is_none() && index != 0)
                 {
@@ -77,6 +93,13 @@ impl TurnHistoryRecoverer for PiTimelineAdapter {
         let mut recovered = Vec::new();
         for index in 0..turns.len() {
             let turn = &turns[index];
+            if turn
+                .head_cursor
+                .as_deref()
+                .is_some_and(crate::history::PiEntryCursor::is_entry)
+            {
+                continue;
+            }
             let needs_tail = turn.state == TurnState::Abandoned && turn.tail_cursor.is_none();
             if !needs_tail && turn.topology != TurnTopology::Unknown {
                 continue;
@@ -121,6 +144,7 @@ impl TurnHistoryRecoverer for PiTimelineAdapter {
             };
             recovered.push(RecoveredTurnHistory {
                 turn_id: turn.turn_id.clone(),
+                head_cursor: None,
                 tail_cursor: tail_cursor.clone(),
                 topology,
             });
@@ -170,7 +194,9 @@ fn recover_tail(
         if entry.parent_id.as_deref() != parent {
             return None;
         }
-        users += usize::from(entry_kind(entry) == PiTopologyEntryKind::UserMessage);
+        users += usize::from(
+            crate::topology::entry_kind(&entry.value) == PiTopologyEntryKind::UserMessage,
+        );
         parent = Some(id);
     }
     if users != 1 {
@@ -201,7 +227,7 @@ fn native_context(
         let entry = by_id.get(id)?;
         entries.push(PiTopologyEntry {
             id: id.to_string(),
-            kind: entry_kind(entry),
+            kind: crate::topology::entry_kind(&entry.value),
         });
         current = entry.parent_id.as_deref();
         if let Some(parent) = current
@@ -212,25 +238,4 @@ fn native_context(
     }
     entries.reverse();
     Some(PiTopologyEvidence { entries })
-}
-
-fn entry_kind(entry: &ParsedEntry) -> PiTopologyEntryKind {
-    use PiTopologyEntryKind::*;
-    match entry.value["type"].as_str() {
-        Some("message") => match entry.value["message"]["role"].as_str() {
-            Some("user") => UserMessage,
-            Some("assistant") => AssistantMessage,
-            Some("toolResult") => ToolResultMessage,
-            _ => OtherMessage,
-        },
-        Some("thinking_level_change") => ThinkingLevelChange,
-        Some("model_change") => ModelChange,
-        Some("compaction") => Compaction,
-        Some("branch_summary") => BranchSummary,
-        Some("custom") => Custom,
-        Some("custom_message") => CustomMessage,
-        Some("label") => Label,
-        Some("session_info") => SessionInfo,
-        _ => Other,
-    }
 }

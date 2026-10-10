@@ -201,8 +201,8 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
             "pi",
             "sess_turn_timeline_pi",
             "turn_pi",
-            StatusCode::SERVICE_UNAVAILABLE,
-            "timeline_source_unavailable",
+            StatusCode::CONFLICT,
+            "turn_timeline_invalid",
         ),
     ] {
         if client_type == "pi" {
@@ -276,6 +276,12 @@ async fn turn_timeline_maps_capability_invalid_cursor_and_source_errors() {
     sqlx::query("UPDATE agent_bindings SET client_session_file = ? WHERE id = ?")
         .bind(stale_bound_path.display().to_string())
         .bind(&binding.id)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE turns SET head_cursor=?,tail_cursor=? WHERE turn_id='turn_invalid_cursor'")
+        .bind(format!("pi-jsonl-v2:{}:0:after:", binding.id))
+        .bind(format!("pi-jsonl-v2:{}:39:after:entry", binding.id))
         .execute(&state.db())
         .await
         .unwrap();

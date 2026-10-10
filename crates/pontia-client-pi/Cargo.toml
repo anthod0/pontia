@@ -12,6 +12,7 @@ pontia-runtime.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio = { version = "1", features = ["rt", "sync", "time", "net", "io-util", "macros"] }
+tracing = "0.1"
 
 [dev-dependencies]
 pontia-storage-sqlite.workspace = true

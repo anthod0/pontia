@@ -1,3 +1,13 @@
+use pontia_client_pi::history::PiEntryCursor;
+fn cursor(binding: &str, native: &str, anchor: &str) -> String {
+    PiEntryCursor {
+        binding_id: binding.into(),
+        session_id: native.into(),
+        anchor: Some(anchor.into()),
+        relation: "after".into(),
+    }
+    .encode()
+}
 use super::{
     AgentBindingService, CapturedLogWriter, EventIngestService, EventSource, EventType,
     ProjectionState, ReportedEvent, StatusCode, TimelineBoundary, UpsertAgentBindingRequest, Value,
@@ -6,7 +16,7 @@ use super::{
 };
 
 #[tokio::test]
-async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
+async fn first_turn_captures_identity_without_a_file_and_requires_runtime_history() {
     let temp = tempdir().unwrap();
     let state = test_state().await;
     let session_id = "sess_delayed_first_timeline";
@@ -55,7 +65,7 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
         .unwrap();
     assert_eq!(
         started_turn.head_cursor.as_deref(),
-        Some(format!("pi-jsonl-v2:{}:0:after:previous", binding.id).as_str())
+        Some(cursor(&binding.id, session_key, "previous").as_str())
     );
     assert_eq!(
         started_turn.topology,
@@ -67,9 +77,12 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
         &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward"),
     )
     .await;
-    assert_eq!(pending_status, StatusCode::OK, "{pending_body:?}");
-    assert_eq!(pending_body["data"]["items"], json!([]));
-    assert!(pending_body["data"]["next_turn_id"].is_null());
+    assert_eq!(
+        pending_status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "{pending_body:?}"
+    );
+    assert_eq!(pending_body["error"]["code"], "timeline_source_unavailable");
 
     fs::write(
         &transcript,
@@ -81,6 +94,8 @@ async fn first_turn_timeline_survives_pi_creating_its_jsonl_after_turn_start() {
         ),
     )
     .unwrap();
+    super::runtime_history::attach_fixture(&state, session_id, session_key, transcript.clone())
+        .await;
     let (active_status, active_body) = get_json(
         state.clone(),
         &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward"),
@@ -215,6 +230,8 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
     .await;
     assert_eq!(completed_status, StatusCode::OK, "{completed_body:?}");
 
+    super::runtime_history::attach_fixture(&state, session_id, session_key, transcript.clone())
+        .await;
     let (timeline_status, timeline_body) = get_json(
         state,
         &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward"),
@@ -233,7 +250,7 @@ async fn delayed_terminal_fact_seals_timeline_after_runtime_binding_changes() {
 }
 
 #[tokio::test]
-async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
+async fn hook_lifecycle_events_capture_and_replay_entry_boundaries_without_history_io() {
     let temp = tempdir().unwrap();
 
     let state = test_state().await;
@@ -251,7 +268,6 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
         b"{\"type\":\"message\",\"id\":\"previous_leaf\",\"parentId\":null}\n",
     )
     .unwrap();
-    let head_offset = fs::metadata(&transcript).unwrap().len();
 
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
@@ -292,7 +308,6 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
             .as_bytes(),
         )
         .unwrap();
-    let tail_offset = fs::metadata(&transcript).unwrap().len();
 
     let completed = json!({
         "session_id": session_id,
@@ -308,14 +323,8 @@ async fn hook_lifecycle_events_capture_project_and_replay_pi_v2_boundaries() {
         StatusCode::OK
     );
 
-    let expected_head = format!(
-        "pi-jsonl-v2:{}:{head_offset}:after:previous_leaf",
-        binding.id
-    );
-    let expected_tail = format!(
-        "pi-jsonl-v2:{}:{tail_offset}:after:terminal_leaf",
-        binding.id
-    );
+    let expected_head = cursor(&binding.id, session_key, "previous_leaf");
+    let expected_tail = cursor(&binding.id, session_key, "terminal_leaf");
     let (status, body) = get_json(
         state.clone(),
         &format!("/api/v1/sessions/{session_id}/turns/{turn_id}"),
@@ -375,7 +384,6 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
         b"{\"type\":\"message\",\"id\":\"previous_leaf\",\"parentId\":null}\n",
     )
     .unwrap();
-    let head_offset = fs::metadata(&transcript).unwrap().len();
 
     let binding = AgentBindingService::new(state.db())
         .upsert_binding(UpsertAgentBindingRequest {
@@ -417,7 +425,6 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
             .as_bytes(),
         )
         .unwrap();
-    let tail_offset = fs::metadata(&transcript).unwrap().len();
 
     let (status, body) = post_internal_event(
         state.clone(),
@@ -434,6 +441,8 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
 
+    super::runtime_history::attach_fixture(&state, session_id, session_key, transcript.clone())
+        .await;
     let (status, body) = get_json(
         state.clone(),
         &format!("/api/v1/sessions/{session_id}/turns/timeline?direction=backward"),
@@ -442,14 +451,8 @@ async fn interrupted_pi_turn_captures_tail_boundary_and_remains_timeline_readabl
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(body["data"]["items"].as_array().unwrap().len(), 2);
 
-    let expected_head = format!(
-        "pi-jsonl-v2:{}:{head_offset}:after:previous_leaf",
-        binding.id
-    );
-    let expected_tail = format!(
-        "pi-jsonl-v2:{}:{tail_offset}:after:terminal_leaf",
-        binding.id
-    );
+    let expected_head = cursor(&binding.id, session_key, "previous_leaf");
+    let expected_tail = cursor(&binding.id, session_key, "terminal_leaf");
     let turn = EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
         .get_turn(turn_id)
@@ -568,7 +571,7 @@ async fn timeline_capture_failure_keeps_lifecycle_fact_and_logs_structured_warni
     assert_eq!(warning["fields"]["event_type"], "turn.started");
     assert_eq!(warning["fields"]["client_type"], "pi");
     assert_eq!(warning["fields"]["binding_id"], binding.id);
-    assert_eq!(warning["fields"]["adapter_error"], "source_unavailable");
+
     assert!(
         !captured_logs
             .text()

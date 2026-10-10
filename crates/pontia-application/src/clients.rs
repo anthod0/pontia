@@ -4,7 +4,7 @@ pub use crate::client_contract::{
     ClientOperation, ClientSession, ClientSessionDetails, InProcessClient, NativeEventEvidence,
 };
 mod connections;
-pub use connections::ClientControlService;
+pub use connections::{ClientControlService, NativeHistoryConnection};
 mod lifecycle;
 mod models;
 pub(crate) use lifecycle::discard_unbound_runtime;

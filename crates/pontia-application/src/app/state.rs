@@ -95,7 +95,8 @@ impl AppState {
             scheduler.clone(),
         );
         let branches = crate::BranchReplayService::new(builder.db.clone())
-            .with_clients(builder.clients.clone());
+            .with_clients(builder.clients.clone())
+            .with_history_control(builder.client_control.clone());
         let inbox = Arc::new(crate::InboxCommandService::new(
             builder.db.clone(),
             ingest.clone(),

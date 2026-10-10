@@ -28,6 +28,7 @@ use tracing_subscriber::fmt::MakeWriter;
 const TOKEN: &str = "test-token";
 
 mod branch_replay;
+mod runtime_history;
 mod timeline_boundaries;
 mod timeline_queries;
 mod timeline_reading;

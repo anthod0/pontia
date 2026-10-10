@@ -4,6 +4,16 @@ use std::{future::Future, pin::Pin};
 pub type ClientControlOperation<'a, T = ()> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
 pub trait ClientControlChannel: Send + Sync {
+    fn native_history(
+        &self,
+        _params: serde_json::Value,
+    ) -> ClientControlOperation<'_, serde_json::Value> {
+        Box::pin(async {
+            Err(pontia_core::Error::CapabilityUnavailable(
+                "native history is unsupported".into(),
+            ))
+        })
+    }
     fn available(&self) -> bool;
     fn process_id(&self) -> Option<u32> {
         None

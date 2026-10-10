@@ -1,6 +1,7 @@
 mod adapter;
 pub mod config;
 mod facts;
+pub mod history;
 pub mod ipc;
 mod lifecycle;
 pub mod raw_transcripts;

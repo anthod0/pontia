@@ -218,6 +218,8 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         );
     }
 
+    super::runtime_history::attach_fixture(&state, session_id, session_key, transcript.clone())
+        .await;
     let (status, initial_history) = get_json(
         state.clone(),
         &format!("/api/v1/sessions/{session_id}/turns/tree/history?limit=5"),
@@ -408,6 +410,24 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
         .unwrap();
     assert!(!log_text.contains(turn_five.tail_cursor.as_deref().unwrap()));
 
+    // Lifecycle ingestion preserves invalid topology evidence as Unknown;
+    // native recovery happens only when a history operation is requested.
+    assert_eq!(
+        state
+            .event_ingest_service()
+            .get_turn("turn_pi_linear_malformed")
+            .await
+            .unwrap()
+            .unwrap()
+            .topology,
+        pontia_core::domain::TurnTopology::Unknown
+    );
+    let (status, recovery) = get_json(
+        state.clone(),
+        &format!("/api/v1/sessions/{session_id}/turns/tree/updates"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{recovery:?}");
     let (status, body) = get_json(
         state.clone(),
         &format!("/api/v1/sessions/{session_id}/turns"),

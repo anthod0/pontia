@@ -5,6 +5,7 @@ mod profile;
 pub use profile::{ClientProfile, ResolvedClientProfile};
 mod data;
 pub mod history;
+pub mod native_history;
 mod service;
 mod session;
 mod setup;

@@ -86,14 +86,51 @@ pub struct TurnTimelineService {
     clients: crate::clients::ClientRegistry,
     pub(super) pool: sqlx::SqlitePool,
     events: crate::EventIngestService,
+    history: std::sync::Arc<
+        tokio::sync::OnceCell<
+            Option<std::sync::Arc<dyn crate::client_contract::native_history::NativeHistory>>,
+        >,
+    >,
 }
 
 impl TurnTimelineService {
+    fn request_scope(&self) -> Self {
+        Self {
+            history: Default::default(),
+            ..self.clone()
+        }
+    }
+    async fn native_history(
+        &self,
+        binding: &crate::AgentBinding,
+    ) -> Option<std::sync::Arc<dyn crate::client_contract::native_history::NativeHistory>> {
+        self.history
+            .get_or_init(|| async {
+                self.clients.data(&binding.client_type).and_then(|data| {
+                    data.native_history(
+                        crate::client_contract::raw_transcripts::AgentBindingResolveRequest {
+                            id: binding.id.clone(),
+                            session_id: binding.session_id.clone(),
+                            client_type: binding.client_type.clone(),
+                            client_session_key: binding.client_session_key.clone(),
+                            client_session_file: binding
+                                .client_session_file
+                                .clone()
+                                .map(Into::into),
+                        },
+                        self.events.history_control(),
+                    )
+                })
+            })
+            .await
+            .clone()
+    }
     pub fn new(events: crate::EventIngestService) -> Self {
         Self {
             pool: events.db(),
             clients: events.clients(),
             events,
+            history: Default::default(),
         }
     }
 }

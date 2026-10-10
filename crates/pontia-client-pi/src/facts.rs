@@ -6,6 +6,18 @@ pub fn normalize_payload(event_type: EventType, data: Value) -> Result<Value> {
         .as_object()
         .ok_or_else(|| Error::Domain("data must be a JSON object".to_string()))?;
 
+    for anchor in ["previous_leaf_id", "terminal_leaf_id"] {
+        if let Some(value) = object
+            .get(anchor)
+            .or_else(|| data.get("timeline_anchor").and_then(|v| v.get(anchor)))
+            && !value.is_null()
+            && !value
+                .as_str()
+                .is_some_and(|id| !id.trim().is_empty() && id.len() <= 512)
+        {
+            return Err(Error::Domain("invalid Pi native timeline anchor".into()));
+        }
+    }
     let payload = match event_type {
         EventType::TurnStarted => {
             let input_summary = object

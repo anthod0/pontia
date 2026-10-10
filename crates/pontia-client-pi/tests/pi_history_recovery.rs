@@ -1,3 +1,4 @@
+//! Legacy pi-jsonl-v2 file behavior; runtime entry locators are covered separately.
 use pontia_application::client_contract::{
     TopologyResolution,
     history::{HistoryRecoveryRequest, TurnHistoryCandidate},
@@ -22,6 +23,7 @@ fn cursor(offset: usize, anchor: &str) -> String {
 
 fn turn(id: &str, head: String, tail: Option<String>, state: TurnState) -> TurnHistoryCandidate {
     TurnHistoryCandidate {
+        input_summary: None,
         turn_id: id.into(),
         head_cursor: Some(head),
         tail_cursor: tail,

@@ -1,3 +1,4 @@
+//! Legacy pi-jsonl-v2 file behavior; runtime entry locators are covered separately.
 use pontia_client_pi::raw_transcripts::PiAgentBindingResolver;
 use std::fs;
 

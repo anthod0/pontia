@@ -84,11 +84,18 @@ impl TurnTopologyResolver for PiTopologyResolver {
                 unmatched = TopologyDiagnostic::CandidateBoundaryMissing;
                 continue;
             };
-            let Ok(cursor) = PiJsonlV2Cursor::decode(&tail_cursor, &request.binding_id) else {
+            let anchor = if crate::history::PiEntryCursor::is_entry(&tail_cursor) {
+                crate::history::PiEntryCursor::decode(&tail_cursor, &request.binding_id, None)
+                    .map(|c| c.anchor)
+            } else {
+                PiJsonlV2Cursor::decode(&tail_cursor, &request.binding_id)
+                    .map(|c| c.native_entry_anchor)
+            };
+            let Ok(anchor) = anchor else {
                 unmatched = TopologyDiagnostic::CursorInvalid;
                 continue;
             };
-            let Some(anchor) = cursor.native_entry_anchor else {
+            let Some(anchor) = anchor else {
                 unmatched = TopologyDiagnostic::CandidateBoundaryMissing;
                 continue;
             };
@@ -143,5 +150,26 @@ impl PiTopologyEntryKind {
                 | Self::Label
                 | Self::SessionInfo
         )
+    }
+}
+
+pub(crate) fn entry_kind(entry: &serde_json::Value) -> PiTopologyEntryKind {
+    use PiTopologyEntryKind::*;
+    match entry["type"].as_str() {
+        Some("message") => match entry["message"]["role"].as_str() {
+            Some("user") => UserMessage,
+            Some("assistant") => AssistantMessage,
+            Some("toolResult") => ToolResultMessage,
+            _ => OtherMessage,
+        },
+        Some("thinking_level_change") => ThinkingLevelChange,
+        Some("model_change") => ModelChange,
+        Some("compaction") => Compaction,
+        Some("branch_summary") => BranchSummary,
+        Some("custom") => Custom,
+        Some("custom_message") => CustomMessage,
+        Some("label") => Label,
+        Some("session_info") => SessionInfo,
+        _ => Other,
     }
 }

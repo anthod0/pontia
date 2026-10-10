@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
@@ -32,6 +32,7 @@ pub struct PiRpcPeer {
     writer: tokio::sync::Mutex<OwnedWriteHalf>,
     pending: Mutex<HashMap<String, oneshot::Sender<Value>>>,
     closed: watch::Sender<bool>,
+    cancelled_history: Mutex<HashSet<String>>,
     sequence: AtomicU64,
 }
 
@@ -43,6 +44,7 @@ impl PiRpcPeer {
             writer: tokio::sync::Mutex::new(writer),
             pending: Mutex::new(HashMap::new()),
             closed: watch::channel(false).0,
+            cancelled_history: Mutex::new(HashSet::new()),
             sequence: AtomicU64::new(0),
         });
         let running = peer.clone();
@@ -116,7 +118,12 @@ impl PiRpcPeer {
                         break;
                     };
                     let pending = running.pending.lock().unwrap().remove(id);
-                    let Some(pending) = pending else { break };
+                    let Some(pending) = pending else {
+                        if running.cancelled_history.lock().unwrap().remove(id) {
+                            continue;
+                        }
+                        break;
+                    };
                     let _ = pending.send(value);
                 }
             }
@@ -156,6 +163,7 @@ impl PiRpcPeer {
             peer: self,
             id,
             completed: false,
+            read_only: method == "history.read",
         };
         let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
             self.write(request).await?;
@@ -165,6 +173,11 @@ impl PiRpcPeer {
                 )
             })?;
             if let Some(error) = response.get("error") {
+                if method == "history.read" && error["code"] == -32601 {
+                    return Err(Error::CapabilityUnavailable(
+                        "Pi peer does not support native history".into(),
+                    ));
+                }
                 if error["code"] == -32010 {
                     return Err(Error::Conflict {
                         code: "input_busy",
@@ -236,12 +249,22 @@ struct PendingCall<'a> {
     peer: &'a PiRpcPeer,
     id: String,
     completed: bool,
+    read_only: bool,
 }
 impl Drop for PendingCall<'_> {
     fn drop(&mut self) {
         self.peer.pending.lock().unwrap().remove(&self.id);
         if !self.completed {
-            self.peer.close();
+            if self.read_only {
+                let mut cancelled = self.peer.cancelled_history.lock().unwrap();
+                if cancelled.len() < 64 {
+                    cancelled.insert(self.id.clone());
+                } else {
+                    self.peer.close();
+                }
+            } else {
+                self.peer.close();
+            }
         }
     }
 }
