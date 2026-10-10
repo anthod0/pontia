@@ -28,17 +28,22 @@
 
 <svelte:window onpopstate={() => (currentPath = dashboardRelativePath())} />
 
-<nav aria-label="Settings sections" data-settings-shell-nav="persistent" class="shrink-0 self-start md:sticky md:top-20 md:w-56">
-  <div class="flex flex-col gap-1 rounded-none bg-transparent p-1">
+<aside class="shrink-0 self-start md:sticky md:top-20 md:w-[190px]">
+  <a
+    class="mb-5 block text-sm font-semibold text-heading"
+    href={dashboardPath('/settings/common')}
+    onclick={(event) => activate(event, sections[0])}
+  >Settings</a>
+  <nav aria-label="Settings sections" data-settings-shell-nav="persistent" class="flex flex-wrap gap-x-5 gap-y-2.5 border-l border-border pl-4 text-[13px] md:grid md:gap-3">
     {#each sections as section}
       <a
         href={dashboardPath(section.path)}
         aria-current={isActive(section) ? 'page' : undefined}
         onclick={(event) => activate(event, section)}
-        class="rounded-none px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-muted aria-[current=page]:text-foreground"
+        class="text-muted-foreground transition-colors hover:text-primary aria-[current=page]:text-primary"
       >
         {section.label}
       </a>
     {/each}
-  </div>
-</nav>
+  </nav>
+</aside>
