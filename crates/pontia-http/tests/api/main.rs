@@ -14,6 +14,7 @@ mod runtime_binding;
 mod runtime_lifecycle;
 mod session_create;
 mod session_inbox;
+mod session_overview;
 mod session_workspace_linking;
 mod support;
 mod task_creation;

@@ -2264,6 +2264,7 @@ dependencies = [
 name = "pontia-application"
 version = "0.0.0"
 dependencies = [
+ "base64 0.22.1",
  "ignore",
  "nucleo-matcher",
  "pontia-application",

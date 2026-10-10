@@ -7,7 +7,10 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use pontia_application::{AppState, CreateSessionRequest, UpdateSessionRequest};
+use pontia_application::{
+    AppState, CreateSessionRequest, SessionOverviewRequest, SessionOverviewView,
+    UpdateSessionRequest,
+};
 
 use super::{
     idempotency::idempotent,
@@ -50,6 +53,30 @@ pub async fn list_sessions(
         .list_sessions(query.include_archived, query.limit, query.include_pinned)
         .await?;
     Ok(ok(json!({ "sessions": sessions })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SessionOverviewQuery {
+    sections: Option<String>,
+    workspace_id: Option<String>,
+    limit: Option<String>,
+    cursor: Option<String>,
+}
+
+pub async fn session_overview(
+    State(state): State<AppState>,
+    Query(query): Query<SessionOverviewQuery>,
+) -> Result<Json<SessionOverviewView>, ApiError> {
+    let overview = state
+        .queries()
+        .session_overview(SessionOverviewRequest {
+            sections: query.sections,
+            workspace_id: query.workspace_id,
+            limit: query.limit,
+            cursor: query.cursor,
+        })
+        .await?;
+    Ok(Json(overview))
 }
 
 pub async fn update_session(

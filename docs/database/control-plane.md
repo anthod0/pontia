@@ -59,11 +59,14 @@
 
 | Name | Unique | Columns | Condition |
 |---|---|---|---|
+| `idx_sessions_active_updated` | No | `updated_at DESC`, `session_id DESC` | `archived_at IS NULL AND state NOT IN ('exited', 'error')` |
 | `idx_sessions_execution_profile` | No | `workspace_id`, `execution_profile_id`, `execution_profile_version`, `state`, `updated_at`, `session_id` |  |
 | `idx_sessions_management_list` | No | `archived_at`, `pinned_at`, `updated_at`, `session_id` |  |
+| `idx_sessions_unarchived_updated` | No | `updated_at DESC`, `session_id DESC` | `archived_at IS NULL` |
 | `idx_sessions_workflow_replanner_creation_token` | Yes | `json_extract(metadata, '$.workflow_replanner_creation_token')` | `json_extract(metadata, '$.workflow_replanner_creation_token') IS NOT NULL` |
 | `idx_sessions_workspace` | No | `workspace_id`, `state`, `updated_at`, `session_id` |  |
 | `idx_sessions_workspace_handle` | Yes | `workspace_id`, `handle` | `handle IS NOT NULL AND state NOT IN ('exited', 'error')` |
+| `idx_sessions_workspace_unarchived_updated` | No | `workspace_id`, `updated_at DESC`, `session_id DESC` | `archived_at IS NULL` |
 
 ## `turns`
 

@@ -5,6 +5,7 @@ use sqlx::SqlitePool;
 mod events;
 mod git_status;
 mod sessions;
+pub use sessions::{SessionOverviewRequest, SessionOverviewView};
 mod tasks;
 mod turns;
 mod workspaces;

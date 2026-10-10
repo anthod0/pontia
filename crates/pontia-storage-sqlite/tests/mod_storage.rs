@@ -67,6 +67,56 @@ async fn migrations_preserve_removed_schema_contracts() {
 }
 
 #[tokio::test]
+async fn session_overview_indexes_exist_and_back_their_queries() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db_path = dir.path().join("session-overview-indexes.db");
+    let database_url = format!("sqlite://{}", db_path.display());
+    let pool = connect_sqlite(&database_url).await.expect("connect sqlite");
+    run_migrations(&pool).await.expect("run migrations");
+
+    let indexes = sqlx::query("PRAGMA index_list(sessions)")
+        .fetch_all(&pool)
+        .await
+        .expect("session indexes")
+        .into_iter()
+        .map(|row| row.get::<String, _>("name"))
+        .collect::<Vec<_>>();
+    for expected in [
+        "idx_sessions_management_list",
+        "idx_sessions_active_updated",
+        "idx_sessions_unarchived_updated",
+        "idx_sessions_workspace_unarchived_updated",
+    ] {
+        assert!(indexes.iter().any(|name| name == expected), "{expected}");
+    }
+
+    for (sql, expected_index) in [
+        (
+            "EXPLAIN QUERY PLAN SELECT session_id FROM sessions INDEXED BY idx_sessions_active_updated WHERE archived_at IS NULL AND state NOT IN ('exited', 'error') ORDER BY updated_at DESC, session_id DESC",
+            "idx_sessions_active_updated",
+        ),
+        (
+            "EXPLAIN QUERY PLAN SELECT session_id FROM sessions INDEXED BY idx_sessions_unarchived_updated WHERE archived_at IS NULL ORDER BY updated_at DESC, session_id DESC",
+            "idx_sessions_unarchived_updated",
+        ),
+        (
+            "EXPLAIN QUERY PLAN SELECT session_id FROM sessions INDEXED BY idx_sessions_workspace_unarchived_updated WHERE workspace_id = 'workspace-1' AND archived_at IS NULL ORDER BY updated_at DESC, session_id DESC",
+            "idx_sessions_workspace_unarchived_updated",
+        ),
+    ] {
+        let plan = sqlx::query(sql)
+            .fetch_all(&pool)
+            .await
+            .expect("explain query")
+            .into_iter()
+            .map(|row| row.get::<String, _>("detail"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(plan.contains(expected_index), "{plan}");
+    }
+}
+
+#[tokio::test]
 async fn session_runtimes_schema_uses_structured_runtime_fields_without_runtime_ref() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("runtime-bindings-schema.db");

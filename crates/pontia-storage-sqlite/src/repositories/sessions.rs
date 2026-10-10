@@ -40,6 +40,38 @@ pub struct SessionListOptions {
 }
 
 #[derive(Debug, Clone)]
+pub struct SessionOverviewOptions {
+    pub include_pinned: bool,
+    pub include_archived: bool,
+    pub include_active: bool,
+    pub include_list: bool,
+    pub workspace_id: Option<String>,
+    pub cursor: Option<SessionOverviewCursor>,
+    pub list_limit: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionOverviewCursor {
+    pub updated_at: String,
+    pub session_id: String,
+}
+
+#[derive(Debug)]
+pub struct SessionOverviewRows {
+    pub pinned: Option<Vec<SessionRow>>,
+    pub archived: Option<Vec<SessionRow>>,
+    pub active: Option<Vec<SessionRow>>,
+    pub list: Option<SessionOverviewListRows>,
+    pub workspace_exists: bool,
+}
+
+#[derive(Debug)]
+pub struct SessionOverviewListRows {
+    pub sessions: Vec<SessionRow>,
+    pub next_cursor: Option<SessionOverviewCursor>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SqliteSessionRepository {
     pool: SqlitePool,
 }
@@ -175,6 +207,192 @@ impl SqliteSessionRepository {
         .bind(limit)
         .fetch_all(&self.pool)
         .await?)
+    }
+
+    pub async fn session_overview(
+        &self,
+        options: SessionOverviewOptions,
+    ) -> Result<SessionOverviewRows> {
+        let mut tx = self.pool.begin().await?;
+        let workspace_exists = match options.workspace_id.as_deref() {
+            Some(workspace_id) => {
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT EXISTS(SELECT 1 FROM workspaces WHERE workspace_id = ?)",
+                )
+                .bind(workspace_id)
+                .fetch_one(&mut *tx)
+                .await?
+                    != 0
+            }
+            None => true,
+        };
+
+        let pinned = if options.include_pinned {
+            Some(
+                sqlx::query_as::<_, SessionRow>(
+                    r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
+                              s.execution_profile_id, s.execution_profile_version,
+                              s.state, s.current_turn_id, s.workspace_id,
+                              COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                              s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                       FROM sessions s
+                       LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
+                       WHERE s.archived_at IS NULL AND s.pinned_at IS NOT NULL
+                       ORDER BY s.pinned_at DESC, s.session_id DESC"#,
+                )
+                .fetch_all(&mut *tx)
+                .await?,
+            )
+        } else {
+            None
+        };
+
+        let archived = if options.include_archived {
+            Some(
+                sqlx::query_as::<_, SessionRow>(
+                    r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
+                              s.execution_profile_id, s.execution_profile_version,
+                              s.state, s.current_turn_id, s.workspace_id,
+                              COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                              s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                       FROM sessions s
+                       LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
+                       WHERE s.archived_at IS NOT NULL
+                       ORDER BY s.archived_at DESC, s.session_id DESC"#,
+                )
+                .fetch_all(&mut *tx)
+                .await?,
+            )
+        } else {
+            None
+        };
+
+        let active = if options.include_active {
+            Some(
+                sqlx::query_as::<_, SessionRow>(
+                    r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
+                              s.execution_profile_id, s.execution_profile_version,
+                              s.state, s.current_turn_id, s.workspace_id,
+                              COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                              s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                       FROM sessions s INDEXED BY idx_sessions_active_updated
+                       LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
+                       WHERE s.archived_at IS NULL AND s.state NOT IN ('exited', 'error')
+                       ORDER BY s.updated_at DESC, s.session_id DESC"#,
+                )
+                .fetch_all(&mut *tx)
+                .await?,
+            )
+        } else {
+            None
+        };
+
+        let list = if options.include_list && workspace_exists {
+            let fetch_limit = i64::from(options.list_limit) + 1;
+            let mut sessions = match (options.workspace_id.as_deref(), options.cursor.as_ref()) {
+                (None, None) => sqlx::query_as::<_, SessionRow>(
+                    r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
+                                  s.execution_profile_id, s.execution_profile_version,
+                                  s.state, s.current_turn_id, s.workspace_id,
+                                  COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                                  s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                           FROM sessions s INDEXED BY idx_sessions_unarchived_updated
+                           LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
+                           WHERE s.archived_at IS NULL
+                           ORDER BY s.updated_at DESC, s.session_id DESC
+                           LIMIT ?"#,
+                )
+                .bind(fetch_limit)
+                .fetch_all(&mut *tx)
+                .await?,
+                (None, Some(cursor)) => sqlx::query_as::<_, SessionRow>(
+                    r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
+                                  s.execution_profile_id, s.execution_profile_version,
+                                  s.state, s.current_turn_id, s.workspace_id,
+                                  COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                                  s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                           FROM sessions s INDEXED BY idx_sessions_unarchived_updated
+                           LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
+                           WHERE s.archived_at IS NULL
+                             AND (s.updated_at < ? OR (s.updated_at = ? AND s.session_id < ?))
+                           ORDER BY s.updated_at DESC, s.session_id DESC
+                           LIMIT ?"#,
+                )
+                .bind(&cursor.updated_at)
+                .bind(&cursor.updated_at)
+                .bind(&cursor.session_id)
+                .bind(fetch_limit)
+                .fetch_all(&mut *tx)
+                .await?,
+                (Some(workspace_id), None) => sqlx::query_as::<_, SessionRow>(
+                    r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
+                                  s.execution_profile_id, s.execution_profile_version,
+                                  s.state, s.current_turn_id, s.workspace_id,
+                                  COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                                  s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                           FROM sessions s INDEXED BY idx_sessions_workspace_unarchived_updated
+                           LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
+                           WHERE s.workspace_id = ? AND s.archived_at IS NULL
+                           ORDER BY s.updated_at DESC, s.session_id DESC
+                           LIMIT ?"#,
+                )
+                .bind(workspace_id)
+                .bind(fetch_limit)
+                .fetch_all(&mut *tx)
+                .await?,
+                (Some(workspace_id), Some(cursor)) => sqlx::query_as::<_, SessionRow>(
+                    r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
+                                  s.execution_profile_id, s.execution_profile_version,
+                                  s.state, s.current_turn_id, s.workspace_id,
+                                  COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
+                                  s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
+                           FROM sessions s INDEXED BY idx_sessions_workspace_unarchived_updated
+                           LEFT JOIN workspaces w ON w.workspace_id = s.workspace_id
+                           WHERE s.workspace_id = ? AND s.archived_at IS NULL
+                             AND (s.updated_at < ? OR (s.updated_at = ? AND s.session_id < ?))
+                           ORDER BY s.updated_at DESC, s.session_id DESC
+                           LIMIT ?"#,
+                )
+                .bind(workspace_id)
+                .bind(&cursor.updated_at)
+                .bind(&cursor.updated_at)
+                .bind(&cursor.session_id)
+                .bind(fetch_limit)
+                .fetch_all(&mut *tx)
+                .await?,
+            };
+            let has_next_page = sessions.len() > options.list_limit as usize;
+            sessions.truncate(options.list_limit as usize);
+            let next_cursor = has_next_page.then(|| {
+                let last = sessions
+                    .last()
+                    .expect("a next page requires a returned row");
+                SessionOverviewCursor {
+                    updated_at: last.updated_at.clone(),
+                    session_id: last.session_id.clone(),
+                }
+            });
+            Some(SessionOverviewListRows {
+                sessions,
+                next_cursor,
+            })
+        } else if options.include_list {
+            Some(SessionOverviewListRows {
+                sessions: Vec::new(),
+                next_cursor: None,
+            })
+        } else {
+            None
+        };
+
+        tx.commit().await?;
+        Ok(SessionOverviewRows {
+            pinned,
+            archived,
+            active,
+            list,
+            workspace_exists,
+        })
     }
 
     pub async fn get_session(&self, session_id: &str) -> Result<Option<SessionRow>> {

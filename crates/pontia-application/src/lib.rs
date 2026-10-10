@@ -50,7 +50,7 @@ pub use live_output::{
     LiveOutputProducer, LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshot,
     LiveOutputSnapshotReplacement, LiveOutputStreamEvent, LiveOutputSubscription, LiveOutputUpdate,
 };
-pub use queries::ExternalQueryService;
+pub use queries::{ExternalQueryService, SessionOverviewRequest, SessionOverviewView};
 pub use raw_transcripts::{
     TurnTimelineDirection, TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage,
     TurnTimelineService, TurnTimelineServiceError, TurnTreeHistoryPage, TurnTreeUpdatesPage,
