@@ -19,11 +19,9 @@ import {
   listInboxMessages,
   listTurns,
   pinSession as apiPinSession,
-  restartSession as apiRestartSession,
   resumeSession as apiResumeSession,
   submitInboxMessage as apiSubmitInboxMessage,
   terminateSession as apiTerminateSession,
-  unarchiveSession as apiUnarchiveSession,
   unpinSession as apiUnpinSession,
   updateSession as apiUpdateSession,
 } from "../api/client";
@@ -213,14 +211,6 @@ export async function archiveSession(sessionId: string): Promise<SessionView> {
   return refreshAfterSessionManagement(await apiArchiveSession(sessionId));
 }
 
-export async function unarchiveSession(sessionId: string): Promise<SessionView> {
-  const session = await apiUnarchiveSession(sessionId);
-  if (session.archived_at) throw new Error("The session is still archived. Refresh and try again.");
-  applySessionManagementResult(session);
-  await invalidateSessionOverview();
-  return session;
-}
-
 async function refreshSidebarAndSelectedSession(sessionId: string): Promise<void> {
   await Promise.all([
     invalidateSessionOverview(),
@@ -347,11 +337,6 @@ export async function dismissInboxMessage(
 
 export async function interruptSession(sessionId: string): Promise<void> {
   await apiInterruptSession(sessionId);
-  await refreshSidebarAndSelectedSession(sessionId);
-}
-
-export async function restartSession(sessionId: string): Promise<void> {
-  await apiRestartSession(sessionId);
   await refreshSidebarAndSelectedSession(sessionId);
 }
 

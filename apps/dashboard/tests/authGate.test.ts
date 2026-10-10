@@ -7,7 +7,6 @@ import { token } from "../src/stores/auth";
 const mocks = vi.hoisted(() => ({
   startEventStream: vi.fn(),
   stopEventStream: vi.fn(),
-  loadTasks: vi.fn(async () => undefined),
   loadWorkspaces: vi.fn(async () => undefined),
   loadWorkflows: vi.fn(async () => undefined),
 }));
@@ -35,12 +34,6 @@ vi.mock("../src/queries/sessionOverview", () => ({
     archived: [],
     nextCursor: null,
   }),
-}));
-vi.mock("../src/stores/tasks", () => ({
-  tasks: writable([]),
-  tasksError: writable(null),
-  tasksLoading: writable(false),
-  loadTasks: mocks.loadTasks,
 }));
 vi.mock("../src/queries/workspaces", () => ({
   fetchWorkspaces: mocks.loadWorkspaces,
@@ -80,7 +73,6 @@ test("blocks dashboard routes behind a token prompt when no token is saved", asy
   expect(screen.getByRole("heading", { name: /enter external api token/i })).toBeInTheDocument();
   expect(screen.getByLabelText(/bearer token/i)).toBeInTheDocument();
   expect(screen.queryByText("PONTIA")).not.toBeInTheDocument();
-  expect(mocks.loadTasks).not.toHaveBeenCalled();
   expect(mocks.loadWorkspaces).not.toHaveBeenCalled();
   expect(mocks.startEventStream).not.toHaveBeenCalled();
 });
@@ -97,7 +89,6 @@ test("stores a token from the URL and removes only that query parameter", async 
   expect(
     screen.queryByRole("heading", { name: /enter external api token/i }),
   ).not.toBeInTheDocument();
-  expect(mocks.loadTasks).toHaveBeenCalled();
   expect(mocks.startEventStream).toHaveBeenCalled();
 });
 
@@ -157,7 +148,6 @@ test("saves the entered token and opens the requested dashboard route after vali
     ).not.toBeInTheDocument(),
   );
   expect(screen.getByText("Pontia")).toBeInTheDocument();
-  expect(mocks.loadTasks).toHaveBeenCalled();
   expect(mocks.loadWorkspaces).toHaveBeenCalled();
   expect(mocks.startEventStream).toHaveBeenCalled();
 });
@@ -175,6 +165,5 @@ test("opens dashboard immediately when a saved token exists without startup vali
   expect(screen.getByText("Pontia")).toBeInTheDocument();
   expect(localStorage.getItem("pontia.externalApiToken")).toBe("saved-token");
   expect(fetchMock).not.toHaveBeenCalled();
-  expect(mocks.loadTasks).toHaveBeenCalled();
   expect(mocks.startEventStream).toHaveBeenCalled();
 });

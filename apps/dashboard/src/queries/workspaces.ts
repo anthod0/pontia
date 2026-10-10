@@ -2,8 +2,6 @@ import { createMutation, createQuery, QueryObserver, queryOptions } from "@tanst
 import { readable } from "svelte/store";
 import {
   deleteWorkspace as requestDeleteWorkspace,
-  getWorkspace,
-  getWorkspaceGitStatus,
   listWorkspaceFilePickerEntries,
   listWorkspaceRootEntries,
   listWorkspaceRoots,
@@ -19,10 +17,6 @@ export const workspaceKeys = {
   all: ["workspaces"] as const,
   lists: () => [...workspaceKeys.all, "list"] as const,
   list: () => [...workspaceKeys.lists()] as const,
-  details: () => [...workspaceKeys.all, "detail"] as const,
-  detail: (workspaceId: string) => [...workspaceKeys.details(), workspaceId] as const,
-  gitStatuses: () => [...workspaceKeys.all, "git-status"] as const,
-  gitStatus: (workspaceId: string) => [...workspaceKeys.gitStatuses(), workspaceId] as const,
   filePickers: () => [...workspaceKeys.all, "file-picker"] as const,
   filePicker: (workspaceId: string, query: string, limit: number | undefined) =>
     [...workspaceKeys.filePickers(), workspaceId, { query, limit }] as const,
@@ -38,22 +32,6 @@ function workspacesOptions() {
   return queryOptions({
     queryKey: workspaceKeys.list(),
     queryFn: ({ signal }) => listWorkspaces({ signal }),
-  });
-}
-
-function workspaceOptions(workspaceId: string, enabled = true) {
-  return queryOptions({
-    queryKey: workspaceKeys.detail(workspaceId),
-    enabled: enabled && workspaceId.length > 0,
-    queryFn: ({ signal }) => getWorkspace(workspaceId, { signal }),
-  });
-}
-
-function workspaceGitStatusOptions(workspaceId: string, enabled = true) {
-  return queryOptions({
-    queryKey: workspaceKeys.gitStatus(workspaceId),
-    enabled: enabled && workspaceId.length > 0,
-    queryFn: ({ signal }) => getWorkspaceGitStatus(workspaceId, { signal }),
   });
 }
 
@@ -100,26 +78,6 @@ export function createWorkspacesStore() {
   });
 }
 
-export function createWorkspaceQuery(
-  workspaceId: () => string,
-  enabled: () => boolean = () => true,
-) {
-  return createQuery(
-    () => workspaceOptions(workspaceId(), enabled()),
-    () => queryClient,
-  );
-}
-
-export function createWorkspaceGitStatusQuery(
-  workspaceId: () => string,
-  enabled: () => boolean = () => true,
-) {
-  return createQuery(
-    () => workspaceGitStatusOptions(workspaceId(), enabled()),
-    () => queryClient,
-  );
-}
-
 export function createWorkspaceRootsQuery() {
   return createQuery(workspaceRootsOptions, () => queryClient);
 }
@@ -137,10 +95,6 @@ export function createWorkspaceRootEntriesQuery(
 
 export function fetchWorkspaces() {
   return queryClient.fetchQuery(workspacesOptions());
-}
-
-export function fetchWorkspaceGitStatus(workspaceId: string) {
-  return queryClient.fetchQuery(workspaceGitStatusOptions(workspaceId));
 }
 
 export function fetchWorkspaceRootEntries(rootId: string, path = "") {
@@ -172,10 +126,7 @@ export function createRegisterWorkspaceMutation() {
   return createMutation(
     () => ({
       mutationFn: (input: RegisterWorkspaceInput) => requestRegisterWorkspace(input),
-      onSuccess: async (workspace) => {
-        queryClient.setQueryData(workspaceKeys.detail(workspace.workspace_id), workspace);
-        await invalidateWorkspaceCollections();
-      },
+      onSuccess: invalidateWorkspaceCollections,
     }),
     () => queryClient,
   );
@@ -186,10 +137,7 @@ export function createRenameWorkspaceMutation() {
     () => ({
       mutationFn: ({ workspaceId, input }: { workspaceId: string; input: RenameWorkspaceInput }) =>
         requestRenameWorkspace(workspaceId, input),
-      onSuccess: async (workspace) => {
-        queryClient.setQueryData(workspaceKeys.detail(workspace.workspace_id), workspace);
-        await invalidateWorkspaceCollections();
-      },
+      onSuccess: invalidateWorkspaceCollections,
     }),
     () => queryClient,
   );
@@ -200,9 +148,6 @@ export function createDeleteWorkspaceMutation() {
     () => ({
       mutationFn: (workspaceId: string) => requestDeleteWorkspace(workspaceId),
       onSuccess: async (_workspace, workspaceId) => {
-        await queryClient.cancelQueries({ queryKey: workspaceKeys.detail(workspaceId) });
-        queryClient.removeQueries({ queryKey: workspaceKeys.detail(workspaceId) });
-        queryClient.removeQueries({ queryKey: workspaceKeys.gitStatus(workspaceId) });
         queryClient.removeQueries({ queryKey: [...workspaceKeys.filePickers(), workspaceId] });
         await invalidateWorkspaceCollections();
       },
@@ -211,22 +156,6 @@ export function createDeleteWorkspaceMutation() {
   );
 }
 
-function refreshWorkspaceGitStatusMutationOptions() {
-  return {
-    mutationFn: (workspaceId: string) => requestRefreshWorkspaceGitStatus(workspaceId),
-    onSuccess: (status: Awaited<ReturnType<typeof requestRefreshWorkspaceGitStatus>>) => {
-      queryClient.setQueryData(workspaceKeys.gitStatus(status.workspace_id), status);
-    },
-  };
-}
-
-export function createRefreshWorkspaceGitStatusMutation() {
-  return createMutation(refreshWorkspaceGitStatusMutationOptions, () => queryClient);
-}
-
 export function refreshWorkspaceGitStatus(workspaceId: string) {
-  return queryClient
-    .getMutationCache()
-    .build(queryClient, refreshWorkspaceGitStatusMutationOptions())
-    .execute(workspaceId);
+  return requestRefreshWorkspaceGitStatus(workspaceId);
 }

@@ -26,8 +26,6 @@ import type {
   TurnTreeHistoryPage,
   TurnTreeUpdatesPage,
   UpsertAgentProfileInput,
-  TaskEventView,
-  TaskView,
   TurnView,
   UpdateSessionInput,
   WorkspaceDirectoryListingView,
@@ -208,18 +206,6 @@ export async function listAgentProfiles(
   ).agent_profiles;
 }
 
-export async function getAgentProfile(
-  profileId: string,
-  options: ReadRequestOptions = {},
-): Promise<AgentProfileView> {
-  return (
-    await request<{ agent_profile: AgentProfileView }>(
-      `/agent-profiles/${encodeURIComponent(profileId)}`,
-      options,
-    )
-  ).agent_profile;
-}
-
 export async function createAgentProfile(
   input: UpsertAgentProfileInput,
 ): Promise<AgentProfileView> {
@@ -263,19 +249,6 @@ export async function createAgentProfileVersion(
     await request<{ agent_profile: AgentProfileView }>(
       `/agent-profiles/${encodeURIComponent(profileId)}/versions`,
       { method: "POST", body: input, mutating: true },
-    )
-  ).agent_profile;
-}
-
-export async function getAgentProfileVersion(
-  profileId: string,
-  version: string,
-  options: ReadRequestOptions = {},
-): Promise<AgentProfileView> {
-  return (
-    await request<{ agent_profile: AgentProfileView }>(
-      `/agent-profiles/${encodeURIComponent(profileId)}/versions/${encodeURIComponent(version)}`,
-      options,
     )
   ).agent_profile;
 }
@@ -430,18 +403,6 @@ export async function listWorkspaces(options: ReadRequestOptions = {}): Promise<
     .workspaces;
 }
 
-export async function getWorkspace(
-  workspaceId: string,
-  options: ReadRequestOptions = {},
-): Promise<WorkspaceView> {
-  return (
-    await request<{ workspace: WorkspaceView }>(
-      `/workspaces/${encodeURIComponent(workspaceId)}`,
-      options,
-    )
-  ).workspace;
-}
-
 export async function registerWorkspace(input: RegisterWorkspaceInput): Promise<WorkspaceView> {
   return (
     await request<{ workspace: WorkspaceView }>("/workspaces", {
@@ -472,18 +433,6 @@ export async function deleteWorkspace(workspaceId: string): Promise<WorkspaceVie
       mutating: true,
     })
   ).workspace;
-}
-
-export async function getWorkspaceGitStatus(
-  workspaceId: string,
-  options: ReadRequestOptions = {},
-): Promise<WorkspaceGitStatusView> {
-  return (
-    await request<{ git_status: WorkspaceGitStatusView }>(
-      `/workspaces/${encodeURIComponent(workspaceId)}/git-status`,
-      options,
-    )
-  ).git_status;
 }
 
 export async function refreshWorkspaceGitStatus(
@@ -527,34 +476,6 @@ export async function listWorkspaceFilePickerEntries(
   return request<FilePickerResultView>(path, { signal: options.signal });
 }
 
-export async function listTasks(): Promise<TaskView[]> {
-  return (await boundedReadRequest<{ tasks: TaskView[] }>("/tasks", {})).tasks;
-}
-
-export async function getTask(taskId: string): Promise<TaskView> {
-  return (await boundedReadRequest<{ task: TaskView }>(`/tasks/${taskId}`, {})).task;
-}
-
-export async function listTaskEvents(taskId: string): Promise<TaskEventView[]> {
-  return (await boundedReadRequest<{ events: TaskEventView[] }>(`/tasks/${taskId}/events`, {}))
-    .events;
-}
-
-export async function interruptTask(taskId: string): Promise<TaskView> {
-  return (
-    await request<{ task: TaskView }>(`/tasks/${taskId}/interrupt`, {
-      method: "POST",
-      mutating: true,
-    })
-  ).task;
-}
-
-export async function cancelTask(taskId: string): Promise<TaskView> {
-  return (
-    await request<{ task: TaskView }>(`/tasks/${taskId}/cancel`, { method: "POST", mutating: true })
-  ).task;
-}
-
 export async function createSession(input: CreateSessionInput): Promise<CreateSessionResult> {
   return request<CreateSessionResult>("/sessions", { method: "POST", body: input, mutating: true });
 }
@@ -596,15 +517,6 @@ export async function archiveSession(sessionId: string): Promise<SessionView> {
       method: "POST",
       mutating: true,
     })
-  ).session;
-}
-
-export async function unarchiveSession(sessionId: string): Promise<SessionView> {
-  return (
-    await request<{ session: SessionView }>(
-      `/sessions/${encodeURIComponent(sessionId)}/unarchive`,
-      { method: "POST", mutating: true },
-    )
   ).session;
 }
 
@@ -767,10 +679,6 @@ export async function getTurnTreeUpdates(
 
 export async function interruptSession(sessionId: string): Promise<unknown> {
   return request(`/sessions/${sessionId}/interrupt`, { method: "POST", mutating: true });
-}
-
-export async function restartSession(sessionId: string): Promise<unknown> {
-  return request(`/sessions/${sessionId}/restart`, { method: "POST", mutating: true });
 }
 
 export async function resumeSession(sessionId: string): Promise<unknown> {

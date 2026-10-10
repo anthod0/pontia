@@ -39,7 +39,6 @@ const api = vi.hoisted(() => ({
   cancelInboxMessage: vi.fn(),
   dismissInboxMessage: vi.fn(),
   interruptSession: vi.fn(),
-  restartSession: vi.fn(),
   resumeSession: vi.fn(),
   terminateSession: vi.fn(),
   pinSession: vi.fn(),

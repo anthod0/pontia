@@ -1,7 +1,6 @@
 import { get } from "svelte/store";
 import { loadSessionDetail, selectedSessionId } from "../stores/sessions";
 import { invalidateQueriesAfterConnectionRecovery } from "../queries/dashboardInvalidation";
-import { loadTasks, refreshTask, selectedTaskId } from "../stores/tasks";
 import {
   hasTimelineSnapshot,
   loadSessionTimeline,
@@ -55,15 +54,12 @@ async function refreshSelectedSession(sessionId: string): Promise<void> {
 
 async function refreshDashboardSnapshotNow(): Promise<void> {
   const sessionId = get(selectedSessionId);
-  const taskId = get(selectedTaskId);
   const workflowId = get(selectedWorkflowId);
   const refreshes: Promise<unknown>[] = [
     invalidateQueriesAfterConnectionRecovery(),
-    loadTasks(),
     loadWorkflows({ showLoading: false }),
   ];
 
-  if (taskId) refreshes.push(refreshTask(taskId));
   if (workflowId) refreshes.push(refreshWorkflow(workflowId, { showLoading: false }));
   if (sessionId) refreshes.push(refreshSelectedSession(sessionId));
 

@@ -106,7 +106,6 @@ const mocks = vi.hoisted(() => {
     cancelInboxMessage: vi.fn(),
     dismissInboxMessage: vi.fn(),
     resumeSession: vi.fn(),
-    restartSession: vi.fn(),
     interruptSession: vi.fn(),
     terminateSession: vi.fn(),
     updateSessionTitle: vi.fn(),
@@ -142,14 +141,6 @@ vi.mock("../../../src/api/client", async (importOriginal) => ({
   listWorkspaceRoots: vi.fn(async () => mocks.workspaceRoots.get()),
   listWorkspaceRootEntries: vi.fn(async (rootId: string, path = "") =>
     mocks.browseWorkspaceRoot(rootId, path),
-  ),
-  getWorkspaceGitStatus: vi.fn(
-    async (workspaceId: string) =>
-      mocks.workspaceGitStatuses.get()[workspaceId] ?? {
-        workspace_id: workspaceId,
-        state: "unknown",
-        observed_at: null,
-      },
   ),
   refreshWorkspaceGitStatus: vi.fn(async (workspaceId: string) => {
     await mocks.refreshWorkspaceGitStatus(workspaceId);
@@ -196,7 +187,6 @@ vi.mock("../../../src/stores/sessions", () => ({
   cancelInboxMessage: mocks.cancelInboxMessage,
   dismissInboxMessage: mocks.dismissInboxMessage,
   resumeSession: mocks.resumeSession,
-  restartSession: mocks.restartSession,
   interruptSession: mocks.interruptSession,
   terminateSession: mocks.terminateSession,
   updateSessionTitle: mocks.updateSessionTitle,

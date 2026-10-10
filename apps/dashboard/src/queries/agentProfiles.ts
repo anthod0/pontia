@@ -4,8 +4,6 @@ import {
   createAgentProfileVersion as requestCreateAgentProfileVersion,
   deleteAgentProfile as requestDeleteAgentProfile,
   deleteAgentProfileVersion as requestDeleteAgentProfileVersion,
-  getAgentProfile,
-  getAgentProfileVersion,
   listAgentProfiles,
   listAgentProfileVersions,
   updateAgentProfileVersion as requestUpdateAgentProfileVersion,
@@ -22,8 +20,6 @@ export const agentProfileKeys = {
   versions: (profileId: string) => [...agentProfileKeys.detail(profileId), "versions"] as const,
   versionList: (profileId: string, includeArchived: boolean) =>
     [...agentProfileKeys.versions(profileId), "list", { includeArchived }] as const,
-  version: (profileId: string, version: string) =>
-    [...agentProfileKeys.versions(profileId), version] as const,
 };
 
 function agentProfilesOptions(includeArchived: boolean) {
@@ -45,22 +41,6 @@ function agentProfileVersionsOptions(
   });
 }
 
-function agentProfileOptions(profileId: string, enabled: boolean) {
-  return queryOptions({
-    queryKey: agentProfileKeys.detail(profileId),
-    enabled: enabled && profileId.length > 0,
-    queryFn: ({ signal }) => getAgentProfile(profileId, { signal }),
-  });
-}
-
-function agentProfileVersionOptions(profileId: string, version: string, enabled: boolean) {
-  return queryOptions({
-    queryKey: agentProfileKeys.version(profileId, version),
-    enabled: enabled && profileId.length > 0 && version.length > 0,
-    queryFn: ({ signal }) => getAgentProfileVersion(profileId, version, { signal }),
-  });
-}
-
 export function createAgentProfilesQuery(includeArchived: () => boolean = () => false) {
   return createQuery(
     () => agentProfilesOptions(includeArchived()),
@@ -75,27 +55,6 @@ export function createAgentProfileVersionsQuery(
 ) {
   return createQuery(
     () => agentProfileVersionsOptions(profileId(), includeArchived(), enabled()),
-    () => queryClient,
-  );
-}
-
-export function createAgentProfileQuery(
-  profileId: () => string,
-  enabled: () => boolean = () => true,
-) {
-  return createQuery(
-    () => agentProfileOptions(profileId(), enabled()),
-    () => queryClient,
-  );
-}
-
-export function createAgentProfileVersionQuery(
-  profileId: () => string,
-  version: () => string,
-  enabled: () => boolean = () => true,
-) {
-  return createQuery(
-    () => agentProfileVersionOptions(profileId(), version(), enabled()),
     () => queryClient,
   );
 }

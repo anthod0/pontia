@@ -7,7 +7,6 @@ import { loadSessionDetail, selectSession, sessionDetail } from "../src/stores/s
 import { fetchWorkspaces } from "../src/queries/workspaces";
 import { startEventStream, stopEventStream } from "../src/services/eventStream";
 import { refreshDashboardSnapshot } from "../src/services/dashboardSnapshotRefresh";
-import { selectedTaskId, task } from "../src/stores/tasks";
 import { selectedWorkflowId, workflowDetail } from "../src/stores/workflows";
 import * as timeline from "../src/stores/timeline";
 import { queryClient } from "../src/queries/queryClient";
@@ -87,9 +86,6 @@ beforeEach(() => {
       const data: Record<string, unknown> = {
         "/workspaces": { workspaces: [{ workspace_id: "workspace" }] },
         "/agent-profiles": { agent_profiles: [] },
-        "/tasks": { tasks: [] },
-        "/tasks/task": { task: { task_id: "task", state: "completed" } },
-        "/tasks/task/events": { events: [] },
         "/workflows": { workflows: [] },
         "/workflows/workflow": {
           workflow: { workflow_id: "workflow", nodes: [], state: "completed" },
@@ -111,7 +107,6 @@ afterEach(async () => {
   stopEventStream();
   selectSession(null);
   timeline.resetTimelineState();
-  selectedTaskId.set(null);
   selectedWorkflowId.set(null);
   token.set("");
   queryClient.clear();
@@ -173,14 +168,12 @@ test.each(["idle", "busy"])(
   },
 );
 
-test("recovery refreshes shared task and workflow consumers", async () => {
+test("recovery refreshes shared workflow consumers", async () => {
   online = true;
-  selectedTaskId.set("task");
   selectedWorkflowId.set("workflow");
   await refreshDashboardSnapshot({ reason: "sse_open" });
-  expect(get(task)?.state).toBe("completed");
   expect(get(workflowDetail)?.workflow_id).toBe("workflow");
-  expect(requests).toEqual(expect.arrayContaining(["/tasks", "/workflows"]));
+  expect(requests).toContain("/workflows");
 });
 
 test("recovers the Session independently of native history failure and uses its declared topology", async () => {

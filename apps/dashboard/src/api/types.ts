@@ -8,16 +8,6 @@ export type SessionState =
   | "interrupted"
   | "exited"
   | "error";
-export type TaskState =
-  | "created"
-  | "routing"
-  | "needs_confirmation"
-  | "queued"
-  | "running"
-  | "paused"
-  | "completed"
-  | "failed"
-  | "cancelled";
 export type TurnState = "queued" | "running" | "completed" | "failed" | "interrupted" | "abandoned";
 export type TurnTopologyStatus = "unknown" | "root" | "linked";
 export type InboxDeliveryPolicy = "after_idle" | "interrupt_now" | "steer";
@@ -372,21 +362,6 @@ export interface RegisterWorkspaceInput {
 
 export interface RenameWorkspaceInput {
   name?: string | null;
-}
-
-export interface TaskView {
-  task_id: string;
-  state: TaskState | string;
-  input: string;
-  workspace_id: string | null;
-  session_id: string | null;
-  turn_id: string | null;
-  routing_state: string;
-  routing_reason: string | null;
-  routing_confidence: number | null;
-  metadata: JsonObject;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface TaskEventView {

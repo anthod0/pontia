@@ -16,7 +16,6 @@ import {
   sseStatus,
   streamedSessionId,
 } from "../stores/connection";
-import { loadTasks, refreshTask, selectedTaskId } from "../stores/tasks";
 import { loadSessionDetail, selectedSessionId } from "../stores/sessions";
 import { invalidateQueriesForDashboardEvent } from "../queries/dashboardInvalidation";
 import { invalidateWorkspaceQueries } from "../queries/workspaces";
@@ -41,14 +40,11 @@ export function subscribeDashboardEvents(listener: DashboardEventListener): () =
 }
 
 const refreshScheduler = createDashboardRefreshScheduler({
-  getSelectedTaskId: () => get(selectedTaskId),
   getSelectedSessionId: () => get(selectedSessionId),
   getSelectedWorkflowId: () => get(selectedWorkflowId),
   getSelectedWorkflowSessionIds: selectedWorkflowSessionIds,
-  loadTasks,
   loadWorkspaces: invalidateWorkspaceQueries,
   loadWorkflows: () => loadWorkflows({ showLoading: false }),
-  refreshTask,
   refreshSession: (sessionId) => loadSessionDetail(sessionId, { showLoading: false }),
   refreshWorkflow: (workflowId) => refreshWorkflow(workflowId, { showLoading: false }),
 });

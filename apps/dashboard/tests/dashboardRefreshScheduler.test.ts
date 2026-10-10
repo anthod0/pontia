@@ -2,21 +2,6 @@ import { expect, test } from "vitest";
 import { createDashboardRefreshScheduler } from "../src/services/dashboardRefreshScheduler.ts";
 import type { DashboardStreamEvent } from "../src/api/types.ts";
 
-function taskEvent(taskId: string): DashboardStreamEvent {
-  return {
-    kind: "task_event",
-    id: `event-${taskId}`,
-    occurred_at: "2026-05-14T00:00:00Z",
-    event: {
-      event_id: `event-${taskId}`,
-      task_id: taskId,
-      event_type: "task.updated",
-      payload: {},
-      created_at: "2026-05-14T00:00:00Z",
-    },
-  };
-}
-
 function sessionEvent(type = "session.updated", sessionId = "session-1"): DashboardStreamEvent {
   return {
     kind: "session_event",
@@ -37,7 +22,6 @@ function sessionEvent(type = "session.updated", sessionId = "session-1"): Dashbo
 function scheduler(
   calls: string[],
   options: {
-    taskId?: string | null;
     sessionId?: string | null;
     workflowId?: string | null;
     workflowSessionIds?: string[];
@@ -45,21 +29,14 @@ function scheduler(
 ) {
   return createDashboardRefreshScheduler({
     delayMs: 0,
-    getSelectedTaskId: () => options.taskId ?? null,
     getSelectedSessionId: () => options.sessionId ?? null,
     getSelectedWorkflowId: () => options.workflowId ?? null,
     getSelectedWorkflowSessionIds: () => options.workflowSessionIds ?? [],
-    loadTasks: async () => {
-      calls.push("tasks");
-    },
     loadWorkspaces: async () => {
       calls.push("workspaces");
     },
     loadWorkflows: async () => {
       calls.push("workflows");
-    },
-    refreshTask: async (taskId) => {
-      calls.push(`task:${taskId}`);
     },
     refreshSession: async (sessionId) => {
       calls.push(`session:${sessionId}`);
@@ -72,12 +49,11 @@ function scheduler(
 
 test("coalesces bursts of dashboard stream events into one refresh per affected resource", async () => {
   const calls: string[] = [];
-  const refreshes = scheduler(calls, { taskId: "task-1", sessionId: "session-1" });
-  refreshes.handleEvent(taskEvent("task-1"));
-  refreshes.handleEvent(taskEvent("task-1"));
+  const refreshes = scheduler(calls, { sessionId: "session-1" });
+  refreshes.handleEvent(sessionEvent());
   refreshes.handleEvent(sessionEvent());
   await refreshes.flushNow();
-  expect(calls.sort()).toEqual(["session:session-1", "task:task-1", "tasks", "workflows"].sort());
+  expect(calls.sort()).toEqual(["session:session-1", "workflows"].sort());
 });
 
 test("refreshes selected session detail and workflow list for a session event", async () => {
@@ -100,16 +76,13 @@ test("discards detail refreshes queued for a route that is no longer selected", 
   const calls: string[] = [];
   const selection = {
     sessionId: "session-1",
-    taskId: "task-1",
     workflowId: "wf-1",
     workflowSessionIds: ["session-1"],
   };
   const refreshes = scheduler(calls, selection);
   refreshes.handleEvent(sessionEvent());
-  refreshes.handleEvent(taskEvent("task-1"));
   selection.sessionId = "session-2";
-  selection.taskId = "task-2";
   selection.workflowId = "wf-2";
   await refreshes.flushNow();
-  expect(calls.sort()).toEqual(["tasks", "workflows"]);
+  expect(calls).toEqual(["workflows"]);
 });
