@@ -22,19 +22,31 @@ const mocks = vi.hoisted(() => {
 
   return {
     navigate: vi.fn(),
-    sessions: writableStore<SessionView[]>([]),
-    sessionsLoading: writableStore(false),
-    sessionsError: writableStore<string | null>(null),
-    loadSessions: vi.fn(async () => [] as SessionView[]),
+    active: writableStore<SessionView[]>([]),
+    archived: writableStore<SessionView[]>([]),
+    list: writableStore<SessionView[]>([]),
+    pinned: writableStore<SessionView[]>([]),
+    loading: writableStore(false),
+    loadingMore: writableStore(false),
+    error: writableStore<string | null>(null),
+    nextCursor: writableStore<string | null>(null),
+    loadOverview: vi.fn(async () => [] as SessionView[]),
+    loadMore: vi.fn(async () => [] as SessionView[]),
   };
 });
 
 vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
 vi.mock("../../src/stores/sessions", () => ({
-  sessions: mocks.sessions,
-  sessionsLoading: mocks.sessionsLoading,
-  sessionsError: mocks.sessionsError,
-  loadSessions: mocks.loadSessions,
+  sessionsPageActiveSessions: mocks.active,
+  sessionsPageArchivedSessions: mocks.archived,
+  sessionsPageListSessions: mocks.list,
+  sessionsPagePinnedSessions: mocks.pinned,
+  sessionsPageLoading: mocks.loading,
+  sessionsPageLoadingMore: mocks.loadingMore,
+  sessionsPageError: mocks.error,
+  sessionsPageNextCursor: mocks.nextCursor,
+  loadSessionsPageOverview: mocks.loadOverview,
+  loadMoreSessionsPageSessions: mocks.loadMore,
 }));
 
 const session = (overrides: Partial<SessionView> = {}): SessionView => ({
@@ -63,45 +75,75 @@ const session = (overrides: Partial<SessionView> = {}): SessionView => ({
 });
 
 beforeEach(() => {
-  mocks.sessions.set([]);
-  mocks.sessionsLoading.set(false);
-  mocks.sessionsError.set(null);
+  mocks.active.set([]);
+  mocks.archived.set([]);
+  mocks.list.set([]);
+  mocks.pinned.set([]);
+  mocks.loading.set(false);
+  mocks.loadingMore.set(false);
+  mocks.error.set(null);
+  mocks.nextCursor.set(null);
   vi.clearAllMocks();
 });
 
-test("loads all unarchived sessions, orders them by update time, and opens the selected session", async () => {
-  mocks.sessions.set([
-    session({ session_id: "older", title: "Older session" }),
+test("shows active sessions before the list and removes active duplicates", async () => {
+  const active = session({ session_id: "active", title: "Active session", state: "busy" });
+  const recent = session({ session_id: "recent", title: "Recent session", state: "exited" });
+  mocks.active.set([active]);
+  mocks.list.set([active, recent]);
+
+  render(SessionsPage);
+
+  expect(mocks.loadOverview).toHaveBeenCalledOnce();
+  expect(within(screen.getByTestId("active-session-list")).getByRole("button")).toHaveTextContent(
+    "Active session",
+  );
+  const listRows = within(screen.getByTestId("all-session-list")).getAllByRole("button");
+  expect(listRows).toHaveLength(1);
+  expect(listRows[0]).toHaveTextContent("Recent session");
+  expect(listRows[0]).not.toHaveTextContent("exited");
+
+  await fireEvent.click(listRows[0]);
+  expect(mocks.navigate).toHaveBeenCalledWith("/chat/recent");
+});
+
+test("loads another list page when more sessions are available", async () => {
+  mocks.list.set([session()]);
+  mocks.nextCursor.set("next-page");
+
+  render(SessionsPage);
+  await fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+
+  expect(mocks.loadMore).toHaveBeenCalledOnce();
+});
+
+test("allows archived and pinned sessions to be viewed separately", async () => {
+  mocks.archived.set([
     session({
       session_id: "archived",
       title: "Archived session",
       archived_at: "2026-05-15T00:00:00Z",
-      updated_at: "2026-05-16T00:00:00Z",
     }),
-    session({
-      session_id: "newer",
-      title: "Newer session",
-      state: "exited",
-      updated_at: "2026-05-15T00:00:00Z",
-    }),
+  ]);
+  mocks.pinned.set([
+    session({ session_id: "pinned", title: "Pinned session", pinned_at: "2026-05-15T00:00:00Z" }),
   ]);
 
   render(SessionsPage);
 
-  expect(mocks.loadSessions).toHaveBeenCalledWith({ includePinned: true, limit: 200 });
-  const rows = within(screen.getByTestId("all-session-list")).getAllByRole("button");
-  expect(rows.map((row) => row.textContent)).toEqual([
-    expect.stringContaining("Newer session"),
-    expect.stringContaining("Older session"),
-  ]);
-  expect(screen.queryByText("Archived session")).not.toBeInTheDocument();
+  await fireEvent.click(screen.getByRole("tab", { name: "Archived" }));
+  expect(within(screen.getByTestId("archived-session-list")).getByRole("button")).toHaveTextContent(
+    "Archived session",
+  );
 
-  await fireEvent.click(rows[0]);
-  expect(mocks.navigate).toHaveBeenCalledWith("/chat/newer");
+  await fireEvent.click(screen.getByRole("tab", { name: "Pinned" }));
+  expect(within(screen.getByTestId("pinned-session-list")).getByRole("button")).toHaveTextContent(
+    "Pinned session",
+  );
 });
 
 test("shows the sessions loading failure without an empty state", () => {
-  mocks.sessionsError.set("Failed to load");
+  mocks.error.set("Failed to load");
 
   render(SessionsPage);
 

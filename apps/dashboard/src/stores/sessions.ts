@@ -62,6 +62,14 @@ export const sidebarSessionsLoading = writable(false);
 export const sidebarSessionsLoadingMore = writable(false);
 export const sidebarSessionsError = writable<string | null>(null);
 export const sidebarSessionsNextCursor = writable<string | null>(null);
+export const sessionsPagePinnedSessions = writable<SessionView[]>([]);
+export const sessionsPageArchivedSessions = writable<SessionView[]>([]);
+export const sessionsPageActiveSessions = writable<SessionView[]>([]);
+export const sessionsPageListSessions = writable<SessionView[]>([]);
+export const sessionsPageLoading = writable(false);
+export const sessionsPageLoadingMore = writable(false);
+export const sessionsPageError = writable<string | null>(null);
+export const sessionsPageNextCursor = writable<string | null>(null);
 export const sessionDetail = writable<SessionConsoleDetail | null>(null);
 export const sessionDetailLoading = writable(false);
 export const sessionDetailError = writable<string | null>(null);
@@ -80,6 +88,8 @@ let detailRequest: {
 let listRequest = 0;
 let sidebarOverviewRequest = 0;
 let sidebarLoadMorePromise: Promise<SessionView[]> | null = null;
+let sessionsPageOverviewRequest = 0;
+let sessionsPageLoadMorePromise: Promise<SessionView[]> | null = null;
 
 export function resetSessions(): void {
   selectionGeneration += 1;
@@ -98,6 +108,16 @@ export function resetSessions(): void {
   sidebarSessionsLoadingMore.set(false);
   sidebarSessionsError.set(null);
   sidebarSessionsNextCursor.set(null);
+  sessionsPageOverviewRequest += 1;
+  sessionsPageLoadMorePromise = null;
+  sessionsPagePinnedSessions.set([]);
+  sessionsPageArchivedSessions.set([]);
+  sessionsPageActiveSessions.set([]);
+  sessionsPageListSessions.set([]);
+  sessionsPageLoading.set(false);
+  sessionsPageLoadingMore.set(false);
+  sessionsPageError.set(null);
+  sessionsPageNextCursor.set(null);
   selectedSessionId.set(null);
   sessionDetail.set(null);
   sessionDetailLoading.set(false);
@@ -221,6 +241,79 @@ export function loadMoreSidebarSessions(): Promise<SessionView[]> {
       if (sidebarLoadMorePromise === promise) sidebarLoadMorePromise = null;
     });
   sidebarLoadMorePromise = promise;
+  return promise;
+}
+
+const defaultSessionsPageListLimit = 50;
+
+export async function loadSessionsPageOverview(): Promise<SessionView[]> {
+  const request = ++sessionsPageOverviewRequest;
+  sessionsPageLoadMorePromise = null;
+  sessionsPageLoading.set(true);
+  sessionsPageLoadingMore.set(false);
+  sessionsPageError.set(null);
+  try {
+    const overview = await getSessionOverview({
+      sections: ["active", "list", "archived", "pinned"],
+      limit: defaultSessionsPageListLimit,
+    });
+    const pinned = overview.groups.pinned?.sessions ?? [];
+    const archived = overview.groups.archived?.sessions ?? [];
+    const active = overview.groups.active?.sessions ?? [];
+    const list = overview.groups.list?.sessions ?? [];
+    if (request === sessionsPageOverviewRequest) {
+      sessionsPagePinnedSessions.set(pinned);
+      sessionsPageArchivedSessions.set(archived);
+      sessionsPageActiveSessions.set(active);
+      sessionsPageListSessions.set(list);
+      sessionsPageNextCursor.set(overview.groups.list?.next_cursor ?? null);
+    }
+    return [...active, ...list];
+  } catch (error) {
+    if (request === sessionsPageOverviewRequest) {
+      sessionsPageError.set(error instanceof Error ? error.message : String(error));
+    }
+    return [];
+  } finally {
+    if (request === sessionsPageOverviewRequest) sessionsPageLoading.set(false);
+  }
+}
+
+export function loadMoreSessionsPageSessions(): Promise<SessionView[]> {
+  if (sessionsPageLoadMorePromise) return sessionsPageLoadMorePromise;
+  const cursor = get(sessionsPageNextCursor);
+  if (!cursor) return Promise.resolve([]);
+
+  const request = sessionsPageOverviewRequest;
+  sessionsPageLoadingMore.set(true);
+  sessionsPageError.set(null);
+  const promise = getSessionOverview({
+    sections: ["list"],
+    limit: defaultSessionsPageListLimit,
+    cursor,
+  })
+    .then((overview) => {
+      const loaded = overview.groups.list?.sessions ?? [];
+      if (request !== sessionsPageOverviewRequest) return [];
+      sessionsPageListSessions.update((current) => {
+        const byId = new Map(current.map((session) => [session.session_id, session]));
+        for (const session of loaded) byId.set(session.session_id, session);
+        return [...byId.values()];
+      });
+      sessionsPageNextCursor.set(overview.groups.list?.next_cursor ?? null);
+      return loaded;
+    })
+    .catch((error) => {
+      if (request === sessionsPageOverviewRequest) {
+        sessionsPageError.set(error instanceof Error ? error.message : String(error));
+      }
+      return [];
+    })
+    .finally(() => {
+      if (request === sessionsPageOverviewRequest) sessionsPageLoadingMore.set(false);
+      if (sessionsPageLoadMorePromise === promise) sessionsPageLoadMorePromise = null;
+    });
+  sessionsPageLoadMorePromise = promise;
   return promise;
 }
 

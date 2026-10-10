@@ -108,3 +108,54 @@ test("appends cursor pages without duplicating sessions", async () => {
     cursor: "cursor-2",
   });
 });
+
+test("loads all session page overview groups", async () => {
+  const active = session("active");
+  const recent = session("recent");
+  const archived = session("archived");
+  const pinned = session("pinned");
+  api.getSessionOverview.mockResolvedValue({
+    groups: {
+      active: { sessions: [active] },
+      list: { sessions: [active, recent], next_cursor: "cursor-2" },
+      archived: { sessions: [archived] },
+      pinned: { sessions: [pinned] },
+    },
+  });
+  const store = await import("../../src/stores/sessions");
+
+  await store.loadSessionsPageOverview();
+
+  expect(get(store.sessionsPageActiveSessions)).toEqual([active]);
+  expect(get(store.sessionsPageListSessions)).toEqual([active, recent]);
+  expect(get(store.sessionsPageArchivedSessions)).toEqual([archived]);
+  expect(get(store.sessionsPagePinnedSessions)).toEqual([pinned]);
+  expect(get(store.sessionsPageNextCursor)).toBe("cursor-2");
+});
+
+test("appends session page list pages without duplicates", async () => {
+  const first = session("first");
+  const second = session("second");
+  api.getSessionOverview
+    .mockResolvedValueOnce({
+      groups: {
+        active: { sessions: [] },
+        list: { sessions: [first], next_cursor: "cursor-2" },
+        archived: { sessions: [] },
+        pinned: { sessions: [] },
+      },
+    })
+    .mockResolvedValueOnce({
+      groups: { list: { sessions: [first, second], next_cursor: null } },
+    });
+  const store = await import("../../src/stores/sessions");
+  await store.loadSessionsPageOverview();
+
+  await store.loadMoreSessionsPageSessions();
+
+  expect(get(store.sessionsPageListSessions).map((item) => item.session_id)).toEqual([
+    "first",
+    "second",
+  ]);
+  expect(get(store.sessionsPageNextCursor)).toBeNull();
+});
