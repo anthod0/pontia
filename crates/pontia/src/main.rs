@@ -23,6 +23,8 @@ use pontia::{
 };
 use pontia_application::client_contract::ClientIntegration;
 use pontia_config::AppConfig;
+#[cfg(target_os = "macos")]
+use pontia_runtime::local_service::launchd_executable_search_path;
 use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 use std::sync::Arc;
 
@@ -653,42 +655,8 @@ fn launchd_manager<'a, R: CommandRunner>(
         current_uid(runner)?,
         pontia_clients::service_path_variables(),
         environment_paths,
-        launchd_executable_search_path(&user_home()?)?,
+        launchd_executable_search_path(env::var_os("PATH").as_deref(), &user_home()?, &[])?,
     ))
-}
-
-#[cfg(target_os = "macos")]
-fn launchd_executable_search_path(user_home: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut paths = Vec::new();
-    if let Some(path) = env::var_os("PATH") {
-        for directory in env::split_paths(&path) {
-            if !directory.is_absolute() {
-                return Err(format!(
-                    "PATH contains a non-absolute directory that launchd cannot use safely: {}",
-                    directory.display()
-                ));
-            }
-            if !paths.contains(&directory) {
-                paths.push(directory);
-            }
-        }
-    }
-    for directory in [
-        user_home.join(".local/bin"),
-        user_home.join(".bun/bin"),
-        user_home.join(".cargo/bin"),
-        PathBuf::from("/opt/homebrew/bin"),
-        PathBuf::from("/usr/local/bin"),
-        PathBuf::from("/usr/bin"),
-        PathBuf::from("/bin"),
-        PathBuf::from("/usr/sbin"),
-        PathBuf::from("/sbin"),
-    ] {
-        if !paths.contains(&directory) {
-            paths.push(directory);
-        }
-    }
-    Ok(paths)
 }
 
 #[cfg(target_os = "macos")]

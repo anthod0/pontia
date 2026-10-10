@@ -1,12 +1,14 @@
 use std::{
     collections::HashMap,
     env,
+    ffi::OsStr,
     path::{Path, PathBuf},
 };
 
 use pontia_application::client_contract::{ClientIntegration, PreparedClientIntegration};
 use pontia_runtime::local_service::{
-    CommandOutput, CommandRunner, DefinitionStore, absolute_utf8_path, systemd_quote, xml_escape,
+    CommandOutput, CommandRunner, DefinitionStore, absolute_utf8_path,
+    launchd_executable_search_path, systemd_quote, xml_escape,
 };
 
 pub const CODEX_SYSTEMD_SERVICE_NAME: &str = "pontia-codex.service";
@@ -235,7 +237,16 @@ pub fn inspect<R: CommandRunner + ?Sized>(
         )?;
     }
 
-    let executable_search_path = executable_search_path(vars, user_home, &executable)?;
+    let preferred_paths = executable
+        .parent()
+        .map(Path::to_path_buf)
+        .into_iter()
+        .collect::<Vec<_>>();
+    let executable_search_path = launchd_executable_search_path(
+        vars.get("PATH").map(|path| OsStr::new(path.as_str())),
+        user_home,
+        &preferred_paths,
+    )?;
     Ok(CodexSetup {
         executable,
         home,
@@ -495,47 +506,6 @@ fn resolve_executable(vars: &HashMap<String, String>) -> Result<PathBuf, String>
         }
     }
     Err("Codex must be installed and executable on PATH".to_string())
-}
-
-fn executable_search_path(
-    vars: &HashMap<String, String>,
-    user_home: &Path,
-    executable: &Path,
-) -> Result<Vec<PathBuf>, String> {
-    let current_dir = env::current_dir()
-        .map_err(|error| format!("failed to resolve the current directory: {error}"))?;
-    let mut paths = Vec::new();
-    if let Some(parent) = executable.parent() {
-        paths.push(parent.to_path_buf());
-    }
-    if let Some(path) = vars.get("PATH") {
-        for directory in env::split_paths(path) {
-            let directory = if directory.is_absolute() {
-                directory
-            } else {
-                current_dir.join(directory)
-            };
-            if !paths.contains(&directory) {
-                paths.push(directory);
-            }
-        }
-    }
-    for directory in [
-        user_home.join(".local/bin"),
-        user_home.join(".bun/bin"),
-        user_home.join(".cargo/bin"),
-        PathBuf::from("/opt/homebrew/bin"),
-        PathBuf::from("/usr/local/bin"),
-        PathBuf::from("/usr/bin"),
-        PathBuf::from("/bin"),
-        PathBuf::from("/usr/sbin"),
-        PathBuf::from("/sbin"),
-    ] {
-        if !paths.contains(&directory) {
-            paths.push(directory);
-        }
-    }
-    Ok(paths)
 }
 
 fn resolve_codex_home(vars: &HashMap<String, String>, user_home: &Path) -> Result<PathBuf, String> {

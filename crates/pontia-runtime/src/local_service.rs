@@ -1,4 +1,9 @@
-use std::{path::Path, process::Command};
+use std::{
+    env,
+    ffi::OsStr,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandOutput {
@@ -93,6 +98,51 @@ pub trait DefinitionStore {
     fn install(&self, path: &Path, contents: &str) -> Result<bool, String>;
 }
 
+pub fn launchd_executable_search_path(
+    inherited_path: Option<&OsStr>,
+    user_home: &Path,
+    preferred_paths: &[PathBuf],
+) -> Result<Vec<PathBuf>, String> {
+    let current_dir = env::current_dir()
+        .map_err(|error| format!("failed to resolve the current directory: {error}"))?;
+    let mut paths = Vec::new();
+
+    let mut push_unique = |path: PathBuf| {
+        let path = if path.is_absolute() {
+            path
+        } else {
+            current_dir.join(path)
+        };
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    };
+
+    for path in preferred_paths {
+        push_unique(path.clone());
+    }
+    if let Some(path) = inherited_path {
+        for directory in env::split_paths(path) {
+            push_unique(directory);
+        }
+    }
+    for directory in [
+        user_home.join(".local/bin"),
+        user_home.join(".bun/bin"),
+        user_home.join(".cargo/bin"),
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/bin"),
+        PathBuf::from("/bin"),
+        PathBuf::from("/usr/sbin"),
+        PathBuf::from("/sbin"),
+    ] {
+        push_unique(directory);
+    }
+
+    Ok(paths)
+}
+
 pub fn absolute_utf8_path<'a>(path: &'a Path, description: &str) -> Result<&'a str, String> {
     if !path.is_absolute() {
         return Err(format!(
@@ -136,4 +186,51 @@ pub fn systemd_quote(value: &str) -> String {
         }
     }
     escaped
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn launchd_search_path_prioritizes_normalizes_and_deduplicates_directories() {
+        let current_dir = env::current_dir().expect("current directory");
+        let paths = launchd_executable_search_path(
+            Some(OsStr::new("tools:/opt/homebrew/bin:/preferred")),
+            Path::new("/Users/alice"),
+            &[PathBuf::from("/preferred")],
+        )
+        .expect("launchd search path");
+
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/preferred"),
+                current_dir.join("tools"),
+                PathBuf::from("/opt/homebrew/bin"),
+                PathBuf::from("/Users/alice/.local/bin"),
+                PathBuf::from("/Users/alice/.bun/bin"),
+                PathBuf::from("/Users/alice/.cargo/bin"),
+                PathBuf::from("/usr/local/bin"),
+                PathBuf::from("/usr/bin"),
+                PathBuf::from("/bin"),
+                PathBuf::from("/usr/sbin"),
+                PathBuf::from("/sbin"),
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn launchd_search_path_supplies_defaults_without_an_inherited_path() {
+        let paths = launchd_executable_search_path(None, Path::new("/Users/alice"), &[])
+            .expect("launchd search path");
+
+        assert_eq!(
+            paths.first(),
+            Some(&PathBuf::from("/Users/alice/.local/bin"))
+        );
+        assert!(paths.contains(&PathBuf::from("/usr/bin")));
+    }
 }
