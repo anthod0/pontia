@@ -1,3 +1,4 @@
+import { render } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { token } from "../src/stores/auth";
@@ -9,6 +10,9 @@ import { refreshDashboardSnapshot } from "../src/services/dashboardSnapshotRefre
 import { selectedTaskId, task } from "../src/stores/tasks";
 import { selectedWorkflowId, workflowDetail } from "../src/stores/workflows";
 import * as timeline from "../src/stores/timeline";
+import { queryClient } from "../src/lib/queryClient";
+import type { SessionOverviewSnapshot } from "../src/queries/sessionOverview";
+import SessionOverviewQueryHarness from "./components/SessionOverviewQueryHarness.svelte";
 
 let online = false;
 let state = "busy";
@@ -29,6 +33,7 @@ beforeEach(() => {
   supportsTimeline = false;
   streams = [];
   requests = [];
+  queryClient.clear();
   token.set("test-token");
   selectSession("current");
   workspaces.set([]);
@@ -109,6 +114,7 @@ afterEach(async () => {
   selectedTaskId.set(null);
   selectedWorkflowId.set(null);
   token.set("");
+  queryClient.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
@@ -118,6 +124,13 @@ test.each(["pi", "codex"])(
   "recovers an offline %s route on first successful connection without events",
   async (client) => {
     clientType = client;
+    let overview: SessionOverviewSnapshot | undefined;
+    render(SessionOverviewQueryHarness, {
+      onSnapshot: (snapshot) => {
+        overview = snapshot;
+      },
+    });
+    await vi.waitFor(() => expect(requests).toContain("/sessions/overview"));
     await Promise.all([loadSessionDetail("current"), loadWorkspaces()]);
     startEventStream();
     await vi.waitFor(() => expect(get(sseStatus)).toBe("reconnecting"));
@@ -127,6 +140,10 @@ test.each(["pi", "codex"])(
     state = "idle";
     await vi.advanceTimersByTimeAsync(1500);
     await vi.waitFor(() => expect(get(sessionDetail)?.session.state).toBe("idle"));
+    await vi.waitFor(() => {
+      expect(overview?.active[0]?.client_type).toBe(client);
+      expect(overview?.active[0]?.state).toBe("idle");
+    });
     expect(get(workspaces)[0]?.workspace_id).toBe("workspace");
     expect(get(sessionDetail)?.turns[0]?.state).toBe("completed");
     const readCount = requests.length;
