@@ -1,6 +1,11 @@
 import { get } from "svelte/store";
 import { loadAgentProfiles } from "../stores/agentProfiles";
-import { loadSessions, loadSessionDetail, selectedSessionId } from "../stores/sessions";
+import {
+  loadSessions,
+  loadSessionDetail,
+  loadSidebarSessionOverview,
+  selectedSessionId,
+} from "../stores/sessions";
 import { loadTasks, refreshTask, selectedTaskId } from "../stores/tasks";
 import {
   hasTimelineSnapshot,
@@ -60,6 +65,7 @@ async function refreshDashboardSnapshotNow(): Promise<void> {
   const workflowId = get(selectedWorkflowId);
   const refreshes: Promise<unknown>[] = [
     loadSessions({ showLoading: false }),
+    loadSidebarSessionOverview({ showLoading: false }),
     loadWorkspaces(),
     loadAgentProfiles(),
     loadTasks(),

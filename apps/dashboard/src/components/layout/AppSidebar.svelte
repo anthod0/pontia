@@ -18,8 +18,8 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as Kbd from '$lib/components/ui/kbd/index.js'
   import { cn } from '$lib/utils.js'
-  import { archiveSession, pinSession, sessions, sessionsError, sessionsLoading, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
-  import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
+  import { archiveSession, loadMoreSidebarSessions, pinSession, sidebarActiveSessions, sidebarPinnedSessions, sidebarRecentSessions, sidebarSessionsError, sidebarSessionsLoading, sidebarSessionsLoadingMore, sidebarSessionsNextCursor, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
+  import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
   import type { SessionView } from '../../api/types'
@@ -42,8 +42,15 @@
   let renameError = $state<string | null>(null)
   let sessionManagementBusyId = $state<string | null>(null)
   let sessionActionMenuOpenKey = $state<string | null>(null)
+  let pinnedSessionsOpen = $state(true)
   let recentSessionsOpen = $state(true)
-  let recentSessions = $derived(visibleChatSessions($sessions, 'all'))
+  let recentSessions = $derived.by(() => {
+    const activeIds = new Set($sidebarActiveSessions.map((session) => session.session_id))
+    return [
+      ...$sidebarActiveSessions,
+      ...$sidebarRecentSessions.filter((session) => !activeIds.has(session.session_id)),
+    ]
+  })
 
   $effect(() => {
     if (!renameDialogOpen && renamingSession && renamingSessionId === null) cancelRenameSession()
@@ -162,6 +169,17 @@
     renameError = null
     renamingSession = null
   }
+
+  function handleSessionListScroll(event: Event): void {
+    const target = event.currentTarget as HTMLElement
+    if (
+      target.scrollHeight - target.scrollTop - target.clientHeight <= 80 &&
+      $sidebarSessionsNextCursor &&
+      !$sidebarSessionsLoadingMore
+    ) {
+      void loadMoreSidebarSessions()
+    }
+  }
 </script>
 
 <svelte:window onpopstate={() => (currentPath = dashboardRelativePath())} />
@@ -278,10 +296,40 @@
       </Sidebar.GroupContent>
     </Sidebar.Group>
 
-    <div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden">
-      {#if $sessionsError}
-        <p role="alert" class="px-4 py-2 text-xs text-destructive">Sidebar refresh failed. {$sessionsError}</p>
+    <div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden" onscroll={handleSessionListScroll}>
+      {#if $sidebarSessionsError}
+        <p role="alert" class="px-4 py-2 text-xs text-destructive">Sidebar refresh failed. {$sidebarSessionsError}</p>
       {/if}
+      <Sidebar.Group>
+        <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
+          <button
+            type="button"
+            class="flex min-w-0 items-center gap-1 rounded-none text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+            aria-expanded={pinnedSessionsOpen}
+            onclick={() => (pinnedSessionsOpen = !pinnedSessionsOpen)}
+          >
+            <span>Pinned Sessions</span>
+            <CaretRightIcon class={cn('size-3 transition-transform', pinnedSessionsOpen && 'rotate-90')} />
+          </button>
+        </Sidebar.GroupLabel>
+        {#if pinnedSessionsOpen}
+          <Sidebar.GroupContent class="pr-1">
+            <Sidebar.Menu>
+              {#if $sidebarSessionsLoading && !$sidebarPinnedSessions.length}
+                <Sidebar.MenuSkeleton />
+              {:else if $sidebarPinnedSessions.length}
+                {#each $sidebarPinnedSessions as session}
+                  {@render sessionMenuItem(session, `pinned:${session.session_id}`)}
+                {/each}
+              {:else if !$sidebarSessionsError}
+                <Sidebar.MenuItem>
+                  <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No pinned sessions</div>
+                </Sidebar.MenuItem>
+              {/if}
+            </Sidebar.Menu>
+          </Sidebar.GroupContent>
+        {/if}
+      </Sidebar.Group>
       <Sidebar.Group>
         <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
           <button
@@ -310,17 +358,20 @@
       {#if recentSessionsOpen}
         <Sidebar.GroupContent class="pr-1">
           <Sidebar.Menu>
-            {#if $sessionsLoading && !recentSessions.length}
+            {#if $sidebarSessionsLoading && !recentSessions.length}
               <Sidebar.MenuSkeleton />
               <Sidebar.MenuSkeleton />
             {:else if recentSessions.length}
               {#each recentSessions as session}
                 {@render sessionMenuItem(session, `recent:${session.session_id}`)}
               {/each}
-            {:else if !$sessionsError}
+            {:else if !$sidebarSessionsError}
               <Sidebar.MenuItem>
-                <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No active sessions</div>
+                <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No recent sessions</div>
               </Sidebar.MenuItem>
+            {/if}
+            {#if $sidebarSessionsLoadingMore}
+              <Sidebar.MenuSkeleton />
             {/if}
           </Sidebar.Menu>
         </Sidebar.GroupContent>

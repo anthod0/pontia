@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   setSessionModel,
+  getSessionOverview,
   getTurnTimeline,
   getTurnTreeHistory,
   getTurnTreeUpdates,
@@ -77,6 +78,28 @@ test("serializes session list limit and pinned inclusion query options", async (
 
   expect(fetchMock).toHaveBeenCalledWith(
     "/api/v1/sessions?limit=50&include_pinned=true",
+    expect.any(Object),
+  );
+});
+
+test("requests session overview groups and cursor pages from the direct response endpoint", async () => {
+  const fetchMock = vi.fn(
+    async () =>
+      new Response(JSON.stringify({ groups: { list: { sessions: [], next_cursor: null } } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  await getSessionOverview({
+    sections: ["pinned", "active", "list"],
+    limit: 50,
+    cursor: "next page",
+  });
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/v1/sessions/overview?sections=pinned%2Cactive%2Clist&limit=50&cursor=next+page",
     expect.any(Object),
   );
 });

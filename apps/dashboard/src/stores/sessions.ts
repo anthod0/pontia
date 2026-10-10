@@ -14,6 +14,7 @@ import {
   createSession as apiCreateSession,
   dismissInboxMessage as apiDismissInboxMessage,
   getSession,
+  getSessionOverview,
   interruptSession as apiInterruptSession,
   listEvents,
   listInboxMessages,
@@ -54,6 +55,13 @@ export interface SessionConsoleDetail {
 export const sessions = writable<SessionView[]>([]);
 export const sessionsLoading = writable(false);
 export const sessionsError = writable<string | null>(null);
+export const sidebarPinnedSessions = writable<SessionView[]>([]);
+export const sidebarActiveSessions = writable<SessionView[]>([]);
+export const sidebarRecentSessions = writable<SessionView[]>([]);
+export const sidebarSessionsLoading = writable(false);
+export const sidebarSessionsLoadingMore = writable(false);
+export const sidebarSessionsError = writable<string | null>(null);
+export const sidebarSessionsNextCursor = writable<string | null>(null);
 export const sessionDetail = writable<SessionConsoleDetail | null>(null);
 export const sessionDetailLoading = writable(false);
 export const sessionDetailError = writable<string | null>(null);
@@ -70,6 +78,8 @@ let detailRequest: {
   promise: Promise<SessionConsoleDetail | null>;
 } | null = null;
 let listRequest = 0;
+let sidebarOverviewRequest = 0;
+let sidebarLoadMorePromise: Promise<SessionView[]> | null = null;
 
 export function resetSessions(): void {
   selectionGeneration += 1;
@@ -79,6 +89,15 @@ export function resetSessions(): void {
   sessions.set([]);
   sessionsLoading.set(false);
   sessionsError.set(null);
+  sidebarOverviewRequest += 1;
+  sidebarLoadMorePromise = null;
+  sidebarPinnedSessions.set([]);
+  sidebarActiveSessions.set([]);
+  sidebarRecentSessions.set([]);
+  sidebarSessionsLoading.set(false);
+  sidebarSessionsLoadingMore.set(false);
+  sidebarSessionsError.set(null);
+  sidebarSessionsNextCursor.set(null);
   selectedSessionId.set(null);
   sessionDetail.set(null);
   sessionDetailLoading.set(false);
@@ -127,6 +146,82 @@ export async function loadSessions(options: LoadOptions = {}): Promise<SessionVi
   } finally {
     if (request === listRequest) sessionsLoading.set(false);
   }
+}
+
+const defaultSidebarSessionListLimit = 50;
+
+export async function loadSidebarSessionOverview(
+  options: {
+    showLoading?: boolean;
+  } = {},
+): Promise<SessionView[]> {
+  const request = ++sidebarOverviewRequest;
+  sidebarLoadMorePromise = null;
+  const showLoading = options.showLoading ?? true;
+  if (showLoading) sidebarSessionsLoading.set(true);
+  sidebarSessionsLoadingMore.set(false);
+  sidebarSessionsError.set(null);
+  try {
+    const overview = await getSessionOverview({
+      sections: ["pinned", "active", "list"],
+      limit: defaultSidebarSessionListLimit,
+    });
+    const pinned = overview.groups.pinned?.sessions ?? [];
+    const active = overview.groups.active?.sessions ?? [];
+    const recent = overview.groups.list?.sessions ?? [];
+    if (request === sidebarOverviewRequest) {
+      sidebarPinnedSessions.set(pinned);
+      sidebarActiveSessions.set(active);
+      sidebarRecentSessions.set(recent);
+      sidebarSessionsNextCursor.set(overview.groups.list?.next_cursor ?? null);
+    }
+    return [...active, ...recent];
+  } catch (error) {
+    if (request === sidebarOverviewRequest) {
+      sidebarSessionsError.set(error instanceof Error ? error.message : String(error));
+    }
+    return [];
+  } finally {
+    if (request === sidebarOverviewRequest) sidebarSessionsLoading.set(false);
+  }
+}
+
+export function loadMoreSidebarSessions(): Promise<SessionView[]> {
+  if (sidebarLoadMorePromise) return sidebarLoadMorePromise;
+  const cursor = get(sidebarSessionsNextCursor);
+  if (!cursor) return Promise.resolve([]);
+
+  const request = sidebarOverviewRequest;
+  sidebarSessionsLoadingMore.set(true);
+  sidebarSessionsError.set(null);
+  const promise = getSessionOverview({
+    sections: ["list"],
+    limit: defaultSidebarSessionListLimit,
+    cursor,
+  })
+    .then((overview) => {
+      const loaded = overview.groups.list?.sessions ?? [];
+      if (request !== sidebarOverviewRequest) return [];
+      sidebarRecentSessions.update((current) => {
+        const byId = new Map(current.map((session) => [session.session_id, session]));
+        for (const session of loaded) byId.set(session.session_id, session);
+        return [...byId.values()];
+      });
+      sidebarSessionsNextCursor.set(overview.groups.list?.next_cursor ?? null);
+      return loaded;
+    })
+    .catch((error) => {
+      if (request === sidebarOverviewRequest) {
+        sidebarSessionsError.set(error instanceof Error ? error.message : String(error));
+      }
+      return [];
+    })
+    .finally(() => {
+      if (request === sidebarOverviewRequest) sidebarSessionsLoadingMore.set(false);
+      if (sidebarLoadMorePromise === promise) sidebarLoadMorePromise = null;
+    });
+  sidebarLoadMorePromise = promise;
+  return promise;
 }
 
 export function loadSessionDetail(
@@ -225,7 +320,7 @@ export async function updateSessionTitle(
   title: string | null,
 ): Promise<SessionView> {
   const session = await apiUpdateSession(sessionId, { title });
-  await loadSessions();
+  await Promise.all([loadSessions(), loadSidebarSessionOverview({ showLoading: false })]);
   await loadSessionDetail(sessionId);
   return session;
 }
@@ -245,7 +340,10 @@ function applySessionManagementResult(session: SessionView): void {
 
 async function refreshAfterSessionManagement(session: SessionView): Promise<SessionView> {
   applySessionManagementResult(session);
-  await loadSessions({ showLoading: false });
+  await Promise.all([
+    loadSessions({ showLoading: false }),
+    loadSidebarSessionOverview({ showLoading: false }),
+  ]);
   return session;
 }
 
@@ -411,7 +509,7 @@ export async function resumeSession(sessionId: string): Promise<void> {
 
 export async function terminateSession(sessionId: string): Promise<void> {
   await apiTerminateSession(sessionId);
-  await loadSessions();
+  await Promise.all([loadSessions(), loadSidebarSessionOverview({ showLoading: false })]);
   if (get(sessionDetail)?.session.session_id === sessionId) {
     await loadSessionDetail(sessionId);
   }

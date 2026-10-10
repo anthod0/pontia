@@ -1,7 +1,7 @@
 import { startEventStream, stopEventStream } from "./eventStream";
 import { loadAgentProfiles, resetAgentProfiles } from "../stores/agentProfiles";
 import { resetConnectionState } from "../stores/connection";
-import { loadSessions, resetSessions } from "../stores/sessions";
+import { loadSessions, loadSidebarSessionOverview, resetSessions } from "../stores/sessions";
 import { loadTasks, resetTasks } from "../stores/tasks";
 import { resetTimelineState } from "../stores/timeline";
 import { loadWorkspaces, resetWorkspaces } from "../stores/workspaces";
@@ -13,6 +13,7 @@ export function startDashboardRuntime(): void {
     loadWorkspaces(),
     loadAgentProfiles(),
     loadSessions(),
+    loadSidebarSessionOverview(),
     loadWorkflows({ showLoading: false }),
   ]);
   startEventStream();

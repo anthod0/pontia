@@ -18,7 +18,12 @@ import {
 } from "../stores/connection";
 import { loadAgentProfiles } from "../stores/agentProfiles";
 import { loadTasks, refreshTask, selectedTaskId } from "../stores/tasks";
-import { loadSessions, loadSessionDetail, selectedSessionId } from "../stores/sessions";
+import {
+  loadSessions,
+  loadSessionDetail,
+  loadSidebarSessionOverview,
+  selectedSessionId,
+} from "../stores/sessions";
 import { loadWorkspaces } from "../stores/workspaces";
 import {
   loadWorkflows,
@@ -48,10 +53,18 @@ const refreshScheduler = createDashboardRefreshScheduler({
   loadTasks,
   loadWorkspaces,
   loadAgentProfiles,
-  loadSessions: () => loadSessions({ showLoading: false }),
+  loadSessions: () =>
+    Promise.all([
+      loadSessions({ showLoading: false }),
+      loadSidebarSessionOverview({ showLoading: false }),
+    ]),
   loadWorkflows: () => loadWorkflows({ showLoading: false }),
   refreshTask,
-  refreshSession: (sessionId) => loadSessionDetail(sessionId, { showLoading: false }),
+  refreshSession: (sessionId) =>
+    Promise.all([
+      loadSessionDetail(sessionId, { showLoading: false }),
+      loadSidebarSessionOverview({ showLoading: false }),
+    ]),
   refreshWorkflow: (workflowId) => refreshWorkflow(workflowId, { showLoading: false }),
 });
 

@@ -23,16 +23,27 @@ const mocks = vi.hoisted(() => {
     };
   }
 
+  const sessionItems = writableStore<unknown[]>([]);
+  const loading = writableStore(false);
+  const error = writableStore<string | null>(null);
   return {
     navigate: vi.fn(),
     startEventStream: vi.fn(),
     stopEventStream: vi.fn(),
-    sessions: writableStore([]),
-    sessionsLoading: writableStore(false),
-    sessionsError: writableStore<string | null>(null),
+    sessions: sessionItems,
+    sessionsLoading: loading,
+    sessionsError: error,
+    sidebarPinnedSessions: writableStore<unknown[]>([]),
+    sidebarActiveSessions: sessionItems,
+    sidebarRecentSessions: writableStore<unknown[]>([]),
+    sidebarSessionsLoading: loading,
+    sidebarSessionsLoadingMore: writableStore(false),
+    sidebarSessionsError: error,
+    sidebarSessionsNextCursor: writableStore<string | null>(null),
     sessionDetail: writableStore(null),
     sessionDetailError: writableStore<string | null>(null),
     loadSessions: vi.fn(async () => []),
+    loadMoreSidebarSessions: vi.fn(async () => []),
     updateSessionTitle: vi.fn(async () => undefined),
     pinSession: vi.fn(async () => undefined),
     unpinSession: vi.fn(async () => undefined),
@@ -50,9 +61,17 @@ vi.mock("../src/stores/sessions", () => ({
   sessions: mocks.sessions,
   sessionsLoading: mocks.sessionsLoading,
   sessionsError: mocks.sessionsError,
+  sidebarPinnedSessions: mocks.sidebarPinnedSessions,
+  sidebarActiveSessions: mocks.sidebarActiveSessions,
+  sidebarRecentSessions: mocks.sidebarRecentSessions,
+  sidebarSessionsLoading: mocks.sidebarSessionsLoading,
+  sidebarSessionsLoadingMore: mocks.sidebarSessionsLoadingMore,
+  sidebarSessionsError: mocks.sidebarSessionsError,
+  sidebarSessionsNextCursor: mocks.sidebarSessionsNextCursor,
   sessionDetail: mocks.sessionDetail,
   sessionDetailError: mocks.sessionDetailError,
   loadSessions: mocks.loadSessions,
+  loadMoreSidebarSessions: mocks.loadMoreSidebarSessions,
   updateSessionTitle: mocks.updateSessionTitle,
   pinSession: mocks.pinSession,
   unpinSession: mocks.unpinSession,
@@ -62,6 +81,10 @@ vi.mock("../src/stores/sessions", () => ({
 beforeEach(() => {
   window.history.pushState({}, "", "/dashboard");
   mocks.sessions.set([]);
+  mocks.sidebarPinnedSessions.set([]);
+  mocks.sidebarRecentSessions.set([]);
+  mocks.sidebarSessionsNextCursor.set(null);
+  mocks.sidebarSessionsLoadingMore.set(false);
   mocks.sessionsLoading.set(false);
   mocks.sessionsError.set(null);
   vi.clearAllMocks();
@@ -112,6 +135,51 @@ test("opens the all sessions page from the Recent Sessions header", async () => 
   await fireEvent.click(screen.getByRole("button", { name: "Open all sessions" }));
 
   expect(mocks.navigate).toHaveBeenCalledWith("/sessions");
+});
+
+test("sidebar renders active sessions before paged recent sessions without duplicating active sessions", () => {
+  const active = chatSession("session-active", "idle", "2026-05-14T04:00:00Z");
+  const duplicate = chatSession("session-active", "idle", "2026-05-14T04:00:00Z");
+  const older = chatSession("session-older", "exited", "2026-05-14T01:00:00Z");
+  mocks.sessions.set([active]);
+  mocks.sidebarRecentSessions.set([duplicate, older]);
+
+  render(AppSidebarHost);
+
+  const activeButton = screen.getByText("session-active").closest("button");
+  const olderButton = screen.getByText("session-older").closest("button");
+  expect(screen.getAllByText("session-active")).toHaveLength(1);
+  expect(
+    activeButton?.compareDocumentPosition(olderButton as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+
+test("sidebar collapses the pinned sessions group", async () => {
+  mocks.sidebarPinnedSessions.set([
+    chatSession("session-pinned", "idle", "2026-05-14T01:00:00Z", "2026-05-14T02:00:00Z"),
+  ]);
+  render(AppSidebarHost);
+
+  const toggle = screen.getByRole("button", { name: /pinned sessions/i });
+  expect(screen.getByText("session-pinned")).toBeInTheDocument();
+  await fireEvent.click(toggle);
+  expect(screen.queryByText("session-pinned")).not.toBeInTheDocument();
+});
+
+test("sidebar loads the next page when its session list reaches the bottom", async () => {
+  mocks.sessions.set([chatSession("session-active", "idle", "2026-05-14T04:00:00Z")]);
+  mocks.sidebarSessionsNextCursor.set("next-page");
+  render(AppSidebarHost);
+
+  const scroller = screen.getByText("Recent Sessions").closest(".overflow-y-auto") as HTMLElement;
+  Object.defineProperties(scroller, {
+    scrollHeight: { configurable: true, value: 500 },
+    scrollTop: { configurable: true, value: 420 },
+    clientHeight: { configurable: true, value: 80 },
+  });
+  await fireEvent.scroll(scroller);
+
+  expect(mocks.loadMoreSidebarSessions).toHaveBeenCalledTimes(1);
 });
 
 test("sidebar shows semantic status dots except for terminal sessions, and opens chat for the selected session", async () => {

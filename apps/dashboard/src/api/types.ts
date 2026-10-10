@@ -280,6 +280,25 @@ export interface SessionView {
   metadata: JsonObject;
 }
 
+export type SessionOverviewSection = "pinned" | "archived" | "active" | "list";
+
+export interface SessionOverviewGroupView {
+  sessions: SessionView[];
+}
+
+export interface SessionOverviewListGroupView extends SessionOverviewGroupView {
+  next_cursor: string | null;
+}
+
+export interface SessionOverviewView {
+  groups: {
+    pinned?: SessionOverviewGroupView;
+    archived?: SessionOverviewGroupView;
+    active?: SessionOverviewGroupView;
+    list?: SessionOverviewListGroupView;
+  };
+}
+
 export interface WorkspaceView {
   workspace_id: string;
   canonical_path: string;

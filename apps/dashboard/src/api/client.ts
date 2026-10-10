@@ -18,6 +18,8 @@ import type {
   RenameWorkspaceInput,
   SessionView,
   SessionModels,
+  SessionOverviewSection,
+  SessionOverviewView,
   SubmitInboxMessageInput,
   TurnTimelineDirection,
   TurnTimelinePage,
@@ -46,6 +48,7 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   mutating?: boolean;
   retryNetworkErrors?: boolean;
+  directResponse?: boolean;
 };
 export type ReadRequestOptions = Pick<RequestOptions, "signal">;
 
@@ -136,29 +139,30 @@ export async function validateExternalApiToken(candidateToken: string): Promise<
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const headers = new Headers(options.headers);
+  const { body, mutating, retryNetworkErrors, directResponse, ...fetchOptions } = options;
+  const headers = new Headers(fetchOptions.headers);
   applyApiAuthentication(headers);
-  if (options.body !== undefined) headers.set("Content-Type", "application/json");
+  if (body !== undefined) headers.set("Content-Type", "application/json");
   if (
-    (options.mutating || (options.method && options.method !== "GET")) &&
+    (mutating || (fetchOptions.method && fetchOptions.method !== "GET")) &&
     !headers.has("Idempotency-Key")
   )
     headers.set("Idempotency-Key", idempotencyKey());
 
   let afterNetworkFailure = false;
   const fetchRequest =
-    options.retryNetworkErrors === false
+    retryNetworkErrors === false
       ? (input: RequestInfo | URL, init: RequestInit) => apiFetch(String(input), init)
       : (input: RequestInfo | URL, init: RequestInit) =>
           fetchWithTransientNetworkRetry(input, init, () => {
             afterNetworkFailure = true;
           });
   const response = await fetchRequest(apiUrl(`${API_BASE}${path}`), {
-    ...options,
+    ...fetchOptions,
     headers,
     credentials: apiCredentials,
-    signal: apiSignal(options.signal),
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: apiSignal(fetchOptions.signal),
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await response.text();
   let envelope: ApiEnvelope<T> | null = null;
@@ -176,6 +180,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       afterNetworkFailure,
     );
   }
+  if (directResponse) return envelope as T;
   if (!envelope || envelope.data === null) {
     throw new ApiError("Response did not include data.", "missing_data", response.status);
   }
@@ -395,6 +400,27 @@ export async function retryWorkflow(
       },
     )
   ).workflow;
+}
+
+export type GetSessionOverviewOptions = {
+  sections: SessionOverviewSection[];
+  workspaceId?: string;
+  limit?: number;
+  cursor?: string;
+};
+
+export async function getSessionOverview(
+  options: GetSessionOverviewOptions,
+): Promise<SessionOverviewView> {
+  const query = new URLSearchParams({ sections: options.sections.join(",") });
+  if (options.workspaceId !== undefined) query.set("workspace_id", options.workspaceId);
+  if (options.limit !== undefined) query.set("limit", String(options.limit));
+  if (options.cursor !== undefined) query.set("cursor", options.cursor);
+  const timeout = AbortSignal.timeout(15_000);
+  return request<SessionOverviewView>(`/sessions/overview?${query}`, {
+    signal: timeout,
+    directResponse: true,
+  });
 }
 
 export async function listSessions(options: ListSessionsOptions = {}): Promise<SessionView[]> {
