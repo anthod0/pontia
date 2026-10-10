@@ -199,15 +199,18 @@
 <section aria-labelledby="deploy-edge">
   <h2 id="deploy-edge">Deploy a self-hosted edge</h2>
   <p>Generate a one-time command, then run it on your public Linux server.</p>
+  <p>
+    Run <code>sudo pontia-edge retry</code> on the same server if initialization is incomplete.
+  </p>
 
-  <form method="POST" action="/settings/edges/deploy">
+  <form class="deployment-form" method="POST" action="/settings/edges/deploy">
+    <Button type="submit">Generate deployment command</Button>
     <p class="agreement">
       By generating this command, you agree to the
       <a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">
         Let's Encrypt Subscriber Agreement</a
       >.
     </p>
-    <Button type="submit">Generate deployment command</Button>
   </form>
 </section>
 
@@ -236,9 +239,27 @@
     white-space: nowrap;
     border: 0;
   }
+  .deployment-form {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 20px;
+  }
   .agreement {
     max-width: 620px;
-    margin-block: 20px;
+    margin: 0;
+  }
+  .agreement a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  code {
+    border-radius: 4px;
+    background: var(--muted);
+    padding: 2px 5px;
+    color: var(--foreground);
   }
   :global(.health-healthy) {
     border-color: color-mix(in oklab, var(--success, #15803d) 35%, transparent);

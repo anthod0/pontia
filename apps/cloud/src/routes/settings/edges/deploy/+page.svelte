@@ -82,6 +82,12 @@
             : "Can't use port 80 or 443? Use an alternative deployment"}
         </Button>
       </div>
+
+      <div class="retry-help">
+        <h3>Initialization incomplete?</h3>
+        <p>After fixing the reported problem, resume it on the same server with:</p>
+        <pre><code>sudo pontia-edge retry</code></pre>
+      </div>
     </section>
   {:else if !form?.error}
     <p>Generate a deployment command from the edges page to get started.</p>
@@ -127,6 +133,15 @@
     display: grid;
     gap: 8px;
     max-width: 240px;
+  }
+
+  .retry-help {
+    margin-top: 28px;
+  }
+
+  .retry-help p {
+    color: var(--muted-foreground);
+    font-size: 14px;
   }
 
   pre {
