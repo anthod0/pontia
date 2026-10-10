@@ -8,7 +8,6 @@ export type InternalEventType =
   | "session.ready"
   | "session.exited"
   | "session.model_updated"
-  | "session.message_updated"
   | "session.context_usage_updated"
   | "turn.started"
   | "turn.output"
@@ -31,8 +30,6 @@ export interface ContextUsageObservation {
   context_usage: ContextUsagePayload;
   model: string | null;
 }
-
-export type SessionMessageUpdatedReason = "append" | "update" | "final";
 
 export type PiTopologyEntryKind =
   | "user_message"
@@ -74,17 +71,6 @@ function turnFact(
   data: Record<string, unknown>,
 ): InternalEvent {
   return { session_id: context.sessionId, turn_id: context.turnId, type, data };
-}
-
-export function buildSessionMessageUpdatedEvent(
-  context: TurnContext,
-  reason: SessionMessageUpdatedReason,
-): InternalEvent {
-  return {
-    session_id: context.sessionId,
-    type: "session.message_updated",
-    data: { reason },
-  };
 }
 
 export function buildSessionContextUsageUpdatedEvent(

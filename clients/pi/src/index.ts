@@ -7,7 +7,6 @@ import { pontiaHomeFromEnv } from "./discovery.js";
 import {
   buildSessionContextUsageUpdatedEvent,
   buildSessionExitedEvent,
-  buildSessionMessageUpdatedEvent,
   buildSessionReadyEvent,
   buildTurnCompletedEvent,
   buildTurnFailedEvent,
@@ -18,7 +17,6 @@ import {
   type InternalEvent,
   type PiTopologyContext,
   type PiTopologyEntryKind,
-  type SessionMessageUpdatedReason,
 } from "./events.js";
 import { asRecord, optionalString } from "./values.js";
 import {
@@ -37,7 +35,6 @@ import {
   assistantDeltaFromEvent,
   assistantTextFromMessage,
   errorMessageFromAgentEnd,
-  isTranscriptBoundaryMessageUpdate,
   lastAssistantTextFromMessages,
 } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
@@ -475,21 +472,6 @@ export function createPontiaPiExtension(
     },
   });
 
-  async function scheduleMessageRefresh(reason: SessionMessageUpdatedReason): Promise<void> {
-    if (!activeTurn || activeTurn.ended) return;
-    await activeTurn.reporter.report(
-      activeTurn.context,
-      buildSessionMessageUpdatedEvent(activeTurn.context, reason),
-    );
-  }
-
-  async function reportFinalMessageRefresh(state: ActiveTurnState): Promise<void> {
-    await state.reporter.report(
-      state.context,
-      buildSessionMessageUpdatedEvent(state.context, "final"),
-    );
-  }
-
   async function reportContextUsageFromHookEvent(event: unknown, ctx?: unknown): Promise<void> {
     if (!activeTurn || activeTurn.ended) return;
     const observation = contextUsageFromPiHook(event, ctx);
@@ -836,16 +818,6 @@ export function createPontiaPiExtension(
     } else if (delta) {
       activeTurn.output += delta;
     }
-
-    if (isTranscriptBoundaryMessageUpdate(event)) await scheduleMessageRefresh("update");
-  });
-
-  pi.on("tool_execution_start", async (event) => {
-    if (!event.parentToolCallId) await scheduleMessageRefresh("update");
-  });
-
-  pi.on("tool_execution_end", async (event) => {
-    if (!event.parentToolCallId) await scheduleMessageRefresh("update");
   });
 
   pi.on("message_end", async (event, ctx) => {
@@ -855,7 +827,6 @@ export function createPontiaPiExtension(
       (event as unknown as Record<string, unknown> | undefined)?.message,
     );
     if (fullText) activeTurn.output = fullText;
-    await scheduleMessageRefresh("append");
   });
 
   pi.on("agent_settled", (_event, ctx) => {
@@ -878,7 +849,6 @@ export function createPontiaPiExtension(
           state.context,
           buildTurnInterruptedEvent(state.context, terminalLeafId),
         );
-        await reportFinalMessageRefresh(state);
         return;
       }
 
@@ -888,7 +858,6 @@ export function createPontiaPiExtension(
           state.context,
           buildTurnFailedEvent(state.context, failureMessage, terminalLeafId),
         );
-        await reportFinalMessageRefresh(state);
         return;
       }
 
@@ -912,7 +881,6 @@ export function createPontiaPiExtension(
         state.context,
         buildTurnCompletedEvent(state.context, terminalLeafId),
       );
-      await reportFinalMessageRefresh(state);
     } finally {
       await state.liveOutput.close();
     }

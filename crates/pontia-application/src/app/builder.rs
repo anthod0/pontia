@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig};
 use sqlx::SqlitePool;
 
-use super::{AppState, ShutdownSignal, VolatileEventBroker};
+use super::{AppState, ShutdownSignal};
 use crate::{
     AgentEventBroker, GitRefreshCoordinator, IdempotencyCoordinator, live_output::LiveOutputStore,
 };
@@ -17,7 +17,6 @@ pub struct AppStateBuilder {
     pub(super) file_picker: FilePickerConfig,
     pub(super) shutdown: ShutdownSignal,
     pub(super) agent_events: AgentEventBroker,
-    pub(super) volatile_events: VolatileEventBroker,
     pub(super) live_output: LiveOutputStore,
     pub(super) git_refresh: GitRefreshCoordinator,
     pub(super) idempotency: IdempotencyCoordinator,
@@ -36,7 +35,6 @@ impl AppStateBuilder {
             file_picker: FilePickerConfig::default(),
             shutdown: ShutdownSignal::default(),
             agent_events: AgentEventBroker::default(),
-            volatile_events: VolatileEventBroker::default(),
             live_output: LiveOutputStore::default(),
             git_refresh: GitRefreshCoordinator::default(),
             idempotency: IdempotencyCoordinator::default(),
@@ -60,11 +58,6 @@ impl AppStateBuilder {
 
     pub fn shutdown(mut self, shutdown: ShutdownSignal) -> Self {
         self.shutdown = shutdown;
-        self
-    }
-
-    pub fn volatile_events(mut self, volatile_events: VolatileEventBroker) -> Self {
-        self.volatile_events = volatile_events;
         self
     }
 

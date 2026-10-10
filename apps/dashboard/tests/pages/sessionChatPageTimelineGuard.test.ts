@@ -173,7 +173,7 @@ test("chat keeps clients without timeline support on the page with history unava
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalled();
 });
 
-test.each(["session.ready", "turn.started", "turn.completed", "session.message_updated"])(
+test.each(["session.ready", "turn.started", "turn.completed"])(
   "%s refreshes session details without requesting unsupported history",
   async (type) => {
     render(SessionChatPage);

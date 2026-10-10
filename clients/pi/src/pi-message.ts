@@ -36,23 +36,6 @@ export function assistantDeltaFromEvent(event: unknown): string | undefined {
   return undefined;
 }
 
-const transcriptBoundaryStreamEventTypes = new Set([
-  "thinking_start",
-  "thinking_end",
-  "text_start",
-  "text_end",
-  "toolcall_start",
-  "toolcall_end",
-]);
-
-export function isTranscriptBoundaryMessageUpdate(event: unknown): boolean {
-  if (!event || typeof event !== "object") return false;
-  const streamEvent = (event as Record<string, unknown>).assistantMessageEvent;
-  if (!streamEvent || typeof streamEvent !== "object") return false;
-  const type = (streamEvent as Record<string, unknown>).type;
-  return typeof type === "string" && transcriptBoundaryStreamEventTypes.has(type);
-}
-
 interface PiAgentEndEventLike {
   messages: unknown[];
 }

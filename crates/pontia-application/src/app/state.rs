@@ -6,7 +6,7 @@ use std::{
 use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig};
 use sqlx::SqlitePool;
 
-use super::{AppStateBuilder, ShutdownSignal, VolatileEventBroker};
+use super::{AppStateBuilder, ShutdownSignal};
 use crate::{
     AgentEventBroker, GitRefreshCoordinator, IdempotencyCoordinator, LiveOutputService,
     live_output::LiveOutputStore,
@@ -40,7 +40,6 @@ struct AppRuntimeState {
 struct EventState {
     ingest: crate::EventIngestService,
     agent_events: AgentEventBroker,
-    volatile_events: VolatileEventBroker,
     live_output: LiveOutputStore,
 }
 
@@ -77,7 +76,6 @@ impl AppState {
                 builder.agent_events.clone(),
                 crate::LiveOutputService::new(builder.db.clone(), builder.live_output.clone())
                     .with_clients(builder.clients.clone()),
-                builder.volatile_events.clone(),
                 scheduler.clone(),
             ),
         );
@@ -136,7 +134,6 @@ impl AppState {
                 events: EventState {
                     ingest,
                     agent_events: builder.agent_events,
-                    volatile_events: builder.volatile_events,
                     live_output: builder.live_output,
                 },
                 lifecycle: LifecycleState {
@@ -178,10 +175,6 @@ impl AppState {
 
     pub fn shutdown(&self) -> ShutdownSignal {
         self.inner.lifecycle.shutdown.clone()
-    }
-
-    pub fn volatile_events(&self) -> VolatileEventBroker {
-        self.inner.events.volatile_events.clone()
     }
 
     pub fn agent_events(&self) -> AgentEventBroker {

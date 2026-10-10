@@ -2,7 +2,6 @@ use serde_json::Value;
 
 use crate::{
     AgentEventBroker, ClientControlService, LiveOutputService,
-    app::VolatileEventBroker,
     inbox::{InboxAssociations, InboxScheduler},
 };
 use pontia_core::{
@@ -69,7 +68,6 @@ pub(crate) struct PostCommitEffects {
     pub(super) client_control: Option<ClientControlService>,
     pub(super) agent_events: Option<AgentEventBroker>,
     pub(super) live_output: Option<LiveOutputService>,
-    pub(super) volatile_events: Option<VolatileEventBroker>,
     pub(super) scheduler: InboxScheduler,
 }
 
@@ -78,14 +76,12 @@ impl PostCommitEffects {
         client_control: ClientControlService,
         agent_events: AgentEventBroker,
         live_output: LiveOutputService,
-        volatile_events: VolatileEventBroker,
         scheduler: InboxScheduler,
     ) -> Self {
         Self {
             client_control: Some(client_control),
             agent_events: Some(agent_events),
             live_output: Some(live_output),
-            volatile_events: Some(volatile_events),
             scheduler,
         }
     }

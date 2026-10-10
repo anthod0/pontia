@@ -200,11 +200,6 @@ async fn direct_reports_validate_fact_shape_usage_and_normalized_payload_size() 
     for (kind, data) in [
         (EventType::SessionCreated, json!({})),
         (EventType::TurnStarted, json!(null)),
-        (EventType::SessionMessageUpdated, json!([1])),
-        (
-            EventType::SessionMessageUpdated,
-            json!({"reason":"x".repeat(65_536)}),
-        ),
         (EventType::SessionContextUsageUpdated, json!({})),
         (
             EventType::SessionContextUsageUpdated,
@@ -300,8 +295,8 @@ async fn session_turn_and_ready_identity_boundaries_are_enforced_without_http() 
         .report_fact(ReportedFact {
             session_id: "missing".into(),
             turn_id: None,
-            fact_type: EventType::SessionMessageUpdated,
-            data: json!({}),
+            fact_type: EventType::SessionContextUsageUpdated,
+            data: json!({"context_usage":{"used_tokens":1}}),
         })
         .await
         .unwrap_err();
@@ -437,50 +432,6 @@ async fn rejected_start_only_fails_its_current_runtime_and_publishes_the_committ
             .live_output()
             .snapshot("session", &turn)
             .is_none()
-    );
-}
-
-#[tokio::test]
-async fn message_refreshes_are_debounced_and_never_persisted() {
-    let fixture = Fixture::new("generic").await;
-    let mut volatile = fixture.state.volatile_events().subscribe();
-    let mut committed = fixture.state.agent_events().subscribe();
-    let mut last = None;
-    for reason in ["first", "last"] {
-        last = Some(
-            fixture
-                .report(
-                    EventType::SessionMessageUpdated,
-                    None,
-                    json!({"reason":reason}),
-                )
-                .await
-                .unwrap(),
-        );
-    }
-    let event = tokio::time::timeout(Duration::from_secs(3), volatile.recv())
-        .await
-        .unwrap()
-        .unwrap();
-    let last = last.unwrap();
-    assert_eq!(event.event_id, last.event_id);
-    assert_eq!(event.payload["reason"], "last");
-    assert_eq!(last.state_version, 1);
-    assert!(
-        tokio::time::timeout(Duration::from_millis(200), volatile.recv())
-            .await
-            .is_err()
-    );
-    assert!(matches!(committed.try_recv(), Err(TryRecvError::Empty)));
-    assert_eq!(
-        fixture
-            .state
-            .event_ingest_service()
-            .list_events("session")
-            .await
-            .unwrap()
-            .len(),
-        1
     );
 }
 

@@ -1303,8 +1303,6 @@ describe("pontia pi extension lifecycle", () => {
     expect(pi.on).toHaveBeenCalledWith("agent_start", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("message_update", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("message_end", expect.any(Function));
-    expect(pi.on).toHaveBeenCalledWith("tool_execution_start", expect.any(Function));
-    expect(pi.on).toHaveBeenCalledWith("tool_execution_end", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("agent_end", expect.any(Function));
     expect(pi.on).toHaveBeenCalledWith("session_shutdown", expect.any(Function));
     expect(pi.registerTool).not.toHaveBeenCalled();
@@ -1545,7 +1543,6 @@ describe("pontia pi extension lifecycle", () => {
       "turn.started",
       "turn.output",
       "turn.completed",
-      "session.message_updated",
     ]);
     expect(reported[0].data).toEqual({
       runtime_id: "rtinst_1",
@@ -1553,7 +1550,6 @@ describe("pontia pi extension lifecycle", () => {
       previous_leaf_id: null,
     });
     expect(reported[1].data).toEqual({ output_summary: "hello world" });
-    expect(reported[3]).toMatchObject({ data: { reason: "final" } });
   });
 
   test("captures the previous and terminal Pi leaves at the lifecycle hook boundaries", async () => {
@@ -1677,91 +1673,10 @@ describe("pontia pi extension lifecycle", () => {
 
     expect(reported.map((event) => event.type)).toEqual([
       "turn.started",
-      "session.message_updated",
       "turn.output",
       "turn.completed",
-      "session.message_updated",
     ]);
-    expect(reported[1]).toMatchObject({ data: { reason: "append" } });
-    expect(reported[2].data).toEqual({ output_summary: "final answer" });
-    expect(reported[4]).toMatchObject({ data: { reason: "final" } });
-  });
-
-  test("reports transcript refresh hints for structured assistant stream boundaries but not text deltas", async () => {
-    vi.useFakeTimers();
-    const { handlers, reported } = await installBound();
-
-    await handlers.agent_start({}, {});
-    await handlers.message_update(
-      { assistantMessageEvent: { type: "thinking_start", contentIndex: 0, partial: {} } },
-      {},
-    );
-    await handlers.message_update(
-      {
-        assistantMessageEvent: {
-          type: "thinking_delta",
-          contentIndex: 0,
-          delta: "reason",
-          partial: {},
-        },
-      },
-      {},
-    );
-    await handlers.message_update(
-      {
-        assistantMessageEvent: {
-          type: "thinking_end",
-          contentIndex: 0,
-          content: "reason",
-          partial: {},
-        },
-      },
-      {},
-    );
-    await handlers.message_update(
-      { assistantMessageEvent: { type: "text_start", contentIndex: 1, partial: {} } },
-      {},
-    );
-    await handlers.message_update(
-      {
-        assistantMessageEvent: { type: "text_delta", contentIndex: 1, delta: "hello", partial: {} },
-      },
-      {},
-    );
-    await handlers.message_update(
-      {
-        assistantMessageEvent: { type: "text_end", contentIndex: 1, content: "hello", partial: {} },
-      },
-      {},
-    );
-    await vi.advanceTimersByTimeAsync(1000);
-
-    expect(reported.map((event) => event.type)).toEqual([
-      "turn.started",
-      "session.message_updated",
-      "session.message_updated",
-      "session.message_updated",
-      "session.message_updated",
-    ]);
-    expect(reported.slice(1).map((event) => event.data)).toEqual([
-      { reason: "update" },
-      { reason: "update" },
-      { reason: "update" },
-      { reason: "update" },
-    ]);
-
-    await handlers.agent_end({ messages: [] }, {});
-    expect(reported.map((event) => event.type)).toEqual([
-      "turn.started",
-      "session.message_updated",
-      "session.message_updated",
-      "session.message_updated",
-      "session.message_updated",
-      "turn.output",
-      "turn.completed",
-      "session.message_updated",
-    ]);
-    expect(reported[7]).toMatchObject({ data: { reason: "final" } });
+    expect(reported[1].data).toEqual({ output_summary: "final answer" });
   });
 
   test("publishes assistant deltas and only complete tool calls to the turn live stream", async () => {
@@ -1806,90 +1721,6 @@ describe("pontia pi extension lifecycle", () => {
       arguments: { path: "README.md" },
     });
     expect(close).toHaveBeenCalledOnce();
-  });
-
-  test("reports transcript refresh hints when tool calls start and finish successfully or with errors", async () => {
-    const { handlers, reported } = await installBound();
-
-    await handlers.agent_start({}, {});
-    await handlers.message_update(
-      { assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, partial: {} } },
-      {},
-    );
-    await handlers.message_update(
-      {
-        assistantMessageEvent: {
-          type: "toolcall_delta",
-          contentIndex: 0,
-          delta: "{}",
-          partial: {},
-        },
-      },
-      {},
-    );
-    await handlers.message_update(
-      {
-        assistantMessageEvent: {
-          type: "toolcall_end",
-          contentIndex: 0,
-          toolCall: {
-            type: "toolCall",
-            id: "call_1",
-            name: "read",
-            arguments: { path: "README.md" },
-          },
-          partial: {},
-        },
-      },
-      {},
-    );
-    await handlers.tool_execution_start(
-      { toolCallId: "call_1", toolName: "read", args: { path: "README.md" } },
-      {},
-    );
-    await handlers.tool_execution_end(
-      { toolCallId: "call_1", toolName: "read", result: {}, isError: false },
-      {},
-    );
-    await handlers.tool_execution_end(
-      { toolCallId: "call_2", toolName: "bash", result: {}, isError: true },
-      {},
-    );
-    await handlers.tool_execution_start(
-      {
-        toolCallId: "call_parent/1",
-        parentToolCallId: "call_parent",
-        toolName: "read",
-        args: { path: "nested.txt" },
-      },
-      {},
-    );
-    await handlers.tool_execution_end(
-      {
-        toolCallId: "call_parent/1",
-        parentToolCallId: "call_parent",
-        toolName: "read",
-        result: {},
-        isError: false,
-      },
-      {},
-    );
-
-    expect(reported.map((event) => event.type)).toEqual([
-      "turn.started",
-      "session.message_updated",
-      "session.message_updated",
-      "session.message_updated",
-      "session.message_updated",
-      "session.message_updated",
-    ]);
-    expect(reported.slice(1).map((event) => event.data)).toEqual([
-      { reason: "update" },
-      { reason: "update" },
-      { reason: "update" },
-      { reason: "update" },
-      { reason: "update" },
-    ]);
   });
 
   test("uses a fresh backend-provided canonical turn id for each real pi agent_start", async () => {
@@ -1950,7 +1781,6 @@ describe("pontia pi extension lifecycle", () => {
       "turn.started",
       "turn.output",
       "turn.completed",
-      "session.message_updated",
     ]);
   });
 
@@ -1972,13 +1802,8 @@ describe("pontia pi extension lifecycle", () => {
       {},
     );
 
-    expect(reported.map((event) => event.type)).toEqual([
-      "turn.started",
-      "turn.interrupted",
-      "session.message_updated",
-    ]);
+    expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.interrupted"]);
     expect(reported[1].data).toEqual({ terminal_leaf_id: null });
-    expect(reported[2]).toMatchObject({ data: { reason: "final" } });
   });
 
   test("reports turn.interrupted when Pi surfaces an aborted operation as an error", async () => {
@@ -2001,11 +1826,7 @@ describe("pontia pi extension lifecycle", () => {
       { signal: abortController.signal },
     );
 
-    expect(reported.map((event) => event.type)).toEqual([
-      "turn.started",
-      "turn.interrupted",
-      "session.message_updated",
-    ]);
+    expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.interrupted"]);
     expect(reported[1].data).toEqual({ terminal_leaf_id: null });
   });
 
@@ -2027,15 +1848,10 @@ describe("pontia pi extension lifecycle", () => {
       {},
     );
 
-    expect(reported.map((event) => event.type)).toEqual([
-      "turn.started",
-      "turn.failed",
-      "session.message_updated",
-    ]);
+    expect(reported.map((event) => event.type)).toEqual(["turn.started", "turn.failed"]);
     expect(reported[1].data).toEqual({
       failure_message: "model failed",
       terminal_leaf_id: null,
     });
-    expect(reported[2]).toMatchObject({ data: { reason: "final" } });
   });
 });

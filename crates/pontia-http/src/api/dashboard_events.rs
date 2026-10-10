@@ -10,13 +10,10 @@ use tokio::sync::mpsc;
 use tokio_stream::{Stream, wrappers::ReceiverStream};
 
 use pontia_application::{AppState, EventView, ExternalQueryService, TaskEventView};
-use pontia_core::{
-    domain::EventType,
-    error::{Error, Result as AppResult},
-};
+use pontia_core::error::{Error, Result as AppResult};
 
 use super::{
-    events::{EventStreamQuery, event_view_from_domain_event, is_test_stream_once},
+    events::{EventStreamQuery, is_test_stream_once},
     response::ApiError,
 };
 
@@ -182,7 +179,6 @@ fn dashboard_sse_stream(
     tokio::spawn(async move {
         let mut shutdown = state.shutdown().subscribe();
         let service = state.queries();
-        let mut volatile_events = state.volatile_events().subscribe();
         let mut cursor = after_cursor;
 
         loop {
@@ -201,27 +197,6 @@ fn dashboard_sse_stream(
                 tokio::select! {
                     _ = tokio::time::sleep(Duration::from_millis(200)) => {}
                     _ = shutdown.changed() => break,
-                    received = volatile_events.recv() => {
-                        if let Ok(event) = received
-                            && event.event_type == EventType::SessionMessageUpdated
-                            && let Some(view) = event_view_from_domain_event(&event)
-                        {
-                            let stream_event = DashboardStreamEvent::SessionEvent {
-                                id: view.event_id.clone(),
-                                occurred_at: view.time.clone(),
-                                event: view,
-                            };
-                            let event = Event::default()
-                                .event("dashboard_event")
-                                .json_data(stream_event);
-                            let Ok(event) = event else {
-                                break;
-                            };
-                            if sender.send(Ok(event)).await.is_err() {
-                                return;
-                            }
-                        }
-                    }
                 }
                 continue;
             }

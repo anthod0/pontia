@@ -52,7 +52,7 @@ impl EventIngestService {
     ///
     /// This is the production entry point for all client adapters, whether called
     /// in-process or through a transport handler. It owns normalization, report
-    /// validation and routing to durable ingestion or volatile notifications.
+    /// validation and routing to durable ingestion.
     /// Use [`crate::AppState::event_ingest_service`] to share the application's
     /// notification dependencies; the lower-level `ingest_*` methods do not replace
     /// this reporting contract.
@@ -65,7 +65,6 @@ impl EventIngestService {
         if self.effects.client_control.is_none()
             || self.effects.agent_events.is_none()
             || self.effects.live_output.is_none()
-            || self.effects.volatile_events.is_none()
         {
             return Err(Error::InvalidConfig {
                 key: "event_reporting",
@@ -136,22 +135,6 @@ impl EventIngestService {
         self.ensure_confirmed_event_matches_session_boundary(&event)
             .await
             .map_err(EventReportError::validation)?;
-        if event.event_type == EventType::SessionMessageUpdated {
-            let state_version = self.volatile_state_version(&event.session_id).await?;
-            self.effects
-                .volatile_events
-                .as_ref()
-                .expect("validated reporting dependencies")
-                .publish_debounced_session_message_updated(event.clone());
-            return Ok(EventIngestResult {
-                accepted: true,
-                duplicate: false,
-                event_id: event.event_id,
-                session_id: event.session_id,
-                turn_id: event.turn_id,
-                state_version,
-            });
-        }
         Ok(self.ingest_confirmed_event(reported_event).await?)
     }
 }

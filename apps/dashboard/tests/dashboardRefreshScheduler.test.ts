@@ -99,18 +99,6 @@ test("refreshes selected workflow when the event belongs to one of its sessions"
   expect(calls.sort()).toEqual(["workflow:wf-1", "workflows"].sort());
 });
 
-test("ignores high-frequency transcript message updates for projection refreshes", async () => {
-  const calls: string[] = [];
-  const refreshes = scheduler(calls, {
-    sessionId: "session-1",
-    workflowId: "wf-1",
-    workflowSessionIds: ["session-1"],
-  });
-  refreshes.handleEvent(sessionEvent("session.message_updated"));
-  await refreshes.flushNow();
-  expect(calls).toEqual([]);
-});
-
 test("discards detail refreshes queued for a route that is no longer selected", async () => {
   const calls: string[] = [];
   const selection = {

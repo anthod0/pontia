@@ -324,12 +324,6 @@ impl EventIngestService {
         rows.into_iter().map(event_from_row).collect()
     }
 
-    async fn volatile_state_version(&self, session_id: &str) -> Result<i64> {
-        SqliteEventRepository::new(self.pool.clone())
-            .session_event_count(session_id)
-            .await
-    }
-
     async fn load_session_projection(&self, session_id: &str) -> Result<Vec<SessionProjection>> {
         let rows = SqliteSessionRepository::new(self.pool.clone())
             .load_projection_rows(session_id)

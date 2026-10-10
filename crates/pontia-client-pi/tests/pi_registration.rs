@@ -275,28 +275,6 @@ async fn reports_use_shared_fact_processing_and_acknowledge_exit_before_closing(
     let summary: String = sqlx::query_scalar("SELECT json_extract(payload, '$.input.summary') FROM events WHERE event_type='turn.started' AND session_id=?")
         .bind(&session).fetch_one(&state.db()).await.unwrap();
     assert_eq!(summary, "界".repeat(200));
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
-        .fetch_one(&state.db())
-        .await
-        .unwrap();
-    let refreshed = pi
-        .call(
-            "event.report",
-            fact(
-                &session,
-                &runtime,
-                "session.message_updated",
-                json!({"reason":"append"}),
-            ),
-        )
-        .await
-        .unwrap();
-    assert_eq!(refreshed["accepted"], true);
-    let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events")
-        .fetch_one(&state.db())
-        .await
-        .unwrap();
-    assert_eq!(after, count, "message refresh remains volatile");
     let mut completed = fact(
         &session,
         &runtime,
@@ -339,7 +317,12 @@ async fn reporting_rejects_unregistered_cross_session_and_stale_identities_and_i
     assert!(
         pi.call(
             "event.report",
-            fact("unknown", "r", "session.message_updated", json!({}))
+            fact(
+                "unknown",
+                "r",
+                "session.context_usage_updated",
+                json!({"context_usage":{"used_tokens":1}}),
+            )
         )
         .await
         .is_err()
@@ -356,8 +339,8 @@ async fn reporting_rejects_unregistered_cross_session_and_stale_identities_and_i
     let valid = fact(
         &session,
         &runtime,
-        "session.message_updated",
-        json!({"reason":"append"}),
+        "session.context_usage_updated",
+        json!({"context_usage":{"used_tokens":1}}),
     );
     for field in [
         "timeline_boundary",

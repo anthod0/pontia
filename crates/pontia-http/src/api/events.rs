@@ -9,8 +9,7 @@ pub(super) use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, wrappers::ReceiverStream};
 
-use pontia_application::{AppState, EventStreamScope, EventView};
-use pontia_core::domain::{DomainEvent, EventType};
+use pontia_application::{AppState, EventStreamScope};
 
 use super::{response::ApiError, session_guard::ensure_session_exists};
 
@@ -106,7 +105,6 @@ fn event_sse_stream(
     tokio::spawn(async move {
         let mut shutdown = state.shutdown().subscribe();
         let service = state.queries();
-        let mut volatile_events = state.volatile_events().subscribe();
         let mut cursor = after_rowid;
 
         loop {
@@ -152,25 +150,6 @@ fn event_sse_stream(
                 tokio::select! {
                     _ = tokio::time::sleep(Duration::from_millis(200)) => {}
                     _ = shutdown.changed() => break,
-                    received = volatile_events.recv() => {
-                        if let Ok(event) = received
-                            && event.event_type == EventType::SessionMessageUpdated
-                            && volatile_event_matches_target(&event, &target)
-                            && let Some(view) = event_view_from_domain_event(&event)
-                        {
-                            let event_id = view.event_id.clone();
-                            let event = Event::default()
-                                .id(event_id)
-                                .event("domain_event")
-                                .json_data(view);
-                            let Ok(event) = event else {
-                                break;
-                            };
-                            if sender.send(Ok(event)).await.is_err() {
-                                return;
-                            }
-                        }
-                    }
                 }
                 continue;
             }
@@ -198,29 +177,6 @@ fn event_sse_stream(
     });
 
     Sse::new(ReceiverStream::new(receiver)).keep_alive(KeepAlive::default())
-}
-
-fn volatile_event_matches_target(event: &DomainEvent, target: &EventStreamTarget) -> bool {
-    match target {
-        EventStreamTarget::Session { session_id } => event.session_id == *session_id,
-        EventStreamTarget::Turn { .. } => false,
-    }
-}
-
-pub(super) fn event_view_from_domain_event(event: &DomainEvent) -> Option<EventView> {
-    let time = event
-        .occurred_at
-        .format(&time::format_description::well_known::Rfc3339)
-        .ok()?;
-    Some(EventView {
-        event_id: event.event_id.clone(),
-        session_id: event.session_id.clone(),
-        turn_id: event.turn_id.clone(),
-        source: event.source.to_string(),
-        event_type: event.event_type.to_string(),
-        time,
-        payload: event.payload.clone(),
-    })
 }
 
 pub(super) fn is_test_stream_once(headers: &HeaderMap) -> bool {

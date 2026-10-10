@@ -7,7 +7,6 @@ export async function invalidateQueriesForDashboardEvent(
   streamEvent: DashboardStreamEvent,
 ): Promise<void> {
   if (streamEvent.kind !== "session_event") return;
-  if (streamEvent.event.type === "session.message_updated") return;
 
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: sessionOverviewKeys.all }),

@@ -4,7 +4,6 @@ import {
   assistantDeltaFromEvent,
   assistantTextFromMessage,
   errorMessageFromAgentEnd,
-  isTranscriptBoundaryMessageUpdate,
   lastAssistantTextFromMessages,
 } from "../src/pi-message.js";
 
@@ -24,17 +23,11 @@ describe("pi message helpers", () => {
     expect(assistantTextFromMessage({ role: "user", content: "ignore" })).toBeUndefined();
   });
 
-  test("extracts assistant deltas and recognizes transcript boundaries", () => {
+  test("extracts assistant deltas", () => {
     expect(assistantDeltaFromEvent({ assistantMessageEvent: { textDelta: "hi" } })).toBe("hi");
     expect(
       assistantDeltaFromEvent({ assistantMessageEvent: { type: "toolcall_delta", delta: "{}" } }),
     ).toBeUndefined();
-    expect(
-      isTranscriptBoundaryMessageUpdate({ assistantMessageEvent: { type: "toolcall_start" } }),
-    ).toBe(true);
-    expect(
-      isTranscriptBoundaryMessageUpdate({ assistantMessageEvent: { type: "text_delta" } }),
-    ).toBe(false);
   });
 
   test("extracts final text and Pi agent end status", () => {

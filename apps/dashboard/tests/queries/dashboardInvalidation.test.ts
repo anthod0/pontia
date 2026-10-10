@@ -64,18 +64,6 @@ test("a session event invalidates its session snapshots and every overview varia
   expect(isInvalidated(workflowRevisionKey)).toBe(false);
 });
 
-test("a transcript message event does not invalidate server snapshots", async () => {
-  const overviewKey = [...sessionOverviewKeys.all, { includeArchived: false }] as const;
-  const detailKey = sessionKeys.detail("session-1");
-  queryClient.setQueryData(overviewKey, {});
-  queryClient.setQueryData(detailKey, {});
-
-  await invalidateQueriesForDashboardEvent(sessionEvent("session.message_updated"));
-
-  expect(isInvalidated(overviewKey)).toBe(false);
-  expect(isInvalidated(detailKey)).toBe(false);
-});
-
 test("connection recovery invalidates all cached dashboard queries", async () => {
   const sessionKey = sessionKeys.detail("session-1");
   const workflowKey = workflowKeys.revision("workflow-1", 1);

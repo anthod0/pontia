@@ -293,9 +293,7 @@ impl EventCommitter {
         let state_version =
             SqliteEventRepository::session_event_count_in_tx(&mut tx, &event.session_id).await?;
 
-        if event.event_type != EventType::SessionMessageUpdated {
-            persist_projections_in_tx(&mut tx, &projection, state_version).await?;
-        }
+        persist_projections_in_tx(&mut tx, &projection, state_version).await?;
 
         if let Some(binding) = initial_agent_binding {
             crate::sessions::upsert_agent_binding_in_tx(&mut tx, binding).await?;

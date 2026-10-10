@@ -531,9 +531,6 @@
         void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
         return
       }
-      if (streamEvent.event.type !== 'session.message_updated') return
-      void refreshSessionTimeline(selectedSessionId, streamEvent.event.turn_id)
-      return
     }
   }
 
