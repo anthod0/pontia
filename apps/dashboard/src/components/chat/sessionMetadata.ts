@@ -175,9 +175,7 @@ export function sessionMetadataSummary(items: SessionMetadataItem[]): string {
 export function visibleChatInboxMessages(messages: InboxMessageView[]): InboxMessageView[] {
   return messages
     .filter(
-      (message) =>
-        !message.retried_by_message_id &&
-        ["pending", "failed"].includes(message.state),
+      (message) => !message.retried_by_message_id && ["pending", "failed"].includes(message.state),
     )
     .slice()
     .reverse();

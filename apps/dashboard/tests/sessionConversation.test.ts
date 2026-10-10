@@ -188,14 +188,19 @@ test("conversation updates the running Turn duration while output is streaming",
     turnId: "turn-running",
     createdAt: "2026-06-11T00:00:00Z",
     status: message.role === "assistant" ? ("pending" as const) : message.status,
-    thoughtSteps: message.role === "assistant" ? [{
-      id: "running-thought",
-      kind: "thinking" as const,
-      title: "Thinking",
-      status: "started" as const,
-      content: "Inspecting the repo.",
-      occurredAt: null,
-    }] : undefined,
+    thoughtSteps:
+      message.role === "assistant"
+        ? [
+            {
+              id: "running-thought",
+              kind: "thinking" as const,
+              title: "Thinking",
+              status: "started" as const,
+              content: "Inspecting the repo.",
+              occurredAt: null,
+            },
+          ]
+        : undefined,
   }));
 
   const { rerender } = render(SessionConversation, {
@@ -227,10 +232,12 @@ test("conversation updates the running Turn duration while output is streaming",
 
   await rerender({
     messages: runningMessages.map((message) => ({ ...message, status: "sent" as const })),
-    turns: [durationTurn({
-      turn_id: "turn-running",
-      completed_at: "2026-06-11T00:02:03Z",
-    })],
+    turns: [
+      durationTurn({
+        turn_id: "turn-running",
+        completed_at: "2026-06-11T00:02:03Z",
+      }),
+    ],
     sessionState: "idle",
     activeTurnId: null,
   });

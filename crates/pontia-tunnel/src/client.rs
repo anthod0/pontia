@@ -383,8 +383,7 @@ mod tests {
     #[test]
     fn credentials_and_tickets_use_distinct_strict_formats() {
         let secret = "v7-_".repeat(10) + "v78";
-        let credential =
-            format!("ptr_v1_0199791c-6600-7000-8000-000000000001_{secret}");
+        let credential = format!("ptr_v1_0199791c-6600-7000-8000-000000000001_{secret}");
         let ticket = format!("pet_v1_{secret}");
         assert!(valid_credential(&credential));
         assert!(!valid_credential(&ticket));

@@ -1716,15 +1716,21 @@ test("only pending and failed inbox messages expose actions in the chat", async 
 
   render(SessionChatPage);
 
-  expect(await screen.findByRole("button", {
-    name: "Cancel inbox message Continue implementation",
-  })).toBeEnabled();
-  expect(screen.getByRole("button", {
-    name: "Retry inbox message Fix the failing dashboard test",
-  })).toBeEnabled();
-  expect(screen.getByRole("button", {
-    name: "Remove inbox message Fix the failing dashboard test",
-  })).toBeEnabled();
+  expect(
+    await screen.findByRole("button", {
+      name: "Cancel inbox message Continue implementation",
+    }),
+  ).toBeEnabled();
+  expect(
+    screen.getByRole("button", {
+      name: "Retry inbox message Fix the failing dashboard test",
+    }),
+  ).toBeEnabled();
+  expect(
+    screen.getByRole("button", {
+      name: "Remove inbox message Fix the failing dashboard test",
+    }),
+  ).toBeEnabled();
   const inbox = screen.getByRole("region", { name: /Inbox/ });
   expect(within(inbox).getAllByRole("listitem")).toHaveLength(2);
 });

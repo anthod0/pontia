@@ -6,27 +6,58 @@ import type { InboxMessageView } from "../../src/api/types";
 
 function message(state = "pending", overrides: Partial<InboxMessageView> = {}): InboxMessageView {
   return {
-    message_id: "message", session_id: "session", state, delivery_policy: "after_idle",
-    input: { summary: "continue" }, metadata: {}, branch_target_turn_id: null,
-    turn_id: null, steer_target_turn_id: null, retry_of_message_id: null,
-    retried_by_message_id: null, superseded_by_message_id: null, failure_message: null,
-    created_at: "", updated_at: "", dispatched_at: null, cancelled_at: null,
+    message_id: "message",
+    session_id: "session",
+    state,
+    delivery_policy: "after_idle",
+    input: { summary: "continue" },
+    metadata: {},
+    branch_target_turn_id: null,
+    turn_id: null,
+    steer_target_turn_id: null,
+    retry_of_message_id: null,
+    retried_by_message_id: null,
+    superseded_by_message_id: null,
+    failure_message: null,
+    created_at: "",
+    updated_at: "",
+    dispatched_at: null,
+    cancelled_at: null,
     ...overrides,
   };
 }
 
 function props(messages: InboxMessageView[]) {
-  return { sessionId: "session", messages, busyMessageId: null,
-    onCancel: vi.fn(), onRetry: vi.fn(), onDismiss: vi.fn() };
+  return {
+    sessionId: "session",
+    messages,
+    busyMessageId: null,
+    onCancel: vi.fn(),
+    onRetry: vi.fn(),
+    onDismiss: vi.fn(),
+  };
 }
 
 afterEach(cleanup);
 
 test("only pending and failed messages without a replacement are eligible", () => {
-  const states = ["pending", "failed", "resuming", "dispatching", "dispatched", "unknown", "cancelled", "superseded", "dismissed"];
+  const states = [
+    "pending",
+    "failed",
+    "resuming",
+    "dispatching",
+    "dispatched",
+    "unknown",
+    "cancelled",
+    "superseded",
+    "dismissed",
+  ];
   const messages = states.map((state) => message(state, { message_id: state }));
   messages.push(message("pending", { message_id: "replaced", retried_by_message_id: "retry" }));
-  expect(visibleChatInboxMessages(messages).map((item) => item.message_id)).toEqual(["failed", "pending"]);
+  expect(visibleChatInboxMessages(messages).map((item) => item.message_id)).toEqual([
+    "failed",
+    "pending",
+  ]);
 });
 
 test("pending messages can be cancelled immediately", async () => {
