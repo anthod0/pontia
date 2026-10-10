@@ -1,5 +1,4 @@
 import { startEventStream, stopEventStream } from "./eventStream";
-import { loadAgentProfiles, resetAgentProfiles } from "../stores/agentProfiles";
 import { resetConnectionState } from "../stores/connection";
 import { resetSessions } from "../stores/sessions";
 import { loadTasks, resetTasks } from "../stores/tasks";
@@ -9,12 +8,7 @@ import { loadWorkflows, resetWorkflows } from "../stores/workflows";
 import { clearDashboardQueries } from "../queries/dashboardInvalidation";
 
 export function startDashboardRuntime(): void {
-  void Promise.all([
-    loadTasks(),
-    loadWorkspaces(),
-    loadAgentProfiles(),
-    loadWorkflows({ showLoading: false }),
-  ]);
+  void Promise.all([loadTasks(), loadWorkspaces(), loadWorkflows({ showLoading: false })]);
   startEventStream();
 }
 
@@ -26,7 +20,6 @@ export function clearDashboardRuntimeState(): void {
   clearDashboardQueries();
   resetConnectionState();
   resetTimelineState();
-  resetAgentProfiles();
   resetSessions();
   resetTasks();
   resetWorkspaces();

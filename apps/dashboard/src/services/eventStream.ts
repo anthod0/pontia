@@ -16,7 +16,6 @@ import {
   sseStatus,
   streamedSessionId,
 } from "../stores/connection";
-import { loadAgentProfiles } from "../stores/agentProfiles";
 import { loadTasks, refreshTask, selectedTaskId } from "../stores/tasks";
 import { loadSessionDetail, selectedSessionId } from "../stores/sessions";
 import { invalidateQueriesForDashboardEvent } from "../queries/dashboardInvalidation";
@@ -48,7 +47,6 @@ const refreshScheduler = createDashboardRefreshScheduler({
   getSelectedWorkflowSessionIds: selectedWorkflowSessionIds,
   loadTasks,
   loadWorkspaces,
-  loadAgentProfiles,
   loadWorkflows: () => loadWorkflows({ showLoading: false }),
   refreshTask,
   refreshSession: (sessionId) => loadSessionDetail(sessionId, { showLoading: false }),

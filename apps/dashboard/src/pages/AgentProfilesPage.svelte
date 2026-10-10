@@ -1,6 +1,5 @@
 <script lang="ts">
   import { defaultClientType } from '../clients'
-  import { onMount } from 'svelte'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import CopySimpleIcon from 'phosphor-svelte/lib/CopySimpleIcon'
@@ -19,17 +18,17 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Table from '$lib/components/ui/table/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
-  import {
-    createAgentProfile,
-    createAgentProfileVersion,
-    deleteAgentProfile,
-    deleteAgentProfileVersion,
-    listAgentProfileVersions,
-    updateAgentProfileVersion,
-  } from '../api/client'
   import type { AgentProfileView } from '../api/types'
   import { formatDateTime } from '../components/tasks/format'
-  import { agentProfiles, agentProfilesError, agentProfilesLoading, loadAgentProfiles } from '../stores/agentProfiles'
+  import {
+    createAgentProfilesQuery,
+    createAgentProfileVersionsQuery,
+    createAgentProfileMutation,
+    createAgentProfileVersionMutation,
+    deleteAgentProfileMutation,
+    deleteAgentProfileVersionMutation,
+    updateAgentProfileVersionMutation,
+  } from '../queries/agentProfiles'
   import {
     buildAgentProfileInput,
     createAgentProfileDraft,
@@ -44,39 +43,33 @@
   let selectedVersion = ''
   let includeArchivedProfiles = false
   let includeArchivedVersions = false
-  let versions: AgentProfileView[] = []
-  let versionsProfileId = ''
-  let versionsLoading = false
-  let versionsError: string | null = null
   let formMode: FormMode | null = null
   let draft: AgentProfileDraft = createAgentProfileDraft()
   let draftErrors: AgentProfileDraftErrors = {}
   let mutationError: string | null = null
   let mutationSuccess: string | null = null
-  let saving = false
   let archiveDialogOpen = false
   let pendingArchive: 'profile' | 'version' | null = null
-  let pageAbortController: AbortController | null = null
 
-  onMount(() => {
-    pageAbortController = new AbortController()
+  const profilesQuery = createAgentProfilesQuery(() => includeArchivedProfiles)
+  const versionsQuery = createAgentProfileVersionsQuery(
+    () => selectedProfileId,
+    () => includeArchivedVersions,
+  )
+  const createProfileMutation = createAgentProfileMutation()
+  const createVersionMutation = createAgentProfileVersionMutation()
+  const updateVersionMutation = updateAgentProfileVersionMutation()
+  const deleteProfileMutation = deleteAgentProfileMutation()
+  const deleteVersionMutation = deleteAgentProfileVersionMutation()
 
-    void (async () => {
-      await refreshProfiles({ signal: pageAbortController?.signal })
-      if (!pageAbortController?.signal.aborted && !selectedProfileId && $agentProfiles.length) selectedProfileId = $agentProfiles[0].profile_id
-    })()
-
-    return () => {
-      pageAbortController?.abort()
-      pageAbortController = null
-    }
-  })
-
-  $: sortedProfiles = [...$agentProfiles].sort((a, b) => a.name.localeCompare(b.name))
-  $: selectedProfile = sortedProfiles.find((profile) => profile.profile_id === selectedProfileId) ?? sortedProfiles[0] ?? null
+  $: sortedProfiles = [...(profilesQuery.data ?? [])].sort((a, b) => a.name.localeCompare(b.name))
+  $: if (sortedProfiles.length && !sortedProfiles.some((profile) => profile.profile_id === selectedProfileId)) selectedProfileId = sortedProfiles[0].profile_id
+  $: if (!sortedProfiles.length) selectedProfileId = ''
+  $: selectedProfile = sortedProfiles.find((profile) => profile.profile_id === selectedProfileId) ?? null
+  $: versions = versionsQuery.data ?? []
   $: sortedVersions = [...versions].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+  $: if (versionsQuery.data) selectedVersion = versions.some((profile) => profile.version === selectedVersion) ? selectedVersion : (versions[0]?.version ?? '')
   $: selectedVersionProfile = sortedVersions.find((profile) => profile.version === selectedVersion) ?? sortedVersions[0] ?? selectedProfile
-  $: if (selectedProfile && selectedProfile.profile_id !== versionsProfileId && !versionsLoading) void loadVersions(selectedProfile.profile_id, { signal: pageAbortController?.signal })
   $: profileRows = selectedVersionProfile ? [
     { label: 'Artifact contract', value: JSON.stringify(selectedVersionProfile.artifact_contract ?? {}, null, 2) },
     { label: 'Execution policy', value: JSON.stringify(selectedVersionProfile.default_execution_policy ?? {}, null, 2) },
@@ -85,35 +78,18 @@
     { label: 'Expected output schema', value: selectedVersionProfile.expected_output_schema ?? 'Not configured' },
   ] : []
   $: builtinSelected = Boolean(selectedVersionProfile?.metadata?.builtin)
+  $: saving = createProfileMutation.isPending || createVersionMutation.isPending || updateVersionMutation.isPending || deleteProfileMutation.isPending || deleteVersionMutation.isPending
   $: archiveDialogTitle = pendingArchive === 'profile' ? 'Archive profile?' : 'Archive profile version?'
   $: archiveDialogDescription = pendingArchive === 'profile'
     ? selectedProfile ? `Archive profile ${selectedProfile.profile_id} and all active versions?` : ''
     : selectedVersionProfile ? `Archive version ${selectedVersionProfile.profile_id}@${selectedVersionProfile.version}?` : ''
   $: if (!archiveDialogOpen && pendingArchive && !saving) pendingArchive = null
 
-  async function refreshProfiles(options: { signal?: AbortSignal } = {}): Promise<void> {
-    await loadAgentProfiles(includeArchivedProfiles, options)
-  }
-
   async function refreshAll(): Promise<void> {
-    await refreshProfiles()
-    if (selectedProfileId) await loadVersions(selectedProfileId)
-  }
-
-  async function loadVersions(profileId: string, options: { signal?: AbortSignal } = {}): Promise<void> {
-    versionsLoading = true
-    versionsError = null
-    versionsProfileId = profileId
-    try {
-      versions = await listAgentProfileVersions(profileId, includeArchivedVersions, options)
-      selectedVersion = versions.find((profile) => profile.version === selectedVersion)?.version ?? versions[0]?.version ?? ''
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return
-      versions = []
-      versionsError = error instanceof Error ? error.message : String(error)
-    } finally {
-      versionsLoading = false
-    }
+    await Promise.all([
+      profilesQuery.refetch(),
+      ...(selectedProfileId ? [versionsQuery.refetch()] : []),
+    ])
   }
 
   function selectProfile(profileId: string): void {
@@ -161,25 +137,21 @@
     mutationSuccess = null
     if (!result.ok || !formMode) return
 
-    saving = true
     try {
       let saved: AgentProfileView
       if (formMode === 'create') {
-        saved = await createAgentProfile(result.input)
+        saved = await createProfileMutation.mutateAsync(result.input)
       } else if (formMode === 'new-version') {
-        saved = await createAgentProfileVersion(result.input.profile_id, result.input)
+        saved = await createVersionMutation.mutateAsync({ profileId: result.input.profile_id, input: result.input })
       } else {
-        saved = await updateAgentProfileVersion(result.input.profile_id, result.input.version, result.input)
+        saved = await updateVersionMutation.mutateAsync({ profileId: result.input.profile_id, version: result.input.version, input: result.input })
       }
       selectedProfileId = saved.profile_id
       selectedVersion = saved.version
       formMode = null
       mutationSuccess = `Saved ${saved.profile_id}@${saved.version}.`
-      await refreshAll()
     } catch (error) {
       mutationError = error instanceof Error ? error.message : String(error)
-    } finally {
-      saving = false
     }
   }
 
@@ -199,20 +171,13 @@
     if (!selectedProfile) return
     mutationError = null
     mutationSuccess = null
-    saving = true
     try {
-      const result = await deleteAgentProfile(selectedProfile.profile_id)
+      const result = await deleteProfileMutation.mutateAsync(selectedProfile.profile_id)
       mutationSuccess = `Archived ${result.archived_versions} version(s) for ${result.profile_id}.`
       selectedProfileId = ''
       selectedVersion = ''
-      versions = []
-      versionsProfileId = ''
-      await refreshProfiles()
-      if ($agentProfiles.length) selectedProfileId = $agentProfiles[0].profile_id
     } catch (error) {
       mutationError = error instanceof Error ? error.message : String(error)
-    } finally {
-      saving = false
     }
   }
 
@@ -220,15 +185,11 @@
     if (!selectedVersionProfile) return
     mutationError = null
     mutationSuccess = null
-    saving = true
     try {
-      const archived = await deleteAgentProfileVersion(selectedVersionProfile.profile_id, selectedVersionProfile.version)
+      const archived = await deleteVersionMutation.mutateAsync({ profileId: selectedVersionProfile.profile_id, version: selectedVersionProfile.version })
       mutationSuccess = `Archived ${archived.profile_id}@${archived.version}.`
-      await refreshAll()
     } catch (error) {
       mutationError = error instanceof Error ? error.message : String(error)
-    } finally {
-      saving = false
     }
   }
 
@@ -241,6 +202,10 @@
     } else if (archiveTarget === 'version') {
       await archiveSelectedVersion()
     }
+  }
+
+  function queryErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
   }
 
   function templateSummary(value: string | null): string {
@@ -261,19 +226,19 @@
     </div>
   </div>
 
-  {#if $agentProfilesError}
+  {#if profilesQuery.error}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />
       <Alert.Title>Unable to load profiles</Alert.Title>
-      <Alert.Description>{$agentProfilesError}</Alert.Description>
+      <Alert.Description>{queryErrorMessage(profilesQuery.error)}</Alert.Description>
     </Alert.Root>
   {/if}
 
-  {#if versionsError}
+  {#if versionsQuery.error}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />
       <Alert.Title>Unable to load versions</Alert.Title>
-      <Alert.Description>{versionsError}</Alert.Description>
+      <Alert.Description>{queryErrorMessage(versionsQuery.error)}</Alert.Description>
     </Alert.Root>
   {/if}
 
@@ -393,11 +358,11 @@
   {/if}
 
   <div class="flex flex-wrap gap-4 text-sm text-muted-foreground">
-    <label class="flex items-center gap-2"><input type="checkbox" bind:checked={includeArchivedProfiles} onchange={() => void refreshProfiles()} /> Show archived profiles</label>
-    <label class="flex items-center gap-2"><input type="checkbox" bind:checked={includeArchivedVersions} onchange={() => selectedProfileId && void loadVersions(selectedProfileId)} /> Show archived versions</label>
+    <label class="flex items-center gap-2"><input type="checkbox" bind:checked={includeArchivedProfiles} /> Show archived profiles</label>
+    <label class="flex items-center gap-2"><input type="checkbox" bind:checked={includeArchivedVersions} /> Show archived versions</label>
   </div>
 
-  {#if $agentProfilesLoading}
+  {#if profilesQuery.isPending}
     <div class="grid gap-4 lg:grid-cols-[22rem_1fr]"><Skeleton class="h-96 w-full" /><Skeleton class="h-96 w-full" /></div>
   {:else if !sortedProfiles.length}
     <Empty.Root><Empty.Header><Empty.Title>No agent profiles</Empty.Title><Empty.Description>No execution profiles are available from /api/v1/agent-profiles.</Empty.Description></Empty.Header></Empty.Root>
@@ -467,7 +432,7 @@
           </Card.Root>
 
           <Card.Root>
-            <Card.Header><Card.Title>Versions</Card.Title><Card.Description>{versionsLoading ? 'Loading versions…' : `${sortedVersions.length} version(s) for this profile.`}</Card.Description></Card.Header>
+            <Card.Header><Card.Title>Versions</Card.Title><Card.Description>{versionsQuery.isFetching ? 'Loading versions…' : `${sortedVersions.length} version(s) for this profile.`}</Card.Description></Card.Header>
             <Card.Content class="space-y-2">
               {#each sortedVersions as version}
                 <button class="w-full rounded-none border p-3 text-left transition hover:bg-muted {selectedVersionProfile?.version === version.version ? 'border-primary bg-muted' : ''}" onclick={() => selectedVersion = version.version}>

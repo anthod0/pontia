@@ -208,10 +208,14 @@ export async function listAgentProfiles(
   ).agent_profiles;
 }
 
-export async function getAgentProfile(profileId: string): Promise<AgentProfileView> {
+export async function getAgentProfile(
+  profileId: string,
+  options: ReadRequestOptions = {},
+): Promise<AgentProfileView> {
   return (
     await request<{ agent_profile: AgentProfileView }>(
       `/agent-profiles/${encodeURIComponent(profileId)}`,
+      options,
     )
   ).agent_profile;
 }
@@ -266,10 +270,12 @@ export async function createAgentProfileVersion(
 export async function getAgentProfileVersion(
   profileId: string,
   version: string,
+  options: ReadRequestOptions = {},
 ): Promise<AgentProfileView> {
   return (
     await request<{ agent_profile: AgentProfileView }>(
       `/agent-profiles/${encodeURIComponent(profileId)}/versions/${encodeURIComponent(version)}`,
+      options,
     )
   ).agent_profile;
 }

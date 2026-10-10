@@ -127,7 +127,6 @@ const mocks = vi.hoisted(() => {
     })),
     registerWorkspace: vi.fn(async () => workspace()),
     refreshWorkspaceGitStatus: vi.fn(async () => undefined),
-    loadAgentProfiles: vi.fn(async () => undefined),
     toastError: vi.fn(),
     navigate: vi.fn(),
     pathParams: {} as Record<string, string>,

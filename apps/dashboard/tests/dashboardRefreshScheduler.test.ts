@@ -55,9 +55,6 @@ function scheduler(
     loadWorkspaces: async () => {
       calls.push("workspaces");
     },
-    loadAgentProfiles: async () => {
-      calls.push("profiles");
-    },
     loadWorkflows: async () => {
       calls.push("workflows");
     },

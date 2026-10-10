@@ -8,7 +8,6 @@ type RefreshOptions = {
   getSelectedWorkflowSessionIds: () => string[];
   loadTasks: () => Promise<unknown>;
   loadWorkspaces: () => Promise<unknown>;
-  loadAgentProfiles: () => Promise<unknown>;
   loadWorkflows: () => Promise<unknown>;
   refreshTask: (taskId: string) => Promise<unknown>;
   refreshSession: (sessionId: string) => Promise<unknown>;
@@ -18,7 +17,6 @@ type RefreshOptions = {
 type PendingRefresh = {
   tasks: boolean;
   workspaces: boolean;
-  agentProfiles: boolean;
   workflows: boolean;
   taskIds: Set<string>;
   sessionIds: Set<string>;
@@ -29,7 +27,6 @@ function emptyPending(): PendingRefresh {
   return {
     tasks: false,
     workspaces: false,
-    agentProfiles: false,
     workflows: false,
     taskIds: new Set(),
     sessionIds: new Set(),
@@ -41,7 +38,6 @@ function hasPending(pending: PendingRefresh): boolean {
   return (
     pending.tasks ||
     pending.workspaces ||
-    pending.agentProfiles ||
     pending.workflows ||
     pending.taskIds.size > 0 ||
     pending.sessionIds.size > 0 ||
@@ -83,7 +79,6 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
       const refreshes: Promise<unknown>[] = [];
       if (batch.tasks) refreshes.push(options.loadTasks());
       if (batch.workspaces) refreshes.push(options.loadWorkspaces());
-      if (batch.agentProfiles) refreshes.push(options.loadAgentProfiles());
       if (batch.workflows) refreshes.push(options.loadWorkflows());
       for (const taskId of batch.taskIds) {
         if (taskId === options.getSelectedTaskId()) refreshes.push(options.refreshTask(taskId));

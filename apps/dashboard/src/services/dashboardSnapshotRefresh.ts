@@ -1,5 +1,4 @@
 import { get } from "svelte/store";
-import { loadAgentProfiles } from "../stores/agentProfiles";
 import { loadSessionDetail, selectedSessionId } from "../stores/sessions";
 import { invalidateQueriesAfterConnectionRecovery } from "../queries/dashboardInvalidation";
 import { loadTasks, refreshTask, selectedTaskId } from "../stores/tasks";
@@ -62,7 +61,6 @@ async function refreshDashboardSnapshotNow(): Promise<void> {
   const refreshes: Promise<unknown>[] = [
     invalidateQueriesAfterConnectionRecovery(),
     loadWorkspaces(),
-    loadAgentProfiles(),
     loadTasks(),
     loadWorkflows({ showLoading: false }),
   ];

@@ -174,7 +174,7 @@ test("recovery refreshes shared task and workflow consumers", async () => {
   await refreshDashboardSnapshot({ reason: "sse_open" });
   expect(get(task)?.state).toBe("completed");
   expect(get(workflowDetail)?.workflow_id).toBe("workflow");
-  expect(requests).toEqual(expect.arrayContaining(["/agent-profiles", "/tasks", "/workflows"]));
+  expect(requests).toEqual(expect.arrayContaining(["/tasks", "/workflows"]));
 });
 
 test("recovers the Session independently of native history failure and uses its declared topology", async () => {
