@@ -193,6 +193,77 @@ async fn sqlite_session_repository_updates_workspace_binding() {
 }
 
 #[tokio::test]
+async fn sqlite_session_management_preserves_the_last_activity_time() {
+    let (pool, _pontia_home) = test_pool().await;
+    let last_activity = "2026-06-15T12:00:00Z";
+    sqlx::query(
+        r#"INSERT INTO sessions
+           (session_id, client_type, state, metadata, created_at, updated_at)
+           VALUES ('sess_managed', 'pi', 'ready', '{}', ?, ?)"#,
+    )
+    .bind(last_activity)
+    .bind(last_activity)
+    .execute(&pool)
+    .await
+    .expect("insert session");
+
+    let repository = SqliteSessionRepository::new(pool);
+
+    repository
+        .pin_session("sess_managed")
+        .await
+        .expect("pin session");
+    let pinned = repository
+        .get_session("sess_managed")
+        .await
+        .expect("get pinned session")
+        .expect("session exists");
+    assert!(pinned.pinned_at.is_some());
+    assert_eq!(pinned.updated_at, last_activity);
+
+    repository
+        .unpin_session("sess_managed")
+        .await
+        .expect("unpin session");
+    let unpinned = repository
+        .get_session("sess_managed")
+        .await
+        .expect("get unpinned session")
+        .expect("session exists");
+    assert!(unpinned.pinned_at.is_none());
+    assert_eq!(unpinned.updated_at, last_activity);
+
+    repository
+        .pin_session("sess_managed")
+        .await
+        .expect("repin session");
+    repository
+        .archive_session("sess_managed")
+        .await
+        .expect("archive session");
+    let archived = repository
+        .get_session("sess_managed")
+        .await
+        .expect("get archived session")
+        .expect("session exists");
+    assert!(archived.pinned_at.is_none());
+    assert!(archived.archived_at.is_some());
+    assert_eq!(archived.updated_at, last_activity);
+
+    repository
+        .unarchive_session("sess_managed")
+        .await
+        .expect("unarchive session");
+    let unarchived = repository
+        .get_session("sess_managed")
+        .await
+        .expect("get unarchived session")
+        .expect("session exists");
+    assert!(unarchived.archived_at.is_none());
+    assert_eq!(unarchived.updated_at, last_activity);
+}
+
+#[tokio::test]
 async fn sqlite_turn_repository_resolves_the_unique_active_turn() {
     let (pool, _pontia_home) = test_pool().await;
     sqlx::query(

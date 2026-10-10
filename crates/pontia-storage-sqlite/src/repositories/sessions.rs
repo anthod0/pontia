@@ -477,7 +477,7 @@ impl SqliteSessionRepository {
 
     pub async fn pin_session(&self, session_id: &str) -> Result<u64> {
         let result = sqlx::query(
-            "UPDATE sessions SET pinned_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
+            "UPDATE sessions SET pinned_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
         )
         .bind(session_id)
         .execute(&self.pool)
@@ -486,18 +486,16 @@ impl SqliteSessionRepository {
     }
 
     pub async fn unpin_session(&self, session_id: &str) -> Result<u64> {
-        let result = sqlx::query(
-            "UPDATE sessions SET pinned_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
-        )
-        .bind(session_id)
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query("UPDATE sessions SET pinned_at = NULL WHERE session_id = ?")
+            .bind(session_id)
+            .execute(&self.pool)
+            .await?;
         Ok(result.rows_affected())
     }
 
     pub async fn archive_session(&self, session_id: &str) -> Result<u64> {
         let result = sqlx::query(
-            "UPDATE sessions SET archived_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), pinned_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
+            "UPDATE sessions SET archived_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), pinned_at = NULL WHERE session_id = ?",
         )
         .bind(session_id)
         .execute(&self.pool)
@@ -506,12 +504,10 @@ impl SqliteSessionRepository {
     }
 
     pub async fn unarchive_session(&self, session_id: &str) -> Result<u64> {
-        let result = sqlx::query(
-            "UPDATE sessions SET archived_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?",
-        )
-        .bind(session_id)
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query("UPDATE sessions SET archived_at = NULL WHERE session_id = ?")
+            .bind(session_id)
+            .execute(&self.pool)
+            .await?;
         Ok(result.rows_affected())
     }
 }
