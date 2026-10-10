@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  archiveClientNotice,
   clientControlDetails,
   clientDeliveryPolicy,
   creationClientTypes,
@@ -19,9 +18,6 @@ describe("registered dashboard clients", () => {
     expect(creationClientTypes).toEqual(["pi", "codex"]);
     expect(workspaceClientTypes).toEqual(["pi"]);
     expect(profileClientTypes).toEqual(["pi"]);
-  });
-  it("preserves the registered client's archive notice", () => {
-    expect(archiveClientNotice).toBe("Codex thread archiving is separate and is not changed here.");
   });
   it("uses client-owned input delivery semantics", () => {
     expect(clientDeliveryPolicy(session("codex"))).toBe("steer");

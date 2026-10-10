@@ -1,9 +1,9 @@
 <script lang="ts">
   import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon'
-  import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
+  import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon'
+  import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
-  import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
-  import FolderOpenIcon from 'phosphor-svelte/lib/FolderOpenIcon'
+  import FunnelIcon from 'phosphor-svelte/lib/FunnelIcon'
   import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon'
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon'
@@ -19,12 +19,10 @@
   import * as Kbd from '$lib/components/ui/kbd/index.js'
   import { cn } from '$lib/utils.js'
   import { archiveSession, pinSession, sessions, sessionsError, sessionsLoading, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
-  import { workspaces, workspacesError, workspacesInitialized, workspacesLoading } from '../../stores/workspaces'
   import { sessionChatTitle, visibleChatSessions } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
-  import { workspaceTitle } from '../chat/sessionMetadata'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
-  import type { SessionView, WorkspaceView } from '../../api/types'
+  import type { SessionView } from '../../api/types'
 
   type Item = {
     label: string
@@ -32,15 +30,9 @@
     icon: typeof NotePencilIcon
   }
 
-  type RecentWorkspaceGroup = {
-    workspace: WorkspaceView
-    sessions: SessionView[]
-  }
-
   const primaryItems: Item[] = [
     { label: 'New Chat', path: '/', icon: NotePencilIcon },
     { label: 'Workflows', path: '/workflows', icon: TreeStructureIcon },
-    { label: 'Archived sessions', path: '/sessions/archived', icon: ArchiveIcon },
   ]
 
   let currentPath = $state(dashboardRelativePath())
@@ -51,10 +43,7 @@
   let sessionManagementBusyId = $state<string | null>(null)
   let sessionActionMenuOpenKey = $state<string | null>(null)
   let recentSessionsOpen = $state(true)
-  let expandedWorkspaceIds = $state<Record<string, boolean>>({})
   let recentSessions = $derived(visibleChatSessions($sessions, 'all'))
-  let activeWorkspaces = $derived($workspaces.filter((workspace) => workspace.state === 'active'))
-  let recentWorkspaceGroups = $derived(groupRecentSessionsByWorkspace(activeWorkspaces, recentSessions))
 
   $effect(() => {
     if (!renameDialogOpen && renamingSession && renamingSessionId === null) cancelRenameSession()
@@ -85,31 +74,6 @@
     return state === 'exited' || state === 'error'
   }
 
-  function groupRecentSessionsByWorkspace(workspaces: WorkspaceView[], sessions: SessionView[]): RecentWorkspaceGroup[] {
-    const sessionsByWorkspaceId = new Map<string, SessionView[]>()
-    for (const session of sessions) {
-      if (!session.workspace_id) continue
-      const workspaceSessions = sessionsByWorkspaceId.get(session.workspace_id) ?? []
-      workspaceSessions.push(session)
-      sessionsByWorkspaceId.set(session.workspace_id, workspaceSessions)
-    }
-
-    return workspaces
-      .map((workspace) => ({ workspace, sessions: sessionsByWorkspaceId.get(workspace.workspace_id) ?? [] }))
-      .filter((group) => group.sessions.length > 0)
-  }
-
-  function isWorkspaceExpanded(workspaceId: string): boolean {
-    return expandedWorkspaceIds[workspaceId] ?? false
-  }
-
-  function toggleWorkspace(workspaceId: string): void {
-    expandedWorkspaceIds = {
-      ...expandedWorkspaceIds,
-      [workspaceId]: !isWorkspaceExpanded(workspaceId),
-    }
-  }
-
   function notifyRouteChanged() {
     window.dispatchEvent(new PopStateEvent('popstate'))
   }
@@ -123,21 +87,6 @@
   function openSession(sessionId: string) {
     navigate(`/chat/${sessionId}`)
     currentPath = `/chat/${sessionId}`
-    notifyRouteChanged()
-  }
-
-  function openWorkspacePage(event: MouseEvent, workspace: WorkspaceView): void {
-    event.stopPropagation()
-    const path = `/workspace/${workspace.workspace_id}`
-    navigate(path)
-    currentPath = path
-    notifyRouteChanged()
-  }
-
-  function openNewChatForWorkspace(event: MouseEvent, workspace: WorkspaceView): void {
-    event.stopPropagation()
-    navigate('/', { workspace: workspace.workspace_id })
-    currentPath = '/'
     notifyRouteChanged()
   }
 
@@ -330,79 +279,34 @@
     </Sidebar.Group>
 
     <div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden">
-      {#if $sessionsError || $workspacesError}
-        <p role="alert" class="px-4 py-2 text-xs text-destructive">Sidebar refresh failed. {$sessionsError ?? $workspacesError}</p>
+      {#if $sessionsError}
+        <p role="alert" class="px-4 py-2 text-xs text-destructive">Sidebar refresh failed. {$sessionsError}</p>
       {/if}
       <Sidebar.Group>
-        <Sidebar.GroupLabel>Recent Workspaces</Sidebar.GroupLabel>
-      <Sidebar.GroupContent>
-        <Sidebar.Menu>
-          {#if (($workspacesLoading && !$workspacesInitialized) || $sessionsLoading) && !recentWorkspaceGroups.length}
-            <Sidebar.MenuSkeleton />
-            <Sidebar.MenuSkeleton />
-          {:else if recentWorkspaceGroups.length}
-            {#each recentWorkspaceGroups as group (group.workspace.workspace_id)}
-              {@const workspace = group.workspace}
-              {@const workspaceExpanded = isWorkspaceExpanded(workspace.workspace_id)}
-              <li data-slot="sidebar-workspace-group" class="group/workspace relative list-none">
-                <button
-                  type="button"
-                  class="flex h-8 w-full min-w-0 items-center gap-2 rounded-none px-2 pr-14 text-left text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
-                  title={workspace.canonical_path}
-                  aria-expanded={workspaceExpanded}
-                  onclick={() => toggleWorkspace(workspace.workspace_id)}
-                >
-                  <FolderIcon class="size-4 shrink-0" />
-                  <span class="truncate">{workspaceTitle(workspace)}</span>
-                </button>
-                <button
-                  type="button"
-                  class="absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-none text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
-                  aria-label={`Open ${workspaceTitle(workspace)} workspace page`}
-                  title="Open workspace"
-                  onclick={(event) => openWorkspacePage(event, workspace)}
-                >
-                  <FolderOpenIcon class="size-4" />
-                </button>
-                <button
-                  type="button"
-                  class="absolute top-1.5 right-7 flex aspect-square w-5 items-center justify-center rounded-none text-sidebar-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden group-hover/workspace:opacity-100 group-has-[:focus-visible]/workspace:opacity-100"
-                  aria-label={`New chat in ${workspaceTitle(workspace)}`}
-                  title="New chat"
-                  onclick={(event) => openNewChatForWorkspace(event, workspace)}
-                >
-                  <NotePencilIcon class="size-4" />
-                </button>
-                {#if workspaceExpanded}
-                  <Sidebar.Menu class="mt-1 pl-2">
-                    {#each group.sessions as session (session.session_id)}
-                      {@render sessionMenuItem(session, `workspace:${workspace.workspace_id}:${session.session_id}`)}
-                    {/each}
-                  </Sidebar.Menu>
-                {/if}
-              </li>
-            {/each}
-          {:else if !$sessionsError && !$workspacesError}
-            <Sidebar.MenuItem>
-              <div class="px-2 py-1 text-xs text-sidebar-foreground/60">No recent workspaces</div>
-            </Sidebar.MenuItem>
-          {/if}
-        </Sidebar.Menu>
-        </Sidebar.GroupContent>
-      </Sidebar.Group>
-
-      <Sidebar.Group>
-        <Sidebar.GroupLabel class="p-0">
-        <button
-          type="button"
-          class="flex h-8 w-full items-center justify-between rounded-none px-2 text-left text-xs font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
-          aria-expanded={recentSessionsOpen}
-          onclick={() => (recentSessionsOpen = !recentSessionsOpen)}
-        >
-          <span>Recent Sessions</span>
-          <CaretDownIcon class={cn('size-4 transition-transform', recentSessionsOpen ? 'rotate-0' : '-rotate-90')} />
-        </button>
-      </Sidebar.GroupLabel>
+        <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
+          <button
+            type="button"
+            class="flex min-w-0 items-center gap-1 rounded-none text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+            aria-expanded={recentSessionsOpen}
+            onclick={() => (recentSessionsOpen = !recentSessionsOpen)}
+          >
+            <span>Recent Sessions</span>
+            <CaretRightIcon class={cn('size-3 transition-transform', recentSessionsOpen && 'rotate-90')} />
+          </button>
+          <span class="flex-1"></span>
+          <span class="flex items-center gap-2">
+            <button
+              type="button"
+              class="rounded-none hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+              aria-label="Open all sessions"
+              title="All sessions"
+              onclick={() => go('/sessions')}
+            >
+              <ArrowUpRightIcon class="size-4" />
+            </button>
+            <FunnelIcon class="size-4" aria-hidden="true" />
+          </span>
+        </Sidebar.GroupLabel>
       {#if recentSessionsOpen}
         <Sidebar.GroupContent class="pr-1">
           <Sidebar.Menu>

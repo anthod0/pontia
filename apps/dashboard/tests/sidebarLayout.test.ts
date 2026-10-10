@@ -38,10 +38,6 @@ const mocks = vi.hoisted(() => {
     unpinSession: vi.fn(async () => undefined),
     archiveSession: vi.fn(async () => undefined),
     terminateSession: vi.fn(async () => undefined),
-    workspaces: writableStore([]),
-    workspacesLoading: writableStore(false),
-    workspacesError: writableStore<string | null>(null),
-    workspacesInitialized: writableStore(true),
   };
 });
 
@@ -63,22 +59,11 @@ vi.mock("../src/stores/sessions", () => ({
   archiveSession: mocks.archiveSession,
   terminateSession: mocks.terminateSession,
 }));
-vi.mock("../src/stores/workspaces", () => ({
-  workspaces: mocks.workspaces,
-  workspacesLoading: mocks.workspacesLoading,
-  workspacesError: mocks.workspacesError,
-  workspacesInitialized: mocks.workspacesInitialized,
-}));
-
 beforeEach(() => {
   window.history.pushState({}, "", "/dashboard");
   mocks.sessions.set([]);
   mocks.sessionsLoading.set(false);
   mocks.sessionsError.set(null);
-  mocks.workspaces.set([]);
-  mocks.workspacesLoading.set(false);
-  mocks.workspacesError.set(null);
-  mocks.workspacesInitialized.set(true);
   vi.clearAllMocks();
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -121,10 +106,12 @@ function chatSession(
   };
 }
 
-test("opens the archived sessions page from the sidebar", async () => {
+test("opens the all sessions page from the Recent Sessions header", async () => {
   render(AppSidebarHost);
-  await fireEvent.click(screen.getByRole("button", { name: "Archived sessions" }));
-  expect(mocks.navigate).toHaveBeenCalledWith("/sessions/archived");
+
+  await fireEvent.click(screen.getByRole("button", { name: "Open all sessions" }));
+
+  expect(mocks.navigate).toHaveBeenCalledWith("/sessions");
 });
 
 test("sidebar shows semantic status dots except for terminal sessions, and opens chat for the selected session", async () => {
@@ -198,278 +185,6 @@ test("sidebar shows semantic status dots except for terminal sessions, and opens
   await fireEvent.click(screen.getByText("main · coder"));
 
   expect(mocks.navigate).toHaveBeenCalledWith("/chat/session-active");
-});
-
-test("sidebar keeps its empty recent-workspaces state stable during a background workspace refresh", async () => {
-  render(AppSidebarHost);
-
-  expect(screen.getByText("No recent workspaces")).toBeInTheDocument();
-
-  mocks.workspacesLoading.set(true);
-  await tick();
-
-  expect(screen.getByText("No recent workspaces")).toBeInTheDocument();
-  expect(document.querySelector('[data-slot="sidebar-menu-skeleton"]')).not.toBeInTheDocument();
-});
-
-test("sidebar groups recent sessions under non-empty recent workspaces without changing Recent Sessions", async () => {
-  mocks.workspaces.set([
-    {
-      workspace_id: "workspace-active",
-      canonical_path: "/home/cheny/projects/pontia",
-      display_path: "~/projects/pontia",
-      name: "Pontia",
-      state: "active",
-      metadata: {},
-      created_at: "2026-05-14T00:00:00Z",
-      updated_at: "2026-05-14T01:00:00Z",
-      last_used_at: "2026-05-14T01:00:00Z",
-    },
-    {
-      workspace_id: "workspace-empty",
-      canonical_path: "/home/cheny/projects/empty",
-      display_path: "~/projects/empty",
-      name: "Empty workspace",
-      state: "active",
-      metadata: {},
-      created_at: "2026-05-14T00:00:00Z",
-      updated_at: "2026-05-14T01:00:00Z",
-      last_used_at: null,
-    },
-    {
-      workspace_id: "workspace-archived",
-      canonical_path: "/tmp/old",
-      display_path: "/tmp/old",
-      name: "Old workspace",
-      state: "archived",
-      metadata: {},
-      created_at: "2026-05-14T00:00:00Z",
-      updated_at: "2026-05-14T01:00:00Z",
-      last_used_at: null,
-    },
-  ]);
-  mocks.sessions.set([
-    {
-      session_id: "session-newer-unpinned",
-      client_type: "pi",
-      title: "Newer unpinned",
-      handle: "newer",
-      role: "coder",
-      description: null,
-      execution_profile_id: null,
-      execution_profile_version: null,
-      state: "idle",
-      current_turn_id: null,
-      workspace_id: "workspace-active",
-      pinned_at: null,
-      workspace: null,
-      capabilities: {},
-      created_at: "2026-05-14T00:00:00Z",
-      updated_at: "2026-05-14T03:00:00Z",
-      metadata: {},
-    },
-    {
-      session_id: "session-active",
-      client_type: "pi",
-      handle: "main",
-      role: "coder",
-      description: null,
-      execution_profile_id: null,
-      execution_profile_version: null,
-      state: "idle",
-      current_turn_id: null,
-      workspace_id: "workspace-active",
-      pinned_at: "2026-05-14T01:30:00Z",
-      workspace: null,
-      capabilities: {},
-      created_at: "2026-05-14T00:00:00Z",
-      updated_at: "2026-05-14T01:00:00Z",
-      metadata: {},
-    },
-  ]);
-
-  render(AppSidebarHost);
-
-  expect(screen.getByText("Recent Workspaces")).toBeInTheDocument();
-  const workspaceButton = screen.getByRole("button", { name: /^pontia$/i });
-  expect(workspaceButton).toHaveAttribute("aria-expanded", "false");
-  expect(screen.queryByText("Empty workspace")).not.toBeInTheDocument();
-  expect(screen.queryByText("Old workspace")).not.toBeInTheDocument();
-  expect(screen.getByText("Recent Sessions")).toBeInTheDocument();
-  expect(screen.getByText("main · coder")).toBeInTheDocument();
-  expect(screen.getByText("Newer unpinned")).toBeInTheDocument();
-
-  await fireEvent.click(workspaceButton);
-
-  const workspaceGroup = workspaceButton.closest('[data-slot="sidebar-workspace-group"]');
-  expect(workspaceButton).toHaveAttribute("aria-expanded", "true");
-  const workspaceQueries = within(workspaceGroup as HTMLElement);
-  const groupedSessionButton = workspaceQueries
-    .getAllByRole("button", { name: /main · coder/i })
-    .find((button) => button.getAttribute("data-sidebar") === "menu-button");
-  expect(groupedSessionButton).toBeInTheDocument();
-  expect(workspaceQueries.getByLabelText("Pinned session")).toBeInTheDocument();
-  expect(workspaceQueries.getAllByLabelText("idle session")).toHaveLength(2);
-  expect(
-    workspaceQueries.getByRole("button", { name: /open session actions for main · coder/i }),
-  ).toBeInTheDocument();
-  const workspaceSessionTitles = workspaceQueries
-    .getAllByRole("button")
-    .filter((button) => button.getAttribute("data-sidebar") === "menu-button")
-    .map((button) => button.textContent?.trim());
-  expect(workspaceSessionTitles).toEqual(["main · coder", "Newer unpinned"]);
-});
-
-test("sidebar recent workspace hover action opens the workspace page without toggling expansion", async () => {
-  mocks.workspaces.set([
-    {
-      workspace_id: "workspace-active",
-      canonical_path: "/home/cheny/projects/pontia",
-      display_path: "~/projects/pontia",
-      name: "Pontia",
-      state: "active",
-      metadata: {},
-      created_at: "2026-05-14T00:00:00Z",
-      updated_at: "2026-05-14T01:00:00Z",
-      last_used_at: "2026-05-14T01:00:00Z",
-    },
-  ]);
-  mocks.sessions.set([
-    {
-      session_id: "session-active",
-      client_type: "pi",
-      title: "Shared session",
-      handle: "main",
-      role: "coder",
-      description: null,
-      execution_profile_id: null,
-      execution_profile_version: null,
-      state: "idle",
-      current_turn_id: null,
-      workspace_id: "workspace-active",
-      workspace: null,
-      pinned_at: null,
-      archived_at: null,
-      capabilities: {},
-      created_at: "2026-05-14T00:00:00Z",
-      updated_at: "2026-05-14T01:00:00Z",
-      metadata: {},
-    },
-  ]);
-
-  render(AppSidebarHost);
-
-  const workspaceButton = screen.getByRole("button", { name: /^pontia$/i });
-  const openWorkspaceButton = screen.getByRole("button", { name: /open pontia workspace page/i });
-
-  await fireEvent.click(openWorkspaceButton);
-
-  expect(mocks.navigate).toHaveBeenCalledWith("/workspace/workspace-active");
-  expect(workspaceButton).toHaveAttribute("aria-expanded", "false");
-});
-
-test("sidebar recent workspace hover action starts a new chat for that workspace without toggling expansion", async () => {
-  mocks.workspaces.set([
-    {
-      workspace_id: "workspace-active",
-      canonical_path: "/home/cheny/projects/pontia",
-      display_path: "~/projects/pontia",
-      name: "Pontia",
-      state: "active",
-      metadata: {},
-      created_at: "2026-05-14T00:00:00Z",
-      updated_at: "2026-05-14T01:00:00Z",
-      last_used_at: "2026-05-14T01:00:00Z",
-    },
-  ]);
-  mocks.sessions.set([
-    {
-      session_id: "session-active",
-      client_type: "pi",
-      title: "Shared session",
-      handle: "main",
-      role: "coder",
-      description: null,
-      execution_profile_id: null,
-      execution_profile_version: null,
-      state: "idle",
-      current_turn_id: null,
-      workspace_id: "workspace-active",
-      workspace: null,
-      pinned_at: null,
-      archived_at: null,
-      capabilities: {},
-      created_at: "2026-05-14T00:00:00Z",
-      updated_at: "2026-05-14T01:00:00Z",
-      metadata: {},
-    },
-  ]);
-
-  render(AppSidebarHost);
-
-  const workspaceButton = screen.getByRole("button", { name: /^pontia$/i });
-  const newChatButton = screen.getByRole("button", { name: /new chat in pontia/i });
-
-  await fireEvent.click(newChatButton);
-
-  expect(mocks.navigate).toHaveBeenCalledWith("/", { workspace: "workspace-active" });
-  expect(workspaceButton).toHaveAttribute("aria-expanded", "false");
-});
-
-test("sidebar workspace session actions open only for the clicked workspace item", async () => {
-  mocks.workspaces.set([
-    {
-      workspace_id: "workspace-active",
-      canonical_path: "/home/cheny/projects/pontia",
-      display_path: "~/projects/pontia",
-      name: "Pontia",
-      state: "active",
-      metadata: {},
-      created_at: "2026-05-14T00:00:00Z",
-      updated_at: "2026-05-14T01:00:00Z",
-      last_used_at: "2026-05-14T01:00:00Z",
-    },
-  ]);
-  mocks.sessions.set([
-    {
-      session_id: "session-active",
-      client_type: "pi",
-      title: "Shared session",
-      handle: "main",
-      role: "coder",
-      description: null,
-      execution_profile_id: null,
-      execution_profile_version: null,
-      state: "idle",
-      current_turn_id: null,
-      workspace_id: "workspace-active",
-      workspace: null,
-      pinned_at: null,
-      archived_at: null,
-      capabilities: {},
-      created_at: "2026-05-14T00:00:00Z",
-      updated_at: "2026-05-14T01:00:00Z",
-      metadata: {},
-    },
-  ]);
-  render(AppSidebarHost);
-
-  const workspaceButton = screen.getByRole("button", { name: /^pontia$/i });
-  await fireEvent.click(workspaceButton);
-  const workspaceGroup = workspaceButton.closest('[data-slot="sidebar-workspace-group"]');
-  const workspaceAction = within(workspaceGroup as HTMLElement).getByRole("button", {
-    name: /open session actions for shared session/i,
-  });
-
-  await fireEvent.click(workspaceAction);
-
-  const actionButtons = screen.getAllByRole("button", {
-    name: /open session actions for shared session/i,
-  });
-  expect(actionButtons.filter((button) => button.getAttribute("data-state") === "open")).toEqual([
-    workspaceAction,
-  ]);
-  expect(screen.getByRole("menuitem", { name: /rename/i })).toBeInTheDocument();
 });
 
 test("sidebar renames a recent session from the hover edit action without opening it", async () => {
@@ -869,7 +584,6 @@ test("shows a sidebar loading failure instead of claiming there are no sessions"
   render(AppSidebarHost);
   expect(screen.getByRole("alert")).toHaveTextContent("Sidebar refresh failed");
   expect(screen.queryByText("No active sessions")).not.toBeInTheDocument();
-  expect(screen.queryByText("No recent workspaces")).not.toBeInTheDocument();
   mocks.sessionsError.set(null);
   await tick();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();

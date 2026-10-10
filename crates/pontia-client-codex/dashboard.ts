@@ -13,7 +13,6 @@ export const dashboardClient: DashboardClient = {
   defaultForCreation: false,
   workspaceCreation: false,
   profileSelection: false,
-  archiveNotice: "Codex thread archiving is separate and is not changed here.",
   deliveryPolicy: "steer",
   controlDetails: (session) => (session.codex as CodexControlDetails | undefined) ?? null,
 };

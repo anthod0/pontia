@@ -6,9 +6,6 @@ const clients = [pi, codex];
 const defaultClient = clients.find((client) => client.defaultForCreation);
 if (!defaultClient) throw new Error("No default Agent Client is registered");
 
-export const archiveClientNotice = clients
-  .flatMap((client) => (client.archiveNotice ? [client.archiveNotice] : []))
-  .join(" ");
 export const defaultClientType = defaultClient.clientType;
 export const creationClientTypes = clients.map((client) => client.clientType);
 export const workspaceClientTypes = clients

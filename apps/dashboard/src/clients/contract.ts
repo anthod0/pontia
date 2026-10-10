@@ -15,7 +15,6 @@ export interface DashboardClient {
   defaultForCreation: boolean;
   workspaceCreation: boolean;
   profileSelection: boolean;
-  archiveNotice?: string;
   deliveryPolicy: InboxDeliveryPolicy;
   controlDetails(session: SessionView): ClientControlDetails | null;
 }
