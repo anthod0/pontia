@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-10
+
+### Added
+
+- Added a unified Sessions view with active and archived tabs backed by a dedicated session overview query.
+- Added the Edge initialization retry command to failed deployment instructions in Cloud.
+
+### Changed
+
+- Migrated Dashboard session, workspace, and workflow reads and invalidation to TanStack Query.
+- Aligned the Dashboard settings navigation with Cloud.
+- Unified macOS service executable discovery across supported installation locations.
+
+### Fixed
+
+- Preserved session activity timestamps when management metadata changes.
+
 ## [0.5.0] - 2026-10-10
 
 ### Added
