@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { SessionOverviewView, SessionView } from "../../src/api/types";
-import { queryClient } from "../../src/lib/queryClient";
+import { queryClient } from "../../src/queries/queryClient";
 import {
   invalidateSessionOverview,
   type SessionOverviewSnapshot,

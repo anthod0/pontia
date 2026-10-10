@@ -1,6 +1,6 @@
 import { createQuery, queryOptions } from "@tanstack/svelte-query";
 import { listWorkspaceRootEntries, listWorkspaceRoots } from "../api/client";
-import { queryClient } from "../lib/queryClient";
+import { queryClient } from "./queryClient";
 
 export const workspaceRootKeys = {
   all: ["workspace-roots"] as const,

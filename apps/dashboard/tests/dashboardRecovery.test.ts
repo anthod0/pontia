@@ -10,7 +10,7 @@ import { refreshDashboardSnapshot } from "../src/services/dashboardSnapshotRefre
 import { selectedTaskId, task } from "../src/stores/tasks";
 import { selectedWorkflowId, workflowDetail } from "../src/stores/workflows";
 import * as timeline from "../src/stores/timeline";
-import { queryClient } from "../src/lib/queryClient";
+import { queryClient } from "../src/queries/queryClient";
 import type { SessionOverviewSnapshot } from "../src/queries/sessionOverview";
 import SessionOverviewQueryHarness from "./components/SessionOverviewQueryHarness.svelte";
 

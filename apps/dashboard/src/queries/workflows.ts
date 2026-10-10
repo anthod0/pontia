@@ -1,6 +1,6 @@
 import { createQuery, queryOptions } from "@tanstack/svelte-query";
 import { getWorkflowDocument, getWorkflowRevision, listWorkflowPatches } from "../api/client";
-import { queryClient } from "../lib/queryClient";
+import { queryClient } from "./queryClient";
 
 export const workflowKeys = {
   all: ["workflows"] as const,

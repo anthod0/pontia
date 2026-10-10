@@ -5,10 +5,12 @@ import {
 } from "@tanstack/svelte-query";
 import { getSessionOverview } from "../api/client";
 import type { SessionOverviewView, SessionView } from "../api/types";
-import { queryClient } from "../lib/queryClient";
+import { queryClient } from "./queryClient";
 
 const listLimit = 50;
-const queryKeyRoot = ["sessions", "overview"] as const;
+export const sessionOverviewKeys = {
+  all: ["sessions", "overview"] as const,
+};
 type PageParam = string | null;
 
 export type SessionOverviewSnapshot = {
@@ -21,7 +23,7 @@ export type SessionOverviewSnapshot = {
 
 function sessionOverviewOptions(includeArchived: boolean) {
   return infiniteQueryOptions({
-    queryKey: [...queryKeyRoot, { includeArchived }] as const,
+    queryKey: [...sessionOverviewKeys.all, { includeArchived }] as const,
     queryFn: ({ pageParam, signal }) =>
       getSessionOverview(
         {
@@ -48,12 +50,12 @@ export function createSessionOverviewQuery(includeArchived = false) {
 }
 
 export function invalidateSessionOverview(): Promise<void> {
-  return queryClient.invalidateQueries({ queryKey: queryKeyRoot });
+  return queryClient.invalidateQueries({ queryKey: sessionOverviewKeys.all });
 }
 
 export function clearSessionOverviewQuery(): void {
-  void queryClient.cancelQueries({ queryKey: queryKeyRoot });
-  queryClient.removeQueries({ queryKey: queryKeyRoot });
+  void queryClient.cancelQueries({ queryKey: sessionOverviewKeys.all });
+  queryClient.removeQueries({ queryKey: sessionOverviewKeys.all });
 }
 
 export function snapshotSessionOverview(

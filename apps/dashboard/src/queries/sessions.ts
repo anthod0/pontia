@@ -1,6 +1,6 @@
 import { createQuery, queryOptions } from "@tanstack/svelte-query";
 import { getSession, listSessionModels } from "../api/client";
-import { queryClient } from "../lib/queryClient";
+import { queryClient } from "./queryClient";
 
 export const sessionKeys = {
   all: ["sessions"] as const,

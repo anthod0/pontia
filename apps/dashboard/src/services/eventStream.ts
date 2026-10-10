@@ -19,7 +19,7 @@ import {
 import { loadAgentProfiles } from "../stores/agentProfiles";
 import { loadTasks, refreshTask, selectedTaskId } from "../stores/tasks";
 import { loadSessionDetail, selectedSessionId } from "../stores/sessions";
-import { invalidateSessionOverview } from "../queries/sessionOverview";
+import { invalidateQueriesForDashboardEvent } from "../queries/dashboardInvalidation";
 import { loadWorkspaces } from "../stores/workspaces";
 import {
   loadWorkflows,
@@ -49,14 +49,9 @@ const refreshScheduler = createDashboardRefreshScheduler({
   loadTasks,
   loadWorkspaces,
   loadAgentProfiles,
-  invalidateSessionOverview,
   loadWorkflows: () => loadWorkflows({ showLoading: false }),
   refreshTask,
-  refreshSession: (sessionId) =>
-    Promise.all([
-      loadSessionDetail(sessionId, { showLoading: false }),
-      invalidateSessionOverview(),
-    ]),
+  refreshSession: (sessionId) => loadSessionDetail(sessionId, { showLoading: false }),
   refreshWorkflow: (workflowId) => refreshWorkflow(workflowId, { showLoading: false }),
 });
 
@@ -247,6 +242,7 @@ function parseFrame(
 
 function handleDashboardEvent(streamEvent: DashboardStreamEvent, cursor: string | null): void {
   if (cursor) dashboardStreamCursor.set(cursor);
+  void invalidateQueriesForDashboardEvent(streamEvent);
   refreshScheduler.handleEvent(streamEvent);
   for (const listener of dashboardEventListeners) listener(streamEvent);
 }

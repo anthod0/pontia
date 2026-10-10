@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import "fake-indexeddb/auto";
 import { cleanup } from "@testing-library/svelte";
 import { afterEach, vi } from "vitest";
-import { queryClient } from "../src/lib/queryClient";
+import { queryClient } from "../src/queries/queryClient";
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,

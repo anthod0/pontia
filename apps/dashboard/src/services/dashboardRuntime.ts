@@ -6,7 +6,7 @@ import { loadTasks, resetTasks } from "../stores/tasks";
 import { resetTimelineState } from "../stores/timeline";
 import { loadWorkspaces, resetWorkspaces } from "../stores/workspaces";
 import { loadWorkflows, resetWorkflows } from "../stores/workflows";
-import { queryClient } from "../lib/queryClient";
+import { clearDashboardQueries } from "../queries/dashboardInvalidation";
 
 export function startDashboardRuntime(): void {
   void Promise.all([
@@ -23,7 +23,7 @@ export function stopDashboardRuntime(): void {
 }
 
 export function clearDashboardRuntimeState(): void {
-  queryClient.clear();
+  clearDashboardQueries();
   resetConnectionState();
   resetTimelineState();
   resetAgentProfiles();

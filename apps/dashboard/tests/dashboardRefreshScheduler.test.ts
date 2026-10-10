@@ -58,9 +58,6 @@ function scheduler(
     loadAgentProfiles: async () => {
       calls.push("profiles");
     },
-    invalidateSessionOverview: async () => {
-      calls.push("sessions");
-    },
     loadWorkflows: async () => {
       calls.push("workflows");
     },
@@ -99,7 +96,7 @@ test("refreshes selected workflow when the event belongs to one of its sessions"
   const refreshes = scheduler(calls, { workflowId: "wf-1", workflowSessionIds: ["session-2"] });
   refreshes.handleEvent(sessionEvent("session.updated", "session-2"));
   await refreshes.flushNow();
-  expect(calls.sort()).toEqual(["sessions", "workflow:wf-1", "workflows"].sort());
+  expect(calls.sort()).toEqual(["workflow:wf-1", "workflows"].sort());
 });
 
 test("ignores high-frequency transcript message updates for projection refreshes", async () => {

@@ -9,7 +9,6 @@ type RefreshOptions = {
   loadTasks: () => Promise<unknown>;
   loadWorkspaces: () => Promise<unknown>;
   loadAgentProfiles: () => Promise<unknown>;
-  invalidateSessionOverview: () => Promise<unknown>;
   loadWorkflows: () => Promise<unknown>;
   refreshTask: (taskId: string) => Promise<unknown>;
   refreshSession: (sessionId: string) => Promise<unknown>;
@@ -20,7 +19,6 @@ type PendingRefresh = {
   tasks: boolean;
   workspaces: boolean;
   agentProfiles: boolean;
-  sessions: boolean;
   workflows: boolean;
   taskIds: Set<string>;
   sessionIds: Set<string>;
@@ -32,7 +30,6 @@ function emptyPending(): PendingRefresh {
     tasks: false,
     workspaces: false,
     agentProfiles: false,
-    sessions: false,
     workflows: false,
     taskIds: new Set(),
     sessionIds: new Set(),
@@ -45,7 +42,6 @@ function hasPending(pending: PendingRefresh): boolean {
     pending.tasks ||
     pending.workspaces ||
     pending.agentProfiles ||
-    pending.sessions ||
     pending.workflows ||
     pending.taskIds.size > 0 ||
     pending.sessionIds.size > 0 ||
@@ -88,7 +84,6 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
       if (batch.tasks) refreshes.push(options.loadTasks());
       if (batch.workspaces) refreshes.push(options.loadWorkspaces());
       if (batch.agentProfiles) refreshes.push(options.loadAgentProfiles());
-      if (batch.sessions) refreshes.push(options.invalidateSessionOverview());
       if (batch.workflows) refreshes.push(options.loadWorkflows());
       for (const taskId of batch.taskIds) {
         if (taskId === options.getSelectedTaskId()) refreshes.push(options.refreshTask(taskId));
@@ -118,8 +113,6 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
       const selected = options.getSelectedSessionId();
       if (selected && streamEvent.event.session_id === selected) {
         pending.sessionIds.add(selected);
-      } else {
-        pending.sessions = true;
       }
       pending.workflows = true;
       const selectedWorkflow = options.getSelectedWorkflowId();
