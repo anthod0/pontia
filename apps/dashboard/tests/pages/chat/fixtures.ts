@@ -134,6 +134,14 @@ const mocks = vi.hoisted(() => {
   };
 });
 
+vi.mock("../../../src/api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../src/api/client")>()),
+  listWorkspaceRoots: vi.fn(async () => mocks.workspaceRoots.get()),
+  listWorkspaceRootEntries: vi.fn(async (rootId: string, path = "") =>
+    mocks.browseWorkspaceRoot(rootId, path),
+  ),
+}));
+
 vi.mock("../../../src/stores/sessions", () => ({
   sessionDetail: mocks.sessionDetail,
   sessionDetailLoading: mocks.sessionDetailLoading,

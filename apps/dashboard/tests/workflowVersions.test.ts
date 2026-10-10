@@ -1,12 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { get } from "svelte/store";
 import { beforeEach, expect, test, vi } from "vitest";
 import WorkflowVersions from "../src/pages/workflows/WorkflowVersions.svelte";
-import {
-  createRevisionReader,
-  revisionSelection,
-  workflowRevisions,
-} from "../src/pages/workflows/revisions";
+import { revisionSelection, workflowRevisions } from "../src/pages/workflows/revisions";
 import type { WorkflowGraphRevisionView } from "../src/api/types";
 
 const mocks = vi.hoisted(() => ({ getWorkflowRevision: vi.fn(), navigate: vi.fn() }));
@@ -30,35 +25,6 @@ test("revision numbers come from the accepted graph, not patch outcomes; malform
   expect(revisionSelection("2", 3)).toBe(2);
   for (const raw of ["0", "-1", "4", "1.5", "abc", "", "01", "9007199254740992"])
     expect(revisionSelection(raw, 3)).toBeNull();
-});
-
-test("late responses and failures cannot overwrite a new workflow/revision or a cancelled reader", async () => {
-  let resolve!: (value: WorkflowGraphRevisionView) => void;
-  mocks.getWorkflowRevision.mockImplementationOnce(
-    () =>
-      new Promise((r) => {
-        resolve = r;
-      }),
-  );
-  const reader = createRevisionReader();
-  const first = reader.load("old", 1);
-  await reader.load("new", 2);
-  resolve(detail(1));
-  await first;
-  expect(get(reader).detail).toEqual(detail());
-  expect(mocks.getWorkflowRevision.mock.calls[0][2].signal.aborted).toBe(true);
-  let reject!: (error: Error) => void;
-  mocks.getWorkflowRevision.mockImplementationOnce(
-    () =>
-      new Promise((_, r) => {
-        reject = r;
-      }),
-  );
-  const pending = reader.load("new", 3);
-  reader.cancel();
-  reject(new Error("late"));
-  await pending;
-  expect(get(reader).error).toBeNull();
 });
 
 test("empty definitions, errors and retry are explicit; only selected revision is fetched", async () => {

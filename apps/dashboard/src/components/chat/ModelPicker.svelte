@@ -1,44 +1,34 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { modelPickerDisabledReason } from '$lib/modelControls'
-  import { listSessionModels, setSessionModel } from '../../api/client'
-  import type { SessionModels, SessionView } from '../../api/types'
+  import { setSessionModel } from '../../api/client'
+  import type { SessionView } from '../../api/types'
+  import { createSessionModelsQuery } from '../../queries/sessions'
 
   let { session, onClose }: { session: SessionView; onClose: () => void } = $props()
-  let catalog = $state<SessionModels | null>(null)
+  const modelsQuery = createSessionModelsQuery(() => session.session_id)
   let query = $state('')
-  let loading = $state(true)
   let submitting = $state(false)
   let pendingModel = $state<string | null>(null)
   let error = $state<string | null>(null)
-  const currentModel = $derived(session.model ?? catalog?.current_model)
+  const currentModel = $derived(session.model ?? modelsQuery.data?.current_model)
   const unavailable = $derived(modelPickerDisabledReason(session))
   const readonly = $derived(session.capabilities.set_model !== true)
-  const models = $derived(catalog?.models.filter((model) => `${model.name} ${model.id}`.toLowerCase().includes(query.trim().toLowerCase())) ?? [])
-
-  onMount(() => {
-    const controller = new AbortController()
-    void listSessionModels(session.session_id, { signal: controller.signal })
-      .then((value) => { if (!controller.signal.aborted) catalog = value })
-      .catch((cause) => { if (!controller.signal.aborted) error = cause instanceof Error ? cause.message : String(cause) })
-      .finally(() => { if (!controller.signal.aborted) loading = false })
-    return () => controller.abort()
-  })
+  const models = $derived(modelsQuery.data?.models.filter((model) => `${model.name} ${model.id}`.toLowerCase().includes(query.trim().toLowerCase())) ?? [])
 
   $effect(() => {
     if (pendingModel && session.model === pendingModel) onClose()
   })
 
   async function choose(model: string): Promise<void> {
-    if (!catalog || readonly || unavailable || submitting || pendingModel) return
+    if (!modelsQuery.data || readonly || unavailable || submitting || pendingModel) return
     submitting = true
     error = null
     try {
-      await setSessionModel(session.session_id, model, catalog.runtime_id)
+      await setSessionModel(session.session_id, model, modelsQuery.data.runtime_id)
       pendingModel = model
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause)
@@ -57,12 +47,12 @@
     <Input aria-label="Search models" placeholder="Search models…" bind:value={query} />
     {#if currentModel}<p class="text-xs text-muted-foreground">Current model: {currentModel}</p>{/if}
     {#if unavailable}<p role="status" class="text-sm text-muted-foreground">{unavailable}</p>{/if}
-    {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
-    {#if loading}
+    {#if error || modelsQuery.error}<p role="alert" class="text-sm text-destructive">{error ?? modelsQuery.error?.message}</p>{/if}
+    {#if modelsQuery.isPending}
       <p role="status">Loading models…</p>
     {:else if pendingModel}
       <p role="status">Model change requested. Waiting for confirmation from the agent…</p>
-    {:else if catalog}
+    {:else if modelsQuery.data}
       <ul aria-label="Available models" class="max-h-80 space-y-1 overflow-y-auto">
         {#each models as model (model.id)}
           <li>

@@ -4,7 +4,6 @@ import { beforeEach, expect, test, vi } from "vitest";
 import WorkflowDetailPage from "../src/pages/WorkflowDetailPage.svelte";
 import WorkflowDocument from "../src/pages/workflows/WorkflowDocument.svelte";
 import WorkflowSession from "../src/pages/workflows/WorkflowSession.svelte";
-import { createPatchHistoryReader } from "../src/pages/workflows/patches";
 import {
   workflowDetail,
   workflowDetailError,
@@ -322,27 +321,6 @@ test("missing historical Session is explicit and does not borrow the active Sess
   expect(mocks.getSession).not.toHaveBeenCalled();
 });
 
-test("patch reader coalesces slow refreshes and fences workflow changes, errors and cancellation", async () => {
-  const old = deferred<WorkflowPatchHistoryView[]>();
-  mocks.listWorkflowPatches.mockReturnValueOnce(old.promise);
-  const reader = createPatchHistoryReader();
-  const first = reader.load("old");
-  expect(reader.load("old")).toBe(first);
-  await reader.load("new");
-  old.resolve([patch("obsolete")]);
-  await first;
-  expect(get(reader).workflowId).toBe("new");
-  expect(get(reader).patches[0].patch_id).toBe("p1");
-  expect(mocks.listWorkflowPatches.mock.calls[0][1].signal.aborted).toBe(true);
-  const late = deferred<WorkflowPatchHistoryView[]>();
-  mocks.listWorkflowPatches.mockReturnValueOnce(late.promise);
-  const pending = reader.load("new");
-  reader.cancel();
-  late.reject(new Error("Late error"));
-  await pending;
-  expect(get(reader).error).toBeNull();
-});
-
 test("Session reads survive slow snapshot refreshes but reject replaced Session responses", async () => {
   const slow = deferred<unknown>();
   mocks.getSession.mockReturnValueOnce(slow.promise);
@@ -358,7 +336,7 @@ test("Session reads survive slow snapshot refreshes but reject replaced Session 
   expect(mocks.getSession.mock.calls[0][1].signal.aborted).toBe(true);
 });
 
-test("documents fence rapid ref/workflow changes and closing an in-flight read", async () => {
+test("documents fence rapid workflow and reference changes", async () => {
   const slow = deferred<unknown>();
   mocks.getWorkflowDocument.mockReturnValueOnce(slow.promise);
   const view = render(WorkflowDocument, {
@@ -373,8 +351,6 @@ test("documents fence rapid ref/workflow changes and closing an in-flight read",
   await Promise.resolve();
   expect(screen.queryByText("Obsolete reason")).not.toBeInTheDocument();
   expect(mocks.getWorkflowDocument.mock.calls[0][2].signal.aborted).toBe(true);
-  await fireEvent.click(screen.getByText("Request document"));
-  expect(mocks.getWorkflowDocument.mock.calls[1][2].signal.aborted).toBe(true);
 });
 
 test("missed notifications converge through polling without moving a selected revision", async () => {

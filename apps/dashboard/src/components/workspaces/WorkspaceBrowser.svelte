@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import ArrowBendUpLeftIcon from 'phosphor-svelte/lib/ArrowBendUpLeftIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
@@ -17,82 +17,66 @@
   import { Label } from '$lib/components/ui/label/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Table from '$lib/components/ui/table/index.js'
-  import type { WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceView } from '../../api/types'
-  import { browseWorkspaceRoot, deleteWorkspace, loadWorkspaceRoots, loadWorkspaces, registerWorkspace, renameWorkspace, workspaceRoots, workspaces, workspacesError, workspacesLoading } from '../../stores/workspaces'
+  import type { WorkspaceDirectoryEntryView, WorkspaceView } from '../../api/types'
+  import { deleteWorkspace, loadWorkspaces, registerWorkspace, renameWorkspace, workspaces, workspacesError, workspacesLoading } from '../../stores/workspaces'
+  import { createWorkspaceRootEntriesQuery, createWorkspaceRootsQuery } from '../../queries/workspaces'
 
-  let mounted = false
-  let rootId = ''
-  let browsePath = ''
-  let listing: WorkspaceDirectoryListingView | null = null
-  let rootsLoading = true
-  let browserLoading = false
-  let browserError: string | null = null
-  let registeringPath: string | null = null
-  let registerError: string | null = null
-  let deletingWorkspaceId: string | null = null
-  let deleteError: string | null = null
-  let renameError: string | null = null
-  let renamingWorkspace: WorkspaceView | null = null
-  let renamingWorkspaceName = ''
-  let renameWorkspaceDialogOpen = false
-  let savingRename = false
-  let showHiddenDirectories = false
+  let mounted = $state(false)
+  let rootId = $state('')
+  let browsePath = $state('')
+  let openedPath = $state('')
+  const rootsQuery = createWorkspaceRootsQuery()
+  const entriesQuery = createWorkspaceRootEntriesQuery(() => rootId, () => openedPath)
+  let registeringPath = $state<string | null>(null)
+  let registerError = $state<string | null>(null)
+  let deletingWorkspaceId = $state<string | null>(null)
+  let deleteError = $state<string | null>(null)
+  let renameError = $state<string | null>(null)
+  let renamingWorkspace = $state<WorkspaceView | null>(null)
+  let renamingWorkspaceName = $state('')
+  let renameWorkspaceDialogOpen = $state(false)
+  let savingRename = $state(false)
+  let showHiddenDirectories = $state(false)
 
   onMount(() => {
     mounted = true
     const controller = new AbortController()
 
-    void initialize(controller.signal)
+    void loadWorkspaces({ signal: controller.signal })
     return () => {
       mounted = false
       controller.abort()
     }
   })
 
-  async function initialize(signal: AbortSignal): Promise<void> {
-    rootsLoading = true
-    try {
-      await Promise.all([
-        loadWorkspaces({ signal }),
-        loadWorkspaceRoots({ signal }).then((roots) => {
-          if (!rootId && roots.length) rootId = roots[0].root_id
-        }),
-      ])
-      if (!signal.aborted && rootId) await openPath('', { signal })
-    } catch (error) {
-      if (!isAbortError(error)) browserError = errorMessage(error)
-    } finally {
-      if (!signal.aborted) rootsLoading = false
+  let workspaceRoots = $derived(rootsQuery.data ?? [])
+  let listing = $derived(entriesQuery.data ?? null)
+  let selectedRoot = $derived(workspaceRoots.find((root) => root.root_id === rootId) ?? null)
+  let currentWorkspace = $derived(listing ? workspaceForCanonicalPath(listing.canonical_path) : null)
+  $effect(() => {
+    if (!rootId && workspaceRoots.length) rootId = workspaceRoots[0].root_id
+  })
+  $effect(() => {
+    if (listing && listing.root_id === rootId && listing.path !== browsePath) browsePath = listing.path
+  })
+  $effect(() => {
+    if (!renameWorkspaceDialogOpen && renamingWorkspace && !savingRename) {
+      renamingWorkspace = null
+      renamingWorkspaceName = ''
     }
-  }
-
-  $: selectedRoot = $workspaceRoots.find((root) => root.root_id === rootId) ?? null
-  $: currentWorkspace = listing ? workspaceForCanonicalPath(listing.canonical_path) : null
-  $: if (!renameWorkspaceDialogOpen && renamingWorkspace && !savingRename) {
-    renamingWorkspace = null
-    renamingWorkspaceName = ''
-  }
+  })
 
   async function refreshAll(): Promise<void> {
-    await Promise.all([loadWorkspaces(), loadWorkspaceRoots()])
-    if (!rootId && $workspaceRoots.length) rootId = $workspaceRoots[0].root_id
-    if (rootId) await openPath(browsePath)
+    await Promise.all([loadWorkspaces(), rootsQuery.refetch()])
+    if (rootId) await entriesQuery.refetch()
   }
 
-  async function openPath(path: string, options: { signal?: AbortSignal } = {}): Promise<void> {
+  async function openPath(path: string): Promise<void> {
     if (!rootId) return
-    browserLoading = true
-    browserError = null
-    try {
-      listing = await browseWorkspaceRoot(rootId, path, options)
-      browsePath = listing.path
-    } catch (error) {
-      if (isAbortError(error)) return
-      listing = null
-      browserError = errorMessage(error)
-    } finally {
-      if (!options.signal?.aborted) browserLoading = false
-    }
+    openedPath = path
+    browsePath = path
+    await tick()
+    await entriesQuery.refetch()
   }
 
   function canonicalPathForEntry(entry: WorkspaceDirectoryEntryView): string | null {
@@ -177,21 +161,17 @@
     }
   }
 
-  function isAbortError(error: unknown): boolean {
-    return error instanceof DOMException && error.name === 'AbortError'
-  }
-
   function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
   }
 </script>
 
 <div class="space-y-4">
-  {#if $workspacesError || browserError || registerError || renameError || deleteError}
+  {#if $workspacesError || rootsQuery.error || entriesQuery.error || registerError || renameError || deleteError}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />
       <Alert.Title>Workspace error</Alert.Title>
-      <Alert.Description>{deleteError ?? renameError ?? registerError ?? browserError ?? $workspacesError}</Alert.Description>
+      <Alert.Description>{deleteError ?? renameError ?? registerError ?? entriesQuery.error?.message ?? rootsQuery.error?.message ?? $workspacesError}</Alert.Description>
     </Alert.Root>
   {/if}
 
@@ -216,12 +196,12 @@
       </div>
     </Card.Header>
     <Card.Content class="space-y-4">
-      {#if rootsLoading}
+      {#if rootsQuery.isPending}
         <div class="space-y-3" aria-label="Loading workspace browser">
           <Skeleton class="h-9 w-full" />
           <Skeleton class="h-44 w-full" />
         </div>
-      {:else if !$workspaceRoots.length}
+      {:else if !workspaceRoots.length}
         <Empty.Root class="min-h-56 border">
           <Empty.Header>
             <Empty.Media variant="icon"><FolderIcon class="size-4" /></Empty.Media>
@@ -234,7 +214,7 @@
           <div class="space-y-2">
             <Label for="workspace-root">Root</Label>
             <select id="workspace-root" bind:value={rootId} onchange={() => void openPath('')} class="h-9 w-full rounded-none border bg-transparent px-3 text-sm">
-              {#each $workspaceRoots as root (root.root_id)}
+              {#each workspaceRoots as root (root.root_id)}
                 <option value={root.root_id}>{root.label}</option>
               {/each}
             </select>
@@ -243,7 +223,7 @@
             <Label for="browse-path">Path</Label>
             <Input id="browse-path" bind:value={browsePath} placeholder="Relative path inside root" />
           </div>
-          <Button variant="outline" onclick={() => void openPath(browsePath)} disabled={!rootId || browserLoading}>Open</Button>
+          <Button variant="outline" onclick={() => void openPath(browsePath)} disabled={!rootId || entriesQuery.isFetching}>Open</Button>
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -251,7 +231,7 @@
           {#if $workspacesLoading}<p>Loading active workspaces…</p>{:else}<p>{$workspaces.length} active workspace{$workspaces.length === 1 ? '' : 's'}</p>{/if}
         </div>
 
-        {#if browserLoading}
+        {#if entriesQuery.isFetching && !listing}
           <div class="space-y-2"><Skeleton class="h-9 w-full" /><Skeleton class="h-9 w-full" /><Skeleton class="h-9 w-full" /></div>
         {:else if listing}
           <div class="rounded-none border">

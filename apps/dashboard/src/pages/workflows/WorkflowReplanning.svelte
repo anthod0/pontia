@@ -7,7 +7,7 @@
   import { navigate } from '$lib/navigation'
   import type { WorkflowDetailView } from '../../api/types'
   import { selectedWorkflowHistorySessionIds } from '../../stores/workflows'
-  import { createPatchHistoryReader } from './patches'
+  import { createWorkflowPatchesQuery } from '../../queries/workflows'
   import WorkflowDocument from './WorkflowDocument.svelte'
   import WorkflowSession from './WorkflowSession.svelte'
 
@@ -15,20 +15,20 @@
     snapshot: WorkflowDetailView; revision: number;
     onrevision: (revision: number) => void;
   } = $props()
-  const reader = createPatchHistoryReader()
+  const patchesQuery = createWorkflowPatchesQuery(() => snapshot.workflow_id, () => false)
   let workflowId = $derived(snapshot.workflow_id)
-  $effect(() => { workflowId; return () => { reader.cancel(); selectedWorkflowHistorySessionIds.set([]) } })
-  $effect(() => { snapshot; untrack(() => void reader.load(snapshot.workflow_id)) })
-  let patches = $derived($reader.workflowId === snapshot.workflow_id ? $reader.patches.filter(patch => patch.base_revision === revision) : [])
+  $effect(() => { workflowId; return () => { selectedWorkflowHistorySessionIds.set([]) } })
+  $effect(() => { snapshot; untrack(() => void patchesQuery.refetch()) })
+  let patches = $derived((patchesQuery.data ?? []).filter(patch => patch.base_revision === revision))
   $effect(() => { selectedWorkflowHistorySessionIds.set(patches.flatMap(patch => patch.replanner_session_id ? [patch.replanner_session_id] : [])) })
   function time(value: string | null): string { return value ?? 'Not recorded' }
 </script>
 
-{#if $reader.error}
-  <Alert.Root variant="destructive"><Alert.Title>Could not load replanning records</Alert.Title><Alert.Description>{$reader.error}</Alert.Description></Alert.Root>
-  <Button variant="outline" onclick={() => reader.load(snapshot.workflow_id)}>Retry records</Button>
+{#if patchesQuery.error}
+  <Alert.Root variant="destructive"><Alert.Title>Could not load replanning records</Alert.Title><Alert.Description>{patchesQuery.error.message}</Alert.Description></Alert.Root>
+  <Button variant="outline" onclick={() => void patchesQuery.refetch()}>Retry records</Button>
 {/if}
-{#if $reader.loading && !$reader.loaded}<p role="status">Loading replanning records…</p>{/if}
+{#if patchesQuery.isFetching && patchesQuery.data === undefined}<p role="status">Loading replanning records…</p>{/if}
 {#if patches.length}
   <section class="space-y-3" aria-label="Replanning records">
     <h3 class="font-semibold">Replanning records · v{revision}</h3>

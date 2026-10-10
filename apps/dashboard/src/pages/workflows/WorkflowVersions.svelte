@@ -8,22 +8,16 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import { Separator } from '$lib/components/ui/separator/index.js'
-  import { createRevisionReader } from './revisions'
+  import { createWorkflowRevisionQuery } from '../../queries/workflows'
 
   let { workflowId, revision, requestedPhase = null, onphase }: {
     workflowId: string; revision: number | null; requestedPhase?: string | null;
     onphase: (ordinal: number) => void;
   } = $props()
-  const reader = createRevisionReader()
-  let selectedWorkflow = $derived(workflowId)
-  let selectedRevision = $derived(revision)
-  $effect(() => {
-    if (selectedRevision !== null) void reader.load(selectedWorkflow, selectedRevision)
-    return () => reader.cancel()
-  })
+  const revisionQuery = createWorkflowRevisionQuery(() => workflowId, () => revision)
   let phases = $derived.by(() => {
-    const groups: { ordinal: number; name: string; nodes: NonNullable<typeof $reader.detail>['nodes'] }[] = []
-    for (const node of $reader.detail?.nodes ?? []) {
+    const groups: { ordinal: number; name: string; nodes: NonNullable<typeof revisionQuery.data>['nodes'] }[] = []
+    for (const node of revisionQuery.data?.nodes ?? []) {
       let phase = groups.at(-1)
       if (!phase || phase.name !== node.phase) {
         phase = { ordinal: groups.length + 1, name: node.phase, nodes: [] }
@@ -55,12 +49,12 @@
       <p class="text-sm text-muted-foreground">Definition only. Session links do not represent execution state at this revision.</p>
       {#if revision === null}
         <Alert.Root variant="destructive"><Alert.Title>Invalid or unavailable revision</Alert.Title><Alert.Description>Select an existing version below.</Alert.Description></Alert.Root>
-      {:else if $reader.loading}
+      {:else if revisionQuery.isPending}
         <div role="status" aria-label="Loading revision"><Skeleton class="h-64 w-full" /></div>
-      {:else if $reader.error}
-        <Alert.Root variant="destructive"><Alert.Title>Could not load revision</Alert.Title><Alert.Description>{$reader.error}</Alert.Description></Alert.Root>
-        <Button variant="outline" onclick={() => revision !== null && reader.load(workflowId, revision)}>Retry revision</Button>
-      {:else if $reader.detail}
+      {:else if revisionQuery.error}
+        <Alert.Root variant="destructive"><Alert.Title>Could not load revision</Alert.Title><Alert.Description>{revisionQuery.error.message}</Alert.Description></Alert.Root>
+        <Button variant="outline" onclick={() => void revisionQuery.refetch()}>Retry revision</Button>
+      {:else if revisionQuery.data}
         {#if selectedPhase}
           <section>
             <div class="mb-4"><h3 class="text-lg font-semibold">{selectedPhase.name || 'No phase'}</h3><p class="text-sm text-muted-foreground">{selectedPhase.nodes.length} {selectedPhase.nodes.length === 1 ? 'agent' : 'agents'}</p></div>

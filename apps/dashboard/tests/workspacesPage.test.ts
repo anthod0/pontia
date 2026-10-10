@@ -32,7 +32,6 @@ const mocks = vi.hoisted(() => {
   const workspaces = writableStore<WorkspaceView[]>([]);
   const workspacesLoading = writableStore(false);
   const workspacesError = writableStore<string | null>(null);
-  const workspaceRoots = writableStore<WorkspaceRootView[]>([]);
   const workspaceGitStatuses = writableStore({});
   const workspaceGitStatusErrors = writableStore({});
 
@@ -40,17 +39,13 @@ const mocks = vi.hoisted(() => {
     workspaces,
     workspacesLoading,
     workspacesError,
-    workspaceRoots,
     workspaceGitStatuses,
     workspaceGitStatusErrors,
     roots: [] as WorkspaceRootView[],
     listing: null as WorkspaceDirectoryListingView | null,
     loadWorkspaces: vi.fn(async () => undefined),
-    loadWorkspaceRoots: vi.fn(async () => {
-      workspaceRoots.set(mocks.roots);
-      return mocks.roots;
-    }),
-    browseWorkspaceRoot: vi.fn(async (_rootId: string, path = "") => {
+    listWorkspaceRoots: vi.fn(async () => mocks.roots),
+    listWorkspaceRootEntries: vi.fn(async (_rootId: string, path = "") => {
       if (path === "missing-workspace") throw new Error("directory not found");
       return mocks.listing;
     }),
@@ -66,17 +61,19 @@ vi.mock("../src/stores/workspaces", () => ({
   workspaces: mocks.workspaces,
   workspacesLoading: mocks.workspacesLoading,
   workspacesError: mocks.workspacesError,
-  workspaceRoots: mocks.workspaceRoots,
   workspaceGitStatuses: mocks.workspaceGitStatuses,
   workspaceGitStatusErrors: mocks.workspaceGitStatusErrors,
   loadWorkspaces: mocks.loadWorkspaces,
-  loadWorkspaceRoots: mocks.loadWorkspaceRoots,
-  browseWorkspaceRoot: mocks.browseWorkspaceRoot,
   loadWorkspaceGitStatus: mocks.loadWorkspaceGitStatus,
   refreshWorkspaceGitStatus: mocks.refreshWorkspaceGitStatus,
   registerWorkspace: mocks.registerWorkspace,
   renameWorkspace: mocks.renameWorkspace,
   deleteWorkspace: mocks.deleteWorkspace,
+}));
+
+vi.mock("../src/api/client", () => ({
+  listWorkspaceRoots: mocks.listWorkspaceRoots,
+  listWorkspaceRootEntries: mocks.listWorkspaceRootEntries,
 }));
 
 const workspace = (overrides: Partial<WorkspaceView> = {}): WorkspaceView => ({
@@ -108,7 +105,6 @@ beforeEach(() => {
     ],
     warnings: [],
   };
-  mocks.workspaceRoots.set(mocks.roots);
   mocks.workspaces.set([workspace()]);
   mocks.workspacesLoading.set(false);
   mocks.workspacesError.set(null);
@@ -161,7 +157,11 @@ test("opens directories through the folder-name button", async () => {
   render(WorkspacesPage);
 
   await user.click(await screen.findByRole("button", { name: "Enter directory sandbox" }));
-  expect(mocks.browseWorkspaceRoot).toHaveBeenLastCalledWith("root-1", "sandbox", {});
+  expect(mocks.listWorkspaceRootEntries).toHaveBeenLastCalledWith(
+    "root-1",
+    "sandbox",
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
 });
 
 test("hides dot-directories by default and allows showing them", async () => {
@@ -184,7 +184,6 @@ test("shows outside-root active workspace banner and revokes workspaces from the
   mocks.roots = [
     { root_id: "root-1", label: "Projects", canonical_path: "/repo/project", state: "available" },
   ];
-  mocks.workspaceRoots.set(mocks.roots);
   mocks.workspaces.set([
     workspace({
       workspace_id: "inside",
@@ -219,7 +218,6 @@ test("shows unavailable active workspaces when the workspace directory is missin
   mocks.roots = [
     { root_id: "root-1", label: "Projects", canonical_path: "/repo/project", state: "available" },
   ];
-  mocks.workspaceRoots.set(mocks.roots);
   mocks.workspaces.set([
     workspace({
       workspace_id: "missing",
@@ -271,21 +269,25 @@ test("toggles workspace active state directly and keeps rename dialog for editin
 });
 
 test("aborts initial settings workspace requests when the page unmounts", async () => {
+  mocks.listWorkspaceRoots.mockImplementationOnce(() => new Promise(() => {}));
   const { unmount } = render(WorkspacesPage);
 
   await vi.waitFor(() => expect(mocks.loadWorkspaces).toHaveBeenCalled());
   const workspaceOptions = mocks.loadWorkspaces.mock.calls[0][0] as
     | { signal?: AbortSignal }
     | undefined;
-  const rootsOptions = mocks.loadWorkspaceRoots.mock.calls[0][0] as
+  await vi.waitFor(() => expect(mocks.listWorkspaceRoots).toHaveBeenCalled());
+  const rootsOptions = mocks.listWorkspaceRoots.mock.calls[0][0] as
     | { signal?: AbortSignal }
     | undefined;
 
   expect(workspaceOptions?.signal).toBeInstanceOf(AbortSignal);
-  expect(rootsOptions?.signal).toBe(workspaceOptions?.signal);
+  expect(rootsOptions?.signal).toBeInstanceOf(AbortSignal);
   expect(workspaceOptions?.signal?.aborted).toBe(false);
+  expect(rootsOptions?.signal?.aborted).toBe(false);
 
   unmount();
 
   expect(workspaceOptions?.signal?.aborted).toBe(true);
+  expect(rootsOptions?.signal?.aborted).toBe(true);
 });

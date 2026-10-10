@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import "fake-indexeddb/auto";
 import { cleanup } from "@testing-library/svelte";
 import { afterEach, vi } from "vitest";
+import { queryClient } from "../src/lib/queryClient";
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,
@@ -45,6 +46,7 @@ Object.defineProperty(Range.prototype, "getBoundingClientRect", {
 
 afterEach(async () => {
   cleanup();
+  queryClient.clear();
 
   // bits-ui schedules body scroll-lock cleanup with a short timeout when overlays unmount.
   // Let that cleanup run before Vitest tears down jsdom, otherwise it can fire after

@@ -6,7 +6,8 @@
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import WorkspaceBrowser from '../components/workspaces/WorkspaceBrowser.svelte'
   import type { WorkspaceRootView, WorkspaceView } from '../api/types'
-  import { browseWorkspaceRoot, deleteWorkspace, workspaceRoots, workspaces, workspacesError, workspacesLoading } from '../stores/workspaces'
+  import { deleteWorkspace, workspaces, workspacesError, workspacesLoading } from '../stores/workspaces'
+  import { createWorkspaceRootsQuery, fetchWorkspaceRootEntries } from '../queries/workspaces'
 
   type WorkspaceAvailabilityProblem = {
     workspace: WorkspaceView
@@ -18,25 +19,28 @@
     canonical_path: string
   }
 
-  let activeWorkspacesDialogOpen = false
-  $: activeWorkspaces = $workspaces.filter((workspace) => workspace.state === 'active')
+  const rootsQuery = createWorkspaceRootsQuery()
+  let activeWorkspacesDialogOpen = $state(false)
+  let activeWorkspaces = $derived($workspaces.filter((workspace) => workspace.state === 'active'))
 
-  let unavailableWorkspacesDialogOpen = false
-  let workspaceAvailabilityProblems: WorkspaceAvailabilityProblem[] = []
+  let unavailableWorkspacesDialogOpen = $state(false)
+  let workspaceAvailabilityProblems = $state<WorkspaceAvailabilityProblem[]>([])
   let workspaceAvailabilityCheckKey = ''
   let workspaceAvailabilityCheckGeneration = 0
-  let deletingWorkspaceId: string | null = null
-  let deleteError: string | null = null
+  let deletingWorkspaceId = $state<string | null>(null)
+  let deleteError = $state<string | null>(null)
 
-  $: availableWorkspaceRoots = activeWorkspaceRoots($workspaceRoots)
-  $: nextWorkspaceAvailabilityCheckKey = JSON.stringify({
+  let availableWorkspaceRoots = $derived(activeWorkspaceRoots(rootsQuery.data ?? []))
+  let nextWorkspaceAvailabilityCheckKey = $derived(JSON.stringify({
     roots: availableWorkspaceRoots.map((root) => [root.root_id, root.canonical_path]),
     workspaces: $workspaces.filter((workspace) => workspace.state === 'active').map((workspace) => [workspace.workspace_id, workspace.canonical_path]),
+  }))
+  $effect(() => {
+    if (nextWorkspaceAvailabilityCheckKey !== workspaceAvailabilityCheckKey) {
+      workspaceAvailabilityCheckKey = nextWorkspaceAvailabilityCheckKey
+      void refreshWorkspaceAvailability($workspaces, availableWorkspaceRoots)
+    }
   })
-  $: if (nextWorkspaceAvailabilityCheckKey !== workspaceAvailabilityCheckKey) {
-    workspaceAvailabilityCheckKey = nextWorkspaceAvailabilityCheckKey
-    void refreshWorkspaceAvailability($workspaces, availableWorkspaceRoots)
-  }
 
   function normalizeAbsolutePath(path: string): string {
     const trimmed = path.trim()
@@ -83,7 +87,7 @@
         continue
       }
       try {
-        await browseWorkspaceRoot(root.root_id, relativePathInsideRoot(workspace.canonical_path, root.canonical_path))
+        await fetchWorkspaceRootEntries(root.root_id, relativePathInsideRoot(workspace.canonical_path, root.canonical_path))
       } catch (_) {
         problems.push({ workspace, reason: 'directory_unavailable' })
       }

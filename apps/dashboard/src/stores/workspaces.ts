@@ -1,9 +1,7 @@
 import { writable } from "svelte/store";
 import {
-  listWorkspaceRootEntries,
   deleteWorkspace as apiDeleteWorkspace,
   getWorkspaceGitStatus,
-  listWorkspaceRoots,
   listWorkspaces,
   refreshWorkspaceGitStatus as apiRefreshWorkspaceGitStatus,
   registerWorkspace as apiRegisterWorkspace,
@@ -13,9 +11,7 @@ import {
 import type {
   RegisterWorkspaceInput,
   RenameWorkspaceInput,
-  WorkspaceDirectoryListingView,
   WorkspaceGitStatusView,
-  WorkspaceRootView,
   WorkspaceView,
 } from "../api/types";
 
@@ -23,7 +19,6 @@ export const workspaces = writable<WorkspaceView[]>([]);
 export const workspacesLoading = writable(false);
 export const workspacesInitialized = writable(false);
 export const workspacesError = writable<string | null>(null);
-export const workspaceRoots = writable<WorkspaceRootView[]>([]);
 export const workspaceGitStatuses = writable<Record<string, WorkspaceGitStatusView>>({});
 export const workspaceGitStatusErrors = writable<Record<string, string>>({});
 
@@ -39,7 +34,6 @@ export function resetWorkspaces(): void {
   workspacesLoading.set(false);
   workspacesInitialized.set(false);
   workspacesError.set(null);
-  workspaceRoots.set([]);
   workspaceGitStatuses.set({});
   workspaceGitStatusErrors.set({});
 }
@@ -61,22 +55,6 @@ export async function loadWorkspaces(options: ReadRequestOptions = {}): Promise<
   } finally {
     if (request === workspaceListRequest) workspacesLoading.set(false);
   }
-}
-
-export async function loadWorkspaceRoots(
-  options: ReadRequestOptions = {},
-): Promise<WorkspaceRootView[]> {
-  const roots = await listWorkspaceRoots(options);
-  workspaceRoots.set(roots);
-  return roots;
-}
-
-export async function browseWorkspaceRoot(
-  rootId: string,
-  path = "",
-  options: ReadRequestOptions = {},
-): Promise<WorkspaceDirectoryListingView> {
-  return listWorkspaceRootEntries(rootId, path, options);
 }
 
 function setGitStatus(status: WorkspaceGitStatusView): void {
