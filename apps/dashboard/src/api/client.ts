@@ -299,12 +299,6 @@ export async function deleteAgentProfileVersion(
   ).agent_profile;
 }
 
-export type ListSessionsOptions = {
-  includeArchived?: boolean;
-  limit?: number;
-  includePinned?: boolean;
-};
-
 export async function listWorkflows(
   limit = 50,
   options: ReadRequestOptions = {},
@@ -421,16 +415,6 @@ export async function getSessionOverview(
     signal: timeout,
     directResponse: true,
   });
-}
-
-export async function listSessions(options: ListSessionsOptions = {}): Promise<SessionView[]> {
-  const query = new URLSearchParams();
-  if (options.includeArchived) query.set("include_archived", "true");
-  if (options.limit !== undefined) query.set("limit", String(options.limit));
-  if (options.includePinned) query.set("include_pinned", "true");
-  const queryString = query.toString() ? `?${query.toString()}` : "";
-  return (await boundedReadRequest<{ sessions: SessionView[] }>(`/sessions${queryString}`, {}))
-    .sessions;
 }
 
 export async function listWorkspaces(options: ReadRequestOptions = {}): Promise<WorkspaceView[]> {

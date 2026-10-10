@@ -4,10 +4,10 @@ import { token } from "../src/stores/auth";
 import { dashboardStreamCursor, sseStatus } from "../src/stores/connection";
 import {
   loadSessionDetail,
-  loadSessions,
+  loadSidebarSessionOverview,
   selectSession,
   sessionDetail,
-  sessions,
+  sidebarActiveSessions,
 } from "../src/stores/sessions";
 import { loadWorkspaces, workspaces } from "../src/stores/workspaces";
 import { startEventStream, stopEventStream } from "../src/services/eventStream";
@@ -37,7 +37,7 @@ beforeEach(() => {
   requests = [];
   token.set("test-token");
   selectSession("current");
-  sessions.set([]);
+  sidebarActiveSessions.set([]);
   workspaces.set([]);
   dashboardStreamCursor.set(null);
   timeline.resetTimelineState();
@@ -74,8 +74,19 @@ beforeEach(() => {
         state,
         capabilities: { timeline: supportsTimeline, topology: supportsTimeline },
       };
+      if (path === "/sessions/overview") {
+        return new Response(
+          JSON.stringify({
+            groups: {
+              pinned: { sessions: [] },
+              active: { sessions: [session] },
+              list: { sessions: [session], next_cursor: null },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
       const data: Record<string, unknown> = {
-        "/sessions": { sessions: [session] },
         "/workspaces": { workspaces: [{ workspace_id: "workspace" }] },
         "/agent-profiles": { agent_profiles: [] },
         "/tasks": { tasks: [] },
@@ -114,7 +125,11 @@ test.each(["pi", "codex"])(
   "recovers an offline %s route and sidebar on first successful connection without events",
   async (client) => {
     clientType = client;
-    await Promise.all([loadSessionDetail("current"), loadSessions(), loadWorkspaces()]);
+    await Promise.all([
+      loadSessionDetail("current"),
+      loadSidebarSessionOverview(),
+      loadWorkspaces(),
+    ]);
     startEventStream();
     await vi.waitFor(() => expect(get(sseStatus)).toBe("reconnecting"));
     expect(get(sessionDetail)).toBeNull();
@@ -123,7 +138,7 @@ test.each(["pi", "codex"])(
     state = "idle";
     await vi.advanceTimersByTimeAsync(1500);
     await vi.waitFor(() => expect(get(sessionDetail)?.session.state).toBe("idle"));
-    expect(get(sessions)[0]?.client_type).toBe(client);
+    expect(get(sidebarActiveSessions)[0]?.client_type).toBe(client);
     expect(get(workspaces)[0]?.workspace_id).toBe("workspace");
     expect(get(sessionDetail)?.turns[0]?.state).toBe("completed");
     const readCount = requests.length;

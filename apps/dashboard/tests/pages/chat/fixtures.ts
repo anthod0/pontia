@@ -59,8 +59,6 @@ const mocks = vi.hoisted(() => {
   });
 
   const sessions = writableStore<SessionView[]>([]);
-  const sessionsLoading = writableStore(false);
-  const sessionsError = writableStore<string | null>(null);
   const sessionDetail = writableStore<SessionConsoleDetail | null>(null);
   const sessionDetailLoading = writableStore(false);
   const sessionDetailError = writableStore<string | null>(null);
@@ -83,8 +81,6 @@ const mocks = vi.hoisted(() => {
 
   return {
     sessions,
-    sessionsLoading,
-    sessionsError,
     sessionDetail,
     sessionDetailLoading,
     sessionDetailError,
@@ -101,7 +97,6 @@ const mocks = vi.hoisted(() => {
     dashboardEventListeners,
     liveOutputListeners,
     loadedSessions: [] as SessionView[],
-    loadSessions: vi.fn(async () => mocks.loadedSessions),
     loadSessionDetail: vi.fn(async () => null),
     retryInboxMessage: vi.fn(async () => undefined),
     recoverInboxSubmission: vi.fn(async () => undefined),
@@ -140,15 +135,11 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("../../../src/stores/sessions", () => ({
-  sessions: mocks.sessions,
-  sessionsLoading: mocks.sessionsLoading,
-  sessionsError: mocks.sessionsError,
   sessionDetail: mocks.sessionDetail,
   sessionDetailLoading: mocks.sessionDetailLoading,
   sessionDetailError: mocks.sessionDetailError,
   sessionDetailErrorKind: mocks.sessionDetailErrorKind,
   selectSession: vi.fn(),
-  loadSessions: mocks.loadSessions,
   loadSessionDetail: mocks.loadSessionDetail,
   submitInboxMessage: async (
     sessionId: string,
@@ -156,10 +147,7 @@ vi.mock("../../../src/stores/sessions", () => ({
     options: { showInChat?: boolean } = {},
   ) => {
     const detailSession = mocks.sessionDetail.get()?.session;
-    const currentSession =
-      detailSession?.session_id === sessionId
-        ? detailSession
-        : mocks.sessions.get().find((session) => session.session_id === sessionId);
+    const currentSession = detailSession?.session_id === sessionId ? detailSession : null;
     const localId = beginInboxSubmission(sessionId, input, {
       showInChat:
         options.showInChat ?? (!input.branch_target_turn_id && currentSession?.state !== "busy"),
@@ -352,8 +340,6 @@ beforeEach(() => {
   const activeSession = session();
   mocks.loadedSessions = [activeSession];
   mocks.sessions.set([activeSession]);
-  mocks.sessionsLoading.set(false);
-  mocks.sessionsError.set(null);
   mocks.sessionDetail.set(null);
   mocks.sessionDetailLoading.set(false);
   mocks.sessionDetailError.set(null);

@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   startEventStream: vi.fn(),
   stopEventStream: vi.fn(),
   loadAgentProfiles: vi.fn(async () => undefined),
-  loadSessions: vi.fn(async () => undefined),
   loadSidebarSessionOverview: vi.fn(async () => undefined),
   loadTasks: vi.fn(async () => undefined),
   loadWorkspaces: vi.fn(async () => undefined),
@@ -26,9 +25,6 @@ vi.mock("../src/stores/agentProfiles", () => ({
   loadAgentProfiles: mocks.loadAgentProfiles,
 }));
 vi.mock("../src/stores/sessions", () => ({
-  sessions: writable([]),
-  sessionsLoading: writable(false),
-  sessionsError: writable(null),
   sidebarPinnedSessions: writable([]),
   sidebarActiveSessions: writable([]),
   sidebarRecentSessions: writable([]),
@@ -38,7 +34,6 @@ vi.mock("../src/stores/sessions", () => ({
   sidebarSessionsNextCursor: writable(null),
   sessionDetail: writable(null),
   sessionDetailError: writable(null),
-  loadSessions: mocks.loadSessions,
   loadSidebarSessionOverview: mocks.loadSidebarSessionOverview,
   loadMoreSidebarSessions: vi.fn(async () => []),
 }));
@@ -92,7 +87,7 @@ test("blocks dashboard routes behind a token prompt when no token is saved", asy
   expect(mocks.loadTasks).not.toHaveBeenCalled();
   expect(mocks.loadWorkspaces).not.toHaveBeenCalled();
   expect(mocks.loadAgentProfiles).not.toHaveBeenCalled();
-  expect(mocks.loadSessions).not.toHaveBeenCalled();
+  expect(mocks.loadSidebarSessionOverview).not.toHaveBeenCalled();
   expect(mocks.startEventStream).not.toHaveBeenCalled();
 });
 
@@ -171,7 +166,7 @@ test("saves the entered token and opens the requested dashboard route after vali
   expect(mocks.loadTasks).toHaveBeenCalled();
   expect(mocks.loadWorkspaces).toHaveBeenCalled();
   expect(mocks.loadAgentProfiles).toHaveBeenCalled();
-  expect(mocks.loadSessions).toHaveBeenCalled();
+  expect(mocks.loadSidebarSessionOverview).toHaveBeenCalled();
   expect(mocks.startEventStream).toHaveBeenCalled();
 });
 

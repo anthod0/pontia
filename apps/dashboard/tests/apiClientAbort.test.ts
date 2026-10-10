@@ -6,7 +6,6 @@ import {
   getTurnTreeHistory,
   getTurnTreeUpdates,
   listAgentProfiles,
-  listSessions,
   listTurns,
   listWorkspaceRootEntries,
   listWorkspaceRoots,
@@ -68,18 +67,6 @@ test("passes AbortSignal through settings-related read requests", async () => {
   expect(signals.every((signal) => signal && !signal.aborted)).toBe(true);
   controller.abort();
   expect(signals.every((signal) => signal?.aborted)).toBe(true);
-});
-
-test("serializes session list limit and pinned inclusion query options", async () => {
-  const fetchMock = vi.fn(async () => jsonResponse({ sessions: [] }));
-  vi.stubGlobal("fetch", fetchMock);
-
-  await listSessions({ limit: 50, includePinned: true });
-
-  expect(fetchMock).toHaveBeenCalledWith(
-    "/api/v1/sessions?limit=50&include_pinned=true",
-    expect.any(Object),
-  );
 });
 
 test("requests session overview groups and cursor pages from the direct response endpoint", async () => {

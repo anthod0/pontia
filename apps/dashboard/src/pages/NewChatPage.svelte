@@ -20,12 +20,7 @@
     workspacesInitialized,
     workspacesLoading,
   } from '../stores/workspaces'
-  import {
-    createSession,
-    loadSessionDetail,
-    loadSessions,
-    sessionsError,
-  } from '../stores/sessions'
+  import { createSession, loadSessionDetail } from '../stores/sessions'
   import { loadSessionTimeline, resetTimelineState } from '../stores/timeline'
 
   let createWorkspaceId = ''
@@ -47,7 +42,7 @@
     const handleLocationChange = () => syncWorkspaceSelectionsFromLocation()
     window.addEventListener('popstate', handleLocationChange)
     if ($workspaces.length) autofocusComposer = claimChatEntryAutofocus('/')
-    void Promise.all([loadSessions(), loadWorkspaces()])
+    void loadWorkspaces()
       .then(syncWorkspaceSelectionsFromLocation)
       .catch(() => {
         // The stores expose request failures; keep the page renderable without an unhandled rejection.
@@ -75,8 +70,7 @@
   $: if (!clientTypeOptions.includes(createClientType)) createClientType = clientTypeOptions[0] ?? createClientType
   $: if (createWorkspaceId && $workspaces.length && createWorkspaceId !== queryWorkspaceSelectionId && createWorkspaceId !== availableWorkspaceId(readQueryWorkspaceId())) rememberCreateWorkspaceSelection(createWorkspaceId)
   $: canCreate = Boolean($chatDraft.trim() && createWorkspaceId && createClientType.trim() && !creating)
-  $: rawPassiveErrorMessage = $sessionsError ?? $workspacesError
-  $: passiveErrorMessage = rawPassiveErrorMessage && !isTransientNetworkError(rawPassiveErrorMessage) ? rawPassiveErrorMessage : null
+  $: passiveErrorMessage = $workspacesError && !isTransientNetworkError($workspacesError) ? $workspacesError : null
   $: errorMessage = actionError ?? passiveErrorMessage
   $: {
     if (errorMessage && errorMessage !== lastToastedError) {

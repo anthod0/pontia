@@ -189,8 +189,18 @@ async fn external_api_validates_bearer_token_explicitly() {
 async fn external_api_rejects_missing_or_wrong_bearer_token() {
     let state = test_state().await;
 
-    let missing = get(state.clone(), "/api/v1/sessions", None).await;
-    let wrong = get(state, "/api/v1/sessions", Some("wrong-token")).await;
+    let missing = get(
+        state.clone(),
+        "/api/v1/sessions/overview?sections=list",
+        None,
+    )
+    .await;
+    let wrong = get(
+        state,
+        "/api/v1/sessions/overview?sections=list",
+        Some("wrong-token"),
+    )
+    .await;
 
     assert_eq!(missing.0, StatusCode::UNAUTHORIZED);
     assert_eq!(missing.1["data"], Value::Null);
@@ -200,36 +210,16 @@ async fn external_api_rejects_missing_or_wrong_bearer_token() {
 }
 
 #[tokio::test]
-async fn external_api_lists_and_gets_session_views() {
+async fn external_api_gets_session_views() {
     let state = test_state().await;
     seed_session_turn(&state).await;
 
-    let (list_status, list_body) = get(state.clone(), "/api/v1/sessions", Some(TOKEN)).await;
     let (get_status, get_body) = get(
         state,
         "/api/v1/sessions/sess_external_queries_1",
         Some(TOKEN),
     )
     .await;
-
-    assert_eq!(list_status, StatusCode::OK);
-    assert_eq!(list_body["error"], Value::Null);
-    assert_eq!(list_body["data"]["sessions"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        list_body["data"]["sessions"][0]["session_id"],
-        "sess_external_queries_1"
-    );
-    assert_eq!(list_body["data"]["sessions"][0]["state"], "idle");
-    assert_eq!(list_body["data"]["sessions"][0]["client_type"], "generic");
-    assert!(list_body["data"]["sessions"][0]["capabilities"].is_object());
-    assert_eq!(
-        list_body["data"]["sessions"][0]["capabilities"]["context_usage"],
-        "unsupported"
-    );
-    assert_eq!(
-        list_body["data"]["sessions"][0]["context_usage"],
-        Value::Null
-    );
 
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(
@@ -239,6 +229,13 @@ async fn external_api_lists_and_gets_session_views() {
     assert_eq!(
         get_body["data"]["session"]["current_turn_id"],
         "turn_external_queries_1"
+    );
+    assert_eq!(get_body["data"]["session"]["state"], "idle");
+    assert_eq!(get_body["data"]["session"]["client_type"], "generic");
+    assert!(get_body["data"]["session"]["capabilities"].is_object());
+    assert_eq!(
+        get_body["data"]["session"]["capabilities"]["context_usage"],
+        "unsupported"
     );
     assert_eq!(get_body["data"]["session"]["context_usage"], Value::Null);
 }
@@ -325,7 +322,6 @@ async fn external_api_exposes_projected_session_context_usage() {
         .unwrap();
     bind_session_to_active_workspace(&state, "sess_external_queries_context").await;
 
-    let (list_status, list_body) = get(state.clone(), "/api/v1/sessions", Some(TOKEN)).await;
     let (get_status, get_body) = get(
         state,
         "/api/v1/sessions/sess_external_queries_context",
@@ -333,25 +329,24 @@ async fn external_api_exposes_projected_session_context_usage() {
     )
     .await;
 
-    assert_eq!(list_status, StatusCode::OK);
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(
-        list_body["data"]["sessions"][0]["context_usage"]["used_tokens"],
+        get_body["data"]["session"]["context_usage"]["used_tokens"],
         7
     );
     assert_eq!(
-        list_body["data"]["sessions"][0]["context_usage"]["max_tokens"],
+        get_body["data"]["session"]["context_usage"]["max_tokens"],
         10
     );
     assert_eq!(
-        list_body["data"]["sessions"][0]["context_usage"]["usage_ratio"],
+        get_body["data"]["session"]["context_usage"]["usage_ratio"],
         0.7
     );
     assert_eq!(
-        list_body["data"]["sessions"][0]["context_usage"]["confidence"],
+        get_body["data"]["session"]["context_usage"]["confidence"],
         "estimated"
     );
-    assert!(list_body["data"]["sessions"][0]["context_usage"]["observed_at"].is_string());
+    assert!(get_body["data"]["session"]["context_usage"]["observed_at"].is_string());
     assert_eq!(get_body["data"]["session"]["model"], "m");
     assert!(
         get_body["data"]["session"]["context_usage"]

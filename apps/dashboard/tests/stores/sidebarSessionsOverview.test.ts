@@ -12,7 +12,6 @@ const api = vi.hoisted(() => ({
   interruptSession: vi.fn(),
   listEvents: vi.fn(),
   listInboxMessages: vi.fn(),
-  listSessions: vi.fn(),
   listTurns: vi.fn(),
   pinSession: vi.fn(),
   restartSession: vi.fn(),

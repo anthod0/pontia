@@ -5,14 +5,12 @@ import type { SessionView } from "../../src/api/types";
 import * as api from "../../src/api/client";
 import {
   loadSessionDetail,
-  loadSessions,
   selectSession,
   selectedSessionId,
   sessionDetail,
   sessionDetailError,
   sessionDetailErrorKind,
   sessionDetailLoading,
-  sessions,
 } from "../../src/stores/sessions";
 
 const session = (id: string, state = "idle") =>
@@ -118,21 +116,4 @@ test("a delayed action refresh for the previous route cannot select it again", a
   await loadSessionDetail("a");
   expect(get(selectedSessionId)).toBe("b");
   expect(get(sessionDetail)?.session.session_id).toBe("b");
-});
-
-test("an old failed list request cannot erase a recovered sidebar snapshot", async () => {
-  let fail!: (error: Error) => void;
-  vi.spyOn(api, "listSessions")
-    .mockImplementationOnce(
-      () =>
-        new Promise((_resolve, reject) => {
-          fail = reject;
-        }),
-    )
-    .mockResolvedValueOnce([session("b")]);
-  const old = loadSessions();
-  await loadSessions({ showLoading: false });
-  fail(new TypeError("Failed to fetch"));
-  await old;
-  expect(get(sessions).map((item) => item.session_id)).toEqual(["b"]);
 });

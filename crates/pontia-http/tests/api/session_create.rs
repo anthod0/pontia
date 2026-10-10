@@ -255,14 +255,9 @@ async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
     let session_id = session["session_id"].as_str().expect("session id");
     assert_eq!(session["handle"], "@reviewer");
 
-    let (get_status, get_body) =
-        get(state.clone(), &format!("/api/v1/sessions/{session_id}")).await;
+    let (get_status, get_body) = get(state, &format!("/api/v1/sessions/{session_id}")).await;
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(get_body["data"]["session"]["handle"], "@reviewer");
-
-    let (list_status, list_body) = get(state, "/api/v1/sessions").await;
-    assert_eq!(list_status, StatusCode::OK);
-    assert_eq!(list_body["data"]["sessions"][0]["handle"], "@reviewer");
 }
 
 #[tokio::test]
@@ -288,18 +283,10 @@ async fn create_session_accepts_title_and_exposes_it_on_session_views() {
     let session_id = session["session_id"].as_str().expect("session id");
     assert_eq!(session["title"], "Inspect dashboard session titles");
 
-    let (get_status, get_body) =
-        get(state.clone(), &format!("/api/v1/sessions/{session_id}")).await;
+    let (get_status, get_body) = get(state, &format!("/api/v1/sessions/{session_id}")).await;
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(
         get_body["data"]["session"]["title"],
-        "Inspect dashboard session titles"
-    );
-
-    let (list_status, list_body) = get(state, "/api/v1/sessions").await;
-    assert_eq!(list_status, StatusCode::OK);
-    assert_eq!(
-        list_body["data"]["sessions"][0]["title"],
         "Inspect dashboard session titles"
     );
 }
@@ -350,17 +337,24 @@ async fn session_management_pin_archive_and_unarchive_update_session_views_and_l
     assert_eq!(archive_body["data"]["session"]["pinned_at"], Value::Null);
     assert!(archive_body["data"]["session"]["archived_at"].is_string());
 
-    let (list_status, list_body) = get(state.clone(), "/api/v1/sessions").await;
-    assert_eq!(list_status, StatusCode::OK);
-    assert!(list_body["data"]["sessions"].as_array().unwrap().is_empty());
-
-    let (include_status, include_body) =
-        get(state.clone(), "/api/v1/sessions?include_archived=true").await;
-    assert_eq!(include_status, StatusCode::OK);
-    let included_sessions = include_body["data"]["sessions"].as_array().unwrap();
-    assert_eq!(included_sessions.len(), 1);
-    assert_eq!(included_sessions[0]["session_id"], session_id);
-    assert!(included_sessions[0]["archived_at"].is_string());
+    let (overview_status, overview_body) = get(
+        state.clone(),
+        "/api/v1/sessions/overview?sections=list,archived",
+    )
+    .await;
+    assert_eq!(overview_status, StatusCode::OK);
+    assert!(
+        overview_body["groups"]["list"]["sessions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let archived_sessions = overview_body["groups"]["archived"]["sessions"]
+        .as_array()
+        .unwrap();
+    assert_eq!(archived_sessions.len(), 1);
+    assert_eq!(archived_sessions[0]["session_id"], session_id);
+    assert!(archived_sessions[0]["archived_at"].is_string());
 
     let (unarchive_status, unarchive_body) = post_json(
         state.clone(),
@@ -485,20 +479,11 @@ async fn create_session_accepts_role_and_description_and_exposes_them_on_session
         "Reviews Rust backend changes for event projection correctness."
     );
 
-    let (get_status, get_body) =
-        get(state.clone(), &format!("/api/v1/sessions/{session_id}")).await;
+    let (get_status, get_body) = get(state, &format!("/api/v1/sessions/{session_id}")).await;
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(get_body["data"]["session"]["role"], "reviewer");
     assert_eq!(
         get_body["data"]["session"]["description"],
-        "Reviews Rust backend changes for event projection correctness."
-    );
-
-    let (list_status, list_body) = get(state, "/api/v1/sessions").await;
-    assert_eq!(list_status, StatusCode::OK);
-    assert_eq!(list_body["data"]["sessions"][0]["role"], "reviewer");
-    assert_eq!(
-        list_body["data"]["sessions"][0]["description"],
         "Reviews Rust backend changes for event projection correctness."
     );
 }

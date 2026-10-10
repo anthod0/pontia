@@ -29,7 +29,7 @@ function session(overrides: Partial<SessionView>): SessionView {
 
 const api = vi.hoisted(() => ({
   createSession: vi.fn(),
-  listSessions: vi.fn(),
+  getSessionOverview: vi.fn(),
   getSession: vi.fn(),
   listTurns: vi.fn(),
   listInboxMessages: vi.fn(),
@@ -53,6 +53,13 @@ describe("sessions store management actions", () => {
   beforeEach(() => {
     vi.resetModules();
     Object.values(api).forEach((mock) => mock.mockReset());
+    api.getSessionOverview.mockResolvedValue({
+      groups: {
+        pinned: { sessions: [] },
+        active: { sessions: [] },
+        list: { sessions: [], next_cursor: null },
+      },
+    });
   });
 
   test("creates an optimistic Inbox submission before the request resolves and upgrades it on acceptance", async () => {
@@ -83,7 +90,6 @@ describe("sessions store management actions", () => {
           resolveRequest = resolve;
         }),
     );
-    api.listSessions.mockResolvedValue([current]);
     api.getSession.mockResolvedValue(current);
     api.listTurns.mockResolvedValue([]);
     api.listInboxMessages.mockResolvedValue([accepted]);
@@ -121,11 +127,9 @@ describe("sessions store management actions", () => {
     });
     api.submitInboxMessage.mockImplementation(() => new Promise(() => undefined));
 
-    const { sessionDetail, sessions, submitInboxMessage } =
-      await import("../../src/stores/sessions");
+    const { sessionDetail, submitInboxMessage } = await import("../../src/stores/sessions");
     const { optimisticInboxSubmissions } = await import("../../src/stores/optimisticInbox");
     optimisticInboxSubmissions.set({});
-    sessions.set([busy]);
     sessionDetail.set({ session: busy, turns: [], inboxMessages: [], events: [] });
 
     void submitInboxMessage("session-current", {
@@ -147,7 +151,6 @@ describe("sessions store management actions", () => {
       state: "exited",
     });
     api.terminateSession.mockResolvedValue(otherExited);
-    api.listSessions.mockResolvedValue([current, otherExited]);
     api.getSession.mockResolvedValue(otherExited);
     api.listTurns.mockResolvedValue([]);
     api.listInboxMessages.mockResolvedValue([]);

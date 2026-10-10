@@ -50,7 +50,6 @@
     cancelInboxMessage,
     dismissInboxMessage,
     loadSessionDetail,
-    loadSessions,
     interruptSession,
     terminateSession,
     resumeSession,
@@ -59,7 +58,6 @@
     sessionDetailError,
     sessionDetailErrorKind,
     selectSession,
-    sessions,
     submitInboxMessage,
     updateSessionTitle,
   } from '../stores/sessions'
@@ -119,7 +117,7 @@
     selectSession(selectedSessionId || null)
     autofocusComposer = claimChatEntryAutofocus(`/chat/${selectedSessionId}`)
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
-    void Promise.all([loadSessions(), loadWorkspaces()])
+    void loadWorkspaces()
     if (selectedSessionId) void loadSelectedSession(selectedSessionId)
   })
 
@@ -133,7 +131,7 @@
     if (scrollDownButtonHideTimer) clearTimeout(scrollDownButtonHideTimer)
   })
 
-  $: selectedSession = selectedSessionId ? ($sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : ($sessionDetailError ? null : $sessions.find((session) => session.session_id === selectedSessionId) ?? null)) : null
+  $: selectedSession = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : null
   $: controlDetails = selectedSession ? clientControlDetails(selectedSession) : null
   $: liveOutputKey = selectedSession ? `${selectedSession.session_id}:${selectedSession.capabilities.stream_output === true}` : ''
   let activeLiveOutputKey = ''
@@ -261,8 +259,7 @@
   function currentSelectedSession(): SessionView | null {
     if (!selectedSessionId) return null
     const detail = get(sessionDetail)
-    if (detail?.session.session_id === selectedSessionId) return detail.session
-    return get(sessions).find((session) => session.session_id === selectedSessionId) ?? null
+    return detail?.session.session_id === selectedSessionId ? detail.session : null
   }
 
   const gitStatusRefreshesInFlight = new Map<string, Promise<void>>()
@@ -766,10 +763,9 @@
     }
   }
 
-  function sessionStateFromStores(sessionId: string): string | null {
+  function sessionStateFromDetail(sessionId: string): string | null {
     const detail = get(sessionDetail)
-    if (detail?.session.session_id === sessionId) return detail.session.state
-    return get(sessions).find((session) => session.session_id === sessionId)?.state ?? null
+    return detail?.session.session_id === sessionId ? detail.session.state : null
   }
 
   function branchSubmissionReadyFromStores(sessionId: string): boolean {
@@ -808,15 +804,13 @@
   }
 
   function waitForSessionIdle(sessionId: string, timeoutMs = AUTO_RESUME_IDLE_TIMEOUT_MS): Promise<void> {
-    if (sessionStateFromStores(sessionId) === 'idle') return Promise.resolve()
+    if (sessionStateFromDetail(sessionId) === 'idle') return Promise.resolve()
 
     return new Promise((resolve, reject) => {
       let done = false
-      let unsubscribeSessions: (() => void) | null = null
       let unsubscribeDetail: (() => void) | null = null
 
       const cleanup = () => {
-        unsubscribeSessions?.()
         unsubscribeDetail?.()
         clearTimeout(timeout)
       }
@@ -827,13 +821,12 @@
         callback()
       }
       const check = () => {
-        if (sessionStateFromStores(sessionId) === 'idle') finish(resolve)
+        if (sessionStateFromDetail(sessionId) === 'idle') finish(resolve)
       }
       const timeout = setTimeout(() => {
         finish(() => reject(new Error('Session resume timed out before becoming idle.')))
       }, timeoutMs)
 
-      unsubscribeSessions = sessions.subscribe(check)
       unsubscribeDetail = sessionDetail.subscribe(check)
       check()
     })

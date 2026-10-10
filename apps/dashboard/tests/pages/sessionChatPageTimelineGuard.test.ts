@@ -25,20 +25,16 @@ const mocks = vi.hoisted(() => {
     };
   }
 
-  const sessions = writableStore<SessionView[]>([]);
   const sessionDetail = writableStore<SessionConsoleDetail | null>(null);
 
   return {
     navigate: vi.fn(),
     pathParams: {} as Record<string, string>,
-    sessions,
-    sessionsError: writableStore<string | null>(null),
     sessionDetail,
     sessionDetailLoading: writableStore(false),
     sessionDetailError: writableStore<string | null>(null),
     sessionDetailErrorKind: writableStore<string | null>(null),
     loadedSessions: [] as SessionView[],
-    loadSessions: vi.fn(async () => mocks.loadedSessions),
     loadSessionDetail: vi.fn(async (sessionId: string) => {
       const selected =
         mocks.loadedSessions.find((session) => session.session_id === sessionId) ?? null;
@@ -78,6 +74,7 @@ const mocks = vi.hoisted(() => {
       error: null,
     }),
     loadSessionTimeline: vi.fn(async () => null),
+    restoreSessionTimeline: vi.fn(async () => false),
     resetTimelineState: vi.fn(),
     refreshSessionTimeline: vi.fn(async () => undefined),
     subscribeDashboardEvents: vi.fn(
@@ -89,14 +86,11 @@ const mocks = vi.hoisted(() => {
 vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
 vi.mock("svelte-sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("../../src/stores/sessions", () => ({
-  sessions: mocks.sessions,
-  sessionsError: mocks.sessionsError,
   sessionDetail: mocks.sessionDetail,
   sessionDetailLoading: mocks.sessionDetailLoading,
   sessionDetailError: mocks.sessionDetailError,
   sessionDetailErrorKind: mocks.sessionDetailErrorKind,
   selectSession: vi.fn(),
-  loadSessions: mocks.loadSessions,
   loadSessionDetail: mocks.loadSessionDetail,
   submitInboxMessage: mocks.submitInboxMessage,
   cancelInboxMessage: mocks.cancelInboxMessage,
@@ -127,6 +121,7 @@ vi.mock("../../src/stores/workspaces", () => ({
 vi.mock("../../src/stores/timeline", () => ({
   timelineState: mocks.timelineState,
   loadSessionTimeline: mocks.loadSessionTimeline,
+  restoreSessionTimeline: mocks.restoreSessionTimeline,
   resetTimelineState: mocks.resetTimelineState,
   refreshSessionTimeline: mocks.refreshSessionTimeline,
   hasTimelineSnapshot: () => false,
@@ -161,9 +156,7 @@ beforeEach(() => {
   const selected = session();
   mocks.pathParams = { sessionId: "session-1" };
   mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
   mocks.sessionDetail.set(null);
-  mocks.sessionsError.set(null);
   mocks.sessionDetailError.set(null);
   mocks.sessionDetailErrorKind.set(null);
   mocks.sessionDetailLoading.set(false);

@@ -1,9 +1,6 @@
 use pontia_storage_sqlite::{
     connect_sqlite,
-    repositories::{
-        sessions::{SessionListOptions, SqliteSessionRepository},
-        turns::SqliteTurnRepository,
-    },
+    repositories::{sessions::SqliteSessionRepository, turns::SqliteTurnRepository},
     run_migrations,
 };
 use serde_json::json;
@@ -15,109 +12,6 @@ async fn test_pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
     let pool = connect_sqlite(&database_url).await.expect("connect");
     run_migrations(&pool).await.expect("migrate");
     (pool, dir)
-}
-
-#[tokio::test]
-async fn sqlite_session_repository_lists_sessions_with_workspace_coalescing_and_recently_updated_order()
- {
-    let (pool, _pontia_home) = test_pool().await;
-    sqlx::query(
-        r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name)
-           VALUES ('ws_1', '/canonical', '/canonical', 'canonical')"#,
-    )
-    .execute(&pool)
-    .await
-    .expect("insert workspace");
-    sqlx::query(
-        r#"INSERT INTO sessions
-           (session_id, client_type, title, handle, role, description, execution_profile_id,
-            execution_profile_version, state, current_turn_id, workspace_ref, workspace_id,
-            metadata, created_at, updated_at)
-           VALUES
-           ('sess_b', 'pi', 'B', 'b', 'worker', 'desc b', 'profile', '1', 'ready', NULL,
-            '/legacy-b', NULL, ?, '2026-06-15T12:00:01Z', '2026-06-15T12:00:01Z'),
-           ('sess_a', 'pi', 'A', 'a', 'reviewer', 'desc a', 'profile', '1', 'ready', NULL,
-            '/legacy-a', 'ws_1', ?, '2026-06-15T12:00:00Z', '2026-06-15T12:00:00Z')"#,
-    )
-    .bind(json!({"model": "grok"}).to_string())
-    .bind(json!({"context_usage": {"used": 1}}).to_string())
-    .execute(&pool)
-    .await
-    .expect("insert sessions");
-
-    let repository = SqliteSessionRepository::new(pool);
-    let rows = repository.list_sessions().await.expect("list sessions");
-
-    let ids: Vec<_> = rows.iter().map(|row| row.session_id.as_str()).collect();
-    assert_eq!(ids, vec!["sess_a"]);
-    assert_eq!(rows[0].workspace_ref.as_deref(), Some("/canonical"));
-}
-
-#[tokio::test]
-async fn sqlite_session_repository_lists_only_sessions_in_active_workspaces() {
-    let (pool, _pontia_home) = test_pool().await;
-    sqlx::query(
-        r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name, state)
-           VALUES
-           ('ws_active', '/active', '/active', 'active', 'active'),
-           ('ws_archived', '/archived', '/archived', 'archived', 'archived')"#,
-    )
-    .execute(&pool)
-    .await
-    .expect("insert workspaces");
-    sqlx::query(
-        r#"INSERT INTO sessions
-           (session_id, client_type, title, handle, role, state, workspace_id, metadata, created_at, updated_at)
-           VALUES
-           ('active_ws_session', 'pi', 'Active workspace', 'active', 'worker', 'ready', 'ws_active', '{}', '2026-06-15T12:00:03Z', '2026-06-15T12:00:03Z'),
-           ('archived_ws_session', 'pi', 'Archived workspace', 'archived', 'worker', 'ready', 'ws_archived', '{}', '2026-06-15T12:00:02Z', '2026-06-15T12:00:02Z'),
-           ('legacy_session', 'pi', 'Legacy', 'legacy', 'worker', 'ready', NULL, '{}', '2026-06-15T12:00:01Z', '2026-06-15T12:00:01Z')"#,
-    )
-    .execute(&pool)
-    .await
-    .expect("insert sessions");
-
-    let repository = SqliteSessionRepository::new(pool);
-    let rows = repository.list_sessions().await.expect("list sessions");
-
-    let ids: Vec<_> = rows.iter().map(|row| row.session_id.as_str()).collect();
-    assert_eq!(ids, vec!["active_ws_session"]);
-}
-
-#[tokio::test]
-async fn sqlite_session_repository_includes_pinned_sessions_outside_limit_when_requested() {
-    let (pool, _pontia_home) = test_pool().await;
-    sqlx::query(
-        r#"INSERT INTO workspaces (workspace_id, canonical_path, display_path, name)
-           VALUES ('ws_active', '/active', '/active', 'active')"#,
-    )
-    .execute(&pool)
-    .await
-    .expect("insert workspace");
-    sqlx::query(
-        r#"INSERT INTO sessions
-           (session_id, client_type, title, handle, role, state, workspace_id, pinned_at, archived_at, metadata, created_at, updated_at)
-           VALUES
-           ('recent', 'pi', 'Recent', 'recent', 'worker', 'ready', 'ws_active', NULL, NULL, '{}', '2026-06-15T12:00:03Z', '2026-06-15T12:00:03Z'),
-           ('old_pinned', 'pi', 'Old pinned', 'old-pinned', 'worker', 'ready', 'ws_active', '2026-06-15T12:00:00Z', NULL, '{}', '2026-06-15T12:00:00Z', '2026-06-15T12:00:00Z'),
-           ('archived_pinned', 'pi', 'Archived pinned', 'archived-pinned', 'worker', 'ready', 'ws_active', '2026-06-15T12:00:01Z', '2026-06-15T12:00:02Z', '{}', '2026-06-15T12:00:01Z', '2026-06-15T12:00:01Z')"#,
-    )
-    .execute(&pool)
-    .await
-    .expect("insert sessions");
-
-    let repository = SqliteSessionRepository::new(pool);
-    let rows = repository
-        .list_sessions_with_options(SessionListOptions {
-            include_archived: false,
-            limit: Some(1),
-            include_pinned: true,
-        })
-        .await
-        .expect("list sessions");
-
-    let ids: Vec<_> = rows.iter().map(|row| row.session_id.as_str()).collect();
-    assert_eq!(ids, vec!["old_pinned", "recent"]);
 }
 
 #[tokio::test]

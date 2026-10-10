@@ -31,8 +31,6 @@ const mocks = vi.hoisted(() => {
     startEventStream: vi.fn(),
     stopEventStream: vi.fn(),
     sessions: sessionItems,
-    sessionsLoading: loading,
-    sessionsError: error,
     sidebarPinnedSessions: writableStore<unknown[]>([]),
     sidebarActiveSessions: sessionItems,
     sidebarRecentSessions: writableStore<unknown[]>([]),
@@ -42,7 +40,6 @@ const mocks = vi.hoisted(() => {
     sidebarSessionsNextCursor: writableStore<string | null>(null),
     sessionDetail: writableStore(null),
     sessionDetailError: writableStore<string | null>(null),
-    loadSessions: vi.fn(async () => []),
     loadMoreSidebarSessions: vi.fn(async () => []),
     updateSessionTitle: vi.fn(async () => undefined),
     pinSession: vi.fn(async () => undefined),
@@ -58,9 +55,6 @@ vi.mock("../src/services/eventStream", () => ({
   stopEventStream: mocks.stopEventStream,
 }));
 vi.mock("../src/stores/sessions", () => ({
-  sessions: mocks.sessions,
-  sessionsLoading: mocks.sessionsLoading,
-  sessionsError: mocks.sessionsError,
   sidebarPinnedSessions: mocks.sidebarPinnedSessions,
   sidebarActiveSessions: mocks.sidebarActiveSessions,
   sidebarRecentSessions: mocks.sidebarRecentSessions,
@@ -70,7 +64,6 @@ vi.mock("../src/stores/sessions", () => ({
   sidebarSessionsNextCursor: mocks.sidebarSessionsNextCursor,
   sessionDetail: mocks.sessionDetail,
   sessionDetailError: mocks.sessionDetailError,
-  loadSessions: mocks.loadSessions,
   loadMoreSidebarSessions: mocks.loadMoreSidebarSessions,
   updateSessionTitle: mocks.updateSessionTitle,
   pinSession: mocks.pinSession,
@@ -85,8 +78,8 @@ beforeEach(() => {
   mocks.sidebarRecentSessions.set([]);
   mocks.sidebarSessionsNextCursor.set(null);
   mocks.sidebarSessionsLoadingMore.set(false);
-  mocks.sessionsLoading.set(false);
-  mocks.sessionsError.set(null);
+  mocks.sidebarSessionsLoading.set(false);
+  mocks.sidebarSessionsError.set(null);
   vi.clearAllMocks();
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -648,11 +641,11 @@ test("settings shell section switcher uses router navigation instead of a docume
 });
 
 test("shows a sidebar loading failure instead of claiming there are no sessions", async () => {
-  mocks.sessionsError.set("Failed to fetch");
+  mocks.sidebarSessionsError.set("Failed to fetch");
   render(AppSidebarHost);
   expect(screen.getByRole("alert")).toHaveTextContent("Sidebar refresh failed");
   expect(screen.queryByText("No active sessions")).not.toBeInTheDocument();
-  mocks.sessionsError.set(null);
+  mocks.sidebarSessionsError.set(null);
   await tick();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });

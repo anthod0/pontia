@@ -36,26 +36,6 @@ pub async fn create_session(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ListSessionsQuery {
-    #[serde(default)]
-    include_archived: bool,
-    limit: Option<u32>,
-    #[serde(default)]
-    include_pinned: bool,
-}
-
-pub async fn list_sessions(
-    State(state): State<AppState>,
-    Query(query): Query<ListSessionsQuery>,
-) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.queries();
-    let sessions = service
-        .list_sessions(query.include_archived, query.limit, query.include_pinned)
-        .await?;
-    Ok(ok(json!({ "sessions": sessions })))
-}
-
-#[derive(Debug, Deserialize)]
 pub struct SessionOverviewQuery {
     sections: Option<String>,
     workspace_id: Option<String>,

@@ -31,7 +31,7 @@ const session: SessionView = {
 
 const api = vi.hoisted(() => ({
   createSession: vi.fn(),
-  listSessions: vi.fn(),
+  getSessionOverview: vi.fn(),
   getSession: vi.fn(),
   listTurns: vi.fn(),
   listInboxMessages: vi.fn(),
@@ -59,22 +59,15 @@ describe("sessions store createSession", () => {
       session,
       initial_turn: null,
     } satisfies CreateSessionResult);
-    api.listSessions.mockImplementation(() => new Promise(() => {}));
+    api.getSessionOverview.mockImplementation(() => new Promise(() => {}));
     api.getSession.mockImplementation(() => new Promise(() => {}));
 
-    const { createSession, sessions, sessionDetail } = await import("../../src/stores/sessions");
+    const { createSession, sessionDetail } = await import("../../src/stores/sessions");
     const result = await createSession({ client_type: "pi", workspace_id: "workspace-1" });
 
     expect(result.session.session_id).toBe("session-fast");
-    expect(api.listSessions).not.toHaveBeenCalled();
+    expect(api.getSessionOverview).toHaveBeenCalled();
     expect(api.getSession).not.toHaveBeenCalled();
-
-    let sessionsValue: SessionView[] = [];
-    const unsubscribeSessions = sessions.subscribe((value) => {
-      sessionsValue = value;
-    });
-    unsubscribeSessions();
-    expect(sessionsValue.map((item) => item.session_id)).toEqual(["session-fast"]);
 
     let detailValue: unknown = undefined;
     const unsubscribeDetail = sessionDetail.subscribe((value) => {

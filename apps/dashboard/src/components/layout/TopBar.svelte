@@ -9,7 +9,7 @@
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { lastConnectionError, sseStatus } from '../../stores/connection'
-  import { sessionDetail, sessionDetailError, sessions } from '../../stores/sessions'
+  import { sessionDetail, sessionDetailError, sidebarActiveSessions, sidebarPinnedSessions, sidebarRecentSessions } from '../../stores/sessions'
 
   let currentPath = $state(dashboardRelativePath())
 
@@ -31,8 +31,14 @@
 
   const sseTitle = $derived($lastConnectionError ? `SSE ${$sseStatus}: ${$lastConnectionError}` : `SSE ${$sseStatus}`)
   const sessionId = $derived(currentPath.startsWith('/chat/') ? decodeURIComponent(currentPath.split('/')[2] ?? '') : '')
+  const overviewSession = $derived(
+    $sidebarPinnedSessions.find((item) => item.session_id === sessionId)
+      ?? $sidebarActiveSessions.find((item) => item.session_id === sessionId)
+      ?? $sidebarRecentSessions.find((item) => item.session_id === sessionId)
+      ?? null
+  )
   const session = $derived(sessionId
-    ? ($sessionDetail?.session.session_id === sessionId ? $sessionDetail.session : ($sessionDetailError ? null : $sessions.find((item) => item.session_id === sessionId) ?? null))
+    ? ($sessionDetail?.session.session_id === sessionId ? $sessionDetail.session : ($sessionDetailError ? null : overviewSession))
     : null)
   const title = $derived(session ? sessionChatTitle(session) : '')
 </script>

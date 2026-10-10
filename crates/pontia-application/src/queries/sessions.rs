@@ -5,7 +5,7 @@ use pontia_core::{Error, error::Result};
 use pontia_storage_sqlite::{
     models::sessions::SessionRow,
     repositories::sessions::{
-        SessionListOptions, SessionOverviewCursor, SessionOverviewOptions, SqliteSessionRepository,
+        SessionOverviewCursor, SessionOverviewOptions, SqliteSessionRepository,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -73,31 +73,6 @@ struct SessionOverviewCursorPayload {
 }
 
 impl ExternalQueryService {
-    pub async fn list_sessions(
-        &self,
-        include_archived: bool,
-        limit: Option<u32>,
-        include_pinned: bool,
-    ) -> Result<Vec<SessionView>> {
-        let repository = SqliteSessionRepository::new(self.pool.clone());
-        let rows = repository
-            .list_sessions_with_options(SessionListOptions {
-                include_archived,
-                limit,
-                include_pinned,
-            })
-            .await?;
-
-        let mut sessions = rows
-            .into_iter()
-            .map(row_to_view)
-            .collect::<Result<Vec<_>>>()?;
-        for session in &mut sessions {
-            self.enrich_session_view(session).await?;
-        }
-        Ok(sessions)
-    }
-
     pub async fn session_overview(
         &self,
         request: SessionOverviewRequest,

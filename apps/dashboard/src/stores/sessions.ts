@@ -18,7 +18,6 @@ import {
   interruptSession as apiInterruptSession,
   listEvents,
   listInboxMessages,
-  listSessions,
   listTurns,
   pinSession as apiPinSession,
   restartSession as apiRestartSession,
@@ -52,9 +51,6 @@ export interface SessionConsoleDetail {
   events: EventView[];
 }
 
-export const sessions = writable<SessionView[]>([]);
-export const sessionsLoading = writable(false);
-export const sessionsError = writable<string | null>(null);
 export const sidebarPinnedSessions = writable<SessionView[]>([]);
 export const sidebarActiveSessions = writable<SessionView[]>([]);
 export const sidebarRecentSessions = writable<SessionView[]>([]);
@@ -85,7 +81,6 @@ let detailRequest: {
   dirty: boolean;
   promise: Promise<SessionConsoleDetail | null>;
 } | null = null;
-let listRequest = 0;
 let sidebarOverviewRequest = 0;
 let sidebarLoadMorePromise: Promise<SessionView[]> | null = null;
 let sessionsPageOverviewRequest = 0;
@@ -93,12 +88,8 @@ let sessionsPageLoadMorePromise: Promise<SessionView[]> | null = null;
 
 export function resetSessions(): void {
   selectionGeneration += 1;
-  listRequest += 1;
   detailRequest?.controller.abort();
   detailRequest = null;
-  sessions.set([]);
-  sessionsLoading.set(false);
-  sessionsError.set(null);
   sidebarOverviewRequest += 1;
   sidebarLoadMorePromise = null;
   sidebarPinnedSessions.set([]);
@@ -137,36 +128,9 @@ export function selectSession(sessionId: string | null): void {
   sessionDetailLoading.set(false);
 }
 
-const defaultSessionListLimit = 50;
-
-type LoadOptions = {
+type SessionDetailLoadOptions = {
   showLoading?: boolean;
-  limit?: number;
-  includePinned?: boolean;
-  throwOnError?: boolean;
 };
-
-export async function loadSessions(options: LoadOptions = {}): Promise<SessionView[]> {
-  const request = ++listRequest;
-  const showLoading = options.showLoading ?? true;
-  if (showLoading) sessionsLoading.set(true);
-  sessionsError.set(null);
-  try {
-    const loaded = await listSessions({
-      limit: options.limit ?? defaultSessionListLimit,
-      includePinned: options.includePinned ?? true,
-    });
-    if (request === listRequest) sessions.set(loaded);
-    return loaded;
-  } catch (error) {
-    if (request === listRequest)
-      sessionsError.set(error instanceof Error ? error.message : String(error));
-    if (options.throwOnError) throw error;
-    return [];
-  } finally {
-    if (request === listRequest) sessionsLoading.set(false);
-  }
-}
 
 const defaultSidebarSessionListLimit = 50;
 
@@ -319,7 +283,7 @@ export function loadMoreSessionsPageSessions(): Promise<SessionView[]> {
 
 export function loadSessionDetail(
   sessionId: string,
-  options: LoadOptions = {},
+  options: SessionDetailLoadOptions = {},
 ): Promise<SessionConsoleDetail | null> {
   const selected = get(selectedSessionId);
   if (!sessionId || (selected && selected !== sessionId)) return Promise.resolve(null);
@@ -362,9 +326,6 @@ export function loadSessionDetail(
         sessionDetail.set(detail);
         sessionDetailError.set(null);
         sessionDetailErrorKind.set(null);
-        sessions.update((items) =>
-          items.map((item) => (item.session_id === sessionId ? session : item)),
-        );
       } catch (error) {
         if (!isCurrent()) return null;
         detail = null;
@@ -395,16 +356,13 @@ export function loadSessionDetail(
 
 export async function createSession(input: CreateSessionInput): Promise<CreateSessionResult> {
   const result = await apiCreateSession(input);
-  sessions.update((items) => {
-    const withoutCreated = items.filter((item) => item.session_id !== result.session.session_id);
-    return [result.session, ...withoutCreated];
-  });
   sessionDetail.set({
     session: result.session,
     turns: result.initial_turn ? [result.initial_turn] : [],
     inboxMessages: [],
     events: [],
   });
+  void loadSidebarSessionOverview({ showLoading: false });
   return result;
 }
 
@@ -413,18 +371,11 @@ export async function updateSessionTitle(
   title: string | null,
 ): Promise<SessionView> {
   const session = await apiUpdateSession(sessionId, { title });
-  await Promise.all([loadSessions(), loadSidebarSessionOverview({ showLoading: false })]);
-  await loadSessionDetail(sessionId);
+  await refreshSidebarAndSelectedSession(sessionId);
   return session;
 }
 
 function applySessionManagementResult(session: SessionView): void {
-  listRequest += 1;
-  sessionsLoading.set(false);
-  sessions.update((items) => {
-    const remaining = items.filter((item) => item.session_id !== session.session_id);
-    return session.archived_at ? remaining : [session, ...remaining];
-  });
   if (get(sessionDetail)?.session.session_id === session.session_id) {
     sessionDetail.update((detail) => (detail ? { ...detail, session } : detail));
   }
@@ -433,10 +384,7 @@ function applySessionManagementResult(session: SessionView): void {
 
 async function refreshAfterSessionManagement(session: SessionView): Promise<SessionView> {
   applySessionManagementResult(session);
-  await Promise.all([
-    loadSessions({ showLoading: false }),
-    loadSidebarSessionOverview({ showLoading: false }),
-  ]);
+  await loadSidebarSessionOverview({ showLoading: false });
   return session;
 }
 
@@ -456,7 +404,17 @@ export async function unarchiveSession(sessionId: string): Promise<SessionView> 
   const session = await apiUnarchiveSession(sessionId);
   if (session.archived_at) throw new Error("The session is still archived. Refresh and try again.");
   applySessionManagementResult(session);
+  await loadSidebarSessionOverview({ showLoading: false });
   return session;
+}
+
+async function refreshSidebarAndSelectedSession(sessionId: string): Promise<void> {
+  await Promise.all([
+    loadSidebarSessionOverview({ showLoading: false }),
+    get(selectedSessionId) === sessionId
+      ? loadSessionDetail(sessionId, { showLoading: false })
+      : Promise.resolve(null),
+  ]);
 }
 
 export async function submitInboxMessage(
@@ -465,10 +423,7 @@ export async function submitInboxMessage(
   options: { showInChat?: boolean } = {},
 ): Promise<InboxMessageView> {
   const detailSession = get(sessionDetail)?.session;
-  const currentSession =
-    detailSession?.session_id === sessionId
-      ? detailSession
-      : get(sessions).find((session) => session.session_id === sessionId);
+  const currentSession = detailSession?.session_id === sessionId ? detailSession : null;
   const submission = { messageId: `msg_${crypto.randomUUID()}`, sessionId, input };
   const localSubmissionId = beginInboxSubmission(sessionId, input, {
     messageId: submission.messageId,
@@ -492,8 +447,7 @@ export async function submitInboxMessage(
     );
     return { ...detail, inboxMessages: [...inboxMessages, message] };
   });
-  await loadSessions();
-  await loadSessionDetail(sessionId);
+  await refreshSidebarAndSelectedSession(sessionId);
   return message;
 }
 
@@ -540,8 +494,7 @@ export async function recoverInboxSubmission(submission: UnconfirmedSubmission):
     if (!(error instanceof ApiError) || error.status !== 404) throw error;
     await deliverSubmission(submission, true);
   }
-  await loadSessions();
-  await loadSessionDetail(submission.sessionId);
+  await refreshSidebarAndSelectedSession(submission.sessionId);
 }
 
 export async function retryInboxMessage(
@@ -558,8 +511,7 @@ export async function retryInboxMessage(
   };
   rememberSubmission(submission);
   await deliverSubmission(submission);
-  await loadSessions();
-  await loadSessionDetail(sessionId);
+  await refreshSidebarAndSelectedSession(sessionId);
 }
 
 export async function cancelInboxMessage(
@@ -567,8 +519,7 @@ export async function cancelInboxMessage(
   messageId: string,
 ): Promise<InboxMessageView> {
   const message = await apiCancelInboxMessage(sessionId, messageId);
-  await loadSessions();
-  await loadSessionDetail(sessionId);
+  await refreshSidebarAndSelectedSession(sessionId);
   return message;
 }
 
@@ -577,33 +528,26 @@ export async function dismissInboxMessage(
   messageId: string,
 ): Promise<InboxMessageView> {
   const message = await apiDismissInboxMessage(sessionId, messageId);
-  await loadSessions();
-  await loadSessionDetail(sessionId);
+  await refreshSidebarAndSelectedSession(sessionId);
   return message;
 }
 
 export async function interruptSession(sessionId: string): Promise<void> {
   await apiInterruptSession(sessionId);
-  await loadSessions();
-  await loadSessionDetail(sessionId);
+  await refreshSidebarAndSelectedSession(sessionId);
 }
 
 export async function restartSession(sessionId: string): Promise<void> {
   await apiRestartSession(sessionId);
-  await loadSessions();
-  await loadSessionDetail(sessionId);
+  await refreshSidebarAndSelectedSession(sessionId);
 }
 
 export async function resumeSession(sessionId: string): Promise<void> {
   await apiResumeSession(sessionId);
-  await loadSessions();
-  await loadSessionDetail(sessionId);
+  await refreshSidebarAndSelectedSession(sessionId);
 }
 
 export async function terminateSession(sessionId: string): Promise<void> {
   await apiTerminateSession(sessionId);
-  await Promise.all([loadSessions(), loadSidebarSessionOverview({ showLoading: false })]);
-  if (get(sessionDetail)?.session.session_id === sessionId) {
-    await loadSessionDetail(sessionId);
-  }
+  await refreshSidebarAndSelectedSession(sessionId);
 }

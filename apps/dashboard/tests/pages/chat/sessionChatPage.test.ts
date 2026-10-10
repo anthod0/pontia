@@ -1479,7 +1479,6 @@ test("does not toast transient network errors from automatic chat refreshes", as
 
   mocks.sessionDetailError.set("Failed to fetch");
   mocks.timelineState.set({ ...mocks.timelineState.get(), error: "net::ERR_NETWORK_CHANGED" });
-  mocks.sessionsError.set("NetworkError when attempting to fetch resource.");
 
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(mocks.toastError).not.toHaveBeenCalled();

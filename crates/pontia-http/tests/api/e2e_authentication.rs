@@ -59,7 +59,7 @@ async fn verified_e2e_and_local_token_access_the_same_business_router() {
     let (context, mut upload, mut download) = session.request().unwrap();
     let (mut bhttp, head) = Encoder::new(&Head::Request {
         method: Method::GET,
-        uri: "/api/v1/sessions".parse().unwrap(),
+        uri: "/api/v1/sessions/overview?sections=list".parse().unwrap(),
         headers: HeaderMap::new(),
     })
     .unwrap();
@@ -99,7 +99,7 @@ async fn verified_e2e_and_local_token_access_the_same_business_router() {
         .local_http()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/sessions")
+                .uri("/api/v1/sessions/overview?sections=list")
                 .header(header::AUTHORIZATION, "Bearer local-secret")
                 .body(Body::empty())
                 .unwrap(),
@@ -116,7 +116,7 @@ async fn verified_e2e_and_local_token_access_the_same_business_router() {
         .local_http()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/sessions")
+                .uri("/api/v1/sessions/overview?sections=list")
                 .header("x-pontia-e2e-authenticated", "true")
                 .body(Body::empty())
                 .unwrap(),

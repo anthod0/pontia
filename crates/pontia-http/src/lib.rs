@@ -118,10 +118,7 @@ fn external_api_router(state: HttpState) -> Router {
             post(api::block_workflow_patch),
         )
         .route("/api/v1/auth/validate", get(api::validate_auth))
-        .route(
-            "/api/v1/sessions",
-            get(api::list_sessions).post(api::create_session),
-        )
+        .route("/api/v1/sessions", post(api::create_session))
         .route(
             "/api/v1/agent-profiles",
             get(api::list_agent_profiles).post(api::create_agent_profile),

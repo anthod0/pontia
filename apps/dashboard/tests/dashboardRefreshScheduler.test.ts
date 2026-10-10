@@ -58,7 +58,7 @@ function scheduler(
     loadAgentProfiles: async () => {
       calls.push("profiles");
     },
-    loadSessions: async () => {
+    loadSessionOverview: async () => {
       calls.push("sessions");
     },
     loadWorkflows: async () => {

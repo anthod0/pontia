@@ -5,7 +5,13 @@ const api = vi.hoisted(() => ({
   submitInboxMessage: vi.fn(),
   getInboxMessage: vi.fn(),
   retryInboxMessage: vi.fn(),
-  listSessions: vi.fn(async () => []),
+  getSessionOverview: vi.fn(async () => ({
+    groups: {
+      pinned: { sessions: [] },
+      active: { sessions: [] },
+      list: { sessions: [], next_cursor: null },
+    },
+  })),
   getSession: vi.fn(async () => ({ session_id: "session" })),
   listTurns: vi.fn(async () => []),
   listInboxMessages: vi.fn(async () => []),

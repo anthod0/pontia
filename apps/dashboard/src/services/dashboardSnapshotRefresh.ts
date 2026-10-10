@@ -1,7 +1,6 @@
 import { get } from "svelte/store";
 import { loadAgentProfiles } from "../stores/agentProfiles";
 import {
-  loadSessions,
   loadSessionDetail,
   loadSidebarSessionOverview,
   selectedSessionId,
@@ -64,7 +63,6 @@ async function refreshDashboardSnapshotNow(): Promise<void> {
   const taskId = get(selectedTaskId);
   const workflowId = get(selectedWorkflowId);
   const refreshes: Promise<unknown>[] = [
-    loadSessions({ showLoading: false }),
     loadSidebarSessionOverview({ showLoading: false }),
     loadWorkspaces(),
     loadAgentProfiles(),

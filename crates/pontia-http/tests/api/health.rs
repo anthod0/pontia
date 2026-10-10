@@ -12,7 +12,7 @@ use pontia_http as http;
 async fn test_state() -> AppState {
     TestApp::builder()
         .database_name("health.db")
-        .external_api_token(None)
+        .external_api_token(Some("test-token".into()))
         .build_state()
         .await
 }
@@ -40,6 +40,22 @@ async fn healthz_returns_ok_json() {
     let json: serde_json::Value = serde_json::from_slice(&body).expect("json body");
 
     assert_eq!(json, serde_json::json!({ "status": "ok" }));
+}
+
+#[tokio::test]
+async fn legacy_session_list_method_is_removed() {
+    let response = http::router(test_state().await)
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/sessions")
+                .header("authorization", "Bearer test-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
 }
 
 #[tokio::test]

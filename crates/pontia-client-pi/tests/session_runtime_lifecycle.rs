@@ -239,7 +239,7 @@ async fn startup_failure_ends_runtime_and_preserves_reason() {
 }
 
 #[tokio::test]
-async fn session_queries_return_one_session_with_all_runtimes() {
+async fn session_query_returns_all_runtimes() {
     let (app, root) = fixture().await;
     let workspace = pontia_application::upsert_workspace(&app.db(), root.path().to_str().unwrap())
         .await
@@ -250,9 +250,6 @@ async fn session_queries_return_one_session_with_all_runtimes() {
         .await
         .unwrap();
     sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('another','session','tui','running','2000-01-01T00:00:00Z')").execute(&app.db()).await.unwrap();
-    let sessions = app.queries().list_sessions(true, None, true).await.unwrap();
-    assert_eq!(sessions.len(), 1);
-    assert_eq!(sessions[0].runtimes.len(), 2);
     assert_eq!(
         app.queries()
             .get_session("session")
