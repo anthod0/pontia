@@ -6,7 +6,6 @@ on:
     paths:
       - scripts/install.sh
       - scripts/install-edge.sh
-      - .github/scripts/publish-release.py
       - .github/workflows/publish-installers.yml
   workflow_dispatch:
 
@@ -26,10 +25,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Embed the release verification key
-        env:
-          RELEASE_PUBLIC_KEY: ${{ vars.RELEASE_PUBLIC_KEY }}
-        run: python3 .github/scripts/publish-release.py prepare-installers installers
       - name: Publish installers to R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -37,4 +32,21 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: python3 .github/scripts/publish-release.py publish-installers installers
+        shell: bash
+        run: |
+          set -euo pipefail
+          downloaded="$(mktemp -d)"
+          trap 'rm -rf "$downloaded"' EXIT
+          for name in install.sh install-edge.sh; do
+            aws --endpoint-url "$R2_ENDPOINT" s3api put-object \
+              --bucket "$R2_BUCKET" \
+              --key "$name" \
+              --body "scripts/$name" \
+              --cache-control "public, max-age=60" \
+              --content-type "text/plain"
+            aws --endpoint-url "$R2_ENDPOINT" s3api get-object \
+              --bucket "$R2_BUCKET" \
+              --key "$name" \
+              "$downloaded/$name"
+            cmp "scripts/$name" "$downloaded/$name"
+          done

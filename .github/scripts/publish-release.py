@@ -12,7 +12,6 @@ import subprocess
 import tempfile
 
 ORIGIN = "https://get.pontia.dev"
-ROOT = Path(__file__).resolve().parents[2]
 CONTROL_PLANE_TARGETS = (
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
@@ -28,7 +27,6 @@ def run(*args):
 
 def public_key():
     key = os.environ["RELEASE_PUBLIC_KEY"].strip()
-    # Parse before embedding; only a PEM public key may enter shell source.
     with tempfile.TemporaryDirectory(prefix="pontia-public-key-") as directory:
         path = Path(directory) / "public.pem"
         path.write_text(key)
@@ -38,15 +36,6 @@ def public_key():
             raise ValueError("RELEASE_PUBLIC_KEY must be an Ed25519 public key")
         canonical = run("openssl", "pkey", "-pubin", "-in", str(path), "-pubout").decode().strip()
     return canonical
-
-
-def prepare_installers(destination):
-    destination.mkdir(parents=True, exist_ok=True)
-    key = public_key()
-    for name in ("install.sh", "install-edge.sh"):
-        source = (ROOT / "scripts" / name).read_text()
-        assert source.count("@PONTIA_RELEASE_PUBLIC_KEY@") == 1
-        (destination / name).write_text(source.replace("@PONTIA_RELEASE_PUBLIC_KEY@", key))
 
 
 def version_order(version):
@@ -175,21 +164,16 @@ def publish_github_release(directory, version):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("prepare-installers", "prepare-release", "publish-installers", "publish-release", "publish-github-release"))
+    parser.add_argument("command", choices=("prepare-release", "publish-release", "publish-github-release"))
     parser.add_argument("directory", type=Path)
     parser.add_argument("--version")
     args = parser.parse_args()
     if args.command.endswith("release") and not args.version:
         parser.error("--version is required")
-    if args.command == "prepare-installers":
-        prepare_installers(args.directory)
-    elif args.command == "prepare-release":
+    if args.command == "prepare-release":
         prepare_release(args.directory, args.version)
     elif args.command == "publish-github-release":
         publish_github_release(args.directory, args.version)
-    elif args.command == "publish-installers":
-        for name in ("install.sh", "install-edge.sh"):
-            upload(args.directory / name, name)
     else:
         publish_release(args.directory, args.version)
 

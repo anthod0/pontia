@@ -57,15 +57,26 @@ async function fixture(
     RELEASE_PUBLIC_KEY: keys.publicKey,
     RELEASE_SIGNING_KEY: keys.privateKey,
   };
-  for (const args of [
-    ["prepare-release", releases, "--version", "v1.2.3"],
-    ["prepare-installers", root],
-  ]) {
-    const prepared = Bun.spawnSync(["python3", ".github/scripts/publish-release.py", ...args], {
-      cwd: repository,
-      env: signingEnvironment,
-    });
-    expect(prepared.exitCode).toBe(0);
+  const prepared = Bun.spawnSync(
+    [
+      "python3",
+      ".github/scripts/publish-release.py",
+      "prepare-release",
+      releases,
+      "--version",
+      "v1.2.3",
+    ],
+    { cwd: repository, env: signingEnvironment },
+  );
+  expect(prepared.exitCode).toBe(0);
+  for (const name of ["install.sh", "install-edge.sh"]) {
+    const source = await readFile(join(repository, "scripts", name), "utf8");
+    const publicKey = /RELEASE_PUBLIC_KEY='[^']+'/;
+    if (!publicKey.test(source)) throw new Error(`${name} does not contain an embedded public key`);
+    await writeFile(
+      join(root, name),
+      source.replace(publicKey, `RELEASE_PUBLIC_KEY='${keys.publicKey.trim()}'`),
+    );
   }
   const envelope = JSON.parse(await readFile(join(releases, "manifest.json"), "utf8"));
   const signature = Buffer.from(envelope.signature, "base64");
@@ -161,25 +172,6 @@ test("publisher rejects mismatched Ed25519 signing keys", async () => {
     "RELEASE_SIGNING_KEY does not match RELEASE_PUBLIC_KEY",
   );
   expect(await Bun.file(manifest).exists()).toBe(false);
-});
-
-test("installer preparation rejects non-Ed25519 public keys", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pontia-installer-key-"));
-  roots.push(root);
-  const wrongKeys = generateKeyPairSync("ec", {
-    namedCurve: "prime256v1",
-    publicKeyEncoding: { type: "spki", format: "pem" },
-  });
-  const result = Bun.spawnSync(
-    ["python3", ".github/scripts/publish-release.py", "prepare-installers", root],
-    {
-      cwd: repository,
-      env: { ...process.env, RELEASE_PUBLIC_KEY: wrongKeys.publicKey },
-    },
-  );
-  expect(result.exitCode).not.toBe(0);
-  expect(result.stderr.toString()).toContain("RELEASE_PUBLIC_KEY must be an Ed25519 public key");
-  expect(await Bun.file(join(root, "install.sh")).exists()).toBe(false);
 });
 
 for (const architecture of ["x86_64", "arm64"] as const) {
