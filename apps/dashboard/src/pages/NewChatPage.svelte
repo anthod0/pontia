@@ -13,13 +13,7 @@
   import { titleFromInitialPrompt } from '$lib/session-chat/sessionChat'
   import { chatDraft, clearChatDraft } from '../stores/chatDraft'
   import { rememberOptimisticInitialMessage } from '../stores/optimisticChat'
-  import {
-    loadWorkspaces,
-    workspaces,
-    workspacesError,
-    workspacesInitialized,
-    workspacesLoading,
-  } from '../stores/workspaces'
+  import { createWorkspacesStore } from '../queries/workspaces'
   import { createSession, loadSessionDetail } from '../stores/sessions'
   import { loadSessionTimeline, resetTimelineState } from '../stores/timeline'
 
@@ -30,47 +24,43 @@
   let lastToastedError: string | null = null
   let queryWorkspaceSelectionId: string | null = null
   let autofocusComposer = false
-  let initialWorkspaceLoadComplete = false
+  let initialWorkspaceQueryHandled = false
   let workspaceSetupDecisionPending = true
   let workspaceOnboardingActive = false
 
   const CLIENT_TYPE_OPTIONS = creationClientTypes
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
+  const workspacesQuery = createWorkspacesStore()
 
   onMount(() => {
-    let mounted = true
     const handleLocationChange = () => syncWorkspaceSelectionsFromLocation()
     window.addEventListener('popstate', handleLocationChange)
-    if ($workspaces.length) autofocusComposer = claimChatEntryAutofocus('/')
-    void loadWorkspaces()
-      .then(syncWorkspaceSelectionsFromLocation)
-      .catch(() => {
-        // The stores expose request failures; keep the page renderable without an unhandled rejection.
-      })
-      .finally(() => {
-        if (!mounted) return
-        initialWorkspaceLoadComplete = true
-      })
+    syncWorkspaceSelectionsFromLocation()
     return () => {
-      mounted = false
       window.removeEventListener('popstate', handleLocationChange)
     }
   })
 
-  // A superseded request can finish before the latest workspace list is available.
-  // Decide only once the shared store has settled; activation still requires Continue.
-  $: if (initialWorkspaceLoadComplete && workspaceSetupDecisionPending && $workspacesInitialized && !$workspacesLoading) {
-    workspaceOnboardingActive = !$workspaces.length && !$workspacesError
+  $: workspaces = $workspacesQuery.data ?? []
+  $: workspacesError = $workspacesQuery.error?.message ?? null
+  $: workspacesLoading = $workspacesQuery.isFetching
+  $: initialWorkspaceLoadComplete = !$workspacesQuery.isPending
+  $: if (initialWorkspaceLoadComplete && workspaceSetupDecisionPending && !workspacesLoading) {
+    workspaceOnboardingActive = !workspaces.length && !workspacesError
     workspaceSetupDecisionPending = false
   }
 
-  $: if ($workspaces.length) ensureCreateWorkspaceSelection()
-  $: selectedWorkspace = $workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
+  $: if (workspaces.length) ensureCreateWorkspaceSelection()
+  $: if (!$workspacesQuery.isPending && !initialWorkspaceQueryHandled) {
+    if (workspaces.length) autofocusComposer = claimChatEntryAutofocus('/')
+    initialWorkspaceQueryHandled = true
+  }
+  $: selectedWorkspace = workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
   $: clientTypeOptions = CLIENT_TYPE_OPTIONS
   $: if (!clientTypeOptions.includes(createClientType)) createClientType = clientTypeOptions[0] ?? createClientType
-  $: if (createWorkspaceId && $workspaces.length && createWorkspaceId !== queryWorkspaceSelectionId && createWorkspaceId !== availableWorkspaceId(readQueryWorkspaceId())) rememberCreateWorkspaceSelection(createWorkspaceId)
+  $: if (createWorkspaceId && workspaces.length && createWorkspaceId !== queryWorkspaceSelectionId && createWorkspaceId !== availableWorkspaceId(readQueryWorkspaceId())) rememberCreateWorkspaceSelection(createWorkspaceId)
   $: canCreate = Boolean($chatDraft.trim() && createWorkspaceId && createClientType.trim() && !creating)
-  $: passiveErrorMessage = $workspacesError && !isTransientNetworkError($workspacesError) ? $workspacesError : null
+  $: passiveErrorMessage = workspacesError && !isTransientNetworkError(workspacesError) ? workspacesError : null
   $: errorMessage = actionError ?? passiveErrorMessage
   $: {
     if (errorMessage && errorMessage !== lastToastedError) {
@@ -86,7 +76,7 @@
 
   function availableWorkspaceId(workspaceId: string | null): string | null {
     if (!workspaceId) return null
-    return $workspaces.some((workspace) => workspace.workspace_id === workspaceId) ? workspaceId : null
+    return workspaces.some((workspace) => workspace.workspace_id === workspaceId) ? workspaceId : null
   }
 
   function readRememberedWorkspaceId(): string | null {
@@ -98,7 +88,7 @@
   }
 
   function rememberCreateWorkspaceSelection(workspaceId: string): void {
-    if (!workspaceId || !$workspaces.some((workspace) => workspace.workspace_id === workspaceId)) return
+    if (!workspaceId || !workspaces.some((workspace) => workspace.workspace_id === workspaceId)) return
     try {
       window.localStorage.setItem(LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY, workspaceId)
     } catch {
@@ -111,7 +101,7 @@
     if (queryWorkspaceId) return queryWorkspaceId
     const rememberedWorkspaceId = availableWorkspaceId(readRememberedWorkspaceId())
     if (rememberedWorkspaceId) return rememberedWorkspaceId
-    return $workspaces[0]?.workspace_id ?? ''
+    return workspaces[0]?.workspace_id ?? ''
   }
 
   function syncWorkspaceSelectionsFromLocation(): void {
@@ -120,17 +110,17 @@
 
   async function retryWorkspaces(): Promise<void> {
     workspaceSetupDecisionPending = true
-    await loadWorkspaces()
+    await $workspacesQuery.refetch()
   }
 
   function completeWorkspaceOnboarding(): void {
-    if (!$workspaces.length) return
+    if (!workspaces.length) return
     ensureCreateWorkspaceSelection()
     workspaceOnboardingActive = false
   }
 
   function ensureCreateWorkspaceSelection(): void {
-    if (!$workspaces.length) return
+    if (!workspaces.length) return
     const queryWorkspaceId = availableWorkspaceId(readQueryWorkspaceId())
     if (queryWorkspaceId) {
       queryWorkspaceSelectionId = queryWorkspaceId
@@ -138,7 +128,7 @@
       return
     }
     queryWorkspaceSelectionId = null
-    if (createWorkspaceId && $workspaces.some((workspace) => workspace.workspace_id === createWorkspaceId)) return
+    if (createWorkspaceId && workspaces.some((workspace) => workspace.workspace_id === createWorkspaceId)) return
     createWorkspaceId = preferredCreateWorkspaceId()
   }
 
@@ -175,7 +165,7 @@
   }
 </script>
 
-{#if !$workspaces.length && (!initialWorkspaceLoadComplete || workspaceSetupDecisionPending)}
+{#if !workspaces.length && (!initialWorkspaceLoadComplete || workspaceSetupDecisionPending)}
   <section class="flex min-h-[calc(100svh-5.5rem)] items-center justify-center md:min-h-[calc(100svh-6.5rem)]" aria-label="Loading dashboard">
     <div class="w-full max-w-3xl space-y-3">
       <Skeleton class="h-24 w-full" />
@@ -183,7 +173,7 @@
     </div>
   </section>
 {:else if workspaceOnboardingActive}
-  <WorkspaceOnboarding canContinue={$workspaces.length > 0} onContinue={completeWorkspaceOnboarding} />
+  <WorkspaceOnboarding canContinue={workspaces.length > 0} onContinue={completeWorkspaceOnboarding} />
 {:else}
   <section class="flex min-h-[calc(100svh-3.25rem)] flex-col gap-6">
     <div class="mx-auto flex w-full max-w-[720px] flex-1 items-center justify-center py-12 text-center">
@@ -192,11 +182,11 @@
         <p class="text-sm text-foreground">Choose a workspace and agent client, then describe the job.</p>
       </div>
     </div>
-    {#if !$workspaces.length && $workspacesError}
+    {#if !workspaces.length && workspacesError}
       <Alert.Root variant="destructive" class="mx-auto max-w-[720px]">
         <Alert.Title>Could not load workspaces</Alert.Title>
-        <Alert.Description>{$workspacesError}</Alert.Description>
-        <Button variant="outline" class="mt-2" disabled={$workspacesLoading} onclick={() => void retryWorkspaces()}>Retry</Button>
+        <Alert.Description>{workspacesError}</Alert.Description>
+        <Button variant="outline" class="mt-2" disabled={workspacesLoading} onclick={() => void retryWorkspaces()}>Retry</Button>
       </Alert.Root>
     {/if}
 
@@ -207,8 +197,8 @@
       {creating}
       {canCreate}
       autofocus={autofocusComposer}
-      workspaces={$workspaces}
-      workspacesLoading={$workspacesLoading}
+      {workspaces}
+      {workspacesLoading}
       {selectedWorkspace}
       {clientTypeOptions}
       placement="bottom"

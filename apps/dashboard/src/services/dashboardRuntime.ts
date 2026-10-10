@@ -3,12 +3,12 @@ import { resetConnectionState } from "../stores/connection";
 import { resetSessions } from "../stores/sessions";
 import { loadTasks, resetTasks } from "../stores/tasks";
 import { resetTimelineState } from "../stores/timeline";
-import { loadWorkspaces, resetWorkspaces } from "../stores/workspaces";
+import { fetchWorkspaces } from "../queries/workspaces";
 import { loadWorkflows, resetWorkflows } from "../stores/workflows";
 import { clearDashboardQueries } from "../queries/dashboardInvalidation";
 
 export function startDashboardRuntime(): void {
-  void Promise.all([loadTasks(), loadWorkspaces(), loadWorkflows({ showLoading: false })]);
+  void Promise.all([loadTasks(), fetchWorkspaces(), loadWorkflows({ showLoading: false })]);
   startEventStream();
 }
 
@@ -22,6 +22,5 @@ export function clearDashboardRuntimeState(): void {
   resetTimelineState();
   resetSessions();
   resetTasks();
-  resetWorkspaces();
   resetWorkflows();
 }

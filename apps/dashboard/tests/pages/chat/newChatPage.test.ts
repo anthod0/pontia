@@ -51,12 +51,12 @@ test("keeps first-time users in workspace setup until they continue explicitly",
 test.each([true, false])(
   "waits for the latest workspace request before choosing setup, with registered workspaces: %s",
   async (hasWorkspace) => {
-    mocks.workspaces.set([]);
-    mocks.workspacesInitialized.set(false);
-    mocks.loadWorkspaces.mockImplementationOnce(async () => {
-      // This request has been superseded; its completion does not settle the list.
-      mocks.workspacesLoading.set(true);
-    });
+    let resolveWorkspaces!: (workspaces: ReturnType<typeof workspace>[]) => void;
+    mocks.listWorkspaces.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveWorkspaces = resolve;
+      }),
+    );
 
     await act(async () => {
       render(NewChatPage);
@@ -65,9 +65,7 @@ test.each([true, false])(
     expect(screen.getByRole("region", { name: "Loading dashboard" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Continue to New Chat" })).not.toBeInTheDocument();
 
-    mocks.workspaces.set(hasWorkspace ? [workspace()] : []);
-    mocks.workspacesInitialized.set(true);
-    mocks.workspacesLoading.set(false);
+    resolveWorkspaces(hasWorkspace ? [workspace()] : []);
 
     if (hasWorkspace) {
       expect(await screen.findByPlaceholderText("What should the agent do?")).toBeInTheDocument();
@@ -168,7 +166,7 @@ test("remembers the selected new chat workspace after starting a chat", async ()
   await screen.findByPlaceholderText("What should the agent do?");
   const workspaceSelector = screen.getByLabelText(/^Workspace$/i);
   await user.click(workspaceSelector);
-  await user.keyboard("{ArrowDown}{Enter}{Escape}");
+  await user.click(await screen.findByText("sandbox"));
   expect(workspaceSelector).toHaveTextContent("sandbox");
   document.body.style.pointerEvents = "";
   await user.type(screen.getByPlaceholderText("What should the agent do?"), "Use sandbox");
@@ -200,16 +198,12 @@ test("offers Pi and Codex and requires a task before submission", async () => {
 test.each([true, false])(
   "recovers from a workspace load error, with registered workspaces: %s",
   async (hasWorkspace) => {
-    mocks.workspaces.set([]);
-    mocks.workspacesError.set("Workspace request failed");
+    mocks.listWorkspaces.mockRejectedValueOnce(new Error("Workspace request failed"));
     render(NewChatPage);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Workspace request failed");
     expect(screen.getByRole("button", { name: "Start session" })).toBeDisabled();
-    mocks.loadWorkspaces.mockImplementationOnce(async () => {
-      mocks.workspacesError.set(null);
-      mocks.workspaces.set(hasWorkspace ? [workspace()] : []);
-    });
+    mocks.listWorkspaces.mockResolvedValueOnce(hasWorkspace ? [workspace()] : []);
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -233,7 +227,7 @@ test("creates a session with initial prompt, workspace, and client then opens it
   render(NewChatPage);
 
   await user.type(
-    screen.getByPlaceholderText("What should the agent do?"),
+    await screen.findByPlaceholderText("What should the agent do?"),
     "Implement the dashboard chat flow",
   );
   await fireEvent.click(screen.getByRole("button", { name: /start session/i }));

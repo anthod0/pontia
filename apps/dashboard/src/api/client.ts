@@ -430,8 +430,16 @@ export async function listWorkspaces(options: ReadRequestOptions = {}): Promise<
     .workspaces;
 }
 
-export async function getWorkspace(workspaceId: string): Promise<WorkspaceView> {
-  return (await request<{ workspace: WorkspaceView }>(`/workspaces/${workspaceId}`)).workspace;
+export async function getWorkspace(
+  workspaceId: string,
+  options: ReadRequestOptions = {},
+): Promise<WorkspaceView> {
+  return (
+    await request<{ workspace: WorkspaceView }>(
+      `/workspaces/${encodeURIComponent(workspaceId)}`,
+      options,
+    )
+  ).workspace;
 }
 
 export async function registerWorkspace(input: RegisterWorkspaceInput): Promise<WorkspaceView> {

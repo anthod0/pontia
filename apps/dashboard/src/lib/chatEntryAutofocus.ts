@@ -1,5 +1,9 @@
 const focusedEntriesByWindow = new WeakMap<Window, Set<string>>();
 
+export function resetChatEntryAutofocus(): void {
+  if (typeof window !== "undefined") focusedEntriesByWindow.delete(window);
+}
+
 export function claimChatEntryAutofocus(entryKey: string): boolean {
   if (typeof window === "undefined") return false;
   let focusedEntries = focusedEntriesByWindow.get(window);

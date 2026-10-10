@@ -6,8 +6,12 @@
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import WorkspaceBrowser from '../components/workspaces/WorkspaceBrowser.svelte'
   import type { WorkspaceRootView, WorkspaceView } from '../api/types'
-  import { deleteWorkspace, workspaces, workspacesError, workspacesLoading } from '../stores/workspaces'
-  import { createWorkspaceRootsQuery, fetchWorkspaceRootEntries } from '../queries/workspaces'
+  import {
+    createDeleteWorkspaceMutation,
+    createWorkspaceRootsQuery,
+    createWorkspacesQuery,
+    fetchWorkspaceRootEntries,
+  } from '../queries/workspaces'
 
   type WorkspaceAvailabilityProblem = {
     workspace: WorkspaceView
@@ -19,9 +23,12 @@
     canonical_path: string
   }
 
+  const workspacesQuery = createWorkspacesQuery()
   const rootsQuery = createWorkspaceRootsQuery()
+  const deleteWorkspaceMutation = createDeleteWorkspaceMutation()
+  let workspaces = $derived(workspacesQuery.data ?? [])
   let activeWorkspacesDialogOpen = $state(false)
-  let activeWorkspaces = $derived($workspaces.filter((workspace) => workspace.state === 'active'))
+  let activeWorkspaces = $derived(workspaces.filter((workspace) => workspace.state === 'active'))
 
   let unavailableWorkspacesDialogOpen = $state(false)
   let workspaceAvailabilityProblems = $state<WorkspaceAvailabilityProblem[]>([])
@@ -33,12 +40,12 @@
   let availableWorkspaceRoots = $derived(activeWorkspaceRoots(rootsQuery.data ?? []))
   let nextWorkspaceAvailabilityCheckKey = $derived(JSON.stringify({
     roots: availableWorkspaceRoots.map((root) => [root.root_id, root.canonical_path]),
-    workspaces: $workspaces.filter((workspace) => workspace.state === 'active').map((workspace) => [workspace.workspace_id, workspace.canonical_path]),
+    workspaces: workspaces.filter((workspace) => workspace.state === 'active').map((workspace) => [workspace.workspace_id, workspace.canonical_path]),
   }))
   $effect(() => {
     if (nextWorkspaceAvailabilityCheckKey !== workspaceAvailabilityCheckKey) {
       workspaceAvailabilityCheckKey = nextWorkspaceAvailabilityCheckKey
-      void refreshWorkspaceAvailability($workspaces, availableWorkspaceRoots)
+      void refreshWorkspaceAvailability(workspaces, availableWorkspaceRoots)
     }
   })
 
@@ -100,7 +107,7 @@
     deletingWorkspaceId = workspaceId
     deleteError = null
     try {
-      await deleteWorkspace(workspaceId)
+      await deleteWorkspaceMutation.mutateAsync(workspaceId)
     } catch (error) {
       deleteError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -139,7 +146,7 @@
     </Alert.Root>
   {/if}
 
-  <WorkspaceBrowser />
+  <WorkspaceBrowser workspaceViews={workspaces} />
 </section>
 
 <Dialog.Root bind:open={activeWorkspacesDialogOpen}>
@@ -148,10 +155,10 @@
       <Dialog.Title>Active workspaces</Dialog.Title>
       <Dialog.Description>Registered active workspaces across all roots.</Dialog.Description>
     </Dialog.Header>
-    {#if $workspacesLoading}
+    {#if workspacesQuery.isPending}
       <p class="text-sm text-muted-foreground" role="status">Loading active workspaces…</p>
-    {:else if $workspacesError}
-      <p class="text-sm text-destructive" role="alert">{$workspacesError}</p>
+    {:else if workspacesQuery.error}
+      <p class="text-sm text-destructive" role="alert">{workspacesQuery.error.message}</p>
     {:else if activeWorkspaces.length}
       <ul class="max-h-[28rem] space-y-2 overflow-auto">
         {#each activeWorkspaces as workspace (workspace.workspace_id)}

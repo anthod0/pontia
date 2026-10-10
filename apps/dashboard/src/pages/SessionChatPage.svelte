@@ -40,12 +40,9 @@
   } from '../stores/optimisticInbox'
   import { chatDraft, clearChatDraft } from '../stores/chatDraft'
   import {
-    loadWorkspaces,
+    createWorkspacesStore,
     refreshWorkspaceGitStatus,
-    workspaceGitStatuses,
-    workspaceGitStatusErrors,
-    workspaces,
-  } from '../stores/workspaces'
+  } from '../queries/workspaces'
   import {
     cancelInboxMessage,
     dismissInboxMessage,
@@ -106,6 +103,12 @@
   let transcriptResolving = false
   let selectedSessionLoadGeneration = 0
   let destroyed = false
+  let selectedWorkspaceId = ''
+  let gitStatusWorkspaceId = ''
+  let selectedSessionGitStatus: import('../api/types').WorkspaceGitStatusView | undefined
+  let workspaceGitStatusErrors: Record<string, string> = {}
+
+  const workspacesQuery = createWorkspacesStore()
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
   const BRANCH_INTERRUPT_TIMEOUT_MS = 30_000
@@ -117,7 +120,6 @@
     selectSession(selectedSessionId || null)
     autofocusComposer = claimChatEntryAutofocus(`/chat/${selectedSessionId}`)
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
-    void loadWorkspaces()
     if (selectedSessionId) void loadSelectedSession(selectedSessionId)
   })
 
@@ -142,8 +144,14 @@
   $: if ($timelineState.sessionId === selectedSessionId && !$timelineState.loading && $timelineState.status !== 'idle') {
     historyObserverEnabled = true
   }
-  $: selectedSessionGitStatus = selectedSession ? $workspaceGitStatuses[selectedSession.workspace_id ?? ''] : undefined
-  $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, $workspaces, selectedSessionGitStatus, $workspaceGitStatusErrors) : []
+  $: selectedWorkspaceId = selectedSession?.workspace_id ?? ''
+  $: if (selectedWorkspaceId !== gitStatusWorkspaceId) {
+    gitStatusWorkspaceId = selectedWorkspaceId
+    selectedSessionGitStatus = undefined
+    workspaceGitStatusErrors = {}
+  }
+  $: workspaces = $workspacesQuery.data ?? []
+  $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, workspaces, selectedSessionGitStatus, workspaceGitStatusErrors) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
   $: transcriptMessages = $timelineState.sessionId === selectedSessionId
     ? timelineItemsToChatMessages($timelineState.items, $timelineState.mode === 'tree')
@@ -262,21 +270,20 @@
     return detail?.session.session_id === selectedSessionId ? detail.session : null
   }
 
-  const gitStatusRefreshesInFlight = new Map<string, Promise<void>>()
-
   async function refreshSessionGitStatus(session: SessionView | null): Promise<void> {
     const workspaceId = session?.workspace_id
     if (!workspaceId) return
-    const existing = gitStatusRefreshesInFlight.get(workspaceId)
-    if (existing) {
-      await existing
-      return
+    try {
+      const status = await refreshWorkspaceGitStatus(workspaceId)
+      if (selectedWorkspaceId === workspaceId) selectedSessionGitStatus = status
+      const { [workspaceId]: _, ...remainingErrors } = workspaceGitStatusErrors
+      workspaceGitStatusErrors = remainingErrors
+    } catch (error) {
+      workspaceGitStatusErrors = {
+        ...workspaceGitStatusErrors,
+        [workspaceId]: error instanceof Error ? error.message : String(error),
+      }
     }
-    const refresh = refreshWorkspaceGitStatus(workspaceId).finally(() => {
-      if (gitStatusRefreshesInFlight.get(workspaceId) === refresh) gitStatusRefreshesInFlight.delete(workspaceId)
-    })
-    gitStatusRefreshesInFlight.set(workspaceId, refresh)
-    await refresh
   }
 
   async function refreshCurrentSessionGitStatus(): Promise<void> {

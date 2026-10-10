@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { token } from "../src/stores/auth";
 import { dashboardStreamCursor, sseStatus } from "../src/stores/connection";
 import { loadSessionDetail, selectSession, sessionDetail } from "../src/stores/sessions";
-import { loadWorkspaces, workspaces } from "../src/stores/workspaces";
+import { fetchWorkspaces } from "../src/queries/workspaces";
 import { startEventStream, stopEventStream } from "../src/services/eventStream";
 import { refreshDashboardSnapshot } from "../src/services/dashboardSnapshotRefresh";
 import { selectedTaskId, task } from "../src/stores/tasks";
@@ -13,6 +13,7 @@ import * as timeline from "../src/stores/timeline";
 import { queryClient } from "../src/queries/queryClient";
 import type { SessionOverviewSnapshot } from "../src/queries/sessionOverview";
 import SessionOverviewQueryHarness from "./components/SessionOverviewQueryHarness.svelte";
+import WorkspacesQueryHarness from "./components/WorkspacesQueryHarness.svelte";
 
 let online = false;
 let state = "busy";
@@ -36,7 +37,6 @@ beforeEach(() => {
   queryClient.clear();
   token.set("test-token");
   selectSession("current");
-  workspaces.set([]);
   dashboardStreamCursor.set(null);
   timeline.resetTimelineState();
   vi.stubGlobal(
@@ -125,13 +125,19 @@ test.each(["pi", "codex"])(
   async (client) => {
     clientType = client;
     let overview: SessionOverviewSnapshot | undefined;
+    let workspaceViews: { workspace_id: string }[] = [];
     render(SessionOverviewQueryHarness, {
       onSnapshot: (snapshot) => {
         overview = snapshot;
       },
     });
+    render(WorkspacesQueryHarness, {
+      onData: (workspaces) => {
+        workspaceViews = workspaces;
+      },
+    });
     await vi.waitFor(() => expect(requests).toContain("/sessions/overview"));
-    await Promise.all([loadSessionDetail("current"), loadWorkspaces()]);
+    await Promise.allSettled([loadSessionDetail("current"), fetchWorkspaces()]);
     startEventStream();
     await vi.waitFor(() => expect(get(sseStatus)).toBe("reconnecting"));
     expect(get(sessionDetail)).toBeNull();
@@ -144,7 +150,7 @@ test.each(["pi", "codex"])(
       expect(overview?.active[0]?.client_type).toBe(client);
       expect(overview?.active[0]?.state).toBe("idle");
     });
-    expect(get(workspaces)[0]?.workspace_id).toBe("workspace");
+    expect(workspaceViews[0]?.workspace_id).toBe("workspace");
     expect(get(sessionDetail)?.turns[0]?.state).toBe("completed");
     const readCount = requests.length;
     await vi.advanceTimersByTimeAsync(10_000);
@@ -190,11 +196,12 @@ test("recovers the Session independently of native history failure and uses its 
     latestTurnId: "turn-2",
     topology: true,
   });
-  expect(get(workspaces)).toHaveLength(1);
 });
 
 test("keeps a recovery requested during an older snapshot in flight", async () => {
   online = true;
+  render(WorkspacesQueryHarness, { onData: () => undefined });
+  await fetchWorkspaces();
   const { listWorkspaces } = await import("../src/api/client");
   const api = await import("../src/api/client");
   let release!: () => void;
@@ -213,7 +220,7 @@ test("keeps a recovery requested during an older snapshot in flight", async () =
   release();
   await Promise.all([first, recovery]);
   expect(get(sessionDetail)?.session.state).toBe("idle");
-  expect(get(workspaces)).toHaveLength(1);
+  expect(queryClient.getQueryData(["workspaces", "list"])).toHaveLength(1);
   expect(requests.filter((path) => path === "/sessions/current")).toHaveLength(2);
 });
 

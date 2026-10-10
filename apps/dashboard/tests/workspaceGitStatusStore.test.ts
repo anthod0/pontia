@@ -1,49 +1,41 @@
-import { get } from "svelte/store";
+import { fireEvent, render, screen } from "@testing-library/svelte";
 import { beforeEach, expect, test, vi } from "vitest";
-import {
-  loadWorkspaceGitStatus,
-  refreshWorkspaceGitStatus,
-  workspaceGitStatuses,
-} from "../src/stores/workspaces";
+import { queryClient } from "../src/queries/queryClient";
+import WorkspaceGitStatusQueryHarness from "./components/WorkspaceGitStatusQueryHarness.svelte";
 
 const mocks = vi.hoisted(() => ({
   getWorkspaceGitStatus: vi.fn(),
-  refreshWorkspaceGitStatusApi: vi.fn(),
+  refreshWorkspaceGitStatus: vi.fn(),
 }));
 
 vi.mock("../src/api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/api/client")>()),
   getWorkspaceGitStatus: mocks.getWorkspaceGitStatus,
-  refreshWorkspaceGitStatus: mocks.refreshWorkspaceGitStatusApi,
+  refreshWorkspaceGitStatus: mocks.refreshWorkspaceGitStatus,
 }));
 
 beforeEach(() => {
-  workspaceGitStatuses.set({});
-  mocks.getWorkspaceGitStatus.mockReset();
-  mocks.refreshWorkspaceGitStatusApi.mockReset();
-});
-
-test("stores git status by workspace id after read and refresh", async () => {
-  mocks.getWorkspaceGitStatus.mockResolvedValue({
+  queryClient.clear();
+  mocks.getWorkspaceGitStatus.mockReset().mockResolvedValue({
     workspace_id: "workspace-1",
     state: "unknown",
     observed_at: null,
   });
-  mocks.refreshWorkspaceGitStatusApi.mockResolvedValue({
+  mocks.refreshWorkspaceGitStatus.mockReset().mockResolvedValue({
     workspace_id: "workspace-1",
     state: "observed",
     branch: "main",
     clean: false,
     observed_at: "now",
   });
+});
 
-  await loadWorkspaceGitStatus("workspace-1");
-  expect(get(workspaceGitStatuses)["workspace-1"]).toMatchObject({ state: "unknown" });
+test("refreshing git status replaces the cached workspace status", async () => {
+  render(WorkspaceGitStatusQueryHarness, { workspaceId: "workspace-1" });
+  expect(await screen.findByText("unknown")).toBeInTheDocument();
 
-  await refreshWorkspaceGitStatus("workspace-1");
-  expect(get(workspaceGitStatuses)["workspace-1"]).toMatchObject({
-    state: "observed",
-    branch: "main",
-    clean: false,
-  });
+  await fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+  expect(await screen.findByText("observed")).toBeInTheDocument();
+  expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith("workspace-1");
 });

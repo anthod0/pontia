@@ -19,7 +19,7 @@ import {
 import { loadTasks, refreshTask, selectedTaskId } from "../stores/tasks";
 import { loadSessionDetail, selectedSessionId } from "../stores/sessions";
 import { invalidateQueriesForDashboardEvent } from "../queries/dashboardInvalidation";
-import { loadWorkspaces } from "../stores/workspaces";
+import { invalidateWorkspaceQueries } from "../queries/workspaces";
 import {
   loadWorkflows,
   refreshWorkflow,
@@ -46,7 +46,7 @@ const refreshScheduler = createDashboardRefreshScheduler({
   getSelectedWorkflowId: () => get(selectedWorkflowId),
   getSelectedWorkflowSessionIds: selectedWorkflowSessionIds,
   loadTasks,
-  loadWorkspaces,
+  loadWorkspaces: invalidateWorkspaceQueries,
   loadWorkflows: () => loadWorkflows({ showLoading: false }),
   refreshTask,
   refreshSession: (sessionId) => loadSessionDetail(sessionId, { showLoading: false }),

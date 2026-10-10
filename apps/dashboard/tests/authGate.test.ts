@@ -42,11 +42,8 @@ vi.mock("../src/stores/tasks", () => ({
   tasksLoading: writable(false),
   loadTasks: mocks.loadTasks,
 }));
-vi.mock("../src/stores/workspaces", () => ({
-  workspaces: writable([]),
-  workspacesError: writable(null),
-  workspacesLoading: writable(false),
-  loadWorkspaces: mocks.loadWorkspaces,
+vi.mock("../src/queries/workspaces", () => ({
+  fetchWorkspaces: mocks.loadWorkspaces,
 }));
 vi.mock("../src/stores/workflows", () => ({
   loadWorkflows: mocks.loadWorkflows,

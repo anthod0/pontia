@@ -839,7 +839,7 @@ test("shows the initial prompt immediately after starting a chat while timeline 
   });
   render(NewChatPage);
 
-  await user.type(screen.getByPlaceholderText("What should the agent do?"), "hi");
+  await user.type(await screen.findByPlaceholderText("What should the agent do?"), "hi");
   await fireEvent.click(screen.getByRole("button", { name: /start session/i }));
 
   await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/chat/session-new"));

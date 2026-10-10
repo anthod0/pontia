@@ -10,7 +10,7 @@
   import { exitSuggestion, type SuggestionProps } from '@tiptap/suggestion'
   import FileIcon from 'phosphor-svelte/lib/FileIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
-  import { listWorkspaceFilePickerEntries } from '../../../api/client'
+  import { fetchWorkspaceFilePickerEntries } from '../../../queries/workspaces'
   import type { FilePickerFileView } from '../../../api/types'
   import { cn } from '$lib/utils.js'
   import { promptDocumentFromText, promptTextFromDocument } from '../../file-picker/fileMention'
@@ -195,7 +195,7 @@
           enabled: () => Boolean(workspaceId && !disabled),
           search: async (query, signal) => {
             if (!workspaceId) return []
-            const result = await listWorkspaceFilePickerEntries(workspaceId, query, { limit: 20, signal })
+            const result = await fetchWorkspaceFilePickerEntries(workspaceId, query, { limit: 20, signal })
             return result.files
           },
           onSuggestion: updatePicker,

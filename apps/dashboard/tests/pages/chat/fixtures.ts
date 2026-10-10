@@ -14,6 +14,8 @@ import type {
 } from "../../../src/api/types";
 import { optimisticInitialMessages } from "../../../src/stores/optimisticChat";
 import { chatDraft } from "../../../src/stores/chatDraft";
+import { queryClient } from "../../../src/queries/queryClient";
+import { resetChatEntryAutofocus } from "../../../src/lib/chatEntryAutofocus";
 import {
   beginInboxSubmission,
   confirmInboxSubmission,
@@ -116,6 +118,7 @@ const mocks = vi.hoisted(() => {
       mocks.timelineState.set(mocks.timelineStateValue({ sessionId }));
     }),
     loadWorkspaces: vi.fn(async () => undefined),
+    listWorkspaces: vi.fn(async () => mocks.workspaces.get()),
     loadWorkspaceRoots: vi.fn(async () => mocks.workspaceRoots.get()),
     browseWorkspaceRoot: vi.fn(async (): Promise<WorkspaceDirectoryListingView> => ({
       root_id: "root-1",
@@ -135,10 +138,30 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("../../../src/api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/api/client")>()),
+  listWorkspaces: mocks.listWorkspaces,
   listWorkspaceRoots: vi.fn(async () => mocks.workspaceRoots.get()),
   listWorkspaceRootEntries: vi.fn(async (rootId: string, path = "") =>
     mocks.browseWorkspaceRoot(rootId, path),
   ),
+  getWorkspaceGitStatus: vi.fn(
+    async (workspaceId: string) =>
+      mocks.workspaceGitStatuses.get()[workspaceId] ?? {
+        workspace_id: workspaceId,
+        state: "unknown",
+        observed_at: null,
+      },
+  ),
+  refreshWorkspaceGitStatus: vi.fn(async (workspaceId: string) => {
+    await mocks.refreshWorkspaceGitStatus(workspaceId);
+    return (
+      mocks.workspaceGitStatuses.get()[workspaceId] ?? {
+        workspace_id: workspaceId,
+        state: "unknown",
+        observed_at: null,
+      }
+    );
+  }),
+  registerWorkspace: (input: unknown) => mocks.registerWorkspace(input),
 }));
 
 vi.mock("../../../src/stores/sessions", () => ({
@@ -178,21 +201,6 @@ vi.mock("../../../src/stores/sessions", () => ({
   terminateSession: mocks.terminateSession,
   updateSessionTitle: mocks.updateSessionTitle,
   createSession: mocks.createSession,
-}));
-
-vi.mock("../../../src/stores/workspaces", () => ({
-  workspaces: mocks.workspaces,
-  workspacesLoading: mocks.workspacesLoading,
-  workspacesInitialized: mocks.workspacesInitialized,
-  workspacesError: mocks.workspacesError,
-  workspaceRoots: mocks.workspaceRoots,
-  workspaceGitStatuses: mocks.workspaceGitStatuses,
-  workspaceGitStatusErrors: mocks.workspaceGitStatusErrors,
-  loadWorkspaces: mocks.loadWorkspaces,
-  loadWorkspaceRoots: mocks.loadWorkspaceRoots,
-  browseWorkspaceRoot: mocks.browseWorkspaceRoot,
-  registerWorkspace: mocks.registerWorkspace,
-  refreshWorkspaceGitStatus: mocks.refreshWorkspaceGitStatus,
 }));
 
 vi.mock("../../../src/stores/timeline", () => ({
@@ -340,6 +348,8 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  queryClient.clear();
+  resetChatEntryAutofocus();
   if (!Element.prototype.hasPointerCapture) Element.prototype.hasPointerCapture = () => false;
   if (!Element.prototype.releasePointerCapture)
     Element.prototype.releasePointerCapture = () => undefined;
@@ -368,6 +378,7 @@ beforeEach(() => {
   mocks.liveOutputListeners.clear();
   mocks.pathParams = {};
   mocks.loadSessionDetail.mockReset().mockResolvedValue(null);
+  mocks.listWorkspaces.mockReset().mockImplementation(async () => mocks.workspaces.get());
   mocks.loadSessionTimeline.mockReset();
   mocks.refreshSessionTimeline.mockReset().mockResolvedValue(true);
   mocks.restoreSessionTimeline.mockReset().mockResolvedValue(false);

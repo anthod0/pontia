@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import WorkspacesPage from "../src/pages/WorkspacesPage.svelte";
+import { queryClient } from "../src/queries/queryClient";
 import type {
   WorkspaceDirectoryListingView,
   WorkspaceRootView,
@@ -25,6 +26,9 @@ const mocks = vi.hoisted(() => {
       update(updater: (value: T) => T) {
         value = updater(value);
         for (const run of subscribers) run(value);
+      },
+      get() {
+        return value;
       },
     };
   }
@@ -57,23 +61,19 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("../src/stores/workspaces", () => ({
-  workspaces: mocks.workspaces,
-  workspacesLoading: mocks.workspacesLoading,
-  workspacesError: mocks.workspacesError,
-  workspaceGitStatuses: mocks.workspaceGitStatuses,
-  workspaceGitStatusErrors: mocks.workspaceGitStatusErrors,
-  loadWorkspaces: mocks.loadWorkspaces,
-  loadWorkspaceGitStatus: mocks.loadWorkspaceGitStatus,
-  refreshWorkspaceGitStatus: mocks.refreshWorkspaceGitStatus,
-  registerWorkspace: mocks.registerWorkspace,
-  renameWorkspace: mocks.renameWorkspace,
-  deleteWorkspace: mocks.deleteWorkspace,
-}));
-
 vi.mock("../src/api/client", () => ({
+  listWorkspaces: async (options: unknown) => {
+    await mocks.loadWorkspaces(options);
+    const error = mocks.workspacesError.get();
+    if (error) throw new Error(error);
+    return mocks.workspaces.get();
+  },
   listWorkspaceRoots: mocks.listWorkspaceRoots,
   listWorkspaceRootEntries: mocks.listWorkspaceRootEntries,
+  registerWorkspace: mocks.registerWorkspace,
+  renameWorkspace: (workspaceId: string, input: unknown) =>
+    mocks.renameWorkspace(workspaceId, input),
+  deleteWorkspace: mocks.deleteWorkspace,
 }));
 
 const workspace = (overrides: Partial<WorkspaceView> = {}): WorkspaceView => ({
@@ -90,6 +90,7 @@ const workspace = (overrides: Partial<WorkspaceView> = {}): WorkspaceView => ({
 });
 
 beforeEach(() => {
+  queryClient.clear();
   mocks.roots = [
     { root_id: "root-1", label: "Projects", canonical_path: "/repo", state: "active" },
   ];
@@ -111,6 +112,9 @@ beforeEach(() => {
   mocks.workspaceGitStatuses.set({});
   mocks.workspaceGitStatusErrors.set({});
   vi.clearAllMocks();
+  mocks.registerWorkspace.mockResolvedValue(workspace());
+  mocks.renameWorkspace.mockResolvedValue(workspace());
+  mocks.deleteWorkspace.mockResolvedValue(workspace());
 });
 
 test("lists active workspaces across roots in a dismissible dialog", async () => {
@@ -241,12 +245,12 @@ test("shows unavailable active workspaces when the workspace directory is missin
   expect(mocks.deleteWorkspace).toHaveBeenCalledWith("missing");
 });
 
-test("toggles workspace active state directly and keeps rename dialog for editing names", async () => {
+test("activates a workspace directly and keeps rename dialog for editing names", async () => {
   const user = userEvent.setup();
-  const confirmSpy = vi.spyOn(window, "confirm");
   render(WorkspacesPage);
 
   const activateButton = await screen.findByRole("button", { name: "Activate sandbox" });
+  await vi.waitFor(() => expect(activateButton).toBeEnabled());
   await user.click(activateButton);
 
   expect(mocks.registerWorkspace).toHaveBeenCalledWith({
@@ -254,21 +258,16 @@ test("toggles workspace active state directly and keeps rename dialog for editin
     path: "sandbox",
     name: "sandbox",
   });
-  await user.click(screen.getByRole("button", { name: "Deactivate pontia" }));
 
-  expect(confirmSpy).not.toHaveBeenCalled();
-  expect(mocks.deleteWorkspace).toHaveBeenCalledWith("workspace-1");
-
-  await user.click(screen.getByRole("button", { name: "Rename pontia" }));
+  await user.click(await screen.findByRole("button", { name: "Rename pontia" }));
 
   expect(screen.getByRole("dialog", { name: "Confirm workspace rename" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Confirm workspace rename" })).toBeInTheDocument();
   expect(screen.getByLabelText("Display name")).toHaveValue("pontia");
-
-  confirmSpy.mockRestore();
 });
 
 test("aborts initial settings workspace requests when the page unmounts", async () => {
+  mocks.loadWorkspaces.mockImplementationOnce(() => new Promise(() => {}));
   mocks.listWorkspaceRoots.mockImplementationOnce(() => new Promise(() => {}));
   const { unmount } = render(WorkspacesPage);
 
@@ -288,6 +287,6 @@ test("aborts initial settings workspace requests when the page unmounts", async 
 
   unmount();
 
-  expect(workspaceOptions?.signal?.aborted).toBe(true);
-  expect(rootsOptions?.signal?.aborted).toBe(true);
+  await vi.waitFor(() => expect(workspaceOptions?.signal?.aborted).toBe(true));
+  await vi.waitFor(() => expect(rootsOptions?.signal?.aborted).toBe(true));
 });

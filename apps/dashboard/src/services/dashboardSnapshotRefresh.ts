@@ -8,7 +8,6 @@ import {
   refreshSessionTimeline,
   timelineState,
 } from "../stores/timeline";
-import { loadWorkspaces } from "../stores/workspaces";
 import { loadWorkflows, refreshWorkflow, selectedWorkflowId } from "../stores/workflows";
 
 export type DashboardSnapshotRefreshReason = "sse_open" | "sse_fallback";
@@ -60,7 +59,6 @@ async function refreshDashboardSnapshotNow(): Promise<void> {
   const workflowId = get(selectedWorkflowId);
   const refreshes: Promise<unknown>[] = [
     invalidateQueriesAfterConnectionRecovery(),
-    loadWorkspaces(),
     loadTasks(),
     loadWorkflows({ showLoading: false }),
   ];

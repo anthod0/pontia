@@ -18,15 +18,30 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Table from '$lib/components/ui/table/index.js'
   import type { WorkspaceDirectoryEntryView, WorkspaceView } from '../../api/types'
-  import { deleteWorkspace, loadWorkspaces, registerWorkspace, renameWorkspace, workspaces, workspacesError, workspacesLoading } from '../../stores/workspaces'
-  import { createWorkspaceRootEntriesQuery, createWorkspaceRootsQuery } from '../../queries/workspaces'
+  import {
+    createDeleteWorkspaceMutation,
+    createRegisterWorkspaceMutation,
+    createRenameWorkspaceMutation,
+    createWorkspaceRootEntriesQuery,
+    createWorkspaceRootsQuery,
+    createWorkspacesQuery,
+  } from '../../queries/workspaces'
 
+  interface Props {
+    workspaceViews?: WorkspaceView[]
+  }
+
+  let { workspaceViews }: Props = $props()
   let mounted = $state(false)
   let rootId = $state('')
   let browsePath = $state('')
   let openedPath = $state('')
+  const workspacesQuery = createWorkspacesQuery()
   const rootsQuery = createWorkspaceRootsQuery()
   const entriesQuery = createWorkspaceRootEntriesQuery(() => rootId, () => openedPath)
+  const registerWorkspaceMutation = createRegisterWorkspaceMutation()
+  const renameWorkspaceMutation = createRenameWorkspaceMutation()
+  const deleteWorkspaceMutation = createDeleteWorkspaceMutation()
   let registeringPath = $state<string | null>(null)
   let registerError = $state<string | null>(null)
   let deletingWorkspaceId = $state<string | null>(null)
@@ -40,15 +55,12 @@
 
   onMount(() => {
     mounted = true
-    const controller = new AbortController()
-
-    void loadWorkspaces({ signal: controller.signal })
     return () => {
       mounted = false
-      controller.abort()
     }
   })
 
+  let workspaces = $derived(workspaceViews ?? workspacesQuery.data ?? [])
   let workspaceRoots = $derived(rootsQuery.data ?? [])
   let listing = $derived(entriesQuery.data ?? null)
   let selectedRoot = $derived(workspaceRoots.find((root) => root.root_id === rootId) ?? null)
@@ -67,7 +79,7 @@
   })
 
   async function refreshAll(): Promise<void> {
-    await Promise.all([loadWorkspaces(), rootsQuery.refetch()])
+    await Promise.all([workspacesQuery.refetch(), rootsQuery.refetch()])
     if (rootId) await entriesQuery.refetch()
   }
 
@@ -86,7 +98,7 @@
   }
 
   function workspaceForCanonicalPath(canonicalPath: string): WorkspaceView | null {
-    return $workspaces.find((workspace) => workspace.canonical_path === canonicalPath || workspace.display_path === canonicalPath) ?? null
+    return workspaces.find((workspace) => workspace.canonical_path === canonicalPath || workspace.display_path === canonicalPath) ?? null
   }
 
   function workspaceForEntry(entry: WorkspaceDirectoryEntryView): WorkspaceView | null {
@@ -108,7 +120,7 @@
     registeringPath = path
     registerError = null
     try {
-      await registerWorkspace({ root_id: rootId, path, name: workspaceName(path) })
+      await registerWorkspaceMutation.mutateAsync({ root_id: rootId, path, name: workspaceName(path) })
       if (mounted) await openPath(browsePath)
     } catch (error) {
       registerError = errorMessage(error)
@@ -135,7 +147,10 @@
     savingRename = true
     renameError = null
     try {
-      await renameWorkspace(renamingWorkspace.workspace_id, { name: renamingWorkspaceName.trim() || null })
+      await renameWorkspaceMutation.mutateAsync({
+        workspaceId: renamingWorkspace.workspace_id,
+        input: { name: renamingWorkspaceName.trim() || null },
+      })
       renameWorkspaceDialogOpen = false
       renamingWorkspace = null
       renamingWorkspaceName = ''
@@ -152,7 +167,7 @@
     deletingWorkspaceId = workspaceId
     deleteError = null
     try {
-      await deleteWorkspace(workspaceId)
+      await deleteWorkspaceMutation.mutateAsync(workspaceId)
       if (rootId) await openPath(browsePath)
     } catch (error) {
       deleteError = errorMessage(error)
@@ -167,11 +182,11 @@
 </script>
 
 <div class="space-y-4">
-  {#if $workspacesError || rootsQuery.error || entriesQuery.error || registerError || renameError || deleteError}
+  {#if workspacesQuery.error || rootsQuery.error || entriesQuery.error || registerError || renameError || deleteError}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />
       <Alert.Title>Workspace error</Alert.Title>
-      <Alert.Description>{deleteError ?? renameError ?? registerError ?? entriesQuery.error?.message ?? rootsQuery.error?.message ?? $workspacesError}</Alert.Description>
+      <Alert.Description>{deleteError ?? renameError ?? registerError ?? entriesQuery.error?.message ?? rootsQuery.error?.message ?? workspacesQuery.error?.message}</Alert.Description>
     </Alert.Root>
   {/if}
 
@@ -228,7 +243,7 @@
 
         <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
           {#if selectedRoot}<p>Root state: {selectedRoot.state} · {selectedRoot.canonical_path ?? 'virtual root'}</p>{/if}
-          {#if $workspacesLoading}<p>Loading active workspaces…</p>{:else}<p>{$workspaces.length} active workspace{$workspaces.length === 1 ? '' : 's'}</p>{/if}
+          {#if workspacesQuery.isPending}<p>Loading active workspaces…</p>{:else}<p>{workspaces.length} active workspace{workspaces.length === 1 ? '' : 's'}</p>{/if}
         </div>
 
         {#if entriesQuery.isFetching && !listing}
@@ -247,7 +262,7 @@
                 variant={currentWorkspace ? 'secondary' : 'outline'}
                 aria-label={currentWorkspace ? `Deactivate ${currentWorkspace.name ?? workspaceName(listing.path)}` : `Activate ${workspaceName(listing.path)}`}
                 onclick={() => void togglePath(listing?.path ?? '', currentWorkspace)}
-                disabled={registeringPath !== null || deletingWorkspaceId !== null}
+                disabled={(workspaceViews === undefined && workspacesQuery.isPending) || registeringPath !== null || deletingWorkspaceId !== null}
               >
                 {registeringPath === listing.path ? 'Activating…' : currentWorkspace ? 'Deactivate' : 'Activate current directory'}
               </Button>
@@ -277,7 +292,7 @@
                             aria-label={entry.is_workspace ? `Deactivate ${entry.name}` : `Activate ${entry.name}`}
                             title={entry.is_workspace ? 'Remove workspace registration' : 'Register as workspace'}
                             onclick={() => void togglePath(entry.path, entryWorkspace)}
-                            disabled={registeringPath !== null || deletingWorkspaceId !== null}
+                            disabled={(workspaceViews === undefined && workspacesQuery.isPending) || registeringPath !== null || deletingWorkspaceId !== null}
                           >
                             {registeringPath === entry.path ? 'Activating…' : entry.is_workspace ? 'Deactivate' : 'Activate'}
                           </Button>
