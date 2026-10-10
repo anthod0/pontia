@@ -18,7 +18,7 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as Kbd from '$lib/components/ui/kbd/index.js'
   import { cn } from '$lib/utils.js'
-  import { archiveSession, loadMoreSidebarSessions, pinSession, sidebarActiveSessions, sidebarPinnedSessions, sidebarRecentSessions, sidebarSessionsError, sidebarSessionsLoading, sidebarSessionsLoadingMore, sidebarSessionsNextCursor, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
+  import { archiveSession, loadMoreSessionOverview, pinSession, sessionOverviewActiveSessions, sessionOverviewError, sessionOverviewListSessions, sessionOverviewLoading, sessionOverviewLoadingMore, sessionOverviewNextCursor, sessionOverviewPinnedSessions, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
@@ -45,10 +45,10 @@
   let pinnedSessionsOpen = $state(true)
   let recentSessionsOpen = $state(true)
   let recentSessions = $derived.by(() => {
-    const activeIds = new Set($sidebarActiveSessions.map((session) => session.session_id))
+    const activeIds = new Set($sessionOverviewActiveSessions.map((session) => session.session_id))
     return [
-      ...$sidebarActiveSessions,
-      ...$sidebarRecentSessions.filter((session) => !activeIds.has(session.session_id)),
+      ...$sessionOverviewActiveSessions,
+      ...$sessionOverviewListSessions.filter((session) => !activeIds.has(session.session_id)),
     ]
   })
 
@@ -174,10 +174,10 @@
     const target = event.currentTarget as HTMLElement
     if (
       target.scrollHeight - target.scrollTop - target.clientHeight <= 80 &&
-      $sidebarSessionsNextCursor &&
-      !$sidebarSessionsLoadingMore
+      $sessionOverviewNextCursor &&
+      !$sessionOverviewLoadingMore
     ) {
-      void loadMoreSidebarSessions()
+      void loadMoreSessionOverview()
     }
   }
 </script>
@@ -297,8 +297,8 @@
     </Sidebar.Group>
 
     <div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden" onscroll={handleSessionListScroll}>
-      {#if $sidebarSessionsError}
-        <p role="alert" class="px-4 py-2 text-xs text-destructive">Sidebar refresh failed. {$sidebarSessionsError}</p>
+      {#if $sessionOverviewError}
+        <p role="alert" class="px-4 py-2 text-xs text-destructive">Sidebar refresh failed. {$sessionOverviewError}</p>
       {/if}
       <Sidebar.Group>
         <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
@@ -315,13 +315,13 @@
         {#if pinnedSessionsOpen}
           <Sidebar.GroupContent class="pr-1">
             <Sidebar.Menu>
-              {#if $sidebarSessionsLoading && !$sidebarPinnedSessions.length}
+              {#if $sessionOverviewLoading && !$sessionOverviewPinnedSessions.length}
                 <Sidebar.MenuSkeleton />
-              {:else if $sidebarPinnedSessions.length}
-                {#each $sidebarPinnedSessions as session}
+              {:else if $sessionOverviewPinnedSessions.length}
+                {#each $sessionOverviewPinnedSessions as session}
                   {@render sessionMenuItem(session, `pinned:${session.session_id}`)}
                 {/each}
-              {:else if !$sidebarSessionsError}
+              {:else if !$sessionOverviewError}
                 <Sidebar.MenuItem>
                   <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No pinned sessions</div>
                 </Sidebar.MenuItem>
@@ -358,19 +358,19 @@
       {#if recentSessionsOpen}
         <Sidebar.GroupContent class="pr-1">
           <Sidebar.Menu>
-            {#if $sidebarSessionsLoading && !recentSessions.length}
+            {#if $sessionOverviewLoading && !recentSessions.length}
               <Sidebar.MenuSkeleton />
               <Sidebar.MenuSkeleton />
             {:else if recentSessions.length}
               {#each recentSessions as session}
                 {@render sessionMenuItem(session, `recent:${session.session_id}`)}
               {/each}
-            {:else if !$sidebarSessionsError}
+            {:else if !$sessionOverviewError}
               <Sidebar.MenuItem>
                 <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No recent sessions</div>
               </Sidebar.MenuItem>
             {/if}
-            {#if $sidebarSessionsLoadingMore}
+            {#if $sessionOverviewLoadingMore}
               <Sidebar.MenuSkeleton />
             {/if}
           </Sidebar.Menu>

@@ -9,7 +9,7 @@
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { lastConnectionError, sseStatus } from '../../stores/connection'
-  import { sessionDetail, sessionDetailError, sidebarActiveSessions, sidebarPinnedSessions, sidebarRecentSessions } from '../../stores/sessions'
+  import { sessionDetail, sessionDetailError, sessionOverviewActiveSessions, sessionOverviewListSessions, sessionOverviewPinnedSessions } from '../../stores/sessions'
 
   let currentPath = $state(dashboardRelativePath())
 
@@ -32,9 +32,9 @@
   const sseTitle = $derived($lastConnectionError ? `SSE ${$sseStatus}: ${$lastConnectionError}` : `SSE ${$sseStatus}`)
   const sessionId = $derived(currentPath.startsWith('/chat/') ? decodeURIComponent(currentPath.split('/')[2] ?? '') : '')
   const overviewSession = $derived(
-    $sidebarPinnedSessions.find((item) => item.session_id === sessionId)
-      ?? $sidebarActiveSessions.find((item) => item.session_id === sessionId)
-      ?? $sidebarRecentSessions.find((item) => item.session_id === sessionId)
+    $sessionOverviewPinnedSessions.find((item) => item.session_id === sessionId)
+      ?? $sessionOverviewActiveSessions.find((item) => item.session_id === sessionId)
+      ?? $sessionOverviewListSessions.find((item) => item.session_id === sessionId)
       ?? null
   )
   const session = $derived(sessionId

@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
   import { navigate } from '$lib/navigation'
-  import { sidebarActiveSessions, sidebarPinnedSessions, sidebarRecentSessions } from '../../stores/sessions'
+  import { sessionOverviewActiveSessions, sessionOverviewListSessions, sessionOverviewPinnedSessions } from '../../stores/sessions'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import * as Kbd from '$lib/components/ui/kbd/index.js'
   import { adjacentActiveSessionId, isChatRoute, sessionIdAtShortcutIndex, sessionIdFromChatPath } from '$lib/shortcuts/sessionNavigation'
@@ -46,7 +46,7 @@
   function openNewChatFromCurrentRoute(): void {
     const currentSessionId = sessionIdFromChatPath(window.location.pathname)
     const currentSession = currentSessionId
-      ? [get(sidebarPinnedSessions), get(sidebarActiveSessions), get(sidebarRecentSessions)]
+      ? [get(sessionOverviewPinnedSessions), get(sessionOverviewActiveSessions), get(sessionOverviewListSessions)]
           .flat()
           .find((session) => session.session_id === currentSessionId)
       : null
@@ -86,11 +86,11 @@
 
     let sessionId: string | null = null
     if (key === 'j') {
-      sessionId = adjacentActiveSessionId(get(sidebarActiveSessions), sessionIdFromChatPath(window.location.pathname), 1)
+      sessionId = adjacentActiveSessionId(get(sessionOverviewActiveSessions), sessionIdFromChatPath(window.location.pathname), 1)
     } else if (key === 'k') {
-      sessionId = adjacentActiveSessionId(get(sidebarActiveSessions), sessionIdFromChatPath(window.location.pathname), -1)
+      sessionId = adjacentActiveSessionId(get(sessionOverviewActiveSessions), sessionIdFromChatPath(window.location.pathname), -1)
     } else if (/^[1-9]$/.test(key)) {
-      sessionId = sessionIdAtShortcutIndex(get(sidebarActiveSessions), key)
+      sessionId = sessionIdAtShortcutIndex(get(sessionOverviewActiveSessions), key)
     }
 
     if (!sessionId) return

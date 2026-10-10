@@ -30,23 +30,23 @@ const mocks = vi.hoisted(() => {
     loadingMore: writableStore(false),
     error: writableStore<string | null>(null),
     nextCursor: writableStore<string | null>(null),
-    loadOverview: vi.fn(async () => [] as SessionView[]),
+    activateOverview: vi.fn(() => () => undefined),
     loadMore: vi.fn(async () => [] as SessionView[]),
   };
 });
 
 vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
 vi.mock("../../src/stores/sessions", () => ({
-  sessionsPageActiveSessions: mocks.active,
+  activateSessionsPageOverview: mocks.activateOverview,
+  sessionOverviewActiveSessions: mocks.active,
+  sessionOverviewListSessions: mocks.list,
+  sessionOverviewPinnedSessions: mocks.pinned,
+  sessionOverviewLoading: mocks.loading,
+  sessionOverviewLoadingMore: mocks.loadingMore,
+  sessionOverviewError: mocks.error,
+  sessionOverviewNextCursor: mocks.nextCursor,
   sessionsPageArchivedSessions: mocks.archived,
-  sessionsPageListSessions: mocks.list,
-  sessionsPagePinnedSessions: mocks.pinned,
-  sessionsPageLoading: mocks.loading,
-  sessionsPageLoadingMore: mocks.loadingMore,
-  sessionsPageError: mocks.error,
-  sessionsPageNextCursor: mocks.nextCursor,
-  loadSessionsPageOverview: mocks.loadOverview,
-  loadMoreSessionsPageSessions: mocks.loadMore,
+  loadMoreSessionOverview: mocks.loadMore,
 }));
 
 const session = (overrides: Partial<SessionView> = {}): SessionView => ({
@@ -94,7 +94,7 @@ test("shows active sessions before the list and removes active duplicates", asyn
 
   render(SessionsPage);
 
-  expect(mocks.loadOverview).toHaveBeenCalledOnce();
+  expect(mocks.activateOverview).toHaveBeenCalledOnce();
   expect(within(screen.getByTestId("active-session-list")).getByRole("button")).toHaveTextContent(
     "Active session",
   );

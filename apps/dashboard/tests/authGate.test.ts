@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   startEventStream: vi.fn(),
   stopEventStream: vi.fn(),
   loadAgentProfiles: vi.fn(async () => undefined),
-  loadSidebarSessionOverview: vi.fn(async () => undefined),
+  loadSessionOverview: vi.fn(async () => undefined),
   loadTasks: vi.fn(async () => undefined),
   loadWorkspaces: vi.fn(async () => undefined),
   loadWorkflows: vi.fn(async () => undefined),
@@ -25,17 +25,17 @@ vi.mock("../src/stores/agentProfiles", () => ({
   loadAgentProfiles: mocks.loadAgentProfiles,
 }));
 vi.mock("../src/stores/sessions", () => ({
-  sidebarPinnedSessions: writable([]),
-  sidebarActiveSessions: writable([]),
-  sidebarRecentSessions: writable([]),
-  sidebarSessionsLoading: writable(false),
-  sidebarSessionsLoadingMore: writable(false),
-  sidebarSessionsError: writable(null),
-  sidebarSessionsNextCursor: writable(null),
+  sessionOverviewPinnedSessions: writable([]),
+  sessionOverviewActiveSessions: writable([]),
+  sessionOverviewListSessions: writable([]),
+  sessionOverviewLoading: writable(false),
+  sessionOverviewLoadingMore: writable(false),
+  sessionOverviewError: writable(null),
+  sessionOverviewNextCursor: writable(null),
   sessionDetail: writable(null),
   sessionDetailError: writable(null),
-  loadSidebarSessionOverview: mocks.loadSidebarSessionOverview,
-  loadMoreSidebarSessions: vi.fn(async () => []),
+  loadSessionOverview: mocks.loadSessionOverview,
+  loadMoreSessionOverview: vi.fn(async () => []),
 }));
 vi.mock("../src/stores/tasks", () => ({
   tasks: writable([]),
@@ -87,7 +87,7 @@ test("blocks dashboard routes behind a token prompt when no token is saved", asy
   expect(mocks.loadTasks).not.toHaveBeenCalled();
   expect(mocks.loadWorkspaces).not.toHaveBeenCalled();
   expect(mocks.loadAgentProfiles).not.toHaveBeenCalled();
-  expect(mocks.loadSidebarSessionOverview).not.toHaveBeenCalled();
+  expect(mocks.loadSessionOverview).not.toHaveBeenCalled();
   expect(mocks.startEventStream).not.toHaveBeenCalled();
 });
 
@@ -166,7 +166,7 @@ test("saves the entered token and opens the requested dashboard route after vali
   expect(mocks.loadTasks).toHaveBeenCalled();
   expect(mocks.loadWorkspaces).toHaveBeenCalled();
   expect(mocks.loadAgentProfiles).toHaveBeenCalled();
-  expect(mocks.loadSidebarSessionOverview).toHaveBeenCalled();
+  expect(mocks.loadSessionOverview).toHaveBeenCalled();
   expect(mocks.startEventStream).toHaveBeenCalled();
 });
 

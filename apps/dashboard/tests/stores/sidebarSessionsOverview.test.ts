@@ -56,7 +56,7 @@ beforeEach(() => {
   Object.values(api).forEach((mock) => mock.mockReset());
 });
 
-test("loads the sidebar overview groups and keeps its next-page cursor", async () => {
+test("loads the shared overview groups without requesting archived sessions", async () => {
   const pinned = session("pinned");
   const active = session("active");
   const recent = session("recent");
@@ -69,12 +69,16 @@ test("loads the sidebar overview groups and keeps its next-page cursor", async (
   });
   const store = await import("../../src/stores/sessions");
 
-  await store.loadSidebarSessionOverview();
+  await store.loadSessionOverview();
 
-  expect(get(store.sidebarPinnedSessions)).toEqual([pinned]);
-  expect(get(store.sidebarActiveSessions)).toEqual([active]);
-  expect(get(store.sidebarRecentSessions)).toEqual([active, recent]);
-  expect(get(store.sidebarSessionsNextCursor)).toBe("cursor-2");
+  expect(get(store.sessionOverviewPinnedSessions)).toEqual([pinned]);
+  expect(get(store.sessionOverviewActiveSessions)).toEqual([active]);
+  expect(get(store.sessionOverviewListSessions)).toEqual([active, recent]);
+  expect(get(store.sessionOverviewNextCursor)).toBe("cursor-2");
+  expect(api.getSessionOverview).toHaveBeenCalledWith({
+    sections: ["pinned", "active", "list"],
+    limit: 50,
+  });
 });
 
 test("appends cursor pages without duplicating sessions", async () => {
@@ -92,15 +96,15 @@ test("appends cursor pages without duplicating sessions", async () => {
       groups: { list: { sessions: [first, second], next_cursor: null } },
     });
   const store = await import("../../src/stores/sessions");
-  await store.loadSidebarSessionOverview();
+  await store.loadSessionOverview();
 
-  await store.loadMoreSidebarSessions();
+  await store.loadMoreSessionOverview();
 
-  expect(get(store.sidebarRecentSessions).map((item) => item.session_id)).toEqual([
+  expect(get(store.sessionOverviewListSessions).map((item) => item.session_id)).toEqual([
     "first",
     "second",
   ]);
-  expect(get(store.sidebarSessionsNextCursor)).toBeNull();
+  expect(get(store.sessionOverviewNextCursor)).toBeNull();
   expect(api.getSessionOverview).toHaveBeenLastCalledWith({
     sections: ["list"],
     limit: 50,
@@ -123,13 +127,40 @@ test("loads all session page overview groups", async () => {
   });
   const store = await import("../../src/stores/sessions");
 
-  await store.loadSessionsPageOverview();
+  const deactivate = store.activateSessionsPageOverview();
+  await vi.waitFor(() => expect(get(store.sessionsPageArchivedSessions)).toEqual([archived]));
 
-  expect(get(store.sessionsPageActiveSessions)).toEqual([active]);
-  expect(get(store.sessionsPageListSessions)).toEqual([active, recent]);
-  expect(get(store.sessionsPageArchivedSessions)).toEqual([archived]);
-  expect(get(store.sessionsPagePinnedSessions)).toEqual([pinned]);
-  expect(get(store.sessionsPageNextCursor)).toBe("cursor-2");
+  expect(get(store.sessionOverviewActiveSessions)).toEqual([active]);
+  expect(get(store.sessionOverviewListSessions)).toEqual([active, recent]);
+  expect(get(store.sessionOverviewPinnedSessions)).toEqual([pinned]);
+  expect(get(store.sessionOverviewNextCursor)).toBe("cursor-2");
+  expect(api.getSessionOverview).toHaveBeenCalledWith({
+    sections: ["pinned", "active", "list", "archived"],
+    limit: 50,
+  });
+  deactivate();
+});
+
+test("stops requesting archived sessions after the sessions page closes", async () => {
+  api.getSessionOverview.mockResolvedValue({
+    groups: {
+      pinned: { sessions: [] },
+      active: { sessions: [] },
+      list: { sessions: [], next_cursor: null },
+      archived: { sessions: [] },
+    },
+  });
+  const store = await import("../../src/stores/sessions");
+
+  const deactivate = store.activateSessionsPageOverview();
+  await vi.waitFor(() => expect(api.getSessionOverview).toHaveBeenCalledTimes(1));
+  deactivate();
+  await store.loadSessionOverview();
+
+  expect(api.getSessionOverview).toHaveBeenLastCalledWith({
+    sections: ["pinned", "active", "list"],
+    limit: 50,
+  });
 });
 
 test("appends session page list pages without duplicates", async () => {
@@ -148,13 +179,15 @@ test("appends session page list pages without duplicates", async () => {
       groups: { list: { sessions: [first, second], next_cursor: null } },
     });
   const store = await import("../../src/stores/sessions");
-  await store.loadSessionsPageOverview();
+  const deactivate = store.activateSessionsPageOverview();
+  await vi.waitFor(() => expect(get(store.sessionOverviewListSessions)).toEqual([first]));
 
-  await store.loadMoreSessionsPageSessions();
+  await store.loadMoreSessionOverview();
 
-  expect(get(store.sessionsPageListSessions).map((item) => item.session_id)).toEqual([
+  expect(get(store.sessionOverviewListSessions).map((item) => item.session_id)).toEqual([
     "first",
     "second",
   ]);
-  expect(get(store.sessionsPageNextCursor)).toBeNull();
+  expect(get(store.sessionOverviewNextCursor)).toBeNull();
+  deactivate();
 });

@@ -11,33 +11,31 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
   import {
-    loadMoreSessionsPageSessions,
-    loadSessionsPageOverview,
-    sessionsPageActiveSessions,
+    activateSessionsPageOverview,
+    loadMoreSessionOverview,
+    sessionOverviewActiveSessions,
+    sessionOverviewError,
+    sessionOverviewListSessions,
+    sessionOverviewLoading,
+    sessionOverviewLoadingMore,
+    sessionOverviewNextCursor,
+    sessionOverviewPinnedSessions,
     sessionsPageArchivedSessions,
-    sessionsPageError,
-    sessionsPageListSessions,
-    sessionsPageLoading,
-    sessionsPageLoadingMore,
-    sessionsPageNextCursor,
-    sessionsPagePinnedSessions,
   } from '../stores/sessions'
   import type { SessionView } from '../api/types'
 
   let selectedTab = $state('all')
-  const activeIds = $derived(new Set($sessionsPageActiveSessions.map((session) => session.session_id)))
-  const listSessions = $derived($sessionsPageListSessions.filter((session) => !activeIds.has(session.session_id)))
+  const activeIds = $derived(new Set($sessionOverviewActiveSessions.map((session) => session.session_id)))
+  const listSessions = $derived($sessionOverviewListSessions.filter((session) => !activeIds.has(session.session_id)))
   const selectedCount = $derived(
     selectedTab === 'archived'
       ? $sessionsPageArchivedSessions.length
       : selectedTab === 'pinned'
-        ? $sessionsPagePinnedSessions.length
-        : $sessionsPageActiveSessions.length + listSessions.length,
+        ? $sessionOverviewPinnedSessions.length
+        : $sessionOverviewActiveSessions.length + listSessions.length,
   )
 
-  onMount(() => {
-    void loadSessionsPageOverview()
-  })
+  onMount(activateSessionsPageOverview)
 
   function openSession(sessionId: string): void {
     navigate(`/chat/${sessionId}`)
@@ -87,15 +85,15 @@
     <Badge variant="secondary">{selectedCount}</Badge>
   </div>
 
-  {#if $sessionsPageError}
+  {#if $sessionOverviewError}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />
       <Alert.Title>Could not load sessions</Alert.Title>
-      <Alert.Description>{$sessionsPageError}</Alert.Description>
+      <Alert.Description>{$sessionOverviewError}</Alert.Description>
     </Alert.Root>
   {/if}
 
-  {#if $sessionsPageLoading}
+  {#if $sessionOverviewLoading}
     <Card.Root>
       <Card.Content class="py-6 text-sm text-muted-foreground" role="status">Loading sessions…</Card.Content>
     </Card.Root>
@@ -108,11 +106,11 @@
       </Tabs.List>
 
       <Tabs.Content value="all" class="space-y-6 pt-4">
-        {#if $sessionsPageActiveSessions.length || listSessions.length}
-          {#if $sessionsPageActiveSessions.length}
+        {#if $sessionOverviewActiveSessions.length || listSessions.length}
+          {#if $sessionOverviewActiveSessions.length}
             <section class="space-y-2" aria-labelledby="active-sessions-title">
               <h2 id="active-sessions-title" class="text-sm font-semibold">Active</h2>
-              {@render sessionList($sessionsPageActiveSessions, 'active-session-list')}
+              {@render sessionList($sessionOverviewActiveSessions, 'active-session-list')}
             </section>
           {/if}
 
@@ -123,15 +121,15 @@
             {:else}
               <p class="py-4 text-sm text-muted-foreground">No other sessions.</p>
             {/if}
-            {#if $sessionsPageNextCursor}
+            {#if $sessionOverviewNextCursor}
               <div class="flex justify-center pt-2">
-                <Button variant="outline" disabled={$sessionsPageLoadingMore} onclick={() => void loadMoreSessionsPageSessions()}>
-                  {$sessionsPageLoadingMore ? 'Loading…' : 'Load more'}
+                <Button variant="outline" disabled={$sessionOverviewLoadingMore} onclick={() => void loadMoreSessionOverview()}>
+                  {$sessionOverviewLoadingMore ? 'Loading…' : 'Load more'}
                 </Button>
               </div>
             {/if}
           </section>
-        {:else if !$sessionsPageError}
+        {:else if !$sessionOverviewError}
           {@render emptyState('No sessions', 'Start a new chat to create a session.')}
         {/if}
       </Tabs.Content>
@@ -145,8 +143,8 @@
       </Tabs.Content>
 
       <Tabs.Content value="pinned" class="pt-4">
-        {#if $sessionsPagePinnedSessions.length}
-          {@render sessionList($sessionsPagePinnedSessions, 'pinned-session-list')}
+        {#if $sessionOverviewPinnedSessions.length}
+          {@render sessionList($sessionOverviewPinnedSessions, 'pinned-session-list')}
         {:else}
           {@render emptyState('No pinned sessions', 'Pinned sessions will appear here.')}
         {/if}

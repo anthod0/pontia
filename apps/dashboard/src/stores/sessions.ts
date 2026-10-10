@@ -51,21 +51,14 @@ export interface SessionConsoleDetail {
   events: EventView[];
 }
 
-export const sidebarPinnedSessions = writable<SessionView[]>([]);
-export const sidebarActiveSessions = writable<SessionView[]>([]);
-export const sidebarRecentSessions = writable<SessionView[]>([]);
-export const sidebarSessionsLoading = writable(false);
-export const sidebarSessionsLoadingMore = writable(false);
-export const sidebarSessionsError = writable<string | null>(null);
-export const sidebarSessionsNextCursor = writable<string | null>(null);
-export const sessionsPagePinnedSessions = writable<SessionView[]>([]);
+export const sessionOverviewPinnedSessions = writable<SessionView[]>([]);
+export const sessionOverviewActiveSessions = writable<SessionView[]>([]);
+export const sessionOverviewListSessions = writable<SessionView[]>([]);
+export const sessionOverviewLoading = writable(false);
+export const sessionOverviewLoadingMore = writable(false);
+export const sessionOverviewError = writable<string | null>(null);
+export const sessionOverviewNextCursor = writable<string | null>(null);
 export const sessionsPageArchivedSessions = writable<SessionView[]>([]);
-export const sessionsPageActiveSessions = writable<SessionView[]>([]);
-export const sessionsPageListSessions = writable<SessionView[]>([]);
-export const sessionsPageLoading = writable(false);
-export const sessionsPageLoadingMore = writable(false);
-export const sessionsPageError = writable<string | null>(null);
-export const sessionsPageNextCursor = writable<string | null>(null);
 export const sessionDetail = writable<SessionConsoleDetail | null>(null);
 export const sessionDetailLoading = writable(false);
 export const sessionDetailError = writable<string | null>(null);
@@ -81,34 +74,24 @@ let detailRequest: {
   dirty: boolean;
   promise: Promise<SessionConsoleDetail | null>;
 } | null = null;
-let sidebarOverviewRequest = 0;
-let sidebarLoadMorePromise: Promise<SessionView[]> | null = null;
-let sessionsPageOverviewRequest = 0;
-let sessionsPageLoadMorePromise: Promise<SessionView[]> | null = null;
+let sessionOverviewRequest = 0;
+let sessionOverviewLoadMorePromise: Promise<SessionView[]> | null = null;
+let sessionsPageOverviewConsumers = 0;
 
 export function resetSessions(): void {
   selectionGeneration += 1;
   detailRequest?.controller.abort();
   detailRequest = null;
-  sidebarOverviewRequest += 1;
-  sidebarLoadMorePromise = null;
-  sidebarPinnedSessions.set([]);
-  sidebarActiveSessions.set([]);
-  sidebarRecentSessions.set([]);
-  sidebarSessionsLoading.set(false);
-  sidebarSessionsLoadingMore.set(false);
-  sidebarSessionsError.set(null);
-  sidebarSessionsNextCursor.set(null);
-  sessionsPageOverviewRequest += 1;
-  sessionsPageLoadMorePromise = null;
-  sessionsPagePinnedSessions.set([]);
+  sessionOverviewRequest += 1;
+  sessionOverviewLoadMorePromise = null;
+  sessionOverviewPinnedSessions.set([]);
+  sessionOverviewActiveSessions.set([]);
+  sessionOverviewListSessions.set([]);
+  sessionOverviewLoading.set(false);
+  sessionOverviewLoadingMore.set(false);
+  sessionOverviewError.set(null);
+  sessionOverviewNextCursor.set(null);
   sessionsPageArchivedSessions.set([]);
-  sessionsPageActiveSessions.set([]);
-  sessionsPageListSessions.set([]);
-  sessionsPageLoading.set(false);
-  sessionsPageLoadingMore.set(false);
-  sessionsPageError.set(null);
-  sessionsPageNextCursor.set(null);
   selectedSessionId.set(null);
   sessionDetail.set(null);
   sessionDetailLoading.set(false);
@@ -132,152 +115,92 @@ type SessionDetailLoadOptions = {
   showLoading?: boolean;
 };
 
-const defaultSidebarSessionListLimit = 50;
+const defaultSessionOverviewListLimit = 50;
 
-export async function loadSidebarSessionOverview(
+export function activateSessionsPageOverview(): () => void {
+  sessionsPageOverviewConsumers += 1;
+  void loadSessionOverview();
+  return () => {
+    sessionsPageOverviewConsumers = Math.max(0, sessionsPageOverviewConsumers - 1);
+  };
+}
+
+export async function loadSessionOverview(
   options: {
     showLoading?: boolean;
   } = {},
 ): Promise<SessionView[]> {
-  const request = ++sidebarOverviewRequest;
-  sidebarLoadMorePromise = null;
+  const request = ++sessionOverviewRequest;
+  sessionOverviewLoadMorePromise = null;
   const showLoading = options.showLoading ?? true;
-  if (showLoading) sidebarSessionsLoading.set(true);
-  sidebarSessionsLoadingMore.set(false);
-  sidebarSessionsError.set(null);
+  if (showLoading) sessionOverviewLoading.set(true);
+  sessionOverviewLoadingMore.set(false);
+  sessionOverviewError.set(null);
   try {
+    const sections: ("pinned" | "archived" | "active" | "list")[] = ["pinned", "active", "list"];
+    if (sessionsPageOverviewConsumers > 0) sections.push("archived");
     const overview = await getSessionOverview({
-      sections: ["pinned", "active", "list"],
-      limit: defaultSidebarSessionListLimit,
+      sections,
+      limit: defaultSessionOverviewListLimit,
     });
     const pinned = overview.groups.pinned?.sessions ?? [];
-    const active = overview.groups.active?.sessions ?? [];
-    const recent = overview.groups.list?.sessions ?? [];
-    if (request === sidebarOverviewRequest) {
-      sidebarPinnedSessions.set(pinned);
-      sidebarActiveSessions.set(active);
-      sidebarRecentSessions.set(recent);
-      sidebarSessionsNextCursor.set(overview.groups.list?.next_cursor ?? null);
-    }
-    return [...active, ...recent];
-  } catch (error) {
-    if (request === sidebarOverviewRequest) {
-      sidebarSessionsError.set(error instanceof Error ? error.message : String(error));
-    }
-    return [];
-  } finally {
-    if (request === sidebarOverviewRequest) sidebarSessionsLoading.set(false);
-  }
-}
-
-export function loadMoreSidebarSessions(): Promise<SessionView[]> {
-  if (sidebarLoadMorePromise) return sidebarLoadMorePromise;
-  const cursor = get(sidebarSessionsNextCursor);
-  if (!cursor) return Promise.resolve([]);
-
-  const request = sidebarOverviewRequest;
-  sidebarSessionsLoadingMore.set(true);
-  sidebarSessionsError.set(null);
-  const promise = getSessionOverview({
-    sections: ["list"],
-    limit: defaultSidebarSessionListLimit,
-    cursor,
-  })
-    .then((overview) => {
-      const loaded = overview.groups.list?.sessions ?? [];
-      if (request !== sidebarOverviewRequest) return [];
-      sidebarRecentSessions.update((current) => {
-        const byId = new Map(current.map((session) => [session.session_id, session]));
-        for (const session of loaded) byId.set(session.session_id, session);
-        return [...byId.values()];
-      });
-      sidebarSessionsNextCursor.set(overview.groups.list?.next_cursor ?? null);
-      return loaded;
-    })
-    .catch((error) => {
-      if (request === sidebarOverviewRequest) {
-        sidebarSessionsError.set(error instanceof Error ? error.message : String(error));
-      }
-      return [];
-    })
-    .finally(() => {
-      if (request === sidebarOverviewRequest) sidebarSessionsLoadingMore.set(false);
-      if (sidebarLoadMorePromise === promise) sidebarLoadMorePromise = null;
-    });
-  sidebarLoadMorePromise = promise;
-  return promise;
-}
-
-const defaultSessionsPageListLimit = 50;
-
-export async function loadSessionsPageOverview(): Promise<SessionView[]> {
-  const request = ++sessionsPageOverviewRequest;
-  sessionsPageLoadMorePromise = null;
-  sessionsPageLoading.set(true);
-  sessionsPageLoadingMore.set(false);
-  sessionsPageError.set(null);
-  try {
-    const overview = await getSessionOverview({
-      sections: ["active", "list", "archived", "pinned"],
-      limit: defaultSessionsPageListLimit,
-    });
-    const pinned = overview.groups.pinned?.sessions ?? [];
-    const archived = overview.groups.archived?.sessions ?? [];
     const active = overview.groups.active?.sessions ?? [];
     const list = overview.groups.list?.sessions ?? [];
-    if (request === sessionsPageOverviewRequest) {
-      sessionsPagePinnedSessions.set(pinned);
-      sessionsPageArchivedSessions.set(archived);
-      sessionsPageActiveSessions.set(active);
-      sessionsPageListSessions.set(list);
-      sessionsPageNextCursor.set(overview.groups.list?.next_cursor ?? null);
+    if (request === sessionOverviewRequest) {
+      sessionOverviewPinnedSessions.set(pinned);
+      sessionOverviewActiveSessions.set(active);
+      sessionOverviewListSessions.set(list);
+      sessionOverviewNextCursor.set(overview.groups.list?.next_cursor ?? null);
+      if (overview.groups.archived) {
+        sessionsPageArchivedSessions.set(overview.groups.archived.sessions);
+      }
     }
     return [...active, ...list];
   } catch (error) {
-    if (request === sessionsPageOverviewRequest) {
-      sessionsPageError.set(error instanceof Error ? error.message : String(error));
+    if (request === sessionOverviewRequest) {
+      sessionOverviewError.set(error instanceof Error ? error.message : String(error));
     }
     return [];
   } finally {
-    if (request === sessionsPageOverviewRequest) sessionsPageLoading.set(false);
+    if (request === sessionOverviewRequest) sessionOverviewLoading.set(false);
   }
 }
 
-export function loadMoreSessionsPageSessions(): Promise<SessionView[]> {
-  if (sessionsPageLoadMorePromise) return sessionsPageLoadMorePromise;
-  const cursor = get(sessionsPageNextCursor);
+export function loadMoreSessionOverview(): Promise<SessionView[]> {
+  if (sessionOverviewLoadMorePromise) return sessionOverviewLoadMorePromise;
+  const cursor = get(sessionOverviewNextCursor);
   if (!cursor) return Promise.resolve([]);
 
-  const request = sessionsPageOverviewRequest;
-  sessionsPageLoadingMore.set(true);
-  sessionsPageError.set(null);
+  const request = sessionOverviewRequest;
+  sessionOverviewLoadingMore.set(true);
+  sessionOverviewError.set(null);
   const promise = getSessionOverview({
     sections: ["list"],
-    limit: defaultSessionsPageListLimit,
+    limit: defaultSessionOverviewListLimit,
     cursor,
   })
     .then((overview) => {
       const loaded = overview.groups.list?.sessions ?? [];
-      if (request !== sessionsPageOverviewRequest) return [];
-      sessionsPageListSessions.update((current) => {
+      if (request !== sessionOverviewRequest) return [];
+      sessionOverviewListSessions.update((current) => {
         const byId = new Map(current.map((session) => [session.session_id, session]));
         for (const session of loaded) byId.set(session.session_id, session);
         return [...byId.values()];
       });
-      sessionsPageNextCursor.set(overview.groups.list?.next_cursor ?? null);
+      sessionOverviewNextCursor.set(overview.groups.list?.next_cursor ?? null);
       return loaded;
     })
     .catch((error) => {
-      if (request === sessionsPageOverviewRequest) {
-        sessionsPageError.set(error instanceof Error ? error.message : String(error));
+      if (request === sessionOverviewRequest) {
+        sessionOverviewError.set(error instanceof Error ? error.message : String(error));
       }
       return [];
     })
     .finally(() => {
-      if (request === sessionsPageOverviewRequest) sessionsPageLoadingMore.set(false);
-      if (sessionsPageLoadMorePromise === promise) sessionsPageLoadMorePromise = null;
+      if (request === sessionOverviewRequest) sessionOverviewLoadingMore.set(false);
+      if (sessionOverviewLoadMorePromise === promise) sessionOverviewLoadMorePromise = null;
     });
-  sessionsPageLoadMorePromise = promise;
+  sessionOverviewLoadMorePromise = promise;
   return promise;
 }
 
@@ -362,7 +285,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
     inboxMessages: [],
     events: [],
   });
-  void loadSidebarSessionOverview({ showLoading: false });
+  void loadSessionOverview({ showLoading: false });
   return result;
 }
 
@@ -384,7 +307,7 @@ function applySessionManagementResult(session: SessionView): void {
 
 async function refreshAfterSessionManagement(session: SessionView): Promise<SessionView> {
   applySessionManagementResult(session);
-  await loadSidebarSessionOverview({ showLoading: false });
+  await loadSessionOverview({ showLoading: false });
   return session;
 }
 
@@ -404,13 +327,13 @@ export async function unarchiveSession(sessionId: string): Promise<SessionView> 
   const session = await apiUnarchiveSession(sessionId);
   if (session.archived_at) throw new Error("The session is still archived. Refresh and try again.");
   applySessionManagementResult(session);
-  await loadSidebarSessionOverview({ showLoading: false });
+  await loadSessionOverview({ showLoading: false });
   return session;
 }
 
 async function refreshSidebarAndSelectedSession(sessionId: string): Promise<void> {
   await Promise.all([
-    loadSidebarSessionOverview({ showLoading: false }),
+    loadSessionOverview({ showLoading: false }),
     get(selectedSessionId) === sessionId
       ? loadSessionDetail(sessionId, { showLoading: false })
       : Promise.resolve(null),
