@@ -84,7 +84,9 @@ fn producer(
             turn_id: turn_id.into(),
             stream_id: stream_id.into(),
         },
-        runtime_id: runtime_id.into(),
+        source: pontia_application::LiveOutputSource::RuntimeBound {
+            runtime_id: runtime_id.into(),
+        },
     }
 }
 

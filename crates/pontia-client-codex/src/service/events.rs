@@ -5,6 +5,11 @@ use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 use std::collections::HashSet;
 
+pub(super) struct ObservedTurn {
+    pub turn: Value,
+    pub notification_boundary: u64,
+}
+
 impl CodexService {
     pub(super) async fn ready(
         &self,
@@ -35,12 +40,22 @@ impl CodexService {
         connection: &crate::runtime::protocol::Connection,
         thread: &str,
     ) -> Result<Option<Vec<Value>>> {
+        self.observed_turns(connection, thread).await.map(|turns| {
+            turns.map(|turns| turns.into_iter().map(|snapshot| snapshot.turn).collect())
+        })
+    }
+
+    pub(super) async fn observed_turns(
+        &self,
+        connection: &crate::runtime::protocol::Connection,
+        thread: &str,
+    ) -> Result<Option<Vec<ObservedTurn>>> {
         let mut cursor = Value::Null;
         let mut seen = HashSet::new();
         let mut turns = Vec::new();
         loop {
-            let response = match connection
-                .call(
+            let (response, sequence) = match connection
+                .call_observed(
                     "thread/turns/list",
                     json!({"threadId":thread,"cursor":cursor,"limit":100,"sortDirection":"asc","itemsView":"full"}),
                 )
@@ -57,7 +72,10 @@ impl CodexService {
             let page = response["data"]
                 .as_array()
                 .ok_or_else(|| Error::Domain("Codex turns/list has no data".into()))?;
-            turns.extend(page.iter().cloned());
+            turns.extend(page.iter().cloned().map(|turn| ObservedTurn {
+                turn,
+                notification_boundary: sequence,
+            }));
             cursor = response["nextCursor"].clone();
             if cursor.is_null() {
                 break;

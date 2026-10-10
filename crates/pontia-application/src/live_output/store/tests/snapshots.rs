@@ -171,3 +171,37 @@ fn another_stream_cannot_replace_an_active_turn_stream() {
         "stream_1"
     );
 }
+
+#[test]
+fn text_deltas_cannot_reuse_tool_item_identity() {
+    let store = LiveOutputStore::default();
+    let items = vec![LiveOutputItem::ToolCall {
+        item_id: "tool".into(),
+        call_id: "call".into(),
+        tool_name: "read".into(),
+        arguments: serde_json::json!({"path":"file"}),
+        managed_tool_use: None,
+    }];
+    store
+        .replace_snapshot(LiveOutputSnapshotReplacement {
+            producer: producer(),
+            sequence: 1,
+            items: items.clone(),
+        })
+        .unwrap();
+    assert!(
+        store
+            .publish_batch(LiveOutputBatch {
+                producer: producer(),
+                first_sequence: 2,
+                updates: vec![LiveOutputUpdate::AssistantTextDelta {
+                    item_id: "tool".into(),
+                    delta: "text".into()
+                }],
+            })
+            .is_err()
+    );
+    let snapshot = store.snapshot("sess_1", "turn_1").unwrap();
+    assert_eq!(snapshot.sequence, 1);
+    assert_eq!(snapshot.items, items);
+}

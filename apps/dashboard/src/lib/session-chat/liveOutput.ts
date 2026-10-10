@@ -211,10 +211,10 @@ function liveItemsToMessages(overlay: LiveOutputOverlay): SessionChatMessage[] {
 
 function applyUpdate(items: LiveOutputItem[], update: LiveOutputUpdate): void {
   if (update.type === "assistant_text_delta") {
-    const last = items.at(-1);
-    if (last?.kind === "assistant_text" && last.item_id === update.item_id) {
-      last.text += update.delta;
-    } else if (!items.some((item) => item.item_id === update.item_id)) {
+    const existing = items.find((item) => item.item_id === update.item_id);
+    if (existing?.kind === "assistant_text") {
+      existing.text += update.delta;
+    } else if (!existing) {
       items.push({ kind: "assistant_text", item_id: update.item_id, text: update.delta });
     }
     return;

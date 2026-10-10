@@ -62,7 +62,13 @@ pub struct LiveOutputIdentity {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveOutputProducer {
     pub identity: LiveOutputIdentity,
-    pub runtime_id: String,
+    pub source: LiveOutputSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LiveOutputSource {
+    RuntimeBound { runtime_id: String },
+    SharedBackend,
 }
 
 #[derive(Debug, Clone)]

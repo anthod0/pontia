@@ -1,4 +1,4 @@
-use super::CodexService;
+use super::{CodexService, live_output::CodexLiveOutput};
 use crate::runtime::{CodexRuntime, SubscriptionState};
 use pontia_application::AgentBindingService;
 use pontia_core::{Error, Result};
@@ -9,12 +9,14 @@ use tokio::sync::{broadcast, watch};
 pub struct CodexObserver {
     service: CodexService,
     root: PathBuf,
+    live_output: pontia_application::LiveOutputService,
 }
 
 impl CodexObserver {
-    pub fn new(event_ingest: pontia_application::EventIngestService, root: PathBuf) -> Self {
+    pub fn new(state: &pontia_application::AppState, root: PathBuf) -> Self {
         Self {
-            service: CodexService::new(event_ingest),
+            service: CodexService::new(state.event_ingest_service()),
+            live_output: state.live_output(),
             root,
         }
     }
@@ -75,6 +77,8 @@ impl CodexObserver {
         let connection = runtime.connection().await?;
         let mut events = connection.events.subscribe();
         let mut threads = HashMap::<String, String>::new();
+        let mut output = CodexLiveOutput::new(self.live_output.clone());
+        let mut restored = std::collections::HashSet::new();
         let mut interval = tokio::time::interval(Duration::from_secs(2));
         loop {
             tokio::select! {
@@ -87,20 +91,33 @@ impl CodexObserver {
                     }
                     let bindings: Vec<(String,String)> = sqlx::query_as("SELECT a.session_id,a.client_session_key FROM agent_bindings a JOIN sessions s USING(session_id) WHERE a.client_type='codex' AND s.state<>'exited'")
                         .fetch_all(&self.service.pool).await?;
+                    threads.clear();
                     for (session, thread) in bindings {
                         threads.insert(thread.clone(), session.clone());
                         if CodexService::has_confirmed_unsubscribe(&session).await { continue; }
-                        if matches!(runtime.subscription(&session).await, Some(SubscriptionState::Available | SubscriptionState::ExitPending)) { continue; }
+                        if runtime.subscription(&session).await == Some(SubscriptionState::ExitPending) { continue; }
+                        if runtime.subscription(&session).await == Some(SubscriptionState::Available) {
+                            if restored.insert(session.clone()) {
+                                let _operation = runtime.lock_session(&session).await;
+                                output.reconcile(&self.service, &runtime, &session, &thread).await;
+                            }
+                            continue;
+                        }
                         let _operation = runtime.lock_session(&session).await;
                         if let Err(error) = self.service.subscribe(&session, &runtime, &thread).await {
                             runtime.clear_subscription(&session).await;
                             if !connection.is_connected() { return Err(error); }
                             tracing::warn!(%session, %error, "Codex thread reconciliation failed");
+                        } else if runtime.subscription(&session).await == Some(SubscriptionState::Available) {
+                            output.reconcile(&self.service, &runtime, &session, &thread).await;
+                            restored.insert(session.clone());
                         }
                     }
                     let exited: Vec<String> = sqlx::query_scalar("SELECT session_id FROM sessions WHERE client_type='codex' AND state='exited'")
                         .fetch_all(&self.service.pool).await?;
                     for session in exited {
+                        output.invalidate(&session);
+                        restored.remove(&session);
                         runtime.clear_subscription(&session).await;
                         CodexService::clear_confirmed_unsubscribe(&session).await;
                     }
@@ -109,6 +126,8 @@ impl CodexObserver {
                     let event = match event {
                         Ok(event) => event,
                         Err(broadcast::error::RecvError::Lagged(_)) => {
+                            for session in threads.values() { output.invalidate(session); }
+                            restored.clear();
                             runtime.clear_subscriptions().await;
                             continue;
                         }
@@ -133,6 +152,14 @@ impl CodexObserver {
                             if let Some(turns) = self.service.turns(&connection, thread).await? {
                                 self.service.reconcile_turns(&session, &runtime, &turns).await?;
                                 runtime.set_subscription(&session, SubscriptionState::Available).await;
+                                let _operation = runtime.lock_session(&session).await;
+                                output.reconcile(&self.service, &runtime, &session, thread).await;
+                                restored.insert(session.clone());
+                            }
+                        }
+                        Some("item/agentMessage/delta") => {
+                            if let Err(error) = output.delta(&self.service, &runtime, &session, &event).await {
+                                tracing::warn!(%session, %error, "Codex live output delta rejected");
                             }
                         }
                         Some("turn/completed") => {
@@ -140,6 +167,8 @@ impl CodexObserver {
                             self.service.turn_fact(&session, &event["params"]["turn"], "notification").await?;
                         }
                         Some("thread/status/changed") if event.pointer("/params/status/type").and_then(Value::as_str) == Some("notLoaded") => {
+                            output.invalidate(&session);
+                            restored.remove(&session);
                             runtime.clear_subscription(&session).await;
                         }
                         _ => {}

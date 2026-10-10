@@ -48,7 +48,8 @@ pub use ingestion::{
 pub use live_output::{
     LiveOutputBatch, LiveOutputClose, LiveOutputCloseReason, LiveOutputIdentity, LiveOutputItem,
     LiveOutputProducer, LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshot,
-    LiveOutputSnapshotReplacement, LiveOutputStreamEvent, LiveOutputSubscription, LiveOutputUpdate,
+    LiveOutputSnapshotReplacement, LiveOutputSource, LiveOutputStreamEvent, LiveOutputSubscription,
+    LiveOutputUpdate,
 };
 pub use queries::{ExternalQueryService, SessionOverviewRequest, SessionOverviewView};
 pub use raw_transcripts::{

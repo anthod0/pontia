@@ -327,19 +327,13 @@ fn stream_key(identity: &LiveOutputIdentity) -> StreamKey {
 fn apply_update(items: &mut Vec<LiveOutputItem>, update: LiveOutputUpdate) -> Result<()> {
     match update {
         LiveOutputUpdate::AssistantTextDelta { item_id, delta } => {
-            let extends_current = matches!(
-                items.last(),
-                Some(LiveOutputItem::AssistantText { item_id: current_id, .. }) if current_id == &item_id
-            );
-            if extends_current {
-                let Some(LiveOutputItem::AssistantText { text, .. }) = items.last_mut() else {
-                    unreachable!("checked current live output item")
+            if let Some(existing) = items.iter_mut().find(|item| item.item_id() == item_id) {
+                let LiveOutputItem::AssistantText { text, .. } = existing else {
+                    return Err(Error::StateConflict(format!(
+                        "live output item {item_id} is not assistant text"
+                    )));
                 };
                 text.push_str(&delta);
-            } else if items.iter().any(|item| item.item_id() == item_id) {
-                return Err(Error::StateConflict(format!(
-                    "assistant text item {item_id} is not the current output item"
-                )));
             } else {
                 items.push(LiveOutputItem::AssistantText {
                     item_id,

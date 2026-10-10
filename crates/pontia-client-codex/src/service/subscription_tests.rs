@@ -162,13 +162,10 @@ async fn first_input_restores_launch_data_and_binds_a_thread_without_a_runtime()
         .execute(&fixture.app.db())
         .await
         .unwrap();
-    super::CodexObserver::new(
-        fixture.app.event_ingest_service(),
-        fixture.root.path().into(),
-    )
-    .prepare()
-    .await
-    .unwrap();
+    super::CodexObserver::new(&fixture.app, fixture.root.path().into())
+        .prepare()
+        .await
+        .unwrap();
     let (control_root, launch_cwd): (String, String) = sqlx::query_as(
         "SELECT json_extract(metadata,'$.codex_control_root'),json_extract(metadata,'$.codex_launch_cwd') FROM sessions WHERE session_id=?",
     )
@@ -321,11 +318,7 @@ async fn observer_recovers_a_created_session_with_a_bound_unmaterialized_thread_
     fixture.rpc_errors.lock().await.clear();
     let (shutdown, receiver) = tokio::sync::watch::channel(false);
     let observer = tokio::spawn(
-        super::CodexObserver::new(
-            fixture.app.event_ingest_service(),
-            fixture.root.path().into(),
-        )
-        .run(receiver),
+        super::CodexObserver::new(&fixture.app, fixture.root.path().into()).run(receiver),
     );
 
     inbox

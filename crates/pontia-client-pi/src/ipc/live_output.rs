@@ -133,7 +133,7 @@ fn producer(
             turn_id,
             stream_id,
         },
-        runtime_id,
+        source: pontia_application::LiveOutputSource::RuntimeBound { runtime_id },
     }
 }
 

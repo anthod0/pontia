@@ -9,7 +9,7 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     report_turn_started: true,
     report_turn_finished: true,
     interrupt: true,
-    stream_output: false,
+    stream_output: true,
     heartbeat: false,
     timeline: false,
     topology: false,

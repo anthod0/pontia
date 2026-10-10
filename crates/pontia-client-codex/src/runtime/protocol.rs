@@ -19,8 +19,22 @@ use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 
 pub type Socket = WebSocketStream<UnixStream>;
 enum RpcResponse {
-    Success(Value),
+    Success(Value, u64),
     Rejected(Value),
+}
+
+#[derive(Clone, Debug)]
+pub struct Notification {
+    pub value: Value,
+    pub sequence: u64,
+}
+
+impl std::ops::Deref for Notification {
+    type Target = Value;
+
+    fn deref(&self) -> &Value {
+        &self.value
+    }
 }
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<RpcResponse>>>>>;
@@ -54,7 +68,7 @@ pub struct Connection {
     pub codex_home: PathBuf,
     pending: Pending,
     next_id: AtomicU64,
-    pub events: broadcast::Sender<Value>,
+    pub events: broadcast::Sender<Notification>,
 }
 
 impl Connection {
@@ -136,6 +150,7 @@ impl Connection {
             events: events.clone(),
         });
         let task = tokio::spawn(async move {
+            let mut notification_sequence = 0u64;
             loop {
                 tokio::select! {
                     message = incoming.recv() => {
@@ -148,12 +163,13 @@ impl Connection {
                                 let Ok(value) = serde_json::from_str::<Value>(&text) else { break };
                                 if value.get("method").is_some() {
                                     // Server requests belong to the official TUI. Observing never responds.
-                                    let _ = events.send(value);
+                                    notification_sequence += 1;
+                                    let _ = events.send(Notification { value, sequence: notification_sequence });
                                 } else if let Some(id) = value["id"].as_u64()
                                     && let Some(reply) = pending.lock().await.remove(&id) {
                                     let response = if let Some(error) = value.get("error") {
                                         RpcResponse::Rejected(error.clone())
-                                    } else { RpcResponse::Success(value["result"].clone()) };
+                                    } else { RpcResponse::Success(value["result"].clone(), notification_sequence) };
                                     let _ = reply.send(Ok(response));
                                 }
                             }
@@ -168,7 +184,10 @@ impl Connection {
             for (_, reply) in pending.lock().await.drain() {
                 let _ = reply.send(Err(Error::ControlUnknown("Codex disconnected".into())));
             }
-            let _ = events.send(json!({"method":"pontia/disconnected"}));
+            let _ = events.send(Notification {
+                value: json!({"method":"pontia/disconnected"}),
+                sequence: notification_sequence + 1,
+            });
         });
         *connection.task.lock().await = Some(task);
         Ok(connection)
@@ -179,6 +198,13 @@ impl Connection {
     }
 
     pub async fn call(&self, method: &str, params: Value) -> Result<Value> {
+        self.call_observed(method, params)
+            .await
+            .map(|(value, _)| value)
+    }
+
+    /// The boundary is captured by the socket reader, before waking the RPC caller.
+    pub(crate) async fn call_observed(&self, method: &str, params: Value) -> Result<(Value, u64)> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = oneshot::channel();
         self.pending.lock().await.insert(id, sender);
@@ -199,7 +225,7 @@ impl Connection {
         .await;
         self.pending.lock().await.remove(&id);
         match result? {
-            RpcResponse::Success(value) => Ok(value),
+            RpcResponse::Success(value, sequence) => Ok((value, sequence)),
             RpcResponse::Rejected(error) => {
                 // Codex reports this pre-materialization state without a dedicated error code.
                 if error["code"] == -32600
@@ -237,6 +263,9 @@ impl Connection {
         for (_, reply) in self.pending.lock().await.drain() {
             let _ = reply.send(Err(Error::ControlUnknown("Codex connection closed".into())));
         }
-        let _ = self.events.send(json!({"method":"pontia/disconnected"}));
+        let _ = self.events.send(Notification {
+            value: json!({"method":"pontia/disconnected"}),
+            sequence: 0,
+        });
     }
 }

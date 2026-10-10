@@ -10,7 +10,7 @@ use sqlx::SqlitePool;
 
 use super::{
     LiveOutputBatch, LiveOutputClose, LiveOutputProducer, LiveOutputPublishOutcome,
-    LiveOutputSnapshot, LiveOutputSnapshotReplacement,
+    LiveOutputSnapshot, LiveOutputSnapshotReplacement, LiveOutputSource,
     store::{LiveOutputStore, LiveOutputSubscription},
     validation::{validate_identity, validate_non_empty},
 };
@@ -21,6 +21,9 @@ pub struct LiveOutputService {
     pool: SqlitePool,
     store: LiveOutputStore,
 }
+
+#[cfg(test)]
+mod tests;
 
 impl LiveOutputService {
     pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
@@ -77,31 +80,45 @@ impl LiveOutputService {
     ) -> Result<()> {
         let identity = &producer.identity;
         validate_identity(identity)?;
-        validate_non_empty("runtime_id", &producer.runtime_id)?;
 
         let session = SqliteSessionRepository::new(self.pool.clone())
             .get_session(&identity.session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {} not found", identity.session_id)))?;
-        let supports_streaming = self
+        let spec = self
             .clients
             .spec(&session.client_type)
-            .is_some_and(|spec| spec.capabilities.stream_output);
-        if !supports_streaming {
+            .filter(|spec| spec.capabilities.stream_output);
+        let Some(spec) = spec else {
             return Err(Error::CapabilityUnavailable(format!(
                 "agent client {} does not support live output",
                 session.client_type
             )));
-        }
+        };
 
-        let expected_runtime = SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .runtime_id(&identity.session_id)
-            .await?;
-        if expected_runtime.as_deref() != Some(producer.runtime_id.as_str()) {
-            return Err(Error::StateConflict(format!(
-                "runtime_id does not match session {} runtime binding",
-                identity.session_id
-            )));
+        match (
+            &producer.source,
+            spec.adapter.runtime_binding.requires_session_runtime(),
+        ) {
+            (LiveOutputSource::SharedBackend, false) => {}
+            (LiveOutputSource::RuntimeBound { runtime_id }, true) => {
+                validate_non_empty("runtime_id", runtime_id)?;
+                let expected_runtime = SqliteSessionRuntimeRepository::new(self.pool.clone())
+                    .runtime_id(&identity.session_id)
+                    .await?;
+                if expected_runtime.as_deref() != Some(runtime_id) {
+                    return Err(Error::StateConflict(format!(
+                        "runtime_id does not match session {} runtime binding",
+                        identity.session_id
+                    )));
+                }
+            }
+            _ => {
+                return Err(Error::StateConflict(format!(
+                    "live output source does not match agent client {} runtime binding contract",
+                    session.client_type
+                )));
+            }
         }
 
         let turn = SqliteTurnRepository::new(self.pool.clone())

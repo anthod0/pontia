@@ -112,7 +112,9 @@ impl Fixture {
                         turn_id: turn.into(),
                         stream_id: "stream".into(),
                     },
-                    runtime_id: "runtime".into(),
+                    source: pontia_application::LiveOutputSource::RuntimeBound {
+                        runtime_id: "runtime".into(),
+                    },
                 },
                 sequence: 1,
                 items: vec![LiveOutputItem::AssistantText {

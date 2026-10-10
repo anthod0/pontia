@@ -15,6 +15,8 @@ fn identity() -> LiveOutputIdentity {
 fn producer() -> LiveOutputProducer {
     LiveOutputProducer {
         identity: identity(),
-        runtime_id: "rtinst_1".into(),
+        source: crate::live_output::LiveOutputSource::RuntimeBound {
+            runtime_id: "rtinst_1".into(),
+        },
     }
 }

@@ -159,6 +159,32 @@ test("waits for a reconnect snapshot instead of applying deltas twice", () => {
   expect(overlays["turn-live"].items[0]).toMatchObject({ text: "Recovered!" });
 });
 
+test("appends interleaved text deltas to their original items", () => {
+  const overlays = applyLiveOutputEvent(
+    applyLiveOutputEvent({}, "session-1", snapshot()),
+    "session-1",
+    {
+      type: "updates",
+      session_id: "session-1",
+      turn_id: "turn-live",
+      stream_id: "stream-1",
+      first_sequence: 2,
+      updates: [
+        { type: "assistant_text_delta", item_id: "text-2", delta: "Other" },
+        { type: "assistant_text_delta", item_id: "text-1", delta: " world" },
+        { type: "assistant_text_delta", item_id: "text-2", delta: " text" },
+      ],
+    },
+  );
+  expect(overlays["turn-live"].items).toEqual([
+    { kind: "assistant_text", item_id: "text-1", text: "Hello world" },
+    { kind: "assistant_text", item_id: "text-2", text: "Other text" },
+  ]);
+  expect(mergeLiveOutputMessages(transcript, [turn], overlays).at(-1)?.content).toBe(
+    "Hello world\n\nOther text",
+  );
+});
+
 test("falls back without a snapshot and ignores another Session", () => {
   const unchanged = applyLiveOutputEvent({}, "session-1", {
     ...snapshot(),
