@@ -2,13 +2,7 @@ import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { token } from "../src/stores/auth";
 import { dashboardStreamCursor, sseStatus } from "../src/stores/connection";
-import {
-  loadSessionDetail,
-  loadSessionOverview,
-  selectSession,
-  sessionDetail,
-  sessionOverviewActiveSessions,
-} from "../src/stores/sessions";
+import { loadSessionDetail, selectSession, sessionDetail } from "../src/stores/sessions";
 import { loadWorkspaces, workspaces } from "../src/stores/workspaces";
 import { startEventStream, stopEventStream } from "../src/services/eventStream";
 import { refreshDashboardSnapshot } from "../src/services/dashboardSnapshotRefresh";
@@ -37,7 +31,6 @@ beforeEach(() => {
   requests = [];
   token.set("test-token");
   selectSession("current");
-  sessionOverviewActiveSessions.set([]);
   workspaces.set([]);
   dashboardStreamCursor.set(null);
   timeline.resetTimelineState();
@@ -122,10 +115,10 @@ afterEach(async () => {
 });
 
 test.each(["pi", "codex"])(
-  "recovers an offline %s route and sidebar on first successful connection without events",
+  "recovers an offline %s route on first successful connection without events",
   async (client) => {
     clientType = client;
-    await Promise.all([loadSessionDetail("current"), loadSessionOverview(), loadWorkspaces()]);
+    await Promise.all([loadSessionDetail("current"), loadWorkspaces()]);
     startEventStream();
     await vi.waitFor(() => expect(get(sseStatus)).toBe("reconnecting"));
     expect(get(sessionDetail)).toBeNull();
@@ -134,7 +127,6 @@ test.each(["pi", "codex"])(
     state = "idle";
     await vi.advanceTimersByTimeAsync(1500);
     await vi.waitFor(() => expect(get(sessionDetail)?.session.state).toBe("idle"));
-    expect(get(sessionOverviewActiveSessions)[0]?.client_type).toBe(client);
     expect(get(workspaces)[0]?.workspace_id).toBe("workspace");
     expect(get(sessionDetail)?.turns[0]?.state).toBe("completed");
     const readCount = requests.length;

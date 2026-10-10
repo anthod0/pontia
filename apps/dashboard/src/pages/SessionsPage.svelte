@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { navigate } from '$lib/navigation'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
@@ -10,32 +9,21 @@
   import * as Card from '$lib/components/ui/card/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
-  import {
-    activateSessionsPageOverview,
-    loadMoreSessionOverview,
-    sessionOverviewActiveSessions,
-    sessionOverviewError,
-    sessionOverviewListSessions,
-    sessionOverviewLoading,
-    sessionOverviewLoadingMore,
-    sessionOverviewNextCursor,
-    sessionOverviewPinnedSessions,
-    sessionsPageArchivedSessions,
-  } from '../stores/sessions'
+  import { createSessionOverviewQuery, snapshotSessionOverview } from '../queries/sessionOverview'
   import type { SessionView } from '../api/types'
 
   let selectedTab = $state('all')
-  const activeIds = $derived(new Set($sessionOverviewActiveSessions.map((session) => session.session_id)))
-  const listSessions = $derived($sessionOverviewListSessions.filter((session) => !activeIds.has(session.session_id)))
+  const overviewQuery = createSessionOverviewQuery(true)
+  const overview = $derived(snapshotSessionOverview(overviewQuery.data))
+  const activeIds = $derived(new Set(overview.active.map((session) => session.session_id)))
+  const listSessions = $derived(overview.list.filter((session) => !activeIds.has(session.session_id)))
   const selectedCount = $derived(
     selectedTab === 'archived'
-      ? $sessionsPageArchivedSessions.length
+      ? overview.archived.length
       : selectedTab === 'pinned'
-        ? $sessionOverviewPinnedSessions.length
-        : $sessionOverviewActiveSessions.length + listSessions.length,
+        ? overview.pinned.length
+        : overview.active.length + listSessions.length,
   )
-
-  onMount(activateSessionsPageOverview)
 
   function openSession(sessionId: string): void {
     navigate(`/chat/${sessionId}`)
@@ -85,15 +73,15 @@
     <Badge variant="secondary">{selectedCount}</Badge>
   </div>
 
-  {#if $sessionOverviewError}
+  {#if overviewQuery.error}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />
       <Alert.Title>Could not load sessions</Alert.Title>
-      <Alert.Description>{$sessionOverviewError}</Alert.Description>
+      <Alert.Description>{overviewQuery.error.message}</Alert.Description>
     </Alert.Root>
   {/if}
 
-  {#if $sessionOverviewLoading}
+  {#if overviewQuery.isPending}
     <Card.Root>
       <Card.Content class="py-6 text-sm text-muted-foreground" role="status">Loading sessions…</Card.Content>
     </Card.Root>
@@ -106,11 +94,11 @@
       </Tabs.List>
 
       <Tabs.Content value="all" class="space-y-6 pt-4">
-        {#if $sessionOverviewActiveSessions.length || listSessions.length}
-          {#if $sessionOverviewActiveSessions.length}
+        {#if overview.active.length || listSessions.length}
+          {#if overview.active.length}
             <section class="space-y-2" aria-labelledby="active-sessions-title">
               <h2 id="active-sessions-title" class="text-sm font-semibold">Active</h2>
-              {@render sessionList($sessionOverviewActiveSessions, 'active-session-list')}
+              {@render sessionList(overview.active, 'active-session-list')}
             </section>
           {/if}
 
@@ -121,30 +109,30 @@
             {:else}
               <p class="py-4 text-sm text-muted-foreground">No other sessions.</p>
             {/if}
-            {#if $sessionOverviewNextCursor}
+            {#if overview.nextCursor}
               <div class="flex justify-center pt-2">
-                <Button variant="outline" disabled={$sessionOverviewLoadingMore} onclick={() => void loadMoreSessionOverview()}>
-                  {$sessionOverviewLoadingMore ? 'Loading…' : 'Load more'}
+                <Button variant="outline" disabled={overviewQuery.isFetchingNextPage} onclick={() => void overviewQuery.fetchNextPage()}>
+                  {overviewQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}
                 </Button>
               </div>
             {/if}
           </section>
-        {:else if !$sessionOverviewError}
+        {:else if !overviewQuery.error}
           {@render emptyState('No sessions', 'Start a new chat to create a session.')}
         {/if}
       </Tabs.Content>
 
       <Tabs.Content value="archived" class="pt-4">
-        {#if $sessionsPageArchivedSessions.length}
-          {@render sessionList($sessionsPageArchivedSessions, 'archived-session-list')}
+        {#if overview.archived.length}
+          {@render sessionList(overview.archived, 'archived-session-list')}
         {:else}
           {@render emptyState('No archived sessions', 'Archived sessions will appear here.')}
         {/if}
       </Tabs.Content>
 
       <Tabs.Content value="pinned" class="pt-4">
-        {#if $sessionOverviewPinnedSessions.length}
-          {@render sessionList($sessionOverviewPinnedSessions, 'pinned-session-list')}
+        {#if overview.pinned.length}
+          {@render sessionList(overview.pinned, 'pinned-session-list')}
         {:else}
           {@render emptyState('No pinned sessions', 'Pinned sessions will appear here.')}
         {/if}

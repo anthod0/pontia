@@ -17,6 +17,9 @@ const mocks = vi.hoisted(() => {
         value = next;
         for (const run of subscribers) run(value);
       },
+      get value() {
+        return value;
+      },
     };
   }
 
@@ -30,23 +33,35 @@ const mocks = vi.hoisted(() => {
     loadingMore: writableStore(false),
     error: writableStore<string | null>(null),
     nextCursor: writableStore<string | null>(null),
-    activateOverview: vi.fn(() => () => undefined),
     loadMore: vi.fn(async () => [] as SessionView[]),
   };
 });
 
 vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
-vi.mock("../../src/stores/sessions", () => ({
-  activateSessionsPageOverview: mocks.activateOverview,
-  sessionOverviewActiveSessions: mocks.active,
-  sessionOverviewListSessions: mocks.list,
-  sessionOverviewPinnedSessions: mocks.pinned,
-  sessionOverviewLoading: mocks.loading,
-  sessionOverviewLoadingMore: mocks.loadingMore,
-  sessionOverviewError: mocks.error,
-  sessionOverviewNextCursor: mocks.nextCursor,
-  sessionsPageArchivedSessions: mocks.archived,
-  loadMoreSessionOverview: mocks.loadMore,
+vi.mock("../../src/queries/sessionOverview", () => ({
+  createSessionOverviewQuery: () => ({
+    get data() {
+      return {
+        active: mocks.active.value,
+        archived: mocks.archived.value,
+        list: mocks.list.value,
+        pinned: mocks.pinned.value,
+        nextCursor: mocks.nextCursor.value,
+      };
+    },
+    get isPending() {
+      return mocks.loading.value;
+    },
+    get isFetchingNextPage() {
+      return mocks.loadingMore.value;
+    },
+    get error() {
+      const message = mocks.error.value;
+      return message ? new Error(message) : null;
+    },
+    fetchNextPage: mocks.loadMore,
+  }),
+  snapshotSessionOverview: (data: unknown) => data,
 }));
 
 const session = (overrides: Partial<SessionView> = {}): SessionView => ({
@@ -94,7 +109,6 @@ test("shows active sessions before the list and removes active duplicates", asyn
 
   render(SessionsPage);
 
-  expect(mocks.activateOverview).toHaveBeenCalledOnce();
   expect(within(screen.getByTestId("active-session-list")).getByRole("button")).toHaveTextContent(
     "Active session",
   );

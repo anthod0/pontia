@@ -405,14 +405,16 @@ export type GetSessionOverviewOptions = {
 
 export async function getSessionOverview(
   options: GetSessionOverviewOptions,
+  readOptions: ReadRequestOptions = {},
 ): Promise<SessionOverviewView> {
   const query = new URLSearchParams({ sections: options.sections.join(",") });
   if (options.workspaceId !== undefined) query.set("workspace_id", options.workspaceId);
   if (options.limit !== undefined) query.set("limit", String(options.limit));
   if (options.cursor !== undefined) query.set("cursor", options.cursor);
   const timeout = AbortSignal.timeout(15_000);
+  const signal = readOptions.signal ? AbortSignal.any([readOptions.signal, timeout]) : timeout;
   return request<SessionOverviewView>(`/sessions/overview?${query}`, {
-    signal: timeout,
+    signal,
     directResponse: true,
   });
 }

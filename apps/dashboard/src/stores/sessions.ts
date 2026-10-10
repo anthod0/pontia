@@ -14,7 +14,6 @@ import {
   createSession as apiCreateSession,
   dismissInboxMessage as apiDismissInboxMessage,
   getSession,
-  getSessionOverview,
   interruptSession as apiInterruptSession,
   listEvents,
   listInboxMessages,
@@ -43,6 +42,7 @@ import type {
   SubmitInboxMessageInput,
   TurnView,
 } from "../api/types";
+import { clearSessionOverviewQuery, invalidateSessionOverview } from "../queries/sessionOverview";
 
 export interface SessionConsoleDetail {
   session: SessionView;
@@ -51,14 +51,6 @@ export interface SessionConsoleDetail {
   events: EventView[];
 }
 
-export const sessionOverviewPinnedSessions = writable<SessionView[]>([]);
-export const sessionOverviewActiveSessions = writable<SessionView[]>([]);
-export const sessionOverviewListSessions = writable<SessionView[]>([]);
-export const sessionOverviewLoading = writable(false);
-export const sessionOverviewLoadingMore = writable(false);
-export const sessionOverviewError = writable<string | null>(null);
-export const sessionOverviewNextCursor = writable<string | null>(null);
-export const sessionsPageArchivedSessions = writable<SessionView[]>([]);
 export const sessionDetail = writable<SessionConsoleDetail | null>(null);
 export const sessionDetailLoading = writable(false);
 export const sessionDetailError = writable<string | null>(null);
@@ -74,24 +66,11 @@ let detailRequest: {
   dirty: boolean;
   promise: Promise<SessionConsoleDetail | null>;
 } | null = null;
-let sessionOverviewRequest = 0;
-let sessionOverviewLoadMorePromise: Promise<SessionView[]> | null = null;
-let sessionsPageOverviewConsumers = 0;
-
 export function resetSessions(): void {
   selectionGeneration += 1;
   detailRequest?.controller.abort();
   detailRequest = null;
-  sessionOverviewRequest += 1;
-  sessionOverviewLoadMorePromise = null;
-  sessionOverviewPinnedSessions.set([]);
-  sessionOverviewActiveSessions.set([]);
-  sessionOverviewListSessions.set([]);
-  sessionOverviewLoading.set(false);
-  sessionOverviewLoadingMore.set(false);
-  sessionOverviewError.set(null);
-  sessionOverviewNextCursor.set(null);
-  sessionsPageArchivedSessions.set([]);
+  clearSessionOverviewQuery();
   selectedSessionId.set(null);
   sessionDetail.set(null);
   sessionDetailLoading.set(false);
@@ -114,95 +93,6 @@ export function selectSession(sessionId: string | null): void {
 type SessionDetailLoadOptions = {
   showLoading?: boolean;
 };
-
-const defaultSessionOverviewListLimit = 50;
-
-export function activateSessionsPageOverview(): () => void {
-  sessionsPageOverviewConsumers += 1;
-  void loadSessionOverview();
-  return () => {
-    sessionsPageOverviewConsumers = Math.max(0, sessionsPageOverviewConsumers - 1);
-  };
-}
-
-export async function loadSessionOverview(
-  options: {
-    showLoading?: boolean;
-  } = {},
-): Promise<SessionView[]> {
-  const request = ++sessionOverviewRequest;
-  sessionOverviewLoadMorePromise = null;
-  const showLoading = options.showLoading ?? true;
-  if (showLoading) sessionOverviewLoading.set(true);
-  sessionOverviewLoadingMore.set(false);
-  sessionOverviewError.set(null);
-  try {
-    const sections: ("pinned" | "archived" | "active" | "list")[] = ["pinned", "active", "list"];
-    if (sessionsPageOverviewConsumers > 0) sections.push("archived");
-    const overview = await getSessionOverview({
-      sections,
-      limit: defaultSessionOverviewListLimit,
-    });
-    const pinned = overview.groups.pinned?.sessions ?? [];
-    const active = overview.groups.active?.sessions ?? [];
-    const list = overview.groups.list?.sessions ?? [];
-    if (request === sessionOverviewRequest) {
-      sessionOverviewPinnedSessions.set(pinned);
-      sessionOverviewActiveSessions.set(active);
-      sessionOverviewListSessions.set(list);
-      sessionOverviewNextCursor.set(overview.groups.list?.next_cursor ?? null);
-      if (overview.groups.archived) {
-        sessionsPageArchivedSessions.set(overview.groups.archived.sessions);
-      }
-    }
-    return [...active, ...list];
-  } catch (error) {
-    if (request === sessionOverviewRequest) {
-      sessionOverviewError.set(error instanceof Error ? error.message : String(error));
-    }
-    return [];
-  } finally {
-    if (request === sessionOverviewRequest) sessionOverviewLoading.set(false);
-  }
-}
-
-export function loadMoreSessionOverview(): Promise<SessionView[]> {
-  if (sessionOverviewLoadMorePromise) return sessionOverviewLoadMorePromise;
-  const cursor = get(sessionOverviewNextCursor);
-  if (!cursor) return Promise.resolve([]);
-
-  const request = sessionOverviewRequest;
-  sessionOverviewLoadingMore.set(true);
-  sessionOverviewError.set(null);
-  const promise = getSessionOverview({
-    sections: ["list"],
-    limit: defaultSessionOverviewListLimit,
-    cursor,
-  })
-    .then((overview) => {
-      const loaded = overview.groups.list?.sessions ?? [];
-      if (request !== sessionOverviewRequest) return [];
-      sessionOverviewListSessions.update((current) => {
-        const byId = new Map(current.map((session) => [session.session_id, session]));
-        for (const session of loaded) byId.set(session.session_id, session);
-        return [...byId.values()];
-      });
-      sessionOverviewNextCursor.set(overview.groups.list?.next_cursor ?? null);
-      return loaded;
-    })
-    .catch((error) => {
-      if (request === sessionOverviewRequest) {
-        sessionOverviewError.set(error instanceof Error ? error.message : String(error));
-      }
-      return [];
-    })
-    .finally(() => {
-      if (request === sessionOverviewRequest) sessionOverviewLoadingMore.set(false);
-      if (sessionOverviewLoadMorePromise === promise) sessionOverviewLoadMorePromise = null;
-    });
-  sessionOverviewLoadMorePromise = promise;
-  return promise;
-}
 
 export function loadSessionDetail(
   sessionId: string,
@@ -285,7 +175,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
     inboxMessages: [],
     events: [],
   });
-  void loadSessionOverview({ showLoading: false });
+  void invalidateSessionOverview();
   return result;
 }
 
@@ -307,7 +197,7 @@ function applySessionManagementResult(session: SessionView): void {
 
 async function refreshAfterSessionManagement(session: SessionView): Promise<SessionView> {
   applySessionManagementResult(session);
-  await loadSessionOverview({ showLoading: false });
+  await invalidateSessionOverview();
   return session;
 }
 
@@ -327,13 +217,13 @@ export async function unarchiveSession(sessionId: string): Promise<SessionView> 
   const session = await apiUnarchiveSession(sessionId);
   if (session.archived_at) throw new Error("The session is still archived. Refresh and try again.");
   applySessionManagementResult(session);
-  await loadSessionOverview({ showLoading: false });
+  await invalidateSessionOverview();
   return session;
 }
 
 async function refreshSidebarAndSelectedSession(sessionId: string): Promise<void> {
   await Promise.all([
-    loadSessionOverview({ showLoading: false }),
+    invalidateSessionOverview(),
     get(selectedSessionId) === sessionId
       ? loadSessionDetail(sessionId, { showLoading: false })
       : Promise.resolve(null),

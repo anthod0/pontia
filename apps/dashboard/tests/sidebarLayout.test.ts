@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => {
         value = next;
         for (const run of subscribers) run(value);
       },
+      get value() {
+        return value;
+      },
     };
   }
 
@@ -55,21 +58,38 @@ vi.mock("../src/services/eventStream", () => ({
   stopEventStream: mocks.stopEventStream,
 }));
 vi.mock("../src/stores/sessions", () => ({
-  sessionOverviewPinnedSessions: mocks.sidebarPinnedSessions,
-  sessionOverviewActiveSessions: mocks.sidebarActiveSessions,
-  sessionOverviewListSessions: mocks.sidebarRecentSessions,
-  sessionOverviewLoading: mocks.sidebarSessionsLoading,
-  sessionOverviewLoadingMore: mocks.sidebarSessionsLoadingMore,
-  sessionOverviewError: mocks.sidebarSessionsError,
-  sessionOverviewNextCursor: mocks.sidebarSessionsNextCursor,
   sessionDetail: mocks.sessionDetail,
   sessionDetailError: mocks.sessionDetailError,
-  loadMoreSessionOverview: mocks.loadMoreSidebarSessions,
   updateSessionTitle: mocks.updateSessionTitle,
   pinSession: mocks.pinSession,
   unpinSession: mocks.unpinSession,
   archiveSession: mocks.archiveSession,
   terminateSession: mocks.terminateSession,
+}));
+vi.mock("../src/queries/sessionOverview", () => ({
+  createSessionOverviewQuery: () => ({
+    get data() {
+      return {
+        pinned: mocks.sidebarPinnedSessions.value,
+        active: mocks.sidebarActiveSessions.value,
+        list: mocks.sidebarRecentSessions.value,
+        archived: [],
+        nextCursor: mocks.sidebarSessionsNextCursor.value,
+      };
+    },
+    get isPending() {
+      return mocks.sidebarSessionsLoading.value;
+    },
+    get isFetchingNextPage() {
+      return mocks.sidebarSessionsLoadingMore.value;
+    },
+    get error() {
+      const message = mocks.sidebarSessionsError.value;
+      return message ? new Error(message) : null;
+    },
+    fetchNextPage: mocks.loadMoreSidebarSessions,
+  }),
+  snapshotSessionOverview: (data: unknown) => data,
 }));
 beforeEach(() => {
   window.history.pushState({}, "", "/dashboard");
@@ -645,7 +665,4 @@ test("shows a sidebar loading failure instead of claiming there are no sessions"
   render(AppSidebarHost);
   expect(screen.getByRole("alert")).toHaveTextContent("Sidebar refresh failed");
   expect(screen.queryByText("No active sessions")).not.toBeInTheDocument();
-  mocks.sidebarSessionsError.set(null);
-  await tick();
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });

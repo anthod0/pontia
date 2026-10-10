@@ -59,14 +59,13 @@ describe("sessions store createSession", () => {
       session,
       initial_turn: null,
     } satisfies CreateSessionResult);
-    api.getSessionOverview.mockImplementation(() => new Promise(() => {}));
     api.getSession.mockImplementation(() => new Promise(() => {}));
 
     const { createSession, sessionDetail } = await import("../../src/stores/sessions");
     const result = await createSession({ client_type: "pi", workspace_id: "workspace-1" });
 
     expect(result.session.session_id).toBe("session-fast");
-    expect(api.getSessionOverview).toHaveBeenCalled();
+    expect(api.getSessionOverview).not.toHaveBeenCalled();
     expect(api.getSession).not.toHaveBeenCalled();
 
     let detailValue: unknown = undefined;

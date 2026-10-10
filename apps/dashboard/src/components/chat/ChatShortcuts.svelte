@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { get } from 'svelte/store'
   import { navigate } from '$lib/navigation'
-  import { sessionOverviewActiveSessions, sessionOverviewListSessions, sessionOverviewPinnedSessions } from '../../stores/sessions'
+  import { createSessionOverviewQuery, snapshotSessionOverview } from '../../queries/sessionOverview'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import * as Kbd from '$lib/components/ui/kbd/index.js'
   import { adjacentActiveSessionId, isChatRoute, sessionIdAtShortcutIndex, sessionIdFromChatPath } from '$lib/shortcuts/sessionNavigation'
@@ -23,6 +22,8 @@
   ]
 
   let shortcutsOpen = $state(false)
+  const overviewQuery = createSessionOverviewQuery()
+  const overview = $derived(snapshotSessionOverview(overviewQuery.data))
 
   onMount(() => {
     const openShortcuts = () => (shortcutsOpen = true)
@@ -46,7 +47,7 @@
   function openNewChatFromCurrentRoute(): void {
     const currentSessionId = sessionIdFromChatPath(window.location.pathname)
     const currentSession = currentSessionId
-      ? [get(sessionOverviewPinnedSessions), get(sessionOverviewActiveSessions), get(sessionOverviewListSessions)]
+      ? [overview.pinned, overview.active, overview.list]
           .flat()
           .find((session) => session.session_id === currentSessionId)
       : null
@@ -86,11 +87,11 @@
 
     let sessionId: string | null = null
     if (key === 'j') {
-      sessionId = adjacentActiveSessionId(get(sessionOverviewActiveSessions), sessionIdFromChatPath(window.location.pathname), 1)
+      sessionId = adjacentActiveSessionId(overview.active, sessionIdFromChatPath(window.location.pathname), 1)
     } else if (key === 'k') {
-      sessionId = adjacentActiveSessionId(get(sessionOverviewActiveSessions), sessionIdFromChatPath(window.location.pathname), -1)
+      sessionId = adjacentActiveSessionId(overview.active, sessionIdFromChatPath(window.location.pathname), -1)
     } else if (/^[1-9]$/.test(key)) {
-      sessionId = sessionIdAtShortcutIndex(get(sessionOverviewActiveSessions), key)
+      sessionId = sessionIdAtShortcutIndex(overview.active, key)
     }
 
     if (!sessionId) return

@@ -9,7 +9,7 @@ type RefreshOptions = {
   loadTasks: () => Promise<unknown>;
   loadWorkspaces: () => Promise<unknown>;
   loadAgentProfiles: () => Promise<unknown>;
-  loadSessionOverview: () => Promise<unknown>;
+  invalidateSessionOverview: () => Promise<unknown>;
   loadWorkflows: () => Promise<unknown>;
   refreshTask: (taskId: string) => Promise<unknown>;
   refreshSession: (sessionId: string) => Promise<unknown>;
@@ -88,7 +88,7 @@ export function createDashboardRefreshScheduler(options: RefreshOptions) {
       if (batch.tasks) refreshes.push(options.loadTasks());
       if (batch.workspaces) refreshes.push(options.loadWorkspaces());
       if (batch.agentProfiles) refreshes.push(options.loadAgentProfiles());
-      if (batch.sessions) refreshes.push(options.loadSessionOverview());
+      if (batch.sessions) refreshes.push(options.invalidateSessionOverview());
       if (batch.workflows) refreshes.push(options.loadWorkflows());
       for (const taskId of batch.taskIds) {
         if (taskId === options.getSelectedTaskId()) refreshes.push(options.refreshTask(taskId));
