@@ -5,12 +5,11 @@ import WorkflowDetailPage from "../src/pages/WorkflowDetailPage.svelte";
 import WorkflowDocument from "../src/pages/workflows/WorkflowDocument.svelte";
 import WorkflowSession from "../src/pages/workflows/WorkflowSession.svelte";
 import {
-  workflowDetail,
-  workflowDetailError,
-  workflowDetailLoading,
   selectedWorkflowSessionIds,
   selectedWorkflowHistorySessionIds,
 } from "../src/stores/workflows";
+import { queryClient } from "../src/queries/queryClient";
+import { workflowKeys } from "../src/queries/workflows";
 import type { WorkflowDetailView, WorkflowPatchHistoryView } from "../src/api/types";
 
 const mocks = vi.hoisted(() => ({
@@ -92,6 +91,9 @@ function visit(query = "") {
   window.history.replaceState({}, "", `/workflows/wf${query}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
+function setWorkflow(detail: WorkflowDetailView): void {
+  queryClient.setQueryData(workflowKeys.detail(detail.workflow_id), detail);
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: Error) => void;
@@ -103,9 +105,7 @@ function deferred<T>() {
 }
 beforeEach(() => {
   vi.resetAllMocks();
-  workflowDetail.set(null);
-  workflowDetailError.set(null);
-  workflowDetailLoading.set(false);
+  queryClient.clear();
   selectedWorkflowHistorySessionIds.set([]);
   mocks.getWorkflow.mockResolvedValue(snapshot());
   mocks.listWorkflowPatches.mockResolvedValue([patch()]);
@@ -152,20 +152,18 @@ test("Session creation, replacement, applied revision and clearing active patch 
   expect(mocks.getSession).not.toHaveBeenCalled();
   expect(screen.queryByText("Current v4")).not.toBeInTheDocument();
   mocks.listWorkflowPatches.mockResolvedValue([patch()]);
-  workflowDetail.set(snapshot());
+  setWorkflow(snapshot());
   expect(await screen.findByText("Session now: busy")).toBeInTheDocument();
   mocks.listWorkflowPatches.mockResolvedValue([
     patch("p2", { replanner_session_id: "new-replanner" }),
   ]);
-  workflowDetail.set(
-    snapshot({ active_patch: patch("p2", { replanner_session_id: "new-replanner" }) }),
-  );
+  setWorkflow(snapshot({ active_patch: patch("p2", { replanner_session_id: "new-replanner" }) }));
   await waitFor(() =>
     expect(mocks.getSession).toHaveBeenCalledWith("new-replanner", expect.anything()),
   );
   const applied = patch("p1", { state: "applied", outcome: "applied", result_revision: 4 });
   mocks.listWorkflowPatches.mockResolvedValue([applied]);
-  workflowDetail.set(snapshot({ state: "running", current_revision: 4, active_patch: null }));
+  setWorkflow(snapshot({ state: "running", current_revision: 4, active_patch: null }));
   expect(await screen.findByText("Current v4")).toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "Replanning records" })).not.toBeInTheDocument();
   await fireEvent.click(screen.getByRole("button", { name: "v3" }));
@@ -219,7 +217,7 @@ test("all records for a base revision are shown newest first and result links sw
   expect(selectedWorkflowSessionIds()).toEqual(
     expect.arrayContaining(["old-session", "blocked-session"]),
   );
-  workflowDetail.set(snapshot({ current_revision: 4 }));
+  setWorkflow(snapshot({ current_revision: 4 }));
   expect(await screen.findByText("Current v4")).toBeInTheDocument();
   expect(screen.getByText("Patch old")).toBeInTheDocument();
   await fireEvent.click(screen.getByRole("button", { name: "View revision v1 → v2" }));
@@ -250,7 +248,7 @@ test("empty records stay hidden; list errors and retry do not replace the workfl
   );
   expect(screen.queryByRole("region", { name: "Replanning records" })).not.toBeInTheDocument();
   expect(screen.queryByText("No replanning requests.")).not.toBeInTheDocument();
-  workflowDetail.set(snapshot());
+  setWorkflow(snapshot());
   expect(await screen.findByText("Patch p1")).toBeInTheDocument();
   expect(window.location.search).toBe("");
 });
@@ -264,7 +262,7 @@ test("empty versions stay hidden during background refreshes and invalid revisio
   await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
   const refresh = deferred<WorkflowPatchHistoryView[]>();
   mocks.listWorkflowPatches.mockReturnValueOnce(refresh.promise);
-  workflowDetail.set(snapshot());
+  setWorkflow(snapshot());
   await waitFor(() => expect(mocks.listWorkflowPatches).toHaveBeenCalledTimes(2));
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
   refresh.resolve([patch()]);

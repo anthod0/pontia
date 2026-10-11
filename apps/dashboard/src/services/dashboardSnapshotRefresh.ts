@@ -7,7 +7,8 @@ import {
   refreshSessionTimeline,
   timelineState,
 } from "../stores/timeline";
-import { loadWorkflows, refreshWorkflow, selectedWorkflowId } from "../stores/workflows";
+import { selectedWorkflowId } from "../stores/workflows";
+import { fetchWorkflow, fetchWorkflows } from "../queries/workflows";
 
 export type DashboardSnapshotRefreshReason = "sse_open" | "sse_fallback";
 
@@ -57,10 +58,10 @@ async function refreshDashboardSnapshotNow(): Promise<void> {
   const workflowId = get(selectedWorkflowId);
   const refreshes: Promise<unknown>[] = [
     invalidateQueriesAfterConnectionRecovery(),
-    loadWorkflows({ showLoading: false }),
+    fetchWorkflows(),
   ];
 
-  if (workflowId) refreshes.push(refreshWorkflow(workflowId, { showLoading: false }));
+  if (workflowId) refreshes.push(fetchWorkflow(workflowId));
   if (sessionId) refreshes.push(refreshSelectedSession(sessionId));
 
   await Promise.allSettled(refreshes);

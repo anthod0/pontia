@@ -19,12 +19,8 @@ import {
 import { loadSessionDetail, selectedSessionId } from "../stores/sessions";
 import { invalidateQueriesForDashboardEvent } from "../queries/dashboardInvalidation";
 import { invalidateWorkspaceQueries } from "../queries/workspaces";
-import {
-  loadWorkflows,
-  refreshWorkflow,
-  selectedWorkflowId,
-  selectedWorkflowSessionIds,
-} from "../stores/workflows";
+import { selectedWorkflowId, selectedWorkflowSessionIds } from "../stores/workflows";
+import { invalidateWorkflow, invalidateWorkflowLists } from "../queries/workflows";
 import { createDashboardRefreshScheduler } from "./dashboardRefreshScheduler";
 import { isAuthenticationFailure } from "../api/client";
 import { refreshDashboardSnapshot } from "./dashboardSnapshotRefresh";
@@ -44,9 +40,9 @@ const refreshScheduler = createDashboardRefreshScheduler({
   getSelectedWorkflowId: () => get(selectedWorkflowId),
   getSelectedWorkflowSessionIds: selectedWorkflowSessionIds,
   loadWorkspaces: invalidateWorkspaceQueries,
-  loadWorkflows: () => loadWorkflows({ showLoading: false }),
+  loadWorkflows: invalidateWorkflowLists,
   refreshSession: (sessionId) => loadSessionDetail(sessionId, { showLoading: false }),
-  refreshWorkflow: (workflowId) => refreshWorkflow(workflowId, { showLoading: false }),
+  refreshWorkflow: invalidateWorkflow,
 });
 
 let controller: AbortController | null = null;

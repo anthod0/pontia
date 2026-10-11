@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import { navigate } from '$lib/navigation'
@@ -10,9 +9,10 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Table from '$lib/components/ui/table/index.js'
   import { formatDateTime, shortId } from '../components/tasks/format'
-  import { loadWorkflows, workflows, workflowsError, workflowsLoading } from '../stores/workflows'
+  import { createWorkflowsQuery } from '../queries/workflows'
 
-  onMount(() => { void loadWorkflows() })
+  const workflowsQuery = createWorkflowsQuery()
+  let workflows = $derived(workflowsQuery.data ?? [])
 
   function formatElapsed(ms: number): string {
     const seconds = Math.floor(ms / 1000)
@@ -30,23 +30,23 @@
     </div>
   </div>
 
-  {#if $workflowsError}
-    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>Workflows error</Alert.Title><Alert.Description>{$workflowsError}</Alert.Description></Alert.Root>
+  {#if workflowsQuery.error}
+    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>Workflows error</Alert.Title><Alert.Description>{workflowsQuery.error.message}</Alert.Description></Alert.Root>
   {/if}
 
   <Card.Root class="bg-transparent ring-0">
-    <Card.Header><Card.Title>Workflow runs</Card.Title><Card.Description>{$workflows.length} recent workflows.</Card.Description></Card.Header>
+    <Card.Header><Card.Title>Workflow runs</Card.Title><Card.Description>{workflows.length} recent workflows.</Card.Description></Card.Header>
     <Card.Content>
-      {#if $workflowsLoading}
+      {#if workflowsQuery.isPending}
         <div class="space-y-2"><Skeleton class="h-12 w-full" /><Skeleton class="h-12 w-full" /><Skeleton class="h-12 w-full" /></div>
-      {:else if !$workflows.length}
+      {:else if !workflows.length}
         <Empty.Root><Empty.Header><Empty.Title>No workflows</Empty.Title><Empty.Description>Run a Workflow with pontia to observe it here.</Empty.Description></Empty.Header></Empty.Root>
       {:else}
         <div class="overflow-x-auto">
           <Table.Root>
             <Table.Header><Table.Row><Table.Head>Workflow</Table.Head><Table.Head>State</Table.Head><Table.Head>Current phase</Table.Head><Table.Head>Agents</Table.Head><Table.Head>Elapsed</Table.Head><Table.Head>Created</Table.Head></Table.Row></Table.Header>
             <Table.Body>
-              {#each $workflows as workflow (workflow.workflow_id)}
+              {#each workflows as workflow (workflow.workflow_id)}
                 <Table.Row class={workflow.observation_error ? 'text-muted-foreground' : 'cursor-pointer hover:bg-muted/50'} onclick={() => !workflow.observation_error && navigate(`/workflows/${workflow.workflow_id}`)}>
                   <Table.Cell><div class="font-medium">{workflow.title}</div><div class="text-xs text-muted-foreground">{shortId(workflow.workflow_id)}</div></Table.Cell>
                   <Table.Cell><Badge variant={workflow.state === 'failed' ? 'destructive' : 'secondary'}>{workflow.state}</Badge></Table.Cell>

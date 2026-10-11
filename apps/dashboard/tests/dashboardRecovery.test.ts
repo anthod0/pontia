@@ -7,7 +7,9 @@ import { loadSessionDetail, selectSession, sessionDetail } from "../src/stores/s
 import { fetchWorkspaces } from "../src/queries/workspaces";
 import { startEventStream, stopEventStream } from "../src/services/eventStream";
 import { refreshDashboardSnapshot } from "../src/services/dashboardSnapshotRefresh";
-import { selectedWorkflowId, workflowDetail } from "../src/stores/workflows";
+import { selectedWorkflowId } from "../src/stores/workflows";
+import { workflowKeys } from "../src/queries/workflows";
+import type { WorkflowDetailView } from "../src/api/types";
 import * as timeline from "../src/stores/timeline";
 import { queryClient } from "../src/queries/queryClient";
 import type { SessionOverviewSnapshot } from "../src/queries/sessionOverview";
@@ -172,7 +174,9 @@ test("recovery refreshes shared workflow consumers", async () => {
   online = true;
   selectedWorkflowId.set("workflow");
   await refreshDashboardSnapshot({ reason: "sse_open" });
-  expect(get(workflowDetail)?.workflow_id).toBe("workflow");
+  expect(
+    queryClient.getQueryData<WorkflowDetailView>(workflowKeys.detail("workflow"))?.workflow_id,
+  ).toBe("workflow");
   expect(requests).toContain("/workflows");
 });
 

@@ -39,7 +39,10 @@ vi.mock("../src/queries/workspaces", () => ({
   fetchWorkspaces: mocks.loadWorkspaces,
 }));
 vi.mock("../src/stores/workflows", () => ({
-  loadWorkflows: mocks.loadWorkflows,
+  resetWorkflows: vi.fn(),
+}));
+vi.mock("../src/queries/workflows", () => ({
+  fetchWorkflows: mocks.loadWorkflows,
 }));
 
 beforeEach(() => {

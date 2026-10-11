@@ -16,11 +16,16 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import { Separator } from '$lib/components/ui/separator/index.js'
-  import { workflowDetail, workflowDetailError, workflowDetailLoading, pauseWorkflow, refreshWorkflow, resumeWorkflow, retryWorkflow, selectedWorkflowId } from '../stores/workflows'
+  import { selectedWorkflowId } from '../stores/workflows'
+  import { createPauseWorkflowMutation, createResumeWorkflowMutation, createRetryWorkflowMutation, createWorkflowQuery } from '../queries/workflows'
   import { groupWorkflowPhases, selectedPhaseOrdinal } from './workflows/phases'
-  import type { WorkflowAgentStatus, WorkflowDetailView } from '../api/types'
+  import type { WorkflowAgentStatus } from '../api/types'
 
   let { routeWorkflowId }: { routeWorkflowId: string } = $props()
+  const workflowQuery = createWorkflowQuery(() => routeWorkflowId, () => true, () => true)
+  const pauseMutation = createPauseWorkflowMutation()
+  const resumeMutation = createResumeWorkflowMutation()
+  const retryMutation = createRetryWorkflowMutation()
   let query = $state(new URLSearchParams(window.location.search))
   let requestedPhase = $derived(query.get('phase'))
 
@@ -31,42 +36,27 @@
   function selectRevision(value: number): void {
     updateQuery({ revision: value === snapshot?.current_revision ? null : String(value), phase: null })
   }
-  let snapshot = $derived($workflowDetail?.workflow_id === routeWorkflowId ? $workflowDetail : null)
+  let snapshot = $derived(workflowQuery.data?.workflow_id === routeWorkflowId ? workflowQuery.data : null)
   let revision = $derived(snapshot ? revisionSelection(query.get('revision'), snapshot.current_revision) : null)
   let phases = $derived(groupWorkflowPhases(snapshot?.nodes ?? [], snapshot?.current_node_id ?? null))
   let explicitOrdinal = $derived(selectedPhaseOrdinal(requestedPhase, phases))
   let selectedPhase = $derived(phases.find((phase) => phase.ordinal === explicitOrdinal) ?? phases.find((phase) => phase.current) ?? phases[0] ?? null)
-  let pollTimer: ReturnType<typeof setInterval> | null = null
-  let actionBusy = $state(false)
+  let actionBusy = $derived(pauseMutation.isPending || resumeMutation.isPending || retryMutation.isPending)
+  let workflowError = $derived(workflowQuery.error ?? pauseMutation.error ?? resumeMutation.error ?? retryMutation.error)
 
   function readPhaseQuery(): void {
     query = new URLSearchParams(window.location.search)
   }
 
-  function syncPolling(detail: WorkflowDetailView | null): void {
-    const shouldPoll = detail?.workflow_id === routeWorkflowId && document.visibilityState === 'visible'
-    if (shouldPoll && !pollTimer) {
-      pollTimer = setInterval(() => void refreshWorkflow(routeWorkflowId, { showLoading: false }), 2000)
-    } else if (!shouldPoll && pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = null
-    }
-  }
-
   function handleVisibility(): void {
-    syncPolling($workflowDetail)
-    if (document.visibilityState === 'visible') void refreshWorkflow(routeWorkflowId, { showLoading: false })
+    if (document.visibilityState === 'visible') void workflowQuery.refetch()
   }
 
   onMount(() => {
     selectedWorkflowId.set(routeWorkflowId)
-    const unsubscribe = workflowDetail.subscribe(syncPolling)
     document.addEventListener('visibilitychange', handleVisibility)
-    void refreshWorkflow(routeWorkflowId)
     return () => {
-      unsubscribe()
       document.removeEventListener('visibilitychange', handleVisibility)
-      if (pollTimer) clearInterval(pollTimer)
       selectedWorkflowId.set(null)
     }
   })
@@ -81,16 +71,14 @@
 
   async function runControl(action: 'pause' | 'resume' | 'retry'): Promise<void> {
     if (actionBusy) return
-    actionBusy = true
     try {
-      if (action === 'pause') await pauseWorkflow(routeWorkflowId)
-      else if (action === 'resume') await resumeWorkflow(routeWorkflowId)
-      else if (snapshot?.retry_failure_event_id) await retryWorkflow(routeWorkflowId, snapshot.retry_failure_event_id)
-    } catch (error) {
-      await refreshWorkflow(routeWorkflowId, { showLoading: false })
-      workflowDetailError.set(error instanceof Error ? error.message : String(error))
-    } finally {
-      actionBusy = false
+      if (action === 'pause') await pauseMutation.mutateAsync(routeWorkflowId)
+      else if (action === 'resume') await resumeMutation.mutateAsync(routeWorkflowId)
+      else if (snapshot?.retry_failure_event_id) {
+        await retryMutation.mutateAsync({ workflowId: routeWorkflowId, failureEventId: snapshot.retry_failure_event_id })
+      }
+    } catch {
+      await workflowQuery.refetch()
     }
   }
 
@@ -129,9 +117,9 @@
     </div>
   </div>
 
-  {#if $workflowDetailError}
-    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>Workflow error</Alert.Title><Alert.Description>{$workflowDetailError}</Alert.Description></Alert.Root>
-    <Button variant="outline" onclick={() => void refreshWorkflow(routeWorkflowId)}>Reload workflow</Button>
+  {#if workflowError}
+    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>Workflow error</Alert.Title><Alert.Description>{workflowError.message}</Alert.Description></Alert.Root>
+    <Button variant="outline" onclick={() => void workflowQuery.refetch()}>Reload workflow</Button>
   {/if}
 
   {#if snapshot?.retry_unavailable_reason}
@@ -167,7 +155,7 @@
     {/if}
   {#if snapshot && revision !== snapshot.current_revision}
     <WorkflowVersions workflowId={routeWorkflowId} {revision} requestedPhase={requestedPhase} onphase={(value) => updateQuery({ phase: String(value) })} />
-  {:else if $workflowDetailLoading && !snapshot}
+  {:else if workflowQuery.isPending && !snapshot}
     <div class="space-y-3"><Skeleton class="h-24 w-full" /><Skeleton class="h-80 w-full" /></div>
   {:else if snapshot && selectedPhase}
     <Card.Root class="overflow-hidden">
@@ -214,7 +202,7 @@
     </Card.Root>
   {:else if snapshot}
     <Card.Root><Empty.Root><Empty.Header><Empty.Title>No agents in this workflow</Empty.Title></Empty.Header></Empty.Root></Card.Root>
-  {:else if !$workflowDetailLoading && !$workflowDetailError}
+  {:else if !workflowQuery.isPending && !workflowError}
     <Empty.Root><Empty.Header><Empty.Title>Workflow unavailable</Empty.Title><Empty.Description>No observable Workflow snapshot was returned.</Empty.Description></Empty.Header></Empty.Root>
   {/if}
   </div>

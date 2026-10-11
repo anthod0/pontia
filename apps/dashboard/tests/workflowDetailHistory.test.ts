@@ -1,11 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, expect, test, vi } from "vitest";
 import WorkflowDetailPage from "../src/pages/WorkflowDetailPage.svelte";
-import {
-  workflowDetail,
-  workflowDetailError,
-  workflowDetailLoading,
-} from "../src/stores/workflows";
+import { queryClient } from "../src/queries/queryClient";
+import { workflowKeys } from "../src/queries/workflows";
 import type { WorkflowDetailView } from "../src/api/types";
 const mocks = vi.hoisted(() => ({
   getWorkflow: vi.fn(),
@@ -65,9 +62,7 @@ const snapshot: WorkflowDetailView = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
-  workflowDetail.set(null);
-  workflowDetailError.set(null);
-  workflowDetailLoading.set(false);
+  queryClient.clear();
   mocks.getWorkflow.mockResolvedValue(snapshot);
   mocks.listWorkflowPatches.mockResolvedValue([]);
   mocks.getWorkflowRevision.mockImplementation(async (id, revision) => ({
@@ -101,7 +96,7 @@ test("Retry keeps the failure identity and shows durable recovery progress", asy
   render(WorkflowDetailPage, { routeWorkflowId: "wf" });
   const button = await screen.findByRole("button", { name: "Retry", exact: true });
   await fireEvent.click(button);
-  expect(button).toBeDisabled();
+  await waitFor(() => expect(button).toBeDisabled());
   expect(mocks.retryWorkflow).toHaveBeenCalledExactlyOnceWith("wf", "failure-1");
   const recovering = {
     ...failed,
@@ -145,7 +140,7 @@ test("version buttons and popstate select history independently of the current r
   const view = render(WorkflowDetailPage, { routeWorkflowId: "wf" });
   expect(await screen.findByText("Viewing v2")).toBeInTheDocument();
   expect(screen.getByText("Current v3")).toBeInTheDocument();
-  workflowDetail.set({ ...snapshot, current_revision: 4 });
+  queryClient.setQueryData(workflowKeys.detail("wf"), { ...snapshot, current_revision: 4 });
   expect(await screen.findByText("Current v4")).toBeInTheDocument();
   expect(screen.getByText("Viewing v2")).toBeInTheDocument();
   await fireEvent.click(screen.getByRole("button", { name: "v4 Current" }));
@@ -164,7 +159,7 @@ test("default selection follows the current workflow without fetching history", 
   visit("?phase=1");
   render(WorkflowDetailPage, { routeWorkflowId: "wf" });
   expect(await screen.findByText("Current writer")).toBeInTheDocument();
-  workflowDetail.set({ ...snapshot, current_revision: 4 });
+  queryClient.setQueryData(workflowKeys.detail("wf"), { ...snapshot, current_revision: 4 });
   expect(await screen.findByText("Current v4")).toBeInTheDocument();
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "v4 Current" })).toHaveAttribute(
