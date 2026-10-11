@@ -4,12 +4,12 @@
   import { Input } from '$lib/components/ui/input/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { modelPickerDisabledReason } from '$lib/modelControls'
-  import { setSessionModel } from '../../api/client'
   import type { SessionView } from '../../api/types'
-  import { createSessionModelsQuery } from '../../queries/sessions'
+  import { createSessionModelsQuery, createSetSessionModelMutation } from '../../queries/sessions'
 
   let { session, onClose }: { session: SessionView; onClose: () => void } = $props()
   const modelsQuery = createSessionModelsQuery(() => session.session_id)
+  const setModelMutation = createSetSessionModelMutation()
   let query = $state('')
   let submitting = $state(false)
   let pendingModel = $state<string | null>(null)
@@ -28,7 +28,11 @@
     submitting = true
     error = null
     try {
-      await setSessionModel(session.session_id, model, modelsQuery.data.runtime_id)
+      await setModelMutation.mutateAsync({
+        sessionId: session.session_id,
+        model,
+        runtimeId: modelsQuery.data.runtime_id,
+      })
       pendingModel = model
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause)

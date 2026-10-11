@@ -9,6 +9,7 @@ import { startEventStream, stopEventStream } from "../src/services/eventStream";
 import { refreshDashboardSnapshot } from "../src/services/dashboardSnapshotRefresh";
 import { selectedWorkflowId } from "../src/stores/workflows";
 import { workflowKeys } from "../src/queries/workflows";
+import { sessionKeys } from "../src/queries/sessions";
 import type { WorkflowDetailView } from "../src/api/types";
 import * as timeline from "../src/stores/timeline";
 import { queryClient } from "../src/queries/queryClient";
@@ -211,7 +212,11 @@ test("keeps a recovery requested during an older snapshot in flight", async () =
     })
     .mockImplementation(listWorkspaces);
   const first = refreshDashboardSnapshot({ reason: "sse_open" });
-  await vi.waitFor(() => expect(get(sessionDetail)?.session.state).toBe("busy"));
+  await vi.waitFor(() =>
+    expect(queryClient.getQueryData<{ state: string }>(sessionKeys.detail("current"))?.state).toBe(
+      "busy",
+    ),
+  );
   state = "idle";
   const recovery = refreshDashboardSnapshot({ reason: "sse_open" });
   release();

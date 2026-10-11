@@ -1,4 +1,5 @@
-import { get, writable } from "svelte/store";
+import { QueriesObserver, type QueryObserverOptions } from "@tanstack/svelte-query";
+import { derived, get, readable, writable } from "svelte/store";
 import { ApiError } from "../api/errors";
 import { getInboxMessage, retryInboxMessage as apiRetryInboxMessage } from "../api/client";
 import {
@@ -9,21 +10,9 @@ import {
   type UnconfirmedSubmission,
 } from "./inboxRecovery";
 import {
-  archiveSession as apiArchiveSession,
   cancelInboxMessage as apiCancelInboxMessage,
-  createSession as apiCreateSession,
   dismissInboxMessage as apiDismissInboxMessage,
-  getSession,
-  interruptSession as apiInterruptSession,
-  listEvents,
-  listInboxMessages,
-  listTurns,
-  pinSession as apiPinSession,
-  resumeSession as apiResumeSession,
   submitInboxMessage as apiSubmitInboxMessage,
-  terminateSession as apiTerminateSession,
-  unpinSession as apiUnpinSession,
-  updateSession as apiUpdateSession,
 } from "../api/client";
 import {
   beginInboxSubmission,
@@ -34,189 +23,189 @@ import {
 import type {
   CreateSessionInput,
   CreateSessionResult,
-  EventView,
   InboxMessageView,
   SessionView,
   SubmitInboxMessageInput,
-  TurnView,
 } from "../api/types";
 import { clearSessionOverviewQuery, invalidateSessionOverview } from "../queries/sessionOverview";
+import { queryClient } from "../queries/queryClient";
+import {
+  clearSessionQueries,
+  fetchSessionDetail,
+  mutateArchiveSession,
+  mutateCreateSession,
+  mutateInterruptSession,
+  mutatePinSession,
+  mutateResumeSession,
+  mutateTerminateSession,
+  mutateUnpinSession,
+  mutateUpdateSession,
+  sessionEventsOptions,
+  sessionInboxMessagesOptions,
+  sessionKeys,
+  sessionOptions,
+  sessionTurnsOptions,
+  setSessionInboxMessages,
+  type SessionConsoleDetail,
+} from "../queries/sessions";
 
-export interface SessionConsoleDetail {
-  session: SessionView;
-  turns: TurnView[];
-  inboxMessages: InboxMessageView[];
-  events: EventView[];
-}
-
-export const sessionDetail = writable<SessionConsoleDetail | null>(null);
-export const sessionDetailLoading = writable(false);
-export const sessionDetailError = writable<string | null>(null);
+export type { SessionConsoleDetail } from "../queries/sessions";
 export type SessionDetailErrorKind = "not_found" | "authentication" | "network" | "request";
-export const sessionDetailErrorKind = writable<SessionDetailErrorKind | null>(null);
 export const selectedSessionId = writable<string | null>(null);
 
-let selectionGeneration = 0;
-let detailRequest: {
-  sessionId: string;
-  generation: number;
-  controller: AbortController;
-  dirty: boolean;
-  promise: Promise<SessionConsoleDetail | null>;
-} | null = null;
+type SessionDetailState = {
+  detail: SessionConsoleDetail | null;
+  loading: boolean;
+  error: string | null;
+  errorKind: SessionDetailErrorKind | null;
+};
+
+function classifySessionDetailError(
+  error: unknown,
+  sessionFailed: boolean,
+): SessionDetailErrorKind {
+  if (error instanceof ApiError) {
+    if (error.status === 404 && sessionFailed) return "not_found";
+    if ([401, 403].includes(error.status)) return "authentication";
+    return "request";
+  }
+  return error instanceof TypeError || error instanceof DOMException ? "network" : "request";
+}
+
+function readSessionDetailState(sessionId: string | null): SessionDetailState {
+  if (!sessionId) return { detail: null, loading: false, error: null, errorKind: null };
+  const sessionState = queryClient.getQueryState<SessionView>(sessionKeys.detail(sessionId));
+  const turnsState = queryClient.getQueryState(sessionKeys.turns(sessionId));
+  const inboxState = queryClient.getQueryState<InboxMessageView[]>(
+    sessionKeys.inboxMessages(sessionId),
+  );
+  const eventsState = queryClient.getQueryState(sessionKeys.events(sessionId));
+  const states = [sessionState, turnsState, inboxState, eventsState];
+  const failedState = states.find((state) => state?.error);
+  const detail =
+    sessionState?.data && turnsState?.data && inboxState?.data && eventsState?.data
+      ? {
+          session: sessionState.data,
+          turns: turnsState.data as SessionConsoleDetail["turns"],
+          inboxMessages: inboxState.data,
+          events: eventsState.data as SessionConsoleDetail["events"],
+        }
+      : null;
+  const error = failedState?.error ?? null;
+  return {
+    detail,
+    loading: !detail && states.some((state) => state?.fetchStatus === "fetching"),
+    error: error ? (error instanceof Error ? error.message : String(error)) : null,
+    errorKind: error ? classifySessionDetailError(error, failedState === sessionState) : null,
+  };
+}
+
+function detailQueryOptions(
+  sessionId: string | null,
+): Array<QueryObserverOptions<any, any, any, any, any>> {
+  const id = sessionId ?? "";
+  return [
+    sessionOptions(id, false),
+    sessionTurnsOptions(id, false),
+    sessionInboxMessagesOptions(id, false),
+    sessionEventsOptions(id, false),
+  ];
+}
+
+const sessionDetailState = readable<SessionDetailState>(readSessionDetailState(null), (set) => {
+  let sessionId = get(selectedSessionId);
+  let lastInboxMessages: InboxMessageView[] | undefined;
+  const observer = new QueriesObserver(queryClient, detailQueryOptions(sessionId));
+  const update = () => {
+    const state = readSessionDetailState(sessionId);
+    if (state.detail?.inboxMessages !== lastInboxMessages) {
+      lastInboxMessages = state.detail?.inboxMessages;
+      if (lastInboxMessages) {
+        syncInboxSubmissions(lastInboxMessages);
+        reconcileSubmissions(lastInboxMessages);
+      }
+    }
+    set(state);
+  };
+  const unsubscribeQueries = observer.subscribe(update);
+  const unsubscribeSelection = selectedSessionId.subscribe((selected) => {
+    sessionId = selected;
+    lastInboxMessages = undefined;
+    observer.setQueries(detailQueryOptions(sessionId));
+    update();
+  });
+  return () => {
+    unsubscribeSelection();
+    unsubscribeQueries();
+    observer.destroy();
+  };
+});
+
+export const sessionDetail = derived(sessionDetailState, (state) => state.detail);
+export const sessionDetailLoading = derived(sessionDetailState, (state) => state.loading);
+export const sessionDetailError = derived(sessionDetailState, (state) => state.error);
+export const sessionDetailErrorKind = derived(sessionDetailState, (state) => state.errorKind);
+
 export function resetSessions(): void {
-  selectionGeneration += 1;
-  detailRequest?.controller.abort();
-  detailRequest = null;
   clearSessionOverviewQuery();
+  clearSessionQueries();
   selectedSessionId.set(null);
-  sessionDetail.set(null);
-  sessionDetailLoading.set(false);
-  sessionDetailError.set(null);
-  sessionDetailErrorKind.set(null);
 }
 
 export function selectSession(sessionId: string | null): void {
-  if (get(selectedSessionId) === sessionId) return;
-  selectionGeneration += 1;
-  detailRequest?.controller.abort();
-  detailRequest = null;
+  const previous = get(selectedSessionId);
+  if (previous === sessionId) return;
+  if (previous) void queryClient.cancelQueries({ queryKey: sessionKeys.detail(previous) });
   selectedSessionId.set(sessionId);
-  if (get(sessionDetail)?.session.session_id !== sessionId) sessionDetail.set(null);
-  sessionDetailError.set(null);
-  sessionDetailErrorKind.set(null);
-  sessionDetailLoading.set(false);
 }
 
 type SessionDetailLoadOptions = {
   showLoading?: boolean;
 };
 
-export function loadSessionDetail(
+export async function loadSessionDetail(
   sessionId: string,
-  options: SessionDetailLoadOptions = {},
+  _options: SessionDetailLoadOptions = {},
 ): Promise<SessionConsoleDetail | null> {
   const selected = get(selectedSessionId);
-  if (!sessionId || (selected && selected !== sessionId)) return Promise.resolve(null);
-  if (detailRequest?.sessionId === sessionId && detailRequest.generation === selectionGeneration) {
-    detailRequest.dirty = true;
-    return detailRequest.promise;
-  }
-
-  detailRequest?.controller.abort();
-  const request = {
-    sessionId,
-    generation: selectionGeneration,
-    controller: new AbortController(),
-    dirty: false,
-    promise: Promise.resolve<SessionConsoleDetail | null>(null),
-  };
-  detailRequest = request;
-  const isCurrent = () => detailRequest === request && request.generation === selectionGeneration;
-  if (options.showLoading !== false || !get(sessionDetail)) sessionDetailLoading.set(true);
-
-  request.promise = (async () => {
-    let detail: SessionConsoleDetail | null = null;
-    do {
-      request.dirty = false;
-      let sessionLoaded = false;
-      const readOptions = { signal: request.controller.signal };
-      try {
-        const session = await getSession(sessionId, readOptions);
-        if (!isCurrent()) return null;
-        sessionLoaded = true;
-        const [turns, inboxMessages, events] = await Promise.all([
-          listTurns(sessionId, readOptions),
-          listInboxMessages(sessionId, readOptions),
-          listEvents(sessionId, readOptions),
-        ]);
-        if (!isCurrent()) return null;
-        detail = { session, turns, inboxMessages, events };
-        syncInboxSubmissions(inboxMessages);
-        reconcileSubmissions(inboxMessages);
-        sessionDetail.set(detail);
-        sessionDetailError.set(null);
-        sessionDetailErrorKind.set(null);
-      } catch (error) {
-        if (!isCurrent()) return null;
-        detail = null;
-        const kind: SessionDetailErrorKind =
-          error instanceof ApiError
-            ? error.status === 404 && !sessionLoaded
-              ? "not_found"
-              : [401, 403].includes(error.status)
-                ? "authentication"
-                : "request"
-            : error instanceof TypeError || error instanceof DOMException
-              ? "network"
-              : "request";
-        if (kind === "not_found" || kind === "authentication") sessionDetail.set(null);
-        sessionDetailErrorKind.set(kind);
-        sessionDetailError.set(error instanceof Error ? error.message : String(error));
-      }
-    } while (request.dirty && isCurrent());
+  if (!sessionId || (selected && selected !== sessionId)) return null;
+  try {
+    const detail = await fetchSessionDetail(sessionId);
+    if (get(selectedSessionId) !== sessionId) return null;
+    syncInboxSubmissions(detail.inboxMessages);
+    reconcileSubmissions(detail.inboxMessages);
     return detail;
-  })().finally(() => {
-    if (isCurrent()) {
-      detailRequest = null;
-      sessionDetailLoading.set(false);
-    }
-  });
-  return request.promise;
-}
-
-export async function createSession(input: CreateSessionInput): Promise<CreateSessionResult> {
-  const result = await apiCreateSession(input);
-  sessionDetail.set({
-    session: result.session,
-    turns: result.initial_turn ? [result.initial_turn] : [],
-    inboxMessages: [],
-    events: [],
-  });
-  void invalidateSessionOverview();
-  return result;
-}
-
-export async function updateSessionTitle(
-  sessionId: string,
-  title: string | null,
-): Promise<SessionView> {
-  const session = await apiUpdateSession(sessionId, { title });
-  await refreshSidebarAndSelectedSession(sessionId);
-  return session;
-}
-
-function applySessionManagementResult(session: SessionView): void {
-  if (get(sessionDetail)?.session.session_id === session.session_id) {
-    sessionDetail.update((detail) => (detail ? { ...detail, session } : detail));
+  } catch {
+    return null;
   }
-  if (detailRequest?.sessionId === session.session_id) detailRequest.dirty = true;
 }
 
-async function refreshAfterSessionManagement(session: SessionView): Promise<SessionView> {
-  applySessionManagementResult(session);
-  await invalidateSessionOverview();
-  return session;
+export function createSession(input: CreateSessionInput): Promise<CreateSessionResult> {
+  return mutateCreateSession(input);
 }
 
-export async function pinSession(sessionId: string): Promise<SessionView> {
-  return refreshAfterSessionManagement(await apiPinSession(sessionId));
+export function updateSessionTitle(sessionId: string, title: string | null): Promise<SessionView> {
+  return mutateUpdateSession(sessionId, { title });
 }
 
-export async function unpinSession(sessionId: string): Promise<SessionView> {
-  return refreshAfterSessionManagement(await apiUnpinSession(sessionId));
+export function pinSession(sessionId: string): Promise<SessionView> {
+  return mutatePinSession(sessionId);
 }
 
-export async function archiveSession(sessionId: string): Promise<SessionView> {
-  return refreshAfterSessionManagement(await apiArchiveSession(sessionId));
+export function unpinSession(sessionId: string): Promise<SessionView> {
+  return mutateUnpinSession(sessionId);
+}
+
+export function archiveSession(sessionId: string): Promise<SessionView> {
+  return mutateArchiveSession(sessionId);
 }
 
 async function refreshSidebarAndSelectedSession(sessionId: string): Promise<void> {
   await Promise.all([
     invalidateSessionOverview(),
     get(selectedSessionId) === sessionId
-      ? loadSessionDetail(sessionId, { showLoading: false })
-      : Promise.resolve(null),
+      ? queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) })
+      : Promise.resolve(),
   ]);
 }
 
@@ -243,12 +232,11 @@ export async function submitInboxMessage(
   }
 
   confirmInboxSubmission(localSubmissionId, message);
-  sessionDetail.update((detail) => {
-    if (detail?.session.session_id !== sessionId) return detail;
-    const inboxMessages = detail.inboxMessages.filter(
+  setSessionInboxMessages(sessionId, (messages) => {
+    const withoutAcceptedMessage = messages.filter(
       (item) => item.message_id !== message.message_id,
     );
-    return { ...detail, inboxMessages: [...inboxMessages, message] };
+    return [...withoutAcceptedMessage, message];
   });
   await refreshSidebarAndSelectedSession(sessionId);
   return message;
@@ -335,17 +323,23 @@ export async function dismissInboxMessage(
   return message;
 }
 
+async function refreshSelectedSessionAfterControl(sessionId: string): Promise<void> {
+  if (get(selectedSessionId) === sessionId) {
+    await loadSessionDetail(sessionId, { showLoading: false });
+  }
+}
+
 export async function interruptSession(sessionId: string): Promise<void> {
-  await apiInterruptSession(sessionId);
-  await refreshSidebarAndSelectedSession(sessionId);
+  await mutateInterruptSession(sessionId);
+  await refreshSelectedSessionAfterControl(sessionId);
 }
 
 export async function resumeSession(sessionId: string): Promise<void> {
-  await apiResumeSession(sessionId);
-  await refreshSidebarAndSelectedSession(sessionId);
+  await mutateResumeSession(sessionId);
+  await refreshSelectedSessionAfterControl(sessionId);
 }
 
 export async function terminateSession(sessionId: string): Promise<void> {
-  await apiTerminateSession(sessionId);
-  await refreshSidebarAndSelectedSession(sessionId);
+  await mutateTerminateSession(sessionId);
+  await refreshSelectedSessionAfterControl(sessionId);
 }

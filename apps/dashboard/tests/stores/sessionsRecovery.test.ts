@@ -92,7 +92,7 @@ test.each(["success", "failure"])(
   },
 );
 
-test("coalesces recovery requests but follows an in-flight failure with a fresh read", async () => {
+test("coalesces concurrent recovery requests and permits a fresh read after failure", async () => {
   let fail!: (error: Error) => void;
   vi.mocked(api.getSession).mockImplementationOnce(
     () =>
@@ -105,6 +105,10 @@ test("coalesces recovery requests but follows an in-flight failure with a fresh 
   const another = loadSessionDetail("a", { showLoading: false });
   fail(new TypeError("Failed to fetch"));
   await Promise.all([first, recovery, another]);
+  expect(api.getSession).toHaveBeenCalledTimes(1);
+  expect(get(sessionDetail)).toBeNull();
+
+  await loadSessionDetail("a", { showLoading: false });
   expect(api.getSession).toHaveBeenCalledTimes(2);
   expect(get(sessionDetail)?.session.session_id).toBe("a");
   expect(get(sessionDetailError)).toBeNull();

@@ -94,10 +94,13 @@ describe("sessions store management actions", () => {
     api.listInboxMessages.mockResolvedValue([accepted]);
     api.listEvents.mockResolvedValue([]);
 
-    const { sessionDetail, submitInboxMessage } = await import("../../src/stores/sessions");
+    const { selectSession, sessionDetail, submitInboxMessage } =
+      await import("../../src/stores/sessions");
+    const { setSessionDetail } = await import("../../src/queries/sessions");
     const { optimisticInboxSubmissions } = await import("../../src/stores/optimisticInbox");
     optimisticInboxSubmissions.set({});
-    sessionDetail.set({ session: current, turns: [], inboxMessages: [], events: [] });
+    selectSession(current.session_id);
+    setSessionDetail({ session: current, turns: [], inboxMessages: [], events: [] });
 
     const submission = submitInboxMessage("session-current", {
       input: "Follow up",
@@ -126,10 +129,12 @@ describe("sessions store management actions", () => {
     });
     api.submitInboxMessage.mockImplementation(() => new Promise(() => undefined));
 
-    const { sessionDetail, submitInboxMessage } = await import("../../src/stores/sessions");
+    const { selectSession, submitInboxMessage } = await import("../../src/stores/sessions");
+    const { setSessionDetail } = await import("../../src/queries/sessions");
     const { optimisticInboxSubmissions } = await import("../../src/stores/optimisticInbox");
     optimisticInboxSubmissions.set({});
-    sessionDetail.set({ session: busy, turns: [], inboxMessages: [], events: [] });
+    selectSession(busy.session_id);
+    setSessionDetail({ session: busy, turns: [], inboxMessages: [], events: [] });
 
     void submitInboxMessage("session-current", {
       input: "Queue this follow-up",
@@ -155,8 +160,11 @@ describe("sessions store management actions", () => {
     api.listInboxMessages.mockResolvedValue([]);
     api.listEvents.mockResolvedValue([]);
 
-    const { sessionDetail, terminateSession } = await import("../../src/stores/sessions");
-    sessionDetail.set({ session: current, turns: [], inboxMessages: [], events: [] });
+    const { selectSession, sessionDetail, terminateSession } =
+      await import("../../src/stores/sessions");
+    const { setSessionDetail } = await import("../../src/queries/sessions");
+    selectSession(current.session_id);
+    setSessionDetail({ session: current, turns: [], inboxMessages: [], events: [] });
 
     await terminateSession("session-other");
 
