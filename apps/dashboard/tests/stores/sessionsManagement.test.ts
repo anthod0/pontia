@@ -27,6 +27,29 @@ function session(overrides: Partial<SessionView>): SessionView {
   return { ...baseSession, ...overrides };
 }
 
+function inboxMessage(overrides: Partial<InboxMessageView> = {}): InboxMessageView {
+  return {
+    message_id: "message-accepted",
+    session_id: "session-current",
+    state: "pending",
+    delivery_policy: "after_idle",
+    input: { summary: "Follow up" },
+    metadata: { source: "dashboard_chat" },
+    branch_target_turn_id: null,
+    turn_id: null,
+    steer_target_turn_id: null,
+    retry_of_message_id: null,
+    retried_by_message_id: null,
+    superseded_by_message_id: null,
+    failure_message: null,
+    created_at: "2026-06-22T00:01:00.000Z",
+    updated_at: "2026-06-22T00:01:00.000Z",
+    dispatched_at: null,
+    cancelled_at: null,
+    ...overrides,
+  };
+}
+
 const api = vi.hoisted(() => ({
   createSession: vi.fn(),
   getSessionOverview: vi.fn(),
@@ -63,25 +86,7 @@ describe("sessions store management actions", () => {
 
   test("creates an optimistic Inbox submission before the request resolves and upgrades it on acceptance", async () => {
     const current = session({ session_id: "session-current" });
-    const accepted: InboxMessageView = {
-      message_id: "message-accepted",
-      session_id: "session-current",
-      state: "pending",
-      delivery_policy: "after_idle",
-      input: { summary: "Follow up" },
-      metadata: { source: "dashboard_chat" },
-      branch_target_turn_id: null,
-      turn_id: null,
-      steer_target_turn_id: null,
-      retry_of_message_id: null,
-      retried_by_message_id: null,
-      superseded_by_message_id: null,
-      failure_message: null,
-      created_at: "2026-06-22T00:01:00.000Z",
-      updated_at: "2026-06-22T00:01:00.000Z",
-      dispatched_at: null,
-      cancelled_at: null,
-    };
+    const accepted = inboxMessage();
     let resolveRequest: (message: InboxMessageView) => void = () => undefined;
     api.submitInboxMessage.mockImplementation(
       () =>
@@ -97,8 +102,7 @@ describe("sessions store management actions", () => {
     const { selectSession, sessionDetail, submitInboxMessage } =
       await import("../../src/stores/sessions");
     const { setSessionDetail } = await import("../../src/queries/sessions");
-    const { optimisticInboxSubmissions } = await import("../../src/stores/optimisticInbox");
-    optimisticInboxSubmissions.set({});
+    const { optimisticInboxSubmissions } = await import("../../src/queries/inbox");
     selectSession(current.session_id);
     setSessionDetail({ session: current, turns: [], inboxMessages: [], events: [] });
 
@@ -108,14 +112,15 @@ describe("sessions store management actions", () => {
       metadata: { source: "dashboard_chat" },
     });
 
-    expect(get(optimisticInboxSubmissions)["session-current"]).toMatchObject([
+    expect(optimisticInboxSubmissions("session-current")).toMatchObject([
       { input: "Follow up", showInChat: true, acceptedMessage: null },
     ]);
 
+    await vi.waitFor(() => expect(api.submitInboxMessage).toHaveBeenCalled());
     resolveRequest(accepted);
     await submission;
 
-    expect(get(optimisticInboxSubmissions)["session-current"]).toMatchObject([
+    expect(optimisticInboxSubmissions("session-current")).toMatchObject([
       { acceptedMessage: { message_id: "message-accepted" } },
     ]);
     expect(get(sessionDetail)?.inboxMessages).toEqual([accepted]);
@@ -131,8 +136,7 @@ describe("sessions store management actions", () => {
 
     const { selectSession, submitInboxMessage } = await import("../../src/stores/sessions");
     const { setSessionDetail } = await import("../../src/queries/sessions");
-    const { optimisticInboxSubmissions } = await import("../../src/stores/optimisticInbox");
-    optimisticInboxSubmissions.set({});
+    const { optimisticInboxSubmissions } = await import("../../src/queries/inbox");
     selectSession(busy.session_id);
     setSessionDetail({ session: busy, turns: [], inboxMessages: [], events: [] });
 
@@ -142,9 +146,35 @@ describe("sessions store management actions", () => {
       metadata: { source: "dashboard_chat" },
     });
 
-    expect(get(optimisticInboxSubmissions)["session-current"]).toMatchObject([
+    expect(optimisticInboxSubmissions("session-current")).toMatchObject([
       { input: "Queue this follow-up", showInChat: false, acceptedMessage: null },
     ]);
+  });
+
+  test.each([
+    ["cancel", "cancelInboxMessage", "cancelled"],
+    ["dismiss", "dismissInboxMessage", "dismissed"],
+  ] as const)("%s updates the cached Inbox message", async (_name, actionName, state) => {
+    const updated = inboxMessage({ state });
+    api[actionName].mockResolvedValue(updated);
+    const actions = await import("../../src/stores/sessions");
+    const { queryClient } = await import("../../src/queries/queryClient");
+    const { sessionKeys, setSessionDetail } = await import("../../src/queries/sessions");
+    setSessionDetail({
+      session: session({ session_id: "session-current" }),
+      turns: [],
+      inboxMessages: [inboxMessage()],
+      events: [],
+    });
+
+    await actions[actionName]("session-current", "message-accepted");
+
+    expect(queryClient.getQueryData(sessionKeys.inboxMessages("session-current"))).toEqual([
+      updated,
+    ]);
+    expect(
+      queryClient.getQueryData(sessionKeys.inboxMessage("session-current", "message-accepted")),
+    ).toEqual(updated);
   });
 
   test("terminating a different session does not replace the current session detail", async () => {

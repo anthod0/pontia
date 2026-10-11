@@ -11,11 +11,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import type { CreateSessionResult, SessionView, TurnView } from "../../../src/api/types";
-import {
-  optimisticInitialMessages,
-  rememberOptimisticMessage,
-} from "../../../src/stores/optimisticChat";
-import { optimisticInboxSubmissions } from "../../../src/stores/optimisticInbox";
+import { rememberOptimisticMessage } from "../../../src/queries/optimisticChat";
+import { queryClient } from "../../../src/queries/queryClient";
+import { sessionKeys } from "../../../src/queries/sessions";
 import * as api from "../../../src/api/client";
 
 const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).default;
@@ -328,16 +326,16 @@ test("copies eligible user messages and opens and cancels historical edits", asy
   });
   prepareBranchChat([originalTurn], { current_turn_id: "turn-original" });
   rememberOptimisticMessage("session-branch", "Optimistic follow-up");
-  optimisticInitialMessages.update((messages) => ({
+  queryClient.setQueryData(sessionKeys.optimisticChat(), (messages = {}) => ({
     ...messages,
     "session-branch": [
       ...(messages["session-branch"] ?? []),
       {
         id: "failed-placeholder:user",
         turnId: "failed-placeholder",
-        role: "user",
+        role: "user" as const,
         content: "Failed follow-up",
-        status: "failed",
+        status: "failed" as const,
         createdAt: "2026-05-14T00:02:00Z",
       },
     ],
@@ -2421,7 +2419,7 @@ test("waits for the native user message if the optimistic message disappears bef
     await user.click(screen.getByRole("button", { name: /^send$/i }));
     await screen.findByText("A new prompt");
     await waitFor(() => expect(frames.length).toBeGreaterThan(0));
-    optimisticInboxSubmissions.set({});
+    queryClient.setQueryData(sessionKeys.optimisticInbox(), {});
     await waitFor(() => expect(screen.queryByText("A new prompt")).not.toBeInTheDocument());
     animationFrame.mockRestore();
     for (const frame of frames) frame(performance.now());

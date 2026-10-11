@@ -12,16 +12,11 @@ import type {
   WorkspaceRootView,
   WorkspaceView,
 } from "../../../src/api/types";
-import { optimisticInitialMessages } from "../../../src/stores/optimisticChat";
 import { chatDraft } from "../../../src/stores/chatDraft";
 import { queryClient } from "../../../src/queries/queryClient";
+import { sessionKeys } from "../../../src/queries/sessions";
+import { confirmInboxSubmission, type OptimisticInboxSubmission } from "../../../src/queries/inbox";
 import { resetChatEntryAutofocus } from "../../../src/lib/chatEntryAutofocus";
-import {
-  beginInboxSubmission,
-  confirmInboxSubmission,
-  failInboxSubmission,
-  optimisticInboxSubmissions,
-} from "../../../src/stores/optimisticInbox";
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -164,21 +159,45 @@ vi.mock("../../../src/stores/sessions", () => ({
   loadSessionDetail: mocks.loadSessionDetail,
   submitInboxMessage: async (
     sessionId: string,
-    input: Parameters<typeof beginInboxSubmission>[1],
+    input: import("../../../src/api/types").SubmitInboxMessageInput,
     options: { showInChat?: boolean } = {},
   ) => {
     const detailSession = mocks.sessionDetail.get()?.session;
     const currentSession = detailSession?.session_id === sessionId ? detailSession : null;
-    const localId = beginInboxSubmission(sessionId, input, {
+    const localId = `test_${crypto.randomUUID()}`;
+    const optimistic: OptimisticInboxSubmission = {
+      localId,
+      sessionId,
+      input: input.input.trim(),
+      deliveryPolicy: input.delivery_policy,
+      metadata: input.metadata,
+      branchTargetTurnId: input.branch_target_turn_id ?? null,
       showInChat:
         options.showInChat ?? (!input.branch_target_turn_id && currentSession?.state !== "busy"),
-    });
+      submittedAt: new Date().toISOString(),
+      acceptedMessage: null,
+    };
+    queryClient.setQueryData<Record<string, OptimisticInboxSubmission[]>>(
+      sessionKeys.optimisticInbox(),
+      (submissions) => ({
+        ...(submissions ?? {}),
+        [sessionId]: [...(submissions?.[sessionId] ?? []), optimistic],
+      }),
+    );
     try {
       const message = await mocks.submitInboxMessage(sessionId, input);
-      if (message) confirmInboxSubmission(localId, message);
+      if (message) confirmInboxSubmission(sessionId, localId, message);
       return message;
     } catch (error) {
-      failInboxSubmission(localId);
+      queryClient.setQueryData<Record<string, OptimisticInboxSubmission[]>>(
+        sessionKeys.optimisticInbox(),
+        (submissions) => ({
+          ...(submissions ?? {}),
+          [sessionId]: (submissions?.[sessionId] ?? []).filter(
+            (submission) => submission.localId !== localId,
+          ),
+        }),
+      );
       throw error;
     }
   },
@@ -190,7 +209,29 @@ vi.mock("../../../src/stores/sessions", () => ({
   interruptSession: mocks.interruptSession,
   terminateSession: mocks.terminateSession,
   updateSessionTitle: mocks.updateSessionTitle,
-  createSession: mocks.createSession,
+  createSession: async (input: import("../../../src/api/types").CreateSessionInput) => {
+    const result = await mocks.createSession(input);
+    if (input.initial_task?.input) {
+      const identity = result.initial_turn?.turn_id ?? `test_${crypto.randomUUID()}`;
+      queryClient.setQueryData<
+        Record<string, import("../../../src/lib/session-chat/sessionChat").SessionChatMessage[]>
+      >(sessionKeys.optimisticChat(), (messages) => ({
+        ...(messages ?? {}),
+        [result.session.session_id]: [
+          ...(messages?.[result.session.session_id] ?? []),
+          {
+            id: `optimistic:${identity}:user`,
+            turnId: identity,
+            role: "user",
+            content: input.initial_task.input.trim(),
+            status: "pending",
+            createdAt: result.initial_turn?.created_at ?? new Date().toISOString(),
+          },
+        ],
+      }));
+    }
+    return result;
+  },
 }));
 
 vi.mock("../../../src/stores/timeline", () => ({
@@ -362,8 +403,6 @@ beforeEach(() => {
   mocks.workspaceGitStatusErrors.set({});
   mocks.timelineState.set(mocks.timelineStateValue());
   chatDraft.set("");
-  optimisticInitialMessages.set({});
-  optimisticInboxSubmissions.set({});
   mocks.dashboardEventListeners.clear();
   mocks.liveOutputListeners.clear();
   mocks.pathParams = {};

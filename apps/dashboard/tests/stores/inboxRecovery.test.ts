@@ -48,7 +48,11 @@ test("lost receipt survives reload and recovery queries the same identity withou
   expect(restored.messageId).toBe(originalId);
   api.getInboxMessage.mockResolvedValue(message(originalId));
   await (await import("../../src/stores/sessions")).recoverInboxSubmission(restored);
-  expect(api.getInboxMessage).toHaveBeenCalledWith("session", originalId);
+  expect(api.getInboxMessage).toHaveBeenCalledWith(
+    "session",
+    originalId,
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
   expect(api.submitInboxMessage).toHaveBeenCalledTimes(1);
   expect(get(saved.unconfirmedSubmissions)).toEqual([]);
 });

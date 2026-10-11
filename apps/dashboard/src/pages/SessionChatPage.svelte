@@ -29,15 +29,15 @@
   } from '$lib/session-chat/liveOutput'
   import {
     chatMessagesWithOptimistic,
-    optimisticInitialMessages,
+    createOptimisticChatQuery,
     reconcileOptimisticMessages,
-  } from '../stores/optimisticChat'
+  } from '../queries/optimisticChat'
   import {
     consumeInboxSubmission,
+    createOptimisticInboxQuery,
     inboxSubmissionMessages,
-    optimisticInboxSubmissions,
     reconcileInboxSubmissions,
-  } from '../stores/optimisticInbox'
+  } from '../queries/inbox'
   import { chatDraft, clearChatDraft } from '../stores/chatDraft'
   import {
     createWorkspacesStore,
@@ -109,6 +109,8 @@
   let workspaceGitStatusErrors: Record<string, string> = {}
 
   const workspacesQuery = createWorkspacesStore()
+  const optimisticChatQuery = createOptimisticChatQuery()
+  const optimisticInboxQuery = createOptimisticInboxQuery()
 
   const AUTO_RESUME_IDLE_TIMEOUT_MS = 30_000
   const BRANCH_INTERRUPT_TIMEOUT_MS = 30_000
@@ -166,9 +168,8 @@
   $: reconcileOptimisticMessages(selectedSessionId, timelineMessages)
   $: reconcileInboxSubmissions(selectedSessionId, timelineMessages)
   $: messages = inboxSubmissionMessages(
-    selectedSessionId,
-    chatMessagesWithOptimistic(selectedSessionId, timelineMessages, $optimisticInitialMessages),
-    $optimisticInboxSubmissions,
+    chatMessagesWithOptimistic(timelineMessages, $optimisticChatQuery.data?.[selectedSessionId] ?? []),
+    $optimisticInboxQuery.data?.[selectedSessionId] ?? [],
   )
   $: branchActionInputs = eligibleBranchActionInputs(selectedSession, messages)
   $: branchActionMessageIds = Object.keys(branchActionInputs)
@@ -514,7 +515,7 @@
       const metadata = streamEvent.event.payload.metadata
       if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
         const inboxMessageId = (metadata as Record<string, unknown>).inbox_message_id
-        if (typeof inboxMessageId === 'string') consumeInboxSubmission(inboxMessageId)
+        if (typeof inboxMessageId === 'string') consumeInboxSubmission(selectedSessionId, inboxMessageId)
       }
       if (streamEvent.event.type === 'session.model_updated') {
         void loadSessionDetail(selectedSessionId, { showLoading: false })

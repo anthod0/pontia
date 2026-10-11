@@ -32,6 +32,7 @@ import type {
 } from "../api/types";
 import { queryClient } from "./queryClient";
 import { invalidateSessionOverview } from "./sessionOverview";
+import { rememberOptimisticMessage } from "./optimisticChat";
 
 export interface SessionConsoleDetail {
   session: SessionView;
@@ -47,6 +48,10 @@ export const sessionKeys = {
   turns: (sessionId: string) => [...sessionKeys.detail(sessionId), "turns"] as const,
   inboxMessages: (sessionId: string) =>
     [...sessionKeys.detail(sessionId), "inbox-messages"] as const,
+  inboxMessage: (sessionId: string, messageId: string) =>
+    [...sessionKeys.inboxMessages(sessionId), messageId] as const,
+  optimisticInbox: () => [...sessionKeys.all, "optimistic-inbox"] as const,
+  optimisticChat: () => [...sessionKeys.all, "optimistic-chat"] as const,
   events: (sessionId: string) => [...sessionKeys.detail(sessionId), "events"] as const,
   models: (sessionId: string) => [...sessionKeys.detail(sessionId), "models"] as const,
 };
@@ -160,6 +165,8 @@ export function invalidateSessionDetail(sessionId: string): Promise<void> {
 export function clearSessionQueries(): void {
   void queryClient.cancelQueries({ queryKey: sessionKeys.details() });
   queryClient.removeQueries({ queryKey: sessionKeys.details() });
+  queryClient.removeQueries({ queryKey: sessionKeys.optimisticInbox() });
+  queryClient.removeQueries({ queryKey: sessionKeys.optimisticChat() });
 }
 
 export function setSessionDetail(detail: SessionConsoleDetail): void {
@@ -190,13 +197,20 @@ async function invalidateAfterControl(sessionId: string): Promise<void> {
 
 const createSessionMutationOptions = () => ({
   mutationFn: requestCreateSession,
-  onSuccess: async (result: CreateSessionResult) => {
+  onSuccess: async (result: CreateSessionResult, input: CreateSessionInput) => {
     setSessionDetail({
       session: result.session,
       turns: result.initial_turn ? [result.initial_turn] : [],
       inboxMessages: [],
       events: [],
     });
+    if (input.initial_task?.input) {
+      rememberOptimisticMessage(
+        result.session.session_id,
+        input.initial_task.input,
+        result.initial_turn,
+      );
+    }
     await invalidateSessionOverview();
   },
 });

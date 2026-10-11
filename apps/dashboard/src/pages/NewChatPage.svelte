@@ -12,7 +12,6 @@
   import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { titleFromInitialPrompt } from '$lib/session-chat/sessionChat'
   import { chatDraft, clearChatDraft } from '../stores/chatDraft'
-  import { rememberOptimisticInitialMessage } from '../stores/optimisticChat'
   import { createWorkspacesStore } from '../queries/workspaces'
   import { createSession, loadSessionDetail } from '../stores/sessions'
   import { loadSessionTimeline, resetTimelineState } from '../stores/timeline'
@@ -146,7 +145,6 @@
         metadata: { source: 'dashboard_chat' },
       })
       rememberCreateWorkspaceSelection(createWorkspaceId)
-      rememberOptimisticInitialMessage(result.session.session_id, initialPrompt, result.initial_turn)
       clearChatDraft()
       resetTimelineState(result.session.session_id)
       navigate(`/chat/${result.session.session_id}`)

@@ -574,10 +574,12 @@ export async function submitInboxMessage(
 export async function getInboxMessage(
   sessionId: string,
   messageId: string,
+  options: ReadRequestOptions = {},
 ): Promise<InboxMessageView> {
   return (
-    await request<{ inbox_message: InboxMessageView }>(
+    await boundedReadRequest<{ inbox_message: InboxMessageView }>(
       `/sessions/${encodeURIComponent(sessionId)}/inbox/messages/${encodeURIComponent(messageId)}`,
+      options,
     )
   ).inbox_message;
 }

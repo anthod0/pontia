@@ -1,25 +1,15 @@
 import { QueriesObserver, type QueryObserverOptions } from "@tanstack/svelte-query";
 import { derived, get, readable, writable } from "svelte/store";
 import { ApiError } from "../api/errors";
-import { getInboxMessage, retryInboxMessage as apiRetryInboxMessage } from "../api/client";
+import { reconcileSubmissions, type UnconfirmedSubmission } from "./inboxRecovery";
 import {
-  rememberSubmission,
-  forgetSubmission,
-  reconcileSubmissions,
-  SubmissionUnconfirmedError,
-  type UnconfirmedSubmission,
-} from "./inboxRecovery";
-import {
-  cancelInboxMessage as apiCancelInboxMessage,
-  dismissInboxMessage as apiDismissInboxMessage,
-  submitInboxMessage as apiSubmitInboxMessage,
-} from "../api/client";
-import {
-  beginInboxSubmission,
-  confirmInboxSubmission,
-  failInboxSubmission,
+  mutateCancelInboxMessage,
+  mutateDismissInboxMessage,
+  mutateRetryInboxMessage,
+  mutateSubmitInboxMessage,
+  recoverInboxSubmission as recoverInboxSubmissionMutation,
   syncInboxSubmissions,
-} from "./optimisticInbox";
+} from "../queries/inbox";
 import type {
   CreateSessionInput,
   CreateSessionResult,
@@ -27,7 +17,7 @@ import type {
   SessionView,
   SubmitInboxMessageInput,
 } from "../api/types";
-import { clearSessionOverviewQuery, invalidateSessionOverview } from "../queries/sessionOverview";
+import { clearSessionOverviewQuery } from "../queries/sessionOverview";
 import { queryClient } from "../queries/queryClient";
 import {
   clearSessionQueries,
@@ -45,7 +35,6 @@ import {
   sessionKeys,
   sessionOptions,
   sessionTurnsOptions,
-  setSessionInboxMessages,
   type SessionConsoleDetail,
 } from "../queries/sessions";
 
@@ -121,7 +110,7 @@ const sessionDetailState = readable<SessionDetailState>(readSessionDetailState(n
     if (state.detail?.inboxMessages !== lastInboxMessages) {
       lastInboxMessages = state.detail?.inboxMessages;
       if (lastInboxMessages) {
-        syncInboxSubmissions(lastInboxMessages);
+        syncInboxSubmissions(sessionId ?? "", lastInboxMessages);
         reconcileSubmissions(lastInboxMessages);
       }
     }
@@ -172,7 +161,7 @@ export async function loadSessionDetail(
   try {
     const detail = await fetchSessionDetail(sessionId);
     if (get(selectedSessionId) !== sessionId) return null;
-    syncInboxSubmissions(detail.inboxMessages);
+    syncInboxSubmissions(sessionId, detail.inboxMessages);
     reconcileSubmissions(detail.inboxMessages);
     return detail;
   } catch {
@@ -200,127 +189,38 @@ export function archiveSession(sessionId: string): Promise<SessionView> {
   return mutateArchiveSession(sessionId);
 }
 
-async function refreshSidebarAndSelectedSession(sessionId: string): Promise<void> {
-  await Promise.all([
-    invalidateSessionOverview(),
-    get(selectedSessionId) === sessionId
-      ? queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) })
-      : Promise.resolve(),
-  ]);
-}
-
-export async function submitInboxMessage(
+export function submitInboxMessage(
   sessionId: string,
   input: SubmitInboxMessageInput,
   options: { showInChat?: boolean } = {},
 ): Promise<InboxMessageView> {
-  const detailSession = get(sessionDetail)?.session;
-  const currentSession = detailSession?.session_id === sessionId ? detailSession : null;
-  const submission = { messageId: `msg_${crypto.randomUUID()}`, sessionId, input };
-  const localSubmissionId = beginInboxSubmission(sessionId, input, {
-    messageId: submission.messageId,
-    showInChat:
-      options.showInChat ?? (!input.branch_target_turn_id && currentSession?.state !== "busy"),
-  });
-  let message: InboxMessageView;
-  try {
-    rememberSubmission(submission);
-    message = await deliverSubmission(submission);
-  } catch (error) {
-    failInboxSubmission(localSubmissionId);
-    throw error;
-  }
-
-  confirmInboxSubmission(localSubmissionId, message);
-  setSessionInboxMessages(sessionId, (messages) => {
-    const withoutAcceptedMessage = messages.filter(
-      (item) => item.message_id !== message.message_id,
-    );
-    return [...withoutAcceptedMessage, message];
-  });
-  await refreshSidebarAndSelectedSession(sessionId);
-  return message;
+  return mutateSubmitInboxMessage(sessionId, input, options);
 }
 
-async function deliverSubmission(
-  submission: UnconfirmedSubmission,
-  recovering = false,
-): Promise<InboxMessageView> {
-  let message: InboxMessageView;
-  try {
-    message = submission.retryOf
-      ? await apiRetryInboxMessage(
-          submission.sessionId,
-          submission.retryOf,
-          submission.messageId,
-          submission.allowUnknown ?? false,
-        )
-      : await apiSubmitInboxMessage(submission.sessionId, submission.input, submission.messageId);
-  } catch (error) {
-    if (
-      !recovering &&
-      error instanceof ApiError &&
-      !error.afterNetworkFailure &&
-      [400, 401, 403, 404, 409, 422].includes(error.status) &&
-      !["invalid_json", "missing_data"].includes(error.code)
-    ) {
-      forgetSubmission(submission.messageId);
-      throw error;
-    }
-    throw new SubmissionUnconfirmedError();
-  }
-  try {
-    forgetSubmission(submission.messageId);
-  } catch {
-    throw new SubmissionUnconfirmedError();
-  }
-  return message;
+export function recoverInboxSubmission(submission: UnconfirmedSubmission): Promise<void> {
+  return recoverInboxSubmissionMutation(submission);
 }
 
-export async function recoverInboxSubmission(submission: UnconfirmedSubmission): Promise<void> {
-  try {
-    await getInboxMessage(submission.sessionId, submission.messageId);
-    forgetSubmission(submission.messageId);
-  } catch (error) {
-    if (!(error instanceof ApiError) || error.status !== 404) throw error;
-    await deliverSubmission(submission, true);
-  }
-  await refreshSidebarAndSelectedSession(submission.sessionId);
-}
-
-export async function retryInboxMessage(
+export function retryInboxMessage(
   sessionId: string,
   original: InboxMessageView,
   allowUnknown = false,
 ): Promise<void> {
-  const submission: UnconfirmedSubmission = {
-    messageId: `msg_${crypto.randomUUID()}`,
-    sessionId,
-    input: { input: original.input.summary },
-    retryOf: original.message_id,
-    allowUnknown,
-  };
-  rememberSubmission(submission);
-  await deliverSubmission(submission);
-  await refreshSidebarAndSelectedSession(sessionId);
+  return mutateRetryInboxMessage(sessionId, original, allowUnknown);
 }
 
-export async function cancelInboxMessage(
+export function cancelInboxMessage(
   sessionId: string,
   messageId: string,
 ): Promise<InboxMessageView> {
-  const message = await apiCancelInboxMessage(sessionId, messageId);
-  await refreshSidebarAndSelectedSession(sessionId);
-  return message;
+  return mutateCancelInboxMessage(sessionId, messageId);
 }
 
-export async function dismissInboxMessage(
+export function dismissInboxMessage(
   sessionId: string,
   messageId: string,
 ): Promise<InboxMessageView> {
-  const message = await apiDismissInboxMessage(sessionId, messageId);
-  await refreshSidebarAndSelectedSession(sessionId);
-  return message;
+  return mutateDismissInboxMessage(sessionId, messageId);
 }
 
 async function refreshSelectedSessionAfterControl(sessionId: string): Promise<void> {

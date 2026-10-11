@@ -50,7 +50,8 @@ const mocks = vi.hoisted(() => {
     terminateSession: vi.fn(),
     updateSessionTitle: vi.fn(),
     chatDraft: writableStore(""),
-    optimisticInitialMessages: writableStore({}),
+    optimisticChatQuery: writableStore({ data: {} }),
+    optimisticInboxQuery: writableStore({ data: {} }),
     workspaces: writableStore([]),
     workspacesError: writableStore<string | null>(null),
     workspaceGitStatuses: writableStore({}),
@@ -103,10 +104,16 @@ vi.mock("../../src/stores/chatDraft", () => ({
   chatDraft: mocks.chatDraft,
   clearChatDraft: vi.fn(),
 }));
-vi.mock("../../src/stores/optimisticChat", () => ({
-  optimisticInitialMessages: mocks.optimisticInitialMessages,
-  chatMessagesWithOptimistic: (_sessionId: string, loadedMessages: unknown[]) => loadedMessages,
+vi.mock("../../src/queries/optimisticChat", () => ({
+  createOptimisticChatQuery: () => mocks.optimisticChatQuery,
+  chatMessagesWithOptimistic: (loadedMessages: unknown[]) => loadedMessages,
   reconcileOptimisticMessages: vi.fn(),
+}));
+vi.mock("../../src/queries/inbox", () => ({
+  createOptimisticInboxQuery: () => mocks.optimisticInboxQuery,
+  consumeInboxSubmission: vi.fn(),
+  inboxSubmissionMessages: (loadedMessages: unknown[]) => loadedMessages,
+  reconcileInboxSubmissions: vi.fn(),
 }));
 vi.mock("../../src/stores/workspaces", () => ({
   workspaces: mocks.workspaces,
