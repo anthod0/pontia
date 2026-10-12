@@ -5,13 +5,12 @@
   import { initialRemoteDashboardState, isValidDeviceHandle, type RemoteDashboardState } from '$lib/remoteDashboard';
   import { clearDashboardRuntimeState, startDashboardRuntime, stopDashboardRuntime } from '../../services/dashboardRuntime';
   import { clearPublicApiTarget, setPublicApiTarget } from './apiTarget';
+  import { createPublicDevicesQuery } from './deviceQueries';
   import { clearE2eSession, connectPublicDevice } from './e2eTransport';
   import {
     dashboardBootstrapUrl,
     dashboardSignInUrl,
-    listPublicDevices,
     CloudRequestError,
-    type PublicDevice,
   } from './remoteAccess';
 
   let { handle, children }: { handle?: string; children: Snippet } = $props();
@@ -20,10 +19,14 @@
   let failedHandle = $state<string | null>(null);
   let targetFailureMessage = $state<string | null>(null);
   let targetSignInRequired = $state(false);
-  let devices = $state<PublicDevice[]>([]);
-  let devicesLoading = $state(false);
-  let devicesError = $state<string | null>(null);
-  let devicesSignInRequired = $state(false);
+  const devicesQuery = createPublicDevicesQuery(() => !handle);
+  const devices = $derived(devicesQuery.data ?? []);
+  const devicesError = $derived(
+    devicesQuery.error ? cloudFailureMessage(devicesQuery.error, 'list') : null,
+  );
+  const devicesSignInRequired = $derived(
+    devicesQuery.error instanceof CloudRequestError && devicesQuery.error.status === 401,
+  );
   const signInUrl = dashboardSignInUrl(
     `${window.location.pathname}${window.location.search}${window.location.hash}`,
   );
@@ -38,6 +41,10 @@
   });
 
   function retry(): void {
+    if (!handle) {
+      void devicesQuery.refetch();
+      return;
+    }
     retryGeneration += 1;
   }
 
@@ -68,29 +75,6 @@
 
   $effect.pre(() => {
     if (runtimeHandle && runtimeHandle !== handle) teardownRuntime();
-  });
-
-  $effect(() => {
-    retryGeneration;
-    if (handle) return;
-    const controller = new AbortController();
-    devicesLoading = true;
-    devicesError = null;
-    devicesSignInRequired = false;
-    void listPublicDevices(controller.signal)
-      .then((loaded) => {
-        if (!controller.signal.aborted) devices = loaded;
-      })
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted) {
-          devicesError = cloudFailureMessage(error, 'list');
-          devicesSignInRequired = error instanceof CloudRequestError && error.status === 401;
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) devicesLoading = false;
-      });
-    return () => controller.abort();
   });
 
   $effect(() => {
@@ -148,7 +132,7 @@
 {:else}
   <DevicesPage
     {devices}
-    loading={devicesLoading}
+    loading={devicesQuery.isPending}
     error={devicesError}
     onRetry={retry}
     openAction={dashboardBootstrapUrl}

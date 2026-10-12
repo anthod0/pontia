@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import PublicDashboardHarness from "../components/PublicDashboardHarness.svelte";
 
 const mocks = vi.hoisted(() => ({
@@ -32,6 +32,29 @@ const target = (handle: string) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.resolveTarget.mockImplementation(async (handle: string) => target(handle));
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+test("retries a failed device list request", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(null, { status: 503 }))
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify([{ device_handle: "office-mac", name: "Office Mac" }]), {
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(PublicDashboardHarness, { props: { handle: "" } });
+  await fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+
+  const openDashboard = await screen.findByRole("link", { name: "Open Dashboard" });
+  expect(openDashboard).toHaveAttribute("href", "https://app.pontia.dev/office-mac");
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
 test("starts only after the secure connection completes and tears down before a scope switch", async () => {
