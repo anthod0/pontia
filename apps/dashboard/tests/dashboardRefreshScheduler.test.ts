@@ -32,9 +32,6 @@ function scheduler(
     getSelectedSessionId: () => options.sessionId ?? null,
     getSelectedWorkflowId: () => options.workflowId ?? null,
     getSelectedWorkflowSessionIds: () => options.workflowSessionIds ?? [],
-    loadWorkspaces: async () => {
-      calls.push("workspaces");
-    },
     loadWorkflows: async () => {
       calls.push("workflows");
     },

@@ -1,9 +1,9 @@
 import { beforeEach, expect, test } from "vitest";
-import type { InboxMessageView } from "../../src/api/types";
+import type { DashboardStreamEvent, InboxMessageView } from "../../src/api/types";
 import type { SessionChatMessage } from "../../src/lib/session-chat/sessionChat";
 import {
-  consumeInboxSubmission,
   inboxSubmissionMessages,
+  reconcileInboxSubmissionForDashboardEvent,
   optimisticInboxSubmissions,
   reconcileInboxSubmissions,
   syncInboxSubmissions,
@@ -83,7 +83,20 @@ test("removes an optimistic Inbox submission when its projected Turn appears", (
 test("removes a submission when SSE reports that its Inbox message was consumed", () => {
   seed(submission({ acceptedMessage: null }));
 
-  consumeInboxSubmission("session-1", "message-1");
+  reconcileInboxSubmissionForDashboardEvent({
+    kind: "session_event",
+    id: "stream-1",
+    occurred_at: "2026-05-14T00:00:00Z",
+    event: {
+      event_id: "event-1",
+      session_id: "session-1",
+      turn_id: "turn-1",
+      source: "runtime",
+      type: "turn.started",
+      time: "2026-05-14T00:00:00Z",
+      payload: { metadata: { inbox_message_id: "message-1" } },
+    },
+  } satisfies DashboardStreamEvent);
 
   expect(optimisticInboxSubmissions("session-1")).toEqual([]);
 });

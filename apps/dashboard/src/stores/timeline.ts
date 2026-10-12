@@ -77,11 +77,32 @@ function emptyState(sessionId = ""): TimelineState {
 let activeTimelineSessionId = "";
 const timelineSubscribers = new Set<Subscriber<TimelineState>>();
 
-function currentTimelineState(): TimelineState {
+function isTimelineRequestForSession(queryKey: readonly unknown[], sessionId: string): boolean {
   return (
-    queryClient.getQueryData<TimelineState>(timelineKeys.snapshot(activeTimelineSessionId)) ??
-    emptyState(activeTimelineSessionId)
+    queryKey[0] === "sessions" &&
+    queryKey[1] === "timeline" &&
+    queryKey[2] === "request" &&
+    queryKey[4] === sessionId
   );
+}
+
+function storedTimelineState(state: TimelineState): TimelineState {
+  return { ...state, loading: false, refreshing: false };
+}
+
+function currentTimelineState(): TimelineState {
+  const state =
+    queryClient.getQueryData<TimelineState>(timelineKeys.snapshot(activeTimelineSessionId)) ??
+    emptyState(activeTimelineSessionId);
+  const fetching =
+    queryClient.isFetching({
+      predicate: (query) => isTimelineRequestForSession(query.queryKey, activeTimelineSessionId),
+    }) > 0;
+  return {
+    ...state,
+    loading: fetching && state.status === "loading" && state.refreshKind === null,
+    refreshing: fetching && state.refreshKind !== null,
+  };
 }
 
 function notifyTimelineSubscribers(): void {
@@ -91,13 +112,13 @@ function notifyTimelineSubscribers(): void {
 
 queryClient.getQueryCache().subscribe((event) => {
   const key = event.query.queryKey;
-  if (
+  const isActiveSnapshot =
     key.length === 4 &&
     key[0] === "sessions" &&
     key[1] === "timeline" &&
     key[2] === "snapshot" &&
-    key[3] === activeTimelineSessionId
-  ) {
+    key[3] === activeTimelineSessionId;
+  if (isActiveSnapshot || isTimelineRequestForSession(key, activeTimelineSessionId)) {
     notifyTimelineSubscribers();
   }
 });
@@ -110,12 +131,12 @@ export const timelineState: Writable<TimelineState> = {
   },
   set(state: TimelineState): void {
     activeTimelineSessionId = state.sessionId;
-    queryClient.setQueryData(timelineKeys.snapshot(state.sessionId), state);
+    queryClient.setQueryData(timelineKeys.snapshot(state.sessionId), storedTimelineState(state));
   },
   update(update: Updater<TimelineState>): void {
     const state = update(currentTimelineState());
     activeTimelineSessionId = state.sessionId;
-    queryClient.setQueryData(timelineKeys.snapshot(state.sessionId), state);
+    queryClient.setQueryData(timelineKeys.snapshot(state.sessionId), storedTimelineState(state));
   },
 };
 

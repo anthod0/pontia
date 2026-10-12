@@ -64,23 +64,48 @@ test("a session event invalidates its session snapshots and every overview varia
   expect(isInvalidated(currentOverviewKey)).toBe(true);
   expect(isInvalidated(archivedOverviewKey)).toBe(true);
   expect(isInvalidated(affectedDetailKey)).toBe(true);
-  expect(isInvalidated(affectedModelsKey)).toBe(true);
+  expect(isInvalidated(affectedModelsKey)).toBe(false);
   expect(isInvalidated(affectedTimelineKey)).toBe(true);
   expect(isInvalidated(otherDetailKey)).toBe(false);
   expect(isInvalidated(otherTimelineKey)).toBe(false);
   expect(isInvalidated(workflowRevisionKey)).toBe(false);
 });
 
-test("connection recovery invalidates all cached dashboard queries", async () => {
+test("a model event also invalidates the affected Session model query", async () => {
+  const modelsKey = sessionKeys.models("session-1");
+  const otherModelsKey = sessionKeys.models("session-2");
+  queryClient.setQueryData(modelsKey, {});
+  queryClient.setQueryData(otherModelsKey, {});
+
+  await invalidateQueriesForDashboardEvent(sessionEvent("session.model_updated"));
+
+  expect(isInvalidated(modelsKey)).toBe(true);
+  expect(isInvalidated(otherModelsKey)).toBe(false);
+});
+
+test("connection recovery invalidates mutable snapshots without expiring immutable or optimistic data", async () => {
   const sessionKey = sessionKeys.detail("session-1");
-  const workflowKey = workflowKeys.revision("workflow-1", 1);
-  queryClient.setQueryData(sessionKey, {});
-  queryClient.setQueryData(workflowKey, {});
+  const workflowDetailKey = workflowKeys.detail("workflow-1");
+  const workflowRevisionKey = workflowKeys.revision("workflow-1", 1);
+  const workflowDocumentKey = workflowKeys.document("workflow-1", "reason.md");
+  const optimisticKey = sessionKeys.optimisticInbox();
+  for (const key of [
+    sessionKey,
+    workflowDetailKey,
+    workflowRevisionKey,
+    workflowDocumentKey,
+    optimisticKey,
+  ]) {
+    queryClient.setQueryData(key, {});
+  }
 
   await invalidateQueriesAfterConnectionRecovery();
 
   expect(isInvalidated(sessionKey)).toBe(true);
-  expect(isInvalidated(workflowKey)).toBe(true);
+  expect(isInvalidated(workflowDetailKey)).toBe(true);
+  expect(isInvalidated(workflowRevisionKey)).toBe(false);
+  expect(isInvalidated(workflowDocumentKey)).toBe(false);
+  expect(isInvalidated(optimisticKey)).toBe(false);
 });
 
 test("dashboard query cleanup removes all cached queries", () => {

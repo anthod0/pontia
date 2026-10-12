@@ -18,7 +18,7 @@ import {
 } from "../stores/connection";
 import { loadSessionDetail, selectedSessionId } from "../stores/sessions";
 import { invalidateQueriesForDashboardEvent } from "../queries/dashboardInvalidation";
-import { invalidateWorkspaceQueries } from "../queries/workspaces";
+import { reconcileInboxSubmissionForDashboardEvent } from "../queries/inbox";
 import { selectedWorkflowId, selectedWorkflowSessionIds } from "../stores/workflows";
 import { invalidateWorkflow, invalidateWorkflowLists } from "../queries/workflows";
 import { createDashboardRefreshScheduler } from "./dashboardRefreshScheduler";
@@ -39,7 +39,6 @@ const refreshScheduler = createDashboardRefreshScheduler({
   getSelectedSessionId: () => get(selectedSessionId),
   getSelectedWorkflowId: () => get(selectedWorkflowId),
   getSelectedWorkflowSessionIds: selectedWorkflowSessionIds,
-  loadWorkspaces: invalidateWorkspaceQueries,
   loadWorkflows: invalidateWorkflowLists,
   refreshSession: (sessionId) => loadSessionDetail(sessionId, { showLoading: false }),
   refreshWorkflow: invalidateWorkflow,
@@ -232,6 +231,7 @@ function parseFrame(
 
 function handleDashboardEvent(streamEvent: DashboardStreamEvent, cursor: string | null): void {
   if (cursor) dashboardStreamCursor.set(cursor);
+  reconcileInboxSubmissionForDashboardEvent(streamEvent);
   void invalidateQueriesForDashboardEvent(streamEvent);
   refreshScheduler.handleEvent(streamEvent);
   for (const listener of dashboardEventListeners) listener(streamEvent);

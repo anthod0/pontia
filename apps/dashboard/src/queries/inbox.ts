@@ -14,7 +14,12 @@ import {
   submitInboxMessage as requestSubmitInboxMessage,
 } from "../api/client";
 import { ApiError } from "../api/errors";
-import type { InboxMessageView, SessionView, SubmitInboxMessageInput } from "../api/types";
+import type {
+  DashboardStreamEvent,
+  InboxMessageView,
+  SessionView,
+  SubmitInboxMessageInput,
+} from "../api/types";
 import type { SessionChatMessage } from "$lib/session-chat/sessionChat";
 import { readable } from "svelte/store";
 import {
@@ -164,6 +169,16 @@ function failInboxSubmission(sessionId: string, localId: string): void {
   setOptimisticInboxSubmissions(sessionId, (submissions) =>
     submissions.filter((submission) => submission.localId !== localId),
   );
+}
+
+export function reconcileInboxSubmissionForDashboardEvent(streamEvent: DashboardStreamEvent): void {
+  if (streamEvent.kind !== "session_event") return;
+  const metadata = streamEvent.event.payload.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return;
+  const messageId = (metadata as Record<string, unknown>).inbox_message_id;
+  if (typeof messageId === "string") {
+    consumeInboxSubmission(streamEvent.event.session_id, messageId);
+  }
 }
 
 export function consumeInboxSubmission(sessionId: string, messageId: string): void {

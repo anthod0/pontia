@@ -33,15 +33,15 @@
     reconcileOptimisticMessages,
   } from '../queries/optimisticChat'
   import {
-    consumeInboxSubmission,
     createOptimisticInboxQuery,
     inboxSubmissionMessages,
     reconcileInboxSubmissions,
   } from '../queries/inbox'
   import { chatDraft, clearChatDraft } from '../stores/chatDraft'
   import {
+    createRefreshWorkspaceGitStatusMutation,
+    createWorkspaceGitStatusesStore,
     createWorkspacesStore,
-    refreshWorkspaceGitStatus,
   } from '../queries/workspaces'
   import {
     cancelInboxMessage,
@@ -105,10 +105,10 @@
   let destroyed = false
   let selectedWorkspaceId = ''
   let gitStatusWorkspaceId = ''
-  let selectedSessionGitStatus: import('../api/types').WorkspaceGitStatusView | undefined
-  let workspaceGitStatusErrors: Record<string, string> = {}
 
   const workspacesQuery = createWorkspacesStore()
+  const workspaceGitStatuses = createWorkspaceGitStatusesStore()
+  const refreshWorkspaceGitStatusMutation = createRefreshWorkspaceGitStatusMutation()
   const optimisticChatQuery = createOptimisticChatQuery()
   const optimisticInboxQuery = createOptimisticInboxQuery()
 
@@ -149,10 +149,17 @@
   $: selectedWorkspaceId = selectedSession?.workspace_id ?? ''
   $: if (selectedWorkspaceId !== gitStatusWorkspaceId) {
     gitStatusWorkspaceId = selectedWorkspaceId
-    selectedSessionGitStatus = undefined
-    workspaceGitStatusErrors = {}
+    refreshWorkspaceGitStatusMutation.reset()
   }
   $: workspaces = $workspacesQuery.data ?? []
+  $: selectedSessionGitStatus = $workspaceGitStatuses[selectedWorkspaceId]
+  $: workspaceGitStatusErrors = selectedWorkspaceId
+    && refreshWorkspaceGitStatusMutation.variables === selectedWorkspaceId
+    && refreshWorkspaceGitStatusMutation.error
+    ? { [selectedWorkspaceId]: refreshWorkspaceGitStatusMutation.error instanceof Error
+      ? refreshWorkspaceGitStatusMutation.error.message
+      : String(refreshWorkspaceGitStatusMutation.error) }
+    : {}
   $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, workspaces, selectedSessionGitStatus, workspaceGitStatusErrors) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
   $: transcriptMessages = $timelineState.sessionId === selectedSessionId
@@ -275,15 +282,9 @@
     const workspaceId = session?.workspace_id
     if (!workspaceId) return
     try {
-      const status = await refreshWorkspaceGitStatus(workspaceId)
-      if (selectedWorkspaceId === workspaceId) selectedSessionGitStatus = status
-      const { [workspaceId]: _, ...remainingErrors } = workspaceGitStatusErrors
-      workspaceGitStatusErrors = remainingErrors
-    } catch (error) {
-      workspaceGitStatusErrors = {
-        ...workspaceGitStatusErrors,
-        [workspaceId]: error instanceof Error ? error.message : String(error),
-      }
+      await refreshWorkspaceGitStatusMutation.mutateAsync(workspaceId)
+    } catch {
+      // The mutation exposes the error to the metadata UI.
     }
   }
 
@@ -512,11 +513,6 @@
   function handleDashboardEvent(streamEvent: DashboardStreamEvent): void {
     if (streamEvent.kind === 'session_event') {
       if (streamEvent.event.session_id !== selectedSessionId) return
-      const metadata = streamEvent.event.payload.metadata
-      if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
-        const inboxMessageId = (metadata as Record<string, unknown>).inbox_message_id
-        if (typeof inboxMessageId === 'string') consumeInboxSubmission(selectedSessionId, inboxMessageId)
-      }
       if (streamEvent.event.type === 'session.model_updated') {
         void loadSessionDetail(selectedSessionId, { showLoading: false })
         return

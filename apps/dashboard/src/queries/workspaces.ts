@@ -1,4 +1,10 @@
-import { createMutation, createQuery, QueryObserver, queryOptions } from "@tanstack/svelte-query";
+import {
+  createMutation,
+  createQuery,
+  MutationObserver,
+  QueryObserver,
+  queryOptions,
+} from "@tanstack/svelte-query";
 import { readable } from "svelte/store";
 import {
   deleteWorkspace as requestDeleteWorkspace,
@@ -10,7 +16,11 @@ import {
   registerWorkspace as requestRegisterWorkspace,
   renameWorkspace as requestRenameWorkspace,
 } from "../api/client";
-import type { RegisterWorkspaceInput, RenameWorkspaceInput } from "../api/types";
+import type {
+  RegisterWorkspaceInput,
+  RenameWorkspaceInput,
+  WorkspaceGitStatusView,
+} from "../api/types";
 import { queryClient } from "./queryClient";
 
 export const workspaceKeys = {
@@ -20,6 +30,8 @@ export const workspaceKeys = {
   filePickers: () => [...workspaceKeys.all, "file-picker"] as const,
   filePicker: (workspaceId: string, query: string, limit: number | undefined) =>
     [...workspaceKeys.filePickers(), workspaceId, { query, limit }] as const,
+  gitStatuses: () => [...workspaceKeys.all, "git-status"] as const,
+  gitStatus: (workspaceId: string) => [...workspaceKeys.gitStatuses(), workspaceId] as const,
 };
 
 export const workspaceRootKeys = {
@@ -80,6 +92,35 @@ export function createWorkspacesStore() {
 
 export function createWorkspaceRootsQuery() {
   return createQuery(workspaceRootsOptions, () => queryClient);
+}
+
+function workspaceGitStatuses(): Record<string, WorkspaceGitStatusView> {
+  return Object.fromEntries(
+    queryClient
+      .getQueryCache()
+      .findAll({ queryKey: workspaceKeys.gitStatuses() })
+      .flatMap((query) => {
+        const workspaceId = query.queryKey[2];
+        const status = query.state.data;
+        return typeof workspaceId === "string" && status
+          ? [[workspaceId, status as WorkspaceGitStatusView]]
+          : [];
+      }),
+  );
+}
+
+export function createWorkspaceGitStatusesStore() {
+  return readable(workspaceGitStatuses(), (set) => {
+    set(workspaceGitStatuses());
+    return queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event.query.queryKey[0] === workspaceKeys.all[0] &&
+        event.query.queryKey[1] === "git-status"
+      ) {
+        set(workspaceGitStatuses());
+      }
+    });
+  });
 }
 
 export function createWorkspaceRootEntriesQuery(
@@ -156,6 +197,24 @@ export function createDeleteWorkspaceMutation() {
   );
 }
 
-export function refreshWorkspaceGitStatus(workspaceId: string) {
-  return requestRefreshWorkspaceGitStatus(workspaceId);
+const refreshWorkspaceGitStatusMutationOptions = () => ({
+  mutationFn: (workspaceId: string) => requestRefreshWorkspaceGitStatus(workspaceId),
+  onSuccess: (status: WorkspaceGitStatusView) => {
+    queryClient.setQueryData(workspaceKeys.gitStatus(status.workspace_id), status);
+  },
+});
+
+export function createRefreshWorkspaceGitStatusMutation() {
+  return createMutation(refreshWorkspaceGitStatusMutationOptions, () => queryClient);
+}
+
+export async function refreshWorkspaceGitStatus(
+  workspaceId: string,
+): Promise<WorkspaceGitStatusView> {
+  const observer = new MutationObserver(queryClient, refreshWorkspaceGitStatusMutationOptions());
+  try {
+    return await observer.mutate(workspaceId);
+  } finally {
+    observer.reset();
+  }
 }

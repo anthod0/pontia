@@ -15,7 +15,11 @@ import type {
 import { chatDraft } from "../../../src/stores/chatDraft";
 import { queryClient } from "../../../src/queries/queryClient";
 import { sessionKeys } from "../../../src/queries/sessions";
-import { confirmInboxSubmission, type OptimisticInboxSubmission } from "../../../src/queries/inbox";
+import {
+  confirmInboxSubmission,
+  reconcileInboxSubmissionForDashboardEvent,
+  type OptimisticInboxSubmission,
+} from "../../../src/queries/inbox";
 import { resetChatEntryAutofocus } from "../../../src/lib/chatEntryAutofocus";
 
 const mocks = vi.hoisted(() => {
@@ -245,9 +249,15 @@ vi.mock("../../../src/stores/timeline", () => ({
 }));
 
 vi.mock("../../../src/services/eventStream", () => ({
-  subscribeDashboardEvents: (listener: (event: unknown) => void) => {
-    mocks.dashboardEventListeners.add(listener);
-    return () => mocks.dashboardEventListeners.delete(listener);
+  subscribeDashboardEvents: (
+    listener: (event: import("../../../src/api/types").DashboardStreamEvent) => void,
+  ) => {
+    const coordinatedListener = (event: import("../../../src/api/types").DashboardStreamEvent) => {
+      reconcileInboxSubmissionForDashboardEvent(event);
+      listener(event);
+    };
+    mocks.dashboardEventListeners.add(coordinatedListener);
+    return () => mocks.dashboardEventListeners.delete(coordinatedListener);
   },
 }));
 
