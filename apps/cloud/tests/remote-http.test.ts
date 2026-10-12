@@ -1,19 +1,22 @@
 import { expect, test } from "bun:test";
 import type { RequestEvent } from "@sveltejs/kit";
+import { eq } from "drizzle-orm";
 import { base64url } from "jose";
 import { GET as listEdges } from "../src/routes/api/remote/edges/+server";
 import {
   DELETE as deleteDevice,
   GET as getDevice,
+  PATCH as patchDevice,
   PUT as putDevice,
 } from "../src/routes/api/remote/devices/[device_id]/+server";
 import { sha256Base64url } from "../src/lib/server/crypto";
-import { authSessions, edges, users } from "../src/lib/server/db/schema";
+import { authSessions, devices, edges, users } from "../src/lib/server/db/schema";
 import { testDatabase } from "./database";
 
 const callListEdges = listEdges as unknown as (event: RequestEvent) => Promise<Response>;
 const callDeleteDevice = deleteDevice as unknown as (event: RequestEvent) => Promise<Response>;
 const callGetDevice = getDevice as unknown as (event: RequestEvent) => Promise<Response>;
+const callPatchDevice = patchDevice as unknown as (event: RequestEvent) => Promise<Response>;
 const callPutDevice = putDevice as unknown as (event: RequestEvent) => Promise<Response>;
 
 const database = testDatabase();
@@ -149,10 +152,11 @@ test("remote HTTP API lists edges and creates, retries, and reads a device", asy
     event(`/api/remote/devices/${deviceId}`, {
       method: "PUT",
       token: credential,
-      body,
+      body: { ...body, name: "PUT must not rename" },
     }),
   );
   expect(retried.status).toBe(200);
+  expect(await retried.json()).toMatchObject({ name: "HTTP Device", device_handle: "http-device" });
   const found = await callGetDevice(
     event(`/api/remote/devices/${deviceId}`, { token: credential }),
   );
@@ -171,4 +175,147 @@ test("remote HTTP API lists edges and creates, retries, and reads a device", asy
     event(`/api/remote/devices/${deviceId}`, { token: credential }),
   );
   expect(missing.status).toBe(404);
+});
+
+test("the CLI can atomically update device profile fields", async () => {
+  await authenticatedRecords();
+  await database.db.insert(devices).values([
+    {
+      id: deviceId,
+      userId: "user-http",
+      edgeId,
+      handle: "office-device",
+      name: "Office Device",
+      e2ePublicKey: base64url.encode(new Uint8Array(32).fill(4)),
+      e2eKeyVersion: 2,
+    },
+    {
+      id: "0195e7d4-1b22-7c33-9d44-123456789abc",
+      userId: "user-http",
+      edgeId,
+      handle: "other-device",
+      name: "Other Device",
+    },
+  ]);
+
+  const renamed = await callPatchDevice(
+    event(`/api/remote/devices/${deviceId}`, {
+      method: "PATCH",
+      token: credential,
+      body: { name: "Studio Device" },
+    }),
+  );
+  expect(renamed.status).toBe(200);
+  expect(await renamed.json()).toMatchObject({
+    name: "Studio Device",
+    device_handle: "office-device",
+    edge_id: edgeId,
+    e2e_key_version: 2,
+  });
+
+  const conflict = await callPatchDevice(
+    event(`/api/remote/devices/${deviceId}`, {
+      method: "PATCH",
+      token: credential,
+      body: { name: "Must not persist", handle: "other-device" },
+    }),
+  );
+  expect(conflict.status).toBe(409);
+  expect((await conflict.json()) as unknown).toEqual({ error: "handle_conflict" });
+  expect(
+    await database.db
+      .select({ name: devices.name, handle: devices.handle })
+      .from(devices)
+      .where(eq(devices.id, deviceId))
+      .get(),
+  ).toEqual({ name: "Studio Device", handle: "office-device" });
+});
+
+test("device profile updates reject malformed and invalid fields", async () => {
+  await authenticatedRecords();
+  await database.db.insert(devices).values({
+    id: deviceId,
+    userId: "user-http",
+    edgeId,
+    handle: "office-device",
+    name: "Office Device",
+  });
+
+  for (const body of [{}, { unknown: true }, { name: "  " }, { handle: "api" }]) {
+    const response = await callPatchDevice(
+      event(`/api/remote/devices/${deviceId}`, {
+        method: "PATCH",
+        token: credential,
+        body,
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()) as unknown).toEqual({ error: "invalid_request" });
+  }
+});
+
+test("device profile updates require a CLI credential", async () => {
+  const response = await callPatchDevice(
+    event(`/api/remote/devices/${deviceId}`, { method: "PATCH", body: { name: "No" } }),
+  );
+
+  expect(response.status).toBe(401);
+});
+
+test("device profile updates hide and preserve another user's device", async () => {
+  await authenticatedRecords();
+  const otherUserId = "user-http-other";
+  const otherEdgeId = "0195e7d6-1b22-7c33-9d44-123456789abc";
+  const otherDeviceId = "0195e7d7-1b22-7c33-9d44-123456789abc";
+  await database.db.insert(users).values({ id: otherUserId });
+  await database.db.insert(edges).values({
+    id: otherEdgeId,
+    userId: otherUserId,
+    name: "Other Edge",
+    dnsLabel: "other-edge",
+    tunnelUrl: "wss://other-edge.example/tunnel",
+    serviceCredentialHash: "hash",
+  });
+  await database.db.insert(devices).values([
+    {
+      id: deviceId,
+      userId: "user-http",
+      edgeId,
+      handle: "office-device",
+      name: "Office Device",
+    },
+    {
+      id: otherDeviceId,
+      userId: otherUserId,
+      edgeId: otherEdgeId,
+      handle: "office-device",
+      name: "Other User Device",
+    },
+  ]);
+
+  const missing = await callPatchDevice(
+    event(`/api/remote/devices/0195e7d5-1b22-7c33-9d44-123456789abc`, {
+      method: "PATCH",
+      token: credential,
+      body: { name: "No device" },
+    }),
+  );
+  const inaccessible = await callPatchDevice(
+    event(`/api/remote/devices/${otherDeviceId}`, {
+      method: "PATCH",
+      token: credential,
+      body: { name: "No device" },
+    }),
+  );
+
+  expect(missing.status).toBe(404);
+  expect(inaccessible.status).toBe(404);
+  expect(await inaccessible.json()).toEqual(await missing.json());
+  expect(
+    await database.db
+      .select({ name: devices.name, handle: devices.handle })
+      .from(devices)
+      .where(eq(devices.id, otherDeviceId))
+      .get(),
+  ).toEqual({ name: "Other User Device", handle: "office-device" });
 });

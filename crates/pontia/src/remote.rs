@@ -28,20 +28,43 @@ pub(crate) struct RemoteCommand {
 enum RemoteCommandKind {
     /// Register this machine as a remote device
     Enable,
+    /// Show this machine's remote registration and identity state
+    Status,
+    /// Edit this machine's Cloud device profile
+    Edit(EditArgs),
     /// Replace the device E2E identity key
     RotateKey,
     /// Unregister this machine and disable remote access
     Disable,
 }
 
+#[derive(Debug, Args)]
+struct EditArgs {
+    /// Set the device display name
+    #[arg(long)]
+    name: Option<String>,
+    /// Set the device Dashboard URL handle
+    #[arg(long)]
+    handle: Option<String>,
+}
+
+pub(crate) enum ServiceRestart {
+    Required,
+    NotRequired,
+}
+
 pub(crate) async fn run(
     command: RemoteCommand,
     vars: &HashMap<String, String>,
-) -> Result<(), String> {
+) -> Result<ServiceRestart, String> {
     match command.command {
-        RemoteCommandKind::Enable => enable(vars).await.map(|_| ()),
-        RemoteCommandKind::RotateKey => rotate_key(vars).await,
-        RemoteCommandKind::Disable => disable(vars).await,
+        RemoteCommandKind::Enable => enable(vars).await.map(|_| ServiceRestart::Required),
+        RemoteCommandKind::Status => status(vars).await.map(|_| ServiceRestart::NotRequired),
+        RemoteCommandKind::Edit(args) => {
+            edit(vars, args).await.map(|_| ServiceRestart::NotRequired)
+        }
+        RemoteCommandKind::RotateKey => rotate_key(vars).await.map(|_| ServiceRestart::Required),
+        RemoteCommandKind::Disable => disable(vars).await.map(|_| ServiceRestart::Required),
     }
 }
 
@@ -62,7 +85,7 @@ struct Device {
     id: String,
     #[serde(rename = "device_handle")]
     handle: String,
-    name: Option<String>,
+    name: String,
     edge_id: String,
     edge_name: String,
     e2e_public_key: String,
@@ -81,6 +104,14 @@ struct RegistrationRequest<'a> {
     e2e_public_key: &'a str,
     e2e_key_version: u64,
     e2e_key_proof: &'a str,
+}
+
+#[derive(Serialize)]
+struct DeviceEditRequest<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    handle: Option<&'a str>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -151,7 +182,9 @@ pub async fn enable(vars: &HashMap<String, String>) -> Result<RemoteAccess, Stri
         .with_prompt("Device name")
         .default(default_name)
         .interact_text()
-        .map_err(|error| format!("failed to read the device name: {error}"))?;
+        .map_err(|error| format!("failed to read the device name: {error}"))?
+        .trim()
+        .to_string();
     validate_name(&name)?;
 
     let pending = generate_identity(
@@ -171,6 +204,137 @@ pub async fn enable(vars: &HashMap<String, String>) -> Result<RemoteAccess, Stri
     write_identity(&home.join("e2e-identity.json"), &stored)?;
     print_registered(&device, false);
     remote_access(device)
+}
+
+pub async fn status(vars: &HashMap<String, String>) -> Result<(), String> {
+    let home = login::pontia_home(vars)?;
+    let Some(device_id) = read_device_id(&home.join("config.toml"))? else {
+        println!("remote: disabled");
+        return Ok(());
+    };
+    let origin = login::auth_origin(vars)?;
+    let credential = read_credential(&home.join("auth.json"), "checking")?;
+    let client = remote_client()?;
+    let api = RegistrationApi {
+        client: &client,
+        origin: &origin,
+        credential: &credential,
+    };
+    let Some(device) = api.find_device(&device_id).await? else {
+        println!("remote: registration missing");
+        println!("device ID: {device_id}");
+        println!("hint: run `pontia remote enable`");
+        return Ok(());
+    };
+
+    println!("remote: registered");
+    println!("device: {}", device.name);
+    println!("handle: {}", device.handle);
+    println!("device ID: {}", device.id);
+    println!("edge: {}", device.edge_name);
+    println!("identity key: version {}", device.e2e_key_version);
+    println!("dashboard: {}", dashboard_url(&device.handle));
+    if !stored_identity_matches_for_status(&home.join("e2e-identity.json"), &device)? {
+        println!("identity: invalid or missing");
+        println!("hint: run `pontia remote enable`");
+    }
+    Ok(())
+}
+
+async fn edit(vars: &HashMap<String, String>, args: EditArgs) -> Result<(), String> {
+    let home = login::pontia_home(vars)?;
+    let device_id = read_device_id(&home.join("config.toml"))?
+        .ok_or_else(|| "remote access is disabled; run `pontia remote enable` first".to_string())?;
+    let parameter_mode = args.name.is_some() || args.handle.is_some();
+    let provided_name = args.name.map(|value| value.trim().to_string());
+    let provided_handle = args.handle.map(|value| value.trim().to_string());
+    if let Some(value) = &provided_name {
+        validate_name(value)?;
+    }
+    if let Some(value) = &provided_handle {
+        validate_handle(value)?;
+    }
+    let origin = login::auth_origin(vars)?;
+    let credential = read_credential(&home.join("auth.json"), "editing")?;
+    let client = remote_client()?;
+    let api = RegistrationApi {
+        client: &client,
+        origin: &origin,
+        credential: &credential,
+    };
+    let current = api.find_device(&device_id).await?.ok_or_else(|| {
+        "the configured remote device is not registered; run `pontia remote enable`".to_string()
+    })?;
+    let (name, handle, send_name, send_handle) = if parameter_mode {
+        (
+            provided_name
+                .clone()
+                .unwrap_or_else(|| current.name.clone()),
+            provided_handle
+                .clone()
+                .unwrap_or_else(|| current.handle.clone()),
+            provided_name,
+            provided_handle,
+        )
+    } else {
+        let name = Input::<String>::new()
+            .with_prompt("Device name")
+            .default(current.name.clone())
+            .interact_text()
+            .map_err(|error| format!("failed to read the device name: {error}"))?
+            .trim()
+            .to_string();
+        let handle = Input::<String>::new()
+            .with_prompt("Device handle")
+            .default(current.handle.clone())
+            .interact_text()
+            .map_err(|error| format!("failed to read the device handle: {error}"))?
+            .trim()
+            .to_string();
+        validate_name(&name)?;
+        validate_handle(&handle)?;
+        (name.clone(), handle.clone(), Some(name), Some(handle))
+    };
+
+    let previous_handle = current.handle.clone();
+    let device = if name == current.name && handle == current.handle {
+        current
+    } else {
+        api.edit_device(&device_id, send_name.as_deref(), send_handle.as_deref())
+            .await?
+    };
+    let handle_changed = device.handle != previous_handle;
+    println!("Device updated.");
+    println!("  Device: {}", device.name);
+    println!("  Handle: {}", device.handle);
+    println!("  Dashboard: {}", dashboard_url(&device.handle));
+    if handle_changed {
+        println!("  The previous Dashboard URL is no longer valid.");
+    }
+    Ok(())
+}
+
+fn remote_client() -> Result<Client, String> {
+    Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .map_err(|error| format!("failed to create the remote registration HTTP client: {error}"))
+}
+
+fn dashboard_url(handle: &str) -> String {
+    format!("https://app.pontia.dev/{handle}")
+}
+
+fn stored_identity_matches_for_status(path: &Path, device: &Device) -> Result<bool, String> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(format!("failed to read {}: {error}", path.display())),
+    };
+    let Ok(identity) = serde_json::from_slice::<StoredIdentity>(&bytes) else {
+        return Ok(false);
+    };
+    Ok(identity_matches(&identity, device).unwrap_or(false))
 }
 
 pub async fn rotate_key(vars: &HashMap<String, String>) -> Result<(), String> {
@@ -280,10 +444,14 @@ fn stored_identity_matches(path: &Path, device: &Device) -> Result<bool, String>
     let Some(identity) = read_identity(path)? else {
         return Ok(false);
     };
+    identity_matches(&identity, device)
+}
+
+fn identity_matches(identity: &StoredIdentity, device: &Device) -> Result<bool, String> {
     Ok(identity.device_id == device.id
         && identity.key_version == device.e2e_key_version
         && identity.capability_verification_key == device.capability_verification_key
-        && identity_public_key(&identity)? == device.e2e_public_key)
+        && identity_public_key(identity)? == device.e2e_public_key)
 }
 
 async fn rotate_registered_identity(
@@ -306,7 +474,7 @@ async fn rotate_registered_identity(
     write_identity(path, &pending)?;
     api.register_device(
         &device.id,
-        device.name.as_deref().unwrap_or("unnamed device"),
+        &device.name,
         &device.edge_id,
         &public_key,
         key_version,
@@ -466,6 +634,79 @@ fn validate_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_handle(handle: &str) -> Result<(), String> {
+    if !valid_device_handle(handle) || reserved_device_handle(handle) {
+        return Err("device handle must be 4 to 48 characters, start with a lowercase ASCII letter, contain only lowercase ASCII letters, numbers, hyphens, or underscores, and not be reserved".to_string());
+    }
+    Ok(())
+}
+
+fn reserved_device_handle(value: &str) -> bool {
+    matches!(
+        value,
+        "about"
+            | "account"
+            | "accounts"
+            | "agent-profiles"
+            | "admin"
+            | "api"
+            | "assets"
+            | "auth"
+            | "authorization"
+            | "authorize"
+            | "billing"
+            | "callback"
+            | "callbacks"
+            | "chat"
+            | "connect"
+            | "contact"
+            | "dashboard"
+            | "device"
+            | "devices"
+            | "docs"
+            | "download"
+            | "downloads"
+            | "edge"
+            | "edges"
+            | "health"
+            | "healthz"
+            | "help"
+            | "install"
+            | "invite"
+            | "invites"
+            | "legal"
+            | "login"
+            | "logout"
+            | "oauth"
+            | "pricing"
+            | "privacy"
+            | "profile"
+            | "profiles"
+            | "register"
+            | "security"
+            | "session"
+            | "sessions"
+            | "settings"
+            | "signin"
+            | "signout"
+            | "signup"
+            | "static"
+            | "status"
+            | "support"
+            | "system"
+            | "terms"
+            | "user"
+            | "users"
+            | "verify"
+            | "webhook"
+            | "webhooks"
+            | "workflow"
+            | "workflows"
+            | "workspace"
+            | "workspaces"
+    )
+}
+
 impl RegistrationApi<'_> {
     async fn e2e_config(&self) -> Result<E2eConfig, String> {
         let response = self
@@ -541,6 +782,42 @@ impl RegistrationApi<'_> {
             ),
             status => Err(format!(
                 "the cloud rejected the device registration query ({status}); the configured device ID was preserved"
+            )),
+        }
+    }
+
+    async fn edit_device(
+        &self,
+        device_id: &str,
+        name: Option<&str>,
+        handle: Option<&str>,
+    ) -> Result<Device, String> {
+        let response = self
+            .client
+            .patch(endpoint(
+                self.origin,
+                &format!("api/remote/devices/{device_id}"),
+            )?)
+            .bearer_auth(self.credential)
+            .json(&DeviceEditRequest { name, handle })
+            .send()
+            .await
+            .map_err(|error| uncertain("update the device profile", error))?;
+        match response.status() {
+            StatusCode::OK => parse_device(response, device_id).await,
+            StatusCode::UNAUTHORIZED => Err(login_required()),
+            StatusCode::NOT_FOUND => Err(
+                "the configured remote device is not registered to the logged-in user; run `pontia remote enable`"
+                    .to_string(),
+            ),
+            StatusCode::CONFLICT => {
+                Err("the device handle is already in use by another device".to_string())
+            }
+            StatusCode::BAD_REQUEST => {
+                Err("the cloud rejected the device name or handle".to_string())
+            }
+            status => Err(format!(
+                "the cloud rejected the device profile update ({status}); the result is unknown"
             )),
         }
     }
@@ -643,9 +920,12 @@ async fn parse_device(response: reqwest::Response, expected_id: &str) -> Result<
     if device.id != expected_id
         || !uuid_v7(&device.id)
         || !uuid_v7(&device.edge_id)
+        || validate_name(&device.name).is_err()
+        || device.edge_name.trim().is_empty()
         || !valid_device_handle(&device.handle)
-        || (device.e2e_key_version == 0 && !device.e2e_public_key.is_empty())
-        || (device.e2e_key_version > 0 && !valid_key(&device.e2e_public_key))
+        || reserved_device_handle(&device.handle)
+        || device.e2e_key_version == 0
+        || !valid_key(&device.e2e_public_key)
         || !valid_key(&device.capability_verification_key)
     {
         return Err(uncertain_result());
@@ -700,7 +980,7 @@ fn login_required() -> String {
 }
 
 fn print_registered(device: &Device, already_registered: bool) {
-    let name = device.name.as_deref().unwrap_or("unnamed device");
+    let name = &device.name;
     if already_registered {
         println!("Device is already registered.");
     } else {
@@ -811,5 +1091,45 @@ mod tests {
         assert!(!valid_device_handle("abc"));
         assert!(!valid_device_handle("Office-Mac"));
         assert!(!valid_device_handle("office/mac"));
+    }
+
+    #[test]
+    fn status_detects_every_local_identity_inconsistency() {
+        let root = tempdir().unwrap();
+        let path = root.path().join("e2e-identity.json");
+        let trust_key = URL_SAFE_NO_PAD.encode([3_u8; 32]);
+        let identity =
+            generate_identity("0195e7c1-1b22-7c33-9d44-123456789abc", 2, trust_key.clone())
+                .unwrap();
+        let public_key = identity_public_key(&identity).unwrap();
+        write_identity(&path, &identity).unwrap();
+        let device = Device {
+            id: identity.device_id.clone(),
+            handle: "office-mac".to_string(),
+            name: "Office Mac".to_string(),
+            edge_id: "0195e7c2-1b22-7c33-9d44-123456789abc".to_string(),
+            edge_name: "Tokyo".to_string(),
+            e2e_public_key: public_key,
+            e2e_key_version: 2,
+            capability_verification_key: trust_key,
+        };
+
+        assert!(stored_identity_matches_for_status(&path, &device).unwrap());
+
+        let missing = root.path().join("missing.json");
+        assert!(!stored_identity_matches_for_status(&missing, &device).unwrap());
+
+        let mut changed = device;
+        changed.id = "0195e7c3-1b22-7c33-9d44-123456789abc".to_string();
+        assert!(!stored_identity_matches_for_status(&path, &changed).unwrap());
+        changed.id = identity.device_id.clone();
+        changed.e2e_key_version = 3;
+        assert!(!stored_identity_matches_for_status(&path, &changed).unwrap());
+        changed.e2e_key_version = 2;
+        changed.e2e_public_key = URL_SAFE_NO_PAD.encode([4_u8; 32]);
+        assert!(!stored_identity_matches_for_status(&path, &changed).unwrap());
+        changed.e2e_public_key = identity_public_key(&identity).unwrap();
+        changed.capability_verification_key = URL_SAFE_NO_PAD.encode([5_u8; 32]);
+        assert!(!stored_identity_matches_for_status(&path, &changed).unwrap());
     }
 }

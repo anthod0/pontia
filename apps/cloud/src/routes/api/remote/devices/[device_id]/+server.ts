@@ -5,6 +5,7 @@ import {
   findRegisteredDevice,
   registerDevice,
   unregisterDevice,
+  updateRegisteredDevice,
 } from "$lib/server/remote-access/registration";
 import type { RequestHandler } from "./$types";
 
@@ -45,6 +46,51 @@ export const GET: RequestHandler = async (event) => {
   const trustKey = event.platform?.env.E2E_CAPABILITY_VERIFICATION_KEY;
   if (!trustKey) return json({ error: "unavailable" }, { status: 503 });
   return json(deviceResponseBody(result.device, trustKey));
+};
+
+export const PATCH: RequestHandler = async (event) => {
+  const principal = await cliPrincipal(event);
+  if (!principal) return json({ error: "invalid_credentials" }, { status: 401 });
+
+  let parsed: unknown;
+  try {
+    parsed = await event.request.json();
+  } catch {
+    return json({ error: "invalid_request" }, { status: 400 });
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    return json({ error: "invalid_request" }, { status: 400 });
+  const body = parsed as Record<string, unknown>;
+  const keys = Object.keys(body);
+  if (
+    keys.length === 0 ||
+    keys.some((key) => !["name", "handle"].includes(key)) ||
+    ("name" in body && typeof body.name !== "string") ||
+    ("handle" in body && typeof body.handle !== "string")
+  )
+    return json({ error: "invalid_request" }, { status: 400 });
+
+  const trustKey = event.platform?.env.E2E_CAPABILITY_VERIFICATION_KEY;
+  if (!trustKey) return json({ error: "unavailable" }, { status: 503 });
+  const result = await updateRegisteredDevice(
+    remoteDatabase(event),
+    principal.userId,
+    event.params.device_id,
+    {
+      ...(typeof body.name === "string" ? { name: body.name } : {}),
+      ...(typeof body.handle === "string" ? { handle: body.handle } : {}),
+    },
+  );
+  switch (result.status) {
+    case "invalid_request":
+      return json({ error: result.status }, { status: 400 });
+    case "not_found":
+      return json({ error: "device_not_found" }, { status: 404 });
+    case "handle_conflict":
+      return json({ error: result.status }, { status: 409 });
+    case "updated":
+      return json(deviceResponseBody(result.device, trustKey));
+  }
 };
 
 export const DELETE: RequestHandler = async (event) => {

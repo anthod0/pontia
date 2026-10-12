@@ -99,8 +99,12 @@ async fn execute(command: Command) -> Result<bool, String> {
         }
         Command::Remote(command) => {
             let vars: HashMap<String, String> = env::vars().collect();
-            remote::run(command, &vars).await?;
-            restart_service_for_remote_config()?;
+            if matches!(
+                remote::run(command, &vars).await?,
+                remote::ServiceRestart::Required
+            ) {
+                restart_service_for_remote_config()?;
+            }
             Ok(true)
         }
         Command::Update => run_update().await,

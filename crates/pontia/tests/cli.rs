@@ -551,6 +551,45 @@ fn login_rejects_plaintext_http_without_writing_a_credential() {
 }
 
 #[test]
+fn remote_status_reports_disabled_without_login_or_cloud_access() {
+    let dir = temp_dir("remote-status-disabled");
+    let output = pontia()
+        .args(["remote", "status"])
+        .env("PONTIA_HOME", dir.path())
+        .env(
+            "PONTIA_AUTH_ORIGIN",
+            "https://must-not-be-requested.invalid",
+        )
+        .output()
+        .expect("run remote status");
+
+    assert!(output.status.success());
+    assert!(!output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn remote_edit_parameter_mode_validates_without_reading_terminal_input() {
+    let dir = temp_dir("remote-edit-invalid");
+    fs::write(
+        dir.path().join("config.toml"),
+        "[remote]\ndevice_id = '0195e7c1-1b22-7c33-9d44-123456789abc'\n",
+    )
+    .unwrap();
+
+    let output = pontia()
+        .args(["remote", "edit", "--handle", "api"])
+        .env("PONTIA_HOME", dir.path())
+        .output()
+        .expect("run remote edit");
+
+    assert!(!output.status.success());
+    assert!(!output.stderr.is_empty());
+    assert!(!dir.path().join("auth.json").exists());
+}
+
+#[test]
 fn remote_enable_requires_login_before_creating_a_device_id() {
     let dir = temp_dir("remote-not-logged-in");
     let output = pontia()

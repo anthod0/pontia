@@ -2,7 +2,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import type { Database } from "../db";
 import { devices, edges } from "../db/schema";
 import { isUuidV7 } from "../uuid";
-import { deviceHandleCandidates } from "./device-handle";
+import { deviceHandleCandidates, isValidDeviceHandle } from "./device-handle";
 import { edgeIsAccessibleTo } from "./resources";
 
 export type RegistrationEdge = {
@@ -31,7 +31,11 @@ export type DeviceRegistration =
 
 export type DeviceUnregistration = { status: "deleted" | "not_found" | "conflict" };
 
-function validName(value: string) {
+export type DeviceUpdate =
+  | { status: "updated"; device: RegisteredDevice }
+  | { status: "invalid_request" | "not_found" | "handle_conflict" };
+
+export function isValidDeviceName(value: string) {
   return value.trim() === value && value.length > 0 && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
 }
 
@@ -59,6 +63,14 @@ function registeredDevice(device: StoredDevice): RegisteredDevice {
     e2ePublicKey: device.e2ePublicKey ?? "",
     e2eKeyVersion: device.e2eKeyVersion ?? 0,
   };
+}
+
+async function handleOwner(db: Database, userId: string, handle: string) {
+  return db
+    .select({ id: devices.id })
+    .from(devices)
+    .where(and(eq(devices.userId, userId), eq(devices.handle, handle)))
+    .get();
 }
 
 async function storedDevice(db: Database, deviceId: string): Promise<StoredDevice | null> {
@@ -92,6 +104,49 @@ export async function findRegisteredDevice(
   return { status: "found", device: registeredDevice(device) };
 }
 
+export async function updateRegisteredDevice(
+  db: Database,
+  userId: string,
+  deviceId: string,
+  update: { name?: string; handle?: string },
+): Promise<DeviceUpdate> {
+  if (
+    !isUuidV7(deviceId) ||
+    (update.name === undefined && update.handle === undefined) ||
+    (update.name !== undefined && !isValidDeviceName(update.name)) ||
+    (update.handle !== undefined && !isValidDeviceHandle(update.handle))
+  )
+    return { status: "invalid_request" };
+
+  const existing = await storedDevice(db, deviceId);
+  if (!existing || existing.userId !== userId) return { status: "not_found" };
+
+  if (update.handle !== undefined) {
+    const owner = await handleOwner(db, userId, update.handle);
+    if (owner && owner.id !== deviceId) return { status: "handle_conflict" };
+  }
+
+  try {
+    const changed = await db
+      .update(devices)
+      .set({ ...update, updatedAt: new Date().toISOString() })
+      .where(and(eq(devices.id, deviceId), eq(devices.userId, userId)))
+      .returning({ id: devices.id });
+    if (changed.length !== 1) return { status: "not_found" };
+  } catch (cause) {
+    if (update.handle !== undefined) {
+      const owner = await handleOwner(db, userId, update.handle);
+      if (owner && owner.id !== deviceId) return { status: "handle_conflict" };
+    }
+    throw cause;
+  }
+
+  const stored = await storedDevice(db, deviceId);
+  return stored && stored.userId === userId
+    ? { status: "updated", device: registeredDevice(stored) }
+    : { status: "not_found" };
+}
+
 export async function unregisterDevice(
   db: Database,
   userId: string,
@@ -118,7 +173,7 @@ export async function registerDevice(
   if (
     !isUuidV7(deviceId) ||
     !isUuidV7(edgeId) ||
-    !validName(name) ||
+    !isValidDeviceName(name) ||
     !/^[A-Za-z0-9_-]{43}$/.test(e2ePublicKey) ||
     !Number.isSafeInteger(e2eKeyVersion) ||
     e2eKeyVersion < 1

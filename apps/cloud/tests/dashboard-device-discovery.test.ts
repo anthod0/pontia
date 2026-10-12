@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { issueLogin } from "../src/lib/server/auth/jwt";
 import { authSessions, devices, edges, users } from "../src/lib/server/db/schema";
 import { edgeApiOrigin } from "../src/lib/server/edge-network";
+import { updateRegisteredDevice } from "../src/lib/server/remote-access/registration";
 import {
   GET as listDevices,
   OPTIONS as listDevicesOptions,
@@ -190,6 +191,24 @@ test("connect returns trusted routing and browser-bound signed authorization wit
   ).toBe(true);
   expect(capability.subarray(25, 57).toString("base64url")).toBe(browserPublicKey);
   expectCredentialedCors(response);
+});
+
+test("editing a handle immediately moves Dashboard discovery to the new URL", async () => {
+  const token = await seedDashboardFixtureAndLogin();
+  const updated = await updateRegisteredDevice(database.db, ownerId, ownerDeviceId, {
+    handle: "studio-mac",
+  });
+  expect(updated.status).toBe("updated");
+
+  const current = await callConnect(
+    event("/api/dashboard/devices/studio-mac/connect", { origin: dashboardOrigin, token }),
+  );
+  const previous = await callConnect(
+    event("/api/dashboard/devices/office-mac/connect", { origin: dashboardOrigin, token }),
+  );
+
+  expect(current.status).toBe(200);
+  expect(previous.status).toBe(404);
 });
 
 test("connect does not reveal another user's handle", async () => {
