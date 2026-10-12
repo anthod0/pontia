@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-12
+
+### Added
+
+- Added Cloud controls for editing device names and handles.
+- Added live Codex assistant output through the shared conversation streaming path.
+
+### Changed
+
+- Completed the Dashboard migration of profiles, workspaces, sessions, Inbox, timelines, and public device data to TanStack Query.
+- Moved Pi entry history recovery to a bounded runtime RPC.
+- Published installer scripts directly from the repository release workflow.
+
+### Removed
+
+- Removed the obsolete message update event and its volatile event broker path.
+
 ## [0.5.1] - 2026-10-10
 
 ### Added
