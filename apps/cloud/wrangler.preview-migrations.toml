@@ -1,6 +1,0 @@
-[[d1_databases]]
-binding = "DB"
-database_name = "pontia-cloud-staging"
-database_id = "37de0e2f-1dcd-4673-ad66-96f909c9fcec"
-migrations_dir = "migrations"
-migrations_pattern = "migrations/*/migration.sql"

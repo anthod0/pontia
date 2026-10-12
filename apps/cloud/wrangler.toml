@@ -68,11 +68,3 @@ database_name = "pontia-cloud"
 database_id = "c1c8fe42-98a7-4d89-a650-2e742a744a79"
 migrations_dir = "migrations"
 migrations_pattern = "migrations/*/migration.sql"
-
-[previews.vars]
-AUTH_ORIGIN = "https://staging-pontia-cloud.anthod.workers.dev"
-
-[[previews.d1_databases]]
-binding = "DB"
-database_name = "pontia-cloud-staging"
-database_id = "37de0e2f-1dcd-4673-ad66-96f909c9fcec"
