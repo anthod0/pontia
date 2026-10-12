@@ -103,6 +103,128 @@ test("the settings pages return the current profile, active logins, and register
   ]);
 });
 
+test("a device owner can update its name and handle", async () => {
+  await insertCurrentUser();
+  const edgeId = "0199791c-6600-7000-8000-000000000020";
+  const deviceId = "0199791c-6600-7000-8000-000000000030";
+  await database.db.insert(edges).values({
+    id: edgeId,
+    userId,
+    name: "Home edge",
+    dnsLabel: "home-edge",
+    tunnelUrl: "wss://home.example/tunnel",
+    serviceCredentialHash: "hash",
+  });
+  await database.db.insert(devices).values({
+    id: deviceId,
+    userId,
+    edgeId,
+    handle: "home-device",
+    name: "Home device",
+  });
+
+  expect(
+    await (deviceActions.updateDevice as (event: RequestEvent) => Promise<unknown>)(
+      await signedInEvent({
+        device_id: deviceId,
+        name: "Office device",
+        handle: "office-device",
+      }),
+    ),
+  ).toEqual({ success: "device_updated" });
+  expect(
+    await database.db.select().from(devices).where(eq(devices.id, deviceId)).get(),
+  ).toMatchObject({
+    name: "Office device",
+    handle: "office-device",
+  });
+});
+
+test("device handles remain unique within a user", async () => {
+  await insertCurrentUser();
+  const edgeId = "0199791c-6600-7000-8000-000000000020";
+  await database.db.insert(edges).values({
+    id: edgeId,
+    userId,
+    name: "Home edge",
+    dnsLabel: "home-edge",
+    tunnelUrl: "wss://home.example/tunnel",
+    serviceCredentialHash: "hash",
+  });
+  await database.db.insert(devices).values([
+    {
+      id: "0199791c-6600-7000-8000-000000000030",
+      userId,
+      edgeId,
+      handle: "first-device",
+      name: "First device",
+    },
+    {
+      id: "0199791c-6600-7000-8000-000000000031",
+      userId,
+      edgeId,
+      handle: "second-device",
+      name: "Second device",
+    },
+  ]);
+
+  const result = (await (deviceActions.updateDevice as (event: RequestEvent) => Promise<unknown>)(
+    await signedInEvent({
+      device_id: "0199791c-6600-7000-8000-000000000031",
+      name: "Renamed device",
+      handle: "first-device",
+    }),
+  )) as { status: number };
+
+  expect(result.status).toBe(409);
+  expect(
+    await database.db
+      .select({ name: devices.name, handle: devices.handle })
+      .from(devices)
+      .where(eq(devices.id, "0199791c-6600-7000-8000-000000000031"))
+      .get(),
+  ).toEqual({ name: "Second device", handle: "second-device" });
+});
+
+test("editing a device does not modify another user's device", async () => {
+  await insertCurrentUser();
+  const otherUserId = "0199791c-6600-7000-8000-000000000010";
+  const edgeId = "0199791c-6600-7000-8000-000000000020";
+  const deviceId = "0199791c-6600-7000-8000-000000000030";
+  await database.db.insert(users).values({ id: otherUserId });
+  await database.db.insert(edges).values({
+    id: edgeId,
+    userId: otherUserId,
+    name: "Other edge",
+    dnsLabel: "other-edge",
+    tunnelUrl: "wss://other.example/tunnel",
+    serviceCredentialHash: "hash",
+  });
+  await database.db.insert(devices).values({
+    id: deviceId,
+    userId: otherUserId,
+    edgeId,
+    handle: "other-device",
+    name: "Other device",
+  });
+
+  const result = (await (deviceActions.updateDevice as (event: RequestEvent) => Promise<unknown>)(
+    await signedInEvent({
+      device_id: deviceId,
+      name: "Taken over",
+      handle: "taken-over",
+    }),
+  )) as { status: number };
+
+  expect(result.status).toBe(404);
+  expect(
+    await database.db.select().from(devices).where(eq(devices.id, deviceId)).get(),
+  ).toMatchObject({
+    name: "Other device",
+    handle: "other-device",
+  });
+});
+
 test("signing out other browsers preserves the current browser and CLI credentials", async () => {
   await insertCurrentUser();
   await database.db.insert(authSessions).values([
