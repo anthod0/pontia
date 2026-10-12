@@ -8,6 +8,7 @@ import {
 import { queryClient } from "../../src/queries/queryClient";
 import { sessionOverviewKeys } from "../../src/queries/sessionOverview";
 import { sessionKeys } from "../../src/queries/sessions";
+import { timelineKeys } from "../../src/queries/timeline";
 import { workflowKeys } from "../../src/queries/workflows";
 
 function sessionEvent(type: string, sessionId = "session-1"): DashboardStreamEvent {
@@ -40,7 +41,9 @@ test("a session event invalidates its session snapshots and every overview varia
   const archivedOverviewKey = [...sessionOverviewKeys.all, { includeArchived: true }] as const;
   const affectedDetailKey = sessionKeys.detail("session-1");
   const affectedModelsKey = sessionKeys.models("session-1");
+  const affectedTimelineKey = timelineKeys.snapshot("session-1");
   const otherDetailKey = sessionKeys.detail("session-2");
+  const otherTimelineKey = timelineKeys.snapshot("session-2");
   const workflowRevisionKey = workflowKeys.revision("workflow-1", 1);
 
   for (const key of [
@@ -48,7 +51,9 @@ test("a session event invalidates its session snapshots and every overview varia
     archivedOverviewKey,
     affectedDetailKey,
     affectedModelsKey,
+    affectedTimelineKey,
     otherDetailKey,
+    otherTimelineKey,
     workflowRevisionKey,
   ]) {
     queryClient.setQueryData(key, {});
@@ -60,7 +65,9 @@ test("a session event invalidates its session snapshots and every overview varia
   expect(isInvalidated(archivedOverviewKey)).toBe(true);
   expect(isInvalidated(affectedDetailKey)).toBe(true);
   expect(isInvalidated(affectedModelsKey)).toBe(true);
+  expect(isInvalidated(affectedTimelineKey)).toBe(true);
   expect(isInvalidated(otherDetailKey)).toBe(false);
+  expect(isInvalidated(otherTimelineKey)).toBe(false);
   expect(isInvalidated(workflowRevisionKey)).toBe(false);
 });
 

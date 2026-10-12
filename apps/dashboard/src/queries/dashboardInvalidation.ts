@@ -2,6 +2,7 @@ import type { DashboardStreamEvent } from "../api/types";
 import { queryClient } from "./queryClient";
 import { sessionOverviewKeys } from "./sessionOverview";
 import { sessionKeys } from "./sessions";
+import { timelineKeys } from "./timeline";
 
 export async function invalidateQueriesForDashboardEvent(
   streamEvent: DashboardStreamEvent,
@@ -11,6 +12,10 @@ export async function invalidateQueriesForDashboardEvent(
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: sessionOverviewKeys.all }),
     queryClient.invalidateQueries({ queryKey: sessionKeys.detail(streamEvent.event.session_id) }),
+    queryClient.invalidateQueries({
+      queryKey: timelineKeys.snapshot(streamEvent.event.session_id),
+      refetchType: "none",
+    }),
   ]);
 }
 

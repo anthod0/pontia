@@ -78,6 +78,10 @@ function updatesPage(overrides: Partial<TurnTreeUpdatesPage> = {}): TurnTreeUpda
   };
 }
 
+function withQuerySignal<T extends object>(options: T) {
+  return expect.objectContaining({ ...options, signal: expect.anything() });
+}
+
 function page(overrides: Partial<TurnTimelinePage> = {}): TurnTimelinePage {
   return {
     session_id: "sess-1",
@@ -113,11 +117,16 @@ test("tree history follows backend groups and paginates without a duplicate boun
   await loadSessionTimeline("sess-1", { mode: "rebuild", topology: true });
   await loadSessionTimeline("sess-1", { mode: "more", topology: true });
 
-  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(1, "sess-1", { limit: 20 });
-  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(2, "sess-1", {
-    fromTurnId: "turn-1",
-    limit: 20,
-  });
+  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(
+    1,
+    "sess-1",
+    withQuerySignal({ limit: 20 }),
+  );
+  expect(mocks.getTurnTreeHistory).toHaveBeenNthCalledWith(
+    2,
+    "sess-1",
+    withQuerySignal({ fromTurnId: "turn-1", limit: 20 }),
+  );
   expect(get(timelineState).groups.map((entry) => entry.turn_id)).toEqual([
     "turn-1",
     "turn-4",
@@ -186,7 +195,10 @@ test("tree updates discard a divergent suffix after the LCA and append the repla
     messages: timelineItemsToChatMessages(get(timelineState).items, true),
   });
 
-  expect(mocks.getTurnTreeUpdates).toHaveBeenCalledWith("sess-1", { fromTurnId: "turn-3" });
+  expect(mocks.getTurnTreeUpdates).toHaveBeenCalledWith(
+    "sess-1",
+    withQuerySignal({ fromTurnId: "turn-3" }),
+  );
   expect(get(timelineState).groups.map((entry) => entry.turn_id)).toEqual([
     "turn-1",
     "turn-4",
@@ -222,11 +234,11 @@ test("realtime refresh uses an inclusive forward Turn anchor and atomically repl
   await loadSessionTimeline("sess-1", { mode: "rebuild" });
   await refreshSessionTimeline("sess-1");
 
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, "sess-1", {
-    direction: "forward",
-    turnId: "turn-2",
-    limit: 100,
-  });
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(
+    2,
+    "sess-1",
+    withQuerySignal({ direction: "forward", turnId: "turn-2", limit: 100 }),
+  );
   expect(get(timelineState).items.map(({ turn_id, item_id }) => [turn_id, item_id])).toEqual([
     ["turn-1", "item-1"],
     ["turn-2", "item-2-final"],
@@ -240,10 +252,10 @@ test("initial history loads chronological projected Turn items in the backward d
 
   await loadSessionTimeline("sess-1", { mode: "rebuild" });
 
-  expect(mocks.getTurnTimeline).toHaveBeenCalledWith("sess-1", {
-    direction: "backward",
-    limit: 20,
-  });
+  expect(mocks.getTurnTimeline).toHaveBeenCalledWith(
+    "sess-1",
+    withQuerySignal({ direction: "backward", limit: 20 }),
+  );
   expect(get(timelineState)).toMatchObject({
     sessionId: "sess-1",
     items: [expect.objectContaining({ item_id: "item-2", turn_id: "turn-2" })],
@@ -293,16 +305,16 @@ test("a persisted timeline resumes incremental refresh and older pagination with
   await loadSessionTimeline("sess-cached", { mode: "more" });
 
   expect(mocks.getTurnTimeline).toHaveBeenCalledTimes(3);
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, "sess-cached", {
-    direction: "forward",
-    turnId: "turn-2",
-    limit: 100,
-  });
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, "sess-cached", {
-    direction: "backward",
-    turnId: "turn-1",
-    limit: 20,
-  });
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(
+    2,
+    "sess-cached",
+    withQuerySignal({ direction: "forward", turnId: "turn-2", limit: 100 }),
+  );
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(
+    3,
+    "sess-cached",
+    withQuerySignal({ direction: "backward", turnId: "turn-1", limit: 20 }),
+  );
   expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual([
     "item-1",
     "item-2-final",
@@ -339,15 +351,16 @@ test("a stale persisted refresh cursor falls back to rebuilding the timeline", a
 
   await refreshSessionTimeline("sess-stale");
 
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, "sess-stale", {
-    direction: "forward",
-    turnId: "turn-stale",
-    limit: 100,
-  });
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, "sess-stale", {
-    direction: "backward",
-    limit: 20,
-  });
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(
+    2,
+    "sess-stale",
+    withQuerySignal({ direction: "forward", turnId: "turn-stale", limit: 100 }),
+  );
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(
+    3,
+    "sess-stale",
+    withQuerySignal({ direction: "backward", limit: 20 }),
+  );
   expect(get(timelineState)).toMatchObject({
     items: [expect.objectContaining({ item_id: "item-current" })],
     latestTurnId: "turn-current",
@@ -393,11 +406,11 @@ test("older history uses next_turn_id and prepends only previously unseen Turn g
   await loadSessionTimeline("sess-1", { mode: "rebuild" });
   await loadSessionTimeline("sess-1", { mode: "more" });
 
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, "sess-1", {
-    direction: "backward",
-    turnId: "turn-1",
-    limit: 20,
-  });
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(
+    2,
+    "sess-1",
+    withQuerySignal({ direction: "backward", turnId: "turn-1", limit: 20 }),
+  );
   expect(get(timelineState).items.map(({ turn_id, item_id }) => [turn_id, item_id])).toEqual([
     ["turn-1", "item-1"],
     ["turn-2", "item-2"],
@@ -435,11 +448,11 @@ test("an active Turn grows from empty output and converges on its sealed group t
 
   await refreshSessionTimeline("sess-1", "turn-active");
   expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual(["item-final"]);
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, "sess-1", {
-    direction: "forward",
-    turnId: "turn-active",
-    limit: 100,
-  });
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(
+    3,
+    "sess-1",
+    withQuerySignal({ direction: "forward", turnId: "turn-active", limit: 100 }),
+  );
 });
 
 test("an itemless active Turn remains the forward anchor when initial history includes older sealed items", async () => {
@@ -460,11 +473,11 @@ test("an itemless active Turn remains the forward anchor when initial history in
 
   await refreshSessionTimeline("sess-1");
 
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(2, "sess-1", {
-    direction: "forward",
-    turnId: "turn-active",
-    limit: 100,
-  });
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(
+    2,
+    "sess-1",
+    withQuerySignal({ direction: "forward", turnId: "turn-active", limit: 100 }),
+  );
   expect(get(timelineState).items.map((entry) => entry.item_id)).toEqual([
     "item-sealed",
     "item-active",
@@ -529,11 +542,11 @@ test("forward pagination commits no intermediate page when a later range fails",
   await loadSessionTimeline("sess-1", { mode: "rebuild" });
   await refreshSessionTimeline("sess-1");
 
-  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(3, "sess-1", {
-    direction: "forward",
-    turnId: "turn-2",
-    limit: 100,
-  });
+  expect(mocks.getTurnTimeline).toHaveBeenNthCalledWith(
+    3,
+    "sess-1",
+    withQuerySignal({ direction: "forward", turnId: "turn-2", limit: 100 }),
+  );
   expect(get(timelineState)).toMatchObject({
     items: [],
     status: "range_invalid",
@@ -595,9 +608,11 @@ test.each([false, true])(
     expect(api).toHaveBeenNthCalledWith(
       5,
       "sess-1",
-      topology
-        ? { fromTurnId: "turn-1", limit: 7 }
-        : { direction: "backward", turnId: "turn-1", limit: 7 },
+      withQuerySignal(
+        topology
+          ? { fromTurnId: "turn-1", limit: 7 }
+          : { direction: "backward", turnId: "turn-1", limit: 7 },
+      ),
     );
     expect(get(timelineState)).toMatchObject({
       items: [...oldest.items, ...middle.items, ...newest.items],
@@ -642,7 +657,11 @@ test.each([false, true])(
     await vi.advanceTimersByTimeAsync(1000);
     expect(api).toHaveBeenLastCalledWith(
       "sess-1",
-      topology ? { fromTurnId: "turn-2" } : { direction: "forward", turnId: "turn-2", limit: 100 },
+      withQuerySignal(
+        topology
+          ? { fromTurnId: "turn-2" }
+          : { direction: "forward", turnId: "turn-2", limit: 100 },
+      ),
     );
     expect(get(timelineState)).toMatchObject({
       items: [...older.items, ...completed.items],

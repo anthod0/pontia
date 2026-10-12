@@ -1,5 +1,4 @@
-import { get, writable } from "svelte/store";
-import { getTurnTimeline, getTurnTreeHistory, getTurnTreeUpdates } from "../api/client";
+import { get, type Subscriber, type Unsubscriber, type Updater, type Writable } from "svelte/store";
 import { ApiError } from "../api/errors";
 import type {
   TurnTimelineGroup,
@@ -8,6 +7,14 @@ import type {
   TurnTreeHistoryPage,
 } from "../api/types";
 import { readCachedTimeline, writeCachedTimeline } from "../lib/session-chat/timelineCache";
+import { queryClient } from "../queries/queryClient";
+import {
+  cancelTimelineRequests,
+  fetchTurnTimeline,
+  fetchTurnTreeHistory,
+  fetchTurnTreeUpdates,
+  timelineKeys,
+} from "../queries/timeline";
 
 export type TimelineRefreshKind = "history" | "tail" | null;
 export type TimelineStatus =
@@ -67,7 +74,50 @@ function emptyState(sessionId = ""): TimelineState {
   };
 }
 
-export const timelineState = writable<TimelineState>(emptyState());
+let activeTimelineSessionId = "";
+const timelineSubscribers = new Set<Subscriber<TimelineState>>();
+
+function currentTimelineState(): TimelineState {
+  return (
+    queryClient.getQueryData<TimelineState>(timelineKeys.snapshot(activeTimelineSessionId)) ??
+    emptyState(activeTimelineSessionId)
+  );
+}
+
+function notifyTimelineSubscribers(): void {
+  const state = currentTimelineState();
+  for (const subscriber of timelineSubscribers) subscriber(state);
+}
+
+queryClient.getQueryCache().subscribe((event) => {
+  const key = event.query.queryKey;
+  if (
+    key.length === 4 &&
+    key[0] === "sessions" &&
+    key[1] === "timeline" &&
+    key[2] === "snapshot" &&
+    key[3] === activeTimelineSessionId
+  ) {
+    notifyTimelineSubscribers();
+  }
+});
+
+export const timelineState: Writable<TimelineState> = {
+  subscribe(run: Subscriber<TimelineState>): Unsubscriber {
+    timelineSubscribers.add(run);
+    run(currentTimelineState());
+    return () => timelineSubscribers.delete(run);
+  },
+  set(state: TimelineState): void {
+    activeTimelineSessionId = state.sessionId;
+    queryClient.setQueryData(timelineKeys.snapshot(state.sessionId), state);
+  },
+  update(update: Updater<TimelineState>): void {
+    const state = update(currentTimelineState());
+    activeTimelineSessionId = state.sessionId;
+    queryClient.setQueryData(timelineKeys.snapshot(state.sessionId), state);
+  },
+};
 
 export function hasTimelineSnapshot(state: TimelineState, sessionId: string): boolean {
   return (
@@ -131,6 +181,7 @@ const cachedHistoryCursorSessions = new Set<string>();
 
 export function resetTimelineState(sessionId = ""): void {
   timelineGeneration += 1;
+  if (activeTimelineSessionId) cancelTimelineRequests(activeTimelineSessionId);
   if (pendingRetry) clearTimeout(pendingRetry);
   pendingRetry = null;
   timelineState.set(emptyState(sessionId));
@@ -327,10 +378,11 @@ export async function loadSessionTimeline(
 
   try {
     if (topology) {
-      const page = await getTurnTreeHistory(sessionId, {
-        ...(turnId ? { fromTurnId: turnId } : {}),
-        limit: options.limit ?? DEFAULT_HISTORY_LIMIT,
-      });
+      const page = await fetchTurnTreeHistory(
+        sessionId,
+        turnId,
+        options.limit ?? DEFAULT_HISTORY_LIMIT,
+      );
       if (generation !== timelineGeneration) return null;
       timelineState.update((state) => {
         if (state.sessionId !== sessionId) return state;
@@ -357,11 +409,12 @@ export async function loadSessionTimeline(
       return page;
     }
 
-    const page = await getTurnTimeline(sessionId, {
-      direction: "backward",
-      ...(turnId ? { turnId } : {}),
-      limit: options.limit ?? DEFAULT_HISTORY_LIMIT,
-    });
+    const page = await fetchTurnTimeline(
+      sessionId,
+      "backward",
+      turnId,
+      options.limit ?? DEFAULT_HISTORY_LIMIT,
+    );
     if (generation !== timelineGeneration) return null;
     timelineState.update((state) => {
       if (state.sessionId !== sessionId) return state;
@@ -421,11 +474,7 @@ async function loadForwardPages(
     if (seenAnchors.has(turnId))
       throw new Error("Turn timeline pagination returned a repeated anchor");
     seenAnchors.add(turnId);
-    const page = await getTurnTimeline(sessionId, {
-      direction: "forward",
-      turnId,
-      limit: FORWARD_LIMIT,
-    });
+    const page = await fetchTurnTimeline(sessionId, "forward", turnId, FORWARD_LIMIT);
     items.push(...page.items);
     turnId = page.next_turn_id;
   }
@@ -500,7 +549,7 @@ async function refreshSessionTreeUpdates(
   }));
 
   try {
-    const updates = await getTurnTreeUpdates(sessionId, { fromTurnId: latestTurnId });
+    const updates = await fetchTurnTreeUpdates(sessionId, latestTurnId);
     if (generation !== timelineGeneration) return false;
     timelineState.update((state) => {
       if (state.sessionId !== sessionId) return state;
