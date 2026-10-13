@@ -196,6 +196,9 @@ export async function completePendingBinding(
               kind: sql<"browser">`'browser'`.as("kind"),
               tokenHash: sql<string | null>`NULL`.as("token_hash"),
               expiresAt: sql<string>`${sessionExpiry(now)}`.as("expires_at"),
+              ip: sql<string | null>`NULL`.as("ip"),
+              userAgent: sql<string | null>`NULL`.as("user_agent"),
+              country: sql<string | null>`NULL`.as("country"),
               createdAt: sql<string>`${now.toISOString()}`.as("created_at"),
             })
             .from(accounts)

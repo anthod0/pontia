@@ -1,5 +1,7 @@
 import { error, isRedirect, redirect, type Cookies, type RequestEvent } from "@sveltejs/kit";
+import { eq } from "drizzle-orm";
 import { database, type Database } from "../db";
+import { authSessions } from "../db/schema";
 import {
   accountById,
   accountForProfile,
@@ -20,6 +22,7 @@ import {
   deleteBrowserSessionByRefreshToken,
   refreshBrowserSession,
 } from "./refresh";
+import { authSessionRequest } from "./session-request";
 import { AuthError, type Provider } from "./types";
 
 const LOGIN_COOKIE = "_at";
@@ -133,6 +136,7 @@ async function establishBrowserLogin(
   loginId: string,
   secret: string,
 ) {
+  await db.update(authSessions).set(authSessionRequest(event)).where(eq(authSessions.id, loginId));
   const [credential, refresh] = await Promise.all([
     issueLogin(db, loginId, secret),
     createBrowserRefreshToken(db, loginId),

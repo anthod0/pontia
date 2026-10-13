@@ -4,6 +4,7 @@ import { v7 as uuidv7 } from "uuid";
 import { sha256Base64url } from "../crypto";
 import type { Database } from "../db";
 import { authSessions, deviceAuthorizations, deviceRateLimits } from "../db/schema";
+import type { AuthSessionRequest } from "./session-request";
 
 export const DEVICE_AUTHORIZATION_SECONDS = 5 * 60;
 export const DEVICE_POLL_INTERVAL_SECONDS = 5;
@@ -153,6 +154,7 @@ export async function pollDeviceAuthorization(
   db: Database,
   deviceCode: string,
   now = new Date(),
+  request: AuthSessionRequest = { ip: null, userAgent: null, country: null },
 ): Promise<DevicePollResult> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(deviceCode)) return { status: "expired_token" };
   const deviceCodeHash = await sha256Base64url(deviceCode);
@@ -203,6 +205,9 @@ export async function pollDeviceAuthorization(
             kind: sql<"cli">`'cli'`.as("kind"),
             tokenHash: sql<string>`${tokenHash}`.as("token_hash"),
             expiresAt: sql<null>`NULL`.as("expires_at"),
+            ip: sql<string | null>`${request.ip}`.as("ip"),
+            userAgent: sql<string | null>`${request.userAgent}`.as("user_agent"),
+            country: sql<string | null>`${request.country}`.as("country"),
             createdAt: sql<string>`${now.toISOString()}`.as("created_at"),
           })
           .from(deviceAuthorizations)

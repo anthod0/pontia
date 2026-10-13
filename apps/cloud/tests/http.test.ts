@@ -16,6 +16,11 @@ import { accounts, authSessions, users } from "../src/lib/server/db/schema";
 import { testDatabase } from "./database";
 
 const database = testDatabase();
+const sessionRequest = {
+  ip: "203.0.113.10",
+  userAgent: "Test Browser/1.0",
+  country: "CN",
+};
 const config = {
   AUTH_ORIGIN: "https://example.com",
   GOOGLE_CLIENT_ID: "google",
@@ -41,9 +46,13 @@ function browser() {
         params: { provider: url.pathname.split("/")[3] },
         request: new Request(url, {
           method,
-          headers: { origin: requestOrigin },
+          headers: { origin: requestOrigin, "user-agent": sessionRequest.userAgent },
         }),
-        platform: { env: { ...config, DB: database.binding } },
+        getClientAddress: () => sessionRequest.ip,
+        platform: {
+          env: { ...config, DB: database.binding },
+          cf: { country: sessionRequest.country },
+        },
         cookies: {
           get: (name: string) => cookies.get(name),
           set: (name: string, value: string, attributes: Record<string, unknown>) => {
@@ -148,8 +157,12 @@ test("HTTP login, linking and logout persist identity and set and clear protecte
   const storedSession = (await database.db.select().from(authSessions)).find(
     (session) => session.id === claims.sub,
   );
+  expect(storedSession).toMatchObject(sessionRequest);
   expect(storedSession?.tokenHash).toMatch(/^[A-Za-z0-9_-]{43}$/);
   expect(storedSession?.tokenHash).not.toBe(client.cookies.get("_rt"));
+  expect(claims).not.toHaveProperty("ip");
+  expect(claims).not.toHaveProperty("userAgent");
+  expect(claims).not.toHaveProperty("country");
   expect(client.cookies.has("_oauth")).toBe(false);
   const bindingUrl = new URL(await location(startBinding(client.event("/api/auth/github/bind"))));
   expect(

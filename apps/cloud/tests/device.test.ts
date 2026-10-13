@@ -61,10 +61,16 @@ test("device authorization is rate limited, approved once, and stores only crede
     ),
   ).toBe(true);
 
+  const request = {
+    ip: "198.51.100.20",
+    userAgent: "pontia-cli/1.0",
+    country: "DE",
+  };
   const result = await pollDeviceAuthorization(
     database.db,
     authorization.device_code,
     new Date(now.getTime() + 5000),
+    request,
   );
   expect(result.status).toBe("authorized");
   if (result.status !== "authorized") throw new Error("expected authorization");
@@ -79,6 +85,7 @@ test("device authorization is rate limited, approved once, and stores only crede
     kind: "cli",
     accountId: null,
     expiresAt: null,
+    ...request,
   });
   expect(session.tokenHash).not.toBe(secret);
   expect(

@@ -21,6 +21,9 @@ CREATE TABLE `auth_sessions` (
 	`kind` text DEFAULT 'browser' NOT NULL,
 	`token_hash` text,
 	`expires_at` text,
+	`ip` text,
+	`user_agent` text,
+	`country` text,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	CONSTRAINT `fk_auth_sessions_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
 	CONSTRAINT `fk_auth_sessions_account_id_accounts_id_fk` FOREIGN KEY (`account_id`) REFERENCES `accounts`(`id`) ON DELETE SET NULL

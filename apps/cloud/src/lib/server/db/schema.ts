@@ -163,6 +163,9 @@ export const authSessions = sqliteTable(
       .default("browser"),
     tokenHash: text("token_hash"),
     expiresAt: text("expires_at"),
+    ip: text(),
+    userAgent: text("user_agent"),
+    country: text(),
     createdAt: text("created_at").notNull().default(timestamp),
   },
   (table) => [
