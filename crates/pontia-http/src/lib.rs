@@ -252,6 +252,10 @@ fn external_api_router(state: HttpState) -> Router {
             post(api::unarchive_session),
         )
         .route(
+            "/api/v1/sessions/{session_id}/compact",
+            post(api::compact_session),
+        )
+        .route(
             "/api/v1/sessions/{session_id}/interrupt",
             post(api::interrupt_session),
         )

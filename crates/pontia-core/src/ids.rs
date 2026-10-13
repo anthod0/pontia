@@ -35,6 +35,10 @@ pub fn new_dispatch_id() -> ExternalId {
     prefixed_id("dispatch")
 }
 
+pub fn new_compaction_operation_id() -> ExternalId {
+    prefixed_id("compact")
+}
+
 pub fn new_runtime_id() -> ExternalId {
     prefixed_id("runtime")
 }

@@ -28,10 +28,11 @@ impl TurnTimelineService {
             .list_turns(&session_id)
             .await?;
         if turns.is_empty() {
+            let items = service.read_session_page(&session_id, &turns, &[]).await?;
             return Ok(TurnTimelinePage {
                 session_id,
                 direction,
-                items: Vec::new(),
+                items,
                 next_turn_id: None,
             });
         }
@@ -60,7 +61,7 @@ impl TurnTimelineService {
         let mut selected = directional.into_iter().take(limit).collect::<Vec<_>>();
         selected.sort_by(|left, right| left.turn_id.cmp(&right.turn_id));
         let items = service
-            .read_selected_turns(&session_id, &turns, &selected)
+            .read_session_page(&session_id, &turns, &selected)
             .await?;
 
         Ok(TurnTimelinePage {

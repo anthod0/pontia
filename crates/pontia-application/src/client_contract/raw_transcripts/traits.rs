@@ -28,6 +28,19 @@ pub trait TimelineBoundaryCapturer {
 
 pub trait TurnTimelineReader {
     fn client_type(&self) -> &'static str;
+    /// Return messages and successful compaction checkpoints in native occurrence order.
+    /// Session-level checkpoints keep turn_id=None. For pagination, checkpoints in a gap
+    /// belong to the page selecting the next Turn; trailing checkpoints belong to the
+    /// last Turn's page. With no Turns, return all native checkpoints.
+    fn read_session_timeline(
+        &self,
+        _request: super::SessionTimelineReadRequest,
+    ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
+        Err(pontia_core::Error::CapabilityUnavailable(
+            "Session compaction history is unsupported".into(),
+        )
+        .into())
+    }
     fn read_turn_ranges(
         &self,
         request: TurnTimelineReadRequest,

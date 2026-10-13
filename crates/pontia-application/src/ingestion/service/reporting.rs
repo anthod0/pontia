@@ -119,6 +119,12 @@ impl EventIngestService {
         if reported_event.event_type == EventType::SessionContextUsageUpdated {
             validate_context_usage_payload(&reported_event.payload)?;
         }
+        if reported_event.event_type.is_compaction_event() {
+            crate::ingestion::compaction::normalize(
+                reported_event.event_type,
+                &mut reported_event.payload,
+            );
+        }
         let payload_size = serde_json::to_vec(&reported_event.payload)
             .map_err(Error::from)?
             .len();

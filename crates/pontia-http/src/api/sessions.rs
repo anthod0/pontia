@@ -4,7 +4,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use pontia_application::{
@@ -115,6 +115,39 @@ pub async fn get_session(
         .await?
         .ok_or_else(|| ApiError::not_found(format!("session {session_id} not found")))?;
     Ok(ok(json!({ "session": session })))
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "outcome", content = "data", rename_all = "snake_case")]
+enum CompactionReceipt {
+    Accepted(Value),
+    Unknown(String),
+}
+
+pub async fn compact_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let service = state.session_commands();
+    let operation = format!("compact_session:{session_id}");
+    let outcome = idempotent(&state, &headers, operation, || async move {
+        // A lost receipt may follow a successful native send. Cache that uncertainty
+        // as a command result so replay cannot request another native compaction.
+        let receipt = match service.compact_session(&session_id).await {
+            Ok(accepted) => CompactionReceipt::Accepted(serde_json::to_value(accepted)?),
+            Err(pontia_core::Error::ControlUnknown(message)) => CompactionReceipt::Unknown(message),
+            Err(error) => return Err(error),
+        };
+        Ok(serde_json::to_value(receipt)?)
+    })
+    .await?;
+    match serde_json::from_value(outcome.data).map_err(pontia_core::Error::from)? {
+        CompactionReceipt::Accepted(data) => Ok((StatusCode::ACCEPTED, ok(data)).into_response()),
+        CompactionReceipt::Unknown(message) => {
+            Err(pontia_core::Error::ControlUnknown(message).into())
+        }
+    }
 }
 
 pub async fn interrupt_session(

@@ -60,6 +60,9 @@ pub(super) async fn ensure_runtime_fence_in_tx(
                     | EventType::SessionResuming
                     | EventType::SessionError
                     | EventType::SessionModelUpdated
+                    | EventType::SessionCompactionStarted
+                    | EventType::SessionCompactionCompleted
+                    | EventType::SessionCompactionFailed
             )
         {
             return Err(Error::Domain(format!(
@@ -134,7 +137,11 @@ pub(super) async fn ensure_confirmed_event_matches_session_boundary(
     let Some(expected_runtime_id) = expected_runtime_id else {
         if matches!(
             event.event_type,
-            EventType::SessionReady | EventType::SessionModelUpdated
+            EventType::SessionReady
+                | EventType::SessionModelUpdated
+                | EventType::SessionCompactionStarted
+                | EventType::SessionCompactionCompleted
+                | EventType::SessionCompactionFailed
         ) {
             return Err(Error::Domain(format!(
                 "{} from {} requires a confirmed Runtime binding for session {}",
@@ -222,6 +229,9 @@ fn runtime_id_required_for_event(event_type: EventType) -> bool {
         EventType::SessionReady
             | EventType::SessionResuming
             | EventType::SessionModelUpdated
+            | EventType::SessionCompactionStarted
+            | EventType::SessionCompactionCompleted
+            | EventType::SessionCompactionFailed
             | EventType::SessionExited
             | EventType::SessionError
             | EventType::TurnStarted

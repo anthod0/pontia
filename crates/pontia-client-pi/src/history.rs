@@ -386,7 +386,7 @@ impl NativeHistory for PiHistory {
                             crate::raw_transcripts::mapping::pi_entry_to_items(entry, 0)
                                 .into_iter()
                                 .map(|item| TurnTimelineItem {
-                                    turn_id: range.turn_id.clone(),
+                                    turn_id: Some(range.turn_id.clone()),
                                     item,
                                 }),
                         );

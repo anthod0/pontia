@@ -55,6 +55,26 @@ pub struct TurnTimelineReadRequest {
     pub ranges: Vec<TurnTimelineRange>,
 }
 
+/// All known Turn boundaries, including those outside the selected page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionTimelineTurn {
+    pub turn_id: String,
+    pub head_cursor: Option<String>,
+    pub tail_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionTimelineSelection {
+    pub turns: Vec<SessionTimelineTurn>,
+    pub selected_turn_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionTimelineReadRequest {
+    pub source: ResolvedAgentBinding,
+    pub selection: SessionTimelineSelection,
+}
+
 #[derive(Debug)]
 pub enum TurnTimelineReadError {
     InvalidRange { turn_id: String, message: String },
@@ -85,7 +105,7 @@ impl From<Error> for TurnTimelineReadError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TurnTimelineItem {
-    pub turn_id: String,
+    pub turn_id: Option<String>,
     #[serde(flatten)]
     pub item: TimelineItem,
 }

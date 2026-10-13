@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use crate::client_contract::raw_transcripts::{
-    AgentBindingResolveRequest, TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError,
-    TurnTimelineReadRequest,
+    TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError, TurnTimelineReadRequest,
 };
 use pontia_core::{domain::TurnState, error::Error};
 use pontia_storage_sqlite::{models::turns::TurnRow, repositories::turns::SqliteTurnRepository};
@@ -48,7 +47,11 @@ impl TurnTimelineService {
         let mut items_by_turn: HashMap<String, Vec<TurnTimelineItem>> = HashMap::new();
         for item in items {
             items_by_turn
-                .entry(item.turn_id.clone())
+                .entry(item.turn_id.clone().ok_or_else(|| {
+                    TurnTimelineServiceError::Inner(Error::Domain(
+                        "Turn history reader returned a Session-level item".into(),
+                    ))
+                })?)
                 .or_default()
                 .push(item);
         }
@@ -157,13 +160,10 @@ impl TurnTimelineService {
             .clients
             .timeline(&binding.client_type)
             .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
-        let source = match backend.resolver.resolve(&AgentBindingResolveRequest {
-            id: binding.id.clone(),
-            session_id: binding.session_id.clone(),
-            client_type: binding.client_type.clone(),
-            client_session_key: binding.client_session_key.clone(),
-            client_session_file: binding.client_session_file.clone().map(Into::into),
-        }) {
+        let source = match backend
+            .resolver
+            .resolve(&super::binding_resolve_request(&binding))
+        {
             Ok(source) => source,
             Err(error) => {
                 let error = classify_adapter_error(error);

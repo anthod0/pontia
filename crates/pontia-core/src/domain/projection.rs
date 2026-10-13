@@ -165,7 +165,10 @@ impl ProjectionState {
                     .map(|session| session.state)
                     .unwrap_or(SessionState::Created),
             ),
-            EventType::RuntimeStarting
+            EventType::SessionCompactionStarted
+            | EventType::SessionCompactionCompleted
+            | EventType::SessionCompactionFailed
+            | EventType::RuntimeStarting
             | EventType::RuntimeReady
             | EventType::RuntimeExited
             | EventType::TurnTimelineBoundaryRecovered

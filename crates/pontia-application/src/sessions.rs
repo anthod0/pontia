@@ -14,7 +14,9 @@ use serde_json::Value;
 use sqlx::SqlitePool;
 
 mod commands;
+mod compaction;
 mod models;
+pub use compaction::CompactionAccepted;
 pub use models::{SessionModel, SessionModels, SetSessionModelRequest};
 mod lifecycle;
 mod runtime_binding;

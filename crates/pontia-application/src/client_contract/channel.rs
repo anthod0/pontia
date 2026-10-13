@@ -14,6 +14,13 @@ pub trait ClientControlChannel: Send + Sync {
             ))
         })
     }
+    fn compact<'a>(&'a self, _operation_id: &'a str) -> ClientControlOperation<'a> {
+        Box::pin(async {
+            Err(pontia_core::Error::CapabilityUnavailable(
+                "Manual compaction is unsupported".into(),
+            ))
+        })
+    }
     fn available(&self) -> bool;
     fn process_id(&self) -> Option<u32> {
         None

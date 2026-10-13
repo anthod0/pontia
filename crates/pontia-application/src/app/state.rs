@@ -80,7 +80,8 @@ impl AppState {
             ),
         );
         let queries = crate::ExternalQueryService::new(builder.db.clone())
-            .with_clients(builder.clients.clone());
+            .with_clients(builder.clients.clone())
+            .with_control(builder.client_control.clone());
         let execution = crate::clients::ClientExecutionService::new(
             builder.db.clone(),
             builder.clients.clone(),
@@ -216,7 +217,9 @@ impl AppState {
         self.inner.commands.tasks.clone()
     }
     pub fn queries(&self) -> crate::ExternalQueryService {
-        crate::ExternalQueryService::new(self.db()).with_clients(self.clients())
+        crate::ExternalQueryService::new(self.db())
+            .with_clients(self.clients())
+            .with_control(self.client_control())
     }
     pub fn runtime_observer(&self) -> crate::RuntimeObservationService {
         crate::RuntimeObservationService::new(

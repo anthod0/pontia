@@ -16,6 +16,9 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     branch_control: true,
     list_models: true,
     set_model: true,
+    manual_compaction: false,
+    compaction_events: false,
+    compaction_history: false,
     context_usage: ContextUsageCapability::Estimated,
 };
 

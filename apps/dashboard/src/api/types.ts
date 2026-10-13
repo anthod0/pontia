@@ -162,6 +162,11 @@ export interface WorkflowRecovery {
 
 export type ContextUsageCapability = "unsupported" | "estimated" | "exact";
 
+export interface SessionCompactionAccepted {
+  accepted: boolean;
+  operation_id: string;
+}
+
 export interface SessionCapabilities {
   accept_task?: boolean;
   interrupt?: boolean;
@@ -172,6 +177,9 @@ export interface SessionCapabilities {
   branch_control?: boolean;
   list_models?: boolean;
   set_model?: boolean;
+  manual_compaction: boolean;
+  compaction_events: boolean;
+  compaction_history: boolean;
   context_usage?: ContextUsageCapability;
   [key: string]: unknown;
 }
@@ -443,7 +451,7 @@ export interface TimelineItem {
 
 export type TurnTimelineDirection = "forward" | "backward";
 
-export type TurnTimelineItem = TimelineItem & { turn_id: string };
+export type TurnTimelineItem = TimelineItem & { turn_id: string | null };
 
 export interface TurnTimelinePage {
   session_id: string;

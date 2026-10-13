@@ -53,6 +53,10 @@ impl InternalEventValidationService {
             }
         }
 
+        if event.event_type.is_compaction_event() {
+            super::compaction::validate(event)?;
+        }
+
         if event.event_type == EventType::SessionModelUpdated
             && !event
                 .payload

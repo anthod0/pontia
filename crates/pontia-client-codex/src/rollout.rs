@@ -244,7 +244,7 @@ impl TurnTimelineReader for CodexRollout {
                 if record["type"] != "response_item" {
                     if let Some((kind, payload)) = native_detail(&record) {
                         output.push(TurnTimelineItem {
-                            turn_id: range.turn_id.clone(),
+                            turn_id: Some(range.turn_id.clone()),
                             item: TimelineItem {
                                 item_id: format!("codex:{thread}:{item_offset}"),
                                 kind: "tool_result".into(),
@@ -340,7 +340,7 @@ impl TurnTimelineReader for CodexRollout {
                     }
                 };
                 output.push(TurnTimelineItem {
-                    turn_id: range.turn_id.clone(),
+                    turn_id: Some(range.turn_id.clone()),
                     item: TimelineItem {
                         item_id: format!("codex:{thread}:{item_offset}"),
                         kind: kind.into(),

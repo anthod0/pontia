@@ -312,7 +312,7 @@ impl TurnTimelineReader for PiTimelineAdapter {
                 pi_entry_to_items(&entry.value, entry.start)
                     .into_iter()
                     .map(move |item| TurnTimelineItem {
-                        turn_id: entry.turn_id.clone(),
+                        turn_id: Some(entry.turn_id.clone()),
                         item,
                     })
             })

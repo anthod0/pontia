@@ -244,6 +244,11 @@ impl ExternalQueryService {
         let repository = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone());
         let runtimes = repository.list(session_id).await?;
         let entry = self.clients.get(client_type).expect("checked client");
+        let mut capabilities = entry
+            .in_process
+            .as_ref()
+            .map(|client| client.capabilities())
+            .unwrap_or_else(|| entry.spec.capabilities.clone());
         if runtimes.is_empty()
             && entry
                 .spec
@@ -251,13 +256,25 @@ impl ExternalQueryService {
                 .runtime_binding
                 .requires_session_runtime()
         {
-            return Ok(SessionCapabilities::default());
+            return Ok(SessionCapabilities {
+                compaction_events: capabilities.compaction_events,
+                compaction_history: capabilities.compaction_history,
+                ..SessionCapabilities::default()
+            });
         }
-        let capabilities = entry
-            .in_process
-            .as_ref()
-            .map(|client| client.capabilities())
-            .unwrap_or_else(|| entry.spec.capabilities.clone());
+        if capabilities.manual_compaction {
+            capabilities.manual_compaction = if let Some(client) = &entry.session {
+                client.available(self.pool.clone(), session_id).await?
+            } else if entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
+            {
+                match &self.control {
+                    Some(control) => control.available(session_id).await?,
+                    None => false,
+                }
+            } else {
+                false
+            };
+        }
         if self
             .clients
             .spec(client_type)

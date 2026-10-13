@@ -6,7 +6,7 @@ pub use traits::{
 };
 pub use types::{
     AgentBindingResolveRequest, CapturedTimelineBoundary, ManagedToolUse, ManagedToolUseInput,
-    ResolvedAgentBinding, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
-    TimelineItem, TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError,
-    TurnTimelineReadRequest,
+    ResolvedAgentBinding, SessionTimelineReadRequest, SessionTimelineSelection,
+    SessionTimelineTurn, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest, TimelineItem,
+    TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError, TurnTimelineReadRequest,
 };

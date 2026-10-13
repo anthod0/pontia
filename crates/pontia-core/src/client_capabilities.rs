@@ -30,6 +30,9 @@ pub struct AgentClientCapabilities {
     pub branch_control: bool,
     pub list_models: bool,
     pub set_model: bool,
+    pub manual_compaction: bool,
+    pub compaction_events: bool,
+    pub compaction_history: bool,
     pub context_usage: ContextUsageCapability,
 }
 
@@ -47,6 +50,9 @@ impl AgentClientCapabilities {
             branch_control: false,
             list_models: false,
             set_model: false,
+            manual_compaction: false,
+            compaction_events: false,
+            compaction_history: false,
             context_usage: ContextUsageCapability::Unsupported,
         }
     }

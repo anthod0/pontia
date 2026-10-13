@@ -63,6 +63,12 @@ pub enum EventType {
     SessionTitleUpdated,
     #[serde(rename = "session.context_usage_updated")]
     SessionContextUsageUpdated,
+    #[serde(rename = "session.compaction_started")]
+    SessionCompactionStarted,
+    #[serde(rename = "session.compaction_completed")]
+    SessionCompactionCompleted,
+    #[serde(rename = "session.compaction_failed")]
+    SessionCompactionFailed,
     #[serde(rename = "session.model_updated")]
     SessionModelUpdated,
     #[serde(rename = "runtime.starting")]
@@ -112,6 +118,15 @@ pub enum EventType {
 }
 
 impl EventType {
+    pub fn is_compaction_event(self) -> bool {
+        matches!(
+            self,
+            Self::SessionCompactionStarted
+                | Self::SessionCompactionCompleted
+                | Self::SessionCompactionFailed
+        )
+    }
+
     pub fn is_turn_event(self) -> bool {
         matches!(
             self,
@@ -146,6 +161,9 @@ impl EventType {
             self,
             Self::SessionReady
                 | Self::SessionExited
+                | Self::SessionCompactionStarted
+                | Self::SessionCompactionCompleted
+                | Self::SessionCompactionFailed
                 | Self::SessionContextUsageUpdated
                 | Self::SessionModelUpdated
                 | Self::TurnStarted
@@ -169,6 +187,9 @@ impl std::fmt::Display for EventType {
             Self::SessionError => "session.error",
             Self::SessionTitleUpdated => "session.title_updated",
             Self::SessionModelUpdated => "session.model_updated",
+            Self::SessionCompactionStarted => "session.compaction_started",
+            Self::SessionCompactionCompleted => "session.compaction_completed",
+            Self::SessionCompactionFailed => "session.compaction_failed",
             Self::SessionContextUsageUpdated => "session.context_usage_updated",
             Self::RuntimeStarting => "runtime.starting",
             Self::RuntimeReady => "runtime.ready",
@@ -210,6 +231,9 @@ impl std::str::FromStr for EventType {
             "session.error" => Ok(Self::SessionError),
             "session.title_updated" => Ok(Self::SessionTitleUpdated),
             "session.model_updated" => Ok(Self::SessionModelUpdated),
+            "session.compaction_started" => Ok(Self::SessionCompactionStarted),
+            "session.compaction_completed" => Ok(Self::SessionCompactionCompleted),
+            "session.compaction_failed" => Ok(Self::SessionCompactionFailed),
             "session.context_usage_updated" => Ok(Self::SessionContextUsageUpdated),
             "runtime.starting" => Ok(Self::RuntimeStarting),
             "runtime.ready" => Ok(Self::RuntimeReady),

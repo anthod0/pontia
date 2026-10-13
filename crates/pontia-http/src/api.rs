@@ -33,7 +33,7 @@ pub use inbox::{
 pub use live_output::stream_live_output;
 pub use response::{ApiError, ApiResponse};
 pub use sessions::{
-    archive_session, create_session, exit_session, get_session, interrupt_session,
+    archive_session, compact_session, create_session, exit_session, get_session, interrupt_session,
     list_session_models, pin_session, restart_session, resume_session, session_overview,
     set_session_model, start_session_tui, stop_session_tui, unarchive_session, unpin_session,
     update_session,

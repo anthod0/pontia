@@ -59,6 +59,18 @@ pub trait ClientSession: Send + Sync {
         target: &'a ControlTarget,
         model: &'a str,
     ) -> ClientOperation<'a, ()>;
+    fn compact<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _target: &'a ControlTarget,
+        _operation_id: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async {
+            Err(pontia_core::Error::CapabilityUnavailable(
+                "Manual compaction is unsupported".into(),
+            ))
+        })
+    }
     fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool>;
     fn open_interface<'a>(
         &'a self,

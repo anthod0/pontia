@@ -1,3 +1,4 @@
+mod compaction;
 mod owned;
 mod projection_rows;
 mod report;

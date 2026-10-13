@@ -14,9 +14,15 @@ mod workspaces;
 pub struct ExternalQueryService {
     clients: crate::clients::ClientRegistry,
     pool: SqlitePool,
+    control: Option<crate::ClientControlService>,
 }
 
 impl ExternalQueryService {
+    pub fn with_control(mut self, control: crate::ClientControlService) -> Self {
+        self.control = Some(control);
+        self
+    }
+
     pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
         self.clients = clients;
         self
@@ -25,6 +31,7 @@ impl ExternalQueryService {
     pub fn new(pool: SqlitePool) -> Self {
         Self {
             pool,
+            control: None,
             clients: Default::default(),
         }
     }

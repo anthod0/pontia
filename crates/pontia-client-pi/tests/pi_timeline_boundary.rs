@@ -146,7 +146,11 @@ fn pi_turn_reader_restores_parent_chain_and_filters_unrelated_physical_entries()
         .unwrap();
 
     assert_eq!(items.len(), 2);
-    assert!(items.iter().all(|item| item.turn_id == "turn_1"));
+    assert!(
+        items
+            .iter()
+            .all(|item| item.turn_id.as_deref() == Some("turn_1"))
+    );
     assert_eq!(items[0].item.content_preview, "hello");
     assert_eq!(items[1].item.content_preview, "world");
 }
