@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { HistoryContext } from "./history.js";
+import { PiCompaction } from "./compaction.js";
 import { connectPi, RpcError, type PiConnection, type ControlInput } from "./control-socket.js";
 import { defaultHookLogFile, type EnvLike, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
@@ -187,6 +188,13 @@ export function createPontiaPiExtension(
   let controlGeneration = 0;
   let piContext: ExtensionContext | undefined;
   let changingModel = false;
+  const compaction = () => {
+    const context = boundSessionContext;
+    if (!context || reportingDisabled || !readyReported) return undefined;
+    return new PiCompaction(currentPontiaHome(), context, async (event) =>
+      reportAccepted(await makeReporter(currentHookLogFile()).report(context, event)),
+    );
+  };
   const directInput = new AsyncLocalStorage<{
     submission: ControlInput;
     sessionContext: SessionContext;
@@ -317,6 +325,7 @@ export function createPontiaPiExtension(
           if (generation !== controlGeneration)
             throw new Error("Pi session changed during reconnect");
           await reportModel();
+          await compaction()?.reconnect();
         },
       },
       (inboxMessageId) => {
@@ -344,6 +353,26 @@ export function createPontiaPiExtension(
         if (manager.getSessionId() !== boundSessionContext?.clientSessionKey)
           throw new Error("Pi history native Session identity changed");
         return { generation, sessionManager: manager } satisfies HistoryContext;
+      },
+      {
+        compact(operationId) {
+          const ctx = lifecycleContext();
+          if (ctx.sessionManager.getSessionId() !== boundSessionContext?.clientSessionKey)
+            throw new RpcError(-32006, "Pi compaction native Session identity changed");
+          const observation = compaction()!;
+          if (!ctx.isIdle() || ctx.hasPendingMessages() || queuedControlInput || changingModel)
+            throw new RpcError(-32006, "Pi is busy; compaction was not requested");
+          observation.request(operationId, () =>
+            ctx.compact({
+              onComplete: (result) => {
+                void observation.callbackComplete(operationId, result).catch(controlError);
+              },
+              onError: (error) => {
+                void observation.callbackError(operationId, error).catch(controlError);
+              },
+            }),
+          );
+        },
       },
     );
     if (generation !== controlGeneration) {
@@ -519,6 +548,18 @@ export function createPontiaPiExtension(
     await reportModel().catch(controlError);
   });
 
+  pi.on("session_before_compact", async (event) => {
+    await compaction()?.before(event).catch(controlError);
+  });
+  pi.on("session_compact", async (event) => {
+    await compaction()?.completed(event).catch(controlError);
+  });
+  pi.on("session_compact_failed", async (event, ctx) => {
+    await compaction()
+      ?.failed(event, leafIdFromHookContext(ctx ?? piContext))
+      .catch(controlError);
+  });
+
   pi.on("session_start", async (event, ctx) => {
     if (reportingDisabled) return;
     const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
@@ -658,6 +699,7 @@ export function createPontiaPiExtension(
         await makeReporter(logFile).report(context, buildSessionReadyEvent(context)),
       );
       await reportModel().catch(controlError);
+      await compaction()?.reconnect().catch(controlError);
     } catch (error) {
       await closeControlSocket();
       const logFile = currentHookLogFile();

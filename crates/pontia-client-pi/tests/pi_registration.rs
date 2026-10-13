@@ -187,6 +187,84 @@ fn fact(session: &str, runtime: &str, kind: &str, data: serde_json::Value) -> se
 }
 
 #[tokio::test]
+async fn compaction_control_and_facts_share_identity_without_changing_session_state() {
+    let (state, root) = state().await;
+    let (pi, mut requests) = client(&state);
+    let (session, runtime) = register(&pi, root.path()).await;
+    pi.call(
+        "event.report",
+        fact(
+            &session,
+            &runtime,
+            "session.ready",
+            json!({"client_session_key":"native"}),
+        ),
+    )
+    .await
+    .unwrap();
+    let capabilities = state
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap()
+        .capabilities;
+    assert!(
+        capabilities.manual_compaction
+            && capabilities.compaction_events
+            && capabilities.compaction_history
+    );
+    assert!(
+        state
+            .client_control()
+            .compact(&session, "stale-runtime", "rejected")
+            .await
+            .is_err()
+    );
+    assert!(requests.try_recv().is_err());
+    let command = state.session_commands();
+    let receipt = command.compact_session(&session);
+    let native = async {
+        let request = requests.recv().await.unwrap();
+        assert_eq!(request.method, "compact");
+        let operation = request.params["operation_id"].as_str().unwrap().to_owned();
+        pi.reply(request.id, json!({"accepted":true}))
+            .await
+            .unwrap();
+        operation
+    };
+    let (receipt, operation) = tokio::join!(receipt, native);
+    assert_eq!(receipt.unwrap().operation_id, operation);
+    for kind in ["session.compaction_started", "session.compaction_completed"] {
+        let payload = json!({"operation_id":operation, "trigger":"manual"});
+        let request = fact(&session, &runtime, kind, payload);
+        let first = pi.call("event.report", request.clone()).await.unwrap();
+        let duplicate = pi.call("event.report", request).await.unwrap();
+        assert_eq!(first["event_id"], duplicate["event_id"]);
+    }
+    assert_eq!(
+        state
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "idle"
+    );
+    pi.close();
+    let capabilities = state
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap()
+        .capabilities;
+    assert!(!capabilities.manual_compaction);
+    assert!(capabilities.compaction_events && capabilities.compaction_history);
+}
+
+#[tokio::test]
 async fn branch_replay_lost_acknowledgement_is_unknown_and_not_replayed_after_attach() {
     let (state, root) = state().await;
     let (pi, mut requests) = client(&state);

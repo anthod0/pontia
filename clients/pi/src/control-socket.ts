@@ -4,7 +4,7 @@ import { readHistory, type HistoryContext } from "./history.js";
 import { createConnection, type Socket } from "node:net";
 import { isAbsolute, join } from "node:path";
 
-export const CONTROL_VERSION = 7;
+export const CONTROL_VERSION = 8;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
 // Match the former HTTP event body limit, including the RPC envelope.
 export const MAX_RPC_FRAME_BYTES = 2 * 1024 * 1024 + 1024;
@@ -32,6 +32,9 @@ export interface ModelControl {
 export interface LifecycleControl {
   interrupt(): void;
   shutdown(): void;
+}
+export interface CompactionControl {
+  compact(operationId: string): void;
 }
 export interface PiConnection {
   request(method: string, params: object): Promise<unknown>;
@@ -65,6 +68,7 @@ class RpcSocket {
   private models?: ModelControl;
   private lifecycle?: LifecycleControl;
   private history?: () => HistoryContext;
+  private compaction?: CompactionControl;
   private onReplay?: (inboxMessageId: string) => void;
 
   constructor(
@@ -74,6 +78,7 @@ class RpcSocket {
     onReplay?: (inboxMessageId: string) => void,
     lifecycle?: LifecycleControl,
     history?: () => HistoryContext,
+    compaction?: CompactionControl,
   ) {
     this.socket = socket;
     this.onSubmit = onSubmit;
@@ -81,6 +86,7 @@ class RpcSocket {
     this.onReplay = onReplay;
     this.lifecycle = lifecycle;
     this.history = history;
+    this.compaction = compaction;
     socket.on("data", (chunk: Buffer) => this.receive(chunk));
     socket.on("error", (error) => this.fail(error));
     socket.on("close", () =>
@@ -193,6 +199,26 @@ class RpcSocket {
       }
       if (message.method === "ping") {
         respond({ result: { pong: true } });
+        return;
+      }
+      if (message.method === "compact" && this.compaction) {
+        if (
+          Object.keys(params).some((key) => key !== "operation_id") ||
+          typeof params.operation_id !== "string" ||
+          !params.operation_id.trim()
+        ) {
+          error(-32602, "compact requires an operation_id");
+          return;
+        }
+        try {
+          this.compaction.compact(params.operation_id);
+          respond({ result: { accepted: true } });
+        } catch (failure) {
+          error(
+            failure instanceof RpcError ? failure.code : -32006,
+            failure instanceof Error ? failure.message : String(failure),
+          );
+        }
         return;
       }
       if (this.lifecycle && (message.method === "interrupt" || message.method === "shutdown")) {
@@ -310,6 +336,7 @@ export async function connectPi(
   onReplay?: (inboxMessageId: string) => void,
   lifecycle?: LifecycleControl,
   history?: () => HistoryContext,
+  compaction?: CompactionControl,
 ): Promise<PiConnection> {
   const path = piSocketPath(pontiaHome);
   let identity: ControlIdentity | undefined;
@@ -381,6 +408,7 @@ export async function connectPi(
       reportingOnly ? undefined : onReplay,
       reportingOnly ? undefined : lifecycle,
       reportingOnly ? undefined : history,
+      reportingOnly ? undefined : compaction,
     );
     peers.add(peer);
     socket.once("close", () => {

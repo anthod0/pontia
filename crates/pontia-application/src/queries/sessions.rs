@@ -268,7 +268,14 @@ impl ExternalQueryService {
             } else if entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
             {
                 match &self.control {
-                    Some(control) => control.available(session_id).await?,
+                    Some(control) => match control.available(session_id).await {
+                        Ok(available) => available,
+                        Err(
+                            pontia_core::Error::StateConflict(_)
+                            | pontia_core::Error::CapabilityUnavailable(_),
+                        ) => false,
+                        Err(error) => return Err(error),
+                    },
                     None => false,
                 }
             } else {

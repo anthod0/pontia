@@ -1,5 +1,6 @@
 //! Runtime history is independent of Pi's JSONL storage. Legacy dispatch lives separately.
 mod recovery;
+pub(crate) mod timeline;
 
 use crate::raw_transcripts::{PiAgentBindingResolver, PiJsonlV2Cursor, PiTimelineAdapter};
 use pontia_application::{
@@ -7,8 +8,9 @@ use pontia_application::{
         history::{RecoveredTurnHistory, TurnHistoryCandidate},
         native_history::{HistoryRead, NativeHistory},
         raw_transcripts::{
-            AgentBindingResolveRequest, AgentBindingResolver, TurnTimelineItem, TurnTimelineRange,
-            TurnTimelineReadError, TurnTimelineReadRequest, TurnTimelineReader,
+            AgentBindingResolveRequest, AgentBindingResolver, SessionTimelineReadRequest,
+            SessionTimelineSelection, TurnTimelineItem, TurnTimelineRange, TurnTimelineReadError,
+            TurnTimelineReadRequest, TurnTimelineReader,
         },
     },
     clients::ClientControlService,
@@ -23,7 +25,7 @@ use std::{
 use tokio::sync::OnceCell;
 
 const PREFIX: &str = "pi-entry-v1:";
-const MAX_SNAPSHOT_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const MAX_SNAPSHOT_BYTES: usize = 64 * 1024 * 1024;
 const MAX_ENTRIES: usize = 100_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -335,6 +337,44 @@ impl PiHistory {
     }
 }
 impl NativeHistory for PiHistory {
+    fn read_session_timeline(
+        &self,
+        selection: SessionTimelineSelection,
+    ) -> HistoryRead<'_, std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>> {
+        Box::pin(async move {
+            // Locator generation selects the authoritative source; runtime
+            // locators never fall back to JSONL after a connection failure.
+            let mut runtime = selection.turns.is_empty();
+            for turn in &selection.turns {
+                if !selection.selected_turn_ids.contains(&turn.turn_id) {
+                    continue;
+                }
+                runtime |= self
+                    .turn_generation(turn.head_cursor.as_deref(), turn.tail_cursor.as_deref())
+                    .map_err(|error| TurnTimelineReadError::InvalidRange {
+                        turn_id: turn.turn_id.clone(),
+                        message: error.to_string(),
+                    })?;
+            }
+            if !runtime {
+                let source = PiAgentBindingResolver::new().resolve(&self.binding)?;
+                return PiTimelineAdapter::new().read_legacy_session(
+                    SessionTimelineReadRequest { source, selection },
+                    &self.binding.client_session_key,
+                );
+            }
+            let snapshot = self.snapshot().await?;
+            let items = timeline::session_items(
+                &self.binding.id,
+                &self.binding.client_session_key,
+                &snapshot.entries,
+                snapshot.leaf.as_deref(),
+                selection,
+            )?;
+            snapshot.connection.validate().await?;
+            Ok(items)
+        })
+    }
     fn read_ranges(
         &self,
         ranges: Vec<TurnTimelineRange>,

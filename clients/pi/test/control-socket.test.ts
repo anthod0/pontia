@@ -40,6 +40,41 @@ function reply(socket: Socket, id: unknown, result: unknown) {
   socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
 }
 
+test("compaction control acknowledges native initiation and rejects malformed operations", async () => {
+  const responses: any[] = [];
+  const root = await server((socket, message) => {
+    if (!message.method) {
+      responses.push(message);
+      return;
+    }
+    for (const [id, params] of [
+      ["valid", { operation_id: "compact-api" }],
+      ["empty", { operation_id: "" }],
+      ["extra", { operation_id: "other", input: "/compact" }],
+    ]) {
+      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, method: "compact", params })}\n`);
+    }
+    reply(socket, message.id, {});
+  });
+  const compact = vi.fn();
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { compact },
+  );
+  onTestFinished(() => client.close());
+  await client.request("begin", {});
+  await vi.waitFor(() => expect(responses).toHaveLength(3));
+  expect(compact).toHaveBeenCalledExactlyOnceWith("compact-api");
+  expect(responses.find((r) => r.id === "valid").result).toEqual({ accepted: true });
+  expect(responses.filter((r) => r.error).map((r) => r.error.code)).toEqual([-32602, -32602]);
+});
+
 test("branch replay can resolve over the same socket and rejects malformed message identifiers", async () => {
   const replies: any[] = [];
   const root = await server((socket, message) => {

@@ -14,6 +14,20 @@ pub(crate) fn pi_entry_to_items(entry: &Value, start: usize) -> Vec<TimelineItem
     }
     match entry.get("type").and_then(Value::as_str) {
         Some("message") => pi_message_entry_to_items(entry),
+        Some("compaction") => vec![timeline_item(
+            entry,
+            0,
+            "compaction",
+            "system",
+            None,
+            None,
+            entry
+                .get("summary")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            None,
+        )],
         Some("model_change") => vec![timeline_item(
             entry,
             0,
@@ -243,6 +257,7 @@ fn normalize_pi_timeline_kind(raw_kind: &str) -> &str {
         "toolCall" => "tool_call",
         "toolResult" => "tool_result",
         "model_change" => "model_change",
+        "compaction" | "compactionSummary" => "context_compaction",
         other => other,
     }
 }

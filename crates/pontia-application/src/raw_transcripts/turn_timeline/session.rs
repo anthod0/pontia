@@ -23,11 +23,15 @@ impl TurnTimelineService {
         if !session.capabilities.compaction_history {
             return self.read_selected_turns(session_id, turns, selected).await;
         }
+        self.selected_ranges(session_id, turns, selected).await?;
         let bindings = AgentBindingService::new(self.pool.clone());
-        let binding = bindings
-            .binding_for_session(session_id)
-            .await?
-            .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
+        let Some(binding) = bindings.binding_for_session(session_id).await? else {
+            return if turns.is_empty() {
+                Ok(Vec::new())
+            } else {
+                Err(TurnTimelineServiceError::CapabilityUnavailable)
+            };
+        };
         let selection = SessionTimelineSelection {
             turns: turns
                 .iter()

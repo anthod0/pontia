@@ -159,6 +159,140 @@ fn entry(id: &str, parent: Option<&str>, role: &str) -> Value {
     json!({"id":id,"parentId":parent,"type":"message","timestamp":"2026-10-11T00:00:00Z","message":{"role":role,"content":if role=="user"{json!(id)}else{json!([{"type":"text","text":id}])}}})
 }
 
+fn checkpoint(id: &str, parent: Option<&str>) -> Value {
+    json!({"id": id, "parentId": parent, "type":"compaction", "timestamp":"2026-10-11T00:00:00Z",
+        "summary": "native private summary", "tokensBefore": 20000})
+}
+
+#[tokio::test]
+async fn session_checkpoints_keep_native_order_and_turn_or_gap_page_ownership() {
+    use pontia_application::client_contract::raw_transcripts::{
+        SessionTimelineSelection, SessionTimelineTurn,
+    };
+    let f = Fixture::new().await;
+    let (_, daemon) = f
+        .serve(
+            vec![
+                entry("u1", None, "user"),
+                checkpoint("inside", Some("u1")),
+                entry("a1", Some("inside"), "assistant"),
+                checkpoint("between", Some("a1")),
+                entry("u2", Some("between"), "user"),
+                entry("a2", Some("u2"), "assistant"),
+                checkpoint("trailing", Some("a2")),
+            ],
+            2,
+        )
+        .await;
+    let history = f.history();
+    let selection = |selected: &[&str]| SessionTimelineSelection {
+        turns: vec![
+            SessionTimelineTurn {
+                turn_id: "one".into(),
+                head_cursor: Some(f.cursor(None)),
+                tail_cursor: Some(f.cursor(Some("a1"))),
+            },
+            SessionTimelineTurn {
+                turn_id: "two".into(),
+                head_cursor: Some(f.cursor(Some("between"))),
+                tail_cursor: Some(f.cursor(Some("a2"))),
+            },
+        ],
+        selected_turn_ids: selected.iter().map(|id| (*id).into()).collect(),
+    };
+    let items = history
+        .read_session_timeline(selection(&["one", "two"]))
+        .await
+        .unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.item.kind.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "user",
+            "context_compaction",
+            "assistant",
+            "context_compaction",
+            "user",
+            "assistant",
+            "context_compaction"
+        ]
+    );
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.turn_id.as_deref())
+            .collect::<Vec<_>>(),
+        vec![
+            Some("one"),
+            Some("one"),
+            Some("one"),
+            None,
+            Some("two"),
+            Some("two"),
+            None
+        ]
+    );
+    assert_eq!(items[1].item.content_preview, "native private summary");
+    let first = history
+        .read_session_timeline(selection(&["one"]))
+        .await
+        .unwrap();
+    let second = history
+        .read_session_timeline(selection(&["two"]))
+        .await
+        .unwrap();
+    assert_eq!(first.len(), 3);
+    assert_eq!(second.len(), 4);
+    assert_eq!(
+        first
+            .into_iter()
+            .chain(second)
+            .map(|i| i.item.item_id)
+            .collect::<Vec<_>>(),
+        items
+            .into_iter()
+            .map(|i| i.item.item_id)
+            .collect::<Vec<_>>()
+    );
+    daemon.close();
+}
+
+#[tokio::test]
+async fn checkpoints_without_pontia_turns_come_only_from_the_native_branch() {
+    use pontia_application::client_contract::raw_transcripts::SessionTimelineSelection;
+    let f = Fixture::new().await;
+    let (_, daemon) = f.serve(vec![
+        entry("u", None, "user"),
+        checkpoint("offbranch", Some("u")),
+        checkpoint("first", Some("u")),
+        json!({"id":"summary", "parentId":"first", "type":"message", "timestamp":"2026-10-11T00:00:00Z",
+            "message":{"role":"compactionSummary", "summary":"second native summary"}}),
+    ], 2).await;
+    let items = f
+        .history()
+        .read_session_timeline(SessionTimelineSelection {
+            turns: vec![],
+            selected_turn_ids: vec![],
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.item.item_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["pi:entry:first:block:0", "pi:entry:summary:block:0"]
+    );
+    assert!(
+        items
+            .iter()
+            .all(|i| i.turn_id.is_none() && i.item.kind == "context_compaction")
+    );
+    daemon.close();
+}
+
 #[tokio::test]
 async fn runtime_reads_and_branch_resolution_share_a_paginated_snapshot_without_a_session_file() {
     let f = Fixture::new().await;
@@ -497,6 +631,38 @@ async fn mixed_turns_keep_legacy_byte_ranges_and_only_new_turns_require_rpc() {
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     daemon.close();
+    use pontia_application::client_contract::raw_transcripts::{
+        SessionTimelineSelection, SessionTimelineTurn,
+    };
+    let selection = |selected: &str| SessionTimelineSelection {
+        turns: vec![old.clone(), new.clone()]
+            .into_iter()
+            .map(|range| SessionTimelineTurn {
+                turn_id: range.turn_id,
+                head_cursor: Some(range.head_cursor),
+                tail_cursor: range.tail_cursor,
+            })
+            .collect(),
+        selected_turn_ids: vec![selected.into()],
+    };
+    let legacy = f
+        .history()
+        .read_session_timeline(selection("first"))
+        .await
+        .unwrap();
+    assert_eq!(
+        legacy
+            .iter()
+            .map(|i| i.item.content_preview.as_str())
+            .collect::<Vec<_>>(),
+        vec!["old-u", "old-a"]
+    );
+    assert!(
+        f.history()
+            .read_session_timeline(selection("second"))
+            .await
+            .is_err()
+    );
     assert_eq!(f.history().read_ranges(vec![old]).await.unwrap().len(), 2);
     assert!(f.history().read_ranges(vec![new]).await.is_err());
 }

@@ -37,6 +37,47 @@ fn cursor(offset: usize, anchor: Option<&str>) -> String {
 }
 
 #[test]
+fn legacy_session_history_keeps_old_messages_and_recovers_offline_compaction_checkpoints() {
+    use pontia_application::client_contract::raw_transcripts::{
+        SessionTimelineReadRequest, SessionTimelineSelection, SessionTimelineTurn,
+    };
+    let contents = concat!(
+        "{\"type\":\"session\",\"id\":\"native\",\"version\":3}\n",
+        "{\"type\":\"message\",\"id\":\"u\",\"parentId\":null,\"message\":{\"role\":\"user\",\"content\":\"old conversation\"}}\n",
+        "{\"type\":\"message\",\"id\":\"a\",\"parentId\":\"u\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"old response\"}]}}\n",
+        "{\"type\":\"compaction\",\"id\":\"c\",\"parentId\":\"a\",\"summary\":\"native summary\"}\n",
+    );
+    let (_dir, source) = source(contents.as_bytes());
+    let items = PiTimelineAdapter::new()
+        .read_session_timeline(SessionTimelineReadRequest {
+            source,
+            selection: SessionTimelineSelection {
+                turns: vec![SessionTimelineTurn {
+                    turn_id: "one".into(),
+                    head_cursor: Some(cursor(0, None)),
+                    tail_cursor: Some(cursor(
+                        contents.find("{\"type\":\"compaction\"").unwrap(),
+                        Some("a"),
+                    )),
+                }],
+                selected_turn_ids: vec!["one".into()],
+            },
+        })
+        .unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.item.kind.as_str())
+            .collect::<Vec<_>>(),
+        vec!["user", "assistant", "context_compaction"]
+    );
+    assert_eq!(items[0].item.content_preview, "old conversation");
+    assert_eq!(items[1].item.content_preview, "old response");
+    assert_eq!(items[2].turn_id, None);
+    assert_eq!(items[2].item.content_preview, "native summary");
+}
+
+#[test]
 fn pi_v2_boundary_capture_combines_binding_eof_anchor_and_relation() {
     let (_dir, source) = source(b"{\"id\":\"previous\"}\n");
     let adapter = PiTimelineAdapter::new();

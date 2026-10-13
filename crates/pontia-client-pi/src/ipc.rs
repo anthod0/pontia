@@ -418,6 +418,12 @@ impl Drop for ReplyGuard<'_> {
 }
 
 impl pontia_application::ClientControlChannel for PiChannel {
+    fn compact<'a>(
+        &'a self,
+        operation_id: &'a str,
+    ) -> pontia_application::ClientControlOperation<'a> {
+        self.peer.compact(operation_id)
+    }
     fn native_history(
         &self,
         params: Value,
@@ -472,6 +478,23 @@ impl pontia_application::ClientControlChannel for PiChannel {
 }
 
 impl pontia_application::ClientControlChannel for PiRpcPeer {
+    fn compact<'a>(
+        &'a self,
+        operation_id: &'a str,
+    ) -> pontia_application::ClientControlOperation<'a> {
+        Box::pin(async move {
+            if self
+                .call("compact", json!({"operation_id": operation_id}))
+                .await?
+                != json!({"accepted": true})
+            {
+                return Err(Error::ControlUnknown(
+                    "Invalid Pi compaction acknowledgement".into(),
+                ));
+            }
+            Ok(())
+        })
+    }
     fn native_history(
         &self,
         params: Value,

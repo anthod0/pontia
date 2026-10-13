@@ -250,16 +250,10 @@ async fn session_query_returns_all_runtimes() {
         .await
         .unwrap();
     sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('another','session','tui','running','2000-01-01T00:00:00Z')").execute(&app.db()).await.unwrap();
-    assert_eq!(
-        app.queries()
-            .get_session("session")
-            .await
-            .unwrap()
-            .unwrap()
-            .runtimes
-            .len(),
-        2
-    );
+    let session = app.queries().get_session("session").await.unwrap().unwrap();
+    assert_eq!(session.runtimes.len(), 2);
+    assert!(!session.capabilities.manual_compaction);
+    assert!(session.capabilities.compaction_events && session.capabilities.compaction_history);
 }
 
 #[tokio::test]

@@ -10,6 +10,43 @@ use super::{TurnHistoryIssue, TurnTimelineGroup, TurnTimelineService, TurnTimeli
 use crate::{AgentBindingService, ExternalQueryService};
 
 impl TurnTimelineService {
+    pub(super) async fn selected_ranges(
+        &self,
+        session_id: &str,
+        all_turns: &[TurnRow],
+        selected: &[&TurnRow],
+    ) -> Result<Vec<TurnTimelineRange>, TurnTimelineServiceError> {
+        let active_turn_id = SqliteTurnRepository::new(self.pool.clone())
+            .active_turn(session_id)
+            .await?
+            .map(|turn| turn.turn_id);
+        let newest_turn_id = all_turns.last().map(|turn| turn.turn_id.as_str());
+        let mut ranges = Vec::new();
+        for turn in selected {
+            let active = active_turn_id.as_deref() == Some(turn.turn_id.as_str())
+                && newest_turn_id == Some(turn.turn_id.as_str())
+                && turn.state.parse::<TurnState>()?.is_active();
+            let head = turn.head_cursor.clone().ok_or_else(|| {
+                TurnTimelineServiceError::TurnUnavailable {
+                    turn_id: turn.turn_id.clone(),
+                }
+            })?;
+            if !active && turn.tail_cursor.is_none() {
+                return Err(TurnTimelineServiceError::TurnUnavailable {
+                    turn_id: turn.turn_id.clone(),
+                });
+            }
+            ranges.push(TurnTimelineRange {
+                turn_id: turn.turn_id.clone(),
+                is_first_session_turn: all_turns
+                    .first()
+                    .is_some_and(|first| first.turn_id == turn.turn_id),
+                head_cursor: head,
+                tail_cursor: turn.tail_cursor.clone(),
+            });
+        }
+        Ok(ranges)
+    }
     pub(super) async fn read_selected_groups(
         &self,
         session_id: &str,
@@ -114,30 +151,9 @@ impl TurnTimelineService {
             .await?
             .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
         if let Some(history) = self.native_history(&binding).await {
-            let mut ranges = Vec::new();
-            for turn in selected {
-                let active = active_turn_id.as_deref() == Some(turn.turn_id.as_str())
-                    && newest_turn_id == Some(turn.turn_id.as_str())
-                    && turn.state.parse::<TurnState>()?.is_active();
-                let head = turn.head_cursor.clone().ok_or_else(|| {
-                    TurnTimelineServiceError::TurnUnavailable {
-                        turn_id: turn.turn_id.clone(),
-                    }
-                })?;
-                if !active && turn.tail_cursor.is_none() {
-                    return Err(TurnTimelineServiceError::TurnUnavailable {
-                        turn_id: turn.turn_id.clone(),
-                    });
-                }
-                ranges.push(TurnTimelineRange {
-                    turn_id: turn.turn_id.clone(),
-                    is_first_session_turn: all_turns
-                        .first()
-                        .is_some_and(|first| first.turn_id == turn.turn_id),
-                    head_cursor: head,
-                    tail_cursor: turn.tail_cursor.clone(),
-                });
-            }
+            let ranges = self
+                .selected_ranges(session_id, all_turns, selected)
+                .await?;
             let items = history
                 .read_ranges(ranges)
                 .await

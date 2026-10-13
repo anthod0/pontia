@@ -74,14 +74,64 @@ pub(super) async fn report_event(
     event.data["runtime_id"] = json!(request.runtime_id);
     validate_identity(state, identity, &event.session_id, &request.runtime_id).await?;
     let fact_type = EventType::from_str(&event.fact_type)?;
+    let fact = ReportedFact {
+        session_id: event.session_id,
+        turn_id: event.turn_id,
+        fact_type,
+        data: event.data,
+    };
+    // dispatch holds the shared connection identity gate through ingestion.
+    // Replayed hook facts therefore cannot race either the original report or
+    // replacement connections after a lost acknowledgement / extension reload.
+    if fact_type.is_compaction_event() {
+        let queries = state.queries();
+        if let Some(existing) = queries
+            .list_session_events(&fact.session_id)
+            .await?
+            .into_iter()
+            .find(|existing| {
+                existing.event_type == event.fact_type
+                    && existing.payload["operation_id"] == fact.data["operation_id"]
+            })
+        {
+            // A replay must match the previously validated canonical payload.
+            // Missing optional null fields are equivalent; extra fields or a
+            // changed required value are not. Fresh facts use report_fact below.
+            if fact.turn_id.is_some()
+                || existing
+                    .payload
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .any(|(key, value)| fact.data.get(key).unwrap_or(&Value::Null) != value)
+                || fact
+                    .data
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .any(|(key, value)| existing.payload.get(key) != Some(value))
+            {
+                return Err(Error::Domain(
+                    "Pi compaction replay changed its metadata".into(),
+                ));
+            }
+            let version = queries
+                .resolve_event_cursor(
+                    pontia_application::views::events::EventStreamScope::Session {
+                        session_id: &fact.session_id,
+                    },
+                    &existing.event_id,
+                )
+                .await?;
+            return Ok(
+                json!({"accepted":true,"duplicate":true,"event_id":existing.event_id,
+                "session_id":fact.session_id,"turn_id":null,"state_version":version}),
+            );
+        }
+    }
     let result = state
         .event_ingest_service()
-        .report_fact(ReportedFact {
-            session_id: event.session_id,
-            turn_id: event.turn_id,
-            fact_type,
-            data: event.data,
-        })
+        .report_fact(fact)
         .await
         .map_err(|error| match error {
             EventReportError::InvalidFact(message) => Error::Domain(message),

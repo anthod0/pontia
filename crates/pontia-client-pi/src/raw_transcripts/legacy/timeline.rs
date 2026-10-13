@@ -302,6 +302,13 @@ impl TurnTimelineReader for PiTimelineAdapter {
         "pi"
     }
 
+    fn read_session_timeline(
+        &self,
+        request: pontia_application::client_contract::raw_transcripts::SessionTimelineReadRequest,
+    ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
+        self.read_legacy_session(request, "")
+    }
+
     fn read_turn_ranges(
         &self,
         request: TurnTimelineReadRequest,
@@ -317,6 +324,43 @@ impl TurnTimelineReader for PiTimelineAdapter {
                     })
             })
             .collect())
+    }
+}
+
+impl PiTimelineAdapter {
+    pub(crate) fn read_legacy_session(
+        &self,
+        request: pontia_application::client_contract::raw_transcripts::SessionTimelineReadRequest,
+        native_session: &str,
+    ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
+        if request.source.client_type != "pi" || request.source.format != "pi-jsonl" {
+            return Err(Error::CapabilityUnavailable(
+                "Pi native history source unsupported".into(),
+            )
+            .into());
+        }
+        let length = source_len(&request.source)?;
+        if length > crate::history::MAX_SNAPSHOT_BYTES {
+            return Err(Error::CapabilityUnavailable(
+                "source_unavailable: Pi history exceeds snapshot budget".into(),
+            )
+            .into());
+        }
+        let bytes = read_range_from_source(&request.source, 0, length)?;
+        let (parsed, _) = parse_window("session", &bytes, 0)?;
+        // The session header is an identity record, not a branch entry.
+        let entries: Vec<Value> = parsed
+            .into_iter()
+            .map(|(_, entry)| entry.value)
+            .filter(|entry| entry["type"] != "session")
+            .collect();
+        crate::history::timeline::session_items(
+            &request.source.id,
+            native_session,
+            &entries,
+            entries.last().and_then(|entry| entry["id"].as_str()),
+            request.selection,
+        )
     }
 }
 
