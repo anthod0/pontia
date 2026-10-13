@@ -1,0 +1,105 @@
+<svelte:head>
+	<title>Self-host an Edge — Pontia</title>
+	<meta name="description" content="Deploy and operate a self-hosted Pontia Edge on a public Linux server." />
+</svelte:head>
+
+# Self-host an Edge
+
+A self-hosted Edge relays end-to-end encrypted Dashboard traffic between browsers and your Pontia devices. It does not run agents and cannot decrypt device business traffic. Pontia Cloud still provides login, device ownership, Edge registration, and connection authorization.
+
+## Requirements
+
+Use a public Linux server with:
+
+- x86_64 or ARM64 architecture;
+- systemd as the system service manager;
+- a public IPv4 address that the server can bind and receive traffic on;
+- outbound HTTPS and DNS access;
+- `curl`, `grep`, `install`, `jq`, `mktemp`, `mv`, `openssl`, `rm`, `sha256sum`, and `tar`;
+- OpenSSL with Ed25519 verification support.
+
+`pontia-edge` is supported only on Linux.
+
+## Choose a network mode
+
+The default deployment serves HTTPS and WSS on public port 443 and uses HTTP-01 certificate validation. Public port 80 must also reach the server during initialization and certificate renewal.
+
+If port 80 or 443 is unavailable, choose the alternative deployment in [Edge settings](/settings/edges). It uses a browser-safe custom HTTPS/WSS port—8443 is recommended—and DNS-01 certificate validation. Open the selected port in the host and provider firewalls.
+
+Pontia Cloud assigns and configures the Edge hostname under `edge.pontia.dev`; you do not create the DNS record manually.
+
+## Deploy from Cloud
+
+[Open Edge settings](/settings/edges), signing in when prompted. Then:
+
+1. Select **Generate deployment command**.
+2. Choose the default or alternative port mode.
+3. Copy the one-time command and run it on the public Linux server.
+
+The command contains a short-lived deployment ticket. Keep it private and run it before the expiry shown by Cloud. Initialization:
+
+- downloads and verifies the signed `pontia-edge` release;
+- detects and proves control of the server's public IPv4 address;
+- configures the assigned DNS name through Pontia Cloud;
+- obtains a Let's Encrypt certificate;
+- installs and starts `pontia-edge.service`;
+- waits for Cloud to verify the public HTTPS health endpoint;
+- enables automatic stable-release checks.
+
+A successful Edge appears under **Your edges** in [Edge settings](/settings/edges) with a healthy status.
+
+## Resume an incomplete deployment
+
+After fixing the reported problem, resume initialization on the same server:
+
+```sh
+sudo pontia-edge retry
+```
+
+Initialization state is kept in `/etc/pontia/edge/pending-init.json` until setup succeeds. Retry can continue an enrolled Edge without creating a second registration.
+
+## Operate the Edge
+
+Check the service and logs:
+
+```sh
+sudo systemctl status pontia-edge.service
+sudo journalctl -u pontia-edge.service --no-pager -n 200
+```
+
+The public health endpoint is `https://HOST[:PORT]/healthz` and returns `ok` when the service is reachable.
+
+Update manually:
+
+```sh
+sudo pontia-edge update
+```
+
+Manage automatic stable updates:
+
+```sh
+sudo pontia-edge auto-update status
+sudo pontia-edge auto-update enable
+sudo pontia-edge auto-update disable
+```
+
+Automatic updates check hourly with up to ten minutes of random delay. An update already in progress continues when future checks are disabled.
+
+## Stored files
+
+The managed installation uses:
+
+| Path | Purpose |
+| --- | --- |
+| `/usr/local/bin/pontia-edge` | Edge executable |
+| `/etc/pontia/edge/config.json` | Endpoint configuration |
+| `/etc/pontia/edge/credential` | Edge service credential |
+| `/etc/pontia/edge/tls.pem` | TLS certificate and key material |
+| `/etc/pontia/edge/acme-account.json` | ACME account state |
+| `/etc/systemd/system/pontia-edge.service` | systemd service definition |
+
+Keep `/etc/pontia/edge` private and backed up according to your server policy.
+
+## Delete an Edge
+
+Deleting a self-hosted Edge in Cloud permanently removes its registration and associated devices. It does not stop or erase the server process. Stop and remove the server installation separately only after moving or disabling affected devices.

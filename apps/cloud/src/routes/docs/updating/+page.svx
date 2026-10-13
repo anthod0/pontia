@@ -1,0 +1,77 @@
+<svelte:head>
+	<title>Updating Pontia — Pontia</title>
+	<meta name="description" content="Update Pontia and self-hosted Edges using verified stable releases." />
+</svelte:head>
+
+# Updating Pontia
+
+Pontia updates from the signed stable release channel. Check the installed version with:
+
+```sh
+pontia --version
+```
+
+## Update the local control plane
+
+Run as the same user that owns the per-user service:
+
+```sh
+pontia update
+```
+
+The updater:
+
+1. resolves the running installation directory;
+2. acquires an update lock;
+3. downloads the stable release manifest over HTTPS;
+4. verifies its embedded Ed25519 signature;
+5. verifies each artifact URL, size, and SHA-256 digest;
+6. stages replacement `pontia` and `pontiad` binaries in the installation directory;
+7. restarts a running managed service and checks health;
+8. restores the previous binaries and attempts service recovery if replacement or restart fails.
+
+`pontia` and `pontiad` must be regular files in the same directory, and the CLI must be running as the installed executable named `pontia`. A package-manager wrapper or renamed executable cannot self-update.
+
+The Dashboard defaults to the release archive matching the binary version, so a successful update also moves the served Dashboard to that version unless `[dashboard].source` is overridden.
+
+## Install a specific release
+
+The installer accepts a release beginning with `v`:
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | PONTIA_VERSION=v0.5.2 sh
+```
+
+This installs binaries but does not by itself update an existing service definition. Run `pontia up` afterward when changing installation locations or intentionally installing a specific version. Normal in-product updates follow only the stable channel and do not provide a downgrade command.
+
+## Update a self-hosted Edge
+
+Run on the Edge server:
+
+```sh
+sudo pontia-edge update
+```
+
+The Edge updater verifies the same signed release channel, replaces the managed `/usr/local/bin/pontia-edge`, restarts an active service, verifies that the new process remains stable, and rolls back on failure.
+
+Initialization enables automatic Edge updates. Check or change them with:
+
+```sh
+sudo pontia-edge auto-update status
+sudo pontia-edge auto-update enable
+sudo pontia-edge auto-update disable
+```
+
+The timer checks hourly with up to ten minutes of random delay. Disabling the timer does not interrupt an update already running.
+
+## Before and after updating
+
+Pontia applies bundled local database migrations during normal startup when `run_migrations` is enabled. Do not copy a newer local database into an older release and assume it is compatible.
+
+After an update, run:
+
+```sh
+pontia status
+```
+
+For an Edge, check `systemctl status pontia-edge.service` and its Cloud health badge. See [Troubleshooting](/docs/troubleshooting) if automatic rollback or service recovery reports an error.

@@ -1,0 +1,69 @@
+<svelte:head>
+	<title>CLI reference — Pontia</title>
+	<meta name="description" content="Reference for Pontia local service, remote access, update, and Workflow commands." />
+</svelte:head>
+
+# CLI reference
+
+The `pontia` CLI configures the local installation and delegates durable control-plane operations to the running `pontiad` service.
+
+Use `pontia COMMAND --help` for the exact options in your installed version.
+
+## Setup and lifecycle
+
+| Command | Purpose |
+| --- | --- |
+| `pontia init` | Select Agent Clients, create persistent configuration, install integrations, start the per-user service, and offer remote setup |
+| `pontia up` | Install or refresh the per-user service definition and start or restart the service |
+| `pontia status` | Show installation, enabled, running, and HTTP health state |
+| `pontia down` | Stop and disable the per-user service |
+| `pontia update` | Install the latest signed stable `pontia` and `pontiad` release |
+| `pontia --version` | Print the installed version |
+
+Stopping `pontiad` stops observation, input reception, and Workflow scheduling. It is not proof that a running Agent Client, Turn, or native conversation has ended.
+
+## Cloud login and remote access
+
+| Command | Purpose |
+| --- | --- |
+| `pontia login` | Complete browser-based device authorization and store a CLI credential |
+| `pontia remote enable` | Register this device, select an Edge, and create its E2E identity |
+| `pontia remote status` | Compare local identity state with the Cloud registration |
+| `pontia remote edit --name NAME` | Change the device display name |
+| `pontia remote edit --handle HANDLE` | Change the device Dashboard URL handle |
+| `pontia remote rotate-key` | Replace the device E2E identity and key version |
+| `pontia remote disable` | Unregister this device and remove its local remote identity |
+
+Remote configuration changes that affect `pontiad` restart the local service automatically.
+
+## Workflows
+
+| Command | Context | Purpose |
+| --- | --- | --- |
+| `pontia workflow run FILE` | Any local shell | Parse a TOML definition and start a Workflow through the local API |
+| `pontia workflow show [WORKFLOW_ID]` | Any local shell; ID optional inside a managed Node | Print compact Workflow, current Node, input, output, and Patch context |
+| `pontia workflow submit` | Current managed Agent Node pane | Declare the Node's output ready |
+| `pontia workflow patch request` | Current managed Agent Node pane | Report a blocking problem and start replanning |
+| `pontia workflow patch apply` | Current Re-planner pane | Accept the candidate definition as a new revision |
+| `pontia workflow patch block` | Current Re-planner pane | Finish the Patch without applying the candidate definition |
+
+The pane-scoped commands reject calls outside the Pontia-managed `tmux` pane because they derive the Session and runtime identity from that pane.
+
+## Exit status and errors
+
+Commands return success only when the requested operation reports an operational result. Errors are written to standard error with a `pontia:` prefix. Keep the full redacted error when diagnosing a failure.
+
+## `pontia-edge`
+
+A self-hosted Edge has a separate root-operated CLI:
+
+| Command | Purpose |
+| --- | --- |
+| `pontia-edge init --edge-id ID --ticket TICKET` | Initialize and register an Edge; normally use the full Cloud-generated command |
+| `pontia-edge retry` | Resume incomplete initialization on the same server |
+| `pontia-edge update` | Install the latest signed stable Edge release |
+| `pontia-edge auto-update enable` | Install and enable hourly update checks |
+| `pontia-edge auto-update disable` | Disable future checks |
+| `pontia-edge auto-update status` | Show timer schedule and the last update result |
+
+See [Self-host an Edge](/docs/self-hosted-edge) before using these commands directly.

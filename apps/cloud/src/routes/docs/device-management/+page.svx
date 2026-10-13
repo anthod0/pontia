@@ -1,0 +1,72 @@
+<svelte:head>
+	<title>Device and account management — Pontia</title>
+	<meta name="description" content="Manage Pontia remote devices, encryption identities, sign-in methods, and sessions." />
+</svelte:head>
+
+# Device and account management
+
+A registered device is a remote control target owned by your Pontia Cloud user. Its registration, local encryption identity, selected Edge, and local service must all agree before remote access works.
+
+## Check a device
+
+Run on the registered device:
+
+```sh
+pontia remote status
+```
+
+The command checks the local device ID, Cloud registration, selected Edge, and stored end-to-end encryption identity. It requires a valid CLI credential from `pontia login`.
+
+## Rename a device or change its handle
+
+Use [Device settings](/settings/devices), or run:
+
+```sh
+pontia remote edit --name "Build workstation"
+pontia remote edit --handle build-workstation
+```
+
+Both options may be supplied together. Changing the handle changes the device URL at `app.pontia.dev/HANDLE`; it does not rotate keys or change the selected Edge.
+
+## Rotate the device key
+
+Run:
+
+```sh
+pontia remote rotate-key
+```
+
+Pontia creates a new device E2E identity, updates the Cloud registration, writes the replacement to `$PONTIA_HOME/e2e-identity.json`, and restarts the local service. Existing browser/device encrypted sessions no longer match the new identity and must reconnect.
+
+Rotate the key when the identity file may have been exposed or when deliberately replacing the device's cryptographic identity. Do not edit the key version or private key manually.
+
+## Disable remote access
+
+On the device:
+
+```sh
+pontia remote disable
+```
+
+This unregisters the device, removes its local E2E identity, updates local configuration, and restarts the service. Local Dashboard access remains available.
+
+Removing a device in [Device settings](/settings/devices) revokes the Cloud registration, but it does not directly modify files on a disconnected device. Run `pontia remote disable` locally when possible, or run `pontia remote enable` later to establish a valid registration again.
+
+## Manage sign-in methods
+
+In [Account settings](/settings/account), link Google or GitHub as sign-in methods. Each provider account can be linked to only one Pontia user. Pontia identifies provider accounts by their stable provider identity rather than treating matching email addresses as the same account.
+
+Do not unlink the only sign-in method you can still use.
+
+## Revoke browser and CLI sessions
+
+In [Session settings](/settings/sessions), you can:
+
+- revoke one browser session;
+- sign out every other browser;
+- revoke one CLI credential;
+- revoke all CLI credentials.
+
+A revoked browser session cannot refresh after its current access token expires. Revoking a CLI credential causes commands that use its local `$PONTIA_HOME/auth.json` to require `pontia login` again. It does not delete the device registration by itself.
+
+If a device is lost, remove its device registration, revoke the relevant CLI credential, and revoke unfamiliar browser sessions.

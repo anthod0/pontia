@@ -9,7 +9,12 @@ export default defineConfig({
     tailwindcss(),
     sveltekit({
       extensions: [".svelte", ".svx"],
-      preprocess: [mdsvex({ extensions: [".svx"] })],
+      preprocess: [
+        mdsvex({
+          extensions: [".svx"],
+          highlight: { alias: { sh: "bash" } },
+        }),
+      ],
       compilerOptions: {
         // Force runes mode for the project, except for libraries. Can be removed in svelte 6.
         runes: ({ filename }) =>

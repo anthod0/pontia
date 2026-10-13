@@ -1,0 +1,69 @@
+<svelte:head>
+	<title>pi Agent Client — Pontia</title>
+	<meta name="description" content="Install and use the pi Agent Client integration with Pontia." />
+</svelte:head>
+
+# pi Agent Client
+
+The pi integration connects real, `tmux`-backed pi sessions to Pontia. You can use the native TUI and the Dashboard with the same underlying conversation.
+
+## Requirements
+
+Install these commands before running Pontia initialization:
+
+- `pi`
+- `tmux`
+
+Confirm that they are available to your user:
+
+```sh
+pi --version
+tmux -V
+```
+
+Configure pi's own model provider credentials separately. Pontia does not supply model credentials.
+
+## Install the integration
+
+Select **pi** when running:
+
+```sh
+pontia init
+```
+
+The initializer verifies `pi --version` and runs:
+
+```sh
+pi install npm:@pontia/pi-client-plugin
+```
+
+The plugin reports native pi lifecycle and conversation facts to `pontiad` and accepts supported controls from Pontia.
+
+## How pi Sessions run
+
+Pontia launches pi inside a managed `tmux` pane in the selected Workspace. The pane carries the Pontia Session and runtime identities used by Workflow commands and lifecycle reporting.
+
+Do not copy those pane-local identity values into another terminal. Commands such as `pontia workflow submit` intentionally work only inside the managed pane for the current Workflow Agent Node.
+
+Pontia reads complete conversation history from pi's native data rather than maintaining a second full transcript. If the native history is unavailable, the Dashboard may still show Pontia's control state while conversation recovery is limited.
+
+## Override the pi command
+
+The default TUI command is `pi`. To use another executable or wrapper, set it in `$PONTIA_HOME/config.toml`:
+
+```toml
+[runtime.pi]
+tui_command = "/absolute/path/to/pi"
+```
+
+For a command-scoped override, use `PONTIA_PI_TUI_COMMAND`. Environment overrides supplied only to `pontia init` are not persisted into the installed service; put a lasting value in `config.toml` and restart Pontia.
+
+## Diagnose the integration
+
+Pontia's pi hook log is:
+
+```text
+$PONTIA_HOME/state/pi-hook.log
+```
+
+Also verify that `pontia status` reports a healthy service and that the pi plugin remains installed. See [Troubleshooting](/docs/troubleshooting) for service logs and common recovery steps.

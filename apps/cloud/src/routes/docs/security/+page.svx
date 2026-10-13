@@ -1,0 +1,59 @@
+<svelte:head>
+	<title>Security — Pontia</title>
+	<meta name="description" content="Understand Pontia's trust boundaries, encryption, credentials, and local permissions." />
+</svelte:head>
+
+# Security
+
+Pontia keeps agent execution on your device and separates remote authorization from encrypted device traffic. Security still depends on protecting the device, Agent Client credentials, Pontia state directory, browser session, and any self-hosted Edge host.
+
+## Trust boundaries
+
+| Component | Security role | Project-file access |
+| --- | --- | --- |
+| `pontiad` on your device | Authenticates local and remote requests and coordinates Agent Clients | Through the local user's permissions and configured Workspaces |
+| Agent Client | Executes agent work using its own credentials, tools, sandbox, and approvals | According to that Client's local permissions |
+| Pontia Cloud | Authenticates users, records ownership, registers devices and Edges, and authorizes connections | No device filesystem access |
+| Edge | Admits authorized device tunnels and relays browser/device ciphertext | No plaintext project access |
+| Browser | Presents data returned by the selected device | No direct filesystem access |
+
+Cloud is required to authorize a new remote connection, but it is not in the Dashboard business-traffic path. The Edge cannot substitute for browser authorization, and a trusted tunnel does not bypass device authentication.
+
+## End-to-end encrypted remote access
+
+The browser creates an ephemeral identity and obtains a short-lived, signed capability bound to that browser key, the target device, and the device key version. The device validates the capability against the Pontia Cloud verification key before accepting a session.
+
+The browser and device establish session keys with X25519-based HPKE and protect records with ChaCha20-Poly1305. Authenticated request IDs and bounded replay tracking prevent a captured encrypted request from being executed again. Idle E2E sessions expire; active streams are bounded separately.
+
+The Edge sees connection metadata needed to route a device and the sizes and timing of encrypted traffic. It does not receive the plaintext Dashboard API requests or responses.
+
+## Local access
+
+The local Dashboard and External API use the `external_api_token` from `$PONTIA_HOME/config.toml`. The default listener is loopback-only. If you change `bind_addr` to a non-loopback address, you expose the token-authenticated API to that network; provide your own trusted network and transport protections.
+
+Remote access does not reuse the local API token. The encrypted browser/device session authorizes the same current External API capabilities after device-side verification.
+
+## Secrets to protect
+
+Do not share these values or files:
+
+- `external_api_token` in `config.toml`;
+- `$PONTIA_HOME/auth.json`;
+- `$PONTIA_HOME/e2e-identity.json`;
+- self-hosted Edge deployment commands and pending initialization state;
+- `/etc/pontia/edge/credential` and TLS private-key material;
+- Agent Client and model-provider credentials.
+
+Pontia creates its private credential files with restrictive permissions, but backups, shell history, copied diagnostics, and administrator access can still expose them.
+
+## Respond to credential exposure
+
+- Local API token: generate a replacement in `config.toml`, run `pontia up`, and update trusted local browsers.
+- CLI credential: revoke it in [Session settings](/settings/sessions), then run `pontia login` when needed.
+- Device identity: run `pontia remote rotate-key`.
+- Lost device: remove its Cloud device registration and revoke associated CLI/browser sessions.
+- Edge credential or host: remove the Edge registration and associated devices in Cloud, then redeploy and re-register devices on a trusted Edge.
+
+## Data retained on the device
+
+Pontia stores durable control-plane records, limited message and association data, Workflow files, and native timeline locators under `PONTIA_HOME`. Complete conversation history remains owned by the Agent Client and is read from its native interface or storage when available. Deleting Pontia's local database does not necessarily delete the Client's native conversation.

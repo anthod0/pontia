@@ -4,7 +4,7 @@
 	import RocketLaunchIcon from 'phosphor-svelte/lib/RocketLaunchIcon';
 	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
 
-	const installCommand = 'curl -fsSL https://get.pontia.dev/install.sh | sh';
+	const installCommand = 'curl -fsSL https://get.pontia.dev/install.sh | sh && "$HOME/.local/bin/pontia" init';
 	let copyStatus = $state<'idle' | 'copied' | 'error'>('idle');
 
 	async function copyCommand() {
@@ -46,7 +46,7 @@
 	h1 > span { color: var(--primary); }
 	.hero-description { max-width: 500px; margin-inline: auto; font-size: 16px; line-height: 1.8; color: var(--muted-foreground); }
 	.install-command { display: flex; align-items: center; width: min(620px, 100%); margin: 30px auto 0; padding: 7px 7px 7px 20px; background: #282828; border: 1px solid #45433e; color: #ebdbb2; text-align: left; }
-	.install-command code { min-width: 0; overflow-x: auto; padding-right: 16px; font-size: 13px; line-height: 34px; white-space: nowrap; }
+	.install-command code { min-width: 0; padding: 6px 16px 6px 0; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; white-space: normal; }
 	.install-command button { display: flex; flex: 0 0 34px; align-items: center; justify-content: center; width: 34px; height: 34px; margin-left: auto; border: 1px solid #5d584e; background: transparent; color: #bdae93; }
 	.install-command button:hover { color: #ebdbb2; background: #3c3836; }
 	.install-command button:focus-visible { outline-color: #8ec07c; }

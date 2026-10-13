@@ -31,11 +31,23 @@ Choose an available Edge and confirm the device name when prompted. Pontia gener
 
 Open [app.pontia.dev](https://app.pontia.dev) to access your registered device.
 
+## Check and manage the registration
+
+Run this command on the device to compare its local identity with the Cloud registration:
+
+```sh
+pontia remote status
+```
+
+You can change the device's display name or Dashboard URL handle with `pontia remote edit`, and replace its encryption identity with `pontia remote rotate-key`. Cloud provides [Device settings](/settings/devices), [Session settings](/settings/sessions), and [Account settings](/settings/account). See [Device and account management](/docs/device-management) for the effect of each operation.
+
 ## Security model
 
 The browser and your device establish an end-to-end encrypted session. The Edge carries the connection and relays ciphertext, while Pontia Cloud manages login, device registration, and access authorization.
 
-Agent execution and project files remain on your device. Enabling remote access does not move the execution environment into Pontia Cloud.
+Agent execution and project files remain on your device. Enabling remote access does not move the execution environment into Pontia Cloud. See [Security](/docs/security) for protocol and credential details.
+
+You may select an official Edge or [deploy a self-hosted Edge](/docs/self-hosted-edge). Self-hosting changes where ciphertext is relayed, not the Cloud authorization boundary.
 
 ## Disable remote access
 
@@ -45,4 +57,4 @@ To unregister the current device and disable its remote access:
 pontia remote disable
 ```
 
-Local access remains available after remote access is disabled.
+Local access remains available after remote access is disabled. For connection failures, see [Troubleshooting](/docs/troubleshooting).

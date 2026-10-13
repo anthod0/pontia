@@ -1,0 +1,103 @@
+<svelte:head>
+	<title>Troubleshooting — Pontia</title>
+	<meta name="description" content="Diagnose Pontia service, Dashboard, Agent Client, and remote-access problems." />
+</svelte:head>
+
+# Troubleshooting
+
+Start with Pontia's own status check:
+
+```sh
+pontia status
+```
+
+It reports whether the per-user service is installed, enabled, running, and healthy. If configuration changed, restart the service with `pontia up`.
+
+## The service does not start
+
+Validate `$PONTIA_HOME/config.toml` for invalid TOML, unknown values, inaccessible paths, or a port already in use. The default address is `127.0.0.1:8080`.
+
+On Linux, inspect the user service:
+
+```sh
+systemctl --user status pontia.service --no-pager --full
+journalctl --user -u pontia.service --no-pager -n 200
+```
+
+On macOS, inspect the LaunchAgent:
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.pontiad
+```
+
+`pontia up` reinstalls the service definition using the current Pontia executable and restarts an existing service. `pontia down` stops and disables the service; it does not prove that an agent's native conversation has ended.
+
+## The local Dashboard does not open
+
+1. Run `pontia status` and resolve service errors first.
+2. Use <http://127.0.0.1:8080/dashboard> unless `bind_addr` uses another port.
+3. Enter the `external_api_token` from `$PONTIA_HOME/config.toml`.
+4. If a custom Dashboard archive is configured, verify `[dashboard].source`. Remove that override to return to the release-matched Dashboard.
+
+Treat the External API token as a secret. Do not paste it into issue reports or logs shared with others.
+
+## No Workspace is available
+
+Check the configured roots in [Workspaces](https://app.pontia.dev/workspaces). A directory can be activated only when it exists and is inside an available root. If a root moved, update `[workspace_browser].roots` in `config.toml`, restart Pontia, then revoke stale Workspace registrations from the Dashboard.
+
+## pi cannot start or report activity
+
+Verify:
+
+```sh
+pi --version
+tmux -V
+```
+
+Run `pontia init` again with pi selected to reinstall the plugin. Inspect:
+
+```text
+$PONTIA_HOME/state/pi-hook.log
+```
+
+Also check a custom `[runtime.pi].tui_command` for an invalid path or wrapper.
+
+## Codex cannot connect
+
+Confirm that your Codex build supports the app-server daemon, then inspect its per-user service. See [Codex Agent Client](/docs/agent-clients/codex) for platform commands. Run `pontia init` again if the executable or `CODEX_HOME` changed.
+
+An agent can also appear stuck when its own sandbox requests an approval that is not available in the Dashboard. Interrupt the Turn if needed, then adjust the Client policy or handle the request through a compatible native interface.
+
+## A remote device is offline
+
+On the device:
+
+```sh
+pontia status
+pontia remote status
+```
+
+Check that the device still has `$PONTIA_HOME/auth.json`, `e2e-identity.json`, and the `[remote]` device ID in `config.toml`. Do not recreate these files manually. Use `pontia login` and `pontia remote enable` to repair registration, or `pontia remote rotate-key` when replacing the device encryption identity.
+
+Verify that the selected Edge is healthy in [Edge settings](/settings/edges). For a self-hosted Edge, check:
+
+```sh
+sudo systemctl status pontia-edge.service --no-pager --full
+sudo journalctl -u pontia-edge.service --no-pager -n 200
+```
+
+## Edge initialization is incomplete
+
+Fix the network, DNS, port, or certificate error reported by the original command, then resume on the same server:
+
+```sh
+sudo pontia-edge retry
+```
+
+The pending initialization data is stored on that server. Generating a new deployment command is not the first recovery step.
+
+## An update fails
+
+`pontia update` verifies signed release metadata and artifacts before replacing binaries. If service restart or health verification fails, it restores the previous binaries and attempts to recover the service. Inspect the platform service logs, resolve the startup problem, and run the update again.
+
+For further diagnosis, record the output of `pontia --version`, `pontia status`, the operating system, and the relevant redacted service errors. Never include API tokens, CLI credentials, device private keys, deployment commands, or Edge credentials.

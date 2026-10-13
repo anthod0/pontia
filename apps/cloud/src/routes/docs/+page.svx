@@ -5,16 +5,32 @@
 
 # Pontia documentation
 
-Pontia turns your device into an agent cloud. Coding agents run with the tools and project files on your device while you monitor and control their sessions from a local or remote dashboard.
+Pontia turns your device into an agent cloud. Coding agents run with the tools and project files on your device while you monitor and control their Sessions through the hosted Remote Dashboard. A local Dashboard is also available for direct access to `pontiad`.
 
 ## Start here
 
-- [Getting started](/docs/getting-started) — install Pontia, choose your agent integrations, and initialize the local service.
-- [How Pontia works](/docs/how-it-works) — understand local execution, remote connectivity, and the boundaries between your device, Pontia Cloud, and Edge.
-- [Remote access](/docs/remote-access) — sign in, register your device, and control its agent sessions from the web.
+- [Getting started](/docs/getting-started) — install Pontia, select Agent Clients, and initialize the local service.
+- [Remote access](/docs/remote-access) — register a device and connect through the hosted Dashboard.
+- [Dashboard guide](/docs/dashboard) — activate a Workspace, start a Session, and control agent work.
+- [How Pontia works](/docs/how-it-works) — understand local execution and the boundaries between your device, Pontia Cloud, and Edge.
 
-## How Pontia works
+## Remote access and security
 
-Agent execution stays on your device. Pontia runs a local service that manages sessions and serves the local dashboard. When remote access is enabled, the public dashboard connects through an official or self-hosted Edge.
+- [Device and account management](/docs/device-management) — rename, rotate, remove, and revoke remote access resources.
+- [Self-host an Edge](/docs/self-hosted-edge) — deploy and operate an encrypted relay on a public Linux server.
+- [Security](/docs/security) — review trust boundaries, E2E encryption, credentials, and incident response.
 
-Traffic between the remote dashboard and your device is encrypted end to end. The Edge provides connectivity and relays ciphertext; it does not run your agents or hold your project files.
+## Use Pontia
+
+- [Agent Clients](/docs/agent-clients) — configure pi and Codex and understand their capability differences.
+- [Workspaces](/docs/workspaces) — configure project directories and file discovery.
+- [Workflows](/docs/workflows) — run durable, staged agent work with explicit Handoffs and replanning.
+
+## Reference
+
+- [Configuration](/docs/configuration) and [CLI reference](/docs/cli)
+- [Updating Pontia](/docs/updating)
+- Platform notes for [Linux](/docs/platforms/linux) and [macOS](/docs/platforms/macos)
+- [Troubleshooting](/docs/troubleshooting) and [FAQ](/docs/faq)
+
+Agent execution stays on your device. Remote Dashboard traffic is encrypted end to end between the browser and device; an Edge provides connectivity without receiving the plaintext business traffic.

@@ -1,0 +1,94 @@
+<svelte:head>
+	<title>Workflows — Pontia</title>
+	<meta name="description" content="Run and monitor durable multi-agent Workflows with Pontia." />
+</svelte:head>
+
+# Workflows
+
+A Workflow is a durable orchestration of Agent Nodes toward a shared goal. Each Agent Node gets a new Pontia Session, reads declared Handoff inputs, writes one Handoff output, and explicitly submits when its assigned work is ready.
+
+Use a Workflow when a task benefits from staged handoffs, durable progress, and separate agent contexts. Use an ordinary Session for exploratory work that does not need an explicit execution plan.
+
+## Create a definition
+
+Workflow definitions use TOML. Paths are resolved relative to the definition file:
+
+```toml
+title = "Implement search"
+cwd = "."
+
+[[handoffs]]
+name = "requirements.md"
+source = "./requirements.md"
+
+[[nodes]]
+type = "agent"
+phase = "Discovery"
+title = "Research"
+instructions = "Inspect the current search implementation and propose a plan."
+inputs = ["requirements.md"]
+output = "research.md"
+
+[[nodes]]
+type = "agent"
+phase = "Delivery"
+title = "Implement"
+instructions = "Implement and verify the accepted plan."
+inputs = ["research.md"]
+output = "result.md"
+```
+
+`cwd` must resolve to an existing directory and becomes the launch directory for every Agent Client in the Workflow. It is not automatically a registered Pontia Workspace.
+
+Only `agent` Nodes are currently accepted. Nodes execute in definition order. An input must name an initial Handoff or an earlier Node output. Every output name must be unique and must be a single file name, not a path.
+
+## Run and inspect
+
+Start the Workflow while `pontiad` is healthy:
+
+```sh
+pontia workflow run ./workflow.toml
+```
+
+The command prints the new Workflow ID. [Workflows](https://app.pontia.dev/workflows) shows phases, Agent Node states, elapsed time, and the Session created for each active Node.
+
+Show compact context from the CLI:
+
+```sh
+pontia workflow show wf_...
+```
+
+Inside a Workflow-managed Agent Session, `PONTIA_WORKFLOW_ID` supplies the current target, so `pontia workflow show` can omit the ID.
+
+## Complete an Agent Node
+
+Pontia tells the Agent Node the exact output-file path. The Agent must write the complete result there and then run:
+
+```sh
+pontia workflow submit
+```
+
+This command works only in the current Pontia-managed `tmux` pane. A normal Turn completion without a successful submission leaves the Workflow idle for intervention; it does not mark the Node submitted.
+
+## Pause, resume, and retry
+
+Use the Workflow detail page to pause a running Workflow or resume a paused one. Pausing requests interruption of a busy current Turn when supported. Resuming an interrupted current Session sends a continuation before scheduling proceeds.
+
+When a failed Workflow is recoverable, **Retry** continues the same Agent Node conversation. Earlier submitted Nodes remain complete, existing Workspace changes remain in place, and unsubmitted output is archived. The recovering Node must inspect prior side effects and submit a fresh complete output.
+
+## Request replanning
+
+If an Agent Node is blocked by an unexpected problem, it writes the requested problem report and runs:
+
+```sh
+pontia workflow patch request
+```
+
+Pontia creates a dedicated Re-planner Session. The Re-planner inspects `pontia workflow show`, edits the provided candidate definition, records a decision, and finishes with one of:
+
+```sh
+pontia workflow patch apply
+pontia workflow patch block
+```
+
+An applied Workflow Patch creates a new immutable graph revision. Existing Node identities and execution facts are not rewritten. The Dashboard lets you compare revisions and inspect Patch requests, Re-planner Sessions, outcomes, and resulting revisions.

@@ -1,0 +1,53 @@
+<svelte:head>
+	<title>Linux — Pontia</title>
+	<meta name="description" content="Linux requirements and service management for Pontia." />
+</svelte:head>
+
+# Linux
+
+Pontia supports x86_64 and ARM64 Linux releases built for GNU userspace. The local control plane runs as a systemd user service; a self-hosted Edge runs as a system systemd service.
+
+## Local requirements
+
+The release installer requires `curl`, `grep`, `install`, `jq`, `mktemp`, `mv`, `openssl`, `rm`, `sha256sum`, `tar`, `tr`, `uname`, and `wc`. OpenSSL must support Ed25519 verification.
+
+A working systemd user manager is required. The standard installation directory is `$HOME/.local/bin`, which must be on your shell `PATH` before running `pontia init`.
+
+## Service files
+
+`pontia init` installs:
+
+```text
+~/.config/systemd/user/pontia.service
+```
+
+The unit records the absolute `pontiad` path, `PONTIA_HOME`, Cloud origin, and required Agent Client paths. Manage it through the Pontia CLI:
+
+```sh
+pontia up
+pontia status
+pontia down
+```
+
+For direct diagnosis:
+
+```sh
+systemctl --user status pontia.service --no-pager --full
+journalctl --user -u pontia.service --no-pager -n 200
+```
+
+When Codex is selected, initialization also installs `~/.config/systemd/user/pontia-codex.service`, enables it, and enables user lingering so the daemon can run without an active login shell.
+
+## Desktop and headless systems
+
+The service manager must be available to the target user. On a headless host, log in as that user and verify:
+
+```sh
+systemctl --user is-system-running
+```
+
+Pontia does not install the local control plane as a root system service. Avoid running `pontia init` with `sudo`, because that would configure a different home and user service.
+
+## Self-hosted Edge
+
+`pontia-edge` supports Linux only and requires root for initialization and service management. Its unit is `/etc/systemd/system/pontia-edge.service`. Do not substitute the Edge process for the local `pontiad` service; they have separate roles and installations.

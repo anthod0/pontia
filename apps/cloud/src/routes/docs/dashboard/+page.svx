@@ -1,0 +1,78 @@
+<svelte:head>
+	<title>Dashboard guide — Pontia</title>
+	<meta name="description" content="Create and control coding-agent sessions from the Pontia Dashboard." />
+</svelte:head>
+
+# Dashboard guide
+
+The Dashboard is the main place to create, observe, and control agent Sessions. The hosted Remote Dashboard connects securely to agents running on your device.
+
+## Open the Dashboard
+
+Use [app.pontia.dev](https://app.pontia.dev) and select a registered device. See [Remote access](/docs/remote-access) if the device is not registered yet.
+
+### Local Dashboard
+
+The local Dashboard is available at <http://127.0.0.1:8080/dashboard> and uses the `external_api_token` from `$PONTIA_HOME/config.toml`. Access from another device requires a secure tunnel or forwarding setup.
+
+## Activate a Workspace
+
+A Workspace is the project directory in which an agent runs. Before creating a Session, use [Workspaces](https://app.pontia.dev/workspaces) to browse one of the configured roots and activate the project directory.
+
+Only directories inside a configured Workspace Browser root can be activated. The first initialization uses your home directory as the default root. See [Workspaces](/docs/workspaces) to restrict or change the available roots.
+
+## Start a Session
+
+1. Open [New chat](https://app.pontia.dev/).
+2. Select an active Workspace.
+3. Select the pi or Codex Agent Client.
+4. Describe the job and submit the prompt.
+
+Pontia creates a durable Session and starts the selected Agent Client on your device. The Session remains available in Pontia even when you navigate away from the chat.
+
+## Control active work
+
+The chat page streams the conversation and work steps exposed by the Agent Client. While using a Session, you can:
+
+- send another message when the agent is idle;
+- queue input while a supported Agent Client is busy;
+- interrupt the current Turn when the Client supports interruption;
+- retry or dismiss Inbox messages whose delivery failed;
+- use `/model` to change the model for later Turns when the Client supports model changes;
+- type `@` to find files and directories in the active Workspace;
+- edit an eligible earlier user message to branch from that point in the native conversation history.
+
+A successful message submission does not by itself mean a new Turn has started. The Inbox shows input that Pontia is still tracking, including messages waiting for delivery or already queued by an Agent Client.
+
+## Chat commands
+
+Type `/` in the composer to see commands available in the current context:
+
+| Command | Result |
+| --- | --- |
+| `/new` | Start a new Session, keeping the current Workspace when possible |
+| `/rename` | Rename the current Session |
+| `/model` | Choose a model for subsequent Turns, when supported |
+| `/exit` | End Pontia's active control of the current Session |
+
+Ending a Session does not necessarily delete or terminate the Agent Client's native conversation. The exact lifecycle depends on the Client.
+
+## Keyboard shortcuts
+
+Chat pages provide these shortcuts:
+
+| Shortcut | Action |
+| --- | --- |
+| `Alt+J` / `Alt+K` | Move to the next or previous active chat |
+| `Alt+1` … `Alt+9` | Open an active chat by sidebar position |
+| `Alt+N` | Open New chat |
+| `Alt+L` | Focus the composer |
+| `Alt+?` | Show the shortcut reference |
+
+## Organize Sessions
+
+Use a Session's action menu to rename, pin, archive, or end it. The **Sessions** page separates active, archived, and pinned Sessions. Archiving removes a Session from the active list without deleting its recorded control state.
+
+The chat header also shows available metadata such as Workspace, Git branch and status, model, context usage, and Client. Fields appear only when the selected Client reports them.
+
+For service or connection errors, continue with [Troubleshooting](/docs/troubleshooting).

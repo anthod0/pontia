@@ -1,0 +1,107 @@
+<svelte:head>
+	<title>Configuration — Pontia</title>
+	<meta name="description" content="Configure Pontia state, Dashboard access, Workspaces, file search, and Agent Clients." />
+</svelte:head>
+
+# Configuration
+
+Pontia reads its persistent configuration from `$PONTIA_HOME/config.toml`. `PONTIA_HOME` defaults to `$HOME/.pontia` and must be a non-root absolute path without `..` traversal.
+
+After editing persistent service settings, apply them with:
+
+```sh
+pontia up
+```
+
+## Basic configuration
+
+```toml
+bind_addr = "127.0.0.1:8080"
+external_api_token = "replace-with-a-long-secret"
+run_migrations = true
+default_client_type = "pi"
+
+[runtime.pi]
+tui_command = "pi"
+
+[workspace_browser]
+roots = [
+  { root_id = "projects", label = "Projects", path = "/home/me/projects" }
+]
+```
+
+| Key | Meaning |
+| --- | --- |
+| `bind_addr` | Local HTTP listen address; defaults to `127.0.0.1:8080` |
+| `external_api_token` | Bearer token required by the local Dashboard and External API |
+| `run_migrations` | Whether `pontiad` applies its bundled database migrations; defaults to `true` |
+| `default_client_type` | Default Client identifier; the current supported value is `pi` |
+| `dashboard.source` | Local Dashboard build directory or remote `.tar.gz`, `.tgz`, or `.zip` archive containing exactly one `index.html` |
+| `runtime.pi.tui_command` | pi executable or command used for launched pi Sessions |
+| `workspace_browser.roots` | Directories the Dashboard may browse to activate Workspaces |
+
+The release default for `dashboard.source` is the Dashboard archive matching the installed Pontia version. Remote Dashboard archives are cached under `$PONTIA_HOME/cache/dashboard`; an existing cache can still be served if refresh fails.
+
+## File picker
+
+The file picker powers `@` suggestions inside an active Workspace:
+
+```toml
+[file_picker]
+enabled = true
+min_query_chars = 0
+max_results = 100
+max_candidates = 100000
+timeout_ms = 1500
+respect_gitignore = true
+respect_ignore_files = true
+respect_git_exclude = true
+include_hidden = false
+follow_symlinks = false
+ignore_globs = [
+  ".git/**",
+  "node_modules/**",
+  "target/**",
+  "dist/**",
+  "build/**",
+  ".svelte-kit/**",
+  ".next/**"
+]
+```
+
+Following symlinks can expand the search outside the visible directory tree when the operating-system user can access the target. Enable it only when that behavior is intended.
+
+## Environment overrides
+
+The running process accepts these overrides:
+
+| Variable | Overrides |
+| --- | --- |
+| `PONTIA_HOME` | State and configuration directory |
+| `PONTIA_EXTERNAL_API_TOKEN` | `external_api_token` |
+| `PONTIA_RUN_MIGRATIONS` | `run_migrations` |
+| `PONTIA_DEFAULT_CLIENT_TYPE` | `default_client_type` |
+| `PONTIA_WORKSPACE_ROOTS` | Workspace roots as `root_id|label|path` entries separated by semicolons |
+| `PONTIA_DASHBOARD_SOURCE` | `dashboard.source`; an empty value disables Dashboard serving |
+| `PONTIA_PI_TUI_COMMAND` | `runtime.pi.tui_command`; an empty value clears it |
+| `PONTIA_AUTH_ORIGIN` | Pontia Cloud HTTPS origin; intended for controlled deployments and development |
+
+Environment values take precedence over file values for the same setting. The per-user service normally persists only `PONTIA_HOME`, `PONTIA_AUTH_ORIGIN`, and required Agent Client paths. Other variables supplied to `pontia init` are deliberately ignored for persistence; put lasting service configuration in `config.toml`.
+
+Boolean environment values accept `1`, `true`, `yes`, or `on`, and `0`, `false`, `no`, or `off`.
+
+## State files
+
+The default state directory contains sensitive and durable data:
+
+| Path | Purpose |
+| --- | --- |
+| `config.toml` | Persistent service configuration and local API token |
+| `auth.json` | Pontia Cloud CLI credential |
+| `e2e-identity.json` | Remote device identity private key and key version |
+| `data/pontia-e1.db` | Local control-plane database |
+| `workflows/` | Workflow Handoffs, accepted definitions, and Patch documents |
+| `state/` | Runtime sockets, launch files, and integration logs |
+| `cache/dashboard/` | Cached remote Dashboard bundle |
+
+Do not publish or casually copy the state directory. Use [Device management](/docs/device-management) to rotate or revoke remote credentials rather than editing identity files by hand.

@@ -1,0 +1,35 @@
+<svelte:head>
+	<title>Workspaces — Pontia</title>
+	<meta name="description" content="Configure project directories and file discovery in Pontia." />
+</svelte:head>
+
+# Workspaces
+
+A Workspace is the project directory in which an agent runs. One Workspace can be associated with multiple Sessions.
+
+## Workspace Browser roots
+
+A root is an administrator-configured directory that the Dashboard may browse. Roots are set in `$PONTIA_HOME/config.toml`:
+
+```toml
+[workspace_browser]
+roots = [
+  { root_id = "projects", label = "Projects", path = "/home/me/projects" }
+]
+```
+
+Each `root_id` must be unique. The path must be an existing absolute directory when Pontia uses it. On a first initialization, Pontia configures the user's home directory as the root; later `pontia init` runs preserve existing roots.
+
+Roots are a browsing boundary for Pontia, not an operating-system sandbox. The Agent Client still runs with the permissions of its local process.
+
+## Activate a Workspace
+
+In [Workspaces](https://app.pontia.dev/workspaces), choose a root, browse to a project, and activate that directory. An active Workspace becomes available in New chat and can be associated with multiple Sessions.
+
+You can rename an active Workspace without moving its directory. Deactivating or revoking it prevents new selections but does not delete project files. If a directory moves outside all configured roots or disappears, the Dashboard marks the registration unavailable so you can revoke it.
+
+## File mentions
+
+Inside an active Workspace, type `@` in the composer to search for files and directories. File-picker behavior is configurable, including ignored files, hidden entries, symlink traversal, result limits, and timeouts. See [Configuration](/docs/configuration).
+
+A file mention identifies relevant local context for the Agent Client; it does not upload the Workspace to Pontia Cloud.

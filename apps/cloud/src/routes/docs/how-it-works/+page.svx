@@ -5,7 +5,7 @@
 
 # How Pontia works
 
-Pontia separates agent execution from remote access. Coding agents run on your device, alongside your development tools and project files. Pontia adds a local control plane and an optional encrypted path to the remote dashboard.
+Pontia separates agent execution from remote access. Coding agents run on your device, alongside your development tools and project files. Pontia adds a local control plane and an encrypted path to the hosted Remote Dashboard.
 
 <figure
 	class="architecture-diagram"
@@ -47,11 +47,11 @@ The `pontiad` service runs on your device. It coordinates agent sessions, commun
 
 The agent client executes commands and uses the files and tools installed on the device. Pontia does not move that execution environment to Pontia Cloud.
 
-## Local and remote dashboards
+## Remote and local dashboards
 
-The local dashboard connects directly to `pontiad`, normally through its loopback address. It remains available without a Pontia Cloud account or remote access.
+The hosted Remote Dashboard signs in through Pontia Cloud and receives authorization to connect to a registered device. The browser and device then establish an end-to-end encrypted session through the selected Edge. The Edge relays the encrypted traffic but cannot decrypt it.
 
-For remote access, the browser signs in through Pontia Cloud and receives authorization to connect to a registered device. The browser and device then establish an end-to-end encrypted session through the selected Edge. The Edge relays the encrypted traffic but cannot decrypt it.
+The local Dashboard connects directly to `pontiad` through its loopback address. It remains available without a Pontia Cloud account, but reaching it from another device requires a secure tunnel or forwarding setup.
 
 ## Pontia Cloud and Edge
 

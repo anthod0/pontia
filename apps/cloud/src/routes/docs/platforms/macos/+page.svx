@@ -1,0 +1,65 @@
+<svelte:head>
+	<title>macOS — Pontia</title>
+	<meta name="description" content="macOS requirements and LaunchAgent management for Pontia." />
+</svelte:head>
+
+# macOS
+
+Pontia supports macOS 11 and later on Intel and Apple Silicon. The local control plane and Codex daemon use per-user LaunchAgents. `pontia-edge` is not supported on macOS.
+
+## Install requirements
+
+The release installer requires `curl`, `grep`, `install`, `jq`, `mktemp`, `mv`, `openssl`, `rm`, `shasum`, `tar`, `tr`, `uname`, and `wc`.
+
+The system `openssl` may not provide the required Ed25519 command. The installer automatically checks Homebrew's standard `openssl@3` paths:
+
+```text
+/opt/homebrew/opt/openssl@3/bin/openssl
+/usr/local/opt/openssl@3/bin/openssl
+```
+
+You can point the installer at another compatible executable with `PONTIA_OPENSSL`.
+
+The default binary directory is `$HOME/.local/bin`. Add it to your shell `PATH` before running `pontia init`.
+
+## LaunchAgents
+
+Initialization installs the Pontia service definition at:
+
+```text
+~/Library/LaunchAgents/dev.pontia.pontiad.plist
+```
+
+Manage it with:
+
+```sh
+pontia up
+pontia status
+pontia down
+```
+
+For direct diagnosis:
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.pontiad
+```
+
+When Codex is selected, Pontia also installs:
+
+```text
+~/Library/LaunchAgents/dev.pontia.codex-daemon.plist
+```
+
+Inspect it with:
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.codex-daemon
+```
+
+The LaunchAgent definitions store absolute executable paths and a controlled executable search path. Run `pontia init` again after moving pi, Codex, or their home directories.
+
+## Updates
+
+`pontia update` uses `/usr/sbin/lsof` to verify that the running CLI is the installed file before replacement. Keep `pontia` and `pontiad` together as regular files and run the installed `pontia` directly.
+
+Do not use `sudo` for the local initializer or lifecycle commands. Pontia is installed for the current user and uses that user's home, Agent Client credentials, and GUI LaunchAgent domain.

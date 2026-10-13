@@ -41,7 +41,7 @@ The initializer lets you:
 1. Select the pi integration, Codex integration, or both.
 2. Generate the local dashboard credential.
 3. Start the Pontia background service.
-4. Sign in and enable remote access, or continue with local access only.
+4. Sign in and enable the Remote Dashboard, or continue with local access only.
 
 On first initialization, Pontia uses your home directory as the Workspace Browser root. Existing roots are preserved when you run the initializer again.
 
@@ -65,4 +65,4 @@ pontia update
 
 If the managed service is running, Pontia restarts it and waits for it to become healthy. If replacement or restart fails, Pontia restores the previous binaries and attempts to recover the service.
 
-Next, learn how to [enable remote access](/docs/remote-access).
+Next, [enable remote access](/docs/remote-access), then follow the [Dashboard guide](/docs/dashboard) to activate a Workspace and start your first Session.

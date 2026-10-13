@@ -1,0 +1,36 @@
+<svelte:head>
+	<title>FAQ — Pontia</title>
+	<meta name="description" content="Answers to common questions about Pontia sessions, data, remote access, and operation." />
+</svelte:head>
+
+# Frequently asked questions
+
+## Do agents run in Pontia Cloud?
+
+No. Agent Clients, tools, credentials, and project files stay on your device. Pontia Cloud coordinates identity and remote authorization; an Edge relays encrypted traffic.
+
+## Is a Workspace an operating-system sandbox?
+
+No. Workspace roots limit what the Pontia browser exposes for activation and file discovery. The Agent Client still has the permissions and sandbox policy of its local process.
+
+## Can I use Pontia without an account?
+
+Yes. The local Dashboard uses an External API token and listens on the device's loopback address; access from elsewhere requires a secure tunnel or forwarding configuration. The hosted Remote Dashboard requires a Pontia Cloud login and registered device.
+
+## Can Pontia read my prompts or project data?
+
+Pontia has three runtime components:
+
+- **Pontia Cloud** manages users, authentication, device registration, and access authorization. It does not receive Dashboard traffic or project files.
+- **pontiad** runs on your device, coordinates Agent Clients, and serves prompts and agent data to your Dashboard.
+- **Pontia Edge** relays end-to-end encrypted traffic between the browser and `pontiad`. It cannot decrypt that traffic.
+
+Your prompts and project data remain on your device.
+
+## What should I back up?
+
+Back up project files independently. `$PONTIA_HOME` contains local control state, Workflow files, and sensitive credentials; back it up only to a trusted encrypted destination. Agent Client native conversation data may live outside `PONTIA_HOME` and follows that Client's own backup rules.
+
+## Does Pontia support Windows?
+
+No. The local control plane supports Linux and macOS 11 or later. Self-hosted Edge supports Linux only.
