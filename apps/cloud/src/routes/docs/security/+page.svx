@@ -49,9 +49,9 @@ Pontia creates its private credential files with restrictive permissions, but ba
 ## Respond to credential exposure
 
 - Local API token: generate a replacement in `config.toml`, run `pontia up`, and update trusted local browsers.
-- CLI credential: revoke it in [Session settings](/settings/sessions), then run `pontia login` when needed.
+- CLI credential: remove a device through [Device settings](/settings/devices), then run `pontia login` when needed. `pontia remote disable` does not revoke it.
 - Device identity: run `pontia remote rotate-key`.
-- Lost device: remove its Cloud device registration and revoke associated CLI/browser sessions.
+- Lost device: remove it through Device settings and revoke unfamiliar browser sessions.
 - Edge credential or host: remove the Edge registration and associated devices in Cloud, then redeploy and re-register devices on a trusted Edge.
 
 ## Data retained on the device

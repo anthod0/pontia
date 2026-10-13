@@ -83,7 +83,7 @@ test("remote registration endpoints require a valid CLI bearer credential", asyn
   expect(deleted.status).toBe(401);
 });
 
-test("remote HTTP API lists edges and creates, retries, and reads a device", async () => {
+test("remote HTTP API removes a device without revoking its CLI credential", async () => {
   await authenticatedRecords();
 
   const listed = await callListEdges(event("/api/remote/edges", { token: credential }));
