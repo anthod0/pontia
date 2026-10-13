@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img">
   <rect id="background" width="1254" height="1254" fill="#ffffff"/>
+  <defs>
+    <clipPath id="sun-disc">
+      <circle cx="627" cy="628" r="482.929"/>
+    </clipPath>
+  </defs>
   <g id="sunset">
-    <path id="sun-dome" fill="#d65d0e" d="M 145.62 586.5 A 482.929 477.5 0 0 1 1108.217 586.5 Z"/>
-    <path id="stripe-1" fill="#d79921" d="M 145.008 606.5 H 1108.205 Q 1109.47 637 1106.766 667.5 H 147.156 Q 143.688 637 145.008 606.5 Z"/>
-    <path id="stripe-2" fill="#98971a" d="M 149.635 691.5 H 1103.916 Q 1099.338 723.5 1089.529 755.5 H 164.199 Q 154.345 723.5 149.635 691.5 Z"/>
-    <path id="stripe-3" fill="#458588" d="M 172.797 781.5 H 1080.385 Q 1069.288 812.5 1052.062 843.5 H 200.718 Q 183.942 812.5 172.797 781.5 Z"/>
-    <path id="stripe-4" fill="#b16286" d="M 212.146 862.5 H 1040.893 Q 1021.218 895.5 992.757 928.5 H 259.184 Q 231.805 895.5 212.146 862.5 Z"/>
+    <path id="sun-dome" fill="#d65d0e" d="M 160.526 752.991 A 482.929 482.929 0 1 1 1093.474 752.991 Z"/>
+    <g id="stripes" clip-path="url(#sun-disc)">
+      <path id="stripe-1" fill="#d79921" d="M 0 775 H 1254 V 821 H 0 Z"/>
+      <path id="stripe-2" fill="#98971a" d="M 0 850 H 1254 V 896 H 0 Z"/>
+      <path id="stripe-3" fill="#458588" d="M 0 925 H 1254 V 971 H 0 Z"/>
+      <path id="stripe-4" fill="#b16286" d="M 0 1000 H 1254 V 1046.229 H 0 Z"/>
+    </g>
   </g>
 </svg>

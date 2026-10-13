@@ -39,6 +39,7 @@
         "fake-indexeddb": "^6.2.5",
         "jsdom": "^29.1.1",
         "oxfmt": "^0.70.0",
+        "sharp": "0.35.4",
         "svelte": "^5.55.5",
         "svelte-check": "^4.4.8",
         "tailwind-variants": "^3.2.2",

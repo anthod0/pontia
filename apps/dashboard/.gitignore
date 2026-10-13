@@ -12,6 +12,10 @@ node_modules
 .svelte-kit
 dist
 /src/e2e-wasm/
+
+# Generated from public/logo.svg
+/public/favicon.ico
+/public/logo-*.png
 dist-ssr
 *.local
 .env
