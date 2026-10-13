@@ -19,7 +19,8 @@ export const load: PageServerLoad = async (event) => {
       id: authSessions.id,
       kind: authSessions.kind,
       provider: accounts.provider,
-      createdAt: authSessions.createdAt,
+      country: authSessions.country,
+      lastSeenAt: authSessions.lastSeenAt,
       expiresAt: authSessions.expiresAt,
     })
     .from(authSessions)
@@ -27,6 +28,7 @@ export const load: PageServerLoad = async (event) => {
     .where(
       and(
         eq(authSessions.userId, authentication.login.user_id),
+        eq(authSessions.kind, "browser"),
         or(isNull(authSessions.expiresAt), gt(authSessions.expiresAt, new Date().toISOString())),
       ),
     )
@@ -52,7 +54,13 @@ export const actions: Actions = {
     if (!id) return fail(400, { error: "Select a session to revoke." });
     await authentication.db
       .delete(authSessions)
-      .where(and(eq(authSessions.id, id), eq(authSessions.userId, authentication.login.user_id)));
+      .where(
+        and(
+          eq(authSessions.id, id),
+          eq(authSessions.userId, authentication.login.user_id),
+          eq(authSessions.kind, "browser"),
+        ),
+      );
     return { success: "session_revoked" };
   },
 
@@ -69,16 +77,5 @@ export const actions: Actions = {
         ),
       );
     return { success: "other_browsers_revoked" };
-  },
-
-  revokeCli: async (event) => {
-    const authentication = await authenticated(event);
-    if (!authentication) return fail(401, { error: "Sign in to manage credentials." });
-    await authentication.db
-      .delete(authSessions)
-      .where(
-        and(eq(authSessions.userId, authentication.login.user_id), eq(authSessions.kind, "cli")),
-      );
-    return { success: "cli_revoked" };
   },
 };

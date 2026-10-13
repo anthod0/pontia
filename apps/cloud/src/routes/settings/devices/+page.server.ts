@@ -1,8 +1,8 @@
 import { fail, redirect, type RequestEvent } from "@sveltejs/kit";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { currentLogin, environment } from "$lib/server/auth/http";
 import { database } from "$lib/server/db";
-import { devices, edges } from "$lib/server/db/schema";
+import { authSessions, devices, edges } from "$lib/server/db/schema";
 import { isValidDeviceHandle } from "$lib/server/remote-access/device-handle";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -97,9 +97,19 @@ export const actions: Actions = {
     if (typeof value !== "string" || !value) {
       return fail(400, { error: "Select a device to remove." });
     }
-    await authentication.db
-      .delete(devices)
-      .where(and(eq(devices.id, value), eq(devices.userId, authentication.login.user_id)));
+    const userId = authentication.login.user_id;
+    const ownsDevice = sql`EXISTS (
+      SELECT 1 FROM ${devices}
+      WHERE ${devices.id} = ${value} AND ${devices.userId} = ${userId}
+    )`;
+    await authentication.db.batch([
+      authentication.db
+        .delete(authSessions)
+        .where(and(eq(authSessions.userId, userId), eq(authSessions.kind, "cli"), ownsDevice)),
+      authentication.db
+        .delete(devices)
+        .where(and(eq(devices.id, value), eq(devices.userId, userId))),
+    ]);
     return { success: "device_removed" };
   },
 };

@@ -67,8 +67,14 @@ async function insertCurrentUser() {
   });
 }
 
-test("the settings pages return the current profile, active logins, and registered devices", async () => {
+test("the settings pages return the current profile, browser logins, and registered devices", async () => {
   await insertCurrentUser();
+  await database.db.insert(authSessions).values({
+    id: "0199791c-6600-7000-8000-000000000004",
+    userId,
+    kind: "cli",
+    tokenHash: "cli-hash",
+  });
   const edgeId = "0199791c-6600-7000-8000-000000000020";
   const deviceId = "0199791c-6600-7000-8000-000000000030";
   await database.db.insert(edges).values({
@@ -253,24 +259,6 @@ test("signing out other browsers preserves the current browser and CLI credentia
   ).toEqual([currentSessionId, "0199791c-6600-7000-8000-000000000004"]);
 });
 
-test("revoking all CLI credentials does not revoke browser sessions", async () => {
-  await insertCurrentUser();
-  await database.db.insert(authSessions).values({
-    id: "0199791c-6600-7000-8000-000000000004",
-    userId,
-    kind: "cli",
-    tokenHash: "cli-hash",
-  });
-
-  await (sessionActions.revokeCli as (event: RequestEvent) => Promise<unknown>)(
-    await signedInEvent(),
-  );
-
-  expect(
-    await database.db.select().from(authSessions).where(eq(authSessions.userId, userId)),
-  ).toEqual([expect.objectContaining({ id: currentSessionId, kind: "browser" })]);
-});
-
 test("the last sign-in method cannot be unlinked", async () => {
   await insertCurrentUser();
   await database.db.insert(accounts).values({
@@ -341,10 +329,24 @@ test("unlinking a provider revokes only browser sessions created with that provi
   ).toEqual(["0199791c-6600-7000-8000-000000000003", "0199791c-6600-7000-8000-000000000004"]);
 });
 
-test("removing a device does not remove another user's device", async () => {
+test("removing a device also revokes its owner's CLI credentials", async () => {
   await insertCurrentUser();
   const otherUserId = "0199791c-6600-7000-8000-000000000010";
   await database.db.insert(users).values({ id: otherUserId });
+  await database.db.insert(authSessions).values([
+    {
+      id: "0199791c-6600-7000-8000-000000000011",
+      userId,
+      kind: "cli",
+      tokenHash: "owner-cli-hash",
+    },
+    {
+      id: "0199791c-6600-7000-8000-000000000012",
+      userId: otherUserId,
+      kind: "cli",
+      tokenHash: "other-cli-hash",
+    },
+  ]);
   await database.db.insert(edges).values({
     id: "0199791c-6600-7000-8000-000000000020",
     userId,
@@ -377,5 +379,9 @@ test("removing a device does not remove another user's device", async () => {
 
   expect((await database.db.select().from(devices)).map((device) => device.id)).toEqual([
     "0199791c-6600-7000-8000-000000000031",
+  ]);
+  expect((await database.db.select().from(authSessions)).map((session) => session.id)).toEqual([
+    currentSessionId,
+    "0199791c-6600-7000-8000-000000000012",
   ]);
 });

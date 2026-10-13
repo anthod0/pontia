@@ -94,8 +94,8 @@
               type="submit"
               variant="destructive"
               size="icon"
-              aria-label={`Remove remote access for ${device.name}`}
-              title="Remove remote access"
+              aria-label={`Remove ${device.name} and revoke all CLI credentials`}
+              title="Remove device and revoke all CLI credentials"
             >
               <TrashIcon size={16} />
             </Button>
