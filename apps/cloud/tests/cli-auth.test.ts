@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { eq } from "drizzle-orm";
 import { base64url } from "jose";
 import { authenticateCliCredential } from "../src/lib/server/auth/cli";
 import { sha256Base64url } from "../src/lib/server/crypto";
@@ -9,7 +10,9 @@ const database = testDatabase();
 const sessionId = "0195e7b2-3f45-7a61-8c20-1d34a56b7890";
 const secret = base64url.encode(new Uint8Array(32).fill(7));
 
-test("CLI credential authenticates its trusted user", async () => {
+test("CLI credential authentication records only valid use", async () => {
+  const initial = "2026-01-01T00:00:00.000Z";
+  const usedAt = new Date("2026-01-02T00:00:00.000Z");
   await database.db.insert(users).values({ id: "user-cli" });
   await database.db.insert(authSessions).values({
     id: sessionId,
@@ -17,9 +20,12 @@ test("CLI credential authenticates its trusted user", async () => {
     kind: "cli",
     expiresAt: null,
     tokenHash: await sha256Base64url(secret),
+    lastSeenAt: initial,
   });
 
-  expect(await authenticateCliCredential(database.db, `ptr_v1_${sessionId}_${secret}`)).toEqual({
+  expect(
+    await authenticateCliCredential(database.db, `ptr_v1_${sessionId}_${secret}`, usedAt),
+  ).toEqual({
     userId: "user-cli",
     sessionId,
   });
@@ -27,8 +33,16 @@ test("CLI credential authenticates its trusted user", async () => {
     await authenticateCliCredential(
       database.db,
       `ptr_v1_${sessionId}_${base64url.encode(new Uint8Array(32).fill(8))}`,
+      new Date("2026-01-03T00:00:00.000Z"),
     ),
   ).toBeNull();
+  expect(
+    await database.db
+      .select({ lastSeenAt: authSessions.lastSeenAt })
+      .from(authSessions)
+      .where(eq(authSessions.id, sessionId))
+      .get(),
+  ).toEqual({ lastSeenAt: usedAt.toISOString() });
 });
 
 test("CLI credentials with no expiry remain valid in the future", async () => {

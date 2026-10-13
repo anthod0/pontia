@@ -33,7 +33,7 @@ export async function createBrowserRefreshToken(
   const token = `${REFRESH_TOKEN_PREFIX}${secret}`;
   const updated = await db
     .update(authSessions)
-    .set({ tokenHash: await sha256Base64url(token) })
+    .set({ tokenHash: await sha256Base64url(token), lastSeenAt: now.toISOString() })
     .where(
       and(
         eq(authSessions.id, sessionId),
@@ -56,7 +56,7 @@ export async function refreshBrowserSession(
   const expiresAt = sessionExpiry(now);
   const refreshed = await db
     .update(authSessions)
-    .set({ expiresAt })
+    .set({ expiresAt, lastSeenAt: now.toISOString() })
     .where(
       and(
         eq(authSessions.tokenHash, await sha256Base64url(token)),

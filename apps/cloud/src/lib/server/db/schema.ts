@@ -166,6 +166,7 @@ export const authSessions = sqliteTable(
     ip: text(),
     userAgent: text("user_agent"),
     country: text(),
+    lastSeenAt: text("last_seen_at"),
     createdAt: text("created_at").notNull().default(timestamp),
   },
   (table) => [

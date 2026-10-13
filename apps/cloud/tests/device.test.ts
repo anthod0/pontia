@@ -85,6 +85,7 @@ test("device authorization is rate limited, approved once, and stores only crede
     kind: "cli",
     accountId: null,
     expiresAt: null,
+    lastSeenAt: new Date(now.getTime() + 5000).toISOString(),
     ...request,
   });
   expect(session.tokenHash).not.toBe(secret);

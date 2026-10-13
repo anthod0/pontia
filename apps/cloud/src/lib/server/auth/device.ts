@@ -208,6 +208,7 @@ export async function pollDeviceAuthorization(
             ip: sql<string | null>`${request.ip}`.as("ip"),
             userAgent: sql<string | null>`${request.userAgent}`.as("user_agent"),
             country: sql<string | null>`${request.country}`.as("country"),
+            lastSeenAt: sql<string>`${now.toISOString()}`.as("last_seen_at"),
             createdAt: sql<string>`${now.toISOString()}`.as("created_at"),
           })
           .from(deviceAuthorizations)

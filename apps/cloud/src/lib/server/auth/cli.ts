@@ -32,20 +32,20 @@ export async function authenticateCliCredential(
   const parsed = parseCliCredential(credential);
   if (!parsed) return null;
   const session = await db
-    .select({
-      userId: authSessions.userId,
-      tokenHash: authSessions.tokenHash,
-    })
-    .from(authSessions)
+    .update(authSessions)
+    .set({ lastSeenAt: now.toISOString() })
     .where(
       and(
         eq(authSessions.id, parsed.sessionId),
         eq(authSessions.kind, "cli"),
+        eq(authSessions.tokenHash, await sha256Base64url(parsed.secret)),
         or(isNull(authSessions.expiresAt), gt(authSessions.expiresAt, now.toISOString())),
       ),
     )
+    .returning({
+      userId: authSessions.userId,
+      sessionId: authSessions.id,
+    })
     .get();
-  if (!session?.tokenHash) return null;
-  if (session.tokenHash !== (await sha256Base64url(parsed.secret))) return null;
-  return { userId: session.userId, sessionId: parsed.sessionId };
+  return session ?? null;
 }

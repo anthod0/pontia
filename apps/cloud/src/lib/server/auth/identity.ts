@@ -107,6 +107,7 @@ export async function login(db: Database, profile: AccountProfile, now = new Dat
       userId: account.userId,
       accountId: account.id,
       createdAt: now.toISOString(),
+      lastSeenAt: now.toISOString(),
       expiresAt: sessionExpiry(now),
     }),
   ]);
@@ -141,6 +142,7 @@ export async function completeIndependentAccount(
         userId,
         accountId,
         createdAt: now.toISOString(),
+        lastSeenAt: now.toISOString(),
         expiresAt: sessionExpiry(now),
       }),
     ]);
@@ -199,6 +201,7 @@ export async function completePendingBinding(
               ip: sql<string | null>`NULL`.as("ip"),
               userAgent: sql<string | null>`NULL`.as("user_agent"),
               country: sql<string | null>`NULL`.as("country"),
+              lastSeenAt: sql<string>`${now.toISOString()}`.as("last_seen_at"),
               createdAt: sql<string>`${now.toISOString()}`.as("created_at"),
             })
             .from(accounts)
