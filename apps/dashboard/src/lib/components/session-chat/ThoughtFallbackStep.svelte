@@ -8,11 +8,12 @@
     title: string
     content: string
     detailsLabel?: 'parameters' | 'result'
+    result?: string
     error?: boolean
     connected?: boolean
   }
 
-  let { title, content, detailsLabel = 'parameters', error = false, connected = false }: Props = $props()
+  let { title, content, detailsLabel = 'parameters', result, error = false, connected = false }: Props = $props()
   let open = $state(false)
   const displayedContent = $derived(detailsLabel === 'result' ? content : formatParameters(title, content))
 
@@ -43,6 +44,11 @@
   {/if}
 
   <Collapsible.Content>
-    <pre class="mb-3 ml-9 max-w-[calc(100%_-_2.25rem)] overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-sm leading-5 text-muted-foreground">{displayedContent}</pre>
+    <div class="mb-3 ml-9 max-w-[calc(100%_-_2.25rem)] space-y-2 overflow-x-auto">
+      <pre class="whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-sm leading-5 text-muted-foreground">{displayedContent}</pre>
+      {#if result}
+        <pre class={cn('whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-sm leading-5 text-muted-foreground', error && 'text-destructive')}>{result}</pre>
+      {/if}
+    </div>
   </Collapsible.Content>
 </Collapsible.Root>

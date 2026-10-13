@@ -321,6 +321,84 @@ test("maps timeline items into primary chat messages with assistant thought step
   ]);
 });
 
+test("merges tool results into their calls by call id", () => {
+  const messages = timelineItemsToChatMessages([
+    timelineItem({
+      item_id: "call-1",
+      kind: "tool_call",
+      role: "tool",
+      title: "read",
+      call_id: "native-1",
+      content_preview: 'read {"path":"one.ts"}',
+      occurred_at: "2026-01-01T00:00:01Z",
+      turn_id: "turn-1",
+    }),
+    timelineItem({
+      item_id: "call-2",
+      kind: "tool_call",
+      role: "tool",
+      title: "bash",
+      call_id: "native-2",
+      content_preview: "bash pnpm test",
+      occurred_at: "2026-01-01T00:00:02Z",
+      turn_id: "turn-1",
+    }),
+    timelineItem({
+      item_id: "result-1",
+      kind: "tool_result",
+      role: "tool",
+      title: "read result",
+      status: "completed",
+      call_id: "native-1",
+      content_preview: "file contents",
+      occurred_at: "2026-01-01T00:00:03Z",
+      turn_id: "turn-1",
+    }),
+    timelineItem({
+      item_id: "result-2",
+      kind: "tool_result",
+      role: "tool",
+      title: "bash result",
+      status: "error",
+      call_id: "native-2",
+      content_preview: "tests failed",
+      occurred_at: "2026-01-01T00:00:04Z",
+      turn_id: "turn-1",
+    }),
+  ]);
+
+  expect(messages[0].thoughtSteps).toEqual([
+    {
+      id: "call-1",
+      kind: "tool_call",
+      title: "read",
+      status: "started",
+      content: 'read {"path":"one.ts"}',
+      occurredAt: "2026-01-01T00:00:01Z",
+      callId: "native-1",
+      result: {
+        content: "file contents",
+        status: "completed",
+        occurredAt: "2026-01-01T00:00:03Z",
+      },
+    },
+    {
+      id: "call-2",
+      kind: "tool_call",
+      title: "bash",
+      status: "started",
+      content: "bash pnpm test",
+      occurredAt: "2026-01-01T00:00:02Z",
+      callId: "native-2",
+      result: {
+        content: "tests failed",
+        status: "error",
+        occurredAt: "2026-01-01T00:00:04Z",
+      },
+    },
+  ]);
+});
+
 test("keeps intermediate assistant output distinct from thinking in the final Turn response", () => {
   const messages = timelineItemsToChatMessages([
     timelineItem({

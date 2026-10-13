@@ -9,10 +9,11 @@
   interface Props {
     operation: 'read' | 'write' | 'edit'
     files: string[]
+    results?: { file: string; content: string; error: boolean }[]
     connected?: boolean
   }
 
-  let { operation, files, connected = false }: Props = $props()
+  let { operation, files, results = [], connected = false }: Props = $props()
   let open = $state(false)
 
   const Icon = $derived(operation === 'read' ? FileMagnifyingGlassIcon : operation === 'write' ? FilePlusIcon : FileTextIcon)
@@ -41,5 +42,11 @@
         <li class="break-words">{file}</li>
       {/each}
     </ul>
+    {#each results as result, index (`${result.file}:${index}`)}
+      <div class="mb-2 ml-9 max-w-[calc(100%_-_2.25rem)] overflow-x-auto">
+        <div class="px-2 text-xs text-muted-foreground">{result.file}</div>
+        <pre class={cn('whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-xs leading-relaxed text-muted-foreground', result.error && 'text-destructive')}>{result.content}</pre>
+      </div>
+    {/each}
   </Collapsible.Content>
 </Collapsible.Root>

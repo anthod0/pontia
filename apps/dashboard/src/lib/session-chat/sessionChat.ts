@@ -5,6 +5,12 @@ export type ChatSessionFilter = "active" | "all";
 export type ChatMessageRole = "user" | "assistant";
 export type ChatMessageStatus = "sent" | "pending" | "failed";
 
+export interface SessionChatToolResult {
+  content: string;
+  status: string | null;
+  occurredAt: string | null;
+}
+
 export interface SessionChatThoughtStep {
   id: string;
   kind: "assistant" | "thinking" | "tool_call" | "tool_result";
@@ -12,6 +18,8 @@ export interface SessionChatThoughtStep {
   status: string | null;
   content: string;
   occurredAt: string | null;
+  callId?: string;
+  result?: SessionChatToolResult;
   managedToolUse?: ManagedToolUse;
 }
 
@@ -204,6 +212,21 @@ export function timelineItemsToChatMessages(
 
     if (isThoughtStepKind(item.kind)) {
       movePendingAssistantToThoughts();
+      const content = item.content_preview?.trim() || "No details reported.";
+      if (item.kind === "tool_result" && item.call_id) {
+        const toolCall = pendingThoughtSteps.findLast(
+          (step) => step.kind === "tool_call" && step.callId === item.call_id && !step.result,
+        );
+        if (toolCall) {
+          toolCall.result = {
+            content,
+            status: item.status,
+            occurredAt: item.occurred_at,
+          };
+          continue;
+        }
+      }
+
       const managedToolUse =
         item.kind === "tool_call" ? (item.managed_tool_use ?? undefined) : undefined;
       pendingThoughtSteps.push({
@@ -213,10 +236,9 @@ export function timelineItemsToChatMessages(
           ? managedToolUseTitle(managedToolUse)
           : item.title?.trim() || defaultThoughtStepTitle(item.kind),
         status: item.status ?? (item.kind === "tool_call" ? "started" : null),
-        content: managedToolUse
-          ? managedToolUseContent(managedToolUse)
-          : item.content_preview?.trim() || "No details reported.",
+        content: managedToolUse ? managedToolUseContent(managedToolUse) : content,
         occurredAt: item.occurred_at,
+        ...(item.call_id ? { callId: item.call_id } : {}),
         ...(managedToolUse ? { managedToolUse } : {}),
       });
     }

@@ -25,6 +25,7 @@
     kind: 'file_group'
     operation: FileOperation
     files: string[]
+    results: { file: string; content: string; error: boolean }[]
   }
 
   type DisplayStep = SessionChatThoughtStep | GroupedFileSteps
@@ -47,12 +48,17 @@
 
       let end = index + 1
       while (end < source.length && fileOperationFor(source[end]!) === operation) end += 1
-      const files = [...new Set(source.slice(index, end).map((item) => filePathFor(item)!))]
+      const fileSteps = source.slice(index, end)
+      const files = [...new Set(fileSteps.map((item) => filePathFor(item)!))]
+      const results = fileSteps.flatMap((item) => item.result
+        ? [{ file: filePathFor(item)!, content: item.result.content, error: item.result.status === 'error' }]
+        : [])
       grouped.push({
         id: `file-group:${step.id}:${source[end - 1]!.id}`,
         kind: 'file_group',
         operation,
         files,
+        results,
       })
       index = end
     }
@@ -93,11 +99,11 @@
               <Message.Response content={step.content} markdown streamId={step.id} />
             </div>
           {:else if step.kind === 'tool_call' && step.managedToolUse?.input.type === 'bash'}
-            <ThoughtCommandStep title={step.title} command={step.content} connected={hasConnectorAfter(index)} />
+            <ThoughtCommandStep title={step.title} command={step.content} result={step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)} />
           {:else if step.kind === 'file_group'}
-            <ThoughtFileStep operation={step.operation} files={step.files} connected={hasConnectorAfter(index)} />
+            <ThoughtFileStep operation={step.operation} files={step.files} results={step.results} connected={hasConnectorAfter(index)} />
           {:else if step.kind === 'tool_call'}
-            <ThoughtFallbackStep title={step.title} content={step.content} connected={hasConnectorAfter(index)} />
+            <ThoughtFallbackStep title={step.title} content={step.content} result={step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)} />
           {:else if step.kind === 'tool_result'}
             <ThoughtFallbackStep title={step.title} content={step.content} detailsLabel="result" error={step.status === 'error'} connected={hasConnectorAfter(index)} />
           {:else}
