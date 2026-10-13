@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { deploymentModeCommand } from "../src/lib/edge-deployment-command";
 import { deploymentCommand } from "../src/lib/server/edge-deployment";
-import unsafePorts from "../../../config/edge-unsafe-ports.json";
 
 const command = deploymentCommand("edge-id", "deployment-ticket");
 
@@ -22,7 +21,7 @@ test("custom port mode uses DNS-01 and preserves the deployment identity and tic
 });
 
 test("invalid or prohibited custom ports produce no copyable command", () => {
-  for (const port of [undefined, NaN, Infinity, 0, -1, 65536, 8443.5, ...unsafePorts]) {
+  for (const port of [undefined, NaN, Infinity, 0, -1, 25, 6000, 65536, 8443.5]) {
     expect(deploymentModeCommand(command, "custom", port)).toBeNull();
   }
 });

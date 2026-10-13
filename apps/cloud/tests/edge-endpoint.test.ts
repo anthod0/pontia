@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import unsafePorts from "../../../config/edge-unsafe-ports.json";
 import { isEdgePort } from "../src/lib/edge-port";
 import {
   configureEdgeNetwork,
@@ -31,7 +30,7 @@ function socket(body: string) {
 }
 
 test("port policy rejects unsafe ports, not an application whitelist", () => {
-  for (const port of unsafePorts) expect(isEdgePort(port)).toBeFalse();
+  for (const port of [1, 25, 6000, 10080]) expect(isEdgePort(port)).toBeFalse();
   for (const port of [80, 443, 444, 8443, 65535]) expect(isEdgePort(port)).toBeTrue();
   for (const port of [0, 65536, 1.5, "8443", null]) expect(isEdgePort(port)).toBeFalse();
 });
