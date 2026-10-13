@@ -35,6 +35,10 @@
 			>
 		</form>
 	</div>
+	<p class="legal-notice">
+		By continuing, you agree to the <a href="/terms">Terms of Service</a> and acknowledge the
+		<a href="/privacy">Privacy Policy</a>.
+	</p>
 	{#if data.hasCredential}
 		<form method="POST" action="/api/auth/logout">
 			<Button type="submit" class="button button-secondary">Sign out</Button>
@@ -44,6 +48,15 @@
 
 <style>
 	.providers {
-		margin-block: 28px;
+		margin-block: 28px 18px;
+	}
+	.legal-notice {
+		font-size: 12px;
+		text-align: left;
+	}
+	.legal-notice a {
+		color: var(--primary);
+		text-decoration: underline;
+		text-underline-offset: 3px;
 	}
 </style>
