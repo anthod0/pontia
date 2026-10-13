@@ -122,6 +122,8 @@ pub struct TimelineItem {
     pub occurred_at: Option<String>,
     pub content_preview: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub managed_tool_use: Option<ManagedToolUse>,
 }
 

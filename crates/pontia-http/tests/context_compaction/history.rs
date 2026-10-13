@@ -101,6 +101,7 @@ fn item(id: &str, kind: &str, turn: Option<&str>) -> TurnTimelineItem {
             status: None,
             occurred_at: None,
             content_preview: String::new(),
+            call_id: None,
             managed_tool_use: None,
         },
     }

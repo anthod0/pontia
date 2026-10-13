@@ -371,6 +371,7 @@ impl TurnTimelineReader for CodexRollout {
                                 },
                                 occurred_at: record["timestamp"].as_str().map(str::to_string),
                                 content_preview: payload.to_string(),
+                                call_id: None,
                                 managed_tool_use: None,
                             },
                         });
@@ -405,6 +406,7 @@ impl TurnTimelineReader for CodexRollout {
                     continue;
                 }
                 let mut title = None;
+                let mut call_id = None;
                 let (kind, role, content) = match raw_kind {
                     "message" => (role, role, render_content(&payload["content"])),
                     "reasoning" => ("thinking", "assistant", render_content(&payload["summary"])),
@@ -412,6 +414,7 @@ impl TurnTimelineReader for CodexRollout {
                         let name = payload["name"].as_str().unwrap_or("Tool");
                         title = Some(name.to_string());
                         if let Some(id) = payload["call_id"].as_str() {
+                            call_id = Some(id.to_string());
                             calls.insert(id.into(), payload.clone());
                         }
                         (
@@ -429,7 +432,8 @@ impl TurnTimelineReader for CodexRollout {
                             .as_str()
                             .map(str::to_string)
                             .unwrap_or_else(|| payload["output"].to_string());
-                        let call = payload["call_id"].as_str().and_then(|id| calls.get(id));
+                        call_id = payload["call_id"].as_str().map(str::to_string);
+                        let call = call_id.as_deref().and_then(|id| calls.get(id));
                         let content = if let Some(call) =
                             call.filter(|call| call["name"] == "request_user_input")
                         {
@@ -463,6 +467,7 @@ impl TurnTimelineReader for CodexRollout {
                         status: None,
                         occurred_at: record["timestamp"].as_str().map(str::to_string),
                         content_preview: content,
+                        call_id,
                         managed_tool_use: None,
                     },
                 });
@@ -554,6 +559,7 @@ fn compaction_checkpoint(thread: &str, offset: u64, record: &Value) -> TimelineI
         status: None,
         occurred_at: record["timestamp"].as_str().map(str::to_owned),
         content_preview: String::new(),
+        call_id: None,
         managed_tool_use: None,
     }
 }

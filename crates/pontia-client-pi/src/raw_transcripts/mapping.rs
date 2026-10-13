@@ -234,8 +234,22 @@ fn timeline_item(
             .and_then(Value::as_str)
             .map(ToString::to_string),
         content_preview: timeline_content_preview(kind, preview),
+        call_id: pi_call_id(entry, block_index, raw_kind),
         managed_tool_use,
     }
+}
+
+fn pi_call_id(entry: &Value, block_index: usize, raw_kind: &str) -> Option<String> {
+    let value = match raw_kind {
+        "toolCall" => entry
+            .pointer("/message/content")
+            .and_then(Value::as_array)
+            .and_then(|blocks| blocks.get(block_index))
+            .and_then(|block| block.get("id")),
+        "toolResult" => entry.pointer("/message/toolCallId"),
+        _ => None,
+    };
+    value.and_then(Value::as_str).map(ToString::to_string)
 }
 
 fn managed_tool_use_from_tool_call(block: &Value) -> Option<ManagedToolUse> {

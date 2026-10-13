@@ -446,6 +446,7 @@ export interface TimelineItem {
   occurred_at: string | null;
   content_preview: string | null;
   turn_id?: string | null;
+  call_id?: string | null;
   managed_tool_use?: ManagedToolUse | null;
 }
 

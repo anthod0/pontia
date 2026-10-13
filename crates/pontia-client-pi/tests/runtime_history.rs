@@ -165,6 +165,77 @@ fn checkpoint(id: &str, parent: Option<&str>) -> Value {
 }
 
 #[tokio::test]
+async fn tool_calls_and_results_expose_the_same_native_call_id() {
+    use pontia_application::client_contract::raw_transcripts::{
+        SessionTimelineSelection, SessionTimelineTurn,
+    };
+    let f = Fixture::new().await;
+    let (_, daemon) = f
+        .serve(
+            vec![
+                entry("user", None, "user"),
+                json!({
+                    "id": "assistant",
+                    "parentId": "user",
+                    "type": "message",
+                    "timestamp": "2026-10-11T00:00:01Z",
+                    "message": {
+                        "role": "assistant",
+                        "content": [{
+                            "type": "toolCall",
+                            "id": "call-1",
+                            "name": "read",
+                            "arguments": {"path": "src/app.ts"}
+                        }]
+                    }
+                }),
+                json!({
+                    "id": "result",
+                    "parentId": "assistant",
+                    "type": "message",
+                    "timestamp": "2026-10-11T00:00:02Z",
+                    "message": {
+                        "role": "toolResult",
+                        "toolCallId": "call-1",
+                        "toolName": "read",
+                        "content": [{"type": "text", "text": "contents"}],
+                        "isError": false
+                    }
+                }),
+            ],
+            2,
+        )
+        .await;
+
+    let items = f
+        .history()
+        .read_session_timeline(SessionTimelineSelection {
+            turns: vec![SessionTimelineTurn {
+                turn_id: "turn".into(),
+                head_cursor: Some(f.cursor(None)),
+                tail_cursor: Some(f.cursor(Some("result"))),
+            }],
+            selected_turn_ids: vec!["turn".into()],
+        })
+        .await
+        .unwrap();
+    let tool_items = items
+        .iter()
+        .filter(|item| matches!(item.item.kind.as_str(), "tool_call" | "tool_result"))
+        .map(|item| (item.item.kind.as_str(), item.item.call_id.as_deref()))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        tool_items,
+        vec![
+            ("tool_call", Some("call-1")),
+            ("tool_result", Some("call-1"))
+        ]
+    );
+    daemon.close();
+}
+
+#[tokio::test]
 async fn session_checkpoints_keep_native_order_and_turn_or_gap_page_ownership() {
     use pontia_application::client_contract::raw_transcripts::{
         SessionTimelineSelection, SessionTimelineTurn,

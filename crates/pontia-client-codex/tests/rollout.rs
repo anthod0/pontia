@@ -118,6 +118,36 @@ fn normalizes_message_kinds_for_chat_history() {
 }
 
 #[test]
+fn tool_calls_and_outputs_expose_the_same_native_call_id() {
+    let (_root, source) = fixture(&[
+        context("one"),
+        item(json!({
+            "type": "function_call",
+            "name": "shell",
+            "call_id": "call-1",
+            "arguments": "{\"command\":\"pwd\"}"
+        })),
+        item(json!({
+            "type": "function_call_output",
+            "call_id": "call-1",
+            "output": "/workspace"
+        })),
+    ]);
+
+    let items = read(source, "one");
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| (item.item.kind.as_str(), item.item.call_id.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("tool_call", Some("call-1")),
+            ("tool_result", Some("call-1"))
+        ]
+    );
+}
+
+#[test]
 fn native_call_identity_associates_actual_answers_without_crossing_turns() {
     let (_root, source) = fixture(&[
         context("one"),
