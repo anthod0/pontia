@@ -28,10 +28,14 @@ const context = {
 
 describe("event builders", () => {
   test("builds a turn.started observation without Pontia-owned identity", () => {
-    const event = buildTurnStartedEvent({ ...context, input: "from web", inboxMessageId: "msg_1" });
+    const event = buildTurnStartedEvent(
+      { ...context, input: "from web", inboxMessageId: "msg_1" },
+      "entry_1",
+    );
 
     expect(event).toEqual({
       session_id: "sess_1",
+      report_key: "entry_1",
       type: "turn.started",
       data: {
         runtime_id: "rtinst_1",
@@ -47,10 +51,10 @@ describe("event builders", () => {
 
   test("bounds the input summary without changing the actual Unicode prompt", () => {
     const input = "中😀".repeat(30_000);
-    const event = buildTurnStartedEvent({ ...context, input });
+    const event = buildTurnStartedEvent({ ...context, input }, "entry_1");
     expect(event.data.input_summary).toBe("中😀".repeat(100));
     expect(input.length).toBe(90_000);
-    expect(buildTurnStartedEvent(context).data.input_summary).toBeUndefined();
+    expect(buildTurnStartedEvent(context, "entry_1").data.input_summary).toBeUndefined();
   });
 
   test("builds turn output and terminal observations using the canonical turn id", () => {
@@ -246,71 +250,53 @@ describe("EventReporter", () => {
     });
   });
 
-  test.each([
-    ["rejection", "event_rejected"],
-    ["network", "transport_failed"],
-    ["missing identity", "missing_turn_id"],
-  ])("reports %s of turn.started as an orchestration failure", async (failure, reason) => {
-    const request = vi.fn(async (method: string) => {
-      if (method === "turn.startFailure") return { accepted: true };
-      if (failure === "network") throw new Error("connection lost");
-      if (failure === "rejection") throw new RpcError(-32602, "invalid fact");
-      return { accepted: true };
-    });
+  test("retries turn.started with the same report key after a lost response", async () => {
+    const event = buildTurnStartedEvent(context, "entry_1");
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValueOnce({
+        accepted: true,
+        duplicate: true,
+        event_id: "evt_server",
+        turn_id: "turn_server",
+      });
     const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
-    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({
-      accepted: false,
-    });
-    expect(request).toHaveBeenLastCalledWith("turn.startFailure", {
-      session_id: "sess_1",
-      runtime_id: "rtinst_1",
-      reason,
+
+    expect(await reporter.report(context, event)).toEqual({
+      accepted: true,
+      eventId: "evt_server",
+      turnId: "turn_server",
     });
     expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[0]).toEqual(request.mock.calls[1]);
   });
 
-  test("retries the idempotent failure notification, not an ambiguous turn.started", async () => {
-    let starts = 0;
-    let failures = 0;
-    const request = vi.fn(async (method: string) => {
-      if (method === "event.report") {
-        starts++;
-        throw new Error("response lost");
-      }
-      failures++;
-      if (failures < 3) throw new RpcError(-32603, "unavailable");
-      return { accepted: true };
-    });
-    const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
-    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({
-      accepted: false,
-    });
-    expect(starts).toBe(1);
-    expect(failures).toBe(3);
-  });
+  test.each([new RpcError(-32603, "server error"), new Error("connection lost")])(
+    "retries uncertain turn.started failures at most three times",
+    async (error) => {
+      const logFile = await tempLogFile();
+      const request = vi.fn(async () => {
+        throw error;
+      });
+      const reporter = new EventReporter({ connection: { request }, logFile });
+      expect(await reporter.report(context, buildTurnStartedEvent(context, "entry_1"))).toEqual({
+        accepted: false,
+      });
+      expect(request).toHaveBeenCalledTimes(3);
+      expect(await readFile(logFile, "utf8")).toContain("pi_event_report_failed");
+    },
+  );
 
-  test("bounds failure-notification retries and reports unconfirmed state when offline", async () => {
-    const logFile = await tempLogFile();
-    const request = vi.fn(async () => {
-      throw new Error("offline");
-    });
-    const reporter = new EventReporter({ connection: { request }, logFile });
-    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({
-      accepted: false,
-    });
-    expect(request).toHaveBeenCalledTimes(4);
-    expect(await readFile(logFile, "utf8")).toContain("turn_start_failure_report_failed");
-  });
-
-  test("does not retry a failure notification rejected by the runtime fence", async () => {
+  test("does not retry an explicit turn.started rejection", async () => {
     const request = vi.fn(async () => {
       throw new RpcError(-32009, "stale");
     });
     const reporter = new EventReporter({ connection: { request }, logFile: await tempLogFile() });
-    expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({
+    expect(await reporter.report(context, buildTurnStartedEvent(context, "entry_1"))).toEqual({
       accepted: false,
     });
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   test.each([new RpcError(-32603, "server error"), new Error("connection lost")])(

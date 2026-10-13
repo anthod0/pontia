@@ -45,6 +45,7 @@ impl Fixture {
             .report_fact(ReportedFact {
                 session_id: session.clone(),
                 turn_id: None,
+                report_key: None,
                 fact_type: EventType::SessionReady,
                 data: json!({"runtime_id":"runtime"}),
             })
@@ -440,6 +441,7 @@ async fn native_terminal_fact_is_fenced_again_when_committing() {
         .report_fact(ReportedFact {
             session_id: fixture.session.clone(),
             turn_id: None,
+            report_key: None,
             fact_type: EventType::TurnStarted,
             data: json!({"native_turn_id":"native","runtime_id":"runtime"}),
         })
@@ -450,6 +452,7 @@ async fn native_terminal_fact_is_fenced_again_when_committing() {
         .normalize(ReportedFact {
             session_id: fixture.session.clone(),
             turn_id: None,
+            report_key: None,
             fact_type: EventType::TurnCompleted,
             data: json!({"native_turn_id":"native","runtime_id":"runtime"}),
         })

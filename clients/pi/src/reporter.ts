@@ -23,72 +23,52 @@ export class EventReporter {
   }
 
   async report(context: { runtimeId: string }, event: InternalEvent): Promise<EventReportResult> {
-    try {
-      const body = await this.connection.request("event.report", {
-        runtime_id: context.runtimeId,
-        event,
-      });
-      const record =
-        body && typeof body === "object" ? (body as Record<string, unknown>) : undefined;
-      if (
-        event.type === "turn.started" &&
-        (record?.accepted !== true || typeof record?.turn_id !== "string" || !record.turn_id)
-      ) {
-        await this.reportStartFailure(event, "missing_turn_id");
-        return { accepted: false };
-      }
-      if (record?.accepted !== true)
-        throw new Error("Pi event RPC returned an invalid acknowledgement");
-      return {
-        accepted: true,
-        eventId: typeof record.event_id === "string" ? record.event_id : undefined,
-        turnId: typeof record.turn_id === "string" ? record.turn_id : undefined,
-      };
-    } catch (error) {
-      await appendDiagnostic(this.logFile, {
-        level: "error",
-        code: "pi_event_report_failed",
-        message: `Pi event RPC failed for ${event.type}`,
-        details: {
-          event_type: event.type,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      await this.reportStartFailure(
-        event,
-        error instanceof RpcError ? "event_rejected" : "transport_failed",
-      );
-      return { accepted: false };
-    }
-  }
+    const attempts = event.type === "turn.started" ? 3 : 1;
+    let lastError: unknown;
 
-  private async reportStartFailure(
-    event: InternalEvent,
-    reason: "event_rejected" | "transport_failed" | "missing_turn_id",
-  ): Promise<void> {
-    if (event.type !== "turn.started" || typeof event.data.runtime_id !== "string") return;
-    // A lost turn.started response is ambiguous: retrying it could create a
-    // second Turn. Only this fenced, idempotent failure notification is retried.
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
       if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
       try {
-        const result = (await this.connection.request("turn.startFailure", {
-          session_id: event.session_id,
-          runtime_id: event.data.runtime_id,
-          reason,
-        })) as { accepted?: unknown } | null;
-        if (result?.accepted === true) return;
+        const body = await this.connection.request("event.report", {
+          runtime_id: context.runtimeId,
+          event,
+        });
+        const record =
+          body && typeof body === "object" ? (body as Record<string, unknown>) : undefined;
+        if (record?.accepted !== true) {
+          if (record?.accepted === false) {
+            lastError = new Error("Pi event report was rejected");
+            break;
+          }
+          throw new Error("Pi event RPC returned an invalid acknowledgement");
+        }
+        if (
+          event.type === "turn.started" &&
+          (typeof record.turn_id !== "string" || !record.turn_id)
+        ) {
+          throw new Error("Pi turn.started acknowledgement has no canonical turn_id");
+        }
+        return {
+          accepted: true,
+          eventId: typeof record.event_id === "string" ? record.event_id : undefined,
+          turnId: typeof record.turn_id === "string" ? record.turn_id : undefined,
+        };
       } catch (error) {
+        lastError = error;
         if (error instanceof RpcError && error.code !== -32603) break;
-        // Exhaustion is visible locally; an unreachable server cannot persist
-        // a state transition. Never claim that this notification succeeded.
       }
     }
+
     await appendDiagnostic(this.logFile, {
       level: "error",
-      code: "turn_start_failure_report_failed",
-      message: "could not persist turn.started reporting failure; workflow state is unconfirmed",
-      details: { session_id: event.session_id, reason },
+      code: "pi_event_report_failed",
+      message: `Pi event RPC failed for ${event.type}`,
+      details: {
+        event_type: event.type,
+        report_key: event.report_key,
+        error: lastError instanceof Error ? lastError.message : String(lastError),
+      },
     });
+    return { accepted: false };
   }
 }

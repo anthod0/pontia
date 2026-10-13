@@ -12,6 +12,7 @@ pub(crate) async fn report_fact_result(
     let fact = ReportedFact {
         session_id: body["session_id"].as_str().unwrap().into(),
         turn_id: body["turn_id"].as_str().map(str::to_owned),
+        report_key: body["report_key"].as_str().map(str::to_owned),
         fact_type: EventType::from_str(body["type"].as_str().unwrap()).unwrap(),
         data: body["data"].clone(),
     };
@@ -30,21 +31,6 @@ pub(crate) async fn report_fact(state: AppState, body: Value) -> (StatusCode, Va
         ),
         Err(error) => error_response(error),
     }
-}
-
-pub(crate) async fn report_start_failure(
-    state: AppState,
-    session: &str,
-    body: Value,
-) -> pontia_core::Result<()> {
-    state
-        .event_ingest_service()
-        .report_turn_start_failure(
-            session,
-            body["runtime_id"].as_str().unwrap(),
-            body["reason"].as_str().unwrap(),
-        )
-        .await
 }
 
 fn error_response(error: EventReportError) -> (StatusCode, Value) {

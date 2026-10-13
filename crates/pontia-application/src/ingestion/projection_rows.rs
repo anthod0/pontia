@@ -49,6 +49,7 @@ pub(super) fn event_from_row(row: DomainEventRow) -> Result<DomainEvent> {
         event_id: row.event_id,
         session_id: row.session_id,
         turn_id: row.turn_id,
+        report_key: row.report_key,
         source: EventSource::from_str(&row.source)?,
         client_type: row.client_type,
         event_type: EventType::from_str(&row.event_type)?,

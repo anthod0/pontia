@@ -740,7 +740,7 @@ export function createPontiaPiExtension(
 
   pi.on("agent_start", async (_event, ctx) => {
     const topologyContext = topologyContextFromHookContext(ctx);
-    const previousLeafId = leafIdFromHookContext(ctx);
+    const reportKey = leafIdFromHookContext(ctx);
     if (reportingDisabled) return;
     try {
       const dispatch = directInput.getStore();
@@ -750,6 +750,16 @@ export function createPontiaPiExtension(
           : undefined;
       if (dispatch) dispatch.consumed = true;
       const logFile = currentHookLogFile();
+      if (!reportKey) {
+        activeTurn = undefined;
+        pendingPrompt = undefined;
+        await logDiagnostic(logFile, {
+          level: "error",
+          code: "turn_start_entry_id_missing",
+          message: "pi agent_start has no native session entry id; turn.started was not reported",
+        });
+        return;
+      }
       if (!boundSessionContext) {
         const hookSessionDetails = piSessionDetailsFromHookContext(ctx);
         const sessionDetails = hookSessionDetails.clientSessionKey
@@ -816,7 +826,7 @@ export function createPontiaPiExtension(
       lastContextUsageJson = undefined;
       const started = await reporter.report(
         turnContext,
-        buildTurnStartedEvent(turnContext, previousLeafId, topologyContext),
+        buildTurnStartedEvent(turnContext, reportKey, reportKey, topologyContext),
       );
       const canonicalTurnId = typeof started === "boolean" ? turnContext.turnId : started.turnId;
       if (!reportAccepted(started) || !canonicalTurnId) {

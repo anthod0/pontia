@@ -161,6 +161,7 @@ test("a disconnected deferred registration can initialize on the next manual tur
       getSessionId: () => "native",
       getSessionFile: () => join(root, "pi.jsonl"),
       getCwd: () => workspace,
+      getLeafId: () => "entry_1",
     },
   };
   try {
@@ -226,6 +227,7 @@ test("the default extension streams over its registered connection and closes th
       getSessionId: () => "native",
       getSessionFile: () => join(root, "pi.jsonl"),
       getCwd: () => workspace,
+      getLeafId: () => "entry_1",
     },
   };
   try {

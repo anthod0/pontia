@@ -35,6 +35,7 @@ pub(super) async fn insert_event_in_tx(
             event_id: event.event_id.clone(),
             session_id: event.session_id.clone(),
             turn_id: event.turn_id.clone(),
+            report_key: event.report_key.clone(),
             source: event.source.to_string(),
             client_type: event.client_type.clone(),
             event_type: event.event_type.to_string(),

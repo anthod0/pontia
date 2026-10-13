@@ -462,16 +462,6 @@ export async function connectPi(
   current = await open();
   return {
     async request(method, params) {
-      if (method === "turn.startFailure") {
-        if (!identity?.clientSessionKey || stopped)
-          throw new Error("Pi reporting identity is unavailable");
-        await ready();
-        if (!current || stopped) throw new Error("Pi connection is unavailable");
-        return current.request(method, {
-          ...params,
-          client_session_key: identity.clientSessionKey,
-        });
-      }
       await ready();
       if (!current || stopped) return Promise.reject(new Error("Pi connection is unavailable"));
       return current.request(method, params);

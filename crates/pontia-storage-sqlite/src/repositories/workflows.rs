@@ -11,7 +11,6 @@ mod patch_resolution;
 mod queries;
 mod recovery;
 pub use recovery::WorkflowRecoveryCandidate;
-mod reporting_failure;
 
 #[derive(Debug, Clone)]
 pub struct CreateWorkflowRecord {

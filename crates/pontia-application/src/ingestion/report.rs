@@ -18,6 +18,7 @@ use pontia_storage_sqlite::repositories::{
 pub struct ReportedFact {
     pub session_id: String,
     pub turn_id: Option<String>,
+    pub report_key: Option<String>,
     pub fact_type: EventType,
     pub data: Value,
 }
@@ -135,7 +136,8 @@ impl EventReportNormalizer {
             session.client_type,
             fact.fact_type,
             payload,
-        ))
+        )
+        .with_report_key(fact.report_key))
     }
 }
 

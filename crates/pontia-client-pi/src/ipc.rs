@@ -163,7 +163,6 @@ pub async fn serve_connection(state: AppState, stream: UnixStream) {
                 | "runtime.attach"
                 | "event.report"
                 | "liveOutput.publish"
-                | "turn.startFailure"
                 | "branch.resolve"
         ) {
             if peer
@@ -310,12 +309,6 @@ async fn dispatch(
             .validate_connection(&identity.session_id, &identity.runtime_id, &current)
             .await?;
         return Ok(json!({"branch_replay": replay}));
-    }
-    if request.method == "turn.startFailure" {
-        let identity = registered.as_ref().ok_or_else(|| {
-            Error::StateConflict("Pi failure report requires registration".into())
-        })?;
-        return reporting::start_failure(state, identity, request.params.clone()).await;
     }
     if request.method == "event.report" {
         let identity = registered

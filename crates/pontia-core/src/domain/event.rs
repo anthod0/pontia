@@ -267,6 +267,7 @@ pub struct ReportedEvent {
     pub event_id: String,
     pub session_id: String,
     pub turn_id: Option<String>,
+    pub report_key: Option<String>,
     pub source: EventSource,
     pub client_type: String,
     pub event_type: EventType,
@@ -288,12 +289,18 @@ impl ReportedEvent {
             event_id,
             session_id,
             turn_id,
+            report_key: None,
             source,
             client_type,
             event_type,
             occurred_at: utc_now(),
             payload,
         }
+    }
+
+    pub fn with_report_key(mut self, report_key: Option<String>) -> Self {
+        self.report_key = report_key;
+        self
     }
 }
 
@@ -329,6 +336,7 @@ pub struct DomainEvent {
     pub event_id: String,
     pub session_id: String,
     pub turn_id: Option<String>,
+    pub report_key: Option<String>,
     pub source: EventSource,
     pub client_type: String,
     pub event_type: EventType,
@@ -352,6 +360,7 @@ impl DomainEvent {
             event_id,
             session_id,
             turn_id,
+            report_key: None,
             source,
             client_type,
             event_type,
@@ -379,6 +388,7 @@ impl From<ReportedEvent> for DomainEvent {
             event_id: event.event_id,
             session_id: event.session_id,
             turn_id: event.turn_id,
+            report_key: event.report_key,
             source: event.source,
             client_type: event.client_type,
             event_type: event.event_type,

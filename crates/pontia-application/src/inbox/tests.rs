@@ -385,6 +385,7 @@ async fn token_override_preserves_initial_input_gate_and_event_wakeup() {
         .report_fact(crate::ReportedFact {
             session_id: "session".into(),
             turn_id: None,
+            report_key: None,
             fact_type: pontia_core::domain::EventType::SessionReady,
             data: json!({"runtime_id":"runtime"}),
         })
@@ -471,6 +472,7 @@ async fn connected_inbox() -> (
         .report_fact(crate::ReportedFact {
             session_id: "session".into(),
             turn_id: None,
+            report_key: None,
             fact_type: pontia_core::domain::EventType::SessionReady,
             data: json!({"runtime_id":"runtime"}),
         })

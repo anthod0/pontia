@@ -7,6 +7,7 @@ fn fact(kind: EventType, data: Value) -> ReportedFact {
     ReportedFact {
         session_id: "session".into(),
         turn_id: None,
+        report_key: None,
         fact_type: kind,
         data,
     }

@@ -17,6 +17,7 @@ function fakePi() {
   const commands: Record<string, { handler: (args: string, ctx: any) => Promise<void> | void }> =
     {};
   const sendUserMessage = vi.fn();
+  let startEntry = 0;
   return {
     handlers,
     commands,
@@ -34,7 +35,18 @@ function fakePi() {
                     ...(ctx.sessionManager ?? {}),
                   },
                 })
-            : handler;
+            : event === "agent_start"
+              ? (agentEvent, ctx = {}) => {
+                  const entryId = `entry_${++startEntry}`;
+                  return handler(agentEvent, {
+                    ...ctx,
+                    sessionManager: {
+                      getLeafId: () => entryId,
+                      ...(ctx.sessionManager ?? {}),
+                    },
+                  });
+                }
+              : handler;
       }),
       registerTool: vi.fn(),
       registerCommand: vi.fn(
@@ -1544,12 +1556,28 @@ describe("pontia pi extension lifecycle", () => {
       "turn.output",
       "turn.completed",
     ]);
-    expect(reported[0].data).toEqual({
-      runtime_id: "rtinst_1",
-      input_summary: undefined,
-      previous_leaf_id: null,
+    expect(reported[0]).toMatchObject({
+      report_key: "entry_1",
+      data: {
+        runtime_id: "rtinst_1",
+        input_summary: undefined,
+        previous_leaf_id: "entry_1",
+      },
     });
     expect(reported[1].data).toEqual({ output_summary: "hello world" });
+  });
+
+  test("does not report turn.started when Pi exposes no triggering entry id", async () => {
+    const logDiagnostic = vi.fn(async () => undefined);
+    const { handlers, reported } = await installBound({ logDiagnostic });
+
+    await handlers.agent_start({}, { sessionManager: { getLeafId: () => null } });
+
+    expect(reported).toEqual([]);
+    expect(logDiagnostic).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ code: "turn_start_entry_id_missing" }),
+    );
   });
 
   test("captures the previous and terminal Pi leaves at the lifecycle hook boundaries", async () => {
@@ -1579,8 +1607,9 @@ describe("pontia pi extension lifecycle", () => {
     const starting = handlers.agent_start({}, hookContext);
     await vi.waitFor(() => expect(report).toHaveBeenCalledTimes(1));
     expect(observations).toEqual(["leaf:entry_before_turn", "report:turn.started"]);
-    expect(report.mock.calls[0]?.[1].data).toMatchObject({
-      previous_leaf_id: "entry_before_turn",
+    expect(report.mock.calls[0]?.[1]).toMatchObject({
+      report_key: "entry_before_turn",
+      data: { previous_leaf_id: "entry_before_turn" },
     });
     releaseStarted();
     await starting;

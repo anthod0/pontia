@@ -35,6 +35,7 @@ impl ClientEventInterpreter for PiEventInterpreter {
             event_id: format!("{}:runtime", event.event_id),
             session_id: event.session_id.clone(),
             turn_id: None,
+            report_key: None,
             source: event.source,
             client_type: event.client_type.clone(),
             event_type,

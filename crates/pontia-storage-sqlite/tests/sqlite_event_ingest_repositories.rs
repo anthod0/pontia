@@ -30,6 +30,7 @@ async fn sqlite_event_repository_supports_ingest_event_writes_and_reads() {
             event_id: "evt_1".to_string(),
             session_id: "sess_1".to_string(),
             turn_id: Some("turn_1".to_string()),
+            report_key: Some("entry-1".to_string()),
             source: "agent_adapter".to_string(),
             client_type: "pi".to_string(),
             event_type: "turn.started".to_string(),

@@ -183,7 +183,12 @@ async fn register(pi: &PiRpcPeer, root: &std::path::Path) -> (String, String) {
 }
 
 fn fact(session: &str, runtime: &str, kind: &str, data: serde_json::Value) -> serde_json::Value {
-    json!({"runtime_id":runtime,"event":{"session_id":session,"type":kind,"data":data}})
+    json!({"runtime_id":runtime,"event":{
+        "session_id":session,
+        "type":kind,
+        "report_key":(kind == "turn.started").then_some("entry-1"),
+        "data":data
+    }})
 }
 
 #[tokio::test]
@@ -405,14 +410,6 @@ async fn reporting_rejects_unregistered_cross_session_and_stale_identities_and_i
         .await
         .is_err()
     );
-    assert!(
-        pi.call(
-            "turn.startFailure",
-            json!({"session_id":"unknown","runtime_id":"r","reason":"transport_failed"})
-        )
-        .await
-        .is_err()
-    );
     let (session, runtime) = register(&pi, root.path()).await;
     let valid = fact(
         &session,
@@ -420,6 +417,25 @@ async fn reporting_rejects_unregistered_cross_session_and_stale_identities_and_i
         "session.context_usage_updated",
         json!({"context_usage":{"used_tokens":1}}),
     );
+    let mut missing_report_key = fact(
+        &session,
+        &runtime,
+        "turn.started",
+        json!({"runtime_id":runtime}),
+    );
+    missing_report_key["event"]
+        .as_object_mut()
+        .unwrap()
+        .remove("report_key");
+    assert!(pi.call("event.report", missing_report_key).await.is_err());
+    let mut empty_report_key = fact(
+        &session,
+        &runtime,
+        "turn.started",
+        json!({"runtime_id":runtime}),
+    );
+    empty_report_key["event"]["report_key"] = json!("  ");
+    assert!(pi.call("event.report", empty_report_key).await.is_err());
     for field in [
         "timeline_boundary",
         "event_id",
@@ -446,14 +462,6 @@ async fn reporting_rejects_unregistered_cross_session_and_stale_identities_and_i
         .await
         .unwrap();
     assert!(pi.call("event.report", valid).await.is_err());
-    assert!(
-        pi.call(
-            "turn.startFailure",
-            json!({"session_id":session,"runtime_id":runtime,"client_session_key":"native","reason":"transport_failed"})
-        )
-        .await
-        .is_err()
-    );
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_type='session.error'")
             .fetch_one(&state.db())
@@ -464,63 +472,33 @@ async fn reporting_rejects_unregistered_cross_session_and_stale_identities_and_i
 }
 
 #[tokio::test]
-async fn failure_reports_are_idempotent_after_a_lost_started_acknowledgement() {
+async fn repeated_started_reports_return_the_first_canonical_identity() {
     let (state, root) = state().await;
     let (pi, _requests) = client(&state);
     let (session, runtime) = register(&pi, root.path()).await;
-    let started = pi
-        .call(
-            "event.report",
-            fact(
-                &session,
-                &runtime,
-                "turn.started",
-                json!({"runtime_id":runtime}),
-            ),
-        )
-        .await
-        .unwrap();
-    // Only the failure notification is retried after attaching the new connection.
-    pi.close();
-    tokio::time::timeout(Duration::from_secs(1), async {
-        while state.client_control().available(&session).await.unwrap() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
-    let (pi, _requests) = client(&state);
-    pi.call("runtime.attach", json!({"version":PROTOCOL_VERSION,"session_id":session,"runtime_id":runtime,"client_session_key":"native"})).await.unwrap();
-    let failure = json!({"session_id":session,"runtime_id":runtime,"client_session_key":"native","reason":"transport_failed"});
-    assert_eq!(
-        pi.call("turn.startFailure", failure.clone()).await.unwrap()["accepted"],
-        true
+    let report = fact(
+        &session,
+        &runtime,
+        "turn.started",
+        json!({"runtime_id":runtime,"input_summary":"work"}),
     );
-    pi.close();
-    let (retry, _requests) = client(&state);
-    assert!(!state.client_control().available(&session).await.unwrap());
-    assert!(retry.call("turn.startFailure", failure).await.is_err());
-    state
-        .event_ingest_service()
-        .report_turn_start_failure(&session, &runtime, "transport_failed")
-        .await
-        .unwrap();
-    retry.close();
-    let count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE event_type='session.error'")
-            .fetch_one(&state.db())
-            .await
-            .unwrap();
-    assert_eq!(count, 1);
-    let turn_state: String = sqlx::query_scalar("SELECT state FROM turns WHERE turn_id=?")
-        .bind(started["turn_id"].as_str().unwrap())
-        .fetch_one(&state.db())
-        .await
-        .unwrap();
-    assert_eq!(turn_state, "abandoned");
+
+    let started = pi.call("event.report", report.clone()).await.unwrap();
+    let duplicate = pi.call("event.report", report.clone()).await.unwrap();
+    assert_eq!(duplicate["duplicate"], true);
+    assert_eq!(duplicate["event_id"], started["event_id"]);
+    assert_eq!(duplicate["turn_id"], started["turn_id"]);
+
+    let mut changed = report.clone();
+    changed["event"]["data"]["input_summary"] = json!("changed");
+    assert!(pi.call("event.report", changed).await.is_err());
+    let mut supplied_turn = report;
+    supplied_turn["event"]["turn_id"] = started["turn_id"].clone();
+    assert!(pi.call("event.report", supplied_turn).await.is_err());
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM events WHERE event_type IN ('turn.started','turn.failed')",
+        "SELECT COUNT(*) FROM events WHERE session_id=? AND event_type='turn.started'",
     )
+    .bind(&session)
     .fetch_one(&state.db())
     .await
     .unwrap();

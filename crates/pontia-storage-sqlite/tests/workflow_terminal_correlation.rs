@@ -29,6 +29,7 @@ async fn fact(
             event_id: id.into(),
             session_id: session.into(),
             turn_id: turn.map(str::to_string),
+            report_key: None,
             source: source.into(),
             client_type: "pi".into(),
             event_type: event_type.into(),

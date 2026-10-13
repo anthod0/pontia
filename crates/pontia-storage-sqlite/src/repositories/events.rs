@@ -50,6 +50,7 @@ pub struct EventInsertRecord {
     pub event_id: String,
     pub session_id: String,
     pub turn_id: Option<String>,
+    pub report_key: Option<String>,
     pub source: String,
     pub client_type: String,
     pub event_type: String,
@@ -75,12 +76,13 @@ impl SqliteEventRepository {
     ) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO events
-               (event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload, timeline_boundary, turn_topology)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               (event_id, session_id, turn_id, report_key, source, client_type, event_type, occurred_at, payload, timeline_boundary, turn_topology)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(event.event_id)
         .bind(event.session_id)
         .bind(event.turn_id)
+        .bind(event.report_key)
         .bind(event.source)
         .bind(event.client_type)
         .bind(event.event_type)
@@ -158,27 +160,6 @@ impl SqliteEventRepository {
             != 0)
     }
 
-    pub async fn turn_start_reporting_failure_in_tx(
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        session_id: &str,
-        runtime_id: &str,
-    ) -> Result<Option<String>> {
-        Ok(sqlx::query_scalar(
-            r#"SELECT event_id FROM events
-               WHERE session_id = ? AND event_type = 'session.error' AND source = 'runtime_manager'
-                 AND json_extract(payload, '$.reason') = 'turn_start_reporting_failed'
-                 AND json_extract(payload, '$.runtime_id') = ?
-                 AND rowid > COALESCE((SELECT MAX(startup.rowid) FROM events startup
-                     WHERE startup.session_id=events.session_id
-                       AND startup.event_type IN ('session.starting','session.resuming')),0)
-               ORDER BY rowid LIMIT 1"#,
-        )
-        .bind(session_id)
-        .bind(runtime_id)
-        .fetch_optional(&mut **tx)
-        .await?)
-    }
-
     pub async fn latest_workflow_terminal_event(
         &self,
         session_id: &str,
@@ -206,7 +187,7 @@ impl SqliteEventRepository {
 
     pub async fn list_domain_event_rows(&self, session_id: &str) -> Result<Vec<DomainEventRow>> {
         Ok(sqlx::query_as::<_, DomainEventRow>(
-            r#"SELECT event_id, session_id, turn_id, source, client_type, event_type, occurred_at, payload, timeline_boundary, turn_topology
+            r#"SELECT event_id, session_id, turn_id, report_key, source, client_type, event_type, occurred_at, payload, timeline_boundary, turn_topology
                FROM events WHERE session_id = ? ORDER BY rowid"#,
         )
         .bind(session_id)

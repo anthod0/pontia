@@ -61,6 +61,7 @@ export interface PiTopologyContext {
 export interface InternalEvent {
   session_id: string;
   turn_id?: string;
+  report_key?: string;
   type: InternalEventType;
   data: Record<string, unknown>;
   [legacyField: string]: any;
@@ -314,6 +315,7 @@ export function contextUsageFromPiHook(
 
 export function buildTurnStartedEvent(
   context: TurnContext,
+  reportKey: string,
   previousLeafId: string | null = null,
   topologyContext?: PiTopologyContext,
 ): InternalEvent {
@@ -327,7 +329,12 @@ export function buildTurnStartedEvent(
   };
   if (context.inboxMessageId) data.inbox_message_id = context.inboxMessageId;
   if (topologyContext) data.topology_context = topologyContext;
-  return { session_id: context.sessionId, type: "turn.started", data };
+  return {
+    session_id: context.sessionId,
+    report_key: reportKey,
+    type: "turn.started",
+    data,
+  };
 }
 
 export function buildTurnOutputEvent(context: ActiveTurnContext, output: string): InternalEvent {

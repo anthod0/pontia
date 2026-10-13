@@ -57,6 +57,7 @@ async fn ready(
         .report_fact(ReportedFact {
             session_id: "session".into(),
             turn_id: None,
+            report_key: None,
             fact_type: EventType::SessionReady,
             data: json!({"runtime_id":"runtime","client_session_key":"native"}),
         })
@@ -78,6 +79,7 @@ async fn lifecycle_reuses_runtime_and_execution_facts_keep_it_running() {
         .report_fact(ReportedFact {
             session_id: "session".into(),
             turn_id: None,
+            report_key: None,
             fact_type: EventType::TurnStarted,
             data: json!({"runtime_id":"runtime","input_summary":"work"}),
         })
@@ -90,6 +92,7 @@ async fn lifecycle_reuses_runtime_and_execution_facts_keep_it_running() {
         .report_fact(ReportedFact {
             session_id: "session".into(),
             turn_id: started.turn_id,
+            report_key: None,
             fact_type: EventType::TurnInterrupted,
             data: json!({"runtime_id":"runtime"}),
         })
@@ -101,6 +104,7 @@ async fn lifecycle_reuses_runtime_and_execution_facts_keep_it_running() {
             .report_fact(ReportedFact {
                 session_id: "session".into(),
                 turn_id: None,
+                report_key: None,
                 fact_type: EventType::SessionExited,
                 data: json!({"runtime_id":"runtime","reason":"quit"}),
             })
@@ -298,6 +302,7 @@ async fn old_process_observation_cannot_exit_restarted_runtime() {
         .report_fact(ReportedFact {
             session_id: "session".into(),
             turn_id: None,
+            report_key: None,
             fact_type: EventType::SessionExited,
             data: json!({"runtime_id":"runtime","reason":"quit"}),
         })
@@ -327,6 +332,7 @@ async fn restart_rejects_active_turn_and_terminal_session_without_changing_runti
         .report_fact(ReportedFact {
             session_id: "session".into(),
             turn_id: None,
+            report_key: None,
             fact_type: EventType::TurnStarted,
             data: json!({"runtime_id":"runtime"}),
         })
@@ -353,6 +359,7 @@ async fn restart_rejects_active_turn_and_terminal_session_without_changing_runti
         .report_fact(ReportedFact {
             session_id: "session".into(),
             turn_id: None,
+            report_key: None,
             fact_type: EventType::SessionExited,
             data: json!({"runtime_id":"runtime","reason":"quit"}),
         })

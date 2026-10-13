@@ -338,6 +338,7 @@ async fn pi_models_use_the_bound_client_and_only_reported_facts_update_the_curre
         .report_fact(pontia_application::ReportedFact {
             session_id: "sess_models".into(),
             turn_id: None,
+            report_key: None,
             fact_type: pontia_core::domain::EventType::SessionModelUpdated,
             data: json!({"model":"two/shared", "runtime_id":"rt_models"}),
         })

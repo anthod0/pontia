@@ -106,6 +106,16 @@ impl SqliteWorkflowRepository {
         .await?)
     }
 
+    pub async fn failure_node_id(&self, workflow_id: &str) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar::<_, Option<String>>(
+            "SELECT json_extract(payload, '$.node_id') FROM workflow_events WHERE workflow_id = ? AND event_type = 'workflow.failed' ORDER BY sequence DESC LIMIT 1",
+        )
+        .bind(workflow_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten())
+    }
+
     pub async fn get_node_by_session(&self, session_id: &str) -> Result<Option<WorkflowNodeRow>> {
         let nodes = sqlx::query_as::<_, WorkflowNodeRow>(
             r#"SELECT node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,

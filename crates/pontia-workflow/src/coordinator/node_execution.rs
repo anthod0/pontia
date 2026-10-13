@@ -77,13 +77,6 @@ where
         let Some(session_id) = node.session_id.as_deref() else {
             return Ok(());
         };
-        if self
-            .repository
-            .fail_for_turn_start_reporting(workflow_id, &node.node_id, &Uuid::now_v7().to_string())
-            .await?
-        {
-            return Ok(());
-        }
         let recovered_runtime = self
             .repository
             .recovered_node_runtime(&node.node_id)

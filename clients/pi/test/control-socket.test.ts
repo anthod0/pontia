@@ -217,8 +217,9 @@ test("correlates replies that arrive in reverse order", async () => {
   ).resolves.toEqual(["one", "two"]);
 });
 
-test("lost acknowledgements retry only the failure notification over a fresh connection", async () => {
+test("lost turn.started acknowledgements retry the same report over a fresh connection", async () => {
   const methods: string[] = [];
+  let reports = 0;
   const root = await server((socket, message) => {
     if (!message.method) {
       expect(message.id).toBe("daemon:submit");
@@ -228,15 +229,22 @@ test("lost acknowledgements retry only the failure notification over a fresh con
     }
     methods.push(message.method);
     if (message.method === "event.report") {
-      socket.write(
-        `${JSON.stringify({ jsonrpc: "2.0", id: "daemon:submit", method: "submit", params: { input: "next" } })}\n`,
-      );
+      reports++;
+      expect(message.params.event.report_key).toBe("entry_1");
+      if (reports === 1) {
+        socket.write(
+          `${JSON.stringify({ jsonrpc: "2.0", id: "daemon:submit", method: "submit", params: { input: "next" } })}\n`,
+        );
+      } else {
+        reply(socket, message.id, {
+          accepted: true,
+          duplicate: true,
+          event_id: "evt_1",
+          turn_id: "turn_1",
+        });
+      }
     } else if (message.method === "runtime.attach") {
       setTimeout(() => reply(socket, message.id, { session_id: "s", runtime_id: "r" }), 400);
-    } else {
-      expect(message.params.client_session_key).toBe("native");
-      if (methods.filter((method) => method === "turn.startFailure").length === 1) socket.destroy();
-      else reply(socket, message.id, { accepted: true });
     }
   });
   const submit = vi.fn();
@@ -245,13 +253,14 @@ test("lost acknowledgements retry only the failure notification over a fresh con
   client.registered({ sessionId: "s", runtimeId: "r", clientSessionKey: "native" });
   const reporter = new EventReporter({ connection: client, logFile: join(root, "hook.log") });
   const context = { sessionId: "s", runtimeId: "r", clientType: "pi" as const };
-  expect(await reporter.report(context, buildTurnStartedEvent(context))).toEqual({
-    accepted: false,
+  expect(await reporter.report(context, buildTurnStartedEvent(context, "entry_1"))).toEqual({
+    accepted: true,
+    eventId: "evt_1",
+    turnId: "turn_1",
   });
   expect(methods.filter((method) => method !== "runtime.attach")).toEqual([
     "event.report",
-    "turn.startFailure",
-    "turn.startFailure",
+    "event.report",
   ]);
   expect(submit).toHaveBeenCalledWith({ input: "next", inboxMessageId: undefined });
 });

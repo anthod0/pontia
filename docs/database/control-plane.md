@@ -7,6 +7,7 @@
 | `event_id` | TEXT | primary key, NOT NULL |
 | `session_id` | TEXT | NOT NULL |
 | `turn_id` | TEXT | |
+| `report_key` | TEXT | |
 | `source` | TEXT | NOT NULL |
 | `client_type` | TEXT | NOT NULL |
 | `event_type` | TEXT | NOT NULL |
@@ -20,6 +21,7 @@
 
 | Name | Unique | Columns | Condition |
 |---|---|---|---|
+| `idx_events_report_key` | Yes | `session_id`, `event_type`, `report_key` | `report_key IS NOT NULL` |
 | `idx_events_session_id` | No | `session_id`, `created_at`, `event_id` |  |
 | `idx_events_turn_id` | No | `turn_id`, `created_at`, `event_id` | `turn_id IS NOT NULL` |
 

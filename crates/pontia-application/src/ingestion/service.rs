@@ -3,7 +3,6 @@ mod effects;
 mod enrichment;
 mod persistence;
 mod reporting;
-mod reporting_failure;
 mod validation;
 
 use sqlx::SqlitePool;

@@ -1,7 +1,6 @@
 use super::{
     enrichment::{enrich_timeline_boundary, enrich_topology, should_resolve_topology},
     persistence::{insert_event_in_tx, persist_projections_in_tx},
-    reporting_failure,
     validation::{ensure_runtime_fence_in_tx, validate_turn_identity_in_tx},
 };
 use crate::ingestion::projection_rows::{session_from_row, turn_from_row};
@@ -19,7 +18,7 @@ pub(super) enum CommitOutcome {
     Skipped,
     Duplicate {
         result: EventIngestResult,
-        cleanup: Option<DomainEvent>,
+        cleanup: Option<Box<DomainEvent>>,
     },
     Committed {
         result: EventIngestResult,
@@ -59,12 +58,13 @@ impl EventCommitter {
                 event.event_type
             )));
         }
-        if let Some(existing_version) = self
-            .existing_event_state_version(&event.event_id, &event.session_id)
-            .await?
+        if event.report_key.is_none()
+            && let Some(existing_version) = self
+                .existing_event_state_version(&event.event_id, &event.session_id)
+                .await?
         {
             return Ok(CommitOutcome::Duplicate {
-                cleanup: Some(event.clone()),
+                cleanup: Some(Box::new(event.clone())),
                 result: EventIngestResult {
                     accepted: true,
                     duplicate: true,
@@ -130,24 +130,9 @@ impl EventCommitter {
                 .await?;
             }
         }
-        if let Some(event_id) =
-            reporting_failure::existing_reporting_failure_in_tx(&mut tx, &event).await?
-        {
-            let state_version =
-                SqliteEventRepository::session_event_count_in_tx(&mut tx, &event.session_id)
-                    .await?;
+        if let Some(outcome) = duplicate_report_in_tx(&mut tx, &event).await? {
             tx.commit().await?;
-            return Ok(CommitOutcome::Duplicate {
-                cleanup: None,
-                result: EventIngestResult {
-                    accepted: true,
-                    duplicate: true,
-                    event_id,
-                    session_id: event.session_id,
-                    turn_id: None,
-                    state_version,
-                },
-            });
+            return Ok(outcome);
         }
         if sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM events WHERE event_id=?")
             .bind(&event.event_id)
@@ -396,6 +381,45 @@ async fn project_runtime_in_tx(
         ));
     }
     Ok(())
+}
+
+async fn duplicate_report_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event: &DomainEvent,
+) -> Result<Option<CommitOutcome>> {
+    let Some(report_key) = event.report_key.as_deref() else {
+        return Ok(None);
+    };
+    let existing: Option<(String, Option<String>, String)> = sqlx::query_as(
+        "SELECT event_id, turn_id, payload FROM events WHERE session_id=? AND event_type=? AND report_key=?",
+    )
+    .bind(&event.session_id)
+    .bind(event.event_type.to_string())
+    .bind(report_key)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some((event_id, turn_id, payload)) = existing else {
+        return Ok(None);
+    };
+    let existing_payload: serde_json::Value = serde_json::from_str(&payload)?;
+    if existing_payload != event.payload {
+        return Err(Error::StateConflict(format!(
+            "report_key {report_key} was already committed with different fact content"
+        )));
+    }
+    let state_version =
+        SqliteEventRepository::session_event_count_in_tx(tx, &event.session_id).await?;
+    Ok(Some(CommitOutcome::Duplicate {
+        cleanup: None,
+        result: EventIngestResult {
+            accepted: true,
+            duplicate: true,
+            event_id,
+            session_id: event.session_id.clone(),
+            turn_id,
+            state_version,
+        },
+    }))
 }
 
 async fn duplicate_without_effects(

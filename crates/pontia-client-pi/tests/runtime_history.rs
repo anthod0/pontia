@@ -79,7 +79,7 @@ impl Fixture {
             })
             .await
             .unwrap();
-        state.event_ingest_service().report_fact(pontia_application::ReportedFact { session_id: "session".into(), turn_id: None, fact_type: pontia_core::domain::EventType::SessionReady, data: json!({"runtime_id":"runtime", "client_session_key":"native", "client_cwd":root.path(), "client_session_file":root.path().join("does-not-exist.jsonl")}) }).await.unwrap();
+        state.event_ingest_service().report_fact(pontia_application::ReportedFact { session_id: "session".into(), turn_id: None, report_key: None, fact_type: pontia_core::domain::EventType::SessionReady, data: json!({"runtime_id":"runtime", "client_session_key":"native", "client_cwd":root.path(), "client_session_file":root.path().join("does-not-exist.jsonl")}) }).await.unwrap();
         Self {
             binding: AgentBindingResolveRequest {
                 id: binding.id,

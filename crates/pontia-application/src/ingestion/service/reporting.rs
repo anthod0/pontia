@@ -37,6 +37,7 @@ impl EventIngestService {
         self.report_fact(ReportedFact {
             session_id: session.into(),
             turn_id: None,
+            report_key: None,
             fact_type: kind,
             data,
         })
@@ -73,21 +74,7 @@ impl EventIngestService {
             }
             .into());
         }
-        let failure_context = (fact.fact_type == EventType::TurnStarted)
-            .then(|| fact.data.get("runtime_id").and_then(Value::as_str))
-            .flatten()
-            .map(|runtime| (fact.session_id.clone(), runtime.to_owned()));
-        let result = self.process_fact(fact).await;
-        if let Err(error) = &result
-            && error.is_permanent_rejection()
-            && let Some((session_id, runtime_id)) = failure_context
-            && let Err(failure) = self
-                .report_turn_start_failure(&session_id, &runtime_id, "event_rejected")
-                .await
-        {
-            tracing::warn!(%session_id, %failure, "could not record turn start reporting failure");
-        }
-        result
+        self.process_fact(fact).await
     }
 
     async fn process_fact(
@@ -96,6 +83,21 @@ impl EventIngestService {
     ) -> Result<EventIngestResult, EventReportError> {
         if !fact.data.is_object() {
             return Err(invalid_fact("data must be a JSON object"));
+        }
+        if fact
+            .report_key
+            .as_deref()
+            .is_some_and(|report_key| report_key.trim().is_empty())
+        {
+            return Err(invalid_fact("report_key must not be empty"));
+        }
+        if fact.report_key.is_some()
+            && fact.fact_type == EventType::TurnStarted
+            && fact.turn_id.is_some()
+        {
+            return Err(invalid_fact(
+                "reported turn.started cannot supply a canonical turn_id",
+            ));
         }
         let mut reported_event = EventReportNormalizer::new(self.pool.clone())
             .with_clients(self.clients.clone())

@@ -17,26 +17,10 @@ struct EventRequest {
 struct Event {
     session_id: String,
     turn_id: Option<String>,
+    report_key: Option<String>,
     #[serde(rename = "type")]
     fact_type: String,
     data: Value,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct StartFailure {
-    client_session_key: String,
-    session_id: String,
-    runtime_id: String,
-    reason: FailureReason,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum FailureReason {
-    EventRejected,
-    TransportFailed,
-    MissingTurnId,
 }
 
 async fn validate_identity(
@@ -74,9 +58,20 @@ pub(super) async fn report_event(
     event.data["runtime_id"] = json!(request.runtime_id);
     validate_identity(state, identity, &event.session_id, &request.runtime_id).await?;
     let fact_type = EventType::from_str(&event.fact_type)?;
+    if fact_type == EventType::TurnStarted
+        && !event
+            .report_key
+            .as_deref()
+            .is_some_and(|report_key| !report_key.trim().is_empty())
+    {
+        return Err(Error::Domain(
+            "Pi turn.started requires a non-empty report_key".into(),
+        ));
+    }
     let fact = ReportedFact {
         session_id: event.session_id,
         turn_id: event.turn_id,
+        report_key: event.report_key,
         fact_type,
         data: event.data,
     };
@@ -142,32 +137,4 @@ pub(super) async fn report_event(
         "event_id": result.event_id, "session_id": result.session_id,
         "turn_id": result.turn_id, "state_version": result.state_version,
     }))
-}
-
-pub(super) async fn start_failure(
-    state: &AppState,
-    identity: &Attach,
-    params: Value,
-) -> Result<Value> {
-    let request: StartFailure = serde_json::from_value(params)?;
-    validate_identity(state, identity, &request.session_id, &request.runtime_id).await?;
-    state
-        .client_control()
-        .validate_identity(
-            "pi",
-            &request.client_session_key,
-            &request.session_id,
-            &request.runtime_id,
-        )
-        .await?;
-    let reason = match request.reason {
-        FailureReason::EventRejected => "event_rejected",
-        FailureReason::TransportFailed => "transport_failed",
-        FailureReason::MissingTurnId => "missing_turn_id",
-    };
-    state
-        .event_ingest_service()
-        .report_turn_start_failure(&request.session_id, &request.runtime_id, reason)
-        .await?;
-    Ok(json!({"accepted": true}))
 }

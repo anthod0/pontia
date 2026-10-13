@@ -61,7 +61,7 @@ impl Session {
                 "event.report",
                 json!({
                     "runtime_id": runtime,
-                    "event": {"session_id": session, "type": "turn.started", "data": {
+                    "event": {"session_id": session, "type": "turn.started", "report_key": "entry-1", "data": {
                         "runtime_id": runtime, "input_summary": "test"
                     }}
                 }),

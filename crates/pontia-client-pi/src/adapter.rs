@@ -40,9 +40,14 @@ impl ClientData for PiData {
         }
         .and_then(Value::as_str)
         .map(str::to_owned);
+        let preserve_report_content = event.report_key.is_some();
         let topology = event.payload.as_object_mut().and_then(|payload| {
-            payload.remove("timeline_anchor");
-            payload.remove("topology_context")
+            if preserve_report_content {
+                payload.get("topology_context").cloned()
+            } else {
+                payload.remove("timeline_anchor");
+                payload.remove("topology_context")
+            }
         });
         NativeEventEvidence {
             entry_anchor,
