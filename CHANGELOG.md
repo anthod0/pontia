@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-10-13
+
+### Added
+
+- Added context compaction controls, events, and history for Pi and Codex sessions.
+- Added remote device status and profile management.
+- Added hosted privacy and terms pages and expanded the public documentation.
+
+### Changed
+
+- Recorded authentication session activity and request details in Cloud.
+- Simplified Cloud session and device revocation.
+
+### Fixed
+
+- Matched Dashboard tool results to calls by their stable identities.
+
 ## [0.5.2] - 2026-10-12
 
 ### Added
