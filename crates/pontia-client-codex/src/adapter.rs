@@ -131,6 +131,18 @@ impl ClientSession for CodexClient {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move { CodexService::new(events).interrupt(target, turn).await })
     }
+    fn compact<'a>(
+        &'a self,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        operation_id: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            CodexService::new(events)
+                .compact(target, operation_id)
+                .await
+        })
+    }
     fn exit<'a>(
         &'a self,
         events: EventIngestService,
@@ -180,6 +192,26 @@ impl ClientSession for CodexClient {
             } else {
                 runtime.connection().await.is_ok()
             })
+        })
+    }
+    fn manual_compaction_available<'a>(
+        &'a self,
+        pool: SqlitePool,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
+        Box::pin(async move {
+            let root: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?")
+                .bind(session).fetch_optional(&pool).await?.flatten();
+            let Some(root) = root else { return Ok(false) };
+            let Some(runtime) = CodexRuntime::existing(Path::new(&root)).await else {
+                return Ok(false);
+            };
+            Ok(runtime.connection().await.is_ok()
+                && runtime.subscription(session).await == Some(SubscriptionState::Available)
+                && pontia_application::AgentBindingService::new(pool)
+                    .binding_for_session(session)
+                    .await?
+                    .is_some())
         })
     }
     fn open_interface<'a>(

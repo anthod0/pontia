@@ -264,7 +264,9 @@ impl ExternalQueryService {
         }
         if capabilities.manual_compaction {
             capabilities.manual_compaction = if let Some(client) = &entry.session {
-                client.available(self.pool.clone(), session_id).await?
+                client
+                    .manual_compaction_available(self.pool.clone(), session_id)
+                    .await?
             } else if entry.spec.adapter.dispatch == crate::client_contract::DispatchMode::Connected
             {
                 match &self.control {

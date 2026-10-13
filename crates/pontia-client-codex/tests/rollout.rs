@@ -365,3 +365,139 @@ fn rejects_a_source_from_another_bound_thread() {
         }
     ));
 }
+
+fn session_selection(source: &ResolvedAgentBinding, selected: &[&str]) -> SessionTimelineSelection {
+    SessionTimelineSelection {
+        turns: ["a", "b"]
+            .into_iter()
+            .map(|native| {
+                let capture = |kind| {
+                    CodexRollout
+                        .capture_boundary(TimelineBoundaryCaptureRequest {
+                            source: source.clone(),
+                            kind,
+                            native_entry_anchor: Some(native.into()),
+                            allow_missing_native_entry_anchor: false,
+                        })
+                        .unwrap()
+                        .cursor
+                };
+                SessionTimelineTurn {
+                    turn_id: format!("pontia-{native}"),
+                    head_cursor: Some(capture(TimelineBoundaryCaptureKind::Head)),
+                    tail_cursor: Some(capture(TimelineBoundaryCaptureKind::Tail)),
+                }
+            })
+            .collect(),
+        selected_turn_ids: selected
+            .iter()
+            .map(|turn| format!("pontia-{turn}"))
+            .collect(),
+    }
+}
+
+#[test]
+fn session_history_keeps_compactions_in_native_order_and_assigns_gap_pages_without_summaries() {
+    let completed =
+        |turn| json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":turn}});
+    let compacted = || json!({"type":"compacted","payload":{"message":"native private summary","replacement_history":[]}});
+    let confirmation = || json!({"type":"event_msg","payload":{"type":"context_compacted"}});
+    let (_root, source) = fixture(&[
+        context("a"),
+        item(json!({"type":"message","role":"user","content":[{"text":"before"}]})),
+        completed("a"),
+        compacted(),
+        confirmation(),
+        json!({"type":"event_msg","payload":{"type":"task_started","turn_id":"standalone-compact"}}),
+        compacted(),
+        confirmation(),
+        completed("standalone-compact"),
+        context("b"),
+        item(json!({"type":"message","role":"user","content":[{"text":"after"}]})),
+        compacted(),
+        confirmation(),
+        compacted(),
+        confirmation(),
+        item(json!({"type":"message","role":"assistant","content":[{"text":"reply"}]})),
+        completed("b"),
+        compacted(),
+        confirmation(),
+    ]);
+    let all = CodexRollout
+        .read_session_timeline(SessionTimelineReadRequest {
+            source: source.clone(),
+            selection: session_selection(&source, &["a", "b"]),
+        })
+        .unwrap();
+    let kinds: Vec<_> = all
+        .iter()
+        .map(|entry| (entry.item.kind.as_str(), entry.turn_id.as_deref()))
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![
+            ("user", Some("pontia-a")),
+            ("context_compaction", None),
+            ("context_compaction", None),
+            ("user", Some("pontia-b")),
+            ("context_compaction", Some("pontia-b")),
+            ("context_compaction", Some("pontia-b")),
+            ("assistant", Some("pontia-b")),
+            ("context_compaction", None),
+        ]
+    );
+    assert!(
+        all.iter()
+            .filter(|entry| entry.item.kind == "context_compaction")
+            .all(|entry| entry.item.content_preview.is_empty())
+    );
+    let first = CodexRollout
+        .read_session_timeline(SessionTimelineReadRequest {
+            source: source.clone(),
+            selection: session_selection(&source, &["a"]),
+        })
+        .unwrap();
+    assert_eq!(first.len(), 1);
+    let next = CodexRollout
+        .read_session_timeline(SessionTimelineReadRequest {
+            source: source.clone(),
+            selection: session_selection(&source, &["b"]),
+        })
+        .unwrap();
+    assert_eq!(next.len(), 7);
+    assert_eq!(next[0].turn_id, None);
+    assert_eq!(next[1].turn_id, None);
+    assert!(
+        std::fs::read_to_string(&source.path)
+            .unwrap()
+            .contains("before")
+    );
+}
+
+#[test]
+fn session_without_turns_recovers_markers_offline_and_never_treats_failed_starts_as_checkpoints() {
+    let (_root, source) = fixture(&[
+        json!({"type":"compacted","payload":{"message":"unexposed summary"}}),
+        json!({"type":"event_msg","payload":{"type":"context_compacted"}}),
+        json!({"type":"event_msg","payload":{"type":"context_compacted"}}),
+        json!({"type":"event_msg","payload":{"type":"item_started","turn_id":"failed","item":{"type":"ContextCompaction","id":"failed-item"}}}),
+        json!({"type":"event_msg","payload":{"type":"turn_aborted","turn_id":"failed"}}),
+    ]);
+    let items = CodexRollout
+        .read_session_timeline(SessionTimelineReadRequest {
+            source,
+            selection: SessionTimelineSelection {
+                turns: vec![],
+                selected_turn_ids: vec![],
+            },
+        })
+        .unwrap();
+    assert_eq!(items.len(), 2);
+    assert!(
+        items
+            .iter()
+            .all(|entry| entry.item.kind == "context_compaction"
+                && entry.turn_id.is_none()
+                && entry.item.content_preview.is_empty())
+    );
+}

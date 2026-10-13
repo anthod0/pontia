@@ -36,7 +36,12 @@ struct Fixture {
     shutdown: watch::Sender<bool>,
 }
 
-fn turn(items: Value) -> Value {
+fn turn(mut items: Value) -> Value {
+    // Establish a genuine user execution, distinct from an empty standalone operation.
+    items.as_array_mut().unwrap().insert(
+        0,
+        json!({"type":"userMessage","id":"user-item","content":[{"type":"text","text":"hello"}]}),
+    );
     json!({"id":"native-turn", "status":"inProgress", "itemsView":"full", "items":items})
 }
 

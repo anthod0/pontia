@@ -72,6 +72,13 @@ pub trait ClientSession: Send + Sync {
         })
     }
     fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool>;
+    fn manual_compaction_available<'a>(
+        &'a self,
+        pool: SqlitePool,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
+        self.available(pool, session)
+    }
     fn open_interface<'a>(
         &'a self,
         events: EventIngestService,

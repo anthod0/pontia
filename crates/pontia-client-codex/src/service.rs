@@ -1,5 +1,8 @@
 mod background;
 pub(crate) use background::CodexBackgroundService;
+mod compaction;
+#[cfg(test)]
+mod compaction_tests;
 mod events;
 mod live_output;
 #[cfg(test)]

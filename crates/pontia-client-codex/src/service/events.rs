@@ -102,7 +102,22 @@ impl CodexService {
 
     pub(super) async fn turn_fact(&self, session: &str, turn: &Value, origin: &str) -> Result<()> {
         let native_id = string(turn, "id")?;
+        if self.reconcile_compaction_turn(session, turn).await? {
+            return Ok(());
+        }
         let items = turn["items"].as_array().cloned().unwrap_or_default();
+        if items.is_empty() {
+            let bound: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM native_turn_bindings WHERE session_id=? AND client_turn_id=?",
+            )
+            .bind(session)
+            .bind(native_id)
+            .fetch_one(&self.pool)
+            .await?;
+            if bound == 0 {
+                return Ok(());
+            }
+        }
         let input = items
             .iter()
             .find(|item| item["type"] == "userMessage")

@@ -172,6 +172,113 @@ impl TurnTimelineReader for CodexRollout {
     fn client_type(&self) -> &'static str {
         "codex"
     }
+    fn read_session_timeline(
+        &self,
+        request: pontia_application::client_contract::raw_transcripts::SessionTimelineReadRequest,
+    ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
+        use pontia_application::client_contract::raw_transcripts::TurnTimelineRange;
+        let selected: std::collections::HashSet<_> =
+            request.selection.selected_turn_ids.iter().collect();
+        let ranges = request
+            .selection
+            .turns
+            .iter()
+            .filter(|turn| selected.contains(&turn.turn_id))
+            .filter_map(|turn| {
+                turn.head_cursor.as_ref().map(|head| TurnTimelineRange {
+                    turn_id: turn.turn_id.clone(),
+                    is_first_session_turn: false,
+                    head_cursor: head.clone(),
+                    tail_cursor: turn.tail_cursor.clone(),
+                })
+            })
+            .collect();
+        let mut output = self.read_turn_ranges(TurnTimelineReadRequest {
+            source: request.source.clone(),
+            ranges,
+        })?;
+        let thread = identity(&request.source.path)?;
+        let mut starts = Vec::new();
+        let mut native_turns = HashMap::new();
+        for turn in &request.selection.turns {
+            let Some(head) = &turn.head_cursor else {
+                continue;
+            };
+            let cursor: Cursor = match serde_json::from_str(head) {
+                Ok(cursor) => cursor,
+                Err(_) if !selected.contains(&turn.turn_id) => continue,
+                Err(error) => return Err(Error::from(error).into()),
+            };
+            if cursor.version != 1
+                || cursor.binding != request.source.id
+                || cursor.thread.as_ref().is_some_and(|id| id != &thread)
+            {
+                continue; // Selected ranges were validated by read_turn_ranges above.
+            }
+            starts.push((cursor.offset, turn.turn_id.clone()));
+            native_turns.insert(cursor.native_turn, turn.turn_id.clone());
+        }
+        starts.sort_by_key(|(offset, _)| *offset);
+        let mut reader = BufReader::new(File::open(&request.source.path).map_err(Error::from)?);
+        let mut line = String::new();
+        let mut offset = 0;
+        let mut current = None;
+        let mut awaiting_confirmation = false;
+        while reader.read_line(&mut line).map_err(Error::from)? > 0 {
+            if !line.ends_with('\n') {
+                break;
+            }
+            let record: Value = serde_json::from_str(&line).map_err(Error::from)?;
+            let item_offset = offset;
+            offset += line.len() as u64;
+            line.clear();
+            let event = record.pointer("/payload/type").and_then(Value::as_str);
+            if record["type"] == "turn_context" || event == Some("task_started") {
+                current = native_turn(&record);
+            }
+            let compacted = record["type"] == "compacted";
+            let confirmed = record["type"] == "event_msg" && event == Some("context_compacted");
+            if compacted || confirmed {
+                if confirmed && awaiting_confirmation {
+                    awaiting_confirmation = false;
+                } else {
+                    awaiting_confirmation = compacted;
+                    let owner = native_turn(&record)
+                        .or_else(|| current.clone())
+                        .and_then(|native| native_turns.get(&native).cloned());
+                    let page = owner.as_ref().or_else(|| {
+                        starts
+                            .iter()
+                            .find(|(start, _)| *start > item_offset)
+                            .or_else(|| starts.last())
+                            .map(|(_, turn)| turn)
+                    });
+                    if request.selection.turns.is_empty()
+                        || page.is_some_and(|turn| selected.contains(turn))
+                    {
+                        output.push(TurnTimelineItem {
+                            turn_id: owner,
+                            item: compaction_checkpoint(&thread, item_offset, &record),
+                        });
+                    }
+                }
+            }
+            if matches!(event, Some("task_complete" | "turn_aborted")) {
+                current = None;
+            }
+        }
+        output.sort_by_key(|entry| {
+            entry
+                .item
+                .item_id
+                .rsplit(':')
+                .next()
+                .and_then(|offset| offset.parse::<u64>().ok())
+                .unwrap_or_default()
+        });
+        Ok(output)
+    }
+
     fn read_turn_ranges(
         &self,
         request: TurnTimelineReadRequest,
@@ -241,6 +348,12 @@ impl TurnTimelineReader for CodexRollout {
                     continue;
                 }
                 found_anchor = true;
+                if record["type"] == "compacted"
+                    || record.pointer("/payload/type").and_then(Value::as_str)
+                        == Some("context_compacted")
+                {
+                    continue; // Session reader owns checkpoint deduplication and gap ordering.
+                }
                 if record["type"] != "response_item" {
                     if let Some((kind, payload)) = native_detail(&record) {
                         output.push(TurnTimelineItem {
@@ -384,10 +497,11 @@ fn native_detail(record: &Value) -> Option<(&str, &Value)> {
             | "agent_message"
             | "agent_reasoning"
             | "agent_reasoning_raw_content" => None,
+            "item_started" if payload["item"]["type"] == "ContextCompaction" => None,
             "item_completed" => {
                 let item = &payload["item"];
                 match item["type"].as_str()? {
-                    "UserMessage" | "AgentMessage" | "Reasoning" => None,
+                    "UserMessage" | "AgentMessage" | "Reasoning" | "ContextCompaction" => None,
                     kind => Some((kind, item)),
                 }
             }
@@ -427,5 +541,19 @@ fn pending(message: &str) -> Error {
     Error::Conflict {
         code: "timeline_pending",
         message: message.into(),
+    }
+}
+
+fn compaction_checkpoint(thread: &str, offset: u64, record: &Value) -> TimelineItem {
+    TimelineItem {
+        item_id: format!("codex:{thread}:{offset}"),
+        kind: "context_compaction".into(),
+        raw_kind: Some("contextCompaction".into()),
+        role: "system".into(),
+        title: Some("Context compaction".into()),
+        status: None,
+        occurred_at: record["timestamp"].as_str().map(str::to_owned),
+        content_preview: String::new(),
+        managed_tool_use: None,
     }
 }
