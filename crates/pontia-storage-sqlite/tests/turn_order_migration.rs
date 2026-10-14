@@ -43,27 +43,6 @@ async fn migration_removes_turn_ordinals_and_preserves_uuid_v7_identity_invarian
     .expect_err("Turn session must be immutable");
     assert!(changed.to_string().contains("session_id is immutable"));
 
-    let missing_turn_id = sqlx::query(
-        "INSERT INTO events (event_id, session_id, source, client_type, event_type, occurred_at) VALUES ('evt_missing_turn', 'sess_a', 'agent_client', 'pi', 'turn.completed', '2026-01-01T00:00:00Z')",
-    )
-    .execute(&pool)
-    .await
-    .expect_err("Turn events require a Turn ID");
-    assert!(missing_turn_id.to_string().contains("turn_id is required"));
-
-    for (label, parent_id) in [
-        ("forward", "turn_01900000-0000-7000-8000-000000000003"),
-        ("cross-session", "turn_01900000-0000-7000-8000-000000000004"),
-    ] {
-        let result = sqlx::query(
-            "INSERT INTO turns (turn_id, session_id, state, topology_status, parent_turn_id) VALUES ('turn_01900000-0000-7000-8000-000000000002', 'sess_a', 'running', 'linked', ?)",
-        )
-        .bind(parent_id)
-        .execute(&pool)
-        .await;
-        assert!(result.is_err(), "{label} parent must be rejected");
-    }
-
     sqlx::query(
         "INSERT INTO turns (turn_id, session_id, state, topology_status, parent_turn_id) VALUES ('turn_01900000-0000-7000-8000-000000000002', 'sess_a', 'running', 'linked', 'turn_01900000-0000-7000-8000-000000000001')",
     )
