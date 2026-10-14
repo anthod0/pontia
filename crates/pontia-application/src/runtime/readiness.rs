@@ -39,7 +39,7 @@ impl RuntimeReadinessService {
         client_type: &str,
         runtime_id: &str,
     ) -> Result<bool> {
-        Ok(sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id = ? AND r.session_id = ? AND r.role = 'tui' AND r.state = 'running' AND s.client_type = ?)")
+        Ok(sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id = ? AND r.session_id = ? AND r.role <> 'interface' AND r.state = 'running' AND s.client_type = ?)")
             .bind(runtime_id).bind(session_id).bind(client_type).fetch_one(&self.pool).await?)
     }
 

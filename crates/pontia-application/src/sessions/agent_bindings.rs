@@ -204,7 +204,22 @@ pub(crate) async fn register_agent_binding_for_ready_event_in_tx(
             ))
         })?;
 
-    let metadata = diagnostic_metadata_from_ready_payload(&event.payload);
+    let mut metadata: Value =
+        sqlx::query_scalar::<_, String>("SELECT metadata FROM agent_bindings WHERE session_id = ?")
+            .bind(&event.session_id)
+            .fetch_optional(&mut **tx)
+            .await?
+            .map(|value| serde_json::from_str(&value))
+            .transpose()?
+            .unwrap_or_else(|| serde_json::json!({}));
+    if let Some(existing) = metadata.as_object_mut() {
+        existing.extend(
+            diagnostic_metadata_from_ready_payload(&event.payload)
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
+    }
     let binding = upsert_agent_binding_in_tx(
         tx,
         UpsertAgentBindingRequest {

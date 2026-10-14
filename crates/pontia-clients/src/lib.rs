@@ -33,5 +33,8 @@ pub fn registration(config: &AppConfig) -> ClientRegistry {
         config.runtime.tui_command_for_client_config_key("pi"),
     ));
     clients.register(pontia_client_codex::registration());
+    if !config.acp.agents.is_empty() {
+        clients.register(pontia_client_acp::registration(config.acp.clone()));
+    }
     clients
 }

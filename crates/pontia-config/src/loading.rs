@@ -93,6 +93,11 @@ impl AppConfig {
             .unwrap_or_default();
         apply_runtime_overrides(vars, &mut runtime, defaults);
 
+        let acp = file
+            .and_then(|config| config.acp.clone())
+            .unwrap_or_default();
+        acp.validate()?;
+
         Ok(Self {
             pontia_home,
             bind_addr,
@@ -104,6 +109,7 @@ impl AppConfig {
             workspace_browser,
             file_picker,
             runtime,
+            acp,
             dashboard,
             remote: file.and_then(|config| config.remote.clone()),
         })

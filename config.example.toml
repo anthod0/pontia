@@ -17,3 +17,14 @@ tui_command = "pi"
 roots = [
   { root_id = "projects", label = "Projects", path = "/home/me/projects" }
 ]
+
+# Experimental ACP control loop: local stdio peers only. Permission interactions,
+# history, recovery and Dashboard Agent selection are not implemented yet.
+# Create through the Session API with client_type = "acp" and
+# metadata.acp_agent_id = "company-agent". The peer must declare loadSession and close.
+# [acp.agents.company-agent]
+# name = "Company Agent"
+# command = "/opt/company-agent/bin/agent"
+# args = ["--acp"]
+# [acp.agents.company-agent.env]
+# LOG_LEVEL = "info"

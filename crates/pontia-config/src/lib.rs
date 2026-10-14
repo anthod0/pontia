@@ -2,6 +2,8 @@ use std::{collections::HashMap, net::SocketAddr, path::PathBuf};
 
 use serde::Deserialize;
 
+mod acp;
+pub use acp::{AcpAgentConfig, AcpConfig};
 mod environment;
 mod file_config;
 mod loading;
@@ -30,6 +32,7 @@ pub struct AppConfig {
     pub workspace_browser: WorkspaceBrowserConfig,
     pub file_picker: FilePickerConfig,
     pub runtime: RuntimeConfig,
+    pub acp: AcpConfig,
     pub dashboard: DashboardConfig,
     pub remote: Option<RemoteConfig>,
 }

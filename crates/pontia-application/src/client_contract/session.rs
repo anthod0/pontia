@@ -29,6 +29,7 @@ pub trait ClientSession: Send + Sync {
         events: EventIngestService,
         target: &'a ControlTarget,
         input: &'a str,
+        turn: Option<&'a str>,
         message: Option<&'a str>,
         intent: &'a InputIntent,
     ) -> ClientOperation<'a, InputReceipt>;
@@ -70,6 +71,13 @@ pub trait ClientSession: Send + Sync {
                 "Manual compaction is unsupported".into(),
             ))
         })
+    }
+    fn capabilities<'a>(
+        &'a self,
+        _session: &'a str,
+        implementation: &'a crate::client_contract::AgentClientCapabilities,
+    ) -> ClientOperation<'a, crate::client_contract::AgentClientCapabilities> {
+        Box::pin(async move { Ok(implementation.clone()) })
     }
     fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool>;
     fn manual_compaction_available<'a>(

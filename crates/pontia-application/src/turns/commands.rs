@@ -122,7 +122,9 @@ impl TurnCommandService {
             .prepare_initial(session_id, &input, &metadata)
             .await?
             .map(|turn| turn.turn_id);
-        let receipt = adapter.input(&target, input, &metadata, &intent).await;
+        let receipt = adapter
+            .input(&target, input, &metadata, &intent, turn_id.as_deref())
+            .await;
         if let Some(turn_id) = turn_id {
             if let ControlResult::Rejected(error) = &receipt {
                 self.event_ingest
@@ -225,7 +227,7 @@ impl TurnCommandService {
         }
         self.scheduler.begin_initial(session);
         let result = adapter
-            .input(target, input.into(), metadata, &InputIntent::Start)
+            .input(target, input.into(), metadata, &InputIntent::Start, turn_id)
             .await;
         if matches!(
             result,

@@ -146,10 +146,11 @@ impl SqliteSessionRuntimeRepository {
         Ok(())
     }
 
-    /// A control TUI must be unambiguous, never an arbitrary row choice.
+    /// Interface-only runtimes do not own control. A control runtime must be
+    /// unambiguous, never an arbitrary choice among managed runtimes.
     pub async fn runtime_id(&self, session_id: &str) -> Result<Option<String>> {
         let ids: Vec<String> = sqlx::query_scalar(
-            "SELECT runtime_id FROM session_runtimes WHERE session_id = ? AND role = 'tui'",
+            "SELECT runtime_id FROM session_runtimes WHERE session_id = ? AND role <> 'interface'",
         )
         .bind(session_id)
         .fetch_all(&self.pool)
@@ -162,7 +163,7 @@ impl SqliteSessionRuntimeRepository {
         session_id: &str,
     ) -> Result<Option<String>> {
         let ids: Vec<String> = sqlx::query_scalar(
-            "SELECT runtime_id FROM session_runtimes WHERE session_id = ? AND role = 'tui'",
+            "SELECT runtime_id FROM session_runtimes WHERE session_id = ? AND role <> 'interface'",
         )
         .bind(session_id)
         .fetch_all(&mut **tx)
@@ -216,7 +217,7 @@ fn single_runtime(ids: Vec<String>) -> Result<Option<String>> {
         0 => Ok(None),
         1 => Ok(ids.into_iter().next()),
         _ => Err(Error::StateConflict(
-            "Session has multiple TUI runtimes; control target is ambiguous".into(),
+            "Session has multiple control runtimes; control target is ambiguous".into(),
         )),
     }
 }

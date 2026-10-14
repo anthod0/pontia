@@ -67,7 +67,7 @@ impl SessionCommandService {
                 self.event_ingest
                     .report_client_fact(
                         session_id,
-                        None,
+                        target.runtime_id.as_deref(),
                         EventType::SessionExited,
                         json!({"reason":reason}),
                     )

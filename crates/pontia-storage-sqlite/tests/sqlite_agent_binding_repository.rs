@@ -23,6 +23,45 @@ async fn insert_session(pool: &sqlx::SqlitePool, session_id: &str) {
 }
 
 #[tokio::test]
+async fn independent_native_bindings_can_be_created_concurrently() {
+    let (pool, _root) = test_pool().await;
+    for index in 0..8 {
+        insert_session(&pool, &format!("session-{index}")).await;
+    }
+    let ready = std::sync::Arc::new(tokio::sync::Barrier::new(9));
+    let mut tasks = tokio::task::JoinSet::new();
+    for index in 0..8 {
+        let repository = SqliteAgentBindingRepository::new(pool.clone());
+        let ready = ready.clone();
+        tasks.spawn(async move {
+            ready.wait().await;
+            repository
+                .upsert_binding(AgentBindingUpsertRecord {
+                    id: format!("binding-{index}"),
+                    session_id: format!("session-{index}"),
+                    client_type: "pi".into(),
+                    launch_cwd: "/workspace".into(),
+                    client_session_key: format!("native-{index}"),
+                    client_session_file: None,
+                    metadata: "{}".into(),
+                })
+                .await
+        });
+    }
+    ready.wait().await;
+    while let Some(binding) = tasks.join_next().await {
+        binding.unwrap().unwrap();
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM agent_bindings")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        8
+    );
+}
+
+#[tokio::test]
 async fn upserts_agent_binding_and_preserves_discovered_flag() {
     let (pool, _pontia_home) = test_pool().await;
     insert_session(&pool, "sess_agent_binding").await;

@@ -31,6 +31,7 @@ impl ClientAdapter {
         input: String,
         metadata: &Value,
         intent: &InputIntent,
+        turn: Option<&str>,
     ) -> ControlResult<InputReceipt> {
         if self.spec.adapter.dispatch == DispatchMode::None {
             return ControlResult::Unsupported("client has no input channel".into());
@@ -38,7 +39,9 @@ impl ClientAdapter {
         if matches!(intent, InputIntent::Steer { .. }) && !self.supports_steer() {
             return ControlResult::Unsupported("This client does not support steer".into());
         }
-        let result = self.input_inner(target, input, metadata, intent).await;
+        let result = self
+            .input_inner(target, input, metadata, intent, turn)
+            .await;
         ControlResult::from_result(result)
     }
 
@@ -48,6 +51,7 @@ impl ClientAdapter {
         input: String,
         metadata: &Value,
         intent: &InputIntent,
+        turn: Option<&str>,
     ) -> Result<InputReceipt> {
         target.validate(&self.pool.clone()).await?;
         if let Some(client) = self.session_client() {
@@ -56,6 +60,7 @@ impl ClientAdapter {
                     self.events.clone(),
                     target,
                     &input,
+                    turn,
                     metadata["inbox_message_id"].as_str(),
                     intent,
                 )

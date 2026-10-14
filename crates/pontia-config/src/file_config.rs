@@ -14,6 +14,7 @@ pub(super) struct FileConfig {
     pub(super) run_migrations: Option<bool>,
     pub(super) default_client_type: Option<String>,
     pub(super) runtime: Option<RuntimeConfig>,
+    pub(super) acp: Option<super::AcpConfig>,
     pub(super) workspace_browser: Option<WorkspaceBrowserConfig>,
     pub(super) file_picker: Option<FilePickerConfig>,
     pub(super) dashboard: Option<DashboardConfig>,

@@ -149,6 +149,7 @@ impl ClientSession for CodexClient {
         events: EventIngestService,
         target: &'a ControlTarget,
         input: &'a str,
+        _turn: Option<&'a str>,
         message: Option<&'a str>,
         intent: &'a InputIntent,
     ) -> ClientOperation<'a, InputReceipt> {

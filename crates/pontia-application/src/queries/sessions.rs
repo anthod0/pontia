@@ -249,6 +249,10 @@ impl ExternalQueryService {
             .as_ref()
             .map(|client| client.capabilities())
             .unwrap_or_else(|| entry.spec.capabilities.clone());
+        if let Some(client) = &entry.session {
+            capabilities = client.capabilities(session_id, &capabilities).await?;
+            capabilities = capabilities.intersection(&entry.spec.capabilities);
+        }
         if runtimes.is_empty()
             && entry
                 .spec

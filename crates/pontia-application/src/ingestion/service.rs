@@ -86,6 +86,10 @@ impl EventIngestService {
         self
     }
 
+    pub fn live_output(&self) -> Option<crate::LiveOutputService> {
+        self.effects.live_output.clone()
+    }
+
     #[cfg(any(test, feature = "generic-test-client"))]
     pub fn with_live_output(mut self, live_output: LiveOutputService) -> Self {
         self.effects.live_output = Some(live_output);

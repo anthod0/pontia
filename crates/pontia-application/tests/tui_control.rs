@@ -32,6 +32,7 @@ impl ClientSession for ManagedTuiClient {
         _: &'a ControlTarget,
         _: &'a str,
         _: Option<&'a str>,
+        _: Option<&'a str>,
         _: &'a InputIntent,
     ) -> ClientOperation<'a, InputReceipt> {
         panic!("unexpected input")

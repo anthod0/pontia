@@ -28,7 +28,10 @@ impl SqliteAgentBindingRepository {
         &self,
         binding: AgentBindingUpsertRecord,
     ) -> Result<AgentBindingRow> {
-        let mut tx = self.pool.begin().await?;
+        // Identity checks and insertion are one write operation. Acquire the
+        // writer before reading so concurrent writers cannot invalidate a WAL
+        // read snapshot and turn its later write upgrade into SQLITE_BUSY.
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let row = Self::upsert_binding_in_tx(&mut tx, binding).await?;
         tx.commit().await?;
         Ok(row)

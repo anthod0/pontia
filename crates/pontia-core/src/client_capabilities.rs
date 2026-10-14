@@ -37,6 +37,33 @@ pub struct AgentClientCapabilities {
 }
 
 impl AgentClientCapabilities {
+    pub fn intersection(&self, upper: &Self) -> Self {
+        Self {
+            accept_task: self.accept_task && upper.accept_task,
+            report_turn_started: self.report_turn_started && upper.report_turn_started,
+            report_turn_finished: self.report_turn_finished && upper.report_turn_finished,
+            interrupt: self.interrupt && upper.interrupt,
+            stream_output: self.stream_output && upper.stream_output,
+            heartbeat: self.heartbeat && upper.heartbeat,
+            timeline: self.timeline && upper.timeline,
+            topology: self.topology && upper.topology,
+            branch_control: self.branch_control && upper.branch_control,
+            list_models: self.list_models && upper.list_models,
+            set_model: self.set_model && upper.set_model,
+            manual_compaction: self.manual_compaction && upper.manual_compaction,
+            compaction_events: self.compaction_events && upper.compaction_events,
+            compaction_history: self.compaction_history && upper.compaction_history,
+            context_usage: match (self.context_usage, upper.context_usage) {
+                (ContextUsageCapability::Unsupported, _)
+                | (_, ContextUsageCapability::Unsupported) => ContextUsageCapability::Unsupported,
+                (ContextUsageCapability::Estimated, _) | (_, ContextUsageCapability::Estimated) => {
+                    ContextUsageCapability::Estimated
+                }
+                _ => ContextUsageCapability::Exact,
+            },
+        }
+    }
+
     pub fn generic_default() -> Self {
         Self {
             accept_task: true,

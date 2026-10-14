@@ -20,13 +20,22 @@ use std::{
 
 struct Client {
     inputs: AtomicUsize,
+    capabilities: Option<crate::client_contract::AgentClientCapabilities>,
 }
 impl ClientSession for Client {
+    fn capabilities<'a>(
+        &'a self,
+        _: &'a str,
+        implementation: &'a crate::client_contract::AgentClientCapabilities,
+    ) -> ClientOperation<'a, crate::client_contract::AgentClientCapabilities> {
+        Box::pin(async move { Ok(self.capabilities.as_ref().unwrap_or(implementation).clone()) })
+    }
     fn input<'a>(
         &'a self,
         _: EventIngestService,
         _: &'a ControlTarget,
         _: &'a str,
+        _: Option<&'a str>,
         _: Option<&'a str>,
         _: &'a InputIntent,
     ) -> ClientOperation<'a, InputReceipt> {
@@ -100,12 +109,60 @@ impl ClientSession for Client {
 }
 
 #[tokio::test]
+async fn session_resolver_can_narrow_but_not_expand_static_implementation_capabilities()
+-> Result<()> {
+    let root = tempfile::tempdir()?;
+    let db = pontia_storage_sqlite::connect_sqlite("sqlite::memory:").await?;
+    pontia_storage_sqlite::run_migrations(&db).await?;
+    let mut registration = crate::client_contract::test_registration();
+    registration.in_process = None;
+    registration.session = Some(Arc::new(Client {
+        inputs: AtomicUsize::new(0),
+        capabilities: Some(crate::client_contract::AgentClientCapabilities {
+            accept_task: false,
+            report_turn_started: true,
+            report_turn_finished: true,
+            interrupt: true,
+            timeline: true,
+            context_usage: crate::client_contract::ContextUsageCapability::Exact,
+            ..Default::default()
+        }),
+    }));
+    let mut clients = crate::clients::ClientRegistry::default();
+    clients.register(registration);
+    let app = AppState::builder(db.clone(), root.path().into())
+        .clients(clients)
+        .build();
+    sqlx::query(
+        "INSERT INTO sessions(session_id,client_type,state) VALUES ('session','generic','idle')",
+    )
+    .execute(&db)
+    .await?;
+    sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('session','runtime','generic','running','2026-01-01T00:00:00Z')").execute(&db).await?;
+    let capabilities = app
+        .queries()
+        .get_session_control("session")
+        .await?
+        .unwrap()
+        .capabilities;
+    assert!(!capabilities.accept_task);
+    assert!(!capabilities.interrupt);
+    assert!(!capabilities.timeline);
+    assert_eq!(
+        capabilities.context_usage,
+        crate::client_contract::ContextUsageCapability::Unsupported
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn input_uses_client_capabilities_without_fetching_display_details() -> Result<()> {
     let root = tempfile::tempdir()?;
     let db = pontia_storage_sqlite::connect_sqlite("sqlite::memory:").await?;
     pontia_storage_sqlite::run_migrations(&db).await?;
     let client = Arc::new(Client {
         inputs: AtomicUsize::new(0),
+        capabilities: None,
     });
     let mut registration = crate::client_contract::test_registration();
     registration.session = Some(client.clone());
