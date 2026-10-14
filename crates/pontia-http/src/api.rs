@@ -6,6 +6,8 @@ mod events;
 mod git_status;
 mod idempotency;
 mod inbox;
+mod interactions;
+pub use interactions::{get_interaction, list_interactions, respond_interaction};
 mod live_output;
 mod response;
 mod session_guard;

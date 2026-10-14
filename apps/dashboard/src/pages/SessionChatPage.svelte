@@ -69,6 +69,7 @@
   import { subscribeDashboardEvents } from '../services/eventStream'
   import { openLiveOutputStream } from '../services/liveOutputStream'
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
+  import SessionInteractions from '../components/chat/SessionInteractions.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
   import { isTerminalSession } from '$lib/sessionState'
@@ -990,6 +991,7 @@
             {/if}
           </div>
         </div>
+        <SessionInteractions sessionId={selectedSessionId} />
         {#if branchActionError}
           <Alert.Root variant="destructive" role="alert" class="mx-4 mb-4">
             <WarningCircleIcon class="size-4" />

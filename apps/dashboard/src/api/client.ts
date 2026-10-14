@@ -8,6 +8,7 @@ import {
 } from "$dashboard-mode/apiAccess";
 import { ApiError } from "./errors";
 import type {
+  Interaction,
   AgentProfileView,
   ApiEnvelope,
   CreateSessionInput,
@@ -47,6 +48,7 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   mutating?: boolean;
   retryNetworkErrors?: boolean;
   directResponse?: boolean;
+  idempotency?: boolean;
 };
 export type ReadRequestOptions = Pick<RequestOptions, "signal">;
 
@@ -112,6 +114,47 @@ async function fetchWithTransientNetworkRetry(
   }
 }
 
+export async function listPendingInteractions(session: string): Promise<Interaction[]> {
+  const interactions: Interaction[] = [];
+  let cursor: string | null = null;
+  do {
+    const query = new URLSearchParams({ state: "pending" });
+    if (cursor) query.set("cursor", cursor);
+    const page = await request<{ interactions: Interaction[]; next_cursor: string | null }>(
+      `/sessions/${encodeURIComponent(session)}/interactions?${query}`,
+    );
+    interactions.push(...page.interactions);
+    cursor = page.next_cursor;
+  } while (cursor);
+  return interactions;
+}
+
+export async function getInteraction(session: string, id: string): Promise<Interaction> {
+  return (
+    await request<{ interaction: Interaction }>(
+      `/sessions/${encodeURIComponent(session)}/interactions/${encodeURIComponent(id)}`,
+    )
+  ).interaction;
+}
+
+export async function respondInteraction(
+  session: string,
+  id: string,
+  option_key: string,
+): Promise<Interaction> {
+  return (
+    await request<{ interaction: Interaction }>(
+      `/sessions/${encodeURIComponent(session)}/interactions/${encodeURIComponent(id)}/response`,
+      {
+        method: "PUT",
+        body: { option_key },
+        idempotency: false,
+        retryNetworkErrors: false,
+      },
+    )
+  ).interaction;
+}
+
 export async function validateExternalApiToken(candidateToken: string): Promise<void> {
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${candidateToken}`);
@@ -137,11 +180,19 @@ export async function validateExternalApiToken(candidateToken: string): Promise<
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, mutating, retryNetworkErrors, directResponse, ...fetchOptions } = options;
+  const {
+    body,
+    mutating,
+    retryNetworkErrors,
+    directResponse,
+    idempotency = true,
+    ...fetchOptions
+  } = options;
   const headers = new Headers(fetchOptions.headers);
   applyApiAuthentication(headers);
   if (body !== undefined) headers.set("Content-Type", "application/json");
   if (
+    idempotency &&
     (mutating || (fetchOptions.method && fetchOptions.method !== "GET")) &&
     !headers.has("Idempotency-Key")
   )

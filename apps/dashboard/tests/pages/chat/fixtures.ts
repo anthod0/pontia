@@ -137,6 +137,7 @@ const mocks = vi.hoisted(() => {
 vi.mock("../../../src/api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/api/client")>()),
   listWorkspaces: mocks.listWorkspaces,
+  listPendingInteractions: vi.fn(async () => []),
   listWorkspaceRoots: vi.fn(async () => mocks.workspaceRoots.get()),
   listWorkspaceRootEntries: vi.fn(async (rootId: string, path = "") =>
     mocks.browseWorkspaceRoot(rootId, path),

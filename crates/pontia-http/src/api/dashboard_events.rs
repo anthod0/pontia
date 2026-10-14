@@ -169,12 +169,34 @@ fn dashboard_cursor_id(cursor: DashboardStreamCursor) -> String {
     )
 }
 
+fn interaction_stream_event(
+    change: Result<
+        pontia_application::interactions::InteractionChanged,
+        tokio::sync::broadcast::error::RecvError,
+    >,
+) -> Option<Event> {
+    let data = match change {
+        Ok(change) => {
+            serde_json::json!({"kind":"interaction_changed", "session_id":change.session_id, "interaction_id":change.interaction_id})
+        }
+        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+            serde_json::json!({"kind":"interactions_resync"})
+        }
+        Err(_) => return None,
+    };
+    Event::default()
+        .event("dashboard_event")
+        .json_data(data)
+        .ok()
+}
+
 fn dashboard_sse_stream(
     state: AppState,
     after_cursor: DashboardStreamCursor,
     stream_once: bool,
 ) -> Sse<impl Stream<Item = std::result::Result<Event, Infallible>>> {
     let (sender, receiver) = mpsc::channel(32);
+    let mut interactions = state.interactions().subscribe();
 
     tokio::spawn(async move {
         let mut shutdown = state.shutdown().subscribe();
@@ -186,6 +208,25 @@ fn dashboard_sse_stream(
                 break;
             }
 
+            // A bounded transient batch between durable batches prevents either source
+            // from starving the other. Transient frames never change the durable cursor.
+            for _ in 0..32 {
+                let change = match interactions.try_recv() {
+                    Ok(change) => Ok(change),
+                    Err(tokio::sync::broadcast::error::TryRecvError::Lagged(count)) => {
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(count))
+                    }
+                    Err(tokio::sync::broadcast::error::TryRecvError::Empty) => break,
+                    Err(tokio::sync::broadcast::error::TryRecvError::Closed) => return,
+                };
+                let Some(event) = interaction_stream_event(change) else {
+                    return;
+                };
+                tokio::select! {
+                    result = sender.send(Ok(event)) => { if result.is_err() { return; } }
+                    _ = shutdown.changed() => return,
+                }
+            }
             let Ok(items) = list_dashboard_stream_items_after(&service, cursor, 100).await else {
                 break;
             };
@@ -195,6 +236,15 @@ fn dashboard_sse_stream(
                     break;
                 }
                 tokio::select! {
+                    change = interactions.recv() => {
+                        if let Some(event) = interaction_stream_event(change) {
+                            tokio::select! {
+                                result = sender.send(Ok(event)) => { if result.is_err() { break; } }
+                                _ = shutdown.changed() => break,
+                            }
+                        }
+                    }
+                    _ = sender.closed() => break,
                     _ = tokio::time::sleep(Duration::from_millis(200)) => {}
                     _ = shutdown.changed() => break,
                 }

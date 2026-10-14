@@ -16,6 +16,7 @@ mod git_status;
 mod idempotency;
 mod inbox;
 pub mod ingestion;
+pub mod interactions;
 pub mod live_output;
 pub mod queries;
 mod raw_transcripts;

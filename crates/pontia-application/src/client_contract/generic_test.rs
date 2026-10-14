@@ -130,6 +130,7 @@ impl crate::clients::InProcessClient for GenericTestClient {
 }
 pub fn registration() -> crate::clients::ClientRegistration {
     crate::clients::ClientRegistration {
+        interactions: None,
         service: None,
         profile: None,
         events: None,

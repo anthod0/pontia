@@ -4,6 +4,9 @@ mod compaction;
 #[cfg(test)]
 mod compaction_tests;
 mod events;
+#[cfg(test)]
+mod interaction_tests;
+pub(crate) mod interactions;
 mod live_output;
 #[cfg(test)]
 mod live_output_tests;

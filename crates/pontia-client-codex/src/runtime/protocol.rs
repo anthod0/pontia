@@ -38,6 +38,24 @@ impl std::ops::Deref for Notification {
 }
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<RpcResponse>>>>>;
+type ServerRequests = Arc<Mutex<HashMap<String, Notification>>>;
+
+pub(crate) fn invalidates_request(
+    event: &Value,
+    id: &Value,
+    thread: &str,
+    turn: Option<&str>,
+) -> bool {
+    if event["params"]["threadId"].as_str() != Some(thread) {
+        return false;
+    }
+    match event["method"].as_str() {
+        Some("serverRequest/resolved") => event["params"]["requestId"] == *id,
+        Some("turn/completed") => turn.is_none() || event["params"]["turn"]["id"].as_str() == turn,
+        Some("thread/status/changed") => event["params"]["status"]["type"] == "notLoaded",
+        _ => false,
+    }
+}
 
 pub async fn open(path: &Path) -> Result<Socket> {
     tokio::time::timeout(Duration::from_secs(5), async {
@@ -60,13 +78,25 @@ pub fn protocol_error(error: impl std::fmt::Display) -> Error {
     Error::CapabilityUnavailable(format!("Codex control connection: {error}"))
 }
 
+enum Outgoing {
+    Message(Message),
+    Reply {
+        id: Value,
+        result: Value,
+        written: oneshot::Sender<Result<()>>,
+    },
+}
+
 pub struct Connection {
-    outgoing: mpsc::Sender<Message>,
+    outgoing: mpsc::Sender<Outgoing>,
+    pub(crate) interactions:
+        Mutex<HashMap<String, crate::service::interactions::NativeInteraction>>,
     task: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub identity: DaemonIdentity,
     pub server_version: Option<String>,
     pub codex_home: PathBuf,
     pending: Pending,
+    server_requests: ServerRequests,
     next_id: AtomicU64,
     pub events: broadcast::Sender<Notification>,
 }
@@ -139,13 +169,16 @@ impl Connection {
         let (outgoing, mut incoming) = mpsc::channel(128);
         let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
         let (events, _) = broadcast::channel(4096);
+        let server_requests: ServerRequests = Arc::new(Mutex::new(HashMap::new()));
         let connection = Arc::new(Self {
             outgoing,
+            interactions: Mutex::new(HashMap::new()),
             task: Mutex::new(None),
             identity,
             server_version: version.map(str::to_owned),
             codex_home,
             pending: pending.clone(),
+            server_requests: server_requests.clone(),
             next_id: AtomicU64::new(1),
             events: events.clone(),
         });
@@ -155,15 +188,36 @@ impl Connection {
                 tokio::select! {
                     message = incoming.recv() => {
                         let Some(message) = message else { break };
-                        if socket.send(message).await.is_err() { break; }
+                        match message {
+                            Outgoing::Message(message) => { if socket.send(message).await.is_err() { break; } }
+                            Outgoing::Reply { id, result, written } => {
+                                if server_requests.lock().await.remove(&id.to_string()).is_none() {
+                                    let _ = written.send(Err(protocol_error("server request is no longer pending")));
+                                    continue;
+                                }
+                                let result = socket.send(Message::Text(json!({"id":id,"result":result}).to_string().into())).await.map_err(protocol_error);
+                                let failed = result.is_err();
+                                let _ = written.send(result);
+                                if failed { break; }
+                            }
+                        }
                     }
                     frame = socket.next() => {
                         match frame {
                             Some(Ok(Message::Text(text))) => {
                                 let Ok(value) = serde_json::from_str::<Value>(&text) else { break };
                                 if value.get("method").is_some() {
-                                    // Server requests belong to the official TUI. Observing never responds.
                                     notification_sequence += 1;
+                                    if let Some(id) = value.get("id").filter(|id| id.is_string() || id.is_number()) {
+                                        server_requests.lock().await.insert(id.to_string(), Notification { value: value.clone(), sequence: notification_sequence });
+                                    } else {
+                                        server_requests.lock().await.retain(|_, request| {
+                                            let params = &request["params"];
+                                            let thread = params["threadId"].as_str().or(params["conversationId"].as_str()).unwrap_or("");
+                                            !invalidates_request(&value, &request["id"], thread, params["turnId"].as_str())
+                                        });
+                                    }
+                                    // Requests and notifications are observed without waiting for user input.
                                     let _ = events.send(Notification { value, sequence: notification_sequence });
                                 } else if let Some(id) = value["id"].as_u64()
                                     && let Some(reply) = pending.lock().await.remove(&id) {
@@ -181,6 +235,7 @@ impl Connection {
                 }
             }
             incoming.close();
+            server_requests.lock().await.clear();
             for (_, reply) in pending.lock().await.drain() {
                 let _ = reply.send(Err(Error::ControlUnknown("Codex disconnected".into())));
             }
@@ -210,11 +265,11 @@ impl Connection {
         self.pending.lock().await.insert(id, sender);
         let result = async {
             self.outgoing
-                .send(Message::Text(
+                .send(Outgoing::Message(Message::Text(
                     json!({"id":id,"method":method,"params":params})
                         .to_string()
                         .into(),
-                ))
+                )))
                 .await
                 .map_err(protocol_error)?;
             tokio::time::timeout(Duration::from_secs(30), receiver)
@@ -255,11 +310,37 @@ impl Connection {
         }
     }
 
+    pub(crate) async fn pending_server_requests(&self) -> Vec<Notification> {
+        let mut requests: Vec<_> = self
+            .server_requests
+            .lock()
+            .await
+            .values()
+            .cloned()
+            .collect();
+        requests.sort_by_key(|request| request.sequence);
+        requests
+    }
+
+    pub(crate) async fn reply(&self, id: Value, result: Value) -> Result<()> {
+        let (written, receiver) = oneshot::channel();
+        self.outgoing
+            .send(Outgoing::Reply {
+                id,
+                result,
+                written,
+            })
+            .await
+            .map_err(protocol_error)?;
+        receiver.await.map_err(protocol_error)?
+    }
+
     pub async fn close(&self) {
         if let Some(task) = self.task.lock().await.take() {
             task.abort();
             let _ = task.await;
         }
+        self.server_requests.lock().await.clear();
         for (_, reply) in self.pending.lock().await.drain() {
             let _ = reply.send(Err(Error::ControlUnknown("Codex connection closed".into())));
         }

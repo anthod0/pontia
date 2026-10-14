@@ -27,6 +27,7 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
         .workspace_browser(config.workspace_browser.clone())
         .file_picker(config.file_picker.clone())
         .build();
+    state.interactions().expire_leftovers().await?;
     state.inbox_commands().recover_deliveries().await?;
     Ok(state)
 }

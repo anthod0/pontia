@@ -10,6 +10,7 @@ pub struct CodexObserver {
     service: CodexService,
     root: PathBuf,
     live_output: pontia_application::LiveOutputService,
+    interactions: pontia_application::interactions::InteractionService,
 }
 
 impl CodexObserver {
@@ -17,6 +18,7 @@ impl CodexObserver {
         Self {
             service: CodexService::new(state.event_ingest_service()),
             live_output: state.live_output(),
+            interactions: state.interactions(),
             root,
         }
     }
@@ -71,10 +73,23 @@ impl CodexObserver {
         runtime: Arc<CodexRuntime>,
         shutdown: &mut watch::Receiver<bool>,
     ) -> Result<()> {
+        let connection = runtime.connection().await?;
+        let result = self
+            .observe_connection(runtime, &connection, shutdown)
+            .await;
+        super::interactions::expire_matching(&self.interactions, &connection, |_| true).await?;
+        result
+    }
+
+    async fn observe_connection(
+        &self,
+        runtime: Arc<CodexRuntime>,
+        connection: &Arc<crate::runtime::protocol::Connection>,
+        shutdown: &mut watch::Receiver<bool>,
+    ) -> Result<()> {
         runtime
             .profile_service
             .get_or_init(|| self.service.profiles());
-        let connection = runtime.connection().await?;
         let mut events = connection.events.subscribe();
         let mut threads = HashMap::<String, String>::new();
         let mut output = CodexLiveOutput::new(self.live_output.clone());
@@ -84,6 +99,7 @@ impl CodexObserver {
             tokio::select! {
                 _ = shutdown.changed() => return Ok(()),
                 _ = interval.tick() => {
+                    super::interactions::reconcile(&self.interactions, &self.service.pool, connection).await?;
                     let unbound: Vec<String> = sqlx::query_scalar("SELECT s.session_id FROM sessions s LEFT JOIN agent_bindings a USING(session_id) WHERE s.client_type='codex' AND s.state<>'exited' AND a.session_id IS NULL")
                         .fetch_all(&self.service.pool).await?;
                     for session in unbound {
@@ -116,6 +132,7 @@ impl CodexObserver {
                     let exited: Vec<String> = sqlx::query_scalar("SELECT session_id FROM sessions WHERE client_type='codex' AND state='exited'")
                         .fetch_all(&self.service.pool).await?;
                     for session in exited {
+                        super::interactions::expire_matching(&self.interactions, connection, |i| i.session == session).await?;
                         output.invalidate(&session);
                         restored.remove(&session);
                         runtime.clear_subscription(&session).await;
@@ -126,6 +143,7 @@ impl CodexObserver {
                     let event = match event {
                         Ok(event) => event,
                         Err(broadcast::error::RecvError::Lagged(_)) => {
+                            super::interactions::reconcile(&self.interactions, &self.service.pool, connection).await?;
                             for session in threads.values() { output.invalidate(session); }
                             restored.clear();
                             runtime.clear_subscriptions().await;
@@ -134,6 +152,8 @@ impl CodexObserver {
                         Err(_) => return Err(Error::CapabilityUnavailable("Codex event stream closed".into())),
                     };
                     if event["method"] == "pontia/disconnected" { return Err(Error::CapabilityUnavailable("Codex disconnected".into())); }
+                    super::interactions::expire_matching(&self.interactions, connection, |i| crate::runtime::protocol::invalidates_request(&event.value, &i.request_id, &i.thread, i.turn.as_deref())).await?;
+                    if super::interactions::register(&self.interactions, &self.service.pool, connection, &event.value).await? { continue; }
                     let Some(thread) = event.pointer("/params/threadId").and_then(Value::as_str) else { continue };
                     let session = match threads.get(thread) {
                         Some(session) => session.clone(),
@@ -149,7 +169,7 @@ impl CodexObserver {
                             self.service.model_fact(&session, &event["params"]["threadSettings"]).await?;
                         }
                         Some("turn/started") => {
-                            if let Some(turns) = self.service.turns(&connection, thread).await? {
+                            if let Some(turns) = self.service.turns(connection, thread).await? {
                                 let _operation = runtime.lock_session(&session).await;
                                 self.service.reconcile_turns(&session, &runtime, &turns).await?;
                                 runtime.set_subscription(&session, SubscriptionState::Available).await;
@@ -167,7 +187,7 @@ impl CodexObserver {
                             if bound > 0 { continue; }
                             // An empty native start was deferred until its operation
                             // became identifiable. Keep the real native Turn timestamps.
-                            let mut turn = self.service.turns(&connection, thread).await?
+                            let mut turn = self.service.turns(connection, thread).await?
                                 .unwrap_or_default().into_iter().find(|turn| turn["id"] == native)
                                 .unwrap_or_else(|| serde_json::json!({"id":native,"status":"inProgress","items":[]}));
                             if turn["items"].as_array().is_none_or(|items| items.iter().all(|item| item["type"] == "contextCompaction")) {

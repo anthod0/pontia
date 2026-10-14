@@ -28,6 +28,7 @@ use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
 
 pub fn registration() -> ClientRegistration {
     ClientRegistration {
+        interactions: Some(Arc::new(CodexClient)),
         service: Some(Arc::new(crate::service::CodexBackgroundService)),
         profile: Some(Arc::new(crate::profiles::CodexProfilePolicy)),
         events: None,
@@ -91,6 +92,40 @@ impl ClientData for CodexData {
 }
 
 struct CodexClient;
+impl pontia_application::client_contract::ClientInteractions for CodexClient {
+    fn resolve<'a>(
+        &'a self,
+        events: EventIngestService,
+        session: &'a str,
+        interaction: &'a str,
+        option: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            let service = CodexService::new(events);
+            let root = service.root(session).await?;
+            let runtime = CodexRuntime::existing(&root)
+                .await
+                .ok_or_else(|| Error::CapabilityUnavailable("Codex connection expired".into()))?;
+            let _operation = runtime.lock_session(session).await;
+            let live: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND state<>'exited')",
+            )
+            .bind(session)
+            .fetch_one(&service.pool)
+            .await?;
+            if !live
+                || runtime.subscription(session).await == Some(SubscriptionState::ExitPending)
+                || CodexService::has_confirmed_unsubscribe(session).await
+            {
+                return Err(Error::CapabilityUnavailable("Codex Session exited".into()));
+            }
+            let _current = runtime.current_guard().await?;
+            let connection = runtime.connection().await?;
+            crate::service::interactions::resolve(&connection, session, interaction, option).await
+        })
+    }
+}
+
 impl ClientSession for CodexClient {
     fn provision<'a>(
         &'a self,

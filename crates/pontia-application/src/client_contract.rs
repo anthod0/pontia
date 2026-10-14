@@ -1,4 +1,6 @@
 mod channel;
+mod interactions;
+pub use interactions::ClientInteractions;
 mod lifecycle;
 pub use lifecycle::{ClientEventInterpreter, ProcessObservationBehavior, SessionLifecycleBehavior};
 mod profile;

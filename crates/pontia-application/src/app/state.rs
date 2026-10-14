@@ -41,6 +41,7 @@ struct EventState {
     ingest: crate::EventIngestService,
     agent_events: AgentEventBroker,
     live_output: LiveOutputStore,
+    interactions: crate::interactions::InteractionService,
 }
 
 struct LifecycleState {
@@ -127,7 +128,9 @@ impl AppState {
                     inbox,
                     tasks,
                 },
-                persistence: PersistenceState { db: builder.db },
+                persistence: PersistenceState {
+                    db: builder.db.clone(),
+                },
                 config: AppRuntimeState {
                     pontia_home: builder.pontia_home,
                     workspace_browser: builder.workspace_browser,
@@ -136,6 +139,7 @@ impl AppState {
                 events: EventState {
                     ingest,
                     agent_events: builder.agent_events,
+                    interactions: crate::interactions::InteractionService::new(builder.db.clone()),
                     live_output: builder.live_output,
                 },
                 lifecycle: LifecycleState {
@@ -177,6 +181,10 @@ impl AppState {
 
     pub fn shutdown(&self) -> ShutdownSignal {
         self.inner.lifecycle.shutdown.clone()
+    }
+
+    pub fn interactions(&self) -> crate::interactions::InteractionService {
+        self.inner.events.interactions.clone()
     }
 
     pub fn agent_events(&self) -> AgentEventBroker {

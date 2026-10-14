@@ -7,7 +7,7 @@ use axum::{
     Router,
     extract::DefaultBodyLimit,
     middleware,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use tokio::sync::oneshot;
 use tracing::warn;
@@ -269,6 +269,18 @@ fn external_api_router(state: HttpState) -> Router {
         )
         // Read-only turn history. Direct turn dispatch via POST is intentionally not exposed:
         // Web input is submitted through the inbox API, and reported Agent facts own turn lifecycle.
+        .route(
+            "/api/v1/sessions/{session_id}/interactions",
+            get(api::list_interactions),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/interactions/{interaction_id}",
+            get(api::get_interaction),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/interactions/{interaction_id}/response",
+            put(api::respond_interaction),
+        )
         .route("/api/v1/sessions/{session_id}/turns", get(api::list_turns))
         .route(
             "/api/v1/sessions/{session_id}/turns/timeline",

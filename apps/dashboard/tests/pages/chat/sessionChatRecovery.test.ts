@@ -47,7 +47,6 @@ test.each(["pi", "codex"] as const)(
 
     expect(await screen.findByPlaceholderText("Continue the thread…")).toBeInTheDocument();
     await waitFor(() => expect(mocks.liveOutputListeners.has("session-1")).toBe(true));
-    expect(mocks.dashboardEventListeners.size).toBe(1);
     expect(screen.queryByText("Unable to connect")).not.toBeInTheDocument();
     expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
     expect(mocks.recoverInboxSubmission).not.toHaveBeenCalled();

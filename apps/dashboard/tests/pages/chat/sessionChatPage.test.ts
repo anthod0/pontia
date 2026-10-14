@@ -87,7 +87,6 @@ test("focuses the composer and refreshes git only on the first entry, then refre
 
   const composer = await screen.findByPlaceholderText("Continue the thread…");
   await waitFor(() => expect(composer).toHaveFocus());
-  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(1);
   expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith("workspace-1");
 
@@ -99,7 +98,6 @@ test("focuses the composer and refreshes git only on the first entry, then refre
   mocks.refreshWorkspaceGitStatus.mockClear();
   render(SessionChatPage);
   const revisitedComposer = await screen.findByPlaceholderText("Continue the thread…");
-  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
   expect(revisitedComposer).not.toHaveFocus();
   expect(mocks.refreshWorkspaceGitStatus).not.toHaveBeenCalled();
 });
@@ -245,7 +243,7 @@ test("keeps Send and queues inbox input while an interruptible session is busy",
   expect(mocks.interruptSession).not.toHaveBeenCalled();
   expect(screen.queryByText("Queue this follow-up")).not.toBeInTheDocument();
 
-  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
   for (const listener of mocks.dashboardEventListeners) {
     listener({
       kind: "session_event",
@@ -1369,7 +1367,7 @@ test("does not refresh an already-loaded selected chat when the window regains f
   );
   expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith("session-2", { mode: "rebuild" });
   expect(mocks.resetTimelineState).not.toHaveBeenCalledWith("session-2");
-  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
   mocks.loadSessionDetail.mockClear();
   mocks.loadSessionTimeline.mockClear();
   mocks.refreshSessionTimeline.mockClear();
@@ -1415,7 +1413,7 @@ test("does not refresh git status for selected-session idle events", async () =>
 
   render(SessionChatPage);
 
-  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
   mocks.refreshWorkspaceGitStatus.mockClear();
   mocks.refreshSessionTimeline.mockClear();
 
@@ -1973,7 +1971,7 @@ test("shows delivery loading on the submit button instead of below the optimisti
     "true",
   );
 
-  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
   for (const listener of mocks.dashboardEventListeners) {
     listener({
       kind: "session_event",
@@ -2795,7 +2793,7 @@ test("retains terminal live output after a failed timeline refresh and removes i
 
   render(SessionChatPage);
   await waitFor(() => expect(mocks.liveOutputListeners.has("session-live")).toBe(true));
-  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBe(1));
+  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
   mocks.liveOutputListeners.get("session-live")!.onEvent({
     type: "snapshot",
     session_id: "session-live",

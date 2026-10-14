@@ -484,7 +484,23 @@ export interface TurnTreeUpdatesPage {
 
 export type DashboardStreamEvent =
   | { kind: "session_event"; id: string; occurred_at: string; event: EventView }
-  | { kind: "task_event"; id: string; occurred_at: string; event: TaskEventView };
+  | { kind: "task_event"; id: string; occurred_at: string; event: TaskEventView }
+  | { kind: "interaction_changed"; session_id: string; interaction_id: string }
+  | { kind: "interactions_resync" };
+
+export interface Interaction {
+  interaction_id: string;
+  session_id: string;
+  turn_id: string | null;
+  type: "choice";
+  state: "pending" | "resolving" | "resolved" | "expired";
+  title: string;
+  description: string | null;
+  options: { key: string; label: string; intent: "positive" | "negative" }[];
+  response: { option_key: string } | null;
+  requested_at: string;
+  resolved_at: string | null;
+}
 
 export interface CreateSessionInput {
   client_type: string;
