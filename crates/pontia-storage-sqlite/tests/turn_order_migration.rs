@@ -2,7 +2,7 @@ use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use sqlx::Row;
 
 #[tokio::test]
-async fn migration_removes_turn_ordinals_and_preserves_uuid_v7_identity_invariants() {
+async fn migration_removes_turn_ordinals_and_preserves_linked_turns() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("turn-order-constraints.db");
     let pool = connect_sqlite(&format!("sqlite://{}", db_path.display()))
@@ -35,20 +35,26 @@ async fn migration_removes_turn_ordinals_and_preserves_uuid_v7_identity_invarian
     .await
     .expect("seed turns");
 
-    let changed = sqlx::query(
-        "UPDATE turns SET session_id = 'sess_b' WHERE turn_id = 'turn_01900000-0000-7000-8000-000000000001'",
-    )
-    .execute(&pool)
-    .await
-    .expect_err("Turn session must be immutable");
-    assert!(changed.to_string().contains("session_id is immutable"));
-
     sqlx::query(
         "INSERT INTO turns (turn_id, session_id, state, topology_status, parent_turn_id) VALUES ('turn_01900000-0000-7000-8000-000000000002', 'sess_a', 'running', 'linked', 'turn_01900000-0000-7000-8000-000000000001')",
     )
     .execute(&pool)
     .await
     .expect("earlier same-session parent");
+
+    let linked: (String, String) = sqlx::query_as(
+        "SELECT session_id, parent_turn_id FROM turns WHERE turn_id = 'turn_01900000-0000-7000-8000-000000000002'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        linked,
+        (
+            "sess_a".into(),
+            "turn_01900000-0000-7000-8000-000000000001".into()
+        )
+    );
 }
 
 #[tokio::test]

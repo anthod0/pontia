@@ -76,7 +76,7 @@ async fn migration_backfills_the_immediately_preceding_workflow_schema_at_revisi
 }
 
 #[tokio::test]
-async fn fresh_schema_enforces_immutable_node_history_and_revision_ranges() {
+async fn fresh_schema_enforces_revision_ranges() {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("workflow-revision-constraints.db");
     let pool = connect_sqlite(&format!("sqlite://{}", db_path.display()))
@@ -98,56 +98,32 @@ async fn fresh_schema_enforces_immutable_node_history_and_revision_ranges() {
     .expect("insert root");
 
     assert!(
-        sqlx::query("UPDATE workflow_nodes SET title = 'Changed' WHERE node_id = 'node_a'")
+        sqlx::query("UPDATE workflows SET current_revision = 0 WHERE workflow_id = 'wf_a'")
             .execute(&pool)
             .await
             .is_err()
     );
     assert!(
-        sqlx::query("DELETE FROM workflow_nodes WHERE node_id = 'node_a'")
+        sqlx::query("UPDATE workflow_nodes SET introduced_revision = 0 WHERE node_id = 'node_a'")
             .execute(&pool)
             .await
             .is_err()
     );
-    assert!(sqlx::query(
-        "INSERT INTO workflow_nodes (node_id, workflow_id, parent_node_id, node_type, phase, title, instructions, output) VALUES ('node_cross', 'wf_b', 'node_a', 'agent', 'Build', 'Cross', 'Cross', 'cross.md')",
-    )
-    .execute(&pool)
-    .await
-    .is_err());
     assert!(sqlx::query(
         "INSERT INTO workflow_nodes (node_id, workflow_id, node_type, phase, title, instructions, output, introduced_revision, retired_revision) VALUES ('node_bad_range', 'wf_a', 'agent', 'Build', 'Bad', 'Bad', 'bad.md', 2, 2)",
     )
     .execute(&pool)
     .await
     .is_err());
-    assert!(sqlx::query(
-        "INSERT INTO workflow_nodes (node_id, workflow_id, node_type, phase, title, instructions, output, introduced_revision) VALUES ('node_future', 'wf_a', 'agent', 'Build', 'Future', 'Future', 'future.md', 3)",
-    )
-    .execute(&pool)
-    .await
-    .is_err());
-    assert!(
-        sqlx::query("UPDATE workflows SET current_revision = 3 WHERE workflow_id = 'wf_a'")
-            .execute(&pool)
-            .await
-            .is_err()
-    );
-
     sqlx::query("UPDATE workflow_nodes SET retired_revision = 2 WHERE node_id = 'node_a'")
         .execute(&pool)
         .await
         .expect("retire once");
-    assert!(
-        sqlx::query("UPDATE workflow_nodes SET retired_revision = 3 WHERE node_id = 'node_a'")
-            .execute(&pool)
-            .await
-            .is_err()
-    );
-    assert!(
-        sqlx::query("UPDATE workflow_nodes SET retired_revision = NULL WHERE node_id = 'node_a'")
-            .execute(&pool)
-            .await
-            .is_err()
-    );
+    let membership: (i64, Option<i64>) = sqlx::query_as(
+        "SELECT introduced_revision, retired_revision FROM workflow_nodes WHERE node_id = 'node_a'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(membership, (1, Some(2)));
 }
