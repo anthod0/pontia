@@ -27,7 +27,8 @@ impl SessionCommandService {
                 "Manual compaction is unavailable".into(),
             ));
         }
-        let target = ControlTarget::resolve(&self.pool, session_id, None).await?;
+        let target =
+            ControlTarget::resolve(&self.pool, self.clients.registry(), session_id, None).await?;
         let operation_id = new_compaction_operation_id().to_string();
         self.clients
             .for_client(&session.client_type)?

@@ -67,7 +67,8 @@ impl AppState {
         AppStateBuilder::new(db, pontia_home)
     }
 
-    pub(super) fn from_builder(builder: AppStateBuilder) -> Self {
+    pub(super) fn from_builder(mut builder: AppStateBuilder) -> Self {
+        builder.client_control = builder.client_control.with_clients(builder.clients.clone());
         let scheduler = crate::inbox::InboxScheduler::default();
         let ingest = crate::EventIngestService::new(
             builder.db.clone(),

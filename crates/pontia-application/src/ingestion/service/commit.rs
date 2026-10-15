@@ -126,6 +126,7 @@ impl EventCommitter {
                     spec.is_some_and(|spec| {
                         spec.adapter.runtime_binding.requires_session_runtime()
                     }),
+                    spec.and_then(|spec| spec.adapter.control_runtime_role),
                 )
                 .await?;
             }

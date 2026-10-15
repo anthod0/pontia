@@ -75,6 +75,9 @@ pub struct AgentClientAdapter {
     pub native_turn_identity: bool,
     pub native_turn_metadata_key: Option<&'static str>,
     pub runtime: RuntimeBehavior,
+    /// The only runtime role eligible to control this client's Session.
+    /// Shared-backend clients have no Session control runtime.
+    pub control_runtime_role: Option<&'static str>,
     pub dispatch: DispatchBehavior,
     pub client_session_identity: ClientSessionIdentityBehavior,
     pub terminate: TerminateBehavior,

@@ -12,22 +12,30 @@ const DEFAULT_READY_POLL_INTERVAL: Duration = Duration::from_millis(50);
 #[derive(Debug, Clone)]
 pub struct RuntimeReadinessService {
     pool: SqlitePool,
+    control_runtime_role: Option<&'static str>,
     timeout: Duration,
     poll_interval: Duration,
 }
 
 impl RuntimeReadinessService {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: SqlitePool, control_runtime_role: Option<&'static str>) -> Self {
         Self {
             pool,
+            control_runtime_role,
             timeout: DEFAULT_READY_TIMEOUT,
             poll_interval: DEFAULT_READY_POLL_INTERVAL,
         }
     }
 
-    pub fn with_options(pool: SqlitePool, timeout: Duration, poll_interval: Duration) -> Self {
+    pub fn with_options(
+        pool: SqlitePool,
+        control_runtime_role: Option<&'static str>,
+        timeout: Duration,
+        poll_interval: Duration,
+    ) -> Self {
         Self {
             pool,
+            control_runtime_role,
             timeout,
             poll_interval,
         }
@@ -39,8 +47,8 @@ impl RuntimeReadinessService {
         client_type: &str,
         runtime_id: &str,
     ) -> Result<bool> {
-        Ok(sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id = ? AND r.session_id = ? AND r.role <> 'interface' AND r.state = 'running' AND s.client_type = ?)")
-            .bind(runtime_id).bind(session_id).bind(client_type).fetch_one(&self.pool).await?)
+        Ok(sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id = ? AND r.session_id = ? AND r.role = ? AND r.state = 'running' AND s.client_type = ?)")
+            .bind(runtime_id).bind(session_id).bind(self.control_runtime_role).bind(client_type).fetch_one(&self.pool).await?)
     }
 
     pub async fn wait_until_bound_and_ready(
@@ -51,7 +59,7 @@ impl RuntimeReadinessService {
         let deadline = Instant::now() + self.timeout;
         loop {
             if let Some(runtime_id) = SqliteSessionRuntimeRepository::new(self.pool.clone())
-                .runtime_id(session_id)
+                .runtime_id(session_id, self.control_runtime_role)
                 .await?
                 && self.is_ready(session_id, client_type, &runtime_id).await?
             {
@@ -113,7 +121,7 @@ mod tests {
         .unwrap();
         sqlx::query("INSERT INTO session_runtimes(runtime_id,session_id,role,state,created_at) VALUES ('runtime','session','tui','starting','2000-01-01T00:00:00Z')").execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO events(event_id,session_id,client_type,event_type,source,occurred_at,payload) VALUES ('historical-ready','session','pi','session.ready','agent_client','2000-01-01T00:00:00Z','{\"runtime_id\":\"runtime\"}')").execute(&pool).await.unwrap();
-        let readiness = RuntimeReadinessService::new(pool.clone());
+        let readiness = RuntimeReadinessService::new(pool.clone(), Some("tui"));
         assert!(
             !readiness
                 .is_ready("session", "pi", "runtime")
@@ -147,6 +155,7 @@ mod tests {
         let (pool, _pontia_home) = pool().await;
         let readiness = RuntimeReadinessService::with_options(
             pool,
+            Some("tui"),
             Duration::from_millis(5),
             Duration::from_millis(1),
         );

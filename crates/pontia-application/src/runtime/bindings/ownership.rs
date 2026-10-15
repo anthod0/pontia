@@ -49,7 +49,10 @@ impl RuntimeBindingUpsertService {
             return Ok(());
         };
         let existing_runtime_id = SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .runtime_id(session_id)
+            .runtime_id(
+                session_id,
+                self.clients.control_runtime_role(&request.client_type),
+            )
             .await?;
         let existing_tmux = SqliteSessionRuntimeRepository::new(self.pool.clone())
             .tmux_pane_binding(session_id)
@@ -87,8 +90,11 @@ pub(super) async fn fence_runtime_binding_write(
     tx: &mut Transaction<'_, Sqlite>,
     session_id: &str,
     runtime_id: Option<&str>,
+    role: Option<&str>,
 ) -> Result<()> {
     SqliteTurnRepository::serialize_session_turn_writes_in_tx(tx, session_id).await?;
-    SqliteSessionRuntimeRepository::ensure_runtime_owner_may_write_in_tx(tx, session_id, runtime_id)
-        .await
+    SqliteSessionRuntimeRepository::ensure_runtime_owner_may_write_in_tx(
+        tx, session_id, runtime_id, role,
+    )
+    .await
 }

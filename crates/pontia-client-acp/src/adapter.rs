@@ -212,7 +212,7 @@ impl ClientSession for AcpAdapter {
                         launch_cwd: cwd.display().to_string(),
                         client_session_key: key.clone(),
                         client_session_file: None,
-                        metadata,
+                        metadata: metadata.clone(),
                     })
                     .await?;
                 state.native = Some(native);
@@ -229,7 +229,7 @@ impl ClientSession for AcpAdapter {
                         &request.session_id,
                         Some(&runtime),
                         pontia_core::domain::EventType::SessionReady,
-                        json!({"client_session_key":key,"launch_cwd":cwd.display().to_string()}),
+                        json!({"client_session_key":key,"launch_cwd":cwd.display().to_string(),"binding_metadata":metadata}),
                     )
                     .await?;
                 state.refresh_capabilities();

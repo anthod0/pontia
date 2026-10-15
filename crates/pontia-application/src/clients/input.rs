@@ -14,13 +14,16 @@ impl ClientAdapter {
     pub async fn await_initial_ready(&self, target: &ControlTarget) -> Result<()> {
         target.validate(&self.pool.clone()).await?;
         if !self.prepares_on_input() && self.spec.adapter.dispatch == DispatchMode::Connected {
-            crate::RuntimeReadinessService::new(self.pool.clone())
-                .wait_until_ready(
-                    &target.session_id,
-                    self.spec.client_type,
-                    target.instance()?,
-                )
-                .await?;
+            crate::RuntimeReadinessService::new(
+                self.pool.clone(),
+                self.spec.adapter.control_runtime_role,
+            )
+            .wait_until_ready(
+                &target.session_id,
+                self.spec.client_type,
+                target.instance()?,
+            )
+            .await?;
         }
         target.validate(&self.pool.clone()).await
     }

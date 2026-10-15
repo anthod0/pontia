@@ -26,7 +26,7 @@ impl RuntimeBindingUpsertService {
         created_session: bool,
     ) -> Result<Value> {
         let existing = SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .runtime_id(session_id)
+            .runtime_id(session_id, client_spec.adapter.control_runtime_role)
             .await?;
         let requested = non_empty(request.runtime_id.as_deref());
         if requested.is_some() && existing != requested {
@@ -68,7 +68,13 @@ impl RuntimeBindingUpsertService {
             _ => None,
         };
         let mut tx = self.pool.begin().await?;
-        fence_runtime_binding_write(&mut tx, session_id, Some(&runtime_id)).await?;
+        fence_runtime_binding_write(
+            &mut tx,
+            session_id,
+            Some(&runtime_id),
+            client_spec.adapter.control_runtime_role,
+        )
+        .await?;
         // Binding confirmation only adds identity and location. Runtime events own
         // every lifecycle transition, including an already-running attachment.
         let prior_state: String =

@@ -44,8 +44,13 @@ impl TurnCommandService {
         turn_id: &str,
         expected: Option<&str>,
     ) -> Result<ControlCommandOutcome> {
-        let target =
-            crate::runtime::ControlTarget::resolve(&self.pool, session_id, expected).await?;
+        let target = crate::runtime::ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            expected,
+        )
+        .await?;
         let query = &self.queries;
         let session = query
             .get_session_control(session_id)

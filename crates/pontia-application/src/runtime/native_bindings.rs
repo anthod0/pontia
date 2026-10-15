@@ -26,10 +26,11 @@ impl NativeRuntimeBindings {
         &self,
         binding: UpsertAgentBindingRequest,
         runtime_id: &str,
+        clients: &crate::clients::ClientRegistry,
     ) -> Result<()> {
         let session = binding.session_id.clone();
         let mut tx = self.pool.begin().await?;
-        let current = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::runtime_id_in_tx(&mut tx, &session).await?;
+        let current = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::runtime_id_in_tx(&mut tx, &session, clients.control_runtime_role(&binding.client_type)).await?;
         if current.as_deref() != Some(runtime_id) {
             return Err(Error::StateConflict(
                 "Runtime identity cannot change during confirmation".into(),

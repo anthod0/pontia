@@ -128,6 +128,11 @@ impl ClientRegistry {
         self.get(client).map(|entry| entry.spec)
     }
 
+    pub fn control_runtime_role(&self, client: &str) -> Option<&'static str> {
+        self.spec(client)
+            .and_then(|spec| spec.adapter.control_runtime_role)
+    }
+
     pub fn data(&self, client: &str) -> Option<&Arc<dyn ClientData>> {
         self.get(client).and_then(|entry| entry.data.as_ref())
     }

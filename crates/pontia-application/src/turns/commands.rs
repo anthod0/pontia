@@ -117,7 +117,13 @@ impl TurnCommandService {
                 "session {session_id} runtime cannot accept tasks"
             )));
         }
-        let target = ControlTarget::resolve(&self.pool, session_id, required_runtime_id).await?;
+        let target = ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            required_runtime_id,
+        )
+        .await?;
         let turn_id = self
             .prepare_initial(session_id, &input, &metadata)
             .await?

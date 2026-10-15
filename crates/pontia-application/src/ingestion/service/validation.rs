@@ -40,6 +40,7 @@ pub(super) async fn ensure_runtime_fence_in_tx(
     event: &DomainEvent,
     native_turn_identity: bool,
     runtime_bound: bool,
+    control_runtime_role: Option<&str>,
 ) -> Result<()> {
     if !runtime_bound {
         return Ok(());
@@ -50,10 +51,15 @@ pub(super) async fn ensure_runtime_fence_in_tx(
     {
         return Ok(());
     }
-    let expected_runtime_id =
-        SqliteSessionRuntimeRepository::runtime_id_in_tx(tx, &event.session_id).await?;
+    let expected_runtime_id = SqliteSessionRuntimeRepository::runtime_id_in_tx(
+        tx,
+        &event.session_id,
+        control_runtime_role,
+    )
+    .await?;
     let Some(expected_runtime_id) = expected_runtime_id else {
         if native_turn
+            || event.payload.get("runtime_id").is_some()
             || matches!(
                 event.event_type,
                 EventType::SessionReady
@@ -97,6 +103,7 @@ pub(super) async fn ensure_confirmed_event_matches_session_boundary(
     pool: &sqlx::SqlitePool,
     event: &DomainEvent,
     runtime_bound: bool,
+    control_runtime_role: Option<&str>,
 ) -> Result<()> {
     if !is_confirmed_runtime_source(event.source) || event.event_type == EventType::SessionCreated {
         return Ok(());
@@ -131,18 +138,20 @@ pub(super) async fn ensure_confirmed_event_matches_session_boundary(
     }
 
     let expected_runtime_id = SqliteSessionRuntimeRepository::new(pool.clone())
-        .runtime_id(&event.session_id)
+        .runtime_id(&event.session_id, control_runtime_role)
         .await?;
 
     let Some(expected_runtime_id) = expected_runtime_id else {
-        if matches!(
-            event.event_type,
-            EventType::SessionReady
-                | EventType::SessionModelUpdated
-                | EventType::SessionCompactionStarted
-                | EventType::SessionCompactionCompleted
-                | EventType::SessionCompactionFailed
-        ) {
+        if event.payload.get("runtime_id").is_some()
+            || matches!(
+                event.event_type,
+                EventType::SessionReady
+                    | EventType::SessionModelUpdated
+                    | EventType::SessionCompactionStarted
+                    | EventType::SessionCompactionCompleted
+                    | EventType::SessionCompactionFailed
+            )
+        {
             return Err(Error::Domain(format!(
                 "{} from {} requires a confirmed Runtime binding for session {}",
                 event.event_type, event.source, event.session_id

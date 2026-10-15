@@ -342,6 +342,7 @@ async fn runtime_scoped_exit_and_interrupt_reject_replaced_instances_before_nati
             &crate::runtime::ControlTarget {
                 session_id: "session".into(),
                 runtime_id: Some("old".into()),
+                control_runtime_role: Some("tui"),
             },
             "initial input",
             &json!({}),

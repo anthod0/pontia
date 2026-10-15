@@ -31,7 +31,13 @@ impl NativeTurnService {
         runtime_id: Option<&str>,
         turn: NativeTurnObservation,
     ) -> Result<()> {
-        crate::runtime::ControlTarget::resolve(&self.pool, session, runtime_id).await?;
+        crate::runtime::ControlTarget::resolve(
+            &self.pool,
+            &self.events.clients(),
+            session,
+            runtime_id,
+        )
+        .await?;
         let native = &turn.native_turn_id;
         let existing: Option<(String,String)> = sqlx::query_as("SELECT t.turn_id,t.state FROM native_turn_bindings b JOIN turns t ON t.turn_id=b.turn_id WHERE b.session_id=? AND b.client_turn_id=?").bind(session).bind(native).fetch_optional(&self.pool).await?;
         if existing.as_ref().is_some_and(|(_, state)| {

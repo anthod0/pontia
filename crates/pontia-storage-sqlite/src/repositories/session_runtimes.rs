@@ -114,19 +114,26 @@ impl SqliteSessionRuntimeRepository {
         Ok(())
     }
 
-    pub async fn upsert_binding_guarded(&self, record: SessionRuntimeRecord) -> Result<()> {
+    pub async fn upsert_binding_guarded(
+        &self,
+        record: SessionRuntimeRecord,
+        control_runtime_role: Option<&str>,
+    ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
         crate::repositories::turns::SqliteTurnRepository::serialize_session_turn_writes_in_tx(
             &mut tx,
             &record.session_id,
         )
         .await?;
-        Self::ensure_runtime_owner_may_write_in_tx(
-            &mut tx,
-            &record.session_id,
-            Some(&record.runtime_id),
-        )
-        .await?;
+        if Some(record.role.as_str()) == control_runtime_role {
+            Self::ensure_runtime_owner_may_write_in_tx(
+                &mut tx,
+                &record.session_id,
+                Some(&record.runtime_id),
+                control_runtime_role,
+            )
+            .await?;
+        }
         Self::upsert_binding_in_tx(&mut tx, record).await?;
         tx.commit().await?;
         Ok(())
@@ -136,8 +143,9 @@ impl SqliteSessionRuntimeRepository {
         tx: &mut Transaction<'_, Sqlite>,
         session_id: &str,
         incoming: Option<&str>,
+        role: Option<&str>,
     ) -> Result<()> {
-        let existing = Self::runtime_id_in_tx(tx, session_id).await?;
+        let existing = Self::runtime_id_in_tx(tx, session_id, role).await?;
         if existing.is_some() && existing.as_deref() != incoming {
             return Err(Error::StateConflict(
                 "Session already has a different control runtime".into(),
@@ -146,13 +154,14 @@ impl SqliteSessionRuntimeRepository {
         Ok(())
     }
 
-    /// Interface-only runtimes do not own control. A control runtime must be
-    /// unambiguous, never an arbitrary choice among managed runtimes.
-    pub async fn runtime_id(&self, session_id: &str) -> Result<Option<String>> {
+    /// Select only the caller's declared control role. No role means no control
+    /// runtime; other roles never participate in selection or ambiguity checks.
+    pub async fn runtime_id(&self, session_id: &str, role: Option<&str>) -> Result<Option<String>> {
         let ids: Vec<String> = sqlx::query_scalar(
-            "SELECT runtime_id FROM session_runtimes WHERE session_id = ? AND role <> 'interface'",
+            "SELECT runtime_id FROM session_runtimes WHERE session_id = ? AND role = ?",
         )
         .bind(session_id)
+        .bind(role)
         .fetch_all(&self.pool)
         .await?;
         single_runtime(ids)
@@ -161,11 +170,13 @@ impl SqliteSessionRuntimeRepository {
     pub async fn runtime_id_in_tx(
         tx: &mut Transaction<'_, Sqlite>,
         session_id: &str,
+        role: Option<&str>,
     ) -> Result<Option<String>> {
         let ids: Vec<String> = sqlx::query_scalar(
-            "SELECT runtime_id FROM session_runtimes WHERE session_id = ? AND role <> 'interface'",
+            "SELECT runtime_id FROM session_runtimes WHERE session_id = ? AND role = ?",
         )
         .bind(session_id)
+        .bind(role)
         .fetch_all(&mut **tx)
         .await?;
         single_runtime(ids)
@@ -175,7 +186,7 @@ impl SqliteSessionRuntimeRepository {
         &self,
         session_id: &str,
     ) -> Result<Option<RuntimeBindingTmuxPaneRow>> {
-        let Some(id) = self.runtime_id(session_id).await? else {
+        let Some(id) = self.runtime_id(session_id, Some("tui")).await? else {
             return Ok(None);
         };
         Ok(sqlx::query_as("SELECT runtime_id, tmux_socket_path AS socket_path, tmux_pane_id AS pane_id, process_fingerprint FROM session_runtimes WHERE runtime_id = ?")
@@ -204,8 +215,12 @@ impl SqliteSessionRuntimeRepository {
         .await?)
     }
 
-    pub async fn start_command(&self, session_id: &str) -> Result<Option<String>> {
-        let Some(id) = self.runtime_id(session_id).await? else {
+    pub async fn start_command(
+        &self,
+        session_id: &str,
+        role: Option<&str>,
+    ) -> Result<Option<String>> {
+        let Some(id) = self.runtime_id(session_id, role).await? else {
             return Ok(None);
         };
         Ok(self.get(&id).await?.and_then(|row| row.start_command))

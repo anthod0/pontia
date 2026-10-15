@@ -62,7 +62,9 @@ impl BranchReplayService {
             .get_session_control(session)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session} not found")))?;
-        let target = crate::runtime::ControlTarget::resolve(&self.pool, session, None).await?;
+        let target =
+            crate::runtime::ControlTarget::resolve(&self.pool, &self.clients, session, None)
+                .await?;
         self.resolve_command(ResolveBranchReplayRequest {
             inbox_message_id: message.into(),
             session_id: session.into(),
@@ -100,7 +102,10 @@ impl BranchReplayService {
         request: ResolveBranchReplayRequest,
     ) -> pontia_core::Result<ResolvedBranchReplay> {
         let runtime_id = SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .runtime_id(&request.session_id)
+            .runtime_id(
+                &request.session_id,
+                self.clients.control_runtime_role(&request.client_type),
+            )
             .await?
             .ok_or_else(|| {
                 Error::StateConflict(format!(

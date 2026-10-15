@@ -9,7 +9,7 @@ impl ClientAdapter {
         input: &str,
         message: Option<&str>,
     ) -> Result<()> {
-        RuntimeReadinessService::new(self.pool.clone())
+        RuntimeReadinessService::new(self.pool.clone(), self.spec.adapter.control_runtime_role)
             .wait_until_ready(
                 &target.session_id,
                 self.spec.client_type,
@@ -40,7 +40,7 @@ impl ClientAdapter {
             );
         }
         let result = async {
-            RuntimeReadinessService::new(self.pool.clone())
+            RuntimeReadinessService::new(self.pool.clone(), self.spec.adapter.control_runtime_role)
                 .wait_until_ready(
                     &target.session_id,
                     self.spec.client_type,

@@ -104,7 +104,7 @@ impl LiveOutputService {
             (LiveOutputSource::RuntimeBound { runtime_id }, true) => {
                 validate_non_empty("runtime_id", runtime_id)?;
                 let expected_runtime = SqliteSessionRuntimeRepository::new(self.pool.clone())
-                    .runtime_id(&identity.session_id)
+                    .runtime_id(&identity.session_id, spec.adapter.control_runtime_role)
                     .await?;
                 if expected_runtime.as_deref() != Some(runtime_id) {
                     return Err(Error::StateConflict(format!(

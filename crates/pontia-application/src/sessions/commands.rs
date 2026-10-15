@@ -204,7 +204,12 @@ impl SessionCommandService {
                 duplicate: false,
             });
         };
-        self.upsert_runtime_binding(&session_id, &runtime).await?;
+        self.upsert_runtime_binding(
+            &session_id,
+            &runtime,
+            adapter.spec.adapter.control_runtime_role,
+        )
+        .await?;
         self.update_session_workspace(&session_id, workspace_record.as_ref())
             .await?;
 
@@ -242,6 +247,10 @@ impl SessionCommandService {
             let target = crate::runtime::ControlTarget {
                 session_id: session_id.clone(),
                 runtime_id: runtime.runtime_id().map(str::to_string),
+                control_runtime_role: self
+                    .clients
+                    .registry()
+                    .control_runtime_role(&request.client_type),
             };
             tokio::spawn(async move {
                 let _initial_slot = initial_slot;

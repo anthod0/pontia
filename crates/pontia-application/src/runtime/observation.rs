@@ -201,7 +201,7 @@ impl RuntimeObservationService {
             RuntimeBehavior::External => return Ok(()),
             RuntimeBehavior::InProcess => {
                 let Some(runtime_target) = SqliteSessionRuntimeRepository::new(self.pool.clone())
-                    .runtime_id(session_id)
+                    .runtime_id(session_id, client_spec.adapter.control_runtime_role)
                     .await?
                 else {
                     return Ok(());

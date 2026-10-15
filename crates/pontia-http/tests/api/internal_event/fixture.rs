@@ -40,7 +40,7 @@ pub(super) async fn bind_runtime(state: &AppState, session_id: &str, runtime_id:
         .await
         .unwrap();
     if let Some(existing) = SqliteSessionRuntimeRepository::new(state.db())
-        .runtime_id(session_id)
+        .runtime_id(session_id, Some("tui"))
         .await
         .unwrap()
         && existing != runtime_id

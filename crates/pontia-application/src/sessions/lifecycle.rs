@@ -31,8 +31,13 @@ impl SessionCommandService {
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let target =
-            crate::runtime::ControlTarget::resolve(&self.pool, session_id, runtime_id).await?;
+        let target = crate::runtime::ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            runtime_id,
+        )
+        .await?;
         self.clients
             .for_client(&session.client_type)?
             .ensure_exit_available(&target)
@@ -53,9 +58,13 @@ impl SessionCommandService {
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
-        let target =
-            crate::runtime::ControlTarget::resolve(&self.pool, session_id, expected_runtime)
-                .await?;
+        let target = crate::runtime::ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            expected_runtime,
+        )
+        .await?;
         if !matches!(session.state.as_str(), "exited" | "error") {
             let outcome = self
                 .clients
@@ -87,7 +96,13 @@ impl SessionCommandService {
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("Session {session_id} not found")))?;
-        let target = crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
+        let target = crate::runtime::ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            None,
+        )
+        .await?;
         self.clients
             .for_client(&session.client_type)?
             .await_initial_ready(&target)
@@ -112,7 +127,13 @@ impl SessionCommandService {
             )));
         }
         let adapter = self.clients.for_client(&session.client_type)?;
-        let target = crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
+        let target = crate::runtime::ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            None,
+        )
+        .await?;
         adapter.validate_resume(&target).await?;
         self.control.retire_connection_locked(session_id).await;
         let ingest = self.event_ingest.clone();
@@ -133,7 +154,9 @@ impl SessionCommandService {
         } else {
             None
         };
-        let persisted_start_command = self.start_command(session_id).await?;
+        let persisted_start_command = self
+            .start_command(session_id, target.control_runtime_role)
+            .await?;
         let runtime = adapter
             .resume(
                 &target,
@@ -166,7 +189,7 @@ impl SessionCommandService {
                 duplicate: false,
             });
         };
-        self.upsert_resumed_runtime_binding(session_id, &runtime)
+        self.upsert_resumed_runtime_binding(session_id, &runtime, target.control_runtime_role)
             .await?;
         ingest
             .ingest_pontia_event(PontiaEvent::new(
@@ -225,8 +248,13 @@ impl SessionCommandService {
                     "session {session_id} has an active Turn and its runtime cannot be replaced"
                 )));
             }
-            let target =
-                crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
+            let target = crate::runtime::ControlTarget::resolve(
+                &self.pool,
+                self.clients.registry(),
+                session_id,
+                None,
+            )
+            .await?;
             self.clients
                 .for_client(&session.client_type)?
                 .validate_resume(&target)
@@ -258,7 +286,13 @@ impl SessionCommandService {
                 "A Session cannot restart a shared runtime".into(),
             ));
         }
-        let target = crate::runtime::ControlTarget::resolve(&self.pool, session_id, None).await?;
+        let target = crate::runtime::ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            None,
+        )
+        .await?;
         let prior_restart_count = 0;
         let mut runtime_replacement_tx = self.pool.begin().await?;
         SqliteTurnRepository::serialize_session_turn_writes_in_tx(
@@ -293,7 +327,9 @@ impl SessionCommandService {
                     workspace_name: runtime_workspace_name,
                     handle: session.handle.clone(),
                     role: session.role.clone(),
-                    start_command: self.start_command(session_id).await?,
+                    start_command: self
+                        .start_command(session_id, target.control_runtime_role)
+                        .await?,
                     environment: self.workflow_runtime_environment(session_id).await?,
                 },
                 prior_restart_count + 1,

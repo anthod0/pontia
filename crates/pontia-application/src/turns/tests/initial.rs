@@ -69,6 +69,7 @@ async fn initial_input_uses_the_injected_channel_after_ready() {
                 &crate::runtime::ControlTarget {
                     session_id: "sess_pi".into(),
                     runtime_id: Some("rtinst_pi".into()),
+                    control_runtime_role: Some("tui"),
                 },
                 "initial input",
                 &json!({}),

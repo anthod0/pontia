@@ -43,6 +43,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         },
         native_turn_identity: false,
         native_turn_metadata_key: None,
+        control_runtime_role: Some("tui"),
         runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
             process_names: &["pi"],
             hook_log: Some(HookLogBehavior {

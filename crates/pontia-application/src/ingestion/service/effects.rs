@@ -40,7 +40,8 @@ pub(super) async fn clear_exited_session_tmux_markers(
     {
         Some(runtime_id) => runtime_id.to_string(),
         None if allow_bound_runtime_fallback => {
-            let Ok(Some(runtime_id)) = repository.runtime_id(&event.session_id).await else {
+            let Ok(Some(runtime_id)) = repository.runtime_id(&event.session_id, Some("tui")).await
+            else {
                 return;
             };
             runtime_id

@@ -41,7 +41,7 @@ impl NativeSessionService {
         runtime_id: &str,
     ) -> Result<()> {
         crate::runtime::NativeRuntimeBindings::new(self.pool.clone())
-            .confirm(binding, runtime_id)
+            .confirm(binding, runtime_id, &self.events.clients())
             .await
     }
 
@@ -99,7 +99,13 @@ impl NativeSessionService {
     }
 
     pub async fn ready(&self, session: &str, instance: &str, data: Value) -> Result<()> {
-        crate::runtime::ControlTarget::resolve(&self.pool, session, Some(instance)).await?;
+        crate::runtime::ControlTarget::resolve(
+            &self.pool,
+            &self.events.clients(),
+            session,
+            Some(instance),
+        )
+        .await?;
         let session_row =
             pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository::new(
                 self.pool.clone(),

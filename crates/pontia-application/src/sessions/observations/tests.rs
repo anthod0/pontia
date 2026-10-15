@@ -206,9 +206,14 @@ async fn observed_native_identity_reuses_its_session_without_reprovisioning() {
         .unwrap()
         .unwrap();
     assert_eq!(binding.client_session_key, "thread");
-    let target = crate::runtime::ControlTarget::resolve(&fixture.state.db(), &session, None)
-        .await
-        .unwrap();
+    let target = crate::runtime::ControlTarget::resolve(
+        &fixture.state.db(),
+        &fixture.state.clients(),
+        &session,
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(target.instance().unwrap(), "observed-runtime");
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE session_id != ?")
         .bind(&fixture.session)

@@ -30,6 +30,7 @@ struct Connections {
 #[derive(Clone)]
 pub struct ClientControlService {
     pool: SqlitePool,
+    clients: crate::clients::ClientRegistry,
     pontia_home: PathBuf,
     connections: Arc<Mutex<Connections>>,
     identity_gate: Arc<Mutex<()>>,
@@ -39,10 +40,16 @@ impl ClientControlService {
     pub fn new(pool: SqlitePool, pontia_home: PathBuf) -> Self {
         Self {
             pool,
+            clients: Default::default(),
             pontia_home,
             connections: Arc::default(),
             identity_gate: Arc::default(),
         }
+    }
+
+    pub fn with_clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
+        self.clients = clients;
+        self
     }
 
     /// Serializes connection replacement and accepted facts without persisting a generation.
@@ -79,8 +86,10 @@ impl ClientControlService {
     }
 
     pub async fn validate_runtime(&self, session_id: &str, runtime_id: &str) -> Result<()> {
-        let current = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .runtime_id(session_id).await?;
+        let current =
+            crate::runtime::ControlTarget::resolve(&self.pool, &self.clients, session_id, None)
+                .await?
+                .runtime_id;
         if current.as_deref() != Some(runtime_id) {
             return Err(Error::StateConflict(
                 "report runtime is no longer current".into(),
@@ -109,7 +118,11 @@ impl ClientControlService {
     }
 
     async fn current_runtime(&self, session_id: &str) -> Result<Option<String>> {
-        let Some(runtime_id) = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).runtime_id(session_id).await? else {
+        let Some(runtime_id) =
+            crate::runtime::ControlTarget::resolve(&self.pool, &self.clients, session_id, None)
+                .await?
+                .runtime_id
+        else {
             return Ok(None);
         };
         Ok(sqlx::query_scalar("SELECT r.runtime_id FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id=? AND s.state IN ('starting','idle','busy','interrupted') AND r.state IN ('starting','running')")

@@ -28,7 +28,7 @@ impl RuntimeBindingUpsertService {
         }
 
         let runtime_id = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .runtime_id(session_id)
+            .runtime_id(session_id, self.clients.control_runtime_role(&request.client_type))
             .await?
             .ok_or_else(|| pontia_core::Error::StateConflict("Session runtime is missing".into()))?;
         let ingest = &self.events;

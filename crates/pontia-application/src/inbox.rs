@@ -377,8 +377,13 @@ impl InboxCommandService {
             return Ok(());
         };
         if let Some(expected) = row.required_runtime_id.as_deref()
-            && let Err(error) =
-                crate::runtime::ControlTarget::resolve(&self.pool, session_id, Some(expected)).await
+            && let Err(error) = crate::runtime::ControlTarget::resolve(
+                &self.pool,
+                self.clients.registry(),
+                session_id,
+                Some(expected),
+            )
+            .await
         {
             self.mark_failed(&row.message_id, error.to_string()).await?;
             return Ok(());

@@ -6,9 +6,13 @@ use pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeR
 use super::SessionCommandService;
 
 impl SessionCommandService {
-    pub(super) async fn start_command(&self, session_id: &str) -> Result<Option<String>> {
+    pub(super) async fn start_command(
+        &self,
+        session_id: &str,
+        role: Option<&str>,
+    ) -> Result<Option<String>> {
         SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .start_command(session_id)
+            .start_command(session_id, role)
             .await
     }
 
@@ -16,10 +20,11 @@ impl SessionCommandService {
         &self,
         session_id: &str,
         runtime: &RuntimeStartResult,
+        role: Option<&str>,
     ) -> Result<()> {
         let record = runtime_binding_record(session_id, runtime)?;
         let result = SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .upsert_binding_guarded(record)
+            .upsert_binding_guarded(record, role)
             .await;
         if result.is_err() {
             crate::clients::discard_unbound_runtime(runtime);

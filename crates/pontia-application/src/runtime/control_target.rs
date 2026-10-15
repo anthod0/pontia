@@ -7,12 +7,26 @@ use sqlx::SqlitePool;
 pub struct ControlTarget {
     pub session_id: String,
     pub runtime_id: Option<String>,
+    pub control_runtime_role: Option<&'static str>,
 }
 
 impl ControlTarget {
-    pub async fn resolve(pool: &SqlitePool, session: &str, expected: Option<&str>) -> Result<Self> {
+    pub async fn resolve(
+        pool: &SqlitePool,
+        clients: &crate::clients::ClientRegistry,
+        session: &str,
+        expected: Option<&str>,
+    ) -> Result<Self> {
+        let client: Option<String> =
+            sqlx::query_scalar("SELECT client_type FROM sessions WHERE session_id = ?")
+                .bind(session)
+                .fetch_optional(pool)
+                .await?;
+        let role = client
+            .as_deref()
+            .and_then(|client| clients.control_runtime_role(client));
         let runtime_id = SqliteSessionRuntimeRepository::new(pool.clone())
-            .runtime_id(session)
+            .runtime_id(session, role)
             .await?;
         if expected.is_some() && expected != runtime_id.as_deref() {
             return Err(Error::StateConflict(format!(
@@ -22,12 +36,17 @@ impl ControlTarget {
         Ok(Self {
             session_id: session.into(),
             runtime_id,
+            control_runtime_role: role,
         })
     }
 
     pub async fn validate(&self, pool: &SqlitePool) -> Result<()> {
-        let current = Self::resolve(pool, &self.session_id, None).await?;
-        if current.runtime_id != self.runtime_id {
+        // Keep the captured role: validation may run while the Session row is
+        // write-locked by the caller, so it must query only runtime records.
+        let current = SqliteSessionRuntimeRepository::new(pool.clone())
+            .runtime_id(&self.session_id, self.control_runtime_role)
+            .await?;
+        if current != self.runtime_id {
             return Err(Error::StateConflict(
                 "runtime binding changed before control execution".into(),
             ));

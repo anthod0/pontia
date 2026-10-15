@@ -53,9 +53,60 @@ async fn updating_one_runtime_preserves_other_runtimes_and_creation_time() {
     assert_eq!(repository.get("b").await.unwrap(), Some(b));
     assert_eq!(repository.list("session").await.unwrap().len(), 2);
     assert!(
-        repository.runtime_id("session").await.is_err(),
+        repository.runtime_id("session", Some("tui")).await.is_err(),
         "ambiguous control must not choose an arbitrary TUI"
     );
+}
+
+#[tokio::test]
+async fn guarded_writes_allow_multiple_non_control_runtimes() {
+    for role in [None, Some("tui")] {
+        let (pool, _root) = test_pool().await;
+        let repository = SqliteSessionRuntimeRepository::new(pool);
+        repository
+            .upsert_binding_guarded(runtime("control"), role)
+            .await
+            .unwrap();
+        for id in ["interface-one", "interface-two"] {
+            let mut interface = runtime(id);
+            interface.role = "interface".into();
+            repository
+                .upsert_binding_guarded(interface, role)
+                .await
+                .unwrap();
+        }
+        assert_eq!(repository.list("session").await.unwrap().len(), 3);
+        assert_eq!(
+            repository
+                .runtime_id("session", role)
+                .await
+                .unwrap()
+                .as_deref(),
+            role.map(|_| "control")
+        );
+    }
+}
+
+#[tokio::test]
+async fn guarded_writes_fence_only_the_declared_control_role() {
+    let (pool, _root) = test_pool().await;
+    let repository = SqliteSessionRuntimeRepository::new(pool);
+    let mut first = runtime("first");
+    first.role = "owned".into();
+    repository
+        .upsert_binding_guarded(first.clone(), Some("owned"))
+        .await
+        .unwrap();
+    let mut replacement = first.clone();
+    replacement.runtime_id = "replacement".into();
+    assert!(
+        repository
+            .upsert_binding_guarded(replacement, Some("owned"))
+            .await
+            .is_err()
+    );
+    assert_eq!(repository.get("first").await.unwrap(), Some(first));
+    assert!(repository.get("replacement").await.unwrap().is_none());
 }
 
 #[tokio::test]

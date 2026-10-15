@@ -28,7 +28,8 @@ pub struct SetSessionModelRequest {
 impl SessionCommandService {
     pub async fn list_session_models(&self, session_id: &str) -> Result<SessionModels> {
         let session = self.model_session(session_id, false).await?;
-        let target = ControlTarget::resolve(&self.pool, session_id, None).await?;
+        let target =
+            ControlTarget::resolve(&self.pool, self.clients.registry(), session_id, None).await?;
         let runtime_id = target.runtime_id.clone();
         let models = self
             .clients
@@ -66,8 +67,13 @@ impl SessionCommandService {
         if runtime_bound && request.runtime_id.as_deref().is_none_or(str::is_empty) {
             return Err(Error::Domain("runtime_id must be non-empty".into()));
         }
-        let target =
-            ControlTarget::resolve(&self.pool, session_id, request.runtime_id.as_deref()).await?;
+        let target = ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            request.runtime_id.as_deref(),
+        )
+        .await?;
         self.clients
             .for_client(&session.client_type)?
             .set_model(&target, &request.model)
