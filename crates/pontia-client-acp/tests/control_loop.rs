@@ -148,6 +148,56 @@ impl Harness {
         .unwrap();
     }
 
+    async fn wait_interactions(
+        &self,
+        session: &str,
+        count: usize,
+    ) -> Vec<pontia_application::interactions::Interaction> {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let interactions = self
+                    .app
+                    .interactions()
+                    .list(session, None, 50, None)
+                    .await
+                    .unwrap()
+                    .interactions;
+                if interactions.len() == count {
+                    return interactions;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("permission registration must not block the reader")
+    }
+
+    async fn wait_interaction_state(
+        &self,
+        session: &str,
+        id: &str,
+        expected: pontia_application::interactions::InteractionState,
+    ) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if self
+                    .app
+                    .interactions()
+                    .get(session, id)
+                    .await
+                    .unwrap()
+                    .state
+                    == expected
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
     async fn stop(mut self) {
         self.app.shutdown().notify();
         tokio::time::timeout(Duration::from_secs(5), self.tasks.take().unwrap().join())
@@ -900,4 +950,381 @@ async fn agent_namespaces_isolate_equal_native_ids_and_duplicate_binding_is_reje
         assert_eq!(count, 1);
     }
     h.stop().await;
+}
+
+#[tokio::test]
+async fn permission_choices_preserve_all_scopes_and_native_ids_without_blocking_prompt_messages() {
+    use pontia_application::interactions::{InteractionError, InteractionIntent, InteractionState};
+    let h = Harness::new(&[("ACP_PERMISSION", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    for (ordinal, selected) in [
+        (1, "once:原"),
+        (2, "always:原"),
+        (3, "reject-once"),
+        (4, "reject-always"),
+    ] {
+        let turn = h
+            .app
+            .turn_commands()
+            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        h.release(&format!("update-{ordinal}"));
+        let records = h.wait_interactions(&session, ordinal * 3).await;
+        let records: Vec<_> = records
+            .into_iter()
+            .filter(|i| i.turn_id.as_deref() == Some(&turn.turn_id))
+            .collect();
+        assert_eq!(records.len(), 3);
+        h.wait_turn(&session, &turn.turn_id, "running").await;
+        let expected_id = if ordinal % 2 == 0 {
+            json!(format!("permission-{ordinal}"))
+        } else {
+            json!(700 + ordinal)
+        };
+        let locator = format!(
+            "request:{}",
+            expected_id
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| expected_id.to_string())
+        );
+        let record = records
+            .iter()
+            .find(|record| {
+                record
+                    .description
+                    .as_ref()
+                    .is_some_and(|text| text.ends_with(&locator))
+            })
+            .unwrap();
+        assert_eq!(
+            record
+                .options
+                .iter()
+                .map(|o| (o.key.as_str(), &o.intent))
+                .collect::<Vec<_>>(),
+            vec![
+                ("once:原", &InteractionIntent::Positive),
+                ("always:原", &InteractionIntent::Positive),
+                ("reject-once", &InteractionIntent::Negative),
+                ("reject-always", &InteractionIntent::Negative),
+            ]
+        );
+        let public = serde_json::to_string(record).unwrap();
+        assert!(!public.contains("do-not-persist"));
+        assert!(!public.contains("requestId"));
+        assert!(matches!(
+            h.app
+                .interactions()
+                .respond(&h.app, &session, &record.interaction_id, "not-offered")
+                .await,
+            Err(InteractionError::InvalidOption)
+        ));
+        let service = h.app.interactions();
+        let (first, concurrent) = tokio::join!(
+            service.respond(&h.app, &session, &record.interaction_id, selected),
+            service.respond(&h.app, &session, &record.interaction_id, selected)
+        );
+        assert!(first.is_ok() || concurrent.is_ok());
+        for result in [&first, &concurrent] {
+            if let Err(error) = result {
+                assert!(matches!(error, InteractionError::Resolving));
+            }
+        }
+        let repeated = h
+            .app
+            .interactions()
+            .respond(&h.app, &session, &record.interaction_id, "different")
+            .await
+            .unwrap();
+        assert_eq!(repeated.response.unwrap().option_key, selected);
+        // Leave the other two requests pending: the final prompt response must still be read.
+        h.release(&format!("release-{ordinal}"));
+        h.wait_turn(&session, &turn.turn_id, "completed").await;
+        for other in records
+            .iter()
+            .filter(|other| other.interaction_id != record.interaction_id)
+        {
+            h.wait_interaction_state(&session, &other.interaction_id, InteractionState::Expired)
+                .await;
+        }
+        assert_eq!(
+            h.app
+                .interactions()
+                .get(&session, &record.interaction_id)
+                .await
+                .unwrap()
+                .state,
+            InteractionState::Resolved
+        );
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let responses: Vec<_> = h
+                    .wire()
+                    .into_iter()
+                    .filter(|r| {
+                        r["result"]["outcome"]["outcome"] == "selected"
+                            && r["result"]["outcome"]["optionId"] == selected
+                    })
+                    .collect();
+                if responses.len() == 1 {
+                    assert_eq!(responses[0]["id"], expected_id);
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+    assert_eq!(h.requests("session/prompt"), 4);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn prompt_cancel_replies_cancelled_to_every_pending_request_without_finishing_turn() {
+    use pontia_application::interactions::{InteractionError, InteractionState};
+    let h = Harness::new(&[("ACP_PERMISSION", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    let records = h.wait_interactions(&session, 3).await;
+    h.wait_turn(&session, &turn.turn_id, "running").await;
+    h.app
+        .turn_commands()
+        .interrupt_turn(&session, &turn.turn_id)
+        .await
+        .unwrap();
+    for record in records {
+        h.wait_interaction_state(&session, &record.interaction_id, InteractionState::Expired)
+            .await;
+        assert!(matches!(
+            h.app
+                .interactions()
+                .respond(&h.app, &session, &record.interaction_id, "once:原")
+                .await,
+            Err(InteractionError::Expired)
+        ));
+    }
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while h
+            .wire()
+            .iter()
+            .filter(|r| r["result"]["outcome"]["outcome"] == "cancelled")
+            .count()
+            != 3
+        {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let replies: Vec<_> = h
+        .wire()
+        .into_iter()
+        .filter(|r| r.get("result").is_some())
+        .collect();
+    for id in [json!(701), json!("permission-1"), json!("unanswered-1")] {
+        assert_eq!(
+            replies
+                .iter()
+                .filter(
+                    |r| r["id"] == id && r["result"] == json!({"outcome":{"outcome":"cancelled"}})
+                )
+                .count(),
+            1
+        );
+    }
+    assert_eq!(h.events(&session, "turn.interrupted").await, 0);
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "interrupted").await;
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn native_request_cancellation_expires_only_its_own_interaction() {
+    use pontia_application::interactions::{InteractionError, InteractionState};
+    let h = Harness::new(&[("ACP_PERMISSION", "1"), ("ACP_NATIVE_CANCEL", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    let records = h.wait_interactions(&session, 3).await;
+    h.release("native-cancel-1");
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let page = h
+                .app
+                .interactions()
+                .list(&session, None, 50, None)
+                .await
+                .unwrap();
+            if page
+                .interactions
+                .iter()
+                .filter(|i| i.state == InteractionState::Expired)
+                .count()
+                == 1
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    for record in records {
+        let current = h
+            .app
+            .interactions()
+            .get(&session, &record.interaction_id)
+            .await
+            .unwrap();
+        let result = h
+            .app
+            .interactions()
+            .respond(&h.app, &session, &record.interaction_id, "always:原")
+            .await;
+        if current.state == InteractionState::Expired {
+            assert!(matches!(result, Err(InteractionError::Expired)));
+        } else {
+            assert_eq!(result.unwrap().state, InteractionState::Resolved);
+        }
+    }
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    assert!(
+        !h.wire()
+            .iter()
+            .any(|r| r["id"] == "unanswered-1" && r.get("result").is_some())
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn disconnect_and_close_expire_pending_permissions_without_replaying_on_another_peer() {
+    use pontia_application::interactions::{InteractionError, InteractionState};
+    for close in [false, true] {
+        let h = Harness::new(&[("ACP_PERMISSION", "1"), ("ACP_DROP_PROMPT", "1")]).await;
+        let session = h.create("first").await.unwrap();
+        let turn = h
+            .app
+            .turn_commands()
+            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        h.release("update-1");
+        let records = h.wait_interactions(&session, 3).await;
+        h.wait_turn(&session, &turn.turn_id, "running").await;
+        if close {
+            h.app
+                .session_commands()
+                .terminate_session(&session)
+                .await
+                .unwrap();
+        } else {
+            h.release("release-1");
+        }
+        h.wait_runtime_exited(&session).await;
+        let other = h.create("second").await.unwrap();
+        for record in records {
+            h.wait_interaction_state(&session, &record.interaction_id, InteractionState::Expired)
+                .await;
+            assert!(matches!(
+                h.app
+                    .interactions()
+                    .respond(&h.app, &session, &record.interaction_id, "once:原")
+                    .await,
+                Err(InteractionError::Expired)
+            ));
+            assert!(matches!(
+                h.app
+                    .interactions()
+                    .respond(&h.app, &other, &record.interaction_id, "once:原")
+                    .await,
+                Err(InteractionError::NotFound)
+            ));
+        }
+        assert!(!h.wire().iter().any(|r| r.get("result").is_some()));
+        assert_eq!(h.events(&session, "turn.completed").await, 0);
+        assert_eq!(h.events(&session, "turn.interrupted").await, 0);
+        h.stop().await;
+    }
+}
+
+#[tokio::test]
+async fn permission_response_flush_does_not_block_incoming_updates_under_pipe_backpressure() {
+    use pontia_application::interactions::InteractionState;
+    let h = Harness::new(&[("ACP_PERMISSION", "1"), ("ACP_REPLY_BACKPRESSURE", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    let record = h.wait_interactions(&session, 1).await.remove(0);
+    h.wait_turn(&session, &turn.turn_id, "running").await;
+    let app = h.app.clone();
+    let response_session = session.clone();
+    let response_id = record.interaction_id.clone();
+    let responding = tokio::spawn(async move {
+        app.interactions()
+            .respond(&app, &response_session, &response_id, &"x".repeat(262144))
+            .await
+    });
+    h.wait_interaction_state(
+        &session,
+        &record.interaction_id,
+        InteractionState::Resolving,
+    )
+    .await;
+    h.release("backpressure-1");
+    let result = tokio::time::timeout(Duration::from_secs(5), responding)
+        .await
+        .expect("incoming updates must drain while the response waits for stdin capacity")
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.state, InteractionState::Resolved);
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn invalid_permission_options_or_native_session_do_not_register_or_approve() {
+    for flag in ["ACP_BAD_OPTIONS", "ACP_WRONG_SESSION"] {
+        let h = Harness::new(&[("ACP_PERMISSION", "1"), (flag, "1")]).await;
+        let session = h.create("first").await.unwrap();
+        let turn = h
+            .app
+            .turn_commands()
+            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        h.release("update-1");
+        h.wait_turn(&session, &turn.turn_id, "running").await;
+        assert!(h.wait_interactions(&session, 0).await.is_empty());
+        h.release("release-1");
+        h.wait_turn(&session, &turn.turn_id, "completed").await;
+        assert!(!h.wire().iter().any(|r| r.get("result").is_some()));
+        h.stop().await;
+    }
 }

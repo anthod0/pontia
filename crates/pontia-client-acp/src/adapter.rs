@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     path::Path,
     sync::{
-        Arc,
+        Arc, OnceLock,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -13,8 +13,8 @@ use agent_client_protocol::schema::v1::{
 use pontia_application::{
     AgentBindingService, AppState, EventIngestService, PontiaEventType, UpsertAgentBindingRequest,
     client_contract::{
-        AgentClientCapabilities, ClientExitOutcome, ClientOperation, ClientService,
-        ClientServicePhase, ClientSession, ClientSessionDetails,
+        AgentClientCapabilities, ClientExitOutcome, ClientInteractions, ClientOperation,
+        ClientService, ClientServicePhase, ClientSession, ClientSessionDetails,
     },
     clients::ClientRegistration,
     control::InputReceipt,
@@ -40,9 +40,10 @@ pub fn registration(config: AcpConfig) -> ClientRegistration {
         config,
         peers: Arc::new(Mutex::new(HashMap::new())),
         stopped: Arc::new(AtomicBool::new(false)),
+        interactions: Arc::new(OnceLock::new()),
     });
     ClientRegistration {
-        interactions: None,
+        interactions: Some(adapter.clone()),
         events: None,
         service: Some(adapter.clone()),
         profile: None,
@@ -61,6 +62,7 @@ struct AcpAdapter {
     config: AcpConfig,
     peers: Peers,
     stopped: Arc<AtomicBool>,
+    interactions: Arc<OnceLock<pontia_application::interactions::InteractionService>>,
 }
 
 fn unavailable() -> Error {
@@ -175,6 +177,7 @@ impl ClientSession for AcpAdapter {
             };
             let peer = match Peer::spawn(
                 events.clone(),
+                self.interactions.get().cloned().ok_or_else(unavailable)?,
                 &request.session_id,
                 &runtime,
                 &cwd,
@@ -276,6 +279,7 @@ impl ClientSession for AcpAdapter {
                 turn: turn.into(),
                 started: false,
                 sequence: 0,
+                cancelled: false,
             });
             let sent = peer.connection.prepare_request(PromptRequest::new(
                 native,
@@ -315,7 +319,7 @@ impl ClientSession for AcpAdapter {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             let peer = self.peer(&target.session_id).await?;
-            let state = peer.state.lock().await;
+            let mut state = peer.state.lock().await;
             target.validate(&events.db()).await?;
             if !state.current || state.closing {
                 return Err(unavailable());
@@ -329,7 +333,18 @@ impl ClientSession for AcpAdapter {
             peer.connection
                 .send_notification(CancelNotification::new(native))
                 .map_err(peer::protocol_error)?;
-            peer.receipts.wait("session/cancel".into()).await
+            state.active.as_mut().expect("checked prompt").cancelled = true;
+            let permissions = std::mem::take(&mut state.permissions);
+            drop(state);
+            let sent = peer.receipts.wait("session/cancel".into()).await;
+            let expired = crate::interactions::expire(
+                &peer.interactions,
+                &target.session_id,
+                permissions,
+                Some(&peer.receipts),
+            )
+            .await;
+            sent.and(expired)
         })
     }
 
@@ -452,6 +467,21 @@ impl ClientSession for AcpAdapter {
     }
 }
 
+impl ClientInteractions for AcpAdapter {
+    fn resolve<'a>(
+        &'a self,
+        _events: EventIngestService,
+        session: &'a str,
+        interaction: &'a str,
+        option: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            let peer = self.peer(session).await?;
+            crate::interactions::resolve(&peer.state, &peer.receipts, interaction, option).await
+        })
+    }
+}
+
 impl ClientService for AcpAdapter {
     fn phase(&self) -> ClientServicePhase {
         ClientServicePhase::Transport
@@ -461,6 +491,7 @@ impl ClientService for AcpAdapter {
         state: AppState,
     ) -> ClientOperation<'a, Option<tokio::task::JoinHandle<Result<()>>>> {
         Box::pin(async move {
+            let _ = self.interactions.set(state.interactions());
             let adapter = self.clone();
             let mut shutdown = state.shutdown().subscribe();
             Ok(Some(tokio::spawn(async move {

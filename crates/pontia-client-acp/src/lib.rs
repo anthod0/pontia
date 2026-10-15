@@ -1,5 +1,6 @@
 mod adapter;
 pub mod identity;
+mod interactions;
 mod peer;
 mod spec;
 mod transport;

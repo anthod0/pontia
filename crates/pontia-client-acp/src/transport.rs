@@ -15,6 +15,7 @@ use tokio::{io::AsyncWrite, process::ChildStdin, sync::watch};
 #[derive(Default)]
 struct Written {
     keys: HashSet<String>,
+    responses: HashSet<String>,
     closed: bool,
 }
 
@@ -52,6 +53,14 @@ impl Receipts {
         }
     }
 
+    // Only observed response writes need a receipt. Unsupported requests and
+    // already-cancelled prompts can send protocol replies without retaining keys.
+    pub fn response(&self, id: &agent_client_protocol::schema::v1::RequestId) -> Result<String> {
+        let key = format!("response:{}", serde_json::to_string(id)?);
+        self.state.lock().unwrap().responses.insert(key.clone());
+        Ok(key)
+    }
+
     pub fn close(&self) {
         self.state.lock().unwrap().closed = true;
         self.changed.send_modify(|version| *version += 1);
@@ -79,14 +88,19 @@ impl FlushedWriter {
                 let key =
                     if let Some(id) = frame.get("id").filter(|_| frame.get("method").is_some()) {
                         Some(id.to_string())
+                    } else if let Some(id) = frame.get("id") {
+                        Some(format!("response:{id}"))
                     } else if frame["method"] == "session/cancel" {
                         Some("session/cancel".into())
                     } else {
                         None
                     };
                 if let Some(key) = key {
-                    self.receipts.state.lock().unwrap().keys.insert(key);
-                    self.receipts.changed.send_modify(|version| *version += 1);
+                    let mut state = self.receipts.state.lock().unwrap();
+                    if !key.starts_with("response:") || state.responses.remove(&key) {
+                        state.keys.insert(key);
+                        self.receipts.changed.send_modify(|version| *version += 1);
+                    }
                 }
             }
             self.bytes.drain(..=end);

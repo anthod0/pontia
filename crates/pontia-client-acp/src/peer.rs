@@ -31,6 +31,7 @@ pub(crate) struct Prompt {
     pub turn: String,
     pub started: bool,
     pub sequence: u64,
+    pub cancelled: bool,
 }
 
 pub(crate) struct SessionState {
@@ -39,6 +40,7 @@ pub(crate) struct SessionState {
     pub capabilities: Option<pontia_core::client_capabilities::AgentClientCapabilities>,
     pub active: Option<Prompt>,
     pub closing: bool,
+    pub permissions: HashMap<String, crate::interactions::Permission>,
 }
 
 pub(crate) type Peers = Arc<Mutex<HashMap<String, Arc<Peer>>>>;
@@ -57,6 +59,7 @@ pub(crate) struct Peer {
     pub connection: ConnectionTo<Agent>,
     pub state: Arc<Mutex<SessionState>>,
     pub receipts: Arc<Receipts>,
+    pub interactions: pontia_application::interactions::InteractionService,
     pub runtime: String,
     pub stop: watch::Sender<bool>,
     pub done: watch::Receiver<bool>,
@@ -163,6 +166,7 @@ fn fingerprint(pid: Option<u32>) -> Option<String> {
 impl Peer {
     pub async fn spawn(
         events: EventIngestService,
+        interactions: pontia_application::interactions::InteractionService,
         session: &str,
         runtime: &str,
         cwd: &Path,
@@ -194,6 +198,7 @@ impl Peer {
             capabilities: None,
             active: None,
             closing: false,
+            permissions: HashMap::new(),
         }));
         let (connected, connection) = oneshot::channel();
         let (stop, mut stopping) = watch::channel(false);
@@ -206,9 +211,24 @@ impl Peer {
         let task_receipts = receipts.clone();
         let session = session.to_owned();
         let task_runtime = runtime.to_owned();
+        let permission_service = interactions.clone();
+        let cleanup_service = interactions.clone();
+        let permission_state = state.clone();
+        let permission_session = session.clone();
         tokio::spawn(async move {
             let io = agent_client_protocol::Client
                 .builder()
+                .on_receive_request(
+                    async move |request: RequestPermissionRequest, responder, _cx| {
+                        if let Err(error) = crate::interactions::register(
+                            &permission_service, &permission_session, &permission_state, request, responder,
+                        ).await {
+                            tracing::warn!(session=%permission_session, %error, "ACP permission registration failed");
+                        }
+                        Ok(())
+                    },
+                    agent_client_protocol::on_receive_request!(),
+                )
                 .on_receive_notification(
                     async move |message: agent_client_protocol::UntypedMessage, _cx| {
                         if message.method() != "session/update" { return Ok(()); }
@@ -250,11 +270,17 @@ impl Peer {
             // Release write waiters before taking the state lock: a control operation
             // may hold that lock while awaiting a pipe flush.
             task_receipts.close();
-            {
+            let permissions = {
                 let mut state = task_state.lock().await;
                 state.current = false;
                 state.capabilities = None;
                 state.active = None;
+                std::mem::take(&mut state.permissions)
+            };
+            if let Err(error) =
+                crate::interactions::expire(&cleanup_service, &session, permissions, None).await
+            {
+                tracing::warn!(%session, %error, "ACP permission cleanup failed");
             }
             if let Some(output) = events.live_output() {
                 output.discard_session(&session);
@@ -290,6 +316,7 @@ impl Peer {
             connection,
             state,
             receipts,
+            interactions,
             runtime: runtime.into(),
             stop,
             done: completion,
@@ -565,6 +592,8 @@ pub(crate) async fn finish(
     };
     fact(events, session, &peer.runtime, turn, terminal, data).await?;
     state.active = None;
+    let permissions = std::mem::take(&mut state.permissions);
     state.refresh_capabilities();
-    Ok(())
+    drop(state);
+    crate::interactions::expire(&peer.interactions, session, permissions, None).await
 }

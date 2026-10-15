@@ -35,6 +35,28 @@ def wait_for(name):
 def prompt(request, ordinal, cancellation):
     global active
     wait_for(f"update-{ordinal}")
+    if os.environ.get("ACP_PERMISSION") == "1":
+        options = [
+            {"optionId": "once:原", "name": "Allow once", "kind": "allow_once"},
+            {"optionId": "always:原", "name": "Allow always", "kind": "allow_always"},
+            {"optionId": "reject-once", "name": "Reject once", "kind": "reject_once"},
+            {"optionId": "reject-always", "name": "Reject always", "kind": "reject_always"},
+        ]
+        if os.environ.get("ACP_BAD_OPTIONS") == "1":
+            options.append(options[0])
+        request_ids = [700 + ordinal, f"permission-{ordinal}", f"unanswered-{ordinal}"]
+        if os.environ.get("ACP_REPLY_BACKPRESSURE") == "1":
+            options = [{"optionId": "x" * 262144, "name": "Allow once", "kind": "allow_once"}]
+            request_ids = [700 + ordinal]
+        for request_id in request_ids:
+            send({"id": request_id, "method": "session/request_permission", "params": {
+                "sessionId": "other-session" if os.environ.get("ACP_WRONG_SESSION") == "1" else "native-id",
+                "toolCall": {"toolCallId": "same-tool", "title": f"<script>untrusted</script> request:{request_id}", "rawInput": {"secret": "do-not-persist"}},
+                "options": options,
+            }})
+    if os.environ.get("ACP_NATIVE_CANCEL") == "1":
+        wait_for(f"native-cancel-{ordinal}")
+        send({"method": "$/cancel_request", "params": {"requestId": f"unanswered-{ordinal}"}})
     if os.environ.get("ACP_EXTENSION_UPDATE") == "1":
         send({"method": "session/update", "params": {
             "sessionId": "native-id", "update": {"sessionUpdate": "extension_running"}
@@ -45,6 +67,17 @@ def prompt(request, ordinal, cancellation):
             "sessionId": "native-id",
             "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "streamed answer"}}
         }})
+    if os.environ.get("ACP_REPLY_BACKPRESSURE") == "1":
+        wait_for(f"backpressure-{ordinal}")
+        # The main thread cannot drain stdin until these updates have all been
+        # written. A response writer holding the reader's state lock deadlocks.
+        for _ in range(64):
+            send({"method": "session/update", "params": {
+                "sessionId": "native-id", "update": {
+                    "sessionUpdate": "tool_call_update", "toolCallId": "pressure", "rawInput": "x" * 4096
+                }
+            }})
+        (root / f"drain-input-{ordinal}").touch()
     wait_for(f"release-{ordinal}")
     if os.environ.get("ACP_DROP_PROMPT") == "1":
         os._exit(0)
@@ -81,6 +114,8 @@ for line in sys.stdin:
         number += 1
         active = threading.Event()
         threading.Thread(target=prompt, args=(request, number, active), daemon=True).start()
+        if os.environ.get("ACP_REPLY_BACKPRESSURE") == "1":
+            wait_for(f"drain-input-{number}")
     elif method == "session/cancel":
         if active is not None:
             active.set()
