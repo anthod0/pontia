@@ -15,6 +15,7 @@ struct Harness {
     app: AppState,
     tasks: Option<ClientServiceTasks>,
     root: tempfile::TempDir,
+    config: AcpConfig,
 }
 
 impl Harness {
@@ -43,9 +44,10 @@ impl Harness {
             env,
         };
         let mut clients = ClientRegistry::default();
-        clients.register(pontia_client_acp::registration(AcpConfig {
+        let config = AcpConfig {
             agents: BTreeMap::from([("first".into(), config.clone()), ("second".into(), config)]),
-        }));
+        };
+        clients.register(pontia_client_acp::registration(config.clone()));
         let db = connect_sqlite(&format!(
             "sqlite://{}",
             root.path().join("test.db").display()
@@ -64,6 +66,7 @@ impl Harness {
             app,
             root,
             tasks: Some(tasks),
+            config,
         }
     }
 
@@ -132,13 +135,7 @@ impl Harness {
     async fn wait_runtime_exited(&self, session: &str) {
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
-                let state: Option<String> =
-                    sqlx::query_scalar("SELECT state FROM session_runtimes WHERE session_id=?")
-                        .bind(session)
-                        .fetch_optional(&self.app.db())
-                        .await
-                        .unwrap();
-                if state.as_deref() == Some("exited") {
+                if self.events(session, "runtime.exited").await > 0 {
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(5)).await;
@@ -196,6 +193,75 @@ impl Harness {
         })
         .await
         .unwrap();
+    }
+
+    async fn restart(&mut self) {
+        self.app.shutdown().notify();
+        tokio::time::timeout(Duration::from_secs(5), self.tasks.take().unwrap().join())
+            .await
+            .unwrap()
+            .unwrap();
+        let mut clients = ClientRegistry::default();
+        clients.register(pontia_client_acp::registration(self.config.clone()));
+        self.app = AppState::builder(self.app.db(), self.root.path().into())
+            .clients(clients.clone())
+            .build();
+        self.tasks = Some(
+            clients
+                .start_services(self.app.clone(), ClientServicePhase::Transport)
+                .await
+                .unwrap(),
+        );
+    }
+
+    async fn wait_requests(&self, method: &str, count: usize) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while self.requests(method) < count {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    async fn wait_ready(&self, session: &str, count: i64) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if self.events(session, "session.ready").await >= count
+                    && self
+                        .app
+                        .queries()
+                        .get_session(session)
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .capabilities
+                        .timeline
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("Session did not recover: wire={:?}", self.wire()));
+    }
+
+    async fn history(
+        &self,
+        session: &str,
+    ) -> std::result::Result<
+        pontia_application::TurnTimelinePage,
+        pontia_application::TurnTimelineServiceError,
+    > {
+        pontia_application::TurnTimelineService::new(self.app.event_ingest_service())
+            .page(
+                session.into(),
+                pontia_application::TurnTimelineDirection::Forward,
+                None,
+                50,
+            )
+            .await
     }
 
     async fn stop(mut self) {
@@ -575,7 +641,7 @@ async fn creation_immediately_initializes_peer_and_persists_one_identity_and_run
     assert_eq!(view.state, "idle");
     assert!(view.capabilities.accept_task);
     assert!(!view.capabilities.interrupt);
-    assert!(!view.capabilities.timeline);
+    assert!(view.capabilities.timeline);
     assert_eq!(view.runtimes.len(), 1);
     assert_eq!(view.runtimes[0].role, "acp");
     assert_eq!(view.runtimes[0].state, "running");
@@ -1240,6 +1306,9 @@ async fn disconnect_and_close_expire_pending_permissions_without_replaying_on_an
             h.release("release-1");
         }
         h.wait_runtime_exited(&session).await;
+        if !close {
+            h.wait_ready(&session, 2).await;
+        }
         let other = h.create("second").await.unwrap();
         for record in records {
             h.wait_interaction_state(&session, &record.interaction_id, InteractionState::Expired)
@@ -1305,6 +1374,481 @@ async fn permission_response_flush_does_not_block_incoming_updates_under_pipe_ba
     h.release("release-1");
     h.wait_turn(&session, &turn.turn_id, "completed").await;
     h.stop().await;
+}
+
+#[tokio::test]
+async fn load_replay_reads_user_and_agent_history_without_creating_execution_facts() {
+    let h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    assert!(h.history(&session).await.unwrap().items.is_empty());
+    let mut turns = Vec::new();
+    for ordinal in 1..=2 {
+        let turn = h
+            .app
+            .turn_commands()
+            .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        h.release(&format!("update-{ordinal}"));
+        h.wait_turn(&session, &turn.turn_id, "running").await;
+        // A live read must not issue session/load into the active prompt.
+        let loads = h.requests("session/load");
+        let live = h.history(&session).await.unwrap();
+        assert_eq!(h.requests("session/load"), loads);
+        assert!(
+            live.items
+                .iter()
+                .any(|item| item.turn_id.as_deref() == Some(&turn.turn_id)
+                    && item.item.role == "assistant")
+        );
+        h.release(&format!("release-{ordinal}"));
+        h.wait_turn(&session, &turn.turn_id, "completed").await;
+        turns.push(turn.turn_id);
+    }
+    let page = h.history(&session).await.unwrap();
+    // The existing chat consumer orders untimestamped native items by item ID.
+    assert!(
+        page.items
+            .windows(2)
+            .all(|pair| pair[0].item.item_id < pair[1].item.item_id)
+    );
+    let messages: Vec<_> = page
+        .items
+        .iter()
+        .map(|item| {
+            (
+                item.turn_id.as_deref().unwrap(),
+                item.item.role.as_str(),
+                item.item.content_preview.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        messages,
+        vec![
+            (turns[0].as_str(), "user", "end_turn"),
+            (turns[0].as_str(), "assistant", "streamed answer"),
+            (turns[1].as_str(), "user", "end_turn"),
+            (turns[1].as_str(), "assistant", "streamed answer")
+        ]
+    );
+    assert_eq!(h.events(&session, "turn.started").await, 2);
+    assert_eq!(h.events(&session, "turn.completed").await, 2);
+    let copied: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE payload LIKE '%streamed answer%'")
+            .fetch_one(&h.app.db())
+            .await
+            .unwrap();
+    assert_eq!(copied, 0);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn service_restart_loads_the_bound_agent_identity_and_preserves_runtime_and_history() {
+    let mut h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    let before = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    let binding = pontia_application::AgentBindingService::new(h.app.db())
+        .binding_for_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    // Selection metadata is not the authority for an already-bound Session.
+    sqlx::query("UPDATE sessions SET metadata=? WHERE session_id=?")
+        .bind(r#"{"acp_agent_id":"second"}"#)
+        .bind(&session)
+        .execute(&h.app.db())
+        .await
+        .unwrap();
+    h.restart().await;
+    h.wait_ready(&session, 2).await;
+    let after = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    let restored = pontia_application::AgentBindingService::new(h.app.db())
+        .binding_for_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored.id, binding.id);
+    assert_eq!(restored.client_session_key, binding.client_session_key);
+    assert_eq!(after.runtimes.len(), 1);
+    assert_eq!(after.runtimes[0].runtime_id, before.runtimes[0].runtime_id);
+    #[cfg(target_os = "linux")]
+    assert_ne!(
+        after.runtimes[0].process_fingerprint,
+        before.runtimes[0].process_fingerprint
+    );
+    assert_eq!(h.requests("session/new"), 1);
+    assert_eq!(h.requests("session/prompt"), 1);
+    let history = h.history(&session).await.unwrap();
+    assert_eq!(history.items.len(), 2);
+    assert!(
+        history
+            .items
+            .iter()
+            .all(|item| item.turn_id.as_deref() == Some(&turn.turn_id))
+    );
+    assert_eq!(history.items[1].item.content_preview, "streamed answer");
+    assert_eq!(h.events(&session, "turn.completed").await, 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn lost_prompt_reconnect_expires_permissions_without_replay_or_terminal_facts() {
+    use pontia_application::interactions::InteractionState;
+    let h = Harness::new(&[("ACP_PERMISSION", "1"), ("ACP_DROP_PROMPT", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    let records = h.wait_interactions(&session, 3).await;
+    h.wait_turn(&session, &turn.turn_id, "running").await;
+    h.release("release-1");
+    h.wait_ready(&session, 2).await;
+    for record in records {
+        h.wait_interaction_state(&session, &record.interaction_id, InteractionState::Expired)
+            .await;
+    }
+    let view = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(view.runtimes.len(), 1);
+    assert_eq!(view.state, "busy");
+    assert!(!view.capabilities.accept_task);
+    assert!(!view.capabilities.interrupt);
+    assert!(view.capabilities.timeline);
+    assert_eq!(h.history(&session).await.unwrap().items.len(), 2);
+    assert_eq!(h.requests("initialize"), 2);
+    assert_eq!(h.requests("session/new"), 1);
+    assert_eq!(h.requests("session/prompt"), 1);
+    assert!(!h.wire().iter().any(|frame| frame.get("result").is_some()));
+    for kind in [
+        "session.exited",
+        "turn.completed",
+        "turn.interrupted",
+        "turn.failed",
+    ] {
+        assert_eq!(h.events(&session, kind).await, 0);
+    }
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn failed_history_load_is_not_empty_success_and_can_be_reprobed() {
+    let h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    h.release("load-fail");
+    assert!(h.history(&session).await.is_err());
+    let failed = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!failed.capabilities.timeline);
+    assert!(failed.timeline_unavailable_reason.is_some());
+    std::fs::remove_file(h.root.path().join("load-fail")).unwrap();
+    let restored = h.history(&session).await.unwrap();
+    assert_eq!(restored.items.len(), 2);
+    assert_eq!(h.requests("session/new"), 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn empty_history_is_distinct_from_a_failed_or_unassociated_replay() {
+    let h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    assert!(h.history(&session).await.unwrap().items.is_empty());
+    for marker in ["load-fail", "orphan-replay"] {
+        h.release(marker);
+        assert!(h.history(&session).await.is_err());
+        let view = h
+            .app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!view.capabilities.timeline);
+        assert!(view.timeline_unavailable_reason.is_some());
+        std::fs::remove_file(h.root.path().join(marker)).unwrap();
+        assert!(h.history(&session).await.unwrap().items.is_empty());
+    }
+    assert_eq!(h.events(&session, "turn.started").await, 0);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn replay_for_another_native_session_is_unavailable_not_empty_history() {
+    let h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    h.release("wrong-replay");
+    assert!(h.history(&session).await.is_err());
+    let view = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!view.capabilities.timeline);
+    assert!(view.timeline_unavailable_reason.is_some());
+    assert_eq!(h.events(&session, "turn.started").await, 1);
+    assert_eq!(h.events(&session, "turn.completed").await, 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn shutdown_during_recovery_cancels_held_load_and_leaves_identity_and_lifecycle_intact() {
+    let mut h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    h.release("hold-load");
+    h.restart().await;
+    h.wait_requests("session/load", 2).await;
+    let view = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!view.capabilities.accept_task);
+    assert!(!view.capabilities.timeline);
+    assert_eq!(view.runtimes.len(), 1);
+    assert_eq!(h.requests("session/new"), 1);
+    assert_eq!(h.events(&session, "session.exited").await, 0);
+    assert_eq!(h.events(&session, "session.ready").await, 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn rechunked_history_preserves_no_output_prompt_boundaries_across_restart() {
+    let mut h = Harness::new(&[
+        ("ACP_SILENT_FIRST", "1"),
+        ("ACP_RECHUNK", "1"),
+        ("ACP_STOP_REASON", "end_turn"),
+    ])
+    .await;
+    let session = h.create("first").await.unwrap();
+    let mut turns = Vec::new();
+    for (ordinal, input) in [(1, "first:雪"), (2, "second:🌊")] {
+        let turn = h
+            .app
+            .turn_commands()
+            .create_and_dispatch_turn(&session, input.into(), json!({}))
+            .await
+            .unwrap()
+            .unwrap();
+        h.release(&format!("update-{ordinal}"));
+        h.release(&format!("release-{ordinal}"));
+        h.wait_turn(&session, &turn.turn_id, "completed").await;
+        turns.push(turn.turn_id);
+    }
+    for restart in [false, true] {
+        if restart {
+            h.restart().await;
+            h.wait_ready(&session, 2).await;
+        }
+        let page = h.history(&session).await.unwrap();
+        assert_eq!(page.items.len(), 3);
+        assert_eq!(page.items[0].turn_id.as_deref(), Some(turns[0].as_str()));
+        assert_eq!(page.items[0].item.content_preview, "first:雪");
+        assert_eq!(page.items[1].turn_id.as_deref(), Some(turns[1].as_str()));
+        assert_eq!(page.items[1].item.content_preview, "second:🌊");
+        assert_eq!(page.items[2].turn_id.as_deref(), Some(turns[1].as_str()));
+        assert_eq!(page.items[2].item.content_preview, "streamed answer");
+    }
+    assert_eq!(h.events(&session, "turn.completed").await, 2);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn cancelling_a_history_reader_does_not_strand_replay_or_misclassify_late_history() {
+    let h = Harness::new(&[]).await;
+    let session = h.create("first").await.unwrap();
+    h.release("hold-load");
+    let app = h.app.clone();
+    let read_session = session.clone();
+    let read = tokio::spawn(async move {
+        pontia_application::TurnTimelineService::new(app.event_ingest_service())
+            .page(
+                read_session,
+                pontia_application::TurnTimelineDirection::Forward,
+                None,
+                50,
+            )
+            .await
+    });
+    h.wait_requests("session/load", 2).await;
+    read.abort();
+    assert!(read.await.unwrap_err().is_cancelled());
+    h.release("release-load");
+    h.wait_ready(&session, 1).await;
+    assert!(h.history(&session).await.unwrap().items.is_empty());
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    assert_eq!(h.events(&session, "turn.started").await, 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn a_stalled_peer_does_not_block_other_session_recovery_or_shutdown() {
+    let mut h = Harness::new(&[]).await;
+    let first = h.create("first").await.unwrap();
+    let second = h.create("second").await.unwrap();
+    h.config
+        .agents
+        .get_mut("first")
+        .unwrap()
+        .env
+        .insert("ACP_LOAD_GATE".into(), "first-load".into());
+    h.release("first-load");
+    h.restart().await;
+    h.wait_ready(&second, 2).await;
+    let stalled = h.app.queries().get_session(&first).await.unwrap().unwrap();
+    assert!(!stalled.capabilities.accept_task);
+    assert!(!stalled.capabilities.timeline);
+    assert_eq!(h.events(&first, "session.ready").await, 1);
+    assert_eq!(h.requests("session/new"), 2);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn native_history_without_pontia_turns_is_visible_without_inventing_turns() {
+    let h = Harness::new(&[]).await;
+    let updates = [
+        json!({"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"earlier user"}}),
+        json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"earlier answer"}}),
+    ];
+    std::fs::write(
+        h.root.path().join("history.jsonl"),
+        updates
+            .iter()
+            .map(|update| format!("{update}\n"))
+            .collect::<String>(),
+    )
+    .unwrap();
+    let session = h.create("first").await.unwrap();
+    let page = h.history(&session).await.unwrap();
+    assert_eq!(page.items.len(), 2);
+    assert_eq!(page.items[0].item.content_preview, "earlier user");
+    assert_eq!(page.items[1].item.content_preview, "earlier answer");
+    assert!(page.items.iter().all(|item| item.turn_id.is_none()));
+    assert!(
+        h.app
+            .queries()
+            .list_turns(&session)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(h.events(&session, "turn.started").await, 0);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn recovery_rejects_missing_native_session_or_downgraded_capabilities_without_rebinding() {
+    for marker in ["load-fail", "no-load"] {
+        let mut h = Harness::new(&[]).await;
+        let session = h.create("first").await.unwrap();
+        let binding = pontia_application::AgentBindingService::new(h.app.db())
+            .binding_for_session(&session)
+            .await
+            .unwrap()
+            .unwrap();
+        h.release(marker);
+        h.restart().await;
+        h.wait_requests("initialize", 2).await;
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while h.events(&session, "runtime.exited").await < 2 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let failed = h
+            .app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!failed.capabilities.accept_task);
+        assert!(!failed.capabilities.timeline);
+        assert!(failed.timeline_unavailable_reason.is_some());
+        assert_eq!(failed.runtimes.len(), 1);
+        let after = pontia_application::AgentBindingService::new(h.app.db())
+            .binding_for_session(&session)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(after.client_session_key, binding.client_session_key);
+        assert_eq!(after.id, binding.id);
+        assert_eq!(h.requests("session/new"), 1);
+        assert_eq!(h.events(&session, "session.ready").await, 1);
+        assert_eq!(h.events(&session, "session.exited").await, 0);
+        h.stop().await;
+    }
 }
 
 #[tokio::test]

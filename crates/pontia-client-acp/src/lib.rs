@@ -1,4 +1,5 @@
 mod adapter;
+mod history;
 pub mod identity;
 mod interactions;
 mod peer;

@@ -23,6 +23,12 @@ def log(message):
             output.write(json.dumps(message) + "\n")
 
 
+def remember(update):
+    with lock:
+        with (root / "history.jsonl").open("a") as output:
+            output.write(json.dumps(update) + "\n")
+
+
 def response(request, result):
     send({"id": request["id"], "result": result})
 
@@ -62,11 +68,10 @@ def prompt(request, ordinal, cancellation):
             "sessionId": "native-id", "update": {"sessionUpdate": "extension_running"}
         }})
         send({"id": "extension-barrier", "method": "_fixture_barrier", "params": {}})
-    if os.environ.get("ACP_NO_UPDATES") != "1":
-        send({"method": "session/update", "params": {
-            "sessionId": "native-id",
-            "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "streamed answer"}}
-        }})
+    if os.environ.get("ACP_NO_UPDATES") != "1" and not (os.environ.get("ACP_SILENT_FIRST") == "1" and ordinal == 1):
+        update = {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "streamed answer"}}
+        remember(update)
+        send({"method": "session/update", "params": {"sessionId": "native-id", "update": update}})
     if os.environ.get("ACP_REPLY_BACKPRESSURE") == "1":
         wait_for(f"backpressure-{ordinal}")
         # The main thread cannot drain stdin until these updates have all been
@@ -81,7 +86,7 @@ def prompt(request, ordinal, cancellation):
     wait_for(f"release-{ordinal}")
     if os.environ.get("ACP_DROP_PROMPT") == "1":
         os._exit(0)
-    reason = "cancelled" if cancellation.is_set() else request["params"]["prompt"][0]["text"]
+    reason = "cancelled" if cancellation.is_set() else os.environ.get("ACP_STOP_REASON", request["params"]["prompt"][0]["text"])
     active = None
     response(request, {"stopReason": reason})
     if os.environ.get("ACP_EXIT_AFTER_RESULT") == "1":
@@ -96,7 +101,7 @@ for line in sys.stdin:
     if method is None:
         continue
     if method == "initialize":
-        caps = {"loadSession": os.environ.get("ACP_NO_LOAD") != "1", "sessionCapabilities": {}}
+        caps = {"loadSession": os.environ.get("ACP_NO_LOAD") != "1" and not (root / "no-load").exists(), "sessionCapabilities": {}}
         if os.environ.get("ACP_NO_CLOSE") != "1":
             caps["sessionCapabilities"]["close"] = {}
         response(request, {"protocolVersion": 1, "agentCapabilities": caps,
@@ -105,10 +110,36 @@ for line in sys.stdin:
         if os.environ.get("ACP_HOLD_NEW") == "1":
             wait_for("release-new")
         response(request, {"sessionId": "native-id"})
+    elif method == "session/load":
+        gate = os.environ.get("ACP_LOAD_GATE")
+        if gate and (root / gate).exists():
+            wait_for(f"release-{gate}")
+        if (root / "hold-load").exists():
+            wait_for("release-load")
+        if (root / "load-fail").exists() or os.environ.get("ACP_LOAD_FAIL") == "1":
+            send({"id": request["id"], "error": {"code": -32602, "message": "Native session unavailable"}})
+            continue
+        if request["params"]["sessionId"] != "native-id":
+            send({"id": request["id"], "error": {"code": -32602, "message": "Wrong native identity"}})
+            continue
+        history = root / "history.jsonl"
+        if history.exists():
+            for update in history.read_text().splitlines():
+                native = "wrong-native-id" if (root / "wrong-replay").exists() else "native-id"
+                update = json.loads(update)
+                if os.environ.get("ACP_RECHUNK") == "1":
+                    for character in update["content"]["text"]:
+                        send({"method": "session/update", "params": {"sessionId": native, "update": {**update, "content": {"type": "text", "text": character}}}})
+                else:
+                    send({"method": "session/update", "params": {"sessionId": native, "update": update}})
+        if (root / "orphan-replay").exists():
+            send({"method": "session/update", "params": {"sessionId": "native-id", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "orphan answer"}}}})
+        response(request, {})
         if os.environ.get("ACP_BREAK_INPUT") == "1":
             sys.stdin.read(1)
             os._exit(0)
     elif method == "session/prompt":
+        remember({"sessionUpdate": "user_message_chunk", "content": request["params"]["prompt"][0]})
         if active is not None:
             log({"overlap": True})
         number += 1

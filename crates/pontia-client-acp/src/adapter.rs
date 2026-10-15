@@ -36,7 +36,10 @@ use crate::{
 };
 
 pub fn registration(config: AcpConfig) -> ClientRegistration {
+    let (reconnect, recovery) = tokio::sync::mpsc::unbounded_channel();
     let adapter = Arc::new(AcpAdapter {
+        reconnect,
+        recovery: Arc::new(Mutex::new(Some(recovery))),
         config,
         peers: Arc::new(Mutex::new(HashMap::new())),
         stopped: Arc::new(AtomicBool::new(false)),
@@ -48,19 +51,21 @@ pub fn registration(config: AcpConfig) -> ClientRegistration {
         service: Some(adapter.clone()),
         profile: None,
         in_process: None,
-        session: Some(adapter),
+        session: Some(adapter.clone()),
         prepare_on_input: false,
         steer: false,
         spec: &SPEC,
-        data: None,
+        data: Some(adapter),
         launcher: None,
     }
 }
 
 #[derive(Clone)]
-struct AcpAdapter {
+pub(crate) struct AcpAdapter {
     config: AcpConfig,
-    peers: Peers,
+    reconnect: tokio::sync::mpsc::UnboundedSender<String>,
+    recovery: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>>,
+    pub(crate) peers: Peers,
     stopped: Arc<AtomicBool>,
     interactions: Arc<OnceLock<pontia_application::interactions::InteractionService>>,
 }
@@ -101,8 +106,16 @@ impl ClientSession for AcpAdapter {
                     .fetch_one(&pool)
                     .await?;
             let metadata: serde_json::Value = serde_json::from_str(&metadata)?;
-            let selected = metadata["acp_agent_id"]
-                .as_str()
+            let bindings = AgentBindingService::new(pool.clone());
+            let binding = bindings.binding_for_session(&request.session_id).await?;
+            let bound_identity = binding
+                .as_ref()
+                .map(|binding| identity::decode(&binding.client_session_key))
+                .transpose()?;
+            let selected = bound_identity
+                .as_ref()
+                .map(|identity| identity[0].as_str())
+                .or_else(|| metadata["acp_agent_id"].as_str())
                 .filter(|id| !id.is_empty())
                 .ok_or_else(|| {
                     Error::Domain("metadata.acp_agent_id must be a nonempty string".into())
@@ -112,16 +125,6 @@ impl ClientSession for AcpAdapter {
                 .agents
                 .get(selected)
                 .ok_or_else(|| Error::Domain(format!("Unknown ACP Agent ID: {selected}")))?;
-            let bindings = AgentBindingService::new(pool.clone());
-            if bindings
-                .binding_for_session(&request.session_id)
-                .await?
-                .is_some()
-            {
-                return Err(Error::StateConflict(
-                    "Existing ACP identity requires load recovery; session/new is forbidden".into(),
-                ));
-            }
             let mut peers = self.peers.lock().await;
             if self.stopped.load(Ordering::Acquire) {
                 return Err(unavailable());
@@ -137,6 +140,11 @@ impl ClientSession for AcpAdapter {
                     .fetch_all(&pool)
                     .await?;
             let runtime = match runtimes.as_slice() {
+                [] if binding.is_some() => {
+                    return Err(Error::StateConflict(
+                        "ACP recovery requires its existing runtime".into(),
+                    ));
+                }
                 [] => request
                     .runtime_id
                     .clone()
@@ -148,8 +156,10 @@ impl ClientSession for AcpAdapter {
                     ));
                 }
             };
-            let cwd = request
-                .workspace
+            let cwd = binding
+                .as_ref()
+                .map(|binding| binding.launch_cwd.clone())
+                .or(request.workspace)
                 .map(std::path::PathBuf::from)
                 .map(Ok)
                 .unwrap_or_else(std::env::current_dir)?;
@@ -182,7 +192,10 @@ impl ClientSession for AcpAdapter {
                 &runtime,
                 &cwd,
                 &config,
-                Arc::downgrade(&self.peers),
+                peer::PeerOwner {
+                    peers: Arc::downgrade(&self.peers),
+                    reconnect: self.reconnect.clone(),
+                },
             )
             .await
             {
@@ -202,12 +215,15 @@ impl ClientSession for AcpAdapter {
             peers.insert(request.session_id.clone(), peer.clone());
             drop(peers);
             let setup = async {
-                let (native, metadata) = peer.initialize(&cwd).await?;
+                let (native, metadata) = peer.initialize(&cwd, bound_identity.as_ref().map(|identity| identity[1].as_str())).await?;
                 let key = identity::encode(selected, &native.to_string())?;
                 let mut state = peer.state.lock().await;
                 if !state.current || self.stopped.load(Ordering::Acquire) {
                     return Err(unavailable());
                 }
+                let terminal: bool = sqlx::query_scalar("SELECT state='exited' FROM sessions WHERE session_id=?")
+                    .bind(&request.session_id).fetch_one(&pool).await?;
+                if terminal { return Err(Error::StateConflict("ACP Session exited during recovery".into())); }
                 bindings
                     .upsert_binding(UpsertAgentBindingRequest {
                         session_id: request.session_id.clone(),
@@ -235,6 +251,9 @@ impl ClientSession for AcpAdapter {
                         json!({"client_session_key":key,"launch_cwd":cwd.display().to_string(),"binding_metadata":metadata}),
                     )
                     .await?;
+                state.blocked = binding.is_some() && sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM turns WHERE session_id=? AND state IN ('queued','running'))")
+                    .bind(&request.session_id).fetch_one(&pool).await?;
+                state.ready = true;
                 state.refresh_capabilities();
                 Ok(())
             }
@@ -268,18 +287,22 @@ impl ClientSession for AcpAdapter {
             if !state.current || state.closing || state.capabilities.is_none() {
                 return Err(unavailable());
             }
-            if state.active.is_some() {
+            if state.blocked || state.replay.is_some() || state.active.is_some() {
                 return Err(Error::Conflict {
                     code: "input_busy",
                     message: "ACP prompt is still active".into(),
                 });
             }
             let native = state.native.clone().ok_or_else(unavailable)?;
+            let history_index = crate::history::user_bytes(&state.history);
+            crate::history::append(&mut state.history, "user", input);
             state.active = Some(Prompt {
                 turn: turn.into(),
                 started: false,
                 sequence: 0,
                 cancelled: false,
+                history_index,
+                history_end: history_index + input.len(),
             });
             let sent = peer.connection.prepare_request(PromptRequest::new(
                 native,
@@ -358,7 +381,7 @@ impl ClientSession for AcpAdapter {
             let native = {
                 let mut state = peer.state.lock().await;
                 target.validate(&events.db()).await?;
-                if !state.current || state.closing {
+                if !state.current || !state.ready || state.closing || state.replay.is_some() {
                     return Err(unavailable());
                 }
                 state.closing = true;
@@ -385,6 +408,16 @@ impl ClientSession for AcpAdapter {
             let Ok(peer) = self.peer(session).await else {
                 return Ok(AgentClientCapabilities::default());
             };
+            let retry_history = {
+                let state = peer.state.lock().await;
+                state.current
+                    && state.ready
+                    && state.history_error.is_some()
+                    && state.replay.is_none()
+            };
+            if retry_history {
+                let _ = peer.load().await;
+            }
             let state = peer.state.lock().await;
             Ok(state
                 .capabilities
@@ -436,10 +469,28 @@ impl ClientSession for AcpAdapter {
 
     fn resume<'a>(
         &'a self,
-        _events: EventIngestService,
-        _target: &'a ControlTarget,
+        events: EventIngestService,
+        target: &'a ControlTarget,
     ) -> ClientOperation<'a, ()> {
-        Box::pin(async { Err(unsupported()) })
+        Box::pin(async move {
+            target.validate(&events.db()).await?;
+            self.provision(
+                events,
+                Path::new("."),
+                RuntimeStartRequest {
+                    session_id: target.session_id.clone(),
+                    runtime_id: target.runtime_id.clone(),
+                    client_type: "acp".into(),
+                    workspace: None,
+                    workspace_name: None,
+                    handle: None,
+                    role: None,
+                    start_command: None,
+                    environment: Default::default(),
+                },
+            )
+            .await
+        })
     }
     fn list_models<'a>(
         &'a self,
@@ -494,9 +545,41 @@ impl ClientService for AcpAdapter {
             let _ = self.interactions.set(state.interactions());
             let adapter = self.clone();
             let mut shutdown = state.shutdown().subscribe();
+            let mut recovery = self.recovery.lock().await.take().ok_or_else(unavailable)?;
+            // Recover only persisted ACP bindings. Never create native sessions on startup.
+            let sessions: Vec<String> = sqlx::query_scalar("SELECT s.session_id FROM sessions s JOIN agent_bindings b USING(session_id) WHERE b.client_type='acp' AND s.state IN ('starting','idle','busy','interrupted')")
+                .fetch_all(&state.db()).await?;
+            for session in sessions {
+                let _ = adapter.reconnect.send(session);
+            }
             Ok(Some(tokio::spawn(async move {
-                let _ = shutdown.wait_for(|stop| *stop).await;
+                let mut recoveries = tokio::task::JoinSet::new();
+                loop {
+                    tokio::select! {
+                        _ = async { let _ = shutdown.wait_for(|stop| *stop).await; } => break,
+                        session = recovery.recv() => {
+                            let Some(session) = session else { break; };
+                            let adapter = adapter.clone();
+                            let state = state.clone();
+                            recoveries.spawn(async move {
+                            let recover = async {
+                                let target = ControlTarget::resolve(&state.db(), &state.clients(), &session, None).await?;
+                                let active: bool = sqlx::query_scalar("SELECT state IN ('starting','idle','busy','interrupted') FROM sessions WHERE session_id=?")
+                                    .bind(&session).fetch_one(&state.db()).await?;
+                                if active { adapter.resume(state.event_ingest_service(), &target).await?; }
+                                Ok::<_, Error>(())
+                            };
+                            if let Err(error) = recover.await { tracing::warn!(%session, %error, "ACP reconnect unavailable"); }
+                            });
+                        }
+                        result = recoveries.join_next(), if !recoveries.is_empty() => {
+                            if let Some(Err(error)) = result { tracing::warn!(%error, "ACP recovery task failed"); }
+                        }
+                    }
+                }
                 adapter.stopped.store(true, Ordering::Release);
+                recoveries.abort_all();
+                while recoveries.join_next().await.is_some() {}
                 let peers: Vec<_> = adapter
                     .peers
                     .lock()

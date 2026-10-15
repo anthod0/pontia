@@ -113,6 +113,18 @@ impl TurnTimelineService {
         selected: &[&TurnRow],
     ) -> Result<Vec<TurnTimelineItem>, TurnTimelineServiceError> {
         if selected.is_empty() {
+            // A native source must confirm an empty history too. Otherwise an
+            // unavailable source would be indistinguishable from no messages.
+            if let Some(binding) = AgentBindingService::new(self.pool.clone())
+                .binding_for_session(session_id)
+                .await?
+                && let Some(history) = self.native_history(&binding).await
+            {
+                return history
+                    .read_ranges(Vec::new())
+                    .await
+                    .map_err(classify_reader_error);
+            }
             return Ok(Vec::new());
         }
 

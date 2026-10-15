@@ -32,26 +32,43 @@ pub(crate) struct Prompt {
     pub started: bool,
     pub sequence: u64,
     pub cancelled: bool,
+    pub history_index: usize,
+    pub history_end: usize,
 }
 
 pub(crate) struct SessionState {
     pub current: bool,
+    pub ready: bool,
+    pub blocked: bool,
+    reconnect_needed: bool,
     pub native: Option<SessionId>,
     pub capabilities: Option<pontia_core::client_capabilities::AgentClientCapabilities>,
     pub active: Option<Prompt>,
     pub closing: bool,
     pub permissions: HashMap<String, crate::interactions::Permission>,
+    pub history: Vec<crate::history::Message>,
+    pub replay: Option<Vec<crate::history::Message>>,
+    pub history_error: Option<String>,
+    pub cwd: std::path::PathBuf,
 }
 
 pub(crate) type Peers = Arc<Mutex<HashMap<String, Arc<Peer>>>>;
 
+pub(crate) struct PeerOwner {
+    pub peers: Weak<Mutex<HashMap<String, Arc<Peer>>>>,
+    pub reconnect: tokio::sync::mpsc::UnboundedSender<String>,
+}
+
 impl SessionState {
     pub fn refresh_capabilities(&mut self) {
-        self.capabilities = (self.current && self.native.is_some() && !self.closing).then(|| {
-            let mut capabilities = ACP_MAX_CAPABILITIES;
-            capabilities.interrupt = self.active.is_some();
-            capabilities
-        });
+        self.capabilities = (self.current && self.ready && self.native.is_some() && !self.closing)
+            .then(|| {
+                let mut capabilities = ACP_MAX_CAPABILITIES;
+                capabilities.interrupt = self.active.is_some();
+                capabilities.timeline = self.history_error.is_none() && self.replay.is_none();
+                capabilities.accept_task = self.replay.is_none() && !self.blocked;
+                capabilities
+            });
     }
 }
 
@@ -171,7 +188,7 @@ impl Peer {
         runtime: &str,
         cwd: &Path,
         config: &AcpAgentConfig,
-        peers: Weak<Mutex<HashMap<String, Arc<Peer>>>>,
+        owner: PeerOwner,
     ) -> Result<Arc<Self>> {
         let mut child = Command::new(&config.command)
             .args(&config.args)
@@ -194,11 +211,18 @@ impl Peer {
         let reader = child.stdout.take().expect("piped stdout");
         let state = Arc::new(Mutex::new(SessionState {
             current: true,
+            ready: false,
+            blocked: false,
+            reconnect_needed: false,
             native: None,
             capabilities: None,
             active: None,
             closing: false,
             permissions: HashMap::new(),
+            history: Vec::new(),
+            replay: None,
+            history_error: Some("ACP history has not been loaded".into()),
+            cwd: cwd.to_path_buf(),
         }));
         let (connected, connection) = oneshot::channel();
         let (stop, mut stopping) = watch::channel(false);
@@ -216,7 +240,8 @@ impl Peer {
         let permission_state = state.clone();
         let permission_session = session.clone();
         tokio::spawn(async move {
-            let io = agent_client_protocol::Client
+            {
+                let io = agent_client_protocol::Client
                 .builder()
                 .on_receive_request(
                     async move |request: RequestPermissionRequest, responder, _cx| {
@@ -262,20 +287,25 @@ impl Peer {
                         Ok(())
                     },
                 );
-            tokio::pin!(io);
-            tokio::select! {
-                result = &mut io => { if let Err(error) = result { tracing::warn!(%session, %error, "ACP connection ended"); } }
-                _ = stopping.changed() => {}
-            }
+                tokio::pin!(io);
+                tokio::select! {
+                    result = &mut io => { if let Err(error) = result { tracing::warn!(%session, %error, "ACP connection ended"); } }
+                    _ = stopping.changed() => {}
+                }
+            } // Drop in-flight handlers before cleanup takes their state lock.
             // Release write waiters before taking the state lock: a control operation
             // may hold that lock while awaiting a pipe flush.
             task_receipts.close();
-            let permissions = {
+            let (permissions, recover) = {
                 let mut state = task_state.lock().await;
+                let recover = state.ready
+                    && !state.closing
+                    && (state.current || state.reconnect_needed)
+                    && (!*stopping.borrow() || state.reconnect_needed);
                 state.current = false;
                 state.capabilities = None;
                 state.active = None;
-                std::mem::take(&mut state.permissions)
+                (std::mem::take(&mut state.permissions), recover)
             };
             if let Err(error) =
                 crate::interactions::expire(&cleanup_service, &session, permissions, None).await
@@ -298,7 +328,7 @@ impl Peer {
             {
                 tracing::warn!(%session, %error, "ACP runtime cleanup failed");
             }
-            if let Some(peers) = peers.upgrade() {
+            if let Some(peers) = owner.peers.upgrade() {
                 let mut peers = peers.lock().await;
                 if peers
                     .get(&session)
@@ -308,6 +338,9 @@ impl Peer {
                 }
             }
             done.send_replace(true);
+            if recover {
+                let _ = owner.reconnect.send(session);
+            }
         });
         let connection = connection
             .await
@@ -364,7 +397,11 @@ impl Peer {
             .map_err(|_| Error::ControlUnknown("ACP close response was lost".into()))?
     }
 
-    pub async fn initialize(&self, cwd: &Path) -> Result<(SessionId, Value)> {
+    pub async fn initialize(
+        &self,
+        cwd: &Path,
+        existing: Option<&str>,
+    ) -> Result<(SessionId, Value)> {
         let initialize = self
             .call(InitializeRequest::new(ProtocolVersion::V1))
             .await?;
@@ -390,8 +427,15 @@ impl Peer {
                 missing.join(", ")
             )));
         }
-        let new = self.call(NewSessionRequest::new(cwd.to_path_buf())).await?;
-        if new.session_id.to_string().is_empty() {
+        let native = match existing {
+            Some(id) => SessionId::new(id.to_owned()),
+            None => {
+                self.call(NewSessionRequest::new(cwd.to_path_buf()))
+                    .await?
+                    .session_id
+            }
+        };
+        if native.to_string().is_empty() {
             return Err(Error::Domain(
                 "ACP session/new returned an empty sessionId".into(),
             ));
@@ -406,10 +450,94 @@ impl Peer {
         } else {
             json!({})
         };
-        Ok((new.session_id, metadata))
+        {
+            let mut state = self.state.lock().await;
+            if !state.current {
+                return Err(crate::history::unavailable());
+            }
+            state.native = Some(native.clone());
+        }
+        self.load().await?;
+        Ok((native, metadata))
+    }
+
+    pub async fn load(&self) -> Result<()> {
+        let (native, cwd) = {
+            let mut state = self.state.lock().await;
+            if !state.current || state.closing {
+                return Err(crate::history::unavailable());
+            }
+            if state.active.is_some() {
+                return Ok(());
+            }
+            if state.replay.is_some() {
+                return Err(Error::Conflict {
+                    code: "timeline_pending",
+                    message: "ACP history replay is in progress".into(),
+                });
+            }
+            let native = state
+                .native
+                .clone()
+                .ok_or_else(crate::history::unavailable)?;
+            state.replay = Some(Vec::new());
+            state.history_error = None;
+            state.refresh_capabilities();
+            (native, state.cwd.clone())
+        };
+        let request = self
+            .connection
+            .prepare_request(LoadSessionRequest::new(native, cwd));
+        let key = serde_json::to_string(request.id())?;
+        let shared = self.state.clone();
+        let (send, receive) = oneshot::channel();
+        // Completion belongs to the connection, not to the HTTP/read future.
+        // Dropping a reader cannot strand replay or let late history become live output.
+        request
+            .on_receiving_result(async move |result| {
+                let mut state = shared.lock().await;
+                let result = if !state.current {
+                    Err(crate::history::unavailable())
+                } else {
+                    let replay = state.replay.take().unwrap_or_default();
+                    if let Err(error) = result {
+                        state.history_error = Some(format!("ACP session/load failed: {error}"));
+                    } else if state.history_error.is_none()
+                        && !state.history.iter().enumerate().all(|(index, known)| {
+                            replay.get(index).is_some_and(|loaded| {
+                                loaded.role == known.role
+                                    && (loaded.text == known.text
+                                        || (known.role == "assistant"
+                                            && index + 1 == state.history.len()
+                                            && loaded.text.starts_with(&known.text)))
+                            })
+                        })
+                    {
+                        state.history_error = Some(
+                            "ACP replay did not preserve the known native message history".into(),
+                        );
+                    }
+                    let result = if let Some(reason) = state.history_error.clone() {
+                        Err(Error::CapabilityUnavailable(reason))
+                    } else {
+                        state.history = replay;
+                        Ok(())
+                    };
+                    state.refresh_capabilities();
+                    result
+                };
+                let _ = send.send(result);
+                Ok(())
+            })
+            .map_err(protocol_error)?;
+        self.receipts.wait(key).await?;
+        receive
+            .await
+            .map_err(|_| Error::ControlUnknown("ACP history response was lost".into()))?
     }
 
     pub fn invalidate(&self, state: &mut SessionState) {
+        state.reconnect_needed = true;
         state.current = false;
         state.capabilities = None;
         self.stop.send_replace(true);
@@ -462,7 +590,7 @@ pub(crate) async fn started(
             runtime,
             &prompt.turn,
             EventType::TurnStarted,
-            json!({}),
+            json!({"acp_history_anchor":prompt.history_index}),
         )
         .await?;
         prompt.started = true;
@@ -478,13 +606,32 @@ async fn update(
     notification: SessionNotification,
 ) -> Result<()> {
     let mut state = shared.lock().await;
-    if !state.current || state.native.as_ref() != Some(&notification.session_id) {
+    if !state.current {
         return Ok(());
     }
-    let Some(prompt) = &mut state.active else {
+    if state.native.as_ref() != Some(&notification.session_id) {
+        if state.replay.is_some() {
+            state.history_error =
+                Some("ACP replay returned a different native Session identity".into());
+        }
         return Ok(());
-    };
+    }
     let update = serde_json::to_value(notification.update)?;
+    if let Some(replay) = &mut state.replay {
+        if crate::history::collect(replay, &update).is_err() {
+            state.history_error = Some(
+                "ACP history replay contains unsupported or unassociated message content".into(),
+            );
+        }
+        return Ok(());
+    }
+    if state.active.is_none() {
+        return Ok(());
+    }
+    if update["sessionUpdate"] != "user_message_chunk" {
+        let _ = crate::history::collect(&mut state.history, &update);
+    }
+    let prompt = state.active.as_mut().expect("checked active prompt");
     // Only known prompt activity is evidence of started; extension notifications,
     // config changes, usage and unrelated session metadata are not lifecycle facts.
     match update["sessionUpdate"].as_str() {
@@ -590,6 +737,8 @@ pub(crate) async fn finish(
     } else {
         json!({})
     };
+    let mut data = data;
+    data["acp_history_anchor"] = json!(prompt.history_end);
     fact(events, session, &peer.runtime, turn, terminal, data).await?;
     state.active = None;
     let permissions = std::mem::take(&mut state.permissions);
