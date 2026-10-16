@@ -3,6 +3,7 @@
 	import ShieldCheckIcon from 'phosphor-svelte/lib/ShieldCheckIcon';
 	import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon';
 	import HeroSection from '$lib/components/HeroSection.svelte';
+	import IntegrationProgress from '$lib/components/IntegrationProgress.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 </script>
@@ -51,6 +52,7 @@
 		</div>
 	</section>
 
+	<IntegrationProgress />
 </main>
 
 <SiteFooter />

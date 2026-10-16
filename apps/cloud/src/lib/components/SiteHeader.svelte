@@ -9,6 +9,7 @@
   </a>
   <nav aria-label="Primary navigation">
     <a class="nav-link" href="/docs">Docs</a>
+    <a class="nav-link" href="/#progress">Progress</a>
     <a class="nav-link account-link" href="/settings/account">Account</a>
     <a class="button button-small" href="https://app.pontia.dev">Open Dashboard</a>
     <a
