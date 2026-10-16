@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { toast } from 'svelte-sonner'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { getInteraction, listPendingInteractions, respondInteraction } from '../../api/client'
@@ -12,6 +13,7 @@
   let interactions: Interaction[] = []
   let submitting = new Set<string>()
   let error: string | null = null
+  let lastToastedError: string | null = null
   let mounted = false
   let generation = 0
   let activeSession = ''
@@ -74,6 +76,14 @@
     }
   }
 
+  $: {
+    if (error && error !== lastToastedError) {
+      toast.error('Agent interaction failed', { description: error })
+      lastToastedError = error
+    }
+    if (!error) lastToastedError = null
+  }
+
   $: if (mounted && sessionId !== activeSession) {
     activeSession = sessionId
     generation += 1
@@ -102,7 +112,7 @@
   })
 </script>
 
-{#if interactions.length || error}
+{#if interactions.length}
   <section aria-label="Agent interactions" class="mx-auto w-full max-w-[760px] px-4 pb-4">
     {#each interactions as interaction (interaction.interaction_id)}
       <Alert.Root class="mb-3">
@@ -125,6 +135,5 @@
         </Alert.Description>
       </Alert.Root>
     {/each}
-    {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
   </section>
 {/if}

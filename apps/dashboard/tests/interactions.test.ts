@@ -9,7 +9,11 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   respond: vi.fn(),
   get: vi.fn(),
+  toastError: vi.fn(),
   listener: null as null | ((event: DashboardStreamEvent) => void),
+}));
+vi.mock("svelte-sonner", () => ({
+  toast: { error: mocks.toastError },
 }));
 vi.mock("../src/api/client", () => ({
   listPendingInteractions: mocks.list,
@@ -93,6 +97,36 @@ test("refreshes pending choices on notifications, reconnect and page visibility 
   await screen.findByRole("button", { name: "Skip" });
   mocks.list.mockResolvedValue([]);
   document.dispatchEvent(new Event("visibilitychange"));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Skip" })).toBeNull());
+});
+
+test("notifies once for repeated refresh failures and recovers pending choices", async () => {
+  mocks.list.mockRejectedValue(new ApiError("Not Found", "request_failed", 404));
+  render(SessionInteractions, { sessionId: "session-1" });
+  await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(1));
+
+  sseStatus.set("open");
+  await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
+  expect(mocks.toastError).toHaveBeenCalledTimes(1);
+
+  mocks.list.mockResolvedValue([interaction()]);
+  document.dispatchEvent(new Event("visibilitychange"));
+  await screen.findByRole("button", { name: "Skip" });
+
+  mocks.list.mockRejectedValue(new ApiError("Not Found", "request_failed", 404));
+  document.dispatchEvent(new Event("visibilitychange"));
+  await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(2));
+});
+
+test("notifies on a failed response and lets the user retry the pending choice", async () => {
+  mocks.respond.mockRejectedValueOnce(new Error("Response failed"));
+  render(SessionInteractions, { sessionId: "session-1" });
+  await fireEvent.click(await screen.findByRole("button", { name: "Skip" }));
+  await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(1));
+  expect(screen.getByRole("button", { name: "Skip" })).toBeEnabled();
+
+  mocks.respond.mockResolvedValue({ ...interaction(), state: "resolved", response: { option_key: "skip-operation" } });
+  await fireEvent.click(screen.getByRole("button", { name: "Skip" }));
   await waitFor(() => expect(screen.queryByRole("button", { name: "Skip" })).toBeNull());
 });
 
