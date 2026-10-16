@@ -70,7 +70,7 @@
   let fullscreenEditor = $state<{ focusEnd: () => void } | null>(null)
   let editor = $state<{ focusEnd: () => void } | null>(null)
   let focusCommandInput = false
-  const availableCommands = $derived(commands.filter((item) => !item.disabledReason))
+  const availableCommands = $derived(startSession ? [] : commands.filter((item) => !item.disabledReason))
   const command = $derived(findChatCommand(value, commands))
   const commandAction = $derived(command ? commandActions[command.name] : undefined)
   const commandArgument = $derived(command ? value.trim().slice(command.name.length).trim() : '')

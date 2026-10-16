@@ -197,6 +197,16 @@ test.each([
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 });
 
+test("new chat hides chat actions while keeping slash commands available", async () => {
+  render(NewChatPage);
+  await screen.findByRole("textbox");
+  expect(screen.queryByRole("button", { name: "Chat actions" })).not.toBeInTheDocument();
+  chatDraft.set("/new");
+  await fireEvent.click(await screen.findByRole("button", { name: "New chat" }));
+  expect(mocks.navigate).toHaveBeenCalledWith("/", { workspace: "workspace-1" });
+  expect(mocks.createSession).not.toHaveBeenCalled();
+});
+
 async function openChatActions() {
   await userEvent.click(await screen.findByRole("button", { name: "Chat actions" }));
 }
