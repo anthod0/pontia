@@ -8,14 +8,14 @@ export function sessionStateDotClass(state: string): string {
   switch (state) {
     case "busy":
     case "starting":
-      return "bg-warning";
+      return "bg-busy";
     case "idle":
-      return "bg-success";
+      return "bg-idle";
     case "interrupted":
       return "bg-interrupted";
     case "error":
-      return "bg-destructive";
+      return "bg-error";
     default:
-      return "bg-muted-foreground";
+      return "bg-inactive";
   }
 }

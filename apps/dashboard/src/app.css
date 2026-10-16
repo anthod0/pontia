@@ -31,7 +31,11 @@
   --color-destructive: #cc241d;
   --color-warning: #d79921;
   --color-success: #98971a;
+  --color-busy: #d79921;
+  --color-idle: #98971a;
   --color-interrupted: #b16286;
+  --color-error: #cc241d;
+  --color-inactive: #7c6f64;
   --color-aqua: #689d6a;
   --color-repository: #d65d0e;
   --color-selected: #eef5f5;
