@@ -7,10 +7,10 @@ export function isTerminalSession(session: Pick<SessionView, "state">): boolean 
 export function sessionStateDotClass(state: string): string {
   switch (state) {
     case "busy":
-      return "bg-success";
     case "starting":
-    case "idle":
       return "bg-warning";
+    case "idle":
+      return "bg-success";
     case "interrupted":
       return "bg-interrupted";
     case "error":
