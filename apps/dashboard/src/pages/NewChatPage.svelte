@@ -5,8 +5,6 @@
   import { navigate } from '$lib/navigation'
   import { toast } from 'svelte-sonner'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
-  import { Button } from '$lib/components/ui/button/index.js'
-  import * as Alert from '$lib/components/ui/alert/index.js'
   import WorkspaceOnboarding from '../components/workspaces/WorkspaceOnboarding.svelte'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import { isTransientNetworkError } from '../api/client'
@@ -65,7 +63,19 @@
   $: errorMessage = actionError ?? passiveErrorMessage
   $: {
     if (errorMessage && errorMessage !== lastToastedError) {
-      toast.error('Chat error', { description: errorMessage })
+      toast.error(actionError ? 'Could not start session' : $creationOptionsQuery.isError ? 'Could not load agents' : 'Could not load workspaces', {
+        description: errorMessage,
+        ...(!actionError ? {
+          action: {
+            label: 'Retry',
+            onClick: () => {
+              lastToastedError = null
+              if ($creationOptionsQuery.isError) void $creationOptionsQuery.refetch()
+              else void retryWorkspaces()
+            },
+          },
+        } : {}),
+      })
       lastToastedError = errorMessage
     }
     if (!errorMessage) lastToastedError = null
@@ -182,21 +192,6 @@
         <p class="text-sm text-foreground">Choose a workspace and agent client, then describe the job.</p>
       </div>
     </div>
-    {#if !workspaces.length && workspacesError}
-      <Alert.Root variant="destructive" class="mx-auto max-w-[720px]">
-        <Alert.Title>Could not load workspaces</Alert.Title>
-        <Alert.Description>{workspacesError}</Alert.Description>
-        <Button variant="outline" class="mt-2" disabled={workspacesLoading} onclick={() => void retryWorkspaces()}>Retry</Button>
-      </Alert.Root>
-    {/if}
-
-    {#if $creationOptionsQuery.isError}
-      <Alert.Root variant="destructive" class="mx-auto max-w-[720px]">
-        <Alert.Title>Could not load agents</Alert.Title>
-        <Alert.Description>{$creationOptionsQuery.error?.message}</Alert.Description>
-        <Button variant="outline" class="mt-2" disabled={$creationOptionsQuery.isFetching} onclick={() => void $creationOptionsQuery.refetch()}>Retry</Button>
-      </Alert.Root>
-    {/if}
     <NewChatPanel
       bind:prompt={$chatDraft}
       bind:workspaceId={createWorkspaceId}

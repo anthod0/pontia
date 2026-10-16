@@ -201,14 +201,13 @@ test.each([true, false])(
     mocks.listWorkspaces.mockRejectedValueOnce(new Error("Workspace request failed"));
     render(NewChatPage);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Workspace request failed");
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalled());
     expect(screen.getByRole("button", { name: "Start session" })).toBeDisabled();
     mocks.listWorkspaces.mockResolvedValueOnce(hasWorkspace ? [workspace()] : []);
-    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
-
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    const notification = mocks.toastError.mock.lastCall?.[1];
+    notification.action.onClick();
     if (hasWorkspace) {
-      expect(screen.getByLabelText("Workspace")).toHaveTextContent("pontia");
+      await waitFor(() => expect(screen.getByLabelText("Workspace")).toHaveTextContent("pontia"));
     } else {
       expect(
         await screen.findByRole("heading", { name: "Set up your first workspace" }),

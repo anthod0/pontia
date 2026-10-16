@@ -33,11 +33,12 @@ test("prevents creation while discovery is unavailable and recovers after an exp
   mocks.listSessionCreationOptions.mockRejectedValueOnce(new Error("Discovery unavailable"));
   mocks.createSession.mockResolvedValue({ session: session(), initial_turn: turn() });
   render(NewChatPage);
-  await screen.findByRole("alert");
+  await waitFor(() => expect(mocks.toastError).toHaveBeenCalled());
   await user.type(screen.getByRole("textbox"), "Review the changes");
   expect(screen.getByRole("button", { name: "Start session" })).toBeDisabled();
   expect(mocks.createSession).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "Retry" }));
+  const notification = mocks.toastError.mock.lastCall?.[1];
+  notification.action.onClick();
   await waitFor(() => expect(screen.getByRole("button", { name: "Start session" })).toBeEnabled());
   await user.click(screen.getByRole("button", { name: "Start session" }));
   await waitFor(() =>
