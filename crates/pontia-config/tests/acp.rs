@@ -41,9 +41,29 @@ command = "/opt/local-agent"
 }
 
 #[test]
-fn rejects_unsupported_sources_and_protocol_settings_instead_of_silently_ignoring_them() {
+fn registry_agents_keep_the_configuration_identity_and_literal_environment() {
+    let config = load(
+        r#"
+[acp.agents.company-gemini]
+registry_id = "gemini"
+[acp.agents.company-gemini.env]
+TOKEN = "${UNEXPANDED}"
+"#,
+    )
+    .unwrap();
+    let agent = &config.acp.agents["company-gemini"];
+    assert_eq!(agent.registry_id.as_deref(), Some("gemini"));
+    assert!(agent.command.is_empty());
+    assert!(agent.args.is_empty());
+    assert_eq!(agent.env["TOKEN"], "${UNEXPANDED}");
+}
+
+#[test]
+fn rejects_invalid_sources_and_protocol_settings_instead_of_silently_ignoring_them() {
     for contents in [
-        "[acp.agents.agent]\nregistry_id='gemini'",
+        "[acp.agents.agent]\nregistry_id=''",
+        "[acp.agents.agent]\nregistry_id='gemini'\nargs=[]",
+        "[acp.agents.agent]\nregistry_id='gemini'\nargs=['--override']",
         "[acp.agents.agent]\ncommand='agent'\nregistry_id='gemini'",
         "[acp.agents.agent]\ncommand='agent'\ntransport='http'",
         "[acp.agents.agent]\ncommand='agent'\ncapabilities={timeline=true}",

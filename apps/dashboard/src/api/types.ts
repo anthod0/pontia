@@ -251,6 +251,13 @@ export interface SessionLineageView {
   created_at: string;
 }
 
+export interface SessionCreationOption {
+  id: string;
+  name: string;
+  client_type: string;
+  metadata: JsonObject;
+}
+
 export interface SessionView {
   [clientDetail: string]: unknown;
   session_id: string;

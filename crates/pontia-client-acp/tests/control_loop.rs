@@ -36,6 +36,7 @@ impl Harness {
         );
         let config = AcpAgentConfig {
             name: Some("Controlled Agent".into()),
+            registry_id: None,
             command: command.into(),
             args: vec![
                 format!("{}/tests/fixtures/agent.py", env!("CARGO_MANIFEST_DIR")),
@@ -1561,6 +1562,90 @@ async fn lost_prompt_reconnect_expires_permissions_without_replay_or_terminal_fa
     ] {
         assert_eq!(h.events(&session, kind).await, 0);
     }
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn backpressured_prompt_writes_do_not_report_a_live_history_source_as_unavailable() {
+    use pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest;
+    let h = Harness::new(&[("ACP_PAUSE_INPUT_AFTER_LOAD", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    assert!(
+        h.app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .capabilities
+            .timeline
+    );
+    let binding = pontia_application::AgentBindingService::new(h.app.db())
+        .binding_for_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    let request = AgentBindingResolveRequest {
+        id: binding.id,
+        session_id: session.clone(),
+        client_type: binding.client_type,
+        client_session_key: binding.client_session_key,
+        client_session_file: None,
+    };
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !h.root.path().join("input-paused").exists() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let submission = tokio::spawn({
+        let app = h.app.clone();
+        let session = session.clone();
+        async move {
+            app.inbox_commands()
+                .submit_message(
+                    &session,
+                    SubmitInboxMessageRequest {
+                        input: "x".repeat(2 * 1024 * 1024),
+                        metadata: json!({}),
+                        delivery_policy: "after_idle".into(),
+                        branch_target_turn_id: None,
+                    },
+                )
+                .await
+        }
+    });
+    let clients = h.app.clients();
+    let data = clients.data("acp").unwrap();
+    // The peer cannot drain its pipe until explicitly released. Probe through
+    // the public data contract while the large prompt write is backpressured.
+    for _ in 0..64 {
+        if let Some(result) = data.probe_timeline(&request) {
+            assert!(
+                result.is_ok(),
+                "a busy lock must not diagnose a failed history source: {result:?}"
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert_eq!(h.requests("session/prompt"), 0);
+    h.release("resume-input");
+    tokio::time::timeout(Duration::from_secs(5), submission)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    h.wait_requests("session/prompt", 1).await;
+    let view = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(view.capabilities.timeline);
+    assert!(view.timeline_unavailable_reason.is_none());
     h.stop().await;
 }
 

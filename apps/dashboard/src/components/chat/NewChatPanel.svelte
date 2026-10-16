@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { defaultClientType } from '../../clients'
-  import type { WorkspaceView } from '../../api/types'
+  import type { SessionCreationOption, WorkspaceView } from '../../api/types'
   import MessageComposer from './MessageComposer.svelte'
   import SessionTargetSelector from './SessionTargetSelector.svelte'
   import { navigate } from '$lib/navigation'
@@ -10,13 +9,13 @@
   interface Props {
     prompt: string
     workspaceId: string
-    clientType: string
+    creationOptionId: string
     creating?: boolean
     canCreate?: boolean
     workspaces: WorkspaceView[]
     workspacesLoading?: boolean
     selectedWorkspace: WorkspaceView | null
-    clientTypeOptions: string[]
+    creationOptions: SessionCreationOption[]
     fixedWorkspace?: boolean
     promptDisabled?: boolean
     autofocus?: boolean
@@ -27,13 +26,13 @@
   let {
     prompt = $bindable(''),
     workspaceId = $bindable(''),
-    clientType = $bindable(defaultClientType),
+    creationOptionId = $bindable(''),
     creating = false,
     canCreate = false,
     workspaces,
     workspacesLoading = false,
     selectedWorkspace,
-    clientTypeOptions,
+    creationOptions,
     fixedWorkspace = false,
     promptDisabled = false,
     autofocus = false,
@@ -59,7 +58,7 @@
 
 <div data-testid="new-chat-panel" class:justify-center={placement === 'center'} class:justify-end={placement === 'bottom'} class="flex min-h-0 shrink-0 flex-col">
   <div class={`mx-auto w-full space-y-3 ${fixedWorkspace ? 'max-w-4xl' : 'max-w-[720px]'}`}>
-    <SessionTargetSelector bind:workspaceId bind:clientType {workspaces} {workspacesLoading} {selectedWorkspace} {clientTypeOptions} {fixedWorkspace} />
+    <SessionTargetSelector bind:workspaceId bind:creationOptionId {workspaces} {workspacesLoading} {selectedWorkspace} {creationOptions} {fixedWorkspace} />
     <MessageComposer
       bind:value={prompt}
       {workspaceId}

@@ -135,6 +135,9 @@ for line in sys.stdin:
         if (root / "orphan-replay").exists():
             send({"method": "session/update", "params": {"sessionId": "native-id", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "orphan answer"}}}})
         response(request, {})
+        if os.environ.get("ACP_PAUSE_INPUT_AFTER_LOAD") == "1":
+            (root / "input-paused").touch()
+            wait_for("resume-input")
         if os.environ.get("ACP_BREAK_INPUT") == "1":
             sys.stdin.read(1)
             os._exit(0)

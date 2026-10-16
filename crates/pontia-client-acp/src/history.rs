@@ -108,10 +108,15 @@ impl ClientData for AcpAdapter {
         }
     }
     fn probe_timeline(&self, binding: &AgentBindingResolveRequest) -> Option<Result<()>> {
+        // Contention is not evidence of source failure. The application has
+        // already awaited our dynamic capabilities; keep that observation when
+        // a synchronous probe cannot obtain a newer one without blocking.
+        let peers = self.peers.try_lock().ok()?;
+        let Some(peer) = peers.get(&binding.session_id) else {
+            return Some(Err(unavailable()));
+        };
+        let state = peer.state.try_lock().ok()?;
         Some((|| {
-            let peers = self.peers.try_lock().map_err(|_| unavailable())?;
-            let peer = peers.get(&binding.session_id).ok_or_else(unavailable)?;
-            let state = peer.state.try_lock().map_err(|_| unavailable())?;
             let identity = crate::identity::decode(&binding.client_session_key)?;
             if !state.current
                 || !state.ready

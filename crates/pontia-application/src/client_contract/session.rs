@@ -16,8 +16,19 @@ pub enum ClientExitOutcome {
     Confirmed { reason: String },
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SessionCreationOption {
+    pub id: String,
+    pub name: String,
+    pub client_type: String,
+    pub metadata: Value,
+}
+
 /// Session operations for clients whose execution lifetime is independent of a local pane.
 pub trait ClientSession: Send + Sync {
+    fn creation_options(&self) -> ClientOperation<'_, Option<Vec<SessionCreationOption>>> {
+        Box::pin(async { Ok(None) })
+    }
     fn provision<'a>(
         &'a self,
         events: EventIngestService,

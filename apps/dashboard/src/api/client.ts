@@ -18,6 +18,7 @@ import type {
   RegisterWorkspaceInput,
   RenameWorkspaceInput,
   SessionView,
+  SessionCreationOption,
   SessionModels,
   SessionOverviewSection,
   SessionOverviewView,
@@ -42,6 +43,13 @@ import type {
 } from "./types";
 
 const API_BASE = "/api/v1";
+
+export async function listSessionCreationOptions(
+  options: RequestOptions = {},
+): Promise<SessionCreationOption[]> {
+  return (await request<{ options: SessionCreationOption[] }>("/session-creation-options", options))
+    .options;
+}
 
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;

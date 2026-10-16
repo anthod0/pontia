@@ -1,3 +1,4 @@
+import { clientSessionLabel } from "../../clients";
 import { contextUsageSummary } from "$lib/contextUsage";
 import type {
   InboxMessageView,
@@ -139,7 +140,12 @@ export function sessionMetadataItems(
       value: sessionWorkspaceTitle(session, workspaces),
       title: sessionWorkspacePath(session, workspaces),
     },
-    { key: "client", label: "Client", value: session.client_type, title: session.client_type },
+    {
+      key: "client",
+      label: "Client",
+      value: clientSessionLabel(session),
+      title: clientSessionLabel(session),
+    },
   ];
   if (session.model)
     items.push({ key: "model", label: "Model", value: session.model, title: session.model });

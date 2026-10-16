@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { clientSessionLabel } from '../../clients'
   import AtIcon from 'phosphor-svelte/lib/AtIcon'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
@@ -40,8 +41,8 @@
     <GaugeIcon class="size-4" aria-hidden="true" /> {sessionContextUsageLabel(session)}
   </Badge>
 {/if}
-<Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={`Client: ${session.client_type}`} aria-label={`Client: ${session.client_type}`}>
-  <TerminalWindowIcon class="size-4" aria-hidden="true" /> {session.client_type}
+<Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={`Client: ${clientSessionLabel(session)}`} aria-label={`Client: ${clientSessionLabel(session)}`}>
+  <TerminalWindowIcon class="size-4" aria-hidden="true" /> {clientSessionLabel(session)}
 </Badge>
 {#if sessionProfileTitle(session)}
   <Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={`Profile: ${sessionProfileTitle(session)}`} aria-label={`Profile: ${sessionProfileTitle(session)}`}>

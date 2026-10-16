@@ -459,6 +459,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
+name = "bzip2"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49ecfb22d906f800d4fe833b6282cf4dc1c298f5057ca0b5445e5c209735ca47"
+dependencies = [
+ "bzip2-sys",
+]
+
+[[package]]
+name = "bzip2-sys"
+version = "0.1.13+1.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "225bff33b2141874fe80d71e07d6eec4f85c5c216453dd96388240f96e1acc14"
+dependencies = [
+ "cc",
+ "pkg-config",
+]
+
+[[package]]
 name = "cast"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2642,17 +2661,24 @@ name = "pontia-client-acp"
 version = "0.0.0"
 dependencies = [
  "agent-client-protocol",
+ "bzip2",
+ "flate2",
  "pontia-application",
  "pontia-config",
  "pontia-core",
  "pontia-runtime",
  "pontia-storage-sqlite",
+ "reqwest",
+ "serde",
  "serde_json",
+ "sha2 0.10.9",
  "sqlx",
+ "tar",
  "tempfile",
  "tokio",
  "tokio-util",
  "tracing",
+ "zip",
 ]
 
 [[package]]
@@ -2797,6 +2823,7 @@ dependencies = [
  "flate2",
  "http-body-util",
  "pontia-application",
+ "pontia-client-acp",
  "pontia-client-codex",
  "pontia-client-pi",
  "pontia-config",
@@ -4885,7 +4912,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

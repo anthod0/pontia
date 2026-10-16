@@ -36,9 +36,9 @@ pub use live_output::stream_live_output;
 pub use response::{ApiError, ApiResponse};
 pub use sessions::{
     archive_session, compact_session, create_session, exit_session, get_session, interrupt_session,
-    list_session_models, pin_session, restart_session, resume_session, session_overview,
-    set_session_model, start_session_tui, stop_session_tui, unarchive_session, unpin_session,
-    update_session,
+    list_session_models, pin_session, restart_session, resume_session, session_creation_options,
+    session_overview, set_session_model, start_session_tui, stop_session_tui, unarchive_session,
+    unpin_session, update_session,
 };
 pub use tasks::{cancel_task, create_task, get_task, interrupt_task, list_task_events, list_tasks};
 pub use timeline::{get_turn_timeline, get_turn_tree_history, get_turn_tree_updates};

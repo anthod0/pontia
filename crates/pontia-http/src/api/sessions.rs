@@ -17,6 +17,14 @@ use super::{
     response::{ApiError, ApiResponse, ok},
 };
 
+pub async fn session_creation_options(
+    State(state): State<AppState>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    Ok(ok(
+        json!({ "options": state.clients().creation_options().await? }),
+    ))
+}
+
 pub async fn create_session(
     State(state): State<AppState>,
     headers: HeaderMap,

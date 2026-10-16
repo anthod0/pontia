@@ -1,29 +1,28 @@
 <script lang="ts">
-  import { defaultClientType } from '../../clients'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Select from '$lib/components/ui/select/index.js'
-  import type { WorkspaceView } from '../../api/types'
-  import { clientTitle, workspaceTitle } from './sessionMetadata'
+  import type { SessionCreationOption, WorkspaceView } from '../../api/types'
+  import { workspaceTitle } from './sessionMetadata'
 
   interface Props {
     workspaceId: string
-    clientType: string
+    creationOptionId: string
     workspaces: WorkspaceView[]
     workspacesLoading?: boolean
     selectedWorkspace: WorkspaceView | null
-    clientTypeOptions: string[]
+    creationOptions: SessionCreationOption[]
     fixedWorkspace?: boolean
   }
 
   let {
     workspaceId = $bindable(''),
-    clientType = $bindable(defaultClientType),
+    creationOptionId = $bindable(''),
     workspaces,
     workspacesLoading = false,
     selectedWorkspace,
-    clientTypeOptions,
+    creationOptions,
     fixedWorkspace = false,
   }: Props = $props()
 </script>
@@ -36,14 +35,14 @@
       <span class="min-w-0 truncate">{selectedWorkspace ? workspaceTitle(selectedWorkspace) : 'Workspace'}</span>
     </span>
     <span>, use</span>
-    <Select.Root type="single" bind:value={clientType}>
+    <Select.Root type="single" bind:value={creationOptionId}>
       <Select.Trigger class="h-7 max-w-44 border-0 bg-transparent px-1.5 font-medium text-foreground hover:bg-muted" aria-label="Client">
         <TerminalWindowIcon class="size-4 text-primary" aria-hidden="true" />
-        <span class="min-w-0 truncate">{clientTitle(clientType)}</span>
+        <span class="min-w-0 truncate">{creationOptions.find((option) => option.id === creationOptionId)?.name ?? 'Choose an agent'}</span>
       </Select.Trigger>
       <Select.Content align="start">
-        {#each clientTypeOptions as option (option)}
-          <Select.Item value={option} label={option}>{option}</Select.Item>
+        {#each creationOptions as option (option.id)}
+          <Select.Item value={option.id} label={option.name}>{option.name}</Select.Item>
         {/each}
       </Select.Content>
     </Select.Root>
@@ -53,15 +52,15 @@
     <div role="group" aria-labelledby="new-chat-client-label">
       <div id="new-chat-client-label" class="mb-2 font-mono text-[11px] tracking-[0.06em] text-muted-foreground uppercase">Agent client</div>
       <div class="flex flex-wrap gap-2">
-        {#each clientTypeOptions as option (option)}
+        {#each creationOptions as option (option.id)}
           <Button
             variant="outline"
-            class={`h-[34px] gap-1.5 px-3 text-[13px] ${clientType === option ? 'border-primary bg-selected' : ''}`}
-            aria-pressed={clientType === option}
-            onclick={() => (clientType = option)}
+            class={`h-[34px] gap-1.5 px-3 text-[13px] ${creationOptionId === option.id ? 'border-primary bg-selected' : ''}`}
+            aria-pressed={creationOptionId === option.id}
+            onclick={() => (creationOptionId = option.id)}
           >
             <TerminalWindowIcon class="size-3.5 text-primary" aria-hidden="true" />
-            {clientTitle(option)}
+            {option.name}
           </Button>
         {/each}
       </div>

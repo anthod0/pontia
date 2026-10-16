@@ -17,4 +17,5 @@ export interface DashboardClient {
   profileSelection: boolean;
   deliveryPolicy: InboxDeliveryPolicy;
   controlDetails(session: SessionView): ClientControlDetails | null;
+  sessionLabel?(session: SessionView): string;
 }

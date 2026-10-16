@@ -117,6 +117,8 @@ const mocks = vi.hoisted(() => {
     }),
     loadWorkspaces: vi.fn(async () => undefined),
     listWorkspaces: vi.fn(async () => mocks.workspaces.get()),
+    listSessionCreationOptions:
+      vi.fn<() => Promise<import("../../../src/api/types").SessionCreationOption[]>>(),
     loadWorkspaceRoots: vi.fn(async () => mocks.workspaceRoots.get()),
     browseWorkspaceRoot: vi.fn(async (): Promise<WorkspaceDirectoryListingView> => ({
       root_id: "root-1",
@@ -137,6 +139,7 @@ const mocks = vi.hoisted(() => {
 vi.mock("../../../src/api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/api/client")>()),
   listWorkspaces: mocks.listWorkspaces,
+  listSessionCreationOptions: mocks.listSessionCreationOptions,
   listPendingInteractions: vi.fn(async () => []),
   listWorkspaceRoots: vi.fn(async () => mocks.workspaceRoots.get()),
   listWorkspaceRootEntries: vi.fn(async (rootId: string, path = "") =>
@@ -419,6 +422,10 @@ beforeEach(() => {
   mocks.pathParams = {};
   mocks.loadSessionDetail.mockReset().mockResolvedValue(null);
   mocks.listWorkspaces.mockReset().mockImplementation(async () => mocks.workspaces.get());
+  mocks.listSessionCreationOptions.mockReset().mockResolvedValue([
+    { id: "pi", name: "pi", client_type: "pi", metadata: {} },
+    { id: "codex", name: "codex", client_type: "codex", metadata: {} },
+  ]);
   mocks.loadSessionTimeline.mockReset();
   mocks.refreshSessionTimeline.mockReset().mockResolvedValue(true);
   mocks.restoreSessionTimeline.mockReset().mockResolvedValue(false);

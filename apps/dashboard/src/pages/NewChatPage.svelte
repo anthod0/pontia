@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { defaultClientType, creationClientTypes } from '../clients'
+  import { defaultClientType } from '../clients'
+  import { createSessionCreationOptionsStore } from '../queries/sessionCreation'
   import { navigate } from '$lib/navigation'
   import { toast } from 'svelte-sonner'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
@@ -17,7 +18,7 @@
   import { loadSessionTimeline, resetTimelineState } from '../stores/timeline'
 
   let createWorkspaceId = ''
-  let createClientType = defaultClientType
+  let creationOptionId = defaultClientType
   let creating = false
   let actionError: string | null = null
   let lastToastedError: string | null = null
@@ -27,7 +28,7 @@
   let workspaceSetupDecisionPending = true
   let workspaceOnboardingActive = false
 
-  const CLIENT_TYPE_OPTIONS = creationClientTypes
+  const creationOptionsQuery = createSessionCreationOptionsStore()
   const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
   const workspacesQuery = createWorkspacesStore()
 
@@ -55,11 +56,12 @@
     initialWorkspaceQueryHandled = true
   }
   $: selectedWorkspace = workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
-  $: clientTypeOptions = CLIENT_TYPE_OPTIONS
-  $: if (!clientTypeOptions.includes(createClientType)) createClientType = clientTypeOptions[0] ?? createClientType
+  $: creationOptions = $creationOptionsQuery.data ?? []
+  $: if (creationOptions.length && !creationOptions.some((option) => option.id === creationOptionId)) creationOptionId = creationOptions[0].id
+  $: selectedCreationOption = creationOptions.find((option) => option.id === creationOptionId)
   $: if (createWorkspaceId && workspaces.length && createWorkspaceId !== queryWorkspaceSelectionId && createWorkspaceId !== availableWorkspaceId(readQueryWorkspaceId())) rememberCreateWorkspaceSelection(createWorkspaceId)
-  $: canCreate = Boolean($chatDraft.trim() && createWorkspaceId && createClientType.trim() && !creating)
-  $: passiveErrorMessage = workspacesError && !isTransientNetworkError(workspacesError) ? workspacesError : null
+  $: canCreate = Boolean($chatDraft.trim() && createWorkspaceId && selectedCreationOption && !$creationOptionsQuery.isError && !creating)
+  $: passiveErrorMessage = $creationOptionsQuery.error?.message ?? (workspacesError && !isTransientNetworkError(workspacesError) ? workspacesError : null)
   $: errorMessage = actionError ?? passiveErrorMessage
   $: {
     if (errorMessage && errorMessage !== lastToastedError) {
@@ -132,17 +134,17 @@
   }
 
   async function startChat(): Promise<void> {
-    if (!canCreate) return
+    if (!canCreate || !selectedCreationOption) return
     creating = true
     actionError = null
     try {
       const initialPrompt = $chatDraft.trim()
       const result = await createSession({
-        client_type: createClientType.trim(),
+        client_type: selectedCreationOption.client_type,
         workspace_id: createWorkspaceId,
         title: titleFromInitialPrompt(initialPrompt),
         initial_task: { input: initialPrompt, metadata: { source: 'dashboard_chat' } },
-        metadata: { source: 'dashboard_chat' },
+        metadata: { ...selectedCreationOption.metadata, source: 'dashboard_chat' },
       })
       rememberCreateWorkspaceSelection(createWorkspaceId)
       clearChatDraft()
@@ -188,17 +190,24 @@
       </Alert.Root>
     {/if}
 
+    {#if $creationOptionsQuery.isError}
+      <Alert.Root variant="destructive" class="mx-auto max-w-[720px]">
+        <Alert.Title>Could not load agents</Alert.Title>
+        <Alert.Description>{$creationOptionsQuery.error?.message}</Alert.Description>
+        <Button variant="outline" class="mt-2" disabled={$creationOptionsQuery.isFetching} onclick={() => void $creationOptionsQuery.refetch()}>Retry</Button>
+      </Alert.Root>
+    {/if}
     <NewChatPanel
       bind:prompt={$chatDraft}
       bind:workspaceId={createWorkspaceId}
-      bind:clientType={createClientType}
+      bind:creationOptionId
       {creating}
       {canCreate}
       autofocus={autofocusComposer}
       {workspaces}
       {workspacesLoading}
       {selectedWorkspace}
-      {clientTypeOptions}
+      {creationOptions}
       placement="bottom"
       onStartChat={() => void startChat()}
     />

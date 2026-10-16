@@ -213,6 +213,10 @@ fn external_api_router(state: HttpState) -> Router {
             post(api::interrupt_task),
         )
         .route("/api/v1/tasks/{task_id}/cancel", post(api::cancel_task))
+        .route(
+            "/api/v1/session-creation-options",
+            get(api::session_creation_options),
+        )
         .route("/api/v1/sessions/overview", get(api::session_overview))
         .route(
             "/api/v1/sessions/{session_id}",

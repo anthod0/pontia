@@ -103,6 +103,28 @@ impl ClientRegistry {
         Ok(tasks)
     }
 
+    pub async fn creation_options(
+        &self,
+    ) -> pontia_core::Result<Vec<crate::client_contract::SessionCreationOption>> {
+        let mut options = Vec::new();
+        for registration in self.registrations() {
+            if let Some(session) = &registration.session
+                && let Some(client_options) = session.creation_options().await?
+            {
+                options.extend(client_options);
+                continue;
+            }
+            let client = registration.spec.client_type;
+            options.push(crate::client_contract::SessionCreationOption {
+                id: client.into(),
+                name: client.into(),
+                client_type: client.into(),
+                metadata: serde_json::json!({}),
+            });
+        }
+        Ok(options)
+    }
+
     pub fn default_client_type(&self) -> pontia_core::Result<&'static str> {
         self.registrations()
             .find(|client| client.spec.default_for_creation)
