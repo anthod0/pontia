@@ -87,10 +87,11 @@
       onRetry={onRetryInboxMessage}
       onDismiss={onDismissInboxMessage}
     />
-    <div class="mb-2 flex min-w-0 items-center gap-2">
-      <SessionMetadata {gitStatus} {metadataItems} {metadataSummary} />
-    </div>
-    <MessageComposer bind:value={input} {commands} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {autofocus} {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus} />
+    <MessageComposer bind:value={input} {commands} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {autofocus} {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus}>
+      {#snippet header()}
+        <SessionMetadata {gitStatus} {metadataItems} {metadataSummary} />
+      {/snippet}
+    </MessageComposer>
     {#if canSendSessionMessage(session, 'x') === false}
       <p class="mt-2 text-xs text-muted-foreground">This session cannot accept new messages.</p>
     {/if}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { tick, type Snippet } from 'svelte'
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
   import ArrowsInIcon from 'phosphor-svelte/lib/ArrowsInIcon'
   import StopIcon from 'phosphor-svelte/lib/StopIcon'
@@ -7,6 +7,8 @@
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import CpuIcon from 'phosphor-svelte/lib/CpuIcon'
   import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon'
+  import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import ChatCommandInput from './ChatCommandInput.svelte'
   import { findChatCommand, type ChatCommand } from '$lib/chatCommands'
@@ -30,6 +32,7 @@
     interruptBusy?: boolean
     autofocus?: boolean
     commands?: ChatCommand[]
+    header?: Snippet
     onSubmit: () => void
     onInterrupt?: () => void
     onFocus?: () => void
@@ -50,6 +53,7 @@
     interruptBusy = false,
     autofocus = false,
     commands = [],
+    header,
     onSubmit,
     onInterrupt,
     onFocus,
@@ -64,6 +68,9 @@
   }
   const mentionIdentities = new Map<string, FilePickerFileView>()
   let fullscreenEditor = $state<{ focusEnd: () => void } | null>(null)
+  let editor = $state<{ focusEnd: () => void } | null>(null)
+  let focusCommandInput = false
+  const availableCommands = $derived(commands.filter((item) => !item.disabledReason))
   const command = $derived(findChatCommand(value, commands))
   const commandAction = $derived(command ? commandActions[command.name] : undefined)
   const commandArgument = $derived(command ? value.trim().slice(command.name.length).trim() : '')
@@ -92,6 +99,23 @@
     value = command.name
     fullscreenOpen = false
     command.run()
+  }
+
+  function chooseMenuCommand(selected: ChatCommand): void {
+    if (disabled || busy || selected.disabledReason) return
+    if (selected.name === '/rename') {
+      value = '/rename '
+      focusCommandInput = true
+      return
+    }
+    executeCommand(selected)
+  }
+
+  function restoreCommandFocus(event: Event): void {
+    if (!focusCommandInput) return
+    event.preventDefault()
+    focusCommandInput = false
+    void tick().then(() => (fullscreenOpen ? fullscreenEditor : editor)?.focusEnd())
   }
 
   function submitAndCloseFullscreen(): void {
@@ -123,10 +147,45 @@
   }
 </script>
 
+{#snippet actions()}
+  {#if availableCommands.length > 0}
+    <div class="shrink-0">
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button {...props} type="button" variant="ghost" size="icon-sm" aria-label="Chat actions" title="Chat actions" disabled={disabled || busy}>
+              <DotsThreeIcon class="size-5" />
+            </Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content side="top" align="end" class="w-64" preventScroll={false} onCloseAutoFocus={restoreCommandFocus}>
+          {#each availableCommands as item (item.name)}
+            {@const action = commandActions[item.name]}
+            <DropdownMenu.Item variant={item.name === '/exit' ? 'destructive' : 'default'} onSelect={() => chooseMenuCommand(item)}>
+              <action.icon class="size-4" />
+              <span class="min-w-0 flex-1">
+                <span class="block">{action.label}</span>
+              </span>
+              <span class="font-mono text-xs text-muted-foreground">{item.name}</span>
+            </DropdownMenu.Item>
+          {/each}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    </div>
+  {/if}
+{/snippet}
+
+{#if header || availableCommands.length > 0}
+  <div class="mb-2 flex min-w-0 items-center justify-end gap-2">
+    {@render header?.()}
+    {@render actions()}
+  </div>
+{/if}
+
 <PromptInput.Root class="w-full" onSubmit={submit}>
   <PromptInput.Body>
     <div class="relative">
-      <ChatCommandInput id={inputId} bind:value {commands} onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? 'min-h-[52px] px-4 py-3 pr-10 text-base sm:text-[13.5px]' : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
+      <ChatCommandInput bind:this={editor} id={inputId} bind:value {commands} onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? 'min-h-[52px] px-4 py-3 pr-10 text-base sm:text-[13.5px]' : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
       {#if fullscreen}
         <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label="Expand message composer" onclick={() => void openFullscreen()}>
           <ArrowsOutIcon class="size-4" />
@@ -152,9 +211,12 @@
       <Dialog.Header class="shrink-0">
         <div class="flex items-center justify-between gap-2">
           <Dialog.Title>Expanded message composer</Dialog.Title>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Close expanded message composer" onclick={() => (fullscreenOpen = false)}>
-            <ArrowsInIcon class="size-4" />
-          </Button>
+          <div class="flex shrink-0 items-center gap-2">
+            {@render actions()}
+            <Button type="button" variant="ghost" size="icon-sm" aria-label="Close expanded message composer" onclick={() => (fullscreenOpen = false)}>
+              <ArrowsInIcon class="size-4" />
+            </Button>
+          </div>
         </div>
         <Dialog.Description>Write a longer follow-up message.</Dialog.Description>
       </Dialog.Header>

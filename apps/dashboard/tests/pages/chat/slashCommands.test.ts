@@ -1,5 +1,5 @@
 import { mocks, session } from "./fixtures";
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { get } from "svelte/store";
 import { afterEach, expect, test, vi } from "vitest";
@@ -197,6 +197,58 @@ test.each([
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 });
 
+async function openChatActions() {
+  await userEvent.click(await screen.findByRole("button", { name: "Chat actions" }));
+}
+
+test("chat actions exits the current session without submitting a message", async () => {
+  const selected = renderChat("", { state: "busy" });
+  await openChatActions();
+  await fireEvent.click(
+    within(await screen.findByRole("menu", { hidden: true })).getByText("Exit"),
+  );
+  await waitFor(() =>
+    expect(mocks.terminateSession).toHaveBeenCalledExactlyOnceWith(selected.session_id),
+  );
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+});
+
+test("chat actions prepares rename and focuses the input without executing it", async () => {
+  const selected = renderChat("");
+  await openChatActions();
+  await fireEvent.click(
+    within(await screen.findByRole("menu", { hidden: true })).getByText("Rename"),
+  );
+  const editor = screen.getByRole("textbox");
+  await waitFor(() => expect(editor).toHaveFocus());
+  expect(mocks.updateSessionTitle).not.toHaveBeenCalled();
+  await userEvent.keyboard("New title");
+  await fireEvent.keyDown(editor, { key: "Enter" });
+  await waitFor(() =>
+    expect(mocks.updateSessionTitle).toHaveBeenCalledExactlyOnceWith(
+      selected.session_id,
+      "New title",
+    ),
+  );
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+});
+
+test.each([
+  { state: "exited" },
+  { state: "error" },
+  { capabilities: { list_models: false, set_model: false } },
+])("chat actions hides unavailable operations: %j", async (overrides) => {
+  renderChat("", overrides);
+  await openChatActions();
+  const menu = within(await screen.findByRole("menu", { hidden: true }));
+  expect(menu.queryByText("Choose model")).not.toBeInTheDocument();
+  if (overrides.state) expect(menu.queryByText("Exit")).not.toBeInTheDocument();
+  await fireEvent.click(menu.getByText("New chat"));
+  expect(mocks.navigate).toHaveBeenCalledWith("/", { workspace: "workspace-1" });
+  expect(mocks.terminateSession).not.toHaveBeenCalled();
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+});
+
 const modelCatalog = {
   runtime_id: "runtime-1",
   current_model: "model-a",
@@ -205,6 +257,24 @@ const modelCatalog = {
     { id: "model-b", name: "Model B", description: "Second model" },
   ],
 };
+
+test("chat actions opens the model picker and changes the model", async () => {
+  vi.spyOn(api, "listSessionModels").mockResolvedValue(modelCatalog);
+  const change = vi.spyOn(api, "setSessionModel").mockResolvedValue();
+  const selected = renderChat("", {
+    model: "model-a",
+    capabilities: { list_models: true, set_model: true },
+  });
+  await openChatActions();
+  await fireEvent.click(
+    within(await screen.findByRole("menu", { hidden: true })).getByText("Choose model"),
+  );
+  await userEvent.click(await screen.findByRole("button", { name: "Model B" }));
+  await waitFor(() =>
+    expect(change).toHaveBeenCalledExactlyOnceWith(selected.session_id, "model-b", "runtime-1"),
+  );
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+});
 
 test.each(["codex", "pi"])(
   "/model searches and changes the %s model, waiting for a client fact before updating",
