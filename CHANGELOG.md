@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-17
+
+### Added
+
+- Added ACP agent integration with registry and local command launches, agent selection, permission requests, conversation history, and bound-session recovery.
+- Added local ACP defaults for Grok Build, Kimi CLI, and OpenCode with per-agent configuration overrides.
+- Added shared session interactions and Codex approval controls for commands, file changes, and additional permissions.
+- Added a chat actions menu beside the session status in Dashboard.
+- Added a client integration capability overview to the Cloud homepage.
+
+### Changed
+
+- Simplified SQLite validation by removing duplicate domain checks and defensive triggers.
+
+### Fixed
+
+- Made Pi turn-start reporting idempotent so retries do not create duplicate turns.
+- Showed chat creation and interaction errors as transient toasts in Dashboard.
+- Hid chat actions on the new chat page and adjusted agent state indicator colors.
+- Declared explicit client control roles and replaced stale readiness metadata on reconnect.
+
 ## [0.5.3] - 2026-10-13
 
 ### Added
