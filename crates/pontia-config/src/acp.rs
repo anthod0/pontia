@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use pontia_core::{Error, Result};
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AcpConfig {
     #[serde(default)]
@@ -47,6 +47,32 @@ impl TryFrom<AgentConfigInput> for AcpAgentConfig {
             args: input.args.unwrap_or_default(),
             env: input.env,
         })
+    }
+}
+
+impl Default for AcpConfig {
+    fn default() -> Self {
+        Self {
+            agents: [
+                ("grok", "Grok Build", "grok", vec!["agent", "stdio"]),
+                ("kimi", "Kimi CLI", "kimi", vec!["acp"]),
+                ("opencode", "OpenCode", "opencode", vec!["acp"]),
+            ]
+            .into_iter()
+            .map(|(id, name, command, args)| {
+                (
+                    id.into(),
+                    AcpAgentConfig {
+                        name: Some(name.into()),
+                        registry_id: None,
+                        command: command.into(),
+                        args: args.into_iter().map(String::from).collect(),
+                        env: BTreeMap::new(),
+                    },
+                )
+            })
+            .collect(),
+        }
     }
 }
 

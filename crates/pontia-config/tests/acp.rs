@@ -37,7 +37,73 @@ command = "/opt/local-agent"
     assert_eq!(agent.env["TOKEN"], "${FROM_ENV}");
     assert!(config.acp.agents["minimal"].args.is_empty());
     assert!(config.acp.agents["minimal"].env.is_empty());
-    assert!(load("").unwrap().acp.agents.is_empty());
+    assert!(config.acp.agents.contains_key("grok"));
+    assert!(config.acp.agents.contains_key("kimi"));
+    assert!(config.acp.agents.contains_key("opencode"));
+}
+
+#[test]
+fn default_agents_use_local_commands_without_package_installation() {
+    let root = tempfile::tempdir().unwrap();
+    let without_file = AppConfig::from_vars(
+        &HashMap::from([("PONTIA_HOME".into(), root.path().display().to_string())]),
+        &DEFAULTS,
+    )
+    .unwrap();
+    for config in [without_file, load("").unwrap(), load("[acp]").unwrap()] {
+        assert_eq!(config.acp.agents.len(), 3);
+        for (id, command, args) in [
+            ("grok", "grok", vec!["agent", "stdio"]),
+            ("kimi", "kimi", vec!["acp"]),
+            ("opencode", "opencode", vec!["acp"]),
+        ] {
+            let agent = &config.acp.agents[id];
+            assert_eq!(agent.command, command);
+            assert_eq!(agent.args, args);
+            assert!(agent.registry_id.is_none());
+            assert!(agent.env.is_empty());
+        }
+    }
+}
+
+#[test]
+fn same_name_local_agent_replaces_the_whole_default_entry_only() {
+    let config = load(
+        r#"
+[acp.agents.grok]
+command = "/opt/grok"
+[acp.agents.grok.env]
+TOKEN = "${LITERAL}"
+"#,
+    )
+    .unwrap();
+    assert_eq!(config.acp.agents.len(), 3);
+    let agent = &config.acp.agents["grok"];
+    assert_eq!(agent.command, "/opt/grok");
+    assert!(agent.args.is_empty());
+    assert!(agent.name.is_none());
+    assert!(agent.registry_id.is_none());
+    assert_eq!(agent.env["TOKEN"], "${LITERAL}");
+    assert_eq!(config.acp.agents["kimi"].args, ["acp"]);
+    assert_eq!(config.acp.agents["opencode"].args, ["acp"]);
+}
+
+#[test]
+fn same_name_registry_agent_replaces_the_local_default_source() {
+    let config = load(
+        r#"
+[acp.agents.grok]
+registry_id = "grok-build"
+"#,
+    )
+    .unwrap();
+    assert_eq!(config.acp.agents.len(), 3);
+    let agent = &config.acp.agents["grok"];
+    assert_eq!(agent.registry_id.as_deref(), Some("grok-build"));
+    assert!(agent.command.is_empty());
+    assert!(agent.args.is_empty());
+    assert_eq!(config.acp.agents["kimi"].command, "kimi");
+    assert_eq!(config.acp.agents["opencode"].command, "opencode");
 }
 
 #[test]

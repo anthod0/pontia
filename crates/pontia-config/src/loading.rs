@@ -93,9 +93,10 @@ impl AppConfig {
             .unwrap_or_default();
         apply_runtime_overrides(vars, &mut runtime, defaults);
 
-        let acp = file
-            .and_then(|config| config.acp.clone())
-            .unwrap_or_default();
+        let mut acp = super::AcpConfig::default();
+        if let Some(config) = file.and_then(|config| config.acp.as_ref()) {
+            acp.agents.extend(config.agents.clone());
+        }
         acp.validate()?;
 
         Ok(Self {
