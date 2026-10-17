@@ -99,7 +99,7 @@ impl CodexObserver {
             tokio::select! {
                 _ = shutdown.changed() => return Ok(()),
                 _ = interval.tick() => {
-                    super::interactions::reconcile(&self.interactions, &self.service.pool, connection).await?;
+                    super::interactions::reconcile(&self.interactions, &self.service.event_ingest, connection).await?;
                     let unbound: Vec<String> = sqlx::query_scalar("SELECT s.session_id FROM sessions s LEFT JOIN agent_bindings a USING(session_id) WHERE s.client_type='codex' AND s.state<>'exited' AND a.session_id IS NULL")
                         .fetch_all(&self.service.pool).await?;
                     for session in unbound {
@@ -143,7 +143,7 @@ impl CodexObserver {
                     let event = match event {
                         Ok(event) => event,
                         Err(broadcast::error::RecvError::Lagged(_)) => {
-                            super::interactions::reconcile(&self.interactions, &self.service.pool, connection).await?;
+                            super::interactions::reconcile(&self.interactions, &self.service.event_ingest, connection).await?;
                             for session in threads.values() { output.invalidate(session); }
                             restored.clear();
                             runtime.clear_subscriptions().await;
@@ -151,9 +151,9 @@ impl CodexObserver {
                         }
                         Err(_) => return Err(Error::CapabilityUnavailable("Codex event stream closed".into())),
                     };
+                    super::interactions::observe_native(&self.interactions, &self.service.event_ingest, connection).await?;
                     if event["method"] == "pontia/disconnected" { return Err(Error::CapabilityUnavailable("Codex disconnected".into())); }
                     super::interactions::expire_matching(&self.interactions, connection, |i| crate::runtime::protocol::invalidates_request(&event.value, &i.request_id, &i.thread, i.turn.as_deref())).await?;
-                    if super::interactions::register(&self.interactions, &self.service.pool, connection, &event.value).await? { continue; }
                     let Some(thread) = event.pointer("/params/threadId").and_then(Value::as_str) else { continue };
                     let session = match threads.get(thread) {
                         Some(session) => session.clone(),

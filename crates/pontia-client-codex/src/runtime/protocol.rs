@@ -97,6 +97,8 @@ pub struct Connection {
     pub codex_home: PathBuf,
     pending: Pending,
     server_requests: ServerRequests,
+    // Preserve request/resolution ordering even when observer broadcasts lag.
+    pub(crate) interaction_events: Arc<Mutex<std::collections::VecDeque<Value>>>,
     next_id: AtomicU64,
     pub events: broadcast::Sender<Notification>,
 }
@@ -170,6 +172,7 @@ impl Connection {
         let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
         let (events, _) = broadcast::channel(4096);
         let server_requests: ServerRequests = Arc::new(Mutex::new(HashMap::new()));
+        let interaction_events = Arc::new(Mutex::new(std::collections::VecDeque::new()));
         let connection = Arc::new(Self {
             outgoing,
             interactions: Mutex::new(HashMap::new()),
@@ -179,6 +182,7 @@ impl Connection {
             codex_home,
             pending: pending.clone(),
             server_requests: server_requests.clone(),
+            interaction_events: interaction_events.clone(),
             next_id: AtomicU64::new(1),
             events: events.clone(),
         });
@@ -216,6 +220,9 @@ impl Connection {
                                             let thread = params["threadId"].as_str().or(params["conversationId"].as_str()).unwrap_or("");
                                             !invalidates_request(&value, &request["id"], thread, params["turnId"].as_str())
                                         });
+                                    }
+                                    if value.get("id").is_some() || value["method"] == "serverRequest/resolved" {
+                                        interaction_events.lock().await.push_back(value.clone());
                                     }
                                     // Requests and notifications are observed without waiting for user input.
                                     let _ = events.send(Notification { value, sequence: notification_sequence });

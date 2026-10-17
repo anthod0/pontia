@@ -17,6 +17,8 @@ use tokio::{
 };
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
+mod blocking;
+
 struct Fixture {
     app: AppState,
     session: String,
@@ -29,6 +31,9 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> Self {
+        Self::with_native_resolution(true).await
+    }
+    async fn with_native_resolution(auto_resolve: bool) -> Self {
         let root = tempfile::tempdir().unwrap();
         let socket = root.path().join("app-server.sock");
         let listener = UnixListener::bind(&socket).unwrap();
@@ -50,7 +55,9 @@ impl Fixture {
                         let request: Value = serde_json::from_str(&text).unwrap();
                         if request.get("method").is_none() {
                             responses.send(request.clone()).unwrap();
-                            wire.send(Message::Text(json!({"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":request["id"]}}).to_string().into())).await.unwrap();
+                            if auto_resolve {
+                                wire.send(Message::Text(json!({"method":"serverRequest/resolved","params":{"threadId":"thread","requestId":request["id"]}}).to_string().into())).await.unwrap();
+                            }
                             continue;
                         }
                         let Some(id) = request.get("id") else { continue };
@@ -145,6 +152,30 @@ impl Fixture {
         .await
         .unwrap()
     }
+    async fn facts(&self) -> Vec<(String, String)> {
+        sqlx::query_as("SELECT event_type, json_extract(payload,'$.interaction_id') FROM events WHERE session_id=? AND event_type IN ('interaction.blocked','interaction.unblocked') ORDER BY rowid")
+            .bind(&self.session).fetch_all(&self.app.db()).await.unwrap()
+    }
+    async fn wait_facts(&self, expected: &[(String, String)]) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if self.facts().await == expected {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+    async fn assert_state(&self, expected: &str) {
+        let state: String = sqlx::query_scalar("SELECT state FROM sessions WHERE session_id=?")
+            .bind(&self.session)
+            .fetch_one(&self.app.db())
+            .await
+            .unwrap();
+        assert_eq!(state, expected);
+    }
     async fn response(&mut self) -> Value {
         tokio::time::timeout(Duration::from_secs(5), self.replies.recv())
             .await
@@ -204,6 +235,7 @@ async fn every_approval_maps_both_choices_to_a_single_native_reply() {
             json!({"decision":"denied"}),
         ),
     ];
+    let mut facts = Vec::new();
     for (index, (method, allow, deny)) in cases.into_iter().enumerate() {
         for (choice, expected) in [("allow", allow), ("deny", deny)] {
             let id = if choice == "allow" {
@@ -213,6 +245,12 @@ async fn every_approval_maps_both_choices_to_a_single_native_reply() {
             };
             f.send(request(method, id.clone()));
             let interaction = f.wait(1, InteractionState::Pending).await.remove(0);
+            facts.push((
+                "interaction.blocked".into(),
+                interaction.interaction_id.clone(),
+            ));
+            f.wait_facts(&facts).await;
+            f.assert_state("waiting_for_interaction").await;
             assert_eq!(interaction.session_id, f.session);
             if method.starts_with("item/") {
                 assert!(interaction.turn_id.is_some());
@@ -228,6 +266,12 @@ async fn every_approval_maps_both_choices_to_a_single_native_reply() {
             assert_eq!(resolved.state, InteractionState::Resolved);
             let response = f.response().await;
             assert_eq!(response, json!({"id":id,"result":expected}));
+            facts.push((
+                "interaction.unblocked".into(),
+                interaction.interaction_id.clone(),
+            ));
+            f.wait_facts(&facts).await;
+            f.assert_state("busy").await;
             // Our own resolved notification must leave persisted completion intact.
             let duplicate = f
                 .app

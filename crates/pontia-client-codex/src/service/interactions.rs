@@ -2,7 +2,7 @@ use crate::runtime::protocol::Connection;
 use pontia_application::interactions::{
     ChoiceInteractionRequest, InteractionIntent, InteractionOption, InteractionService,
 };
-use pontia_core::{Error, Result};
+use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 
 pub(crate) struct NativeInteraction {
@@ -12,6 +12,7 @@ pub(crate) struct NativeInteraction {
     pub request_id: Value,
     method: String,
     permissions: Value,
+    deliverable: bool,
 }
 
 struct Approval {
@@ -85,12 +86,12 @@ fn approval(value: &Value) -> Option<Approval> {
     })
 }
 
-pub(crate) async fn register(
+async fn register(
     service: &InteractionService,
-    pool: &sqlx::SqlitePool,
+    ingest: &pontia_application::EventIngestService,
     connection: &Connection,
     value: &Value,
-) -> Result<bool> {
+) -> Result<()> {
     let Some(Approval {
         thread,
         native_turn,
@@ -99,19 +100,12 @@ pub(crate) async fn register(
         permissions,
     }) = approval(value)
     else {
-        return Ok(false);
+        return Ok(());
     };
-    if !connection
-        .pending_server_requests()
-        .await
-        .iter()
-        .any(|request| request["id"] == value["id"])
-    {
-        return Ok(true);
-    }
-    let session: Option<String> = sqlx::query_scalar("SELECT a.session_id FROM agent_bindings a JOIN sessions s USING(session_id) WHERE a.client_type='codex' AND a.client_session_key=? AND s.state<>'exited'").bind(&thread).fetch_optional(pool).await?;
+    let pool = ingest.db();
+    let session: Option<String> = sqlx::query_scalar("SELECT a.session_id FROM agent_bindings a JOIN sessions s USING(session_id) WHERE a.client_type='codex' AND a.client_session_key=? AND s.state<>'exited'").bind(&thread).fetch_optional(&pool).await?;
     let Some(session) = session else {
-        return Ok(true);
+        return Ok(());
     };
     let turn_id =
         match &native_turn {
@@ -120,13 +114,13 @@ pub(crate) async fn register(
             )
             .bind(&session)
             .bind(turn)
-            .fetch_optional(pool)
+            .fetch_optional(&pool)
             .await?,
             None => None,
         };
     let mut associations = connection.interactions.lock().await;
     if associations.values().any(|i| i.request_id == value["id"]) {
-        return Ok(true);
+        return Ok(());
     }
     let interaction = service
         .register(ChoiceInteractionRequest {
@@ -148,6 +142,20 @@ pub(crate) async fn register(
             ],
         })
         .await?;
+    if let Err(error) = ingest
+        .report_client_fact(
+            &session,
+            None,
+            EventType::InteractionBlocked,
+            json!({"interaction_id": interaction.interaction_id}),
+        )
+        .await
+    {
+        service
+            .expire(&session, &interaction.interaction_id)
+            .await?;
+        return Err(error);
+    }
     associations.insert(
         interaction.interaction_id,
         NativeInteraction {
@@ -157,24 +165,72 @@ pub(crate) async fn register(
             request_id: value["id"].clone(),
             method: value["method"].as_str().unwrap().into(),
             permissions,
+            deliverable: true,
         },
     );
-    Ok(true)
+    Ok(())
+}
+
+// Only a matching native resolved notification proves this approval wait ended.
+// Delivery expiry (including Turn end/unload) must retain this correlation.
+pub(crate) async fn observe_native(
+    service: &InteractionService,
+    ingest: &pontia_application::EventIngestService,
+    connection: &Connection,
+) -> Result<()> {
+    loop {
+        let Some(event) = connection.interaction_events.lock().await.front().cloned() else {
+            break;
+        };
+        if event["method"] != "serverRequest/resolved" {
+            register(service, ingest, connection, &event).await?;
+            connection.interaction_events.lock().await.pop_front();
+            continue;
+        }
+        let mut associations = connection.interactions.lock().await;
+        let ids: Vec<String> = associations
+            .iter()
+            .filter(|(_, native)| {
+                event["params"]["threadId"] == native.thread
+                    && event["params"]["requestId"] == native.request_id
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in ids {
+            let native = &associations[&id];
+            ingest
+                .report_client_fact(
+                    &native.session,
+                    None,
+                    EventType::InteractionUnblocked,
+                    json!({"interaction_id": id}),
+                )
+                .await?;
+            if native.deliverable {
+                service.expire(&native.session, &id).await?;
+            }
+            associations.remove(&id);
+        }
+        connection.interaction_events.lock().await.pop_front();
+    }
+    Ok(())
 }
 
 pub(crate) async fn reconcile(
     service: &InteractionService,
-    pool: &sqlx::SqlitePool,
+    ingest: &pontia_application::EventIngestService,
     connection: &Connection,
 ) -> Result<()> {
+    // Discover requests received before their Session binding became available.
+    for request in connection.pending_server_requests().await {
+        register(service, ingest, connection, &request.value).await?;
+    }
+    observe_native(service, ingest, connection).await?;
     let requests = connection.pending_server_requests().await;
     expire_matching(service, connection, |i| {
         !requests.iter().any(|r| r["id"] == i.request_id)
     })
     .await?;
-    for request in requests {
-        register(service, pool, connection, &request.value).await?;
-    }
     Ok(())
 }
 
@@ -186,12 +242,15 @@ pub(crate) async fn expire_matching(
     let mut associations = connection.interactions.lock().await;
     let ids: Vec<String> = associations
         .iter()
-        .filter(|(_, i)| matches(i))
+        .filter(|(_, i)| i.deliverable && matches(i))
         .map(|(id, _)| id.clone())
         .collect();
     for id in ids {
-        if let Some(native) = associations.remove(&id) {
+        if let Some(native) = associations.get_mut(&id) {
             service.expire(&native.session, &id).await?;
+            native.deliverable = false;
+            tracing::debug!(session = %native.session, interaction_id = %id,
+                "Codex approval delivery expired; retaining wait correlation until native resolution");
         }
     }
     Ok(())
@@ -206,7 +265,7 @@ pub(crate) async fn resolve(
     let mut associations = connection.interactions.lock().await;
     let native = associations
         .get(id)
-        .filter(|i| i.session == session)
+        .filter(|i| i.session == session && i.deliverable)
         .ok_or_else(|| Error::CapabilityUnavailable("Native interaction expired".into()))?;
     let result = match (native.method.as_str(), option) {
         ("item/commandExecution/requestApproval" | "item/fileChange/requestApproval", "allow") => {
@@ -227,6 +286,6 @@ pub(crate) async fn resolve(
     // Hold the association lock through the write acknowledgment: our own resolved
     // notification must not expire a choice whose response was successfully sent.
     let written = connection.reply(request_id, result).await;
-    associations.remove(id);
+    associations.get_mut(id).unwrap().deliverable = false;
     written
 }
