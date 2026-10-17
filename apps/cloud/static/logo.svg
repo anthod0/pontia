@@ -7,12 +7,11 @@
   </defs>
   <g id="sunset">
     <path id="sun-dome" fill="#d65d0e" d="M 160.529 773 A 482.929 482.929 0 1 1 1093.471 773 Z"/>
-    <!-- Stripes thin by 8 while gaps widen by 6 as they sink below the horizon. -->
     <g id="stripes" clip-path="url(#sun-disc)">
-      <path id="stripe-1" fill="#d79921" d="M 0 793 H 1254 V 849 H 0 Z"/>
-      <path id="stripe-2" fill="#98971a" d="M 0 875 H 1254 V 923 H 0 Z"/>
-      <path id="stripe-3" fill="#458588" d="M 0 955 H 1254 V 995 H 0 Z"/>
-      <path id="stripe-4" fill="#b16286" d="M 0 1033 H 1254 V 1065 H 0 Z"/>
+      <path id="stripe-1" fill="#d79921" d="M 0 798 H 1254 V 846 H 0 Z"/>
+      <path id="stripe-2" fill="#98971a" d="M 0 871 H 1254 V 919 H 0 Z"/>
+      <path id="stripe-3" fill="#458588" d="M 0 944 H 1254 V 992 H 0 Z"/>
+      <path id="stripe-4" fill="#b16286" d="M 0 1017 H 1254 V 1065 H 0 Z"/>
     </g>
   </g>
 </svg>

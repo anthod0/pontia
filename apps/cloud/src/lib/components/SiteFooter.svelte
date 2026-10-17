@@ -6,7 +6,7 @@
 
 <footer class="site-footer page-width">
   <a class="brand footer-brand" href="/" aria-label="Pontia home">
-    <img src="/logo-small.svg" alt="" />
+    <img src="/logo.svg" alt="" />
     <span>Pontia</span>
   </a>
   <p>Your device. Your agent cloud.</p>

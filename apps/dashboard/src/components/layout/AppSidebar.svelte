@@ -256,7 +256,7 @@
       aria-label="Open new chat"
     >
       <span class="flex size-8 shrink-0 items-center justify-center rounded-none">
-        <img src={`${base}/logo-small.svg`} alt="" class="size-8 shrink-0 object-contain" />
+        <img src={`${base}/logo.svg`} alt="" class="size-8 shrink-0 object-contain" />
       </span>
       <span class="truncate group-data-[collapsible=icon]:hidden">Pontia</span>
     </button>
