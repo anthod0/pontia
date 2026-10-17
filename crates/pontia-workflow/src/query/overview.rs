@@ -72,6 +72,7 @@ pub enum WorkflowAgentStatus {
     Pending,
     Starting,
     Running,
+    WaitingForInteraction,
     Paused,
     Idle,
     Exiting,
@@ -293,6 +294,7 @@ fn derive_status(
     match session_state {
         Some("created" | "starting") => WorkflowAgentStatus::Starting,
         Some("busy") => WorkflowAgentStatus::Running,
+        Some("waiting_for_interaction") => WorkflowAgentStatus::WaitingForInteraction,
         Some("interrupted" | "error" | "exited") => WorkflowAgentStatus::Failed,
         Some("idle") if workflow.state == "idle" && current => WorkflowAgentStatus::Idle,
         Some("idle") => WorkflowAgentStatus::Running,

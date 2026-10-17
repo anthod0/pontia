@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -6,6 +6,7 @@ use serde_json::Value;
 use super::{DomainEvent, EventType, SessionState, TimelineBoundary, TurnState, TurnTopology};
 use crate::error::Error;
 
+mod interaction;
 mod session;
 mod turn;
 
@@ -55,6 +56,10 @@ pub struct ProjectionState {
     sessions: HashMap<String, SessionProjection>,
     turns: HashMap<String, TurnProjection>,
     session_runtimes: HashMap<String, String>,
+    interaction_blocks: HashMap<String, HashMap<String, interaction::InteractionBlock>>,
+    interaction_terminal_facts: HashMap<String, time::OffsetDateTime>,
+    interaction_terminal_turns: HashSet<String>,
+    interaction_execution_states: HashMap<String, SessionState>,
 }
 
 impl ProjectionState {
@@ -69,6 +74,10 @@ impl ProjectionState {
                 .collect(),
             turns: turns.into_iter().map(|t| (t.turn_id.clone(), t)).collect(),
             session_runtimes: HashMap::new(),
+            interaction_blocks: HashMap::new(),
+            interaction_terminal_facts: HashMap::new(),
+            interaction_terminal_turns: HashSet::new(),
+            interaction_execution_states: HashMap::new(),
             execution_lifetime: SessionExecutionLifetime::Execution,
         }
     }
@@ -135,7 +144,8 @@ impl ProjectionState {
             return Ok(());
         }
 
-        match event.event_type {
+        let result = match event.event_type {
+            EventType::InteractionBlocked | EventType::InteractionUnblocked => Ok(()),
             EventType::SessionCreated => self.apply_session(event, SessionState::Created),
             EventType::SessionStarting | EventType::SessionResuming => {
                 self.apply_session(event, SessionState::Starting)
@@ -193,10 +203,36 @@ impl ProjectionState {
             | EventType::InboxMessageDeliveryUnknown
             | EventType::InboxMessageFailed
             | EventType::InboxMessageDismissed => Ok(()),
-        }
+        };
+        result?;
+        self.observe_interaction_fact(event);
+        self.project_interaction_wait(event);
+        Ok(())
     }
 
     fn validate_event_shape(&self, event: &DomainEvent) -> crate::error::Result<()> {
+        if event.event_type.is_interaction_event()
+            && event
+                .payload
+                .get("interaction_id")
+                .and_then(Value::as_str)
+                .is_none_or(|id| id.trim().is_empty())
+        {
+            return Err(Error::Domain(
+                "payload.interaction_id must be a non-empty string".into(),
+            ));
+        }
+        if event.event_type.is_interaction_event()
+            && let Some(turn_id) = &event.turn_id
+            && self
+                .turns
+                .get(turn_id)
+                .is_none_or(|turn| turn.session_id != event.session_id)
+        {
+            return Err(Error::Domain(
+                "interaction references an unknown Turn in the Session".into(),
+            ));
+        }
         if event.event_type.requires_turn_id() && event.turn_id.is_none() {
             return Err(Error::Domain(format!(
                 "event {} requires turn_id",

@@ -48,7 +48,7 @@ pub trait ClientSession: Send + Sync {
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-        turn: &'a str,
+        turn: Option<&'a str>,
     ) -> ClientOperation<'a, ()>;
     fn exit<'a>(
         &'a self,

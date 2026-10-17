@@ -14,10 +14,12 @@ pub(super) async fn validate_turn_identity_in_tx(
     event: &DomainEvent,
     require_existing_followup: bool,
 ) -> Result<()> {
-    if !event.event_type.is_turn_event() {
+    if !event.event_type.is_turn_event() && !event.event_type.is_interaction_event() {
         return Ok(());
     }
-    let turn_id = event.turn_id.as_deref().expect("validated turn_id");
+    let Some(turn_id) = event.turn_id.as_deref() else {
+        return Ok(());
+    };
 
     match SqliteTurnRepository::turn_session_id_in_tx(tx, turn_id).await? {
         Some(session_id) if session_id != event.session_id => Err(Error::Domain(format!(
@@ -25,7 +27,9 @@ pub(super) async fn validate_turn_identity_in_tx(
             event.session_id
         ))),
         Some(_) => Ok(()),
-        None if event_type_can_create_turn(event.event_type) || !require_existing_followup => {
+        None if event_type_can_create_turn(event.event_type)
+            || (!require_existing_followup && !event.event_type.is_interaction_event()) =>
+        {
             Ok(())
         }
         None => Err(Error::Domain(format!(
@@ -62,7 +66,9 @@ pub(super) async fn ensure_runtime_fence_in_tx(
             || event.payload.get("runtime_id").is_some()
             || matches!(
                 event.event_type,
-                EventType::SessionReady
+                EventType::InteractionBlocked
+                    | EventType::InteractionUnblocked
+                    | EventType::SessionReady
                     | EventType::SessionResuming
                     | EventType::SessionError
                     | EventType::SessionModelUpdated
@@ -145,7 +151,9 @@ pub(super) async fn ensure_confirmed_event_matches_session_boundary(
         if event.payload.get("runtime_id").is_some()
             || matches!(
                 event.event_type,
-                EventType::SessionReady
+                EventType::InteractionBlocked
+                    | EventType::InteractionUnblocked
+                    | EventType::SessionReady
                     | EventType::SessionModelUpdated
                     | EventType::SessionCompactionStarted
                     | EventType::SessionCompactionCompleted
@@ -235,7 +243,9 @@ fn is_confirmed_runtime_source(source: EventSource) -> bool {
 fn runtime_id_required_for_event(event_type: EventType) -> bool {
     matches!(
         event_type,
-        EventType::SessionReady
+        EventType::InteractionBlocked
+            | EventType::InteractionUnblocked
+            | EventType::SessionReady
             | EventType::SessionResuming
             | EventType::SessionModelUpdated
             | EventType::SessionCompactionStarted

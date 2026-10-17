@@ -134,6 +134,149 @@ async fn stream_get(
 }
 
 #[tokio::test]
+async fn interaction_facts_reach_queries_subscribers_and_cursor_replay() {
+    use pontia_application::ReportedFact;
+    let state = test_state("blocking").await;
+    seed_session_events(&state).await;
+    sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('sess_stream_1','blocking-runtime','tui','running','2026-01-01T00:00:00Z')")
+        .execute(&state.db()).await.unwrap();
+    let service = state.event_ingest_service();
+    let mut subscriber = state.agent_events().subscribe();
+    let fact = ReportedFact {
+        session_id: "sess_stream_1".into(),
+        turn_id: None,
+        report_key: Some("block-a".into()),
+        fact_type: EventType::InteractionBlocked,
+        data: json!({"interaction_id":"a", "runtime_id":"blocking-runtime"}),
+    };
+    let blocked = service.report_fact(fact.clone()).await.unwrap();
+    assert!(blocked.accepted);
+    assert_eq!(
+        subscriber.try_recv().unwrap().event_type,
+        EventType::InteractionBlocked
+    );
+    assert!(service.report_fact(fact).await.unwrap().duplicate);
+    assert!(subscriber.try_recv().is_err());
+    let (status, _, body) =
+        stream_get(state.clone(), "/api/v1/sessions/sess_stream_1", Some(TOKEN)).await;
+    assert_eq!(status, StatusCode::OK);
+    let body: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(body["data"]["session"]["state"], "waiting_for_interaction");
+    let (status, _, body) = stream_get(
+        state.clone(),
+        "/api/v1/sessions/sess_stream_1/events",
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains(&blocked.event_id));
+    let (_, _, body) = stream_get(
+        state.clone(),
+        "/api/v1/sessions/sess_stream_1/events/stream?after=evt_stream_2",
+        Some(TOKEN),
+    )
+    .await;
+    assert!(body.contains(&blocked.event_id));
+    let unblocked = service
+        .report_fact(ReportedFact {
+            session_id: "sess_stream_1".into(),
+            turn_id: None,
+            report_key: Some("unblock-a".into()),
+            fact_type: EventType::InteractionUnblocked,
+            data: json!({"interaction_id":"a", "runtime_id":"blocking-runtime"}),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        subscriber.try_recv().unwrap().event_type,
+        EventType::InteractionUnblocked
+    );
+    let (_, _, body) = stream_get(
+        state,
+        &format!(
+            "/api/v1/sessions/sess_stream_1/events/stream?after={}",
+            blocked.event_id
+        ),
+        Some(TOKEN),
+    )
+    .await;
+    assert!(body.contains(&unblocked.event_id));
+    assert!(!body.contains(&blocked.event_id));
+    assert_eq!(
+        service
+            .get_session("sess_stream_1")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        pontia_core::domain::SessionState::Idle
+    );
+}
+
+#[tokio::test]
+async fn interaction_reporting_rejects_invalid_ids_and_foreign_turns_without_committing() {
+    use pontia_application::{EventReportError, ReportedFact};
+    let state = test_state("blocking-invalid").await;
+    seed_session_events(&state).await;
+    let service = state.event_ingest_service();
+    let before = service.list_events("sess_stream_1").await.unwrap().len();
+    for data in [
+        json!({}),
+        json!({"interaction_id":4}),
+        json!({"interaction_id":" "}),
+    ] {
+        let result = service
+            .report_fact(ReportedFact {
+                session_id: "sess_stream_1".into(),
+                turn_id: None,
+                report_key: None,
+                fact_type: EventType::InteractionBlocked,
+                data,
+            })
+            .await;
+        assert!(matches!(result, Err(EventReportError::InvalidFact(_))));
+    }
+    ingest(
+        &state,
+        event(
+            "other-created",
+            EventType::SessionCreated,
+            "other",
+            None,
+            json!({}),
+        ),
+    )
+    .await;
+    ingest(
+        &state,
+        event(
+            "other-started",
+            EventType::TurnStarted,
+            "other",
+            Some("foreign"),
+            json!({}),
+        ),
+    )
+    .await;
+    assert!(
+        service
+            .report_fact(ReportedFact {
+                session_id: "sess_stream_1".into(),
+                turn_id: Some("foreign".into()),
+                report_key: None,
+                fact_type: EventType::InteractionBlocked,
+                data: json!({"interaction_id":"a"}),
+            })
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        service.list_events("sess_stream_1").await.unwrap().len(),
+        before
+    );
+}
+
+#[tokio::test]
 async fn event_stream_rejects_missing_or_wrong_bearer_token() {
     let state = test_state("auth").await;
 

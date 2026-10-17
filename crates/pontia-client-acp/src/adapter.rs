@@ -390,7 +390,7 @@ impl ClientSession for AcpAdapter {
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-        turn: &'a str,
+        turn: Option<&'a str>,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             let peer = self.peer(&target.session_id).await?;
@@ -399,7 +399,7 @@ impl ClientSession for AcpAdapter {
             if !state.current || state.closing {
                 return Err(unavailable());
             }
-            if state.active.as_ref().map(|prompt| prompt.turn.as_str()) != Some(turn) {
+            if turn.is_some() && state.active.as_ref().map(|prompt| prompt.turn.as_str()) != turn {
                 return Err(Error::StateConflict(
                     "ACP active prompt changed before interrupt".into(),
                 ));
@@ -408,7 +408,9 @@ impl ClientSession for AcpAdapter {
             peer.connection
                 .send_notification(CancelNotification::new(native))
                 .map_err(peer::protocol_error)?;
-            state.active.as_mut().expect("checked prompt").cancelled = true;
+            if let Some(prompt) = state.active.as_mut() {
+                prompt.cancelled = true;
+            }
             let permissions = std::mem::take(&mut state.permissions);
             drop(state);
             let sent = peer.receipts.wait("session/cancel".into()).await;
@@ -606,7 +608,7 @@ impl ClientService for AcpAdapter {
             let mut shutdown = state.shutdown().subscribe();
             let mut recovery = self.recovery.lock().await.take().ok_or_else(unavailable)?;
             // Recover only persisted ACP bindings. Never create native sessions on startup.
-            let sessions: Vec<String> = sqlx::query_scalar("SELECT s.session_id FROM sessions s JOIN agent_bindings b USING(session_id) WHERE b.client_type='acp' AND s.state IN ('starting','idle','busy','interrupted')")
+            let sessions: Vec<String> = sqlx::query_scalar("SELECT s.session_id FROM sessions s JOIN agent_bindings b USING(session_id) WHERE b.client_type='acp' AND s.state IN ('starting','idle','busy','waiting_for_interaction','interrupted')")
                 .fetch_all(&state.db()).await?;
             for session in sessions {
                 let _ = adapter.reconnect.send(session);
@@ -623,7 +625,7 @@ impl ClientService for AcpAdapter {
                             recoveries.spawn(async move {
                             let recover = async {
                                 let target = ControlTarget::resolve(&state.db(), &state.clients(), &session, None).await?;
-                                let active: bool = sqlx::query_scalar("SELECT state IN ('starting','idle','busy','interrupted') FROM sessions WHERE session_id=?")
+                                let active: bool = sqlx::query_scalar("SELECT state IN ('starting','idle','busy','waiting_for_interaction','interrupted') FROM sessions WHERE session_id=?")
                                     .bind(&session).fetch_one(&state.db()).await?;
                                 if active { adapter.resume(state.event_ingest_service(), &target).await?; }
                                 Ok::<_, Error>(())

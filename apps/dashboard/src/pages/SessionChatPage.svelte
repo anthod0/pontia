@@ -11,6 +11,7 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
+  import AgentStatus from '$lib/components/session-chat/AgentStatus.svelte'
   import ChatRuler from '$lib/components/session-chat/ChatRuler.svelte'
   import { SubmissionUnconfirmedError } from '../stores/inboxRecovery'
   import { retryInboxMessage } from '../stores/sessions'
@@ -72,7 +73,7 @@
   import SessionInteractions from '../components/chat/SessionInteractions.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
-  import { isTerminalSession } from '$lib/sessionState'
+  import { isExecutingSessionState, isTerminalSession } from '$lib/sessionState'
 
   export let routeSessionId: string | null = null
 
@@ -209,7 +210,7 @@
   ): Record<string, string> {
     if (!session?.capabilities.branch_control) return {}
     const canEditInCurrentState = ['idle', 'interrupted', 'exited'].includes(session.state)
-      || (session.state === 'busy' && session.capabilities.interrupt === true)
+      || (isExecutingSessionState(session.state) && session.capabilities.interrupt === true)
     if (!canEditInCurrentState) return {}
     const turns = $sessionDetail?.session.session_id === session.session_id
       ? new Map($sessionDetail.turns.map((turn) => [turn.turn_id, turn]))
@@ -350,7 +351,7 @@
     branchActionError = null
     try {
       const session = currentSelectedSession()
-      if (session?.state === 'busy') {
+      if (session && isExecutingSessionState(session.state)) {
         if (session.capabilities.interrupt !== true) {
           throw new Error('This Session cannot interrupt the active Turn before editing history.')
         }
@@ -944,6 +945,9 @@
           {/if}
           <div class={initialChatScrollPending || transcriptResolving ? 'opacity-0' : ''}>
             {#if !sessionSupportsTimeline(selectedSession) || timelineUnavailable}
+              {#if selectedSession.state === 'waiting_for_interaction'}
+                <AgentStatus state={selectedSession.state} />
+              {/if}
               <Empty.Root data-timeline-status={$timelineState.status} class="min-h-80">
                 <Empty.Header>
                   <Empty.Title>{$timelineState.status === 'pending' ? 'Waiting for native history' : 'Conversation history unavailable'}</Empty.Title>

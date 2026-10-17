@@ -6,18 +6,43 @@ use serde_json::json;
 impl TurnCommandService {
     pub async fn interrupt_current_turn(&self, session_id: &str) -> Result<ControlCommandOutcome> {
         let query = &self.queries;
-        if query.get_session_control(session_id).await?.is_none() {
-            return Err(Error::NotFound(format!("session {session_id} not found")));
-        }
-        let active_turn = SqliteTurnRepository::new(self.pool.clone())
+        let session = query
+            .get_session_control(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+        if let Some(active_turn) = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
             .await?
-            .ok_or_else(|| {
-                Error::StateConflict(format!(
-                    "session {session_id} has no active turn to interrupt"
-                ))
-            })?;
-        self.interrupt_turn(session_id, &active_turn.turn_id).await
+        {
+            return self.interrupt_turn(session_id, &active_turn.turn_id).await;
+        }
+        if session.state != "waiting_for_interaction" {
+            return Err(Error::StateConflict(format!(
+                "session {session_id} has no active turn to interrupt"
+            )));
+        }
+        if !session.capabilities.interrupt {
+            return Err(Error::CapabilityUnavailable(format!(
+                "session {session_id} runtime does not support interrupt"
+            )));
+        }
+        let target = crate::runtime::ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            None,
+        )
+        .await?;
+        self.clients
+            .for_client(&session.client_type)?
+            .interrupt(&target, None)
+            .await
+            .into_result()?;
+        // A Session-level request is not evidence that a Turn exists or has ended.
+        Ok(ControlCommandOutcome {
+            data: json!({"turn": null}),
+            duplicate: false,
+        })
     }
 
     pub async fn interrupt_turn_for_runtime(
@@ -96,7 +121,7 @@ impl TurnCommandService {
         let query = &self.queries;
         self.clients
             .for_client(&session.client_type)?
-            .interrupt(&target, turn_id)
+            .interrupt(&target, Some(turn_id))
             .await
             .into_result()?;
         let ingest = self.event_ingest.clone();

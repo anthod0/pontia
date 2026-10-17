@@ -3,7 +3,7 @@ use super::{
     persistence::{insert_event_in_tx, persist_projections_in_tx},
     validation::{ensure_runtime_fence_in_tx, validate_turn_identity_in_tx},
 };
-use crate::ingestion::projection_rows::{session_from_row, turn_from_row};
+use crate::ingestion::projection_rows::{event_from_row, session_from_row, turn_from_row};
 use crate::{EventIngestResult, UpsertAgentBindingRequest, clients::ClientRegistry};
 use pontia_core::{
     Error, Result,
@@ -257,6 +257,13 @@ impl EventCommitter {
         );
         let mut projection = ProjectionState::with_existing(sessions, turns)
             .with_execution_lifetime(lifecycle.execution_lifetime);
+        let interaction_history =
+            SqliteEventRepository::interaction_history_in_tx(&mut tx, &event.session_id)
+                .await?
+                .into_iter()
+                .map(event_from_row)
+                .collect::<Result<Vec<_>>>()?;
+        projection.restore_interaction_history(&interaction_history);
         projection.apply(&event)?;
         let runtime_event = self
             .clients

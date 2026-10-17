@@ -76,17 +76,19 @@ impl TurnCommandService {
                     && !(session.state == "starting" && adapter.client_owns_turn())
                     && !(session.state == "created" && adapter.prepares_on_input())
                 {
-                    return Err(if session.state == "busy" {
-                        Error::Conflict {
-                            code: "input_busy",
-                            message: "Session became busy before input was submitted".into(),
-                        }
-                    } else {
-                        Error::StateConflict(format!(
-                            "session {session_id} in state {} cannot accept a new turn",
-                            session.state
-                        ))
-                    });
+                    return Err(
+                        if matches!(session.state.as_str(), "busy" | "waiting_for_interaction") {
+                            Error::Conflict {
+                                code: "input_busy",
+                                message: "Session became busy before input was submitted".into(),
+                            }
+                        } else {
+                            Error::StateConflict(format!(
+                                "session {session_id} in state {} cannot accept a new turn",
+                                session.state
+                            ))
+                        },
+                    );
                 }
                 if let Some(active) = active {
                     return Err(Error::Conflict {

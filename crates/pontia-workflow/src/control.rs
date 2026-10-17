@@ -43,10 +43,9 @@ impl WorkflowControlService {
         let mut interrupt_requested = false;
         if let Some(session_id) = self.current_session_id(workflow_id).await? {
             let session = self.queries.get_session(&session_id).await?;
-            if session
-                .as_ref()
-                .is_some_and(|session| session.state == "busy")
-            {
+            if session.as_ref().is_some_and(|session| {
+                matches!(session.state.as_str(), "busy" | "waiting_for_interaction")
+            }) {
                 self.turns.interrupt_current_turn(&session_id).await?;
                 interrupt_requested = true;
             }

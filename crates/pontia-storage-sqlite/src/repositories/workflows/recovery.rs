@@ -46,7 +46,7 @@ WHERE w.workflow_id=? AND s.client_type IN (SELECT value FROM json_each(?))
 
 impl SqliteWorkflowRepository {
     pub async fn recovery_runtime_available(&self, id: &str) -> Result<bool> {
-        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workflow_recoveries a JOIN sessions s ON s.session_id=a.session_id JOIN session_runtimes r ON r.session_id=s.session_id WHERE a.recovery_id=? AND s.state IN ('idle','busy','interrupted') AND r.state IN ('starting','running') AND r.role='tui' AND r.runtime_id=a.runtime_id)")
+        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workflow_recoveries a JOIN sessions s ON s.session_id=a.session_id JOIN session_runtimes r ON r.session_id=s.session_id WHERE a.recovery_id=? AND s.state IN ('idle','busy','waiting_for_interaction','interrupted') AND r.state IN ('starting','running') AND r.role='tui' AND r.runtime_id=a.runtime_id)")
             .bind(id).fetch_one(&self.pool).await?)
     }
 

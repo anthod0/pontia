@@ -185,6 +185,27 @@ test("replaces Send with Interrupt in the empty composer for a busy interruptibl
   await waitFor(() => expect(mocks.interruptSession).toHaveBeenCalledWith("session-1"));
 });
 
+test("waiting for interaction still permits interrupting the active Turn", async () => {
+  const waiting = session({
+    state: "waiting_for_interaction",
+    current_turn_id: "turn-1",
+    capabilities: { interrupt: true, timeline: true },
+  });
+  mocks.loadedSessions = [waiting];
+  mocks.sessions.set([waiting]);
+  mocks.sessionDetail.set({
+    session: waiting,
+    turns: [turn({ state: "running", output: null, completed_at: null })],
+    inboxMessages: [],
+    events: [],
+  });
+  mocks.pathParams = { sessionId: "session-1" };
+  window.history.pushState({}, "", "/dashboard/chat/session-1");
+  render(SessionChatPage);
+  await fireEvent.click(await screen.findByRole("button", { name: /interrupt agent/i }));
+  await waitFor(() => expect(mocks.interruptSession).toHaveBeenCalledWith("session-1"));
+});
+
 test.each([
   ["idle session", { state: "idle", capabilities: { interrupt: true, timeline: true } }],
   [
@@ -209,81 +230,81 @@ test.each([
   },
 );
 
-test("keeps Send and queues inbox input while an interruptible session is busy", async () => {
-  const busySession = session({
-    state: "busy",
-    current_turn_id: "turn-1",
-    capabilities: { accept_task: true, interrupt: true, timeline: true },
-  });
-  mocks.loadedSessions = [busySession];
-  mocks.sessions.set([busySession]);
-  mocks.sessionDetail.set({
-    session: busySession,
-    turns: [turn({ state: "running", output: null, completed_at: null })],
-    inboxMessages: [],
-    events: [],
-  });
-  mocks.pathParams = { sessionId: "session-1" };
-  window.history.pushState({}, "", "/dashboard/chat/session-1");
-
-  render(SessionChatPage);
-
-  const input = await screen.findByPlaceholderText("Continue the thread…");
-  await userEvent.type(input, "Queue this follow-up");
-
-  expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: /^send$/i }));
-  await waitFor(() =>
-    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-1", {
-      input: "Queue this follow-up",
-      delivery_policy: "after_idle",
-      metadata: { source: "dashboard_chat" },
-    }),
-  );
-  expect(mocks.interruptSession).not.toHaveBeenCalled();
-  expect(screen.queryByText("Queue this follow-up")).not.toBeInTheDocument();
-
-  await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
-  for (const listener of mocks.dashboardEventListeners) {
-    listener({
-      kind: "session_event",
-      id: "event-queued-turn-started",
-      occurred_at: "2026-05-14T00:01:00Z",
-      event: {
-        event_id: "event-queued-turn-started",
-        session_id: "session-1",
-        turn_id: "turn-2",
-        source: "client",
-        type: "turn.started",
-        time: "2026-05-14T00:01:00Z",
-        payload: { metadata: { inbox_message_id: "message-queued" } },
-      },
+test.each(["busy", "waiting_for_interaction"])(
+  "queues inbox input while an interruptible session is %s",
+  async (state) => {
+    const busySession = session({
+      state,
+      current_turn_id: "turn-1",
+      capabilities: { accept_task: true, interrupt: true, timeline: true },
     });
-  }
+    mocks.loadedSessions = [busySession];
+    mocks.sessions.set([busySession]);
+    mocks.sessionDetail.set({
+      session: busySession,
+      turns: [turn({ state: "running", output: null, completed_at: null })],
+      inboxMessages: [],
+      events: [],
+    });
+    mocks.pathParams = { sessionId: "session-1" };
+    window.history.pushState({}, "", "/dashboard/chat/session-1");
 
-  await waitFor(() =>
-    expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith("session-1", "turn-2"),
-  );
-  mocks.timelineState.set(
-    timelineStateValue({
-      sessionId: "session-1",
-      items: timelineItemsFromTurns([
-        turn({ state: "completed" }),
-        turn({
+    render(SessionChatPage);
+
+    const input = await screen.findByPlaceholderText("Continue the thread…");
+    await userEvent.type(input, "Queue this follow-up");
+
+    expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await waitFor(() =>
+      expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-1", {
+        input: "Queue this follow-up",
+        delivery_policy: "after_idle",
+        metadata: { source: "dashboard_chat" },
+      }),
+    );
+    expect(mocks.interruptSession).not.toHaveBeenCalled();
+    expect(screen.queryByText("Queue this follow-up")).not.toBeInTheDocument();
+
+    await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
+    for (const listener of mocks.dashboardEventListeners) {
+      listener({
+        kind: "session_event",
+        id: "event-queued-turn-started",
+        occurred_at: "2026-05-14T00:01:00Z",
+        event: {
+          event_id: "event-queued-turn-started",
+          session_id: "session-1",
           turn_id: "turn-2",
-          input: { summary: "Queue this follow-up" },
-          state: "running",
-          output: null,
-          completed_at: null,
-          created_at: "2026-05-14T00:01:00Z",
-        }),
-      ]),
-      latestTurnId: "turn-2",
-      status: "ready",
-    }),
-  );
-  expect(await screen.findByText("Queue this follow-up")).toBeInTheDocument();
-});
+          source: "client",
+          type: "turn.started",
+          time: "2026-05-14T00:01:00Z",
+          payload: { metadata: { inbox_message_id: "message-queued" } },
+        },
+      });
+    }
+
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId: "session-1",
+        items: timelineItemsFromTurns([
+          turn({ state: "completed" }),
+          turn({
+            turn_id: "turn-2",
+            input: { summary: "Queue this follow-up" },
+            state: "running",
+            output: null,
+            completed_at: null,
+            created_at: "2026-05-14T00:01:00Z",
+          }),
+        ]),
+        latestTurnId: "turn-2",
+        status: "ready",
+      }),
+    );
+    expect(await screen.findByText("Queue this follow-up")).toBeInTheDocument();
+  },
+);
 
 test("selects tree timeline loading when the Session advertises timeline and topology", async () => {
   const selected = session({

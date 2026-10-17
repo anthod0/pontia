@@ -185,6 +185,27 @@ impl SqliteEventRepository {
         .await?)
     }
 
+    pub async fn interaction_history_in_tx(
+        tx: &mut Transaction<'_, Sqlite>,
+        session_id: &str,
+    ) -> Result<Vec<DomainEventRow>> {
+        let mut query = sqlx::QueryBuilder::<Sqlite>::new(
+            "SELECT event_id, session_id, turn_id, report_key, source, client_type, event_type,
+                    occurred_at, payload, timeline_boundary, turn_topology
+             FROM events WHERE session_id = ",
+        );
+        query.push_bind(session_id).push(" AND event_type IN (");
+        let mut types = query.separated(", ");
+        for kind in pontia_core::domain::EventType::INTERACTION_PROJECTION_EVENTS {
+            types.push_bind(kind.to_string());
+        }
+        query.push(") ORDER BY rowid");
+        Ok(query
+            .build_query_as::<DomainEventRow>()
+            .fetch_all(&mut **tx)
+            .await?)
+    }
+
     pub async fn list_domain_event_rows(&self, session_id: &str) -> Result<Vec<DomainEventRow>> {
         Ok(sqlx::query_as::<_, DomainEventRow>(
             r#"SELECT event_id, session_id, turn_id, report_key, source, client_type, event_type, occurred_at, payload, timeline_boundary, turn_topology

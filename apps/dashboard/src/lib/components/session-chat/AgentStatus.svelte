@@ -16,6 +16,7 @@
     if (!value) return null
     switch (value) {
       case 'created': return { label: 'Session created', tone: 'idle' }
+      case 'waiting_for_interaction': return { label: 'Waiting for interaction', tone: 'idle' }
       case 'busy': return null
       case 'idle': return null
       case 'exited': return null

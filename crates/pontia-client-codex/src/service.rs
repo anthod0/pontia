@@ -231,32 +231,36 @@ impl CodexService {
     pub(crate) async fn interrupt(
         &self,
         target: &pontia_application::runtime::ControlTarget,
-        turn_id: &str,
+        turn_id: Option<&str>,
     ) -> Result<()> {
         let runtime = self.runtime(&target.session_id).await?;
         let _operation = runtime.lock_session(&target.session_id).await;
         self.confirm_control_connection(target, &runtime).await?;
         let binding = self.binding(&target.session_id).await?;
-        let native: String = sqlx::query_scalar(
-            "SELECT client_turn_id FROM native_turn_bindings WHERE session_id=? AND turn_id=?",
-        )
-        .bind(&target.session_id)
-        .bind(turn_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let expected_native: Option<String> = if let Some(turn_id) = turn_id {
+            Some(sqlx::query_scalar(
+                "SELECT client_turn_id FROM native_turn_bindings WHERE session_id=? AND turn_id=?",
+            ).bind(&target.session_id).bind(turn_id).fetch_one(&self.pool).await?)
+        } else {
+            None
+        };
         let connection = runtime.connection().await?;
         let turns = self
             .turns(&connection, &binding.client_session_key)
             .await?
             .unwrap_or_default();
-        if !turns
+        let native = turns
             .iter()
-            .any(|turn| turn["status"] == "inProgress" && turn["id"] == native)
-        {
-            return Err(Error::StateConflict(
-                "Codex active turn changed before interrupt".into(),
-            ));
-        }
+            .find(|turn| {
+                turn["status"] == "inProgress"
+                    && expected_native
+                        .as_ref()
+                        .is_none_or(|expected| turn["id"] == *expected)
+            })
+            .and_then(|turn| turn["id"].as_str())
+            .ok_or_else(|| {
+                Error::StateConflict("Codex active turn changed before interrupt".into())
+            })?;
         connection
             .call(
                 "turn/interrupt",
@@ -428,7 +432,10 @@ impl CodexService {
             .bind(session)
             .fetch_one(&self.pool)
             .await?;
-        Ok(matches!(state.as_str(), "idle" | "busy"))
+        Ok(matches!(
+            state.as_str(),
+            "idle" | "busy" | "waiting_for_interaction"
+        ))
     }
 
     async fn binding(&self, session: &str) -> Result<pontia_application::AgentBinding> {

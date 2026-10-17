@@ -53,6 +53,18 @@ impl InternalEventValidationService {
             }
         }
 
+        if event.event_type.is_interaction_event()
+            && event
+                .payload
+                .get("interaction_id")
+                .and_then(Value::as_str)
+                .is_none_or(|id| id.trim().is_empty())
+        {
+            return Err(Error::Domain(
+                "payload.interaction_id must be a non-empty string".into(),
+            ));
+        }
+
         if event.event_type.is_compaction_event() {
             super::compaction::validate(event)?;
         }

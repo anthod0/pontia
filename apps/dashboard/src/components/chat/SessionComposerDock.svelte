@@ -9,7 +9,7 @@
   import SessionMetadata from './SessionMetadata.svelte'
   import { type SessionMetadataItem } from './sessionMetadata'
   import type { ChatCommand } from '$lib/chatCommands'
-  import { isTerminalSession } from '$lib/sessionState'
+  import { isExecutingSessionState, isTerminalSession } from '$lib/sessionState'
 
   interface Props {
     session: SessionView
@@ -62,7 +62,7 @@
   let modelDialogSessionId = $state<string | null>(null)
 
   let composerDisabled = $derived(submitting || actionBusy)
-  let interruptMode = $derived(session.state === 'busy' && session.capabilities?.interrupt === true && input.trim() === '')
+  let interruptMode = $derived(isExecutingSessionState(session.state) && session.capabilities?.interrupt === true && input.trim() === '')
   const commands: ChatCommand[] = $derived([
     { name: '/model', description: 'Choose a model', disabledReason: modelPickerDisabledReason(session), run: () => { modelDialogSessionId = session.session_id; input = '' } },
     { name: '/new', description: 'Start a new chat in this workspace', run: onNewChat },

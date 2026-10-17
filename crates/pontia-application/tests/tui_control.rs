@@ -42,7 +42,7 @@ impl ClientSession for ManagedTuiClient {
         &'a self,
         _: EventIngestService,
         _: &'a ControlTarget,
-        _: &'a str,
+        _: Option<&'a str>,
     ) -> ClientOperation<'a, ()> {
         panic!("unexpected interrupt")
     }

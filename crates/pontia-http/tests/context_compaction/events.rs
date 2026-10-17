@@ -14,6 +14,54 @@ fn fact(kind: EventType, data: Value) -> ReportedFact {
 }
 
 #[tokio::test]
+async fn session_scoped_wait_can_be_interrupted_without_creating_a_turn() {
+    static INTERRUPTIBLE: pontia_application::client_contract::AgentClientSpec =
+        pontia_application::client_contract::AgentClientSpec {
+            capabilities: pontia_application::client_contract::AgentClientCapabilities {
+                interrupt: true,
+                ..SPEC.capabilities
+            },
+            ..SPEC
+        };
+    let fixture = Fixture::new(&INTERRUPTIBLE, false).await;
+    fixture.seed().await;
+    let service = fixture.state.event_ingest_service();
+    service
+        .report_fact(fact(
+            EventType::InteractionBlocked,
+            json!({"interaction_id":"a"}),
+        ))
+        .await
+        .unwrap();
+    let before = service.list_events("session").await.unwrap().len();
+    let outcome = fixture
+        .state
+        .turn_commands()
+        .interrupt_current_turn("session")
+        .await
+        .unwrap();
+    assert_eq!(outcome.data["turn"], Value::Null);
+    assert_eq!(
+        fixture.channel.operations.lock().unwrap().as_slice(),
+        ["interrupt"]
+    );
+    assert_eq!(service.list_events("session").await.unwrap().len(), before);
+    assert_eq!(
+        service.get_session("session").await.unwrap().unwrap().state,
+        pontia_core::domain::SessionState::WaitingForInteraction
+    );
+    assert!(
+        service
+            .get_session("session")
+            .await
+            .unwrap()
+            .unwrap()
+            .current_turn_id
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn compaction_facts_are_persisted_broadcast_and_queried_without_advancing_lifecycle() {
     let fixture = Fixture::new(&SPEC, true).await;
     fixture.seed().await;

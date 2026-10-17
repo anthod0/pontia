@@ -1,4 +1,5 @@
 mod fixture;
+mod interaction;
 mod session_lifecycle;
 mod subscription_lifecycle;
 mod timeline_boundary;

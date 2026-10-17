@@ -181,7 +181,9 @@ vi.mock("../../../src/stores/sessions", () => ({
       metadata: input.metadata,
       branchTargetTurnId: input.branch_target_turn_id ?? null,
       showInChat:
-        options.showInChat ?? (!input.branch_target_turn_id && currentSession?.state !== "busy"),
+        options.showInChat ??
+        (!input.branch_target_turn_id &&
+          !["busy", "waiting_for_interaction"].includes(currentSession?.state ?? "")),
       submittedAt: new Date().toISOString(),
       acceptedMessage: null,
     };

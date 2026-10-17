@@ -96,7 +96,10 @@ impl ClientControlChannel for Channel {
         Box::pin(async { Ok(()) })
     }
     fn interrupt(&self) -> ClientControlOperation<'_> {
-        Box::pin(async { panic!("compaction must not interrupt a Turn") })
+        Box::pin(async {
+            self.operations.lock().unwrap().push("interrupt".into());
+            Ok(())
+        })
     }
     fn shutdown(&self) -> ClientControlOperation<'_> {
         Box::pin(async { Ok(()) })

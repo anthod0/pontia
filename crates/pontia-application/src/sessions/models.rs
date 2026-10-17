@@ -92,7 +92,10 @@ impl SessionCommandService {
                 "This client does not support this model operation.".into(),
             ));
         }
-        if !matches!(session.state.as_str(), "idle" | "busy") {
+        if !matches!(
+            session.state.as_str(),
+            "idle" | "busy" | "waiting_for_interaction"
+        ) {
             return Err(Error::StateConflict(
                 "The session must be running to choose a model.".into(),
             ));

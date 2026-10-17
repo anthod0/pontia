@@ -5,6 +5,7 @@ export type SessionState =
   | "starting"
   | "idle"
   | "busy"
+  | "waiting_for_interaction"
   | "interrupted"
   | "exited"
   | "error";
@@ -35,6 +36,7 @@ export type WorkflowAgentStatus =
   | "pending"
   | "starting"
   | "running"
+  | "waiting_for_interaction"
   | "paused"
   | "idle"
   | "exiting"

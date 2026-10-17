@@ -71,6 +71,10 @@ pub enum EventType {
     SessionCompactionFailed,
     #[serde(rename = "session.model_updated")]
     SessionModelUpdated,
+    #[serde(rename = "interaction.blocked")]
+    InteractionBlocked,
+    #[serde(rename = "interaction.unblocked")]
+    InteractionUnblocked,
     #[serde(rename = "runtime.starting")]
     RuntimeStarting,
     #[serde(rename = "runtime.ready")]
@@ -118,6 +122,28 @@ pub enum EventType {
 }
 
 impl EventType {
+    pub const INTERACTION_PROJECTION_EVENTS: &'static [Self] = &[
+        Self::InteractionBlocked,
+        Self::InteractionUnblocked,
+        Self::SessionCreated,
+        Self::SessionStarting,
+        Self::SessionStarted,
+        Self::SessionResuming,
+        Self::SessionReady,
+        Self::SessionExited,
+        Self::SessionError,
+        Self::TurnStarted,
+        Self::TurnCompleted,
+        Self::TurnFailed,
+        Self::TurnInterrupted,
+        Self::TurnDispatchFailed,
+        Self::TurnAbandoned,
+    ];
+
+    pub fn is_interaction_event(self) -> bool {
+        matches!(self, Self::InteractionBlocked | Self::InteractionUnblocked)
+    }
+
     pub fn is_compaction_event(self) -> bool {
         matches!(
             self,
@@ -159,7 +185,9 @@ impl EventType {
     pub fn is_client_reportable(self) -> bool {
         matches!(
             self,
-            Self::SessionReady
+            Self::InteractionBlocked
+                | Self::InteractionUnblocked
+                | Self::SessionReady
                 | Self::SessionExited
                 | Self::SessionCompactionStarted
                 | Self::SessionCompactionCompleted
@@ -191,6 +219,8 @@ impl std::fmt::Display for EventType {
             Self::SessionCompactionCompleted => "session.compaction_completed",
             Self::SessionCompactionFailed => "session.compaction_failed",
             Self::SessionContextUsageUpdated => "session.context_usage_updated",
+            Self::InteractionBlocked => "interaction.blocked",
+            Self::InteractionUnblocked => "interaction.unblocked",
             Self::RuntimeStarting => "runtime.starting",
             Self::RuntimeReady => "runtime.ready",
             Self::RuntimeExited => "runtime.exited",
@@ -235,6 +265,8 @@ impl std::str::FromStr for EventType {
             "session.compaction_completed" => Ok(Self::SessionCompactionCompleted),
             "session.compaction_failed" => Ok(Self::SessionCompactionFailed),
             "session.context_usage_updated" => Ok(Self::SessionContextUsageUpdated),
+            "interaction.blocked" => Ok(Self::InteractionBlocked),
+            "interaction.unblocked" => Ok(Self::InteractionUnblocked),
             "runtime.starting" => Ok(Self::RuntimeStarting),
             "runtime.ready" => Ok(Self::RuntimeReady),
             "runtime.exited" => Ok(Self::RuntimeExited),

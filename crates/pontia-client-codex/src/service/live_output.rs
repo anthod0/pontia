@@ -267,7 +267,10 @@ impl CodexLiveOutput {
                 .bind(session)
                 .fetch_optional(&service.pool)
                 .await?;
-        if !matches!(state.as_deref(), Some("idle" | "busy")) {
+        if !matches!(
+            state.as_deref(),
+            Some("idle" | "busy" | "waiting_for_interaction")
+        ) {
             return Ok(false);
         }
         Ok(AgentBindingService::new(service.pool.clone())

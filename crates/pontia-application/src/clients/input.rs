@@ -100,7 +100,7 @@ impl ClientAdapter {
         })
     }
 
-    pub async fn interrupt(&self, target: &ControlTarget, turn: &str) -> ControlResult<()> {
+    pub async fn interrupt(&self, target: &ControlTarget, turn: Option<&str>) -> ControlResult<()> {
         if !self.spec.capabilities.interrupt {
             return ControlResult::Unsupported("client does not support interrupt".into());
         }

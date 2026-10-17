@@ -163,7 +163,7 @@ impl ClientSession for CodexClient {
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
-        turn: &'a str,
+        turn: Option<&'a str>,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move { CodexService::new(events).interrupt(target, turn).await })
     }

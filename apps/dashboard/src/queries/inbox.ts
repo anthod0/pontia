@@ -14,6 +14,7 @@ import {
   submitInboxMessage as requestSubmitInboxMessage,
 } from "../api/client";
 import { ApiError } from "../api/errors";
+import { isExecutingSessionState } from "$lib/sessionState";
 import type {
   DashboardStreamEvent,
   InboxMessageView,
@@ -334,7 +335,8 @@ const submitInboxMutationOptions = () => ({
     rememberSubmission(submission);
     const session = queryClient.getQueryData<SessionView>(sessionKeys.detail(submission.sessionId));
     const visible =
-      showInChat ?? (!submission.input.branch_target_turn_id && session?.state !== "busy");
+      showInChat ??
+      (!submission.input.branch_target_turn_id && !isExecutingSessionState(session?.state));
     return { localId: beginInboxSubmission(submission, visible) };
   },
   onError: (_error: Error, { submission }: SubmitInboxVariables, context?: { localId: string }) => {

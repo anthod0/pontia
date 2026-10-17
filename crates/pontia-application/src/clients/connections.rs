@@ -125,7 +125,7 @@ impl ClientControlService {
         else {
             return Ok(None);
         };
-        Ok(sqlx::query_scalar("SELECT r.runtime_id FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id=? AND s.state IN ('starting','idle','busy','interrupted') AND r.state IN ('starting','running')")
+        Ok(sqlx::query_scalar("SELECT r.runtime_id FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id=? AND s.state IN ('starting','idle','busy','waiting_for_interaction','interrupted') AND r.state IN ('starting','running')")
             .bind(runtime_id).fetch_optional(&self.pool).await?)
     }
 
