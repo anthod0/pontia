@@ -92,6 +92,15 @@ impl Fixture {
             _root: root,
         }
     }
+    fn write_native(&mut self, native: &str, entries: Vec<Value>) {
+        let path = self._root.path().join("persisted.jsonl");
+        let mut bytes = format!("{}\n", json!({"type":"session", "version":3, "id":native}));
+        for entry in entries {
+            bytes.push_str(&format!("{entry}\n"));
+        }
+        std::fs::write(&path, bytes).unwrap();
+        self.binding.client_session_file = Some(path);
+    }
     fn cursor(&self, anchor: Option<&str>) -> String {
         PiEntryCursor {
             binding_id: self.binding.id.clone(),
@@ -567,38 +576,46 @@ async fn unsupported_history_keeps_existing_control_available() {
     daemon.close();
 }
 #[tokio::test]
-async fn missing_runtime_never_uses_an_existing_file_and_reconnect_restores_readability() {
+async fn missing_runtime_reads_persisted_entries_and_connected_runtime_includes_unflushed_entries()
+{
     let mut f = Fixture::new().await;
-    let path = f._root.path().join("available.jsonl");
-    std::fs::write(
-        &path,
-        format!(
-            "{}\n{}\n",
-            entry("u", None, "user"),
-            entry("a", Some("u"), "assistant")
-        ),
-    )
-    .unwrap();
-    f.binding.client_session_file = Some(path);
-    assert!(
-        f.history()
-            .read_ranges(vec![f.range(None, Some("a"))])
-            .await
-            .is_err()
+    f.write_native(
+        "native",
+        vec![entry("u", None, "user"), entry("a", Some("u"), "assistant")],
+    );
+    let items = f
+        .history()
+        .read_ranges(vec![f.range(None, Some("a"))])
+        .await
+        .unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.item.content_preview.as_str())
+            .collect::<Vec<_>>(),
+        vec!["u", "a"]
     );
     let (_, daemon) = f
         .serve(
-            vec![entry("u", None, "user"), entry("a", Some("u"), "assistant")],
+            vec![
+                entry("u", None, "user"),
+                entry("a", Some("u"), "assistant"),
+                entry("unflushed", Some("a"), "assistant"),
+            ],
             128,
         )
         .await;
+    let items = f
+        .history()
+        .read_ranges(vec![f.range(None, None)])
+        .await
+        .unwrap();
     assert_eq!(
-        f.history()
-            .read_ranges(vec![f.range(None, Some("a"))])
-            .await
-            .unwrap()
-            .len(),
-        2
+        items
+            .iter()
+            .map(|i| i.item.content_preview.as_str())
+            .collect::<Vec<_>>(),
+        vec!["u", "a", "unflushed"]
     );
     daemon.close();
 }
@@ -895,4 +912,461 @@ async fn recovers_missing_head_and_abandoned_branch_switch_tail_from_long_unicod
     assert_eq!(recovered[0].head_cursor, Some(f.cursor(Some("base"))));
     assert_eq!(recovered[0].tail_cursor, Some(f.cursor(Some("a"))));
     daemon.close();
+}
+
+#[tokio::test]
+async fn offline_ranges_follow_branches_across_blocks_and_resolve_branch_user() {
+    let mut f = Fixture::new().await;
+    let mut large = entry("large", Some("u"), "assistant");
+    large["message"]["content"] = json!([{"type":"text", "text":"界🙂".repeat(20_000)}]);
+    f.write_native(
+        "native",
+        vec![
+            entry("base", None, "assistant"),
+            entry("u", Some("base"), "user"),
+            large,
+            entry("offbranch", Some("base"), "user"),
+            entry("a", Some("large"), "assistant"),
+            entry("u2", Some("a"), "user"),
+            entry("a2", Some("u2"), "assistant"),
+        ],
+    );
+    let first = f.range(Some("base"), Some("a"));
+    let mut second = f.range(Some("a"), Some("a2"));
+    second.turn_id = "turn2".into();
+    second.is_first_session_turn = false;
+    let items = f
+        .history()
+        .read_ranges(vec![first.clone(), second])
+        .await
+        .unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.item.item_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "pi:entry:u:block:0",
+            "pi:entry:large:block:0",
+            "pi:entry:a:block:0",
+            "pi:entry:u2:block:0",
+            "pi:entry:a2:block:0",
+        ]
+    );
+    assert_eq!(items[1].item.content_preview, "界🙂".repeat(20_000));
+    assert_eq!(f.history().branch_target(first).await.unwrap(), "u");
+}
+
+#[tokio::test]
+async fn offline_recent_range_does_not_parse_unrelated_older_records() {
+    let mut f = Fixture::new().await;
+    f.write_native(
+        "native",
+        vec![
+            entry("base", None, "assistant"),
+            entry("u", Some("base"), "user"),
+            entry("a", Some("u"), "assistant"),
+        ],
+    );
+    let path = f.binding.client_session_file.as_ref().unwrap();
+    let bytes = std::fs::read_to_string(path).unwrap();
+    let (header, rest) = bytes.split_once('\n').unwrap();
+    std::fs::write(
+        path,
+        format!("{header}\nnot-json-in-an-older-record\n{rest}"),
+    )
+    .unwrap();
+    let items = f
+        .history()
+        .read_ranges(vec![f.range(Some("base"), Some("a"))])
+        .await
+        .unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.item.content_preview.as_str())
+            .collect::<Vec<_>>(),
+        vec!["u", "a"]
+    );
+}
+
+#[tokio::test]
+async fn offline_history_rejects_wrong_identity_missing_anchors_and_invalid_parent_chains() {
+    let mut f = Fixture::new().await;
+    f.write_native(
+        "other",
+        vec![entry("u", None, "user"), entry("a", Some("u"), "assistant")],
+    );
+    assert!(
+        f.history()
+            .read_ranges(vec![f.range(None, Some("a"))])
+            .await
+            .is_err()
+    );
+    f.write_native(
+        "native",
+        vec![
+            entry("u", None, "user"),
+            entry("a", Some("u"), "assistant"),
+            entry("sibling", Some("u"), "assistant"),
+        ],
+    );
+    for range in [
+        f.range(None, Some("missing")),
+        f.range(Some("missing"), Some("a")),
+        f.range(Some("a"), Some("sibling")),
+    ] {
+        assert!(matches!(
+            f.history().read_ranges(vec![range]).await,
+            Err(TurnTimelineReadError::InvalidRange { .. })
+        ));
+    }
+    f.write_native(
+        "native",
+        vec![
+            entry("u", None, "user"),
+            entry("x", Some("u"), "assistant"),
+            entry("x", Some("x"), "assistant"),
+            entry("a", Some("x"), "assistant"),
+        ],
+    );
+    assert!(
+        f.history()
+            .read_ranges(vec![f.range(None, Some("a"))])
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn online_failure_does_not_fall_back_to_a_valid_file() {
+    let mut f = Fixture::new().await;
+    f.write_native(
+        "native",
+        vec![entry("u", None, "user"), entry("a", Some("u"), "assistant")],
+    );
+    let (peer, mut incoming, daemon) = f.peer().await;
+    tokio::spawn(async move {
+        let request = incoming.recv().await.unwrap();
+        peer.reply(request.id, json!({"session_id":"wrong"}))
+            .await
+            .unwrap();
+        peer.closed().await;
+    });
+    assert!(
+        f.history()
+            .read_ranges(vec![f.range(None, Some("a"))])
+            .await
+            .is_err()
+    );
+    daemon.close();
+}
+
+#[tokio::test]
+async fn offline_handle_switches_to_runtime_when_a_connection_becomes_available() {
+    let mut f = Fixture::new().await;
+    f.write_native(
+        "native",
+        vec![entry("u", None, "user"), entry("a", Some("u"), "assistant")],
+    );
+    let history = f.history();
+    assert_eq!(
+        history
+            .read_ranges(vec![f.range(None, None)])
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+    let (_, daemon) = f
+        .serve(
+            vec![
+                entry("u", None, "user"),
+                entry("a", Some("u"), "assistant"),
+                entry("unflushed", Some("a"), "assistant"),
+            ],
+            128,
+        )
+        .await;
+    let items = history
+        .read_ranges(vec![f.range(None, None)])
+        .await
+        .unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.item.content_preview.as_str())
+            .collect::<Vec<_>>(),
+        vec!["u", "a", "unflushed"]
+    );
+    daemon.close();
+}
+
+#[tokio::test]
+async fn offline_session_pages_keep_multiple_gap_checkpoints_and_ignore_unselected_open_turns() {
+    use pontia_application::client_contract::raw_transcripts::{
+        SessionTimelineSelection, SessionTimelineTurn,
+    };
+    let mut f = Fixture::new().await;
+    f.write_native(
+        "native",
+        vec![
+            entry("u1", None, "user"),
+            checkpoint("inside", Some("u1")),
+            entry("a1", Some("inside"), "assistant"),
+            checkpoint("gap1", Some("a1")),
+            checkpoint("gap2", Some("gap1")),
+            entry("u2", Some("gap2"), "user"),
+            entry("a2", Some("u2"), "assistant"),
+            checkpoint("trailing", Some("a2")),
+        ],
+    );
+    let selection = |ids: &[&str], first_open: bool| SessionTimelineSelection {
+        turns: vec![
+            SessionTimelineTurn {
+                turn_id: "one".into(),
+                head_cursor: Some(f.cursor(None)),
+                tail_cursor: (!first_open).then(|| f.cursor(Some("a1"))),
+            },
+            SessionTimelineTurn {
+                turn_id: "two".into(),
+                head_cursor: Some(f.cursor(Some("gap2"))),
+                tail_cursor: Some(f.cursor(Some("a2"))),
+            },
+        ],
+        selected_turn_ids: ids.iter().map(|id| (*id).into()).collect(),
+    };
+    let history = f.history();
+    let second = history
+        .read_session_timeline(selection(&["two"], false))
+        .await
+        .unwrap();
+    assert_eq!(
+        second
+            .iter()
+            .map(|i| i.item.item_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "pi:entry:gap1:block:0",
+            "pi:entry:gap2:block:0",
+            "pi:entry:u2:block:0",
+            "pi:entry:a2:block:0",
+            "pi:entry:trailing:block:0"
+        ]
+    );
+    assert_eq!(
+        second
+            .iter()
+            .map(|i| i.turn_id.as_deref())
+            .collect::<Vec<_>>(),
+        vec![None, None, Some("two"), Some("two"), None]
+    );
+    let first = history
+        .read_session_timeline(selection(&["one"], false))
+        .await
+        .unwrap();
+    assert_eq!(
+        first
+            .iter()
+            .map(|i| i.item.kind.as_str())
+            .collect::<Vec<_>>(),
+        vec!["user", "context_compaction", "assistant"]
+    );
+    let all = history
+        .read_session_timeline(selection(&["one", "two"], false))
+        .await
+        .unwrap();
+    assert_eq!(
+        first
+            .into_iter()
+            .chain(second)
+            .map(|i| i.item.item_id)
+            .collect::<Vec<_>>(),
+        all.into_iter().map(|i| i.item.item_id).collect::<Vec<_>>()
+    );
+    let second = history
+        .read_session_timeline(selection(&["two"], true))
+        .await
+        .unwrap();
+    assert!(
+        second
+            .iter()
+            .any(|i| i.item.item_id == "pi:entry:a2:block:0")
+    );
+}
+
+#[tokio::test]
+async fn offline_session_without_turns_only_returns_checkpoints_on_the_persisted_branch() {
+    use pontia_application::client_contract::raw_transcripts::SessionTimelineSelection;
+    let mut f = Fixture::new().await;
+    f.write_native("native", vec![entry("u", None, "user"), checkpoint("offbranch", Some("u")), checkpoint("first", Some("u")),
+        json!({"id":"summary", "parentId":"first", "type":"message", "timestamp":"2026-10-11T00:00:00Z", "message":{"role":"compactionSummary", "summary":"native summary"}}),
+    ]);
+    let items = f
+        .history()
+        .read_session_timeline(SessionTimelineSelection {
+            turns: vec![],
+            selected_turn_ids: vec![],
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.item.item_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["pi:entry:first:block:0", "pi:entry:summary:block:0"]
+    );
+    assert!(
+        items
+            .iter()
+            .all(|i| i.turn_id.is_none() && i.item.kind == "context_compaction")
+    );
+}
+
+#[tokio::test]
+async fn offline_page_ignores_invalid_unselected_chains_before_assigning_ownership() {
+    use pontia_application::client_contract::raw_transcripts::{
+        SessionTimelineSelection, SessionTimelineTurn,
+    };
+    let mut f = Fixture::new().await;
+    f.write_native(
+        "native",
+        vec![
+            entry("root", None, "user"),
+            entry("left", Some("root"), "assistant"),
+            entry("right", Some("root"), "user"),
+            entry("leaf", Some("right"), "assistant"),
+        ],
+    );
+    let items = f
+        .history()
+        .read_session_timeline(SessionTimelineSelection {
+            turns: vec![
+                SessionTimelineTurn {
+                    turn_id: "invalid".into(),
+                    head_cursor: Some(f.cursor(Some("left"))),
+                    tail_cursor: Some(f.cursor(Some("leaf"))),
+                },
+                SessionTimelineTurn {
+                    turn_id: "selected".into(),
+                    head_cursor: Some(f.cursor(Some("right"))),
+                    tail_cursor: Some(f.cursor(Some("leaf"))),
+                },
+            ],
+            selected_turn_ids: vec!["selected".into()],
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.item.content_preview.as_str())
+            .collect::<Vec<_>>(),
+        vec!["leaf"]
+    );
+}
+
+#[tokio::test]
+async fn offline_page_keeps_unselected_head_boundaries_when_their_tails_are_invalid() {
+    use pontia_application::client_contract::raw_transcripts::{
+        SessionTimelineSelection, SessionTimelineTurn,
+    };
+    let mut f = Fixture::new().await;
+    f.write_native(
+        "native",
+        vec![
+            entry("u1", None, "user"),
+            entry("a1", Some("u1"), "assistant"),
+            checkpoint("gap1", Some("a1")),
+            checkpoint("gap2", Some("gap1")),
+            entry("u2", Some("gap2"), "user"),
+            entry("a2", Some("u2"), "assistant"),
+            checkpoint("trailing", Some("a2")),
+        ],
+    );
+    let items = f
+        .history()
+        .read_session_timeline(SessionTimelineSelection {
+            turns: vec![
+                SessionTimelineTurn {
+                    turn_id: "one".into(),
+                    head_cursor: Some(f.cursor(None)),
+                    tail_cursor: Some(f.cursor(Some("a1"))),
+                },
+                SessionTimelineTurn {
+                    turn_id: "two".into(),
+                    head_cursor: Some(f.cursor(Some("gap2"))),
+                    tail_cursor: Some(f.cursor(None)),
+                },
+            ],
+            selected_turn_ids: vec!["one".into()],
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.item.content_preview.as_str())
+            .collect::<Vec<_>>(),
+        vec!["u1", "a1"]
+    );
+}
+
+#[tokio::test]
+async fn offline_history_does_not_return_partial_results_from_an_incomplete_file() {
+    use std::io::Write;
+    let mut f = Fixture::new().await;
+    f.write_native(
+        "native",
+        vec![entry("u", None, "user"), entry("a", Some("u"), "assistant")],
+    );
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(f.binding.client_session_file.as_ref().unwrap())
+        .unwrap();
+    file.write_all(b"{\"id\":\"partial").unwrap();
+    assert!(
+        f.history()
+            .read_ranges(vec![f.range(None, Some("a"))])
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn offline_empty_first_turn_is_empty_but_explicit_missing_anchors_are_rejected() {
+    use pontia_application::client_contract::raw_transcripts::{
+        SessionTimelineSelection, SessionTimelineTurn,
+    };
+    let mut f = Fixture::new().await;
+    f.write_native("native", vec![]);
+    let history = f.history();
+    assert!(
+        history
+            .read_ranges(vec![f.range(None, None)])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        history
+            .read_session_timeline(SessionTimelineSelection {
+                turns: vec![SessionTimelineTurn {
+                    turn_id: "turn".into(),
+                    head_cursor: Some(f.cursor(None)),
+                    tail_cursor: None
+                }],
+                selected_turn_ids: vec!["turn".into()],
+            })
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(matches!(
+        history
+            .read_ranges(vec![f.range(None, Some("missing"))])
+            .await,
+        Err(TurnTimelineReadError::InvalidRange { .. })
+    ));
 }

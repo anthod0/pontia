@@ -1,4 +1,6 @@
-//! Runtime history is independent of Pi's JSONL storage. Legacy dispatch lives separately.
+//! Entry-addressed Pi history uses a current runtime or its persisted JSONL tree.
+//! Legacy byte-addressed dispatch remains separate.
+mod file;
 mod recovery;
 pub(crate) mod timeline;
 
@@ -94,8 +96,10 @@ struct RuntimeSnapshot {
     leaf: Option<String>,
 }
 impl RuntimeSnapshot {
-    async fn load(control: &ClientControlService, session: &str, native: &str) -> Result<Self> {
-        let connection = control.history_source(session).await?;
+    async fn load(
+        connection: pontia_application::clients::NativeHistoryConnection,
+        native: &str,
+    ) -> Result<Self> {
         let mut params = json!({"page_size":128});
         let mut snapshot = None;
         let mut entry_count = None;
@@ -252,26 +256,42 @@ impl PiHistory {
             snapshot: OnceCell::new(),
         })
     }
-    async fn snapshot(&self) -> Result<&RuntimeSnapshot> {
+    async fn runtime_snapshot(&self) -> Result<Option<&RuntimeSnapshot>> {
+        if self.snapshot.get().is_none() {
+            let Some(control) = &self.control else {
+                return Ok(None);
+            };
+            let connection = match control.history_source(&self.binding.session_id).await {
+                Ok(connection) => connection,
+                Err(Error::CapabilityUnavailable(message))
+                    if message == "source_unavailable: no current native history connection" =>
+                {
+                    // Do not cache absence: the same handle may be used after reconnect.
+                    return Ok(None);
+                }
+                Err(error) => return Err(error),
+            };
+            self.snapshot
+                .get_or_init(|| async {
+                    RuntimeSnapshot::load(connection, &self.binding.client_session_key)
+                        .await
+                        .map_err(|error| error.to_string())
+                })
+                .await;
+        }
         let snapshot = self
             .snapshot
-            .get_or_init(|| async {
-                let Some(control) = &self.control else {
-                    return Err("no runtime history router".into());
-                };
-                RuntimeSnapshot::load(
-                    control,
-                    &self.binding.session_id,
-                    &self.binding.client_session_key,
-                )
-                .await
-                .map_err(|error| error.to_string())
-            })
-            .await
+            .get()
+            .expect("initialized runtime snapshot")
             .as_ref()
             .map_err(unavailable)?;
         snapshot.connection.validate().await?;
-        Ok(snapshot)
+        Ok(Some(snapshot))
+    }
+    async fn snapshot(&self) -> Result<&RuntimeSnapshot> {
+        self.runtime_snapshot()
+            .await?
+            .ok_or_else(|| unavailable("history recovery requires a current runtime"))
     }
     fn turn_generation(&self, head: Option<&str>, tail: Option<&str>) -> Result<bool> {
         let decode = |cursor: &str| -> Result<bool> {
@@ -342,8 +362,8 @@ impl NativeHistory for PiHistory {
         selection: SessionTimelineSelection,
     ) -> HistoryRead<'_, std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError>> {
         Box::pin(async move {
-            // Locator generation selects the authoritative source; runtime
-            // locators never fall back to JSONL after a connection failure.
+            // Legacy byte locators retain their existing reader. Entry locators
+            // can use disk only when no runtime connection exists at read start.
             let mut runtime = selection.turns.is_empty();
             for turn in &selection.turns {
                 if !selection.selected_turn_ids.contains(&turn.turn_id) {
@@ -363,7 +383,12 @@ impl NativeHistory for PiHistory {
                     &self.binding.client_session_key,
                 );
             }
-            let snapshot = self.snapshot().await?;
+            let Some(snapshot) = self.runtime_snapshot().await? else {
+                return file::run(self.binding.clone(), move |binding, cancelled| {
+                    file::read_session(binding, selection, cancelled)
+                })
+                .await;
+            };
             let items = timeline::session_items(
                 &self.binding.id,
                 &self.binding.client_session_key,
@@ -406,7 +431,16 @@ impl NativeHistory for PiHistory {
                 )?);
             }
             if !runtime.is_empty() {
-                let snapshot = self.snapshot().await?;
+                let Some(snapshot) = self.runtime_snapshot().await? else {
+                    result.extend(
+                        file::run(self.binding.clone(), move |binding, cancelled| {
+                            file::read_ranges(binding, runtime, cancelled)
+                        })
+                        .await?,
+                    );
+                    result.sort_by(|a, b| a.turn_id.cmp(&b.turn_id));
+                    return Ok(result);
+                };
                 let mut claimed = HashSet::new();
                 for range in runtime {
                     let entries = self.selected(snapshot, &range).map_err(|error| {
@@ -461,8 +495,17 @@ impl NativeHistory for PiHistory {
                     .map(|e| e.entry_id)
                     .map_err(|e| invalid(&e.to_string()));
             }
-            let snapshot = self.snapshot().await?;
-            let selected = self.selected(snapshot, &range)?;
+            let offline;
+            let selected = if let Some(snapshot) = self.runtime_snapshot().await? {
+                self.selected(snapshot, &range)?
+            } else {
+                offline = file::run(self.binding.clone(), move |binding, cancelled| {
+                    file::read_entries(binding, vec![range], cancelled)
+                })
+                .await
+                .map_err(|error| invalid(&error.to_string()))?;
+                offline.iter().map(|(_, entry)| entry).collect()
+            };
             let mut users = selected
                 .iter()
                 .filter(|e| e["type"] == "message" && e["message"]["role"] == "user");
