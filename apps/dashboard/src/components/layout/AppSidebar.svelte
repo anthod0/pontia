@@ -10,7 +10,6 @@
   import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon'
   import GearIcon from 'phosphor-svelte/lib/GearIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
-  import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import { base } from '$app/paths'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { navigate } from '$lib/navigation'
@@ -33,7 +32,6 @@
 
   const primaryItems: Item[] = [
     { label: 'New Chat', path: '/', icon: NotePencilIcon },
-    { label: 'Workflows', path: '/workflows', icon: TreeStructureIcon },
   ]
 
   let currentPath = $state(dashboardRelativePath())
@@ -276,7 +274,7 @@
                 tooltipContent={item.label}
                 onclick={() => go(item.path)}
               >
-                <item.icon class={item.path === '/workflows' ? 'text-aqua' : ''} />
+                <item.icon />
                 <span>{item.label}</span>
                 {#if item.path === '/'}
                   {@render shortcutHint('N')}
