@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-17
+
+### Changed
+
+- Hid the Workflows entry from the Dashboard sidebar.
+
+### Fixed
+
+- Read offline Pi session entry history from persisted JSONL files.
+- Improved logo rendering at small sizes and on dark backgrounds.
+
 ## [0.6.0] - 2026-10-17
 
 ### Added
