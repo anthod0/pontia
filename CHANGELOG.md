@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-17
+
+### Added
+
+- Added a session waiting state for blocking interactions, including native Codex approval requests.
+
+### Changed
+
+- Standardized logo stripe spacing and used the full logo in Cloud pages and the Dashboard sidebar.
+- Removed the Progress link from the Cloud site header.
+
+### Fixed
+
+- Preserved the device connection when navigating between Dashboard pages for the same device.
+
 ## [0.6.1] - 2026-10-17
 
 ### Changed
