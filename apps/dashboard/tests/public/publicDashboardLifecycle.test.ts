@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import PublicDashboardHarness from "../components/PublicDashboardHarness.svelte";
+import PublicDashboardRouteHarness from "../components/PublicDashboardRouteHarness.svelte";
 
 const mocks = vi.hoisted(() => ({
   resolveTarget: vi.fn(),
@@ -83,6 +84,24 @@ test("starts only after the secure connection completes and tears down before a 
   await waitFor(() => expect(screen.getByText("Dashboard content")).toBeInTheDocument());
   expect(mocks.resolveTarget).toHaveBeenLastCalledWith("travel-laptop", expect.any(AbortSignal));
   expect(mocks.startRuntime).toHaveBeenCalledTimes(2);
+});
+
+test("navigation within the same device preserves the secure connection and mounted dashboard", async () => {
+  const view = render(PublicDashboardRouteHarness, {
+    props: { data: { handle: "office-mac" } },
+  });
+  const draft = await screen.findByRole("textbox", { name: "Draft" });
+  await fireEvent.input(draft, { target: { value: "Unsent message" } });
+  mocks.stopRuntime.mockClear();
+  mocks.clearRuntime.mockClear();
+
+  await view.rerender({ data: { handle: "office-mac" } });
+
+  expect(mocks.resolveTarget).toHaveBeenCalledTimes(1);
+  expect(mocks.stopRuntime).not.toHaveBeenCalled();
+  expect(mocks.clearRuntime).not.toHaveBeenCalled();
+  expect(screen.getByRole("textbox", { name: "Draft" })).toBe(draft);
+  expect(draft).toHaveValue("Unsent message");
 });
 
 test("a failed secure connection does not start the dashboard and can be retried", async () => {

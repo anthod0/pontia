@@ -13,7 +13,9 @@
     CloudRequestError,
   } from './remoteAccess';
 
-  let { handle, children }: { handle?: string; children: Snippet } = $props();
+  let { handle: handleProp, children }: { handle?: string; children: Snippet } = $props();
+  // Route data may be replaced during navigation without changing the device.
+  const handle = $derived(handleProp);
   let retryGeneration = $state(0);
   let runtimeHandle = $state<string | null>(null);
   let failedHandle = $state<string | null>(null);
