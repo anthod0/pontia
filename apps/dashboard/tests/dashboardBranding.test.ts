@@ -22,6 +22,28 @@ test("dashboard head links the installable manifest", () => {
   );
 });
 
+test("dashboard SVG favicon uses the small-size logo variant", () => {
+  const head = new DOMParser().parseFromString(appHtml, "text/html").head;
+  expect(head.querySelector('link[rel="icon"][type="image/svg+xml"]')?.getAttribute("href")).toBe(
+    "%sveltekit.assets%/logo-small.svg",
+  );
+});
+
+test.each(["logo.svg", "logo-small.svg"])("%s has a transparent background", (name) => {
+  const svg = new DOMParser().parseFromString(
+    readFileSync(resolve(__dirname, "../public", name), "utf8"),
+    "image/svg+xml",
+  );
+  expect(svg.querySelector("#background")).toBeNull();
+  expect(svg.querySelector(":root > rect")).toBeNull();
+});
+
+test.each(["logo.svg", "logo-small.svg"])("cloud %s matches the dashboard copy", (name) => {
+  expect(readFileSync(resolve(__dirname, "../../cloud/static", name), "utf8")).toBe(
+    readFileSync(resolve(__dirname, "../public", name), "utf8"),
+  );
+});
+
 test("dashboard manifest is installable within the dashboard scope", () => {
   expect(manifest).toMatchObject({
     id: "./",

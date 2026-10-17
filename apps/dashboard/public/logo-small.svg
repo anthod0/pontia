@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Small-size variant of logo.svg for favicons and UI marks up to ~48px.
+     Drawn on a 32-unit grid so every edge lands on whole pixels at 16px and 32px. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img">
+  <defs>
+    <clipPath id="sun-disc">
+      <circle cx="16" cy="17" r="15"/>
+    </clipPath>
+  </defs>
+  <g id="sunset">
+    <path id="sun-dome" fill="#d65d0e" d="M 1.033 18 A 15 15 0 1 1 30.967 18 Z"/>
+    <g id="stripes" clip-path="url(#sun-disc)">
+      <path id="stripe-1" fill="#d79921" d="M 0 20 H 32 V 24 H 0 Z"/>
+      <path id="stripe-2" fill="#458588" d="M 0 26 H 32 V 30 H 0 Z"/>
+    </g>
+  </g>
+</svg>

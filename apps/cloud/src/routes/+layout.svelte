@@ -5,7 +5,7 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" type="image/svg+xml" href="/logo.svg" />
+	<link rel="icon" type="image/svg+xml" href="/logo-small.svg" />
 	<meta name="theme-color" content="#fffefc" />
 </svelte:head>
 

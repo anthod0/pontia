@@ -4,7 +4,7 @@
 
 <header class="site-header page-width">
   <a class="brand" href="/" aria-label="Pontia home">
-    <img src="/logo.svg" alt="" />
+    <img src="/logo-small.svg" alt="" />
     <span>Pontia</span>
   </a>
   <nav aria-label="Primary navigation">
