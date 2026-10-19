@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-19
+
+### Added
+
+- Added streaming and recovery of native Codex tool calls.
+- Added session waiting-state reporting for ACP permission interactions.
+
+### Fixed
+
+- Made `pontia up` prepare persistent local authentication, verify Dashboard availability, and print an authenticated Dashboard URL.
+
 ## [0.6.2] - 2026-10-17
 
 ### Added
