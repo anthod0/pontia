@@ -1,17 +1,14 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
-    io::{self, BufRead, ErrorKind, Write},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    io::{self, BufRead, Write},
+    net::SocketAddr,
     path::{Path, PathBuf},
 };
 
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use dialoguer::{MultiSelect, console::Term};
-use pontia_config::{AppConfig, WorkspaceRootConfig};
-use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
+use pontia_config::AppConfig;
 
-use crate::private_file;
+use crate::{lifecycle::local_health_addr, local_config};
 use pontia_application::client_contract::ClientIntegration;
 use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 use std::sync::Arc;
@@ -73,8 +70,7 @@ where
     P: InitPlatform,
     S: FnOnce(&mut R, &mut W, &[Arc<dyn ClientIntegration>]) -> Result<Vec<usize>, String>,
 {
-    let persistent_vars = persistent_vars(vars);
-    let existing = load_persistent_config(&persistent_vars)?;
+    let existing = local_config::load(vars)?;
     if existing.bind_addr.port() == 0 {
         return Err(
             "bind_addr port 0 is not supported by pontia init; configure a concrete service port"
@@ -83,18 +79,7 @@ where
     }
     let user_home = validated_user_home(vars)?;
     let config_path = existing.pontia_home.join("config.toml");
-    let config_exists = config_path
-        .try_exists()
-        .map_err(|error| format!("failed to inspect {}: {error}", config_path.display()))?;
-    let initial_roots = if config_exists {
-        existing.workspace_browser.roots.clone()
-    } else {
-        vec![WorkspaceRootConfig {
-            root_id: "home".to_string(),
-            label: "Home".to_string(),
-            path: user_home.display().to_string(),
-        }]
-    };
+    let initial_roots = &existing.workspace_browser.roots;
 
     writeln!(output, "Pontia initialization\n").map_err(io_error)?;
     let integrations = platform.integrations();
@@ -112,7 +97,7 @@ where
 
     let token = match existing.external_api_token.as_deref() {
         Some(token) => token.to_string(),
-        None => generate_token(platform)?,
+        None => local_config::generate_token(|bytes| platform.fill_random(bytes))?,
     };
 
     let mut ignored_overrides = vars
@@ -175,17 +160,10 @@ where
         writeln!(output, "✓ {}", setup.completion()).map_err(io_error)?;
     }
 
-    let config_changed = write_config(
-        &config_path,
-        existing.bind_addr,
-        &token,
-        &initial_roots,
-        existing.external_api_token.as_deref(),
-        &existing.workspace_browser.roots,
-    )?;
+    let config_changed = local_config::persist_token(&existing, &token)?;
     writeln!(output, "✓ Wrote {}", config_path.display()).map_err(io_error)?;
 
-    let config = load_persistent_config(&persistent_vars)?;
+    let config = local_config::load(vars)?;
     let environment_paths = prepared
         .iter()
         .flatten()
@@ -194,17 +172,14 @@ where
     platform.start_service(&config, config_changed, &environment_paths)?;
     writeln!(output, "✓ Started Pontia service").map_err(io_error)?;
 
-    let dashboard_addr = local_addr(config.bind_addr);
+    let dashboard_addr = local_health_addr(config.bind_addr);
     if !platform.dashboard_available(dashboard_addr)? {
         return Err(format!(
             "Dashboard is not available at http://{dashboard_addr}/dashboard"
         ));
     }
-    let mut url = url::Url::parse(&format!("http://{dashboard_addr}/dashboard"))
-        .map_err(|error| format!("failed to build Dashboard URL: {error}"))?;
-    url.query_pairs_mut().append_pair("token", &token);
     Ok(Some(InitOutcome {
-        local_dashboard_url: url.to_string(),
+        local_dashboard_url: local_config::dashboard_url(&config)?,
     }))
 }
 
@@ -293,20 +268,6 @@ fn interactive_agent_selection<R: BufRead, W: Write>(
         .map_err(|error| format!("Agent Client selection failed: {error}"))
 }
 
-fn load_persistent_config(vars: &HashMap<String, String>) -> Result<AppConfig, String> {
-    pontia_clients::config_from_vars(vars).map_err(|_| {
-        "failed to load Pontia configuration; verify PONTIA_HOME, config.toml syntax, and configured values"
-            .to_string()
-    })
-}
-
-fn persistent_vars(vars: &HashMap<String, String>) -> HashMap<String, String> {
-    ["HOME", "PONTIA_HOME"]
-        .into_iter()
-        .filter_map(|key| vars.get(key).map(|value| (key.to_string(), value.clone())))
-        .collect()
-}
-
 fn validated_user_home(vars: &HashMap<String, String>) -> Result<PathBuf, String> {
     let path = PathBuf::from(vars.get("HOME").ok_or_else(|| {
         "HOME must be set to install the per-user service and select the default Workspace Browser root"
@@ -333,72 +294,6 @@ fn validate_root_path(path: &Path) -> Result<(), String> {
         ));
     }
     Ok(())
-}
-
-fn generate_token<P: InitPlatform>(platform: &P) -> Result<String, String> {
-    let mut bytes = [0_u8; 32];
-    platform.fill_random(&mut bytes)?;
-    Ok(URL_SAFE_NO_PAD.encode(bytes))
-}
-
-fn write_config(
-    path: &Path,
-    bind_addr: SocketAddr,
-    token: &str,
-    roots: &[WorkspaceRootConfig],
-    existing_token: Option<&str>,
-    existing_roots: &[WorkspaceRootConfig],
-) -> Result<bool, String> {
-    let original = match fs::read_to_string(path) {
-        Ok(contents) => contents,
-        Err(error) if error.kind() == ErrorKind::NotFound => String::new(),
-        Err(error) => return Err(format!("failed to read {}: {error}", path.display())),
-    };
-    let mut document = if original.trim().is_empty() {
-        DocumentMut::new()
-    } else {
-        original
-            .parse::<DocumentMut>()
-            .map_err(|error| format!("failed to parse {}: {error}", path.display()))?
-    };
-    if document.get("bind_addr").is_none() {
-        document["bind_addr"] = toml_edit::value(bind_addr.to_string());
-    }
-    if existing_token != Some(token) || document.get("external_api_token").is_none() {
-        document["external_api_token"] = toml_edit::value(token);
-    }
-    let roots_present = document
-        .get("workspace_browser")
-        .and_then(Item::as_table)
-        .and_then(|table| table.get("roots"))
-        .is_some();
-    if existing_roots != roots || !roots_present {
-        let mut array = Array::new();
-        for root in roots {
-            let mut table = InlineTable::new();
-            table.insert("root_id", Value::from(root.root_id.as_str()));
-            table.insert("label", Value::from(root.label.as_str()));
-            table.insert("path", Value::from(root.path.as_str()));
-            array.push(Value::InlineTable(table));
-        }
-        document["workspace_browser"]["roots"] = Item::Value(Value::Array(array));
-    }
-    let updated = document.to_string();
-    let changed = updated != original;
-    private_file::atomic_write(path, updated.as_bytes())?;
-    Ok(changed)
-}
-
-fn local_addr(addr: SocketAddr) -> SocketAddr {
-    let ip = if addr.ip().is_unspecified() {
-        match addr.ip() {
-            IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::LOCALHOST),
-            IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::LOCALHOST),
-        }
-    } else {
-        addr.ip()
-    };
-    SocketAddr::new(ip, addr.port())
 }
 
 fn io_error(error: std::io::Error) -> String {

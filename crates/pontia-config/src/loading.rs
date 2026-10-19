@@ -3,7 +3,7 @@ use std::{collections::HashMap, env, net::SocketAddr};
 use pontia_core::error::{Error, Result};
 
 use super::{
-    AppConfig, WorkspaceBrowserConfig,
+    AppConfig, WorkspaceBrowserConfig, WorkspaceRootConfig,
     environment::{
         apply_runtime_overrides, get, non_empty, parse_bool, validate_real_default_client_type,
     },
@@ -68,14 +68,25 @@ impl AppConfig {
             defaults.default_client_type,
         )?;
 
-        let workspace_browser = match get(vars, "PONTIA_WORKSPACE_ROOTS") {
-            Some(value) => WorkspaceBrowserConfig {
-                roots: workspace_roots::parse(value)?,
-            },
+        let roots = match get(vars, "PONTIA_WORKSPACE_ROOTS") {
+            Some(value) => workspace_roots::parse(value)?,
             None => file
-                .and_then(|config| config.workspace_browser.clone())
-                .unwrap_or_default(),
+                .and_then(|config| config.workspace_browser.as_ref())
+                .and_then(|config| config.roots.clone())
+                .unwrap_or_else(|| {
+                    get(vars, "HOME")
+                        .filter(|home| !home.trim().is_empty())
+                        .map(|home| {
+                            vec![WorkspaceRootConfig {
+                                root_id: "home".to_string(),
+                                label: "Home".to_string(),
+                                path: home.to_string(),
+                            }]
+                        })
+                        .unwrap_or_default()
+                }),
         };
+        let workspace_browser = WorkspaceBrowserConfig { roots };
 
         let file_picker = file
             .and_then(|config| config.file_picker.clone())

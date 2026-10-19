@@ -304,7 +304,11 @@ fn run_with_manager<M: ServiceManager>(
 
     match command {
         LifecycleCommand::Up => {
-            let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
+            let vars = std::env::vars().collect();
+            let config = pontia::local_config::prepare(&vars, |bytes| {
+                getrandom::fill(bytes)
+                    .map_err(|error| format!("failed to generate a secure token: {error}"))
+            })?;
             eprintln!("Starting Pontia service and waiting for it to become healthy...");
             start_with_lifecycle(
                 &lifecycle,
@@ -313,7 +317,15 @@ fn run_with_manager<M: ServiceManager>(
                     restart_running: true,
                 },
             )?;
+            let dashboard_addr = pontia::lifecycle::local_health_addr(config.bind_addr);
+            if !dashboard_available(dashboard_addr)? {
+                return Err(format!(
+                    "Dashboard is not available at http://{dashboard_addr}/dashboard"
+                ));
+            }
+            let dashboard_url = pontia::local_config::dashboard_url(&config)?;
             println!("Pontia is up and healthy.");
+            println!("Local Dashboard: {dashboard_url}");
             Ok(true)
         }
         LifecycleCommand::Down => {

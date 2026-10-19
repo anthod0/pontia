@@ -400,6 +400,66 @@ external_api_token = "home-config-token"
 }
 
 #[test]
+fn omitted_roots_use_current_home_without_persisting_defaults() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("config.toml");
+    for contents in [
+        None,
+        Some("bind_addr = '127.0.0.1:9090'\n"),
+        Some("[workspace_browser]\n"),
+    ] {
+        if let Some(contents) = contents {
+            fs::write(&path, contents).unwrap();
+        }
+        let mut vars = vars_for_home(root.path());
+        for name in ["first-home", "second-home"] {
+            let home = root.path().join(name);
+            vars.insert("HOME".into(), home.display().to_string());
+            let config = AppConfig::from_vars(&vars).unwrap();
+            assert_eq!(config.workspace_browser.roots.len(), 1);
+            let loaded = &config.workspace_browser.roots[0];
+            assert_eq!(loaded.root_id, "home");
+            assert_eq!(loaded.label, "Home");
+            assert_eq!(loaded.path, home.to_str().unwrap());
+        }
+        assert_eq!(fs::read_to_string(&path).ok().as_deref(), contents);
+    }
+}
+
+#[test]
+fn explicit_file_and_environment_roots_override_home_default() {
+    let root = tempfile::tempdir().unwrap();
+    let mut vars = vars_for_home(root.path());
+    vars.insert("HOME".into(), root.path().display().to_string());
+    for roots in [
+        "[]",
+        "[{ root_id = 'work', label = 'Work', path = '/work' }]",
+    ] {
+        fs::write(
+            root.path().join("config.toml"),
+            format!("[workspace_browser]\nroots = {roots}\n"),
+        )
+        .unwrap();
+        let config = AppConfig::from_vars(&vars).unwrap();
+        if roots == "[]" {
+            assert!(config.workspace_browser.roots.is_empty());
+        } else {
+            assert_eq!(config.workspace_browser.roots.len(), 1);
+            assert_eq!(config.workspace_browser.roots[0].root_id, "work");
+            assert_eq!(config.workspace_browser.roots[0].path, "/work");
+        }
+    }
+    vars.insert("PONTIA_WORKSPACE_ROOTS".into(), String::new());
+    assert!(
+        AppConfig::from_vars(&vars)
+            .unwrap()
+            .workspace_browser
+            .roots
+            .is_empty()
+    );
+}
+
+#[test]
 fn provides_development_defaults_for_optional_values() {
     let home = tempfile::tempdir().expect("Pontia home");
     let config = AppConfig::from_vars(&vars_for_home(home.path())).expect("defaults load");

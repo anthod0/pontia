@@ -11,6 +11,7 @@
   let unsubscribeToken: (() => void) | null = null;
   let dashboardStarted = false;
   loadTokenFromStorage();
+  consumeTokenFromUrl();
   let authenticatedToken = $state(get(token).trim());
 
   function startDashboard(): void {
@@ -19,7 +20,6 @@
   }
 
   onMount(() => {
-    consumeTokenFromUrl();
     unsubscribeToken = token.subscribe((value) => {
       const trimmed = value.trim();
       const previousToken = authenticatedToken;

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, expect, test, vi } from "vitest";
 import { writable } from "svelte/store";
 import AppLayoutHost from "./components/AppLayoutHost.svelte";
+import AppLayoutRequestHost from "./components/AppLayoutRequestHost.svelte";
 import { token } from "../src/stores/auth";
 
 const mocks = vi.hoisted(() => ({
@@ -93,6 +94,30 @@ test("stores a token from the URL and removes only that query parameter", async 
     screen.queryByRole("heading", { name: /enter external api token/i }),
   ).not.toBeInTheDocument();
   expect(mocks.startEventStream).toHaveBeenCalled();
+});
+
+test("uses the URL credential for initial route requests even when storage has a stale token", async () => {
+  localStorage.setItem("pontia.externalApiToken", "stale-token");
+  window.history.pushState({}, "", "/dashboard?token=current-token");
+  const authorization: (string | null)[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init: RequestInit) => {
+      const bearer = new Headers(init.headers).get("Authorization");
+      authorization.push(bearer);
+      return new Response(JSON.stringify({ data: { options: [] }, error: null }), {
+        status: bearer === "Bearer current-token" ? 200 : 401,
+      });
+    }),
+  );
+
+  render(AppLayoutRequestHost);
+
+  await screen.findByTestId("authenticated-options");
+  expect(authorization.length).toBeGreaterThan(0);
+  expect(authorization.every((value) => value === "Bearer current-token")).toBe(true);
+  expect(localStorage.getItem("pontia.externalApiToken")).toBe("current-token");
+  expect(screen.queryByTestId("authentication-failed")).not.toBeInTheDocument();
 });
 
 test("removes an empty URL token without replacing a saved token", async () => {

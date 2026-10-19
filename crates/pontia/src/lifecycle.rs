@@ -196,7 +196,7 @@ where
     }
 }
 
-fn local_health_addr(addr: SocketAddr) -> SocketAddr {
+pub fn local_health_addr(addr: SocketAddr) -> SocketAddr {
     let ip = if addr.ip().is_unspecified() {
         match addr.ip() {
             IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::LOCALHOST),

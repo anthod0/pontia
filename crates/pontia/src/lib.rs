@@ -1,6 +1,7 @@
 pub mod definition;
 pub mod init;
 pub mod lifecycle;
+pub mod local_config;
 pub mod manager;
 pub mod private_file;
 pub mod runtime_io;

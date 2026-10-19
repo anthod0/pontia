@@ -193,14 +193,13 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_returns_d
     let config: toml::Value = toml::from_str(&config_text).expect("valid TOML");
     let token = config["external_api_token"].as_str().expect("token");
     assert_eq!(token.len(), 43);
-    assert_eq!(config["bind_addr"].as_str(), Some("127.0.0.1:8080"));
+    assert_eq!(config.as_table().unwrap().len(), 1);
+    let loaded = pontia_clients::config_from_vars(&vars(&user_home, &pontia_home)).unwrap();
+    assert_eq!(loaded.bind_addr.to_string(), "127.0.0.1:8080");
+    assert_eq!(loaded.workspace_browser.roots[0].root_id, "home");
     assert_eq!(
-        config["workspace_browser"]["roots"][0]["root_id"].as_str(),
-        Some("home")
-    );
-    assert_eq!(
-        config["workspace_browser"]["roots"][0]["path"].as_str(),
-        Some(user_home.display().to_string().as_str())
+        loaded.workspace_browser.roots[0].path,
+        user_home.to_str().unwrap()
     );
     assert_eq!(
         platform.events.borrow().as_slice(),
@@ -213,6 +212,50 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_returns_d
     );
     let expected_url = format!("http://127.0.0.1:8080/dashboard?token={token}");
     assert_eq!(outcome.local_dashboard_url, expected_url);
+}
+
+#[test]
+fn up_and_init_share_credentials_without_materializing_default_roots() {
+    for up_first in [true, false] {
+        let root = tempfile::tempdir().unwrap();
+        let environment = vars(root.path(), &root.path().join("pontia"));
+        let platform = FakePlatform::default();
+        let prepare = || {
+            pontia::local_config::prepare(&environment, |bytes| {
+                bytes.fill(9);
+                Ok(())
+            })
+            .unwrap()
+        };
+        let before = up_first.then(prepare);
+        let outcome = run(
+            &mut Cursor::new(b"none\n\n"),
+            &mut Vec::new(),
+            &environment,
+            &platform,
+        )
+        .unwrap()
+        .unwrap();
+        let after = prepare();
+        if let Some(before) = before {
+            assert_eq!(before.external_api_token, after.external_api_token);
+        }
+        let url = url::Url::parse(&outcome.local_dashboard_url).unwrap();
+        assert_eq!(url.host_str(), Some("127.0.0.1"));
+        assert_eq!(url.port(), Some(8080));
+        assert_eq!(url.path(), "/dashboard");
+        assert_eq!(
+            url.query_pairs().next().unwrap().1,
+            after.external_api_token.unwrap()
+        );
+        let text = fs::read_to_string(after.pontia_home.join("config.toml")).unwrap();
+        let persisted: toml::Value = toml::from_str(&text).unwrap();
+        assert_eq!(persisted.as_table().unwrap().len(), 1);
+        assert_eq!(
+            after.workspace_browser.roots[0].path,
+            root.path().to_str().unwrap()
+        );
+    }
 }
 
 #[test]
