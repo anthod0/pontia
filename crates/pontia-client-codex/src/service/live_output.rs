@@ -8,7 +8,9 @@ use pontia_application::{
 use pontia_core::Result;
 use std::collections::{HashMap, HashSet};
 
-enum Recovery {
+mod tool_calls;
+
+enum TextRecovery {
     Ready {
         turn_id: String,
         boundary: u64,
@@ -21,7 +23,7 @@ enum Recovery {
 
 pub(super) struct CodexLiveOutput {
     output: LiveOutputService,
-    recovered: HashMap<String, Recovery>,
+    recovered: HashMap<String, TextRecovery>,
 }
 
 impl Drop for CodexLiveOutput {
@@ -62,7 +64,7 @@ impl CodexLiveOutput {
         self.invalidate(session);
         self.recovered.insert(
             session.into(),
-            Recovery::Unavailable {
+            TextRecovery::Unavailable {
                 turn_id: native.into(),
             },
         );
@@ -107,7 +109,7 @@ impl CodexLiveOutput {
             let Some(producer) = self.producer(service, session, native).await? else {
                 continue;
             };
-            if matches!(self.recovered.get(session), Some(Recovery::Ready { turn_id, .. }) if turn_id == native)
+            if matches!(self.recovered.get(session), Some(TextRecovery::Ready { turn_id, .. } | TextRecovery::Unavailable { turn_id }) if turn_id == native)
                 && self
                     .output
                     .snapshot(session, &producer.identity.turn_id)
@@ -124,20 +126,15 @@ impl CodexLiveOutput {
                 self.unavailable(session, native);
                 continue;
             };
-            // Legacy full-history snapshots synthesize item-N identities, whereas live
-            // notifications use the native message ID. Those snapshots cannot safely
-            // cover queued deltas. Fail closed rather than infer item correspondence.
-            if items.iter().any(|item| {
+            // Legacy text IDs cannot cover queued deltas. Keep text fail-closed,
+            // but recover tools whose native call IDs remain stable in that history.
+            let unsafe_text = items.iter().any(|item| {
                 item["type"] == "agentMessage" && is_history_item_id(item["id"].as_str())
-            }) {
-                self.unavailable(session, native);
-                continue;
-            }
-            let items = items
-                .iter()
-                .filter(|item| item["type"] == "agentMessage")
-                .map(|item| {
-                    Ok(LiveOutputItem::AssistantText {
+            });
+            let mut recovered_items = Vec::new();
+            for item in items {
+                if item["type"] == "agentMessage" && !unsafe_text {
+                    recovered_items.push(LiveOutputItem::AssistantText {
                         item_id: string(item, "id")?.into(),
                         text: item["text"]
                             .as_str()
@@ -147,9 +144,16 @@ impl CodexLiveOutput {
                                 )
                             })?
                             .into(),
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?;
+                    });
+                } else if let Some(call) = tool_calls::from_native(item) {
+                    recovered_items.push(call.into_item());
+                }
+            }
+            let items = recovered_items;
+            if unsafe_text && items.is_empty() {
+                self.unavailable(session, native);
+                continue;
+            }
             let sequence = self
                 .output
                 .snapshot(session, &producer.identity.turn_id)
@@ -170,10 +174,16 @@ impl CodexLiveOutput {
                 .await?;
             self.recovered.insert(
                 session.into(),
-                Recovery::Ready {
-                    turn_id: native.into(),
-                    boundary: snapshot.notification_boundary,
-                    items: covered_items,
+                if unsafe_text {
+                    TextRecovery::Unavailable {
+                        turn_id: native.into(),
+                    }
+                } else {
+                    TextRecovery::Ready {
+                        turn_id: native.into(),
+                        boundary: snapshot.notification_boundary,
+                        items: covered_items,
+                    }
                 },
             );
         }
@@ -188,8 +198,6 @@ impl CodexLiveOutput {
         notification: &Notification,
     ) -> Result<()> {
         let params = &notification["params"];
-        let thread = string(params, "threadId")?;
-        let native = string(params, "turnId")?;
         let item_id = string(params, "itemId")?;
         let delta = params["delta"]
             .as_str()
@@ -197,10 +205,44 @@ impl CodexLiveOutput {
         if delta.is_empty() {
             return Ok(());
         }
-        if matches!(self.recovered.get(session), Some(Recovery::Unavailable { turn_id }) if turn_id == native)
-        {
+        self.publish(
+            service,
+            runtime,
+            session,
+            notification,
+            LiveOutputUpdate::AssistantTextDelta {
+                item_id: item_id.into(),
+                delta: delta.into(),
+            },
+        )
+        .await
+    }
+
+    pub async fn tool_call(
+        &mut self,
+        service: &CodexService,
+        runtime: &CodexRuntime,
+        session: &str,
+        notification: &Notification,
+    ) -> Result<()> {
+        let Some(call) = tool_calls::from_native(&notification["params"]["item"]) else {
             return Ok(());
-        }
+        };
+        self.publish(service, runtime, session, notification, call.into_update())
+            .await
+    }
+
+    async fn publish(
+        &mut self,
+        service: &CodexService,
+        runtime: &CodexRuntime,
+        session: &str,
+        notification: &Notification,
+        update: LiveOutputUpdate,
+    ) -> Result<()> {
+        let params = &notification["params"];
+        let thread = string(params, "threadId")?;
+        let native = string(params, "turnId")?;
         let _operation = runtime.lock_session(session).await;
         for attempt in 0..2 {
             let turn_id = {
@@ -217,6 +259,11 @@ impl CodexLiveOutput {
                 self.recovered.remove(session);
                 self.restore(service, runtime, session, thread).await?;
             }
+            if matches!(&update, LiveOutputUpdate::AssistantTextDelta { .. })
+                && matches!(self.recovered.get(session), Some(TextRecovery::Unavailable { turn_id }) if turn_id == native)
+            {
+                return Ok(());
+            }
             let _current = runtime.current_guard().await?;
             if !self.accepts(service, runtime, session, thread).await? {
                 return Ok(());
@@ -226,23 +273,46 @@ impl CodexLiveOutput {
             };
             // Full native items cover queued notifications for those items only.
             // Unfinished items may be absent from native history; retain their deltas.
-            if matches!(self.recovered.get(session), Some(Recovery::Ready { turn_id, boundary, items })
-                if turn_id == native && notification.sequence <= *boundary && items.contains(item_id))
+            if matches!(&update, LiveOutputUpdate::AssistantTextDelta { item_id, .. }
+                if matches!(self.recovered.get(session), Some(TextRecovery::Ready { turn_id, boundary, items })
+                    if turn_id == native && notification.sequence <= *boundary && items.contains(item_id)))
             {
                 return Ok(());
+            }
+            // A valid invocation does not need a safe assistant-text baseline.
+            // Native history can omit an unfinished tool even when text recovery
+            // is unavailable; seed a tool-only stream from its notification.
+            if matches!(&update, LiveOutputUpdate::ToolCall { .. })
+                && self.output.snapshot(session, &turn_id).is_none()
+                && matches!(self.recovered.get(session), Some(TextRecovery::Unavailable { turn_id }) if turn_id == native)
+            {
+                self.output
+                    .replace_snapshot(LiveOutputSnapshotReplacement {
+                        producer: producer.clone(),
+                        sequence: 1,
+                        items: Vec::new(),
+                    })
+                    .await?;
             }
             let Some(snapshot) = self.output.snapshot(session, &turn_id) else {
                 return Ok(());
             };
+            // ToolCall adds an immutable call, never updates its result or status.
+            // The same native ID is used by snapshots, starts, completions and replays.
+            if let LiveOutputUpdate::ToolCall { call_id, .. } = &update
+                && snapshot.items.iter().any(|item| {
+                    matches!(item,
+                    LiveOutputItem::ToolCall { call_id: existing, .. } if existing == call_id)
+                })
+            {
+                return Ok(());
+            }
             let outcome = self
                 .output
                 .publish_batch(LiveOutputBatch {
                     producer,
                     first_sequence: snapshot.sequence + 1,
-                    updates: vec![LiveOutputUpdate::AssistantTextDelta {
-                        item_id: item_id.into(),
-                        delta: delta.into(),
-                    }],
+                    updates: vec![update.clone()],
                 })
                 .await?;
             if matches!(outcome, LiveOutputPublishOutcome::Accepted { .. }) {

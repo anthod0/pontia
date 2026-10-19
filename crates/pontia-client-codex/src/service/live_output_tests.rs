@@ -13,6 +13,8 @@ use tokio::{
 };
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
+mod tool_calls;
+
 enum Command {
     Notify(Value),
     Disconnect,

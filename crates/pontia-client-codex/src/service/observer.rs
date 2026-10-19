@@ -184,18 +184,22 @@ impl CodexObserver {
                             let native = super::string(&event["params"], "turnId")?;
                             let bound: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM native_turn_bindings WHERE session_id=? AND client_turn_id=?")
                                 .bind(&session).bind(native).fetch_one(&self.service.pool).await?;
-                            if bound > 0 { continue; }
-                            // An empty native start was deferred until its operation
-                            // became identifiable. Keep the real native Turn timestamps.
-                            let mut turn = self.service.turns(connection, thread).await?
-                                .unwrap_or_default().into_iter().find(|turn| turn["id"] == native)
-                                .unwrap_or_else(|| serde_json::json!({"id":native,"status":"inProgress","items":[]}));
-                            if turn["items"].as_array().is_none_or(|items| items.iter().all(|item| item["type"] == "contextCompaction")) {
-                                turn["items"] = serde_json::json!([event["params"]["item"]]);
+                            if bound == 0 {
+                                // An empty native start was deferred until its operation
+                                // became identifiable. Keep the real native Turn timestamps.
+                                let mut turn = self.service.turns(connection, thread).await?
+                                    .unwrap_or_default().into_iter().find(|turn| turn["id"] == native)
+                                    .unwrap_or_else(|| serde_json::json!({"id":native,"status":"inProgress","items":[]}));
+                                if turn["items"].as_array().is_none_or(|items| items.iter().all(|item| item["type"] == "contextCompaction")) {
+                                    turn["items"] = serde_json::json!([event["params"]["item"]]);
+                                }
+                                let _operation = runtime.lock_session(&session).await;
+                                let _current = runtime.current_guard().await?;
+                                self.service.turn_fact(&session, &turn, "notification").await?;
                             }
-                            let _operation = runtime.lock_session(&session).await;
-                            let _current = runtime.current_guard().await?;
-                            self.service.turn_fact(&session, &turn, "notification").await?;
+                            if let Err(error) = output.tool_call(&self.service, &runtime, &session, &event).await {
+                                tracing::warn!(%session, %error, "Codex live output tool call rejected");
+                            }
                         }
                         Some("error") => {
                             self.service.compaction_error(&runtime, &session, &event["params"]).await?;
