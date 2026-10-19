@@ -11,6 +11,9 @@ use pontia_core::{Error, Result};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 
+#[path = "control_loop/permission_blocking.rs"]
+mod permission_blocking;
+
 struct Harness {
     app: AppState,
     tasks: Option<ClientServiceTasks>,
@@ -1365,6 +1368,9 @@ async fn permission_response_flush_does_not_block_incoming_updates_under_pipe_ba
         InteractionState::Resolving,
     )
     .await;
+    h.wait_session_state(&session, "waiting_for_interaction")
+        .await;
+    assert_eq!(h.events(&session, "interaction.unblocked").await, 0);
     h.release("backpressure-1");
     let result = tokio::time::timeout(Duration::from_secs(5), responding)
         .await
@@ -1372,6 +1378,8 @@ async fn permission_response_flush_does_not_block_incoming_updates_under_pipe_ba
         .unwrap()
         .unwrap();
     assert_eq!(result.state, InteractionState::Resolved);
+    h.wait_session_state(&session, "busy").await;
+    assert_eq!(h.events(&session, "interaction.unblocked").await, 1);
     h.release("release-1");
     h.wait_turn(&session, &turn.turn_id, "completed").await;
     h.stop().await;
@@ -1545,7 +1553,7 @@ async fn lost_prompt_reconnect_expires_permissions_without_replay_or_terminal_fa
         .unwrap()
         .unwrap();
     assert_eq!(view.runtimes.len(), 1);
-    assert_eq!(view.state, "busy");
+    assert_eq!(view.state, "waiting_for_interaction");
     assert!(!view.capabilities.accept_task);
     assert!(!view.capabilities.interrupt);
     assert!(view.capabilities.timeline);
@@ -1954,6 +1962,8 @@ async fn invalid_permission_options_or_native_session_do_not_register_or_approve
         h.release("release-1");
         h.wait_turn(&session, &turn.turn_id, "completed").await;
         assert!(!h.wire().iter().any(|r| r.get("result").is_some()));
+        assert_eq!(h.events(&session, "interaction.blocked").await, 0);
+        assert_eq!(h.events(&session, "interaction.unblocked").await, 0);
         h.stop().await;
     }
 }

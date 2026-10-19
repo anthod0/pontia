@@ -77,6 +77,7 @@ pub(crate) struct Peer {
     pub state: Arc<Mutex<SessionState>>,
     pub receipts: Arc<Receipts>,
     pub interactions: pontia_application::interactions::InteractionService,
+    pub permission_events: crate::interactions::PermissionEvents,
     pub runtime: String,
     pub stop: watch::Sender<bool>,
     pub done: watch::Receiver<bool>,
@@ -238,7 +239,10 @@ impl Peer {
         let permission_service = interactions.clone();
         let cleanup_service = interactions.clone();
         let permission_state = state.clone();
-        let permission_session = session.clone();
+        let permission_events =
+            crate::interactions::PermissionEvents::new(events.clone(), &session, runtime);
+        let permission_facts = permission_events.clone();
+        let permission_log_session = session.clone();
         tokio::spawn(async move {
             {
                 let io = agent_client_protocol::Client
@@ -246,9 +250,9 @@ impl Peer {
                 .on_receive_request(
                     async move |request: RequestPermissionRequest, responder, _cx| {
                         if let Err(error) = crate::interactions::register(
-                            &permission_service, &permission_session, &permission_state, request, responder,
+                            &permission_service, &permission_facts, &permission_state, request, responder,
                         ).await {
-                            tracing::warn!(session=%permission_session, %error, "ACP permission registration failed");
+                            tracing::warn!(session=%permission_log_session, %error, "ACP permission registration failed");
                         }
                         Ok(())
                     },
@@ -350,6 +354,7 @@ impl Peer {
             state,
             receipts,
             interactions,
+            permission_events,
             runtime: runtime.into(),
             stop,
             done: completion,

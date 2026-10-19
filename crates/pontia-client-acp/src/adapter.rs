@@ -585,7 +585,7 @@ impl ClientInteractions for AcpAdapter {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             let peer = self.peer(session).await?;
-            crate::interactions::resolve(&peer.state, &peer.receipts, interaction, option).await
+            crate::interactions::resolve(&peer, interaction, option).await
         })
     }
 }

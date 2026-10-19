@@ -4,13 +4,69 @@ use agent_client_protocol::{Responder, schema::v1::*};
 use pontia_application::interactions::{
     ChoiceInteractionRequest, InteractionIntent, InteractionOption, InteractionService,
 };
-use pontia_core::{Error, Result};
-use tokio::sync::{Mutex, oneshot};
+use pontia_application::{EventIngestService, ReportedFact};
+use pontia_core::{Error, Result, domain::EventType};
+use serde_json::json;
+use tokio::sync::{Mutex, mpsc, oneshot};
 
-use crate::{peer::SessionState, transport::Receipts};
+use crate::{
+    peer::{Peer, SessionState},
+    transport::Receipts,
+};
+
+#[derive(Clone)]
+pub(crate) struct PermissionEvents {
+    sender: mpsc::UnboundedSender<ReportedFact>,
+    session: String,
+    runtime: String,
+}
+
+impl PermissionEvents {
+    pub fn new(events: EventIngestService, session: &str, runtime: &str) -> Self {
+        let (sender, mut pending) = mpsc::unbounded_channel::<ReportedFact>();
+        // Reporting owns its associations independently of responders and API
+        // futures. Preserve fact order, including across transient ingest errors.
+        // This queue never contains native operations and cannot replay a choice.
+        tokio::spawn(async move {
+            while let Some(fact) = pending.recv().await {
+                loop {
+                    match events.report_fact(fact.clone()).await {
+                        Ok(_) => break,
+                        Err(error) => {
+                            tracing::warn!(session=%fact.session_id, %error, "ACP permission fact reporting failed");
+                            if events.db().is_closed() {
+                                return;
+                            }
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        }
+                    }
+                }
+            }
+        });
+        Self {
+            sender,
+            session: session.into(),
+            runtime: runtime.into(),
+        }
+    }
+
+    fn report(&self, turn: &str, id: &str, kind: EventType) {
+        let fact = ReportedFact {
+            session_id: self.session.clone(),
+            turn_id: Some(turn.into()),
+            report_key: Some(format!("acp:{id}:{kind}")),
+            fact_type: kind,
+            data: json!({"runtime_id":self.runtime,"interaction_id":id}),
+        };
+        if self.sender.send(fact).is_err() {
+            tracing::error!(session=%self.session, interaction_id=id, "ACP permission fact reporter unavailable");
+        }
+    }
+}
 
 pub(crate) struct Permission {
     responder: Responder<RequestPermissionResponse>,
+    turn: String,
     options: HashMap<String, PermissionOptionId>,
     // Dropping the association also releases its native cancellation observer.
     _done: oneshot::Sender<()>,
@@ -18,11 +74,12 @@ pub(crate) struct Permission {
 
 pub(crate) async fn register(
     service: &InteractionService,
-    session: &str,
+    facts: &PermissionEvents,
     shared: &Arc<Mutex<SessionState>>,
     request: RequestPermissionRequest,
     responder: Responder<RequestPermissionResponse>,
 ) -> Result<()> {
+    let session = facts.session.as_str();
     let mut state = shared.lock().await;
     let prompt = state.active.as_ref().filter(|_| {
         state.current && !state.closing && state.native.as_ref() == Some(&request.session_id)
@@ -72,6 +129,7 @@ pub(crate) async fn register(
             return Err(error);
         }
     };
+    let turn = prompt.turn.clone();
     let cancellation = responder.cancellation();
     let (done, completed) = oneshot::channel();
     let id = interaction.interaction_id;
@@ -79,10 +137,14 @@ pub(crate) async fn register(
         id.clone(),
         Permission {
             responder,
+            turn: turn.clone(),
             options: native,
             _done: done,
         },
     );
+    // Enqueue under the lock before a selection can consume the responder;
+    // ingestion itself must not delay cancellation or native response delivery.
+    facts.report(&turn, &id, EventType::InteractionBlocked);
     let shared = Arc::downgrade(shared);
     let service = service.clone();
     let session = session.to_owned();
@@ -135,13 +197,9 @@ fn choice_options(
     Some((choices, native))
 }
 
-pub(crate) async fn resolve(
-    shared: &Mutex<SessionState>,
-    receipts: &Receipts,
-    id: &str,
-    option: &str,
-) -> Result<()> {
-    let mut state = shared.lock().await;
+pub(crate) async fn resolve(peer: &Peer, id: &str, option: &str) -> Result<()> {
+    let mut state = peer.state.lock().await;
+    let receipts = peer.receipts.clone();
     let permission = state
         .permissions
         .get(id)
@@ -163,7 +221,22 @@ pub(crate) async fn resolve(
     // The connection-bound responder has been consumed atomically. Reader
     // callbacks must remain free to take the state lock while the pipe drains.
     drop(state);
-    receipts.wait(key).await
+    let facts = peer.permission_events.clone();
+    let id = id.to_owned();
+    let (sent, received) = oneshot::channel();
+    // Observe delivery even if the caller disappears after enqueueing the RPC
+    // response. A local flush is not an Agent acceptance ACK. Failed/unknown
+    // delivery never enqueues an unblock, and event retries never resend RPCs.
+    tokio::spawn(async move {
+        let result = receipts.wait(key).await;
+        if result.is_ok() {
+            facts.report(&permission.turn, &id, EventType::InteractionUnblocked);
+        }
+        let _ = sent.send(result);
+    });
+    received
+        .await
+        .map_err(|_| Error::ControlUnknown("ACP permission delivery observer stopped".into()))?
 }
 
 pub(crate) async fn expire(

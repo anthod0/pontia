@@ -74,6 +74,8 @@ def prompt(request, ordinal, cancellation):
         send({"method": "session/update", "params": {"sessionId": "native-id", "update": update}})
     if os.environ.get("ACP_REPLY_BACKPRESSURE") == "1":
         wait_for(f"backpressure-{ordinal}")
+        if os.environ.get("ACP_BREAK_REPLY") == "1":
+            os._exit(0)
         # The main thread cannot drain stdin until these updates have all been
         # written. A response writer holding the reader's state lock deadlocks.
         for _ in range(64):
@@ -82,6 +84,12 @@ def prompt(request, ordinal, cancellation):
                     "sessionUpdate": "tool_call_update", "toolCallId": "pressure", "rawInput": "x" * 4096
                 }
             }})
+        if os.environ.get("ACP_RESULT_BEFORE_DRAIN") == "1":
+            active = None
+            response(request, {"stopReason": "end_turn"})
+            wait_for(f"drain-result-{ordinal}")
+            (root / f"drain-input-{ordinal}").touch()
+            return
         (root / f"drain-input-{ordinal}").touch()
     wait_for(f"release-{ordinal}")
     if os.environ.get("ACP_DROP_PROMPT") == "1":
