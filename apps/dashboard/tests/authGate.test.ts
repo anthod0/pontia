@@ -38,6 +38,7 @@ vi.mock("../src/queries/sessionOverview", () => ({
 }));
 vi.mock("../src/queries/workspaces", () => ({
   fetchWorkspaces: mocks.loadWorkspaces,
+  createWorkspacesQuery: () => ({ data: [], isPending: false, error: null }),
 }));
 vi.mock("../src/stores/workflows", () => ({
   resetWorkflows: vi.fn(),

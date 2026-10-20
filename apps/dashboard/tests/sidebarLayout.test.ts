@@ -66,13 +66,36 @@ vi.mock("../src/stores/sessions", () => ({
   archiveSession: mocks.archiveSession,
   terminateSession: mocks.terminateSession,
 }));
+vi.mock("../src/queries/workspaces", () => ({
+  createWorkspacesQuery: () => ({
+    data: [
+      {
+        workspace_id: "workspace-1",
+        name: "First workspace",
+        display_path: "/first",
+        canonical_path: "/first",
+      },
+      {
+        workspace_id: "workspace-2",
+        name: "Second workspace",
+        display_path: "/second",
+        canonical_path: "/second",
+      },
+    ],
+    isPending: false,
+    error: null,
+  }),
+}));
 vi.mock("../src/queries/sessionOverview", () => ({
-  createSessionOverviewQuery: () => ({
+  createSessionOverviewQuery: (_includeArchived = false, workspaceId = () => undefined) => ({
     get data() {
       return {
         pinned: mocks.sidebarPinnedSessions.value,
         active: mocks.sidebarActiveSessions.value,
-        list: mocks.sidebarRecentSessions.value,
+        list: mocks.sidebarRecentSessions.value.filter(
+          (session) =>
+            !workspaceId() || (session as { workspace_id: string }).workspace_id === workspaceId(),
+        ),
         archived: [],
         nextCursor: mocks.sidebarSessionsNextCursor.value,
       };
@@ -150,6 +173,46 @@ test("opens the all sessions page from the Recent Sessions header", async () => 
   expect(mocks.navigate).toHaveBeenCalledWith("/sessions");
 });
 
+test("workspace selection filters recent sessions but keeps global pins and does not navigate", async () => {
+  const first = chatSession("first-active", "idle", "2026-05-14T04:00:00Z");
+  const second = {
+    ...chatSession("second-active", "idle", "2026-05-14T03:00:00Z"),
+    workspace_id: "workspace-2",
+  };
+  const older = chatSession("first-older", "exited", "2026-05-14T01:00:00Z");
+  const pinned = {
+    ...chatSession("second-pinned", "exited", "2026-05-14T01:00:00Z", "2026-05-14T02:00:00Z"),
+    workspace_id: "workspace-2",
+  };
+  mocks.sessions.set([first, second]);
+  mocks.sidebarRecentSessions.set([first, second, older, pinned]);
+  mocks.sidebarPinnedSessions.set([pinned]);
+  render(AppSidebarHost);
+
+  await fireEvent.click(
+    screen.getByRole("button", { name: "Filter recent sessions by workspace" }),
+  );
+  await fireEvent.click(screen.getByRole("menuitemradio", { name: /First workspace/ }));
+
+  expect(screen.getAllByText("first-active")).toHaveLength(1);
+  expect(screen.getByText("first-older")).toBeInTheDocument();
+  expect(screen.queryByText("second-active")).not.toBeInTheDocument();
+  expect(screen.getAllByText("second-pinned")).toHaveLength(1);
+  expect(mocks.navigate).not.toHaveBeenCalled();
+
+  await fireEvent.click(
+    screen.getByRole("button", { name: "Filter recent sessions by workspace" }),
+  );
+  expect(screen.getByRole("menuitemradio", { name: /First workspace/ })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await fireEvent.click(screen.getByRole("menuitemradio", { name: "All workspaces" }));
+
+  expect(screen.getByText("second-active")).toBeInTheDocument();
+  expect(screen.getAllByText("second-pinned")).toHaveLength(2);
+});
+
 test("sidebar renders active sessions before paged recent sessions without duplicating active sessions", () => {
   const active = chatSession("session-active", "idle", "2026-05-14T04:00:00Z");
   const duplicate = chatSession("session-active", "idle", "2026-05-14T04:00:00Z");
@@ -174,7 +237,7 @@ test.each([false, true])(
     render(AppSidebarHost);
 
     expect(screen.queryByRole("button", { name: /pinned sessions/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /recent sessions/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^recent sessions$/i })).toBeInTheDocument();
   },
 );
 

@@ -37,8 +37,18 @@ afterEach(() => {
 });
 
 test("a session event invalidates its session snapshots and every overview variant", async () => {
-  const currentOverviewKey = [...sessionOverviewKeys.all, { includeArchived: false }] as const;
-  const archivedOverviewKey = [...sessionOverviewKeys.all, { includeArchived: true }] as const;
+  const currentOverviewKey = [
+    ...sessionOverviewKeys.all,
+    { includeArchived: false, workspaceId: null },
+  ] as const;
+  const archivedOverviewKey = [
+    ...sessionOverviewKeys.all,
+    { includeArchived: true, workspaceId: null },
+  ] as const;
+  const workspaceOverviewKey = [
+    ...sessionOverviewKeys.all,
+    { includeArchived: false, workspaceId: "workspace-1" },
+  ] as const;
   const affectedDetailKey = sessionKeys.detail("session-1");
   const affectedModelsKey = sessionKeys.models("session-1");
   const affectedTimelineKey = timelineKeys.snapshot("session-1");
@@ -49,6 +59,7 @@ test("a session event invalidates its session snapshots and every overview varia
   for (const key of [
     currentOverviewKey,
     archivedOverviewKey,
+    workspaceOverviewKey,
     affectedDetailKey,
     affectedModelsKey,
     affectedTimelineKey,
@@ -63,6 +74,7 @@ test("a session event invalidates its session snapshots and every overview varia
 
   expect(isInvalidated(currentOverviewKey)).toBe(true);
   expect(isInvalidated(archivedOverviewKey)).toBe(true);
+  expect(isInvalidated(workspaceOverviewKey)).toBe(true);
   expect(isInvalidated(affectedDetailKey)).toBe(true);
   expect(isInvalidated(affectedModelsKey)).toBe(false);
   expect(isInvalidated(affectedTimelineKey)).toBe(true);

@@ -19,6 +19,7 @@
   import { cn } from '$lib/utils.js'
   import { archiveSession, pinSession, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
   import { createSessionOverviewQuery, snapshotSessionOverview } from '../../queries/sessionOverview'
+  import { createWorkspacesQuery } from '../../queries/workspaces'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
@@ -43,12 +44,19 @@
   let sessionActionMenuOpenKey = $state<string | null>(null)
   let pinnedSessionsOpen = $state(true)
   let recentSessionsOpen = $state(true)
-  const overviewQuery = createSessionOverviewQuery()
+  let selectedWorkspaceId = $state('')
+  const workspacesQuery = createWorkspacesQuery()
+  const selectedWorkspace = $derived(workspacesQuery.data?.find((workspace) => workspace.workspace_id === selectedWorkspaceId))
+  const overviewQuery = createSessionOverviewQuery(false, () => selectedWorkspaceId || undefined)
   const overview = $derived(snapshotSessionOverview(overviewQuery.data))
   let recentSessions = $derived.by(() => {
-    const activeIds = new Set(overview.active.map((session) => session.session_id))
+    // The overview API scopes only list; active is complete and remains global.
+    const active = selectedWorkspaceId
+      ? overview.active.filter((session) => session.workspace_id === selectedWorkspaceId)
+      : overview.active
+    const activeIds = new Set(active.map((session) => session.session_id))
     return [
-      ...overview.active,
+      ...active,
       ...overview.list.filter((session) => !activeIds.has(session.session_id)),
     ]
   })
@@ -347,7 +355,40 @@
             >
               <ArrowUpRightIcon class="size-4" />
             </button>
-            <FunnelIcon class="size-4" aria-hidden="true" />
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger
+                class={cn('rounded-none hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden', selectedWorkspaceId && 'text-primary')}
+                aria-label="Filter recent sessions by workspace"
+                title={selectedWorkspaceId ? `Workspace: ${selectedWorkspace?.name || selectedWorkspace?.display_path || selectedWorkspaceId}` : 'All workspaces'}
+              >
+                <FunnelIcon class="size-4" weight={selectedWorkspaceId ? 'fill' : 'regular'} />
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content side="right" align="start" class="max-h-80 w-72 overflow-y-auto">
+                <DropdownMenu.Label>Workspace</DropdownMenu.Label>
+                <DropdownMenu.RadioGroup bind:value={selectedWorkspaceId}>
+                  <DropdownMenu.RadioItem value="">All workspaces</DropdownMenu.RadioItem>
+                  <DropdownMenu.Separator />
+                  {#each workspacesQuery.data ?? [] as workspace (workspace.workspace_id)}
+                    <DropdownMenu.RadioItem value={workspace.workspace_id}>
+                      <span class="min-w-0" title={workspace.canonical_path}>
+                        <span class="block truncate">{workspace.name || workspace.display_path}</span>
+                        {#if workspace.name}
+                          <span class="block truncate text-xs text-muted-foreground">{workspace.display_path}</span>
+                        {/if}
+                      </span>
+                    </DropdownMenu.RadioItem>
+                  {/each}
+                </DropdownMenu.RadioGroup>
+                {#if workspacesQuery.error}
+                  <p role="alert" class="px-2 py-1 text-xs text-destructive">Could not load workspaces.</p>
+                  <DropdownMenu.Item onclick={() => void workspacesQuery.refetch()}>Retry</DropdownMenu.Item>
+                {:else if workspacesQuery.isPending}
+                  <p role="status" class="px-2 py-1 text-xs text-muted-foreground">Loading workspaces…</p>
+                {:else if !workspacesQuery.data?.length}
+                  <p class="px-2 py-1 text-xs text-muted-foreground">No workspaces</p>
+                {/if}
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
           </span>
         </Sidebar.GroupLabel>
       {#if recentSessionsOpen}

@@ -21,9 +21,12 @@ export type SessionOverviewSnapshot = {
   nextCursor: string | null;
 };
 
-function sessionOverviewOptions(includeArchived: boolean) {
+function sessionOverviewOptions(includeArchived: boolean, workspaceId: string | undefined) {
   return infiniteQueryOptions({
-    queryKey: [...sessionOverviewKeys.all, { includeArchived }] as const,
+    queryKey: [
+      ...sessionOverviewKeys.all,
+      { includeArchived, workspaceId: workspaceId ?? null },
+    ] as const,
     queryFn: ({ pageParam, signal }) =>
       getSessionOverview(
         {
@@ -33,6 +36,7 @@ function sessionOverviewOptions(includeArchived: boolean) {
               ? ["pinned", "active", "list", "archived"]
               : ["pinned", "active", "list"],
           limit: listLimit,
+          workspaceId,
           ...(pageParam ? { cursor: pageParam } : {}),
         },
         { signal },
@@ -42,9 +46,12 @@ function sessionOverviewOptions(includeArchived: boolean) {
   });
 }
 
-export function createSessionOverviewQuery(includeArchived = false) {
+export function createSessionOverviewQuery(
+  includeArchived = false,
+  workspaceId: () => string | undefined = () => undefined,
+) {
   return createInfiniteQuery(
-    () => sessionOverviewOptions(includeArchived),
+    () => sessionOverviewOptions(includeArchived, workspaceId()),
     () => queryClient,
   );
 }

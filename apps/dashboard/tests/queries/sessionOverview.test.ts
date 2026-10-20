@@ -86,6 +86,111 @@ test("loads another overview page and combines sessions without duplicates", asy
   });
 });
 
+test("workspace switches isolate pages and cursors without filtering the Sessions page", async () => {
+  const requests: URL[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), window.location.origin);
+      requests.push(url);
+      const workspace = url.searchParams.get("workspace_id") ?? "all";
+      const cursor = url.searchParams.get("cursor");
+      return overview({
+        list: {
+          sessions: [session(`${workspace}-${cursor ? "second" : "first"}`)],
+          next_cursor: cursor ? null : `${workspace}-cursor`,
+        },
+      });
+    }),
+  );
+  let sidebar: SessionOverviewSnapshot | undefined;
+  let sessionsPage: SessionOverviewSnapshot | undefined;
+  const sidebarView = render(SessionOverviewQueryHarness, {
+    workspaceId: "workspace-1",
+    onSnapshot: (snapshot) => {
+      sidebar = snapshot;
+    },
+  });
+  render(SessionOverviewQueryHarness, {
+    includeArchived: true,
+    onSnapshot: (snapshot) => {
+      sessionsPage = snapshot;
+    },
+  });
+  await vi.waitFor(() => {
+    expect(sidebar?.list.map((item) => item.session_id)).toEqual(["workspace-1-first"]);
+    expect(sessionsPage?.list.map((item) => item.session_id)).toEqual(["all-first"]);
+  });
+  await fireEvent.click(screen.getAllByTestId("load-more-sessions")[0]);
+  await vi.waitFor(() =>
+    expect(sidebar?.list.map((item) => item.session_id)).toEqual([
+      "workspace-1-first",
+      "workspace-1-second",
+    ]),
+  );
+
+  await sidebarView.rerender({ workspaceId: "workspace-2" });
+  await vi.waitFor(() =>
+    expect(sidebar?.list.map((item) => item.session_id)).toEqual(["workspace-2-first"]),
+  );
+  await fireEvent.click(screen.getAllByTestId("load-more-sessions")[0]);
+  await vi.waitFor(() =>
+    expect(sidebar?.list.map((item) => item.session_id)).toEqual([
+      "workspace-2-first",
+      "workspace-2-second",
+    ]),
+  );
+  expect(
+    requests
+      .filter((url) => url.searchParams.has("cursor"))
+      .map((url) => [url.searchParams.get("workspace_id"), url.searchParams.get("cursor")]),
+  ).toEqual([
+    ["workspace-1", "workspace-1-cursor"],
+    ["workspace-2", "workspace-2-cursor"],
+  ]);
+  expect(sessionsPage?.list.map((item) => item.session_id)).toEqual(["all-first"]);
+  expect(sessionsPage?.nextCursor).toBe("all-cursor");
+
+  await sidebarView.rerender({ workspaceId: undefined });
+  await vi.waitFor(() =>
+    expect(sidebar?.list.map((item) => item.session_id)).toEqual(["all-first"]),
+  );
+  expect(sidebar?.nextCursor).toBe("all-cursor");
+});
+
+test("a late workspace response cannot replace the newly selected workspace", async () => {
+  let resolveFirst!: (response: Response) => void;
+  const firstResponse = new Promise<Response>((resolve) => {
+    resolveFirst = resolve;
+  });
+  const fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), window.location.origin);
+    if (url.searchParams.get("workspace_id") === "workspace-1") return firstResponse;
+    return overview({ list: { sessions: [session("second-workspace")], next_cursor: null } });
+  });
+  vi.stubGlobal("fetch", fetch);
+  let latest: SessionOverviewSnapshot | undefined;
+  const view = render(SessionOverviewQueryHarness, {
+    workspaceId: "workspace-1",
+    onSnapshot: (snapshot) => {
+      latest = snapshot;
+    },
+  });
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+  await view.rerender({ workspaceId: "workspace-2" });
+  await vi.waitFor(() =>
+    expect(latest?.list.map((item) => item.session_id)).toEqual(["second-workspace"]),
+  );
+
+  resolveFirst(
+    overview({ list: { sessions: [session("first-workspace")], next_cursor: "first-cursor" } }),
+  );
+  await firstResponse;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(latest?.list.map((item) => item.session_id)).toEqual(["second-workspace"]);
+  expect(latest?.nextCursor).toBeNull();
+});
+
 test("invalidating the overview refreshes active archived and non-archived queries", async () => {
   const calls = { archived: 0, current: 0 };
   vi.stubGlobal(
