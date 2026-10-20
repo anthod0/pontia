@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-20
+
+### Added
+
+- Added a Dashboard preview and integration progress indicator to the Cloud homepage.
+- Added workspace filtering for recent sessions in the Dashboard sidebar.
+
+### Fixed
+
+- Hid the pinned sessions group when no sessions are pinned.
+
 ## [0.6.3] - 2026-10-19
 
 ### Added
