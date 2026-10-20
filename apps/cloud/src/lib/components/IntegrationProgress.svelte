@@ -1,10 +1,14 @@
 <script lang="ts">
   import * as Table from '$lib/components/ui/table';
+  import { Progress } from '$lib/components/ui/progress';
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
   import CircleHalfIcon from 'phosphor-svelte/lib/CircleHalfIcon';
   import XIcon from 'phosphor-svelte/lib/XIcon';
   import MinusIcon from 'phosphor-svelte/lib/MinusIcon';
   import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
+
+  // Editorial estimate, updated manually rather than derived from capability counts.
+  const developmentProgress = 45;
 
   // SVG logo sources: https://pi.dev/press-kit; Claude symbol extracted from
   // the inline wordmark at https://claude.com/product/claude-code;
@@ -39,6 +43,10 @@
   <div class="section-intro">
     <div>
       <h2 id="integrations-title">Your clients.<br />Coming together.</h2>
+    </div>
+    <div class="development-status">
+      <p id="integration-status">Integration progress</p>
+      <Progress value={developmentProgress} aria-labelledby="integration-status" aria-valuetext={`Approximately ${developmentProgress}% (estimate)`} />
     </div>
   </div>
   <div class="coverage-table">
@@ -76,6 +84,9 @@
 
 <style>
   .integrations { padding-top: 56px; }
+  .development-status { width: 200px; flex-shrink: 0; padding-bottom: 4px; }
+  .development-status p { margin-bottom: 12px; color: var(--primary); font: 11px/1.6 var(--font-mono); }
+  .development-status :global([data-slot="progress-indicator"]) { transition: none; }
   .coverage-table { border-top: 1px solid var(--border); }
   .coverage-table :global(table) { min-width: 980px; table-layout: fixed; }
   .coverage-table :global(.client-heading) { width: 190px; padding: 16px 12px 16px 0; }

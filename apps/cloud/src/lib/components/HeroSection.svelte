@@ -4,6 +4,7 @@
 	import RocketLaunchIcon from 'phosphor-svelte/lib/RocketLaunchIcon';
 	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
 
+	const dashboardScreenshot = 'https://files.pontia.dev/cloud/dashboard-1280-647254d2c10e.webp';
 	const installCommand = 'curl -fsSL https://get.pontia.dev/install.sh | sh && "$HOME/.local/bin/pontia" init';
 	let copyStatus = $state<'idle' | 'copied' | 'error'>('idle');
 
@@ -36,12 +37,24 @@
 		</div>
 	</div>
 
+	<figure class="dashboard-preview">
+		<a class="dashboard-image" href={dashboardScreenshot} target="_blank" rel="noreferrer" aria-label="View full-size Dashboard screenshot (opens in a new tab)">
+			<img
+				src={dashboardScreenshot}
+				width="1280"
+				height="840"
+				alt="Pontia Dashboard showing recent sessions, a coding conversation, tool execution, test results, and the message composer."
+				fetchpriority="high"
+			/>
+		</a>
+	</figure>
+
 	<hr class="hero-divider" />
 </section>
 
 <style>
 	.hero { padding-top: 80px; }
-	.hero-copy { max-width: 820px; margin-inline: auto; padding-bottom: 75px; text-align: center; }
+	.hero-copy { max-width: 820px; margin-inline: auto; padding-bottom: 52px; text-align: center; }
 	h1 { font-size: clamp(42px, 6.5vw, 78px); font-weight: 500; line-height: 1.08; letter-spacing: -.055em; margin: 24px 0; }
 	h1 > span { color: var(--primary); }
 	.hero-description { max-width: 500px; margin-inline: auto; font-size: 16px; line-height: 1.8; color: var(--muted-foreground); }
@@ -52,11 +65,15 @@
 	.install-command button:focus-visible { outline-color: #8ec07c; }
 	.copy-feedback { min-height: 17px; margin-top: 7px; color: #6b7620; font: 10px/1.6 var(--font-mono); }
 	.hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 13px; }
+	.dashboard-preview { margin: 0 0 48px; }
+	.dashboard-image { display: block; overflow: hidden; border: 1px solid var(--border); background: var(--surface); box-shadow: 0 16px 48px -16px rgb(60 56 54 / 16%); }
+	.dashboard-image img { display: block; width: 100%; height: auto; }
 	.hero-divider { margin: 0; border: 0; border-top: 1px solid var(--border); }
 
 	@media (max-width: 760px) {
 		.hero { padding-top: 52px; }
-		.hero-copy { padding-bottom: 50px; }
+		.hero-copy { padding-bottom: 36px; }
+		.dashboard-preview { margin-bottom: 32px; }
 	}
 	@media (max-width: 600px) {
 		h1 { margin-block: 23px 20px; }
