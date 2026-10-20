@@ -301,36 +301,30 @@
       {#if overviewQuery.error}
         <p role="alert" class="px-4 py-2 text-xs text-destructive">Sidebar refresh failed. {overviewQuery.error.message}</p>
       {/if}
-      <Sidebar.Group>
-        <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
-          <button
-            type="button"
-            class="flex min-w-0 items-center gap-1 rounded-none text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
-            aria-expanded={pinnedSessionsOpen}
-            onclick={() => (pinnedSessionsOpen = !pinnedSessionsOpen)}
-          >
-            <span>Pinned Sessions</span>
-            <CaretRightIcon class={cn('size-3 transition-transform', pinnedSessionsOpen && 'rotate-90')} />
-          </button>
-        </Sidebar.GroupLabel>
-        {#if pinnedSessionsOpen}
-          <Sidebar.GroupContent class="pr-1">
-            <Sidebar.Menu>
-              {#if overviewQuery.isPending && !overview.pinned.length}
-                <Sidebar.MenuSkeleton />
-              {:else if overview.pinned.length}
+      {#if overview.pinned.length}
+        <Sidebar.Group>
+          <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
+            <button
+              type="button"
+              class="flex min-w-0 items-center gap-1 rounded-none text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+              aria-expanded={pinnedSessionsOpen}
+              onclick={() => (pinnedSessionsOpen = !pinnedSessionsOpen)}
+            >
+              <span>Pinned Sessions</span>
+              <CaretRightIcon class={cn('size-3 transition-transform', pinnedSessionsOpen && 'rotate-90')} />
+            </button>
+          </Sidebar.GroupLabel>
+          {#if pinnedSessionsOpen}
+            <Sidebar.GroupContent class="pr-1">
+              <Sidebar.Menu>
                 {#each overview.pinned as session}
                   {@render sessionMenuItem(session, `pinned:${session.session_id}`)}
                 {/each}
-              {:else if !overviewQuery.error}
-                <Sidebar.MenuItem>
-                  <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No pinned sessions</div>
-                </Sidebar.MenuItem>
-              {/if}
-            </Sidebar.Menu>
-          </Sidebar.GroupContent>
-        {/if}
-      </Sidebar.Group>
+              </Sidebar.Menu>
+            </Sidebar.GroupContent>
+          {/if}
+        </Sidebar.Group>
+      {/if}
       <Sidebar.Group>
         <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
           <button

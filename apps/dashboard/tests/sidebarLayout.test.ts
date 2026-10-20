@@ -167,6 +167,17 @@ test("sidebar renders active sessions before paged recent sessions without dupli
   ).toBeTruthy();
 });
 
+test.each([false, true])(
+  "sidebar hides the pinned sessions group when empty (loading: %s)",
+  (loading) => {
+    mocks.sidebarSessionsLoading.set(loading);
+    render(AppSidebarHost);
+
+    expect(screen.queryByRole("button", { name: /pinned sessions/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /recent sessions/i })).toBeInTheDocument();
+  },
+);
+
 test("sidebar collapses the pinned sessions group", async () => {
   mocks.sidebarPinnedSessions.set([
     chatSession("session-pinned", "idle", "2026-05-14T01:00:00Z", "2026-05-14T02:00:00Z"),
