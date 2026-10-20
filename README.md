@@ -4,6 +4,8 @@
 
 Pontia is a remote control plane for coding agents. Your agents, development tools, and project files stay on your device while you can view and control agent sessions from a web dashboard wherever you are.
 
+![Pontia Dashboard showing recent sessions, a coding conversation, tool execution, and test results.](https://files.pontia.dev/cloud/dashboard-1280-647254d2c10e.webp)
+
 Pontia provides:
 
 - **Remote control** — create, view, continue, interrupt, and manage agent sessions remotely.
