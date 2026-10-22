@@ -16,19 +16,31 @@ function step(overrides: Partial<SessionChatThoughtStep> = {}): SessionChatThoug
   };
 }
 
-test("live output updates in place and the final result is not rendered twice", async () => {
+test.each([
+  { title: "custom", managedToolUse: undefined, disclosure: "Show custom parameters" },
+  {
+    title: "Run command",
+    managedToolUse: { tool_name: "bash", input: { type: "bash" as const, command: "echo input" } },
+    disclosure: "Show Run command details",
+  },
+])("$title keeps live output inside its disclosure and updates without duplication", async ({ title, managedToolUse, disclosure }) => {
   const user = userEvent.setup();
   const live = step({
     id: "live-call",
     kind: "tool_call",
-    title: "custom",
+    title,
+    managedToolUse,
     content: "input",
     executionStatus: "running",
     processOutput: { text: "first chunk", truncated: false },
   });
   const { rerender } = render(ThoughtSummary, { props: { steps: [live], active: true } });
   await user.click(screen.getByRole("button", { name: "Show agent work steps" }));
+  expect(screen.getByText("first chunk")).not.toBeVisible();
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: disclosure }));
   expect(screen.getByText("first chunk")).toBeVisible();
+  expect(screen.getByRole("status")).toBeVisible();
   const updated = { ...live, processOutput: { text: "first chunk and second", truncated: false } };
   await rerender({ steps: [updated], active: true });
   expect(screen.queryByText("first chunk")).not.toBeInTheDocument();
@@ -58,6 +70,51 @@ test("live output updates in place and the final result is not rendered twice", 
   await user.click(screen.getByRole("button", { name: "Output", exact: true }));
   expect(screen.getByText("first chunk and second")).toBeVisible();
 });
+
+test.each(["read", "write", "edit"] as const)(
+  "live %s calls stay grouped and preserve disclosure state as calls and results arrive",
+  async (operation) => {
+    const user = userEvent.setup();
+    const fileCall = (id: string): SessionChatThoughtStep => step({
+      id,
+      kind: "tool_call",
+      title: `${operation} file`,
+      content: `${id}.ts`,
+      managedToolUse: { tool_name: operation, input: { type: operation, path: `${id}.ts` } },
+      executionStatus: "running",
+    });
+    const first = fileCall("a");
+    const { rerender } = render(ThoughtSummary, { props: { steps: [first], active: true } });
+    await user.click(screen.getByRole("button", { name: "Show agent work steps" }));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Show .*1 file details$/ }));
+    expect(screen.getByRole("status")).toBeVisible();
+
+    const completed: SessionChatThoughtStep = {
+      ...first,
+      executionStatus: "succeeded",
+      result: { content: "first file result", status: null, occurredAt: null },
+    };
+    const second = fileCall("b");
+    await rerender({ steps: [completed, second], active: true });
+    expect(screen.getByRole("button", { name: /^Hide .*2 files details$/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByText("first file result")).toHaveLength(1);
+    expect(screen.getByText("first file result")).toBeVisible();
+    expect(screen.getAllByRole("status")).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: /^Hide .*2 files details$/ }));
+    await rerender({ steps: [completed, {
+      ...second,
+      executionStatus: "failed",
+      result: { content: "second file failed", status: "error", occurredAt: null },
+    }], active: false });
+    expect(screen.getByText("first file result")).not.toBeVisible();
+    expect(screen.getByText("second file failed")).not.toBeVisible();
+    expect(screen.queryByRole("status", { name: "" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Show .*2 files details$/ }));
+    expect(screen.getByText("second file failed")).toBeVisible();
+  },
+);
 
 test("completed work expands inline from its summary heading", async () => {
   const user = userEvent.setup();

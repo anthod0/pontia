@@ -26,6 +26,7 @@
     kind: 'file_group'
     operation: FileOperation
     files: string[]
+    steps: SessionChatThoughtStep[]
     results: { file: string; content: string; error: boolean }[]
   }
 
@@ -51,14 +52,15 @@
       while (end < source.length && fileOperationFor(source[end]!) === operation) end += 1
       const fileSteps = source.slice(index, end)
       const files = [...new Set(fileSteps.map((item) => filePathFor(item)!))]
-      const results = fileSteps.flatMap((item) => item.result
+      const results = fileSteps.flatMap((item) => item.result && !item.executionStatus
         ? [{ file: filePathFor(item)!, content: item.result.content, error: item.result.status === 'error' }]
         : [])
       grouped.push({
-        id: `file-group:${step.id}:${source[end - 1]!.id}`,
+        id: `file-group:${step.id}`,
         kind: 'file_group',
         operation,
         files,
+        steps: fileSteps,
         results,
       })
       index = end
@@ -67,7 +69,7 @@
   }
 
   function fileOperationFor(step: SessionChatThoughtStep): FileOperation | null {
-    if (step.kind !== 'tool_call' || step.executionStatus) return null
+    if (step.kind !== 'tool_call') return null
     const type = step.managedToolUse?.input.type
     return type === 'read' || type === 'write' || type === 'edit' ? type : null
   }
@@ -100,11 +102,28 @@
               <Message.Response content={step.content} markdown streamId={step.id} />
             </div>
           {:else if step.kind === 'tool_call' && step.managedToolUse?.input.type === 'bash'}
-            <ThoughtCommandStep title={step.title} command={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)} />
+            <ThoughtCommandStep title={step.title} command={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)}>
+              {#if step.executionStatus}
+                <ThoughtExecution {step} />
+              {/if}
+            </ThoughtCommandStep>
           {:else if step.kind === 'file_group'}
-            <ThoughtFileStep operation={step.operation} files={step.files} results={step.results} connected={hasConnectorAfter(index)} />
+            <ThoughtFileStep operation={step.operation} files={step.files} results={step.results} connected={hasConnectorAfter(index)}>
+              {#each step.steps as fileStep (fileStep.id)}
+                {#if fileStep.executionStatus}
+                  {#if step.steps.length > 1}
+                    <div class="mb-1 ml-9 break-words text-xs text-muted-foreground">{filePathFor(fileStep)}</div>
+                  {/if}
+                  <ThoughtExecution step={fileStep} />
+                {/if}
+              {/each}
+            </ThoughtFileStep>
           {:else if step.kind === 'tool_call'}
-            <ThoughtFallbackStep title={step.title} content={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)} />
+            <ThoughtFallbackStep title={step.title} content={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)}>
+              {#if step.executionStatus}
+                <ThoughtExecution {step} />
+              {/if}
+            </ThoughtFallbackStep>
           {:else if step.kind === 'tool_result'}
             <ThoughtFallbackStep title={step.title} content={step.content} detailsLabel="result" error={step.status === 'error'} connected={hasConnectorAfter(index)} />
           {:else}
@@ -122,9 +141,6 @@
                 <span class="break-words font-medium text-foreground/75">{step.content}</span>
               </div>
             </div>
-          {/if}
-          {#if step.kind === 'tool_call' && step.executionStatus}
-            <ThoughtExecution {step} />
           {/if}
         {/each}
         {#if !visibleSteps.length}

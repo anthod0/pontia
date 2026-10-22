@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon'
   import { highlightMarkdownCode } from '$lib/components/ai-elements/message/markdownHighlighter'
@@ -11,9 +12,10 @@
     result?: string
     error?: boolean
     connected?: boolean
+    children?: Snippet
   }
 
-  let { title, command, result, error = false, connected = false }: Props = $props()
+  let { title, command, result, error = false, connected = false, children }: Props = $props()
   let open = $state(false)
   const highlightedCommand = $derived(highlightMarkdownCode(command, 'bash'))
 </script>
@@ -41,6 +43,7 @@
         <pre class={cn('mt-2 whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-xs leading-relaxed text-muted-foreground', error && 'text-destructive')}>{result}</pre>
       {/if}
     </div>
+    {@render children?.()}
   </Collapsible.Content>
 </Collapsible.Root>
 

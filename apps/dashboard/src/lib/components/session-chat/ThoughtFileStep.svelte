@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
   import FilePlusIcon from 'phosphor-svelte/lib/FilePlusIcon'
@@ -11,9 +12,10 @@
     files: string[]
     results?: { file: string; content: string; error: boolean }[]
     connected?: boolean
+    children?: Snippet
   }
 
-  let { operation, files, results = [], connected = false }: Props = $props()
+  let { operation, files, results = [], connected = false, children }: Props = $props()
   let open = $state(false)
 
   const Icon = $derived(operation === 'read' ? FileMagnifyingGlassIcon : operation === 'write' ? FilePlusIcon : FileTextIcon)
@@ -48,5 +50,6 @@
         <pre class={cn('whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-xs leading-relaxed text-muted-foreground', result.error && 'text-destructive')}>{result.content}</pre>
       </div>
     {/each}
+    {@render children?.()}
   </Collapsible.Content>
 </Collapsible.Root>

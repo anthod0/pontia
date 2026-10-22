@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon'
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
@@ -11,9 +12,10 @@
     result?: string
     error?: boolean
     connected?: boolean
+    children?: Snippet
   }
 
-  let { title, content, detailsLabel = 'parameters', result, error = false, connected = false }: Props = $props()
+  let { title, content, detailsLabel = 'parameters', result, error = false, connected = false, children }: Props = $props()
   let open = $state(false)
   const displayedContent = $derived(detailsLabel === 'result' ? content : formatParameters(title, content))
 
@@ -50,5 +52,6 @@
         <pre class={cn('whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-sm leading-5 text-muted-foreground', error && 'text-destructive')}>{result}</pre>
       {/if}
     </div>
+    {@render children?.()}
   </Collapsible.Content>
 </Collapsible.Root>

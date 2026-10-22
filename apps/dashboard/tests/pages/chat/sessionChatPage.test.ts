@@ -2785,7 +2785,7 @@ test("renders ordered live output over the active Turn transcript while preservi
   );
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: /show agent work steps/i }));
-  await user.click(screen.getByRole("button", { name: "Show Read file parameters" }));
+  await user.click(screen.getByRole("button", { name: "Show Read 1 file details" }));
   expect(screen.getByText("README.md")).toBeVisible();
   expect(screen.queryByText("transcript partial")).not.toBeInTheDocument();
 });
