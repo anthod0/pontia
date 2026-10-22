@@ -12,6 +12,15 @@ pub struct AcpConfiguration {
     pub(crate) file: BTreeMap<String, Value>,
 }
 
+fn validate_agent_id(id: &str) -> Result<()> {
+    if id.is_empty() || matches!(id, "." | "..") {
+        return Err(Error::Domain(
+            "ACP Agent ID must be nonempty and cannot be . or ..".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn value(config: &AcpAgentConfig) -> Value {
     json!({
         "name": config.name,
@@ -58,11 +67,11 @@ impl ClientConfiguration for AcpConfiguration {
         )
     }
     fn key(&self, metadata: &Value) -> Result<String> {
-        metadata["acp_agent_id"]
+        let key = metadata["acp_agent_id"]
             .as_str()
-            .filter(|key| !key.is_empty())
-            .map(str::to_owned)
-            .ok_or_else(|| Error::Domain("metadata.acp_agent_id must be a nonempty string".into()))
+            .ok_or_else(|| Error::Domain("metadata.acp_agent_id must be a string".into()))?;
+        validate_agent_id(key)?;
+        Ok(key.into())
     }
 
     fn merged(&self, key: &str, overrides: &Value) -> Value {
@@ -75,9 +84,7 @@ impl ClientConfiguration for AcpConfiguration {
     }
 
     fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
-        if key.is_empty() {
-            return Err(Error::Domain("ACP Agent ID must be nonempty".into()));
-        }
+        validate_agent_id(key)?;
         let value = self.merged(key, overrides);
         let _: AcpAgentConfig = serde_json::from_value(value.clone())?;
         Ok(value)

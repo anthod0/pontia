@@ -83,13 +83,17 @@ impl Default for AcpConfig {
 impl AcpConfig {
     pub fn validate(&self) -> Result<()> {
         for (id, agent) in &self.agents {
+            super::validate_agent_id(id).map_err(|error| Error::InvalidConfig {
+                key: "acp.agents",
+                message: error.to_string(),
+            })?;
             let valid_source = match &agent.registry_id {
                 Some(registry) => {
                     !registry.is_empty() && agent.command.is_empty() && agent.args.is_empty()
                 }
                 None => !agent.command.is_empty(),
             };
-            if id.is_empty() || !valid_source {
+            if !valid_source {
                 return Err(Error::InvalidConfig {
                     key: "acp.agents",
                     message: "Agent ID and exactly one valid launch source are required".into(),

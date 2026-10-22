@@ -57,6 +57,8 @@
       if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) throw new Error('Overrides must be a JSON object')
       const target = custom ? { client_type: custom.clientType, client_key: customKey.trim() } : selected
       if (!target || !target.client_key) throw new Error('Enter a stable client ID')
+      const keyError = custom?.validateKey(target.client_key)
+      if (keyError) throw new Error(keyError)
       if (custom && clients.some((client) => client.client_type === target.client_type && client.client_key === target.client_key)) throw new Error('This client already exists; select it to edit its settings')
       const saved = await patchAgentClient(target, { config_overrides: overrides as JsonObject })
       clients = await listAgentClients()

@@ -252,6 +252,33 @@ async fn patch_preserves_omitted_management_fields_and_replaces_overrides() {
 }
 
 #[tokio::test]
+async fn reserved_acp_ids_cannot_create_management_records_or_sessions() {
+    let (app, root) = app().await;
+    let (_, before) = request(&app, "GET", "", None, true).await;
+    for id in [".", "..", "%2E", "%2e%2E"] {
+        assert_eq!(
+            request(
+                &app,
+                "PATCH",
+                &format!("/acp/{id}"),
+                Some(json!({"config_overrides":{"command":"agent"}})),
+                true
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+    assert_eq!(request(&app, "GET", "", None, true).await.1, before);
+    for id in [".", ".."] {
+        let response = app.clone().oneshot(Request::builder().method("POST").uri("/api/v1/sessions")
+            .header("Authorization", "Bearer test-token").header("Content-Type", "application/json")
+            .body(Body::from(json!({"client_type":"acp", "workspace":root.path(), "metadata":{"acp_agent_id":id}}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+}
+
+#[tokio::test]
 async fn invalid_patches_are_atomic_and_unknown_queries_are_not_found() {
     let (app, _root) = app().await;
     request(

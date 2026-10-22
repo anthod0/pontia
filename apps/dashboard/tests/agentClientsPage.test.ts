@@ -98,6 +98,22 @@ test("invalid JSON and failed saves keep the user draft without modifying anothe
   expect(editor).toHaveValue('{"command":null}');
 });
 
+test("reserved dot IDs are rejected before a custom client request is sent", async () => {
+  const user = userEvent.setup();
+  render(AgentClientsPage);
+  await screen.findByRole("button", { name: /kimi/ });
+  await user.click(screen.getByRole("button", { name: "Add custom client" }));
+  const key = screen.getByLabelText("ACP Agent ID");
+  for (const id of [".", ".."]) {
+    await user.clear(key);
+    await user.type(key, id);
+    await user.click(screen.getByRole("button", { name: "Save overrides" }));
+    await screen.findByRole("alert");
+    expect(api.patchAgentClient).not.toHaveBeenCalled();
+    expect(key).toHaveValue(id);
+  }
+});
+
 test("custom clients use their stable key rather than their display name", async () => {
   const user = userEvent.setup();
   api.patchAgentClient.mockResolvedValue(peer("company-agent"));

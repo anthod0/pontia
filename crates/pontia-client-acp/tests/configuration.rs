@@ -5,6 +5,38 @@ use serde_json::json;
 use std::collections::BTreeMap;
 
 #[test]
+fn reserved_dot_ids_are_rejected_in_configuration_and_session_selection() {
+    for id in [".", ".."] {
+        let configuration =
+            AcpConfiguration::new(BTreeMap::from([(id.into(), json!({"command":"agent"}))]));
+        assert!(configuration.resolve(id, &json!({})).is_err());
+        assert!(
+            configuration
+                .resolve(id, &json!({"command":"agent"}))
+                .is_err()
+        );
+        assert!(configuration.key(&json!({"acp_agent_id":id})).is_err());
+        let config: pontia_client_acp::AcpConfig =
+            serde_json::from_value(json!({"agents":{id:{"command":"agent"}}})).unwrap();
+        assert!(config.validate().is_err());
+    }
+    let configuration = AcpConfiguration::new(Default::default());
+    for id in [
+        "company.agent",
+        "company-agent",
+        ".company",
+        "company..agent",
+    ] {
+        assert!(
+            configuration
+                .resolve(id, &json!({"command":"agent"}))
+                .is_ok()
+        );
+        assert_eq!(configuration.key(&json!({"acp_agent_id":id})).unwrap(), id);
+    }
+}
+
+#[test]
 fn partial_overrides_inherit_and_arrays_replace_without_affecting_other_peers() {
     let configuration = AcpConfiguration::new(BTreeMap::from([(
         "kimi".into(),

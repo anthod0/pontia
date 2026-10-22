@@ -12,7 +12,7 @@ export interface ClientControlDetails {
 
 export interface DashboardClient {
   clientType: string;
-  customEntry?: { label: string; keyLabel: string };
+  customEntry?: { label: string; keyLabel: string; validateKey(key: string): string | null };
   defaultForCreation: boolean;
   workspaceCreation: boolean;
   profileSelection: boolean;
