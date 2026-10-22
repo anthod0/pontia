@@ -322,6 +322,14 @@ async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_b
     };
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
+    let management =
+        pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+            pool.clone(),
+        );
+    management
+        .save("acp", "company-choice", Some(true), None)
+        .await
+        .unwrap();
     let state_root = root.path().join("state");
     let mut clients = ClientRegistry::default();
     clients.register(pontia_client_acp::registration_with_registry(
@@ -342,6 +350,8 @@ async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_b
         .await
         .unwrap();
     let session = result.session_id().unwrap().to_string();
+    // Removing admission settings must not prevent recovery of this existing Session.
+    management.delete("acp", "company-choice").await.unwrap();
     let binding = pontia_application::AgentBindingService::new(pool.clone())
         .binding_for_session(&session)
         .await

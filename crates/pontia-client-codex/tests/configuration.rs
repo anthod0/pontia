@@ -29,6 +29,14 @@ async fn new_sessions_capture_tui_configuration_without_reconfiguring_existing_s
             )
             .await
     };
+    assert!(matches!(
+        create().await,
+        Err(pontia_core::Error::CapabilityUnavailable(_))
+    ));
+    service
+        .save("codex", "default", Some(true), None)
+        .await
+        .unwrap();
     let first = create().await.unwrap().session_id().unwrap().to_owned();
     service
         .save(
@@ -70,6 +78,15 @@ async fn new_sessions_capture_tui_configuration_without_reconfiguring_existing_s
             .is_err()
     );
     service.delete("codex", "default").await.unwrap();
+    assert!(matches!(
+        create().await,
+        Err(pontia_core::Error::CapabilityUnavailable(_))
+    ));
+    // Saving configuration without an enabled field still enables a new entry.
+    service
+        .save("codex", "default", None, Some(json!({})))
+        .await
+        .unwrap();
     let third = create().await.unwrap().session_id().unwrap().to_owned();
     let stored: String = sqlx::query_scalar(
         "SELECT json_extract(metadata,'$.codex_tui_command') FROM sessions WHERE session_id=?",

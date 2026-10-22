@@ -11,6 +11,12 @@ async fn omitted_client_selection_uses_the_registered_default_without_global_sta
         .await
         .unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+        pool.clone(),
+    )
+    .save("generic", "default", Some(true), None)
+    .await
+    .unwrap();
     let mut clients = ClientRegistry::default();
     clients.register(test_registration());
     let state = AppState::builder(pool, root.path().to_path_buf())

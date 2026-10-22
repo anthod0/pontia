@@ -112,6 +112,12 @@ impl Fixture {
             .await
             .unwrap();
         pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+        pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+            pool.clone(),
+        )
+        .save("codex", "default", Some(true), None)
+        .await
+        .unwrap();
         let mut clients = ClientRegistry::default();
         clients.register(crate::registration());
         let app = AppState::builder(pool, root.path().into())

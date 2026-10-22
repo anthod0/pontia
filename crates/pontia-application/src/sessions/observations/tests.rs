@@ -18,6 +18,12 @@ impl Fixture {
         .await
         .unwrap();
         pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+        pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+            pool.clone(),
+        )
+        .save("native-test", "default", Some(true), None)
+        .await
+        .unwrap();
         static SPEC: std::sync::OnceLock<crate::client_contract::AgentClientSpec> =
             std::sync::OnceLock::new();
         let spec = SPEC.get_or_init(|| {

@@ -101,7 +101,7 @@ impl AgentClientService {
             client_key: key.into(),
             name,
             short_id,
-            enabled: record.as_ref().is_none_or(|row| row.enabled),
+            enabled: record.as_ref().is_some_and(|row| row.enabled),
             has_record: record.is_some(),
             config_overrides: overrides,
             effective_config: effective,
@@ -167,7 +167,7 @@ impl AgentClientService {
             None => "default".into(),
         };
         let record = self.repository.get(client, &key).await?;
-        if record.as_ref().is_some_and(|row| !row.enabled) {
+        if record.as_ref().is_none_or(|row| !row.enabled) {
             return Err(Error::CapabilityUnavailable(format!(
                 "Client {client}/{key} is disabled"
             )));

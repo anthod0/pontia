@@ -104,7 +104,9 @@ impl TestAppBuilder {
         }
 
         let db = self.open_database(Some(pontia_home.path())).await;
-        let state = self.build_app_state(db.clone(), pontia_home.path().to_path_buf());
+        let state = self
+            .build_app_state(db.clone(), pontia_home.path().to_path_buf())
+            .await;
 
         TestApp {
             state,
@@ -119,6 +121,7 @@ impl TestAppBuilder {
         let db = connect_sqlite("sqlite::memory:").await.expect("connect");
         run_migrations(&db).await.expect("migrate");
         self.build_app_state(db, "/nonexistent/pontia-test-home".into())
+            .await
     }
 
     async fn open_database(&self, pontia_home: Option<&std::path::Path>) -> SqlitePool {
@@ -137,7 +140,17 @@ impl TestAppBuilder {
         db
     }
 
-    fn build_app_state(self, db: SqlitePool, pontia_home: PathBuf) -> AppState {
+    async fn build_app_state(self, db: SqlitePool, pontia_home: PathBuf) -> AppState {
+        let settings =
+            pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+                db.clone(),
+            );
+        for client in ["generic", "pi", "codex"] {
+            settings
+                .save(client, "default", Some(true), None)
+                .await
+                .expect("enable fixture client");
+        }
         let mut builder = AppState::builder(db, pontia_home)
             .clients(crate::common::clients::clients())
             .external_api_token(

@@ -624,6 +624,12 @@ async fn persistent_submission_survives_response_loss_and_database_reopen() {
         .await
         .unwrap();
     pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+    pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+        pool.clone(),
+    )
+    .save("generic", "default", Some(true), None)
+    .await
+    .unwrap();
     let state = AppState::builder(pool, root.path().into())
         .clients(crate::common::clients::clients())
         .external_api_token(Some(TOKEN.into()))

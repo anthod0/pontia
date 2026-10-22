@@ -127,6 +127,12 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
     }));
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+        pool.clone(),
+    )
+    .save("acp", "test", Some(true), None)
+    .await
+    .unwrap();
     let app = AppState::builder(pool, root.path().into())
         .clients(clients.clone())
         .external_api_token(Some("integration-token".into()))
@@ -222,6 +228,12 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     }));
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+        pool.clone(),
+    )
+    .save("acp", "company-id", Some(true), None)
+    .await
+    .unwrap();
     let app = AppState::builder(pool.clone(), root.path().into())
         .clients(clients.clone())
         .external_api_token(Some("integration-token".into()))

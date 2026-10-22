@@ -169,6 +169,7 @@ async fn defaults_files_and_database_entries_share_stable_flat_identity() {
         assert!(identities.contains(&identity));
     }
     assert!(entries.iter().all(|entry| entry["has_record"] == false
+        && entry["enabled"] == false
         && entry["created_at"].is_null()
         && entry["updated_at"].is_null()));
     let (status, created) = request(
@@ -200,6 +201,59 @@ async fn defaults_files_and_database_entries_share_stable_flat_identity() {
 }
 
 #[tokio::test]
+async fn unconfigured_clients_cannot_create_sessions() {
+    let (app, root) = app().await;
+    for (client, metadata) in [
+        ("pi", json!({})),
+        ("codex", json!({})),
+        ("acp", json!({"acp_agent_id":"file-peer"})),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("Authorization", "Bearer test-token")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "client_type":client, "workspace":root.path(), "metadata":metadata
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body: Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(body["error"]["code"], "capability_unavailable");
+    }
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/sessions/overview?sections=list")
+                .header("Authorization", "Bearer test-token")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert!(
+        body["groups"]["list"]["sessions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn patch_preserves_omitted_management_fields_and_replaces_overrides() {
     let (app, _root) = app().await;
     let (_, original) = request(&app, "GET", "/pi/default", None, true).await;
@@ -216,6 +270,16 @@ async fn patch_preserves_omitted_management_fields_and_replaces_overrides() {
     assert_eq!(entry["config_overrides"]["tui_command"], "db-pi");
     assert_eq!(entry["effective_config"]["tui_command"], "env-pi");
     assert!(entry["created_at"].is_string());
+    let (status, configured) = request(
+        &app,
+        "PATCH",
+        "/pi/default",
+        Some(json!({"config_overrides":{"tui_command":"updated-pi"}})),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(configured["data"]["agent_client"]["enabled"], false);
     let (_, enabled) = request(
         &app,
         "PATCH",
@@ -226,7 +290,7 @@ async fn patch_preserves_omitted_management_fields_and_replaces_overrides() {
     .await;
     assert_eq!(
         enabled["data"]["agent_client"]["config_overrides"],
-        entry["config_overrides"]
+        configured["data"]["agent_client"]["config_overrides"]
     );
     let (_, replaced) = request(
         &app,
@@ -249,6 +313,7 @@ async fn patch_preserves_omitted_management_fields_and_replaces_overrides() {
     }
     let (_, reset) = request(&app, "GET", "/pi/default", None, true).await;
     assert_eq!(reset, original);
+    assert_eq!(reset["data"]["agent_client"]["enabled"], false);
 }
 
 #[tokio::test]

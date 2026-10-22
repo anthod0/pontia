@@ -76,6 +76,15 @@ async fn new_sessions_use_latest_overrides_while_existing_peers_remain_controlla
         3
     );
     management.delete("acp", "first").await.unwrap();
+    assert!(matches!(
+        h.create("first").await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+    assert_eq!(h.requests("session/new"), 3);
+    management
+        .save("acp", "first", Some(true), None)
+        .await
+        .unwrap();
     h.create("first").await.unwrap();
     let startup = h
         .wire()

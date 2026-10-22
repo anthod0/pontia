@@ -57,6 +57,12 @@ impl Fixture {
         .await
         .unwrap();
         pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+        pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+            pool.clone(),
+        )
+        .save("generic", "default", Some(true), None)
+        .await
+        .unwrap();
         let resolver = Arc::new(Resolver {
             calls: AtomicUsize::new(0),
             entered: Notify::new(),

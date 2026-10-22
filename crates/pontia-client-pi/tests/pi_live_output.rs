@@ -26,6 +26,12 @@ impl Session {
             .await
             .unwrap();
         run_migrations(&db).await.unwrap();
+        pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+            db.clone(),
+        )
+        .save("pi", "default", Some(true), None)
+        .await
+        .unwrap();
         let state = AppState::builder(db, root.path().into())
             .clients(support::clients())
             .build();

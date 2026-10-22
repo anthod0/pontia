@@ -10,6 +10,12 @@ async fn runtime_registration_and_resume_publish_to_the_application_broker() {
     let root = tempfile::tempdir().unwrap();
     let db = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&db).await.unwrap();
+    pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+        db.clone(),
+    )
+    .save("generic", "default", Some(true), None)
+    .await
+    .unwrap();
     static SPEC: std::sync::OnceLock<pontia_application::client_contract::AgentClientSpec> =
         std::sync::OnceLock::new();
     let mut registration = test_registration();

@@ -308,6 +308,10 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
                 .clients(clients.clone())
                 .build();
             let service = AgentClientService::new(pool.clone(), clients);
+            service
+                .save("pi", "default", Some(true), None)
+                .await
+                .unwrap();
             let create = || async {
                 let result = app
                     .session_commands()
@@ -367,7 +371,18 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
                 ));
             }
             service.delete("pi", "default").await.unwrap();
+            assert!(matches!(
+                app.session_commands()
+                    .create_session(serde_json::from_value(json!({})).unwrap())
+                    .await,
+                Err(pontia_core::Error::CapabilityUnavailable(_))
+            ));
+            service
+                .save("pi", "default", Some(true), None)
+                .await
+                .unwrap();
             assert_eq!(create().await.1, format!("{fallback} --approve"));
+            service.delete("pi", "default").await.unwrap();
             app.shutdown().notify();
         }
         pool.close().await;

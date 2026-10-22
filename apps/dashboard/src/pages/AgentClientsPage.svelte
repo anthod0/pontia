@@ -138,7 +138,7 @@
 
 <AlertDialog.Root bind:open={resetOpen}>
   <AlertDialog.Content>
-    <AlertDialog.Header><AlertDialog.Title>Restore inherited settings?</AlertDialog.Title><AlertDialog.Description>This removes the entire database record for {selected?.name}, including its enabled setting and overrides. It does not disable or uninstall the client. A database-only custom client will disappear from this list.</AlertDialog.Description></AlertDialog.Header>
+    <AlertDialog.Header><AlertDialog.Title>Restore inherited settings?</AlertDialog.Title><AlertDialog.Description>This removes the entire database record for {selected?.name}, including its enabled setting and overrides. The client will be disabled for new sessions, but will not be uninstalled. Existing sessions are not affected. A database-only custom client will disappear from this list.</AlertDialog.Description></AlertDialog.Header>
     <AlertDialog.Footer><AlertDialog.Cancel>Cancel</AlertDialog.Cancel><AlertDialog.Action onclick={() => selected && reset(selected)}>Restore inheritance</AlertDialog.Action></AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
