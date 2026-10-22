@@ -1,4 +1,6 @@
 mod channel;
+mod configuration;
+pub use configuration::ClientConfiguration;
 mod interactions;
 pub use interactions::ClientInteractions;
 mod lifecycle;

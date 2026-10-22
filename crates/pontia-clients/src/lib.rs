@@ -29,12 +29,34 @@ pub fn config_from_vars(
 /// The composition root for the Agent Clients included in Pontia.
 pub fn registration(config: &AppConfig) -> ClientRegistry {
     let mut clients = ClientRegistry::default();
-    clients.register(pontia_client_pi::registration(
-        config.runtime.tui_command_for_client_config_key("pi"),
+    let sources = &config.client_configuration;
+    let mut pi = pontia_client_pi::registration(None);
+    pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
+        sources
+            .runtime_file
+            .get("pi")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})),
+        sources
+            .runtime_environment
+            .get("pi")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})),
+    )));
+    clients.register(pi);
+    let mut codex = pontia_client_codex::registration();
+    codex.configuration = Some(Arc::new(
+        pontia_client_codex::configuration::CodexConfiguration::new(
+            sources
+                .runtime_file
+                .get("codex")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({})),
+        ),
     ));
-    clients.register(pontia_client_codex::registration());
-    if !config.acp.agents.is_empty() {
-        clients.register(pontia_client_acp::registration(config.acp.clone()));
-    }
+    clients.register(codex);
+    clients.register(pontia_client_acp::registration_from_sources(
+        sources.acp_file.clone(),
+    ));
     clients
 }

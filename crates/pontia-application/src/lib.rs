@@ -6,6 +6,7 @@
 
 pub use pontia_config::FilePickerConfig;
 
+pub mod agent_clients;
 mod agent_events;
 mod agent_profiles;
 pub mod app;

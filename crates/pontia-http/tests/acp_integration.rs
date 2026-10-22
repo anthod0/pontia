@@ -5,7 +5,7 @@ use axum::{
 use http_body_util::BodyExt;
 use pontia_application::{AppState, client_contract::ClientServicePhase, clients::ClientRegistry};
 use pontia_client_acp::registration;
-use pontia_config::{AcpAgentConfig, AcpConfig};
+use pontia_client_acp::{AcpAgentConfig, AcpConfig};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, time::Duration};

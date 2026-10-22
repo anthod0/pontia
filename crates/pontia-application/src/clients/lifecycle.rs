@@ -38,9 +38,16 @@ impl ClientAdapter {
         &self,
         root: &Path,
         request: RuntimeStartRequest,
+        configuration: Option<serde_json::Value>,
     ) -> Result<Option<RuntimeStartResult>> {
         if let Some(client) = self.session_client() {
-            client.provision(self.events.clone(), root, request).await?;
+            if let Some(configuration) = configuration {
+                client
+                    .provision_configured(self.events.clone(), root, request, configuration)
+                    .await?;
+            } else {
+                client.provision(self.events.clone(), root, request).await?;
+            }
             return Ok(None);
         }
         if let Some(launcher) = self
@@ -48,16 +55,19 @@ impl ClientAdapter {
             .get(self.spec.client_type)
             .and_then(|entry| entry.launcher.as_ref())
         {
-            return launcher
-                .launch(super::ClientLaunchRequest {
-                    root,
-                    runtime: request,
-                    restart_count: 0,
-                    reuse_pane: None,
-                    native_session_key: None,
-                    native_session_file: None,
-                })
-                .map(Some);
+            let request = super::ClientLaunchRequest {
+                root,
+                runtime: request,
+                restart_count: 0,
+                reuse_pane: None,
+                native_session_key: None,
+                native_session_file: None,
+            };
+            return match configuration {
+                Some(configuration) => launcher.launch_configured(request, &configuration),
+                None => launcher.launch(request),
+            }
+            .map(Some);
         }
         self.start_in_process(root, request, 0).map(Some)
     }

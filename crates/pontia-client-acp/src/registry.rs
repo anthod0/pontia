@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use pontia_config::AcpAgentConfig;
+use crate::AcpAgentConfig;
 use pontia_core::{Error, Result};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};

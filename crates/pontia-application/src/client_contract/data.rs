@@ -75,4 +75,11 @@ pub trait ClientLauncher: Send + Sync {
         native_session_file: Option<&Path>,
     ) -> Result<()>;
     fn launch(&self, request: ClientLaunchRequest<'_>) -> Result<RuntimeStartResult>;
+    fn launch_configured(
+        &self,
+        request: ClientLaunchRequest<'_>,
+        _configuration: &Value,
+    ) -> Result<RuntimeStartResult> {
+        self.launch(request)
+    }
 }

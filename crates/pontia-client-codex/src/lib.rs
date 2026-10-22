@@ -1,4 +1,5 @@
 mod adapter;
+pub mod configuration;
 pub mod profiles;
 pub mod rollout;
 pub mod runtime;

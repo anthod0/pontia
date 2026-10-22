@@ -78,6 +78,9 @@ impl NativeSessionService {
     }
 
     async fn observed_session(&self, client: &str, cwd: &str) -> Result<String> {
+        crate::agent_clients::AgentClientService::new(self.pool.clone(), self.events.clients())
+            .for_creation(client, &json!({}))
+            .await?;
         let session = new_session_id().to_string();
         let workspace = crate::upsert_workspace(&self.pool, cwd).await?;
         self.events

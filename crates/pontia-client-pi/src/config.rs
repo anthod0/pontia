@@ -1,4 +1,46 @@
-use pontia_config::{ClientConfigDefaults, RuntimeCommandOverride};
+use pontia_application::client_contract::ClientConfiguration;
+use pontia_config::{ClientConfigDefaults, ConfigurationLayers, RuntimeCommandOverride};
+use pontia_core::{Error, Result};
+use serde_json::{Value, json};
+
+pub struct PiConfiguration(pub ConfigurationLayers);
+
+impl PiConfiguration {
+    pub fn new(file: Value, mut environment: Value) -> Self {
+        // An empty environment setting retains its existing meaning: use the built-in command.
+        if environment.get("tui_command").is_some_and(Value::is_null) {
+            environment["tui_command"] = json!("pi");
+        }
+        Self(ConfigurationLayers {
+            defaults: json!({"tui_command":"pi"}),
+            file,
+            environment,
+        })
+    }
+}
+
+impl ClientConfiguration for PiConfiguration {
+    fn key(&self, _metadata: &Value) -> Result<String> {
+        Ok("default".into())
+    }
+
+    fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
+        if key != "default" {
+            return Err(Error::Domain("Pi requires the default client key".into()));
+        }
+        let value = self.0.resolve(overrides);
+        command(&value)?;
+        Ok(value)
+    }
+}
+
+pub(crate) fn command(value: &Value) -> Result<String> {
+    let config: pontia_config::RuntimeClientConfig = serde_json::from_value(value.clone())?;
+    config
+        .tui_command
+        .filter(|command| !command.trim().is_empty())
+        .ok_or_else(|| Error::Domain("Pi tui_command must be nonempty".into()))
+}
 
 pub const DEFAULTS: ClientConfigDefaults = ClientConfigDefaults {
     default_client_type: "pi",

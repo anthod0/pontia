@@ -11,6 +11,19 @@ pub(crate) struct PiLauncher {
     pub tui_command: Option<String>,
 }
 impl ClientLauncher for PiLauncher {
+    fn launch_configured(
+        &self,
+        request: ClientLaunchRequest<'_>,
+        configuration: &serde_json::Value,
+    ) -> Result<pontia_runtime::RuntimeStartResult> {
+        let mut request = request;
+        request.runtime.start_command = Some(format!(
+            "{} --approve",
+            crate::config::command(configuration)?
+        ));
+        self.launch(request)
+    }
+
     fn validate_resume(&self, key: &str, file: Option<&Path>) -> Result<()> {
         let path = file.ok_or_else(|| {
             Error::CapabilityUnavailable(format!(

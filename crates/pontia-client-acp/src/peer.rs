@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
+use crate::AcpAgentConfig;
 use agent_client_protocol::{
     Agent, ByteStreams, ConnectionTo, JsonRpcRequest,
     schema::{ProtocolVersion, v1::*},
@@ -12,7 +13,6 @@ use agent_client_protocol::{
 use pontia_application::{
     EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
 };
-use pontia_config::AcpAgentConfig;
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 use tokio::{

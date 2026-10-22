@@ -59,6 +59,12 @@ impl SessionCommandService {
             request.client_type = self.clients.registry().default_client_type()?.to_string();
         }
         self.clients.for_client(&request.client_type)?;
+        let configuration = crate::agent_clients::AgentClientService::new(
+            self.pool.clone(),
+            self.clients.registry().clone(),
+        )
+        .for_creation(&request.client_type, &request.metadata)
+        .await?;
 
         let profile = crate::AgentProfileService::new(self.pool.clone())
             .with_clients(self.clients.registry().clone())
@@ -172,6 +178,7 @@ impl SessionCommandService {
                     start_command: None,
                     environment: request.runtime_environment.clone(),
                 },
+                configuration,
             )
             .await;
         let runtime = match runtime {

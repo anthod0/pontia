@@ -265,6 +265,116 @@ fn resume_rejects_missing_invalid_or_different_native_session_before_launch() {
     assert!(!root.path().join("state/launch").exists());
 }
 
+#[test]
+fn creation_reads_current_database_settings_with_environment_file_and_default_precedence() {
+    let _guard = path_env_lock().lock().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let log = root.path().join("tmux.log");
+    write_fake_tmux(&root.path().join("tmux"));
+    let original_path = install_fake_tmux(root.path(), &log);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        use pontia_application::{
+            AppState, agent_clients::AgentClientService, clients::ClientRegistry,
+        };
+        use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+        use serde_json::json;
+        let pool = connect_sqlite(&format!("sqlite://{}", root.path().join("db").display()))
+            .await
+            .unwrap();
+        run_migrations(&pool).await.unwrap();
+        for (file, environment, fallback, overridden) in [
+            (
+                json!({"tui_command":"file-pi"}),
+                json!({"tui_command":"env-pi"}),
+                "env-pi",
+                "env-pi",
+            ),
+            (
+                json!({"tui_command":"file-pi"}),
+                json!({}),
+                "file-pi",
+                "database-pi",
+            ),
+            (json!({}), json!({}), "pi", "database-pi"),
+        ] {
+            let mut client = pontia_client_pi::registration(None);
+            client.configuration = Some(std::sync::Arc::new(
+                pontia_client_pi::config::PiConfiguration::new(file, environment.clone()),
+            ));
+            let mut clients = ClientRegistry::default();
+            clients.register(client);
+            let app = AppState::builder(pool.clone(), root.path().into())
+                .clients(clients.clone())
+                .build();
+            let service = AgentClientService::new(pool.clone(), clients);
+            let create = || async {
+                let result = app
+                    .session_commands()
+                    .create_session(
+                        serde_json::from_value(json!({"workspace":root.path()})).unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let session = result.session_id().unwrap().to_owned();
+                let command: String = sqlx::query_scalar(
+                    "SELECT start_command FROM session_runtimes WHERE session_id=?",
+                )
+                .bind(&session)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+                (session, command)
+            };
+            let (old_session, original) = create().await;
+            assert_eq!(original, format!("{fallback} --approve"));
+            service
+                .save(
+                    "pi",
+                    "default",
+                    None,
+                    Some(json!({"tui_command":"database-pi"})),
+                )
+                .await
+                .unwrap();
+            assert_eq!(create().await.1, format!("{overridden} --approve"));
+            let old_command: String =
+                sqlx::query_scalar("SELECT start_command FROM session_runtimes WHERE session_id=?")
+                    .bind(&old_session)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(old_command, original);
+            let clear = service
+                .save("pi", "default", None, Some(json!({"tui_command":null})))
+                .await;
+            if environment.get("tui_command").is_some() {
+                clear.unwrap();
+                assert_eq!(create().await.1, "env-pi --approve");
+            } else {
+                assert!(clear.is_err());
+            }
+            service
+                .save("pi", "default", Some(false), None)
+                .await
+                .unwrap();
+            for selection in [json!({}), json!({"client_type":"pi"})] {
+                assert!(matches!(
+                    app.session_commands()
+                        .create_session(serde_json::from_value(selection).unwrap())
+                        .await,
+                    Err(pontia_core::Error::CapabilityUnavailable(_))
+                ));
+            }
+            service.delete("pi", "default").await.unwrap();
+            assert_eq!(create().await.1, format!("{fallback} --approve"));
+            app.shutdown().notify();
+        }
+        pool.close().await;
+    });
+    restore_fake_tmux(original_path);
+}
+
 fn launch_request(root: &Path, start_command: Option<String>) -> RuntimeStartRequest {
     RuntimeStartRequest {
         runtime_id: None,

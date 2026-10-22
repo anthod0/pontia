@@ -2,20 +2,6 @@ use std::collections::HashMap;
 
 use pontia_core::error::{Error, Result};
 
-use super::RuntimeConfig;
-
-pub(super) fn apply_runtime_overrides(
-    vars: &HashMap<String, String>,
-    runtime: &mut RuntimeConfig,
-    defaults: &super::ClientConfigDefaults,
-) {
-    for command in defaults.runtime_commands {
-        if let Some(value) = get(vars, command.environment_variable) {
-            runtime.set_tui_command_for_client_config_key(command.client_type, non_empty(value));
-        }
-    }
-}
-
 pub(super) fn get<'a>(vars: &'a HashMap<String, String>, key: &str) -> Option<&'a str> {
     vars.get(key).map(String::as_str)
 }

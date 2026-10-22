@@ -6,10 +6,13 @@ use pontia_application::{
     clients::{ClientRegistry, ClientServiceTasks},
 };
 use pontia_client_acp::identity;
-use pontia_config::{AcpAgentConfig, AcpConfig};
+use pontia_client_acp::{AcpAgentConfig, AcpConfig};
 use pontia_core::{Error, Result};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
+
+#[path = "control_loop/configuration.rs"]
+mod configuration;
 
 #[path = "control_loop/live_output.rs"]
 mod live_output;

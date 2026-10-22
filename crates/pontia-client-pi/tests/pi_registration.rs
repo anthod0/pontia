@@ -110,6 +110,58 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
 }
 
 #[tokio::test]
+async fn disabling_pi_blocks_new_native_registration_but_preserves_existing_registration_and_facts()
+{
+    let (state, root) = state().await;
+    let (pi, _requests) = client(&state);
+    let (session, runtime) = register(&pi, root.path()).await;
+    pontia_application::agent_clients::AgentClientService::new(state.db(), state.clients())
+        .save("pi", "default", Some(false), None)
+        .await
+        .unwrap();
+    let (new_pi, _requests) = client(&state);
+    assert!(new_pi.call("runtime.register", json!({"version":PROTOCOL_VERSION,"binding":{
+        "client_type":"pi", "client_session_key":"another-native", "client_cwd":root.path(),
+        "tmux":{"socket_path":"/unused/pi-test-tmux","pane_id":"%2"}
+    }})).await.is_err());
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+        .fetch_one(&state.db())
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+    pi.call(
+        "event.report",
+        fact(
+            &session,
+            &runtime,
+            "session.ready",
+            json!({"client_session_key":"native"}),
+        ),
+    )
+    .await
+    .unwrap();
+    pi.close();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while state.client_control().available(&session).await.unwrap() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let (replacement, _requests) = client(&state);
+    let rebound = replacement.call("runtime.register", json!({"version":PROTOCOL_VERSION, "binding":{
+        "client_type":"pi", "session_id":session, "runtime_id":runtime, "client_session_key":"native", "client_cwd":root.path(),
+        "tmux":{"socket_path":"/unused/pi-test-tmux","pane_id":"%1"}
+    }})).await.unwrap();
+    assert_eq!(rebound["runtime"]["runtime_id"], runtime);
+    assert_eq!(rebound["session"]["session_id"], session);
+    assert!(state.client_control().available(&session).await.unwrap());
+    replacement.close();
+    new_pi.close();
+    state.client_control().close().await;
+}
+
+#[tokio::test]
 async fn rejects_old_protocol_and_invalid_registration_before_mutating_business_state() {
     let (state, _root) = state().await;
     let (pi, _requests) = client(&state);

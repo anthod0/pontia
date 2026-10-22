@@ -2688,6 +2688,7 @@ dependencies = [
  "futures-util",
  "libc",
  "pontia-application",
+ "pontia-config",
  "pontia-core",
  "pontia-runtime",
  "pontia-storage-sqlite",
@@ -2729,6 +2730,7 @@ dependencies = [
  "pontia-client-pi",
  "pontia-config",
  "pontia-core",
+ "serde_json",
 ]
 
 [[package]]
@@ -2738,6 +2740,7 @@ dependencies = [
  "pontia-core",
  "pontia-version",
  "serde",
+ "serde_json",
  "tempfile",
  "toml",
  "url",

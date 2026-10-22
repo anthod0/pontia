@@ -14,7 +14,18 @@ use serde_json::Value;
 use std::sync::Arc;
 
 pub fn registration(tui_command: Option<String>) -> ClientRegistration {
+    let file = tui_command
+        .as_ref()
+        .map(|command| serde_json::json!({"tui_command":command}))
+        .unwrap_or_else(|| serde_json::json!({}));
+    let environment = std::env::var("PONTIA_PI_TUI_COMMAND").ok()
+        .map(|command| serde_json::json!({"tui_command": if command.trim().is_empty() { "pi" } else { &command }}))
+        .unwrap_or_else(|| serde_json::json!({}));
     ClientRegistration {
+        configuration: Some(Arc::new(crate::config::PiConfiguration::new(
+            file,
+            environment,
+        ))),
         interactions: None,
         service: Some(Arc::new(crate::service::PiService)),
         profile: None,

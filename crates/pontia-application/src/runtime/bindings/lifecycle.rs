@@ -60,6 +60,9 @@ impl RuntimeBindingUpsertService {
         request: &RuntimeBindingUpsertRequest,
         workspace: &WorkspaceRecord,
     ) -> Result<String> {
+        crate::agent_clients::AgentClientService::new(self.pool.clone(), self.clients.clone())
+            .for_creation(&request.client_type, &agent_binding_metadata(request))
+            .await?;
         let session_id = new_session_id().to_string();
         let ingest = &self.events;
         ingest

@@ -4,9 +4,7 @@ use pontia_core::error::{Error, Result};
 
 use super::{
     AppConfig, WorkspaceBrowserConfig, WorkspaceRootConfig,
-    environment::{
-        apply_runtime_overrides, get, non_empty, parse_bool, validate_real_default_client_type,
-    },
+    environment::{get, non_empty, parse_bool, validate_real_default_client_type},
     file_config,
     paths::{config_path, default_database_url, pontia_home},
     workspace_roots,
@@ -99,16 +97,27 @@ impl AppConfig {
             dashboard.source = non_empty(value);
         }
 
-        let mut runtime = file
-            .and_then(|config| config.runtime.clone())
-            .unwrap_or_default();
-        apply_runtime_overrides(vars, &mut runtime, defaults);
-
-        let mut acp = super::AcpConfig::default();
-        if let Some(config) = file.and_then(|config| config.acp.as_ref()) {
-            acp.agents.extend(config.agents.clone());
-        }
-        acp.validate()?;
+        let client_configuration = super::ClientConfigurationSources {
+            runtime_file: file
+                .and_then(|config| config.runtime.clone())
+                .unwrap_or_default(),
+            runtime_environment: defaults
+                .runtime_commands
+                .iter()
+                .filter_map(|command| {
+                    get(vars, command.environment_variable).map(|value| {
+                        (
+                            command.client_type.to_string(),
+                            serde_json::json!({"tui_command": non_empty(value)}),
+                        )
+                    })
+                })
+                .collect(),
+            acp_file: file
+                .and_then(|config| config.acp.as_ref())
+                .map(|config| config.agents.clone())
+                .unwrap_or_default(),
+        };
 
         Ok(Self {
             pontia_home,
@@ -120,8 +129,7 @@ impl AppConfig {
             default_client_type,
             workspace_browser,
             file_picker,
-            runtime,
-            acp,
+            client_configuration,
             dashboard,
             remote: file.and_then(|config| config.remote.clone()),
         })

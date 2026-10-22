@@ -28,6 +28,9 @@ use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
 
 pub fn registration() -> ClientRegistration {
     ClientRegistration {
+        configuration: Some(Arc::new(crate::configuration::CodexConfiguration::new(
+            json!({}),
+        ))),
         interactions: Some(Arc::new(CodexClient)),
         service: Some(Arc::new(crate::service::CodexBackgroundService)),
         profile: Some(Arc::new(crate::profiles::CodexProfilePolicy)),
@@ -127,6 +130,20 @@ impl pontia_application::client_contract::ClientInteractions for CodexClient {
 }
 
 impl ClientSession for CodexClient {
+    fn provision_configured<'a>(
+        &'a self,
+        events: EventIngestService,
+        root: &'a Path,
+        request: RuntimeStartRequest,
+        configuration: Value,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            let command = crate::configuration::command(&configuration)?;
+            sqlx::query("UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_tui_command',?) WHERE session_id=?")
+                .bind(command).bind(&request.session_id).execute(&events.db()).await?;
+            self.provision(events, root, request).await
+        })
+    }
     fn provision<'a>(
         &'a self,
         events: EventIngestService,
@@ -270,8 +287,11 @@ impl ClientSession for CodexClient {
             let codex_runtime = service.runtime(session).await?;
             let endpoint = format!("unix://{}", codex_runtime.socket_path.display());
             let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+            let command: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_tui_command') FROM sessions WHERE session_id=?")
+                .bind(session).fetch_one(&service.pool).await?;
+            let command = command.as_deref().unwrap_or("codex");
             let start_command = format!(
-                "exec codex resume --remote {} {}",
+                "exec {command} resume --remote {} {}",
                 quote(&endpoint),
                 quote(&binding.client_session_key)
             );

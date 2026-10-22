@@ -2,8 +2,8 @@ use std::{collections::HashMap, net::SocketAddr, path::PathBuf};
 
 use serde::Deserialize;
 
-mod acp;
-pub use acp::{AcpAgentConfig, AcpConfig};
+mod client_configuration;
+pub use client_configuration::{ClientConfigurationSources, ConfigurationLayers, merge};
 mod environment;
 mod file_config;
 mod loading;
@@ -31,8 +31,7 @@ pub struct AppConfig {
     pub default_client_type: String,
     pub workspace_browser: WorkspaceBrowserConfig,
     pub file_picker: FilePickerConfig,
-    pub runtime: RuntimeConfig,
-    pub acp: AcpConfig,
+    pub client_configuration: ClientConfigurationSources,
     pub dashboard: DashboardConfig,
     pub remote: Option<RemoteConfig>,
 }
@@ -80,26 +79,6 @@ impl RuntimeConfig {
         self.clients
             .get(runtime_config_key)
             .and_then(|client| client.tui_command.clone())
-    }
-
-    fn set_tui_command_for_client_config_key(
-        &mut self,
-        runtime_config_key: &str,
-        command: Option<String>,
-    ) {
-        match command {
-            Some(command) => {
-                self.clients
-                    .entry(runtime_config_key.to_string())
-                    .or_default()
-                    .tui_command = Some(command);
-            }
-            None => {
-                if let Some(client) = self.clients.get_mut(runtime_config_key) {
-                    client.tui_command = None;
-                }
-            }
-        }
     }
 }
 

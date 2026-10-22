@@ -1,5 +1,5 @@
+use pontia_client_acp::AcpAgentConfig;
 use pontia_client_acp::registry::Registry;
-use pontia_config::AcpAgentConfig;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -293,7 +293,7 @@ async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_b
         AppState, CreateSessionRequest, client_contract::ClientServicePhase,
         clients::ClientRegistry,
     };
-    use pontia_config::AcpConfig;
+    use pontia_client_acp::AcpConfig;
     use pontia_storage_sqlite::{connect_sqlite, run_migrations};
     let root = tempfile::tempdir().unwrap();
     let workspace = root.path().join("workspace");

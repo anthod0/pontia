@@ -27,8 +27,7 @@ struct AgentConfigInput {
     registry_id: Option<String>,
     command: Option<String>,
     args: Option<Vec<String>>,
-    #[serde(default)]
-    env: BTreeMap<String, String>,
+    env: Option<BTreeMap<String, Option<String>>>,
 }
 
 impl TryFrom<AgentConfigInput> for AcpAgentConfig {
@@ -45,7 +44,12 @@ impl TryFrom<AgentConfigInput> for AcpAgentConfig {
             registry_id: input.registry_id,
             command: input.command.unwrap_or_default(),
             args: input.args.unwrap_or_default(),
-            env: input.env,
+            env: input
+                .env
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|(key, value)| value.map(|value| (key, value)))
+                .collect(),
         })
     }
 }

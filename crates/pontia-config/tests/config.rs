@@ -227,18 +227,12 @@ roots = [
     assert!(!config.run_migrations);
     assert_eq!(config.default_client_type, "pi");
     assert_eq!(
-        config
-            .runtime
-            .tui_command_for_client_config_key("pi")
-            .as_deref(),
-        Some("custom-pi from file")
+        config.client_configuration.runtime_file["pi"]["tui_command"],
+        "custom-pi from file"
     );
     assert_eq!(
-        config
-            .runtime
-            .tui_command_for_client_config_key("custom")
-            .as_deref(),
-        Some("custom-agent from file")
+        config.client_configuration.runtime_file["custom"]["tui_command"],
+        "custom-agent from file"
     );
     assert_eq!(config.workspace_browser.roots.len(), 1);
     assert_eq!(config.workspace_browser.roots[0].root_id, "projects");
@@ -285,11 +279,8 @@ tui_command = "pi from file"
     assert_eq!(config.bind_addr.to_string(), "127.0.0.1:4040");
     assert_eq!(config.external_api_token.as_deref(), Some("env-token"));
     assert_eq!(
-        config
-            .runtime
-            .tui_command_for_client_config_key("pi")
-            .as_deref(),
-        Some("pi from env")
+        config.client_configuration.runtime_environment["pi"]["tui_command"],
+        "pi from env"
     );
     assert_eq!(
         config.dashboard.source.as_deref(),
