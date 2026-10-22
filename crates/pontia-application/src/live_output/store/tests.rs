@@ -3,6 +3,7 @@ use crate::live_output::{LiveOutputIdentity, LiveOutputProducer};
 mod lifecycle;
 mod snapshots;
 mod subscriptions;
+mod tools;
 
 fn identity() -> LiveOutputIdentity {
     LiveOutputIdentity {

@@ -21,9 +21,17 @@ enum TextRecovery {
     },
 }
 
+struct ToolRecovery {
+    turn_id: String,
+    boundary: u64,
+    outputs: HashSet<String>,
+    results: HashSet<String>,
+}
+
 pub(super) struct CodexLiveOutput {
     output: LiveOutputService,
     recovered: HashMap<String, TextRecovery>,
+    tool_baselines: HashMap<String, ToolRecovery>,
 }
 
 impl Drop for CodexLiveOutput {
@@ -39,11 +47,13 @@ impl CodexLiveOutput {
         Self {
             output,
             recovered: HashMap::new(),
+            tool_baselines: HashMap::new(),
         }
     }
 
     pub fn invalidate(&mut self, session: &str) {
         self.recovered.remove(session);
+        self.tool_baselines.remove(session);
         self.output.discard_session(session);
     }
 
@@ -132,6 +142,8 @@ impl CodexLiveOutput {
                 item["type"] == "agentMessage" && is_history_item_id(item["id"].as_str())
             });
             let mut recovered_items = Vec::new();
+            let mut covered_tools = HashSet::new();
+            let mut covered_results = HashSet::new();
             for item in items {
                 if item["type"] == "agentMessage" && !unsafe_text {
                     recovered_items.push(LiveOutputItem::AssistantText {
@@ -147,6 +159,57 @@ impl CodexLiveOutput {
                     });
                 } else if let Some(call) = tool_calls::from_native(item) {
                     recovered_items.push(call.into_item());
+                }
+            }
+            // Reserve all invocation inputs before any output consumes the budget.
+            for item in items {
+                if let Some(index) = recovered_items.iter().position(|call| matches!(call, LiveOutputItem::ToolCall { call_id, .. } if item["id"].as_str() == Some(call_id))) {
+                    for update in tool_calls::execution(item, None) {
+                        let update = update.bound_tool_content(&recovered_items);
+                        if let Some(LiveOutputItem::ToolCall { status, result, .. }) =
+                            recovered_items.get_mut(index)
+                        {
+                            match update {
+                                LiveOutputUpdate::ToolStatusUpdated { status: value, .. } => {
+                                    *status = Some(value)
+                                }
+                                LiveOutputUpdate::ToolResult {
+                                    call_id,
+                                    result: value,
+                                } => {
+                                    covered_results.insert(call_id);
+                                    *result = Some(Box::new(value))
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    if item["type"] == "commandExecution"
+                        && let Some(text) = item["aggregatedOutput"].as_str()
+                    {
+                        // Native history is a bounded observation, not proof that
+                        // every byte since execution started is available.
+                        let update = LiveOutputUpdate::ToolOutputUpdated {
+                            call_id: item["id"].as_str().unwrap().into(),
+                            text: text.into(),
+                            truncated: true,
+                        }
+                        .bound_tool_content(&recovered_items);
+                        if let LiveOutputUpdate::ToolOutputUpdated {
+                            call_id,
+                            text,
+                            truncated,
+                        } = update
+                        {
+                            covered_tools.insert(call_id);
+                            if let Some(LiveOutputItem::ToolCall { output, .. }) =
+                                recovered_items.get_mut(index)
+                            {
+                                *output =
+                                    Some(pontia_application::LiveToolOutput { text, truncated });
+                            }
+                        }
+                    }
                 }
             }
             let items = recovered_items;
@@ -172,6 +235,15 @@ impl CodexLiveOutput {
                     items,
                 })
                 .await?;
+            self.tool_baselines.insert(
+                session.into(),
+                ToolRecovery {
+                    turn_id: native.into(),
+                    boundary: snapshot.notification_boundary,
+                    outputs: covered_tools,
+                    results: covered_results,
+                },
+            );
             self.recovered.insert(
                 session.into(),
                 if unsafe_text {
@@ -225,11 +297,43 @@ impl CodexLiveOutput {
         session: &str,
         notification: &Notification,
     ) -> Result<()> {
-        let Some(call) = tool_calls::from_native(&notification["params"]["item"]) else {
+        let item = &notification["params"]["item"];
+        if let Some(call) = tool_calls::from_native(item) {
+            self.publish(service, runtime, session, notification, call.into_update())
+                .await?;
+        }
+        for update in tool_calls::execution(item, notification["method"].as_str()) {
+            self.publish(service, runtime, session, notification, update)
+                .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn tool_output(
+        &mut self,
+        service: &CodexService,
+        runtime: &CodexRuntime,
+        session: &str,
+        notification: &Notification,
+    ) -> Result<()> {
+        let params = &notification["params"];
+        let call_id = string(params, "itemId")?;
+        let delta = string(params, "delta")?;
+        if delta.is_empty() {
             return Ok(());
-        };
-        self.publish(service, runtime, session, notification, call.into_update())
-            .await
+        }
+        self.publish(
+            service,
+            runtime,
+            session,
+            notification,
+            LiveOutputUpdate::ToolOutputDelta {
+                call_id: call_id.into(),
+                delta: delta.into(),
+                truncated: false,
+            },
+        )
+        .await
     }
 
     async fn publish(
@@ -307,12 +411,63 @@ impl CodexLiveOutput {
             {
                 return Ok(());
             }
+            // Execution content never creates an anonymous tool. Recovery may
+            // discover the call, otherwise ignore uncorrelatable notifications.
+            let call_id = match &update {
+                LiveOutputUpdate::ToolStatusUpdated { call_id, .. }
+                | LiveOutputUpdate::ToolResult { call_id, .. }
+                | LiveOutputUpdate::ToolOutputDelta { call_id, .. }
+                | LiveOutputUpdate::ToolOutputUpdated { call_id, .. } => Some(call_id),
+                _ => None,
+            };
+            if let Some(call_id) = call_id {
+                let Some(LiveOutputItem::ToolCall { status, result, output, .. }) = snapshot.items.iter().find(|item| matches!(item, LiveOutputItem::ToolCall { call_id: id, .. } if id == call_id)) else { return Ok(()); };
+                // A repeated start's initial aggregate must not replace newer deltas.
+                if matches!(&update, LiveOutputUpdate::ToolOutputUpdated { .. }) && output.is_some()
+                {
+                    return Ok(());
+                }
+                if let LiveOutputUpdate::ToolStatusUpdated {
+                    status: incoming, ..
+                } = &update
+                    && let Some(current) = status
+                {
+                    let mut merged = current.clone();
+                    merged.merge(incoming.clone());
+                    if &merged == current {
+                        return Ok(());
+                    }
+                }
+                if matches!(&update, LiveOutputUpdate::ToolResult { .. })
+                    && self.tool_baselines.get(session).is_some_and(|baseline| {
+                        baseline.turn_id == native
+                            && notification.sequence <= baseline.boundary
+                            && baseline.results.contains(call_id)
+                    })
+                {
+                    return Ok(());
+                }
+                if matches!(&update, LiveOutputUpdate::ToolResult { result: incoming, .. } if result.as_deref() == Some(incoming))
+                {
+                    return Ok(());
+                }
+                if matches!(&update, LiveOutputUpdate::ToolOutputDelta { .. })
+                    && self.tool_baselines.get(session).is_some_and(|baseline| {
+                        baseline.turn_id == native
+                            && notification.sequence <= baseline.boundary
+                            && baseline.outputs.contains(call_id)
+                    })
+                {
+                    return Ok(());
+                }
+            }
+            let bounded = update.clone().bound_tool_content(&snapshot.items);
             let outcome = self
                 .output
                 .publish_batch(LiveOutputBatch {
                     producer,
                     first_sequence: snapshot.sequence + 1,
-                    updates: vec![update.clone()],
+                    updates: vec![bounded],
                 })
                 .await?;
             if matches!(outcome, LiveOutputPublishOutcome::Accepted { .. }) {

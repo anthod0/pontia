@@ -2,11 +2,14 @@ use crate::client_contract::raw_transcripts::{ManagedToolUse, ManagedToolUseInpu
 use pontia_core::error::{Error, Result};
 use serde_json::Value;
 
-use super::{LiveOutputIdentity, LiveOutputItem, LiveOutputUpdate};
+use super::{
+    LiveOutputIdentity, LiveOutputItem, LiveOutputUpdate, LiveToolPhase, LiveToolResult,
+    LiveToolStatus,
+};
 
 const MAX_ITEMS_PER_STREAM: usize = 256;
 const MAX_TOTAL_TEXT_BYTES: usize = 1024 * 1024;
-const MAX_TOTAL_TOOL_BYTES: usize = 1024 * 1024;
+pub(super) const MAX_TOTAL_TOOL_BYTES: usize = 1024 * 1024;
 const MAX_TOOL_CALL_BYTES: usize = 64 * 1024;
 const MAX_ID_BYTES: usize = 256;
 
@@ -30,6 +33,25 @@ pub(super) fn validate_non_empty(field: &str, value: &str) -> Result<()> {
 
 pub(super) fn validate_update(update: &LiveOutputUpdate) -> Result<()> {
     match update {
+        LiveOutputUpdate::ToolStatusUpdated { call_id, status } => {
+            validate_non_empty("call_id", call_id)?;
+            validate_status(status)?;
+        }
+        LiveOutputUpdate::ToolResult { call_id, result } => {
+            validate_non_empty("call_id", call_id)?;
+            validate_result(result)?;
+        }
+        LiveOutputUpdate::ToolOutputDelta {
+            call_id,
+            delta: text,
+            ..
+        }
+        | LiveOutputUpdate::ToolOutputUpdated { call_id, text, .. } => {
+            validate_non_empty("call_id", call_id)?;
+            if text.len() > MAX_TOTAL_TOOL_BYTES {
+                return Err(Error::Domain("tool output is too large".into()));
+            }
+        }
         LiveOutputUpdate::AssistantTextDelta { item_id, delta } => {
             validate_non_empty("item_id", item_id)?;
             if delta.is_empty() {
@@ -87,14 +109,26 @@ pub(super) fn validate_items(items: &[LiveOutputItem]) -> Result<()> {
                 tool_name,
                 arguments,
                 managed_tool_use,
+                status,
+                output,
+                result,
                 ..
             } => {
                 validate_non_empty("call_id", call_id)?;
                 validate_non_empty("tool_name", tool_name)?;
                 let tool_bytes =
-                    validate_tool_call(tool_name, arguments, managed_tool_use.as_ref())?;
+                    validate_tool_call(tool_name, arguments, managed_tool_use.as_deref())?;
+                if let Some(status) = status {
+                    validate_status(status)?;
+                }
+                let result_bytes = result
+                    .as_deref()
+                    .map(validate_result)
+                    .transpose()?
+                    .unwrap_or(0);
+                let output_bytes = output.as_ref().map_or(0, |output| output.text.len());
                 total_tool_bytes = total_tool_bytes
-                    .checked_add(tool_bytes)
+                    .checked_add(tool_bytes + result_bytes + output_bytes)
                     .ok_or_else(|| Error::Domain("live output tool size overflow".into()))?;
                 if !call_ids.insert(call_id) {
                     return Err(Error::Domain(format!(
@@ -117,7 +151,27 @@ pub(super) fn validate_items(items: &[LiveOutputItem]) -> Result<()> {
     Ok(())
 }
 
-fn validate_tool_call(
+fn validate_status(status: &LiveToolStatus) -> Result<()> {
+    if status.phase == LiveToolPhase::Running && status.outcome.is_some() {
+        return Err(Error::Domain("running tool cannot have an outcome".into()));
+    }
+    Ok(())
+}
+
+fn validate_result(result: &LiveToolResult) -> Result<usize> {
+    if result.content.is_none() && result.error.is_none() {
+        return Err(Error::Domain(
+            "tool result requires content or error".into(),
+        ));
+    }
+    let size = result.content_bytes();
+    if size > MAX_TOTAL_TOOL_BYTES {
+        return Err(Error::Domain("tool result is too large".into()));
+    }
+    Ok(size)
+}
+
+pub(super) fn validate_tool_call(
     tool_name: &str,
     arguments: &Value,
     managed_tool_use: Option<&ManagedToolUse>,

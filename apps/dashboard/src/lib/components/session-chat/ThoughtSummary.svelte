@@ -7,6 +7,7 @@
   import TurnDuration from './TurnDuration.svelte'
   import type { TurnView } from '../../../api/types'
   import ThoughtCommandStep from './ThoughtCommandStep.svelte'
+  import ThoughtExecution from './ThoughtExecution.svelte'
   import ThoughtFallbackStep from './ThoughtFallbackStep.svelte'
   import ThoughtFileStep from './ThoughtFileStep.svelte'
   import type { SessionChatThoughtStep } from '../../session-chat/sessionChat'
@@ -66,7 +67,7 @@
   }
 
   function fileOperationFor(step: SessionChatThoughtStep): FileOperation | null {
-    if (step.kind !== 'tool_call') return null
+    if (step.kind !== 'tool_call' || step.executionStatus) return null
     const type = step.managedToolUse?.input.type
     return type === 'read' || type === 'write' || type === 'edit' ? type : null
   }
@@ -99,11 +100,11 @@
               <Message.Response content={step.content} markdown streamId={step.id} />
             </div>
           {:else if step.kind === 'tool_call' && step.managedToolUse?.input.type === 'bash'}
-            <ThoughtCommandStep title={step.title} command={step.content} result={step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)} />
+            <ThoughtCommandStep title={step.title} command={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)} />
           {:else if step.kind === 'file_group'}
             <ThoughtFileStep operation={step.operation} files={step.files} results={step.results} connected={hasConnectorAfter(index)} />
           {:else if step.kind === 'tool_call'}
-            <ThoughtFallbackStep title={step.title} content={step.content} result={step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)} />
+            <ThoughtFallbackStep title={step.title} content={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)} />
           {:else if step.kind === 'tool_result'}
             <ThoughtFallbackStep title={step.title} content={step.content} detailsLabel="result" error={step.status === 'error'} connected={hasConnectorAfter(index)} />
           {:else}
@@ -121,6 +122,9 @@
                 <span class="break-words font-medium text-foreground/75">{step.content}</span>
               </div>
             </div>
+          {/if}
+          {#if step.kind === 'tool_call' && step.executionStatus}
+            <ThoughtExecution {step} />
           {/if}
         {/each}
         {#if !visibleSteps.length}

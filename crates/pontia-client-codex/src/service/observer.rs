@@ -204,6 +204,11 @@ impl CodexObserver {
                         Some("error") => {
                             self.service.compaction_error(&runtime, &session, &event["params"]).await?;
                         }
+                        Some("item/commandExecution/outputDelta") => {
+                            if let Err(error) = output.tool_output(&self.service, &runtime, &session, &event).await {
+                                tracing::warn!(%session, %error, "Codex live tool output rejected");
+                            }
+                        }
                         Some("item/agentMessage/delta") => {
                             if let Err(error) = output.delta(&self.service, &runtime, &session, &event).await {
                                 tracing::warn!(%session, %error, "Codex live output delta rejected");

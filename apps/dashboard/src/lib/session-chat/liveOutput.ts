@@ -7,6 +7,20 @@ import {
   type SessionChatThoughtStep,
 } from "./sessionChat";
 
+export interface LiveToolStatus {
+  phase: "running" | "ended";
+  outcome?: "succeeded" | "failed" | "rejected" | "interrupted";
+}
+export interface LiveToolOutput {
+  text: string;
+  truncated: boolean;
+}
+export interface LiveToolResult {
+  content?: unknown;
+  error?: unknown;
+  truncated: boolean;
+}
+
 export type LiveOutputItem =
   | { kind: "assistant_text"; item_id: string; text: string }
   | {
@@ -16,9 +30,16 @@ export type LiveOutputItem =
       tool_name: string;
       arguments: unknown;
       managed_tool_use?: ManagedToolUse;
+      status?: LiveToolStatus;
+      output?: LiveToolOutput;
+      result?: LiveToolResult;
     };
 
 export type LiveOutputUpdate =
+  | { type: "tool_status_updated"; call_id: string; status: LiveToolStatus }
+  | { type: "tool_result"; call_id: string; result: LiveToolResult }
+  | { type: "tool_output_delta"; call_id: string; delta: string; truncated: boolean }
+  | { type: "tool_output_updated"; call_id: string; text: string; truncated: boolean }
   | { type: "assistant_text_delta"; item_id: string; delta: string }
   | {
       type: "tool_call";
@@ -61,6 +82,9 @@ export function applyLiveOutputEvent(
   if (event.session_id !== expectedSessionId) return overlays;
 
   if (event.type === "snapshot") {
+    const current = overlays[event.turn_id];
+    if (current?.stream_id === event.stream_id && event.sequence < current.sequence)
+      return overlays;
     return {
       ...overlays,
       [event.turn_id]: {
@@ -87,7 +111,10 @@ export function applyLiveOutputEvent(
   }
 
   const items = current.items.map(cloneItem);
-  for (const update of event.updates) applyUpdate(items, update);
+  for (const update of event.updates) {
+    if (!applyUpdate(items, update))
+      return { ...overlays, [event.turn_id]: { ...current, awaitingSnapshot: true } };
+  }
   return {
     ...overlays,
     [event.turn_id]: {
@@ -188,7 +215,20 @@ function liveItemsToMessages(overlay: LiveOutputOverlay): SessionChatMessage[] {
       id: `live:${overlay.stream_id}:${item.item_id}`,
       kind: "tool_call",
       title: item.managed_tool_use ? managedToolUseTitle(item.managed_tool_use) : item.tool_name,
-      status: "started",
+      callId: item.call_id,
+      status: item.status?.outcome ?? item.status?.phase ?? "generated",
+      executionStatus: item.status?.outcome ?? item.status?.phase ?? "generated",
+      ...(item.output ? { processOutput: { ...item.output } } : {}),
+      ...(item.result
+        ? {
+            result: {
+              content: formatResult(item.result),
+              status: "error" in item.result || item.status?.outcome === "failed" ? "error" : null,
+              occurredAt: null,
+              truncated: item.result.truncated,
+            },
+          }
+        : {}),
       content: item.managed_tool_use
         ? managedToolUseContent(item.managed_tool_use)
         : formatArguments(item.arguments),
@@ -209,7 +249,7 @@ function liveItemsToMessages(overlay: LiveOutputOverlay): SessionChatMessage[] {
   ];
 }
 
-function applyUpdate(items: LiveOutputItem[], update: LiveOutputUpdate): void {
+function applyUpdate(items: LiveOutputItem[], update: LiveOutputUpdate): boolean {
   if (update.type === "assistant_text_delta") {
     const existing = items.find((item) => item.item_id === update.item_id);
     if (existing?.kind === "assistant_text") {
@@ -217,11 +257,47 @@ function applyUpdate(items: LiveOutputItem[], update: LiveOutputUpdate): void {
     } else if (!existing) {
       items.push({ kind: "assistant_text", item_id: update.item_id, text: update.delta });
     }
-    return;
+    return !existing || existing.kind === "assistant_text";
   }
-  if (!items.some((item) => item.item_id === update.item_id)) {
-    items.push({ kind: "tool_call", ...update });
+  if (update.type === "tool_call") {
+    if (
+      items.some(
+        (item) =>
+          item.item_id === update.item_id ||
+          (item.kind === "tool_call" && item.call_id === update.call_id),
+      )
+    )
+      return false;
+    const { type: _type, ...call } = update;
+    items.push({ kind: "tool_call", ...call });
+    return true;
   }
+  const item = items.find((item) => item.kind === "tool_call" && item.call_id === update.call_id);
+  if (item?.kind !== "tool_call") return false;
+  switch (update.type) {
+    case "tool_result":
+      item.result = cloneJson(update.result);
+      break;
+    case "tool_status_updated":
+      if (
+        !(
+          item.status?.phase === "ended" &&
+          (update.status.phase === "running" || item.status.outcome)
+        )
+      )
+        item.status = { ...update.status };
+      break;
+    case "tool_output_updated":
+      item.output = { text: update.text, truncated: update.truncated };
+      break;
+    case "tool_output_delta":
+      item.output = {
+        text: (item.output?.text ?? "") + update.delta,
+        truncated: !!item.output?.truncated || update.truncated,
+      };
+      break;
+  }
+  return true;
 }
 
 function cloneItem(item: LiveOutputItem): LiveOutputItem {
@@ -230,6 +306,9 @@ function cloneItem(item: LiveOutputItem): LiveOutputItem {
     : {
         ...item,
         arguments: cloneJson(item.arguments),
+        ...(item.status ? { status: { ...item.status } } : {}),
+        ...(item.output ? { output: { ...item.output } } : {}),
+        ...(item.result ? { result: cloneJson(item.result) } : {}),
         ...(item.managed_tool_use ? { managed_tool_use: cloneJson(item.managed_tool_use) } : {}),
       };
 }
@@ -237,6 +316,16 @@ function cloneItem(item: LiveOutputItem): LiveOutputItem {
 function cloneJson<T>(value: T): T {
   if (typeof structuredClone === "function") return structuredClone(value);
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function formatResult(result: LiveToolResult): string {
+  return ["content", "error"]
+    .filter((key) => key in result)
+    .map((key) => {
+      const value = result[key as "content" | "error"];
+      return typeof value === "string" ? value : formatArguments(value);
+    })
+    .join("\n\n");
 }
 
 function formatArguments(argumentsValue: unknown): string {

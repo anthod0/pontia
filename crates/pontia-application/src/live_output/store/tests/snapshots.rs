@@ -59,6 +59,9 @@ fn snapshot_then_batch_preserves_text_tool_text_order() {
                 tool_name: "read".into(),
                 arguments: serde_json::json!({"path": "README.md"}),
                 managed_tool_use: None,
+                status: None,
+                output: None,
+                result: None,
             },
             LiveOutputItem::AssistantText {
                 item_id: "text_2".into(),
@@ -181,6 +184,9 @@ fn text_deltas_cannot_reuse_tool_item_identity() {
         tool_name: "read".into(),
         arguments: serde_json::json!({"path":"file"}),
         managed_tool_use: None,
+        status: None,
+        output: None,
+        result: None,
     }];
     store
         .replace_snapshot(LiveOutputSnapshotReplacement {

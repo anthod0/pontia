@@ -10,7 +10,7 @@ use tokio::sync::broadcast;
 use super::{
     LiveOutputBatch, LiveOutputClose, LiveOutputCloseReason, LiveOutputIdentity, LiveOutputItem,
     LiveOutputPublishOutcome, LiveOutputSnapshot, LiveOutputSnapshotReplacement,
-    LiveOutputStreamEvent, LiveOutputUpdate,
+    LiveOutputStreamEvent, LiveOutputUpdate, LiveToolOutput,
     validation::{validate_identity, validate_items, validate_update},
 };
 
@@ -67,6 +67,7 @@ struct StreamState {
     sequence: u64,
     items: Vec<LiveOutputItem>,
     accepted_updates: VecDeque<(u64, LiveOutputUpdate)>,
+    accepted_update_bytes: usize,
     closed: bool,
     updated_at: Instant,
 }
@@ -142,11 +143,17 @@ impl LiveOutputStore {
         let mut next = existing.clone();
         for (offset, update) in updates.iter().cloned().enumerate() {
             apply_update(&mut next.items, update.clone())?;
+            next.accepted_update_bytes += serde_json::to_vec(&update)?.len();
             next.accepted_updates
                 .push_back((batch.first_sequence + offset as u64, update));
-        }
-        while next.accepted_updates.len() > MAX_UPDATES_PER_BATCH {
-            next.accepted_updates.pop_front();
+            // Replacement snapshots must not accumulate unbounded old content.
+            while next.accepted_updates.len() > MAX_UPDATES_PER_BATCH
+                || next.accepted_update_bytes > super::validation::MAX_TOTAL_TOOL_BYTES
+            {
+                if let Some((_, evicted)) = next.accepted_updates.pop_front() {
+                    next.accepted_update_bytes -= serde_json::to_vec(&evicted)?.len();
+                }
+            }
         }
         validate_items(&next.items)?;
         next.sequence = last_sequence;
@@ -165,7 +172,7 @@ impl LiveOutputStore {
 
     pub fn replace_snapshot(
         &self,
-        replacement: LiveOutputSnapshotReplacement,
+        mut replacement: LiveOutputSnapshotReplacement,
     ) -> Result<LiveOutputPublishOutcome> {
         validate_identity(&replacement.producer.identity)?;
         if replacement.sequence == 0 {
@@ -206,6 +213,30 @@ impl LiveOutputStore {
             )));
         }
 
+        if let Some(existing) = state.streams.get(&key) {
+            for item in &mut replacement.items {
+                let LiveOutputItem::ToolCall {
+                    call_id,
+                    status,
+                    result,
+                    output,
+                    ..
+                } = item
+                else {
+                    continue;
+                };
+                if let Some(LiveOutputItem::ToolCall { status: previous, result: previous_result, output: previous_output, .. }) = existing.items.iter().find(|item| matches!(item, LiveOutputItem::ToolCall { call_id: id, .. } if id == call_id)) {
+                    if let Some(previous) = previous {
+                        let mut merged = previous.clone();
+                        if let Some(incoming) = status.take() { merged.merge(incoming); }
+                        *status = Some(merged);
+                    }
+                    if result.is_none() { *result = previous_result.clone(); }
+                    if output.is_none() { *output = previous_output.clone(); }
+                }
+            }
+            validate_items(&replacement.items)?;
+        }
         let snapshot = LiveOutputSnapshot {
             identity: replacement.producer.identity,
             sequence: replacement.sequence,
@@ -217,6 +248,7 @@ impl LiveOutputStore {
                 sequence: snapshot.sequence,
                 items: snapshot.items.clone(),
                 accepted_updates: VecDeque::new(),
+                accepted_update_bytes: 0,
                 closed: false,
                 updated_at: Instant::now(),
             },
@@ -261,6 +293,7 @@ impl LiveOutputStore {
         existing.sequence = close.sequence;
         existing.items.clear();
         existing.accepted_updates.clear();
+        existing.accepted_update_bytes = 0;
         existing.closed = true;
         existing.updated_at = Instant::now();
         let _ = state.sender.send(LiveOutputStreamEvent::Closed {
@@ -326,6 +359,53 @@ fn stream_key(identity: &LiveOutputIdentity) -> StreamKey {
 
 fn apply_update(items: &mut Vec<LiveOutputItem>, update: LiveOutputUpdate) -> Result<()> {
     match update {
+        LiveOutputUpdate::ToolStatusUpdated {
+            call_id,
+            status: incoming,
+        } => {
+            let LiveOutputItem::ToolCall { status, .. } = tool_mut(items, &call_id)? else {
+                unreachable!()
+            };
+            if let Some(current) = status {
+                current.merge(incoming);
+            } else {
+                *status = Some(incoming);
+            }
+        }
+        LiveOutputUpdate::ToolResult {
+            call_id,
+            result: incoming,
+        } => {
+            let LiveOutputItem::ToolCall { result, .. } = tool_mut(items, &call_id)? else {
+                unreachable!()
+            };
+            *result = Some(Box::new(incoming));
+        }
+        LiveOutputUpdate::ToolOutputUpdated {
+            call_id,
+            text,
+            truncated,
+        } => {
+            let LiveOutputItem::ToolCall { output, .. } = tool_mut(items, &call_id)? else {
+                unreachable!()
+            };
+            *output = Some(LiveToolOutput { text, truncated });
+        }
+        LiveOutputUpdate::ToolOutputDelta {
+            call_id,
+            delta,
+            truncated,
+        } => {
+            let LiveOutputItem::ToolCall { output, .. } = tool_mut(items, &call_id)? else {
+                unreachable!()
+            };
+            let output = output.get_or_insert(LiveToolOutput {
+                text: String::new(),
+                truncated: false,
+            });
+            output.text.push_str(&delta);
+            output.truncated |= truncated;
+        }
         LiveOutputUpdate::AssistantTextDelta { item_id, delta } => {
             if let Some(existing) = items.iter_mut().find(|item| item.item_id() == item_id) {
                 let LiveOutputItem::AssistantText { text, .. } = existing else {
@@ -365,11 +445,21 @@ fn apply_update(items: &mut Vec<LiveOutputItem>, update: LiveOutputUpdate) -> Re
                 call_id,
                 tool_name,
                 arguments,
-                managed_tool_use,
+                managed_tool_use: managed_tool_use.map(Box::new),
+                status: None,
+                output: None,
+                result: None,
             });
         }
     }
     Ok(())
+}
+
+fn tool_mut<'a>(items: &'a mut [LiveOutputItem], call_id: &str) -> Result<&'a mut LiveOutputItem> {
+    items
+        .iter_mut()
+        .find(|item| matches!(item, LiveOutputItem::ToolCall { call_id: id, .. } if id == call_id))
+        .ok_or_else(|| Error::StateConflict(format!("unknown live output call_id {call_id}")))
 }
 
 fn snapshot_for_turn(

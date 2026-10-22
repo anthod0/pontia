@@ -5,7 +5,7 @@ import { type PiConnection } from "../src/control-socket.js";
 import { createPontiaPiExtension } from "../src/index.js";
 import type { TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
-import type { LiveOutputPublisherLike } from "../src/live-output.js";
+import { LiveOutputPublisher, type LiveOutputPublisherLike } from "../src/live-output.js";
 import { tempDir as isolatedTempDir } from "./temp-dir.js";
 
 interface HandlerMap {
@@ -146,6 +146,7 @@ function install(
     makeLiveOutputPublisher: vi.fn((): LiveOutputPublisherLike => ({
       appendText: vi.fn(),
       appendToolCall: vi.fn(),
+      toolExecution: vi.fn(),
       close: vi.fn(async () => undefined),
     })),
     ...overrides,
@@ -1713,7 +1714,12 @@ describe("pontia pi extension lifecycle", () => {
     const appendToolCall = vi.fn();
     const close = vi.fn(async () => undefined);
     const { handlers } = await installBound({
-      makeLiveOutputPublisher: vi.fn(() => ({ appendText, appendToolCall, close })),
+      makeLiveOutputPublisher: vi.fn(() => ({
+        appendText,
+        appendToolCall,
+        toolExecution: vi.fn(),
+        close,
+      })),
     });
 
     await handlers.agent_start({}, {});
@@ -1750,6 +1756,69 @@ describe("pontia pi extension lifecycle", () => {
       arguments: { path: "README.md" },
     });
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  test("tool failures publish execution content without failing the Turn", async () => {
+    const bodies: any[] = [];
+    const { handlers, reported } = await installBound({
+      makeLiveOutputPublisher: (context) =>
+        new LiveOutputPublisher(context, {
+          connection: {
+            request: async (_method, body: any) => {
+              bodies.push(body);
+              return {
+                accepted: true,
+                resync_required: false,
+                accepted_sequence: body.sequence ?? body.first_sequence + body.updates.length - 1,
+              };
+            },
+          },
+        }),
+    });
+    await handlers.agent_start({}, {});
+    await handlers.tool_execution_start(
+      {
+        type: "tool_execution_start",
+        toolCallId: "call",
+        toolName: "bash",
+        args: { command: "false" },
+      },
+      {},
+    );
+    await handlers.tool_execution_update(
+      {
+        type: "tool_execution_update",
+        toolCallId: "call",
+        partialResult: { content: [{ type: "text", text: "partial" }] },
+      },
+      {},
+    );
+    await handlers.tool_execution_end(
+      {
+        type: "tool_execution_end",
+        toolCallId: "call",
+        isError: true,
+        result: { content: [{ type: "text", text: "failed" }] },
+      },
+      {},
+    );
+    expect(reported.map((event) => event.type)).toEqual(["turn.started"]);
+    await handlers.message_update(
+      { assistantMessageEvent: { type: "text_delta", delta: "continuing" } },
+      {},
+    );
+    await handlers.agent_end({ messages: [] }, {});
+    expect(reported.map((event) => event.type)).toEqual([
+      "turn.started",
+      "turn.output",
+      "turn.completed",
+    ]);
+    expect(bodies[0].items[0]).toMatchObject({
+      status: { phase: "ended", outcome: "failed" },
+      output: { text: "partial" },
+      result: { error: { content: [{ type: "text", text: "failed" }] } },
+    });
+    expect(bodies[0].items[1].text).toBe("continuing");
   });
 
   test("uses a fresh backend-provided canonical turn id for each real pi agent_start", async () => {

@@ -4,11 +4,13 @@ use serde_json::Value;
 
 mod service;
 mod store;
+mod tools;
 mod validation;
 
 pub use service::LiveOutputService;
 pub(crate) use store::LiveOutputStore;
 pub use store::LiveOutputSubscription;
+pub use tools::{LiveToolOutcome, LiveToolOutput, LiveToolPhase, LiveToolResult, LiveToolStatus};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -23,7 +25,13 @@ pub enum LiveOutputItem {
         tool_name: String,
         arguments: Value,
         #[serde(skip_serializing_if = "Option::is_none")]
-        managed_tool_use: Option<ManagedToolUse>,
+        managed_tool_use: Option<Box<ManagedToolUse>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        status: Option<LiveToolStatus>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<LiveToolOutput>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        result: Option<Box<LiveToolResult>>,
     },
 }
 
@@ -38,6 +46,26 @@ impl LiveOutputItem {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum LiveOutputUpdate {
+    ToolStatusUpdated {
+        call_id: String,
+        status: LiveToolStatus,
+    },
+    ToolResult {
+        call_id: String,
+        result: LiveToolResult,
+    },
+    ToolOutputDelta {
+        call_id: String,
+        delta: String,
+        #[serde(default)]
+        truncated: bool,
+    },
+    ToolOutputUpdated {
+        call_id: String,
+        text: String,
+        #[serde(default)]
+        truncated: bool,
+    },
     AssistantTextDelta {
         item_id: String,
         delta: String,

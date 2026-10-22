@@ -6,10 +6,20 @@ export type ChatMessageRole = "user" | "assistant";
 export type ChatMessageStatus = "sent" | "pending" | "failed";
 
 export interface SessionChatToolResult {
+  truncated?: boolean;
   content: string;
   status: string | null;
   occurredAt: string | null;
 }
+
+export type SessionChatExecutionStatus =
+  | "generated"
+  | "running"
+  | "ended"
+  | "succeeded"
+  | "failed"
+  | "rejected"
+  | "interrupted";
 
 export interface SessionChatThoughtStep {
   id: string;
@@ -21,6 +31,8 @@ export interface SessionChatThoughtStep {
   callId?: string;
   result?: SessionChatToolResult;
   managedToolUse?: ManagedToolUse;
+  executionStatus?: SessionChatExecutionStatus;
+  processOutput?: { text: string; truncated: boolean };
 }
 
 export interface SessionChatMessage {

@@ -880,6 +880,13 @@ export function createPontiaPiExtension(
     }
   });
 
+  const publishToolExecution = (event: unknown) => {
+    if (activeTurn && !activeTurn.ended) activeTurn.liveOutput.toolExecution(event);
+  };
+  pi.on("tool_execution_start", publishToolExecution);
+  pi.on("tool_execution_update", publishToolExecution);
+  pi.on("tool_execution_end", publishToolExecution);
+
   pi.on("message_end", async (event, ctx) => {
     if (!activeTurn || activeTurn.ended) return;
     await reportContextUsageFromHookEvent(event, ctx);

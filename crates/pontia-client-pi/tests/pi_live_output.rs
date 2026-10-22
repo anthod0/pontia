@@ -203,6 +203,57 @@ async fn orders_deduplicates_and_resynchronizes_live_output_without_persisting_i
 }
 
 #[tokio::test]
+async fn tool_failure_is_ephemeral_content_not_a_turn_failure() {
+    let session = Session::new().await;
+    let event_count = session.event_count().await;
+    session.publish(json!({"type":"snapshot","sequence":1,"items":[
+        {"kind":"tool_call","item_id":"tool","call_id":"call","tool_name":"bash","arguments":{"command":"test"}}
+    ]})).await;
+    let batch = json!({"type":"append","first_sequence":2,"updates":[
+        {"type":"tool_output_updated","call_id":"call","text":"a"},
+        {"type":"tool_output_updated","call_id":"call","text":"ab"},
+        {"type":"tool_result","call_id":"call","result":{"error":"ab"}},
+        {"type":"tool_status_updated","call_id":"call","status":{"phase":"ended","outcome":"failed"}}
+    ]});
+    assert_eq!(session.publish(batch.clone()).await["accepted"], true);
+    assert_eq!(session.publish(batch).await["duplicate"], true);
+    let snapshot = session
+        .state
+        .live_output()
+        .subscribe_session(&session.session)
+        .initial_snapshot
+        .unwrap();
+    let item = serde_json::to_value(&snapshot.items[0]).unwrap();
+    assert_eq!(item["output"]["text"], "ab");
+    assert_eq!(item["result"]["error"], "ab");
+    assert_eq!(item["status"]["outcome"], "failed");
+    assert_eq!(session.event_count().await, event_count);
+    let state: String = sqlx::query_scalar("SELECT state FROM turns WHERE turn_id=?")
+        .bind(&session.turn)
+        .fetch_one(&session.state.db())
+        .await
+        .unwrap();
+    assert_eq!(state, "running");
+    let invalid = session.request(json!({"type":"append","first_sequence":6,"updates":[{"type":"tool_status_updated","call_id":"missing","status":{"phase":"ended"}}]}));
+    assert!(
+        session
+            .peer
+            .call("liveOutput.publish", invalid)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        session
+            .state
+            .live_output()
+            .snapshot(&session.session, &session.turn)
+            .unwrap()
+            .sequence,
+        5
+    );
+}
+
+#[tokio::test]
 async fn rejects_invalid_tool_payloads_and_unregistered_or_mismatched_identities() {
     let session = Session::new().await;
     let unregistered = connect(&session.state);

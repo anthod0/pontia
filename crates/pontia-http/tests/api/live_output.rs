@@ -123,6 +123,61 @@ async fn body_until(body: &mut Body, needle: &str) -> String {
 }
 
 #[tokio::test]
+async fn tool_execution_updates_and_reconnect_snapshot_share_the_session_channel() {
+    let state = state_with_running_turn().await;
+    let producer = producer("sess_live", "turn_live", "stream_live", "rtinst_live");
+    state.live_output().replace_snapshot(LiveOutputSnapshotReplacement {
+        producer: producer.clone(), sequence: 1,
+        items: serde_json::from_value(json!([{ "kind":"tool_call","item_id":"tool","call_id":"call","tool_name":"bash","arguments":{"command":"test"} }])).unwrap(),
+    }).await.unwrap();
+    let mut body = stream_response(state.clone(), true, "sess_live")
+        .await
+        .into_body();
+    body_until(&mut body, "\n\n").await;
+    let updates = json!([
+        {"type":"tool_output_delta","call_id":"call","delta":"a","truncated":false},
+        {"type":"tool_output_updated","call_id":"call","text":"ab","truncated":true},
+        {"type":"tool_result","call_id":"call","result":{"error":"failed","truncated":false}},
+        {"type":"tool_status_updated","call_id":"call","status":{"phase":"ended","outcome":"failed"}}
+    ]);
+    state
+        .live_output()
+        .publish_batch(LiveOutputBatch {
+            producer,
+            first_sequence: 2,
+            updates: serde_json::from_value(updates.clone()).unwrap(),
+        })
+        .await
+        .unwrap();
+    let frame = body_until(&mut body, "\n\n").await;
+    let event: serde_json::Value = serde_json::from_str(
+        frame
+            .lines()
+            .find_map(|line| line.strip_prefix("data: "))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(event["updates"], updates);
+    drop(body);
+    let mut reconnected = stream_response(state, true, "sess_live").await.into_body();
+    let frame = body_until(&mut reconnected, "\n\n").await;
+    let event: serde_json::Value = serde_json::from_str(
+        frame
+            .lines()
+            .find_map(|line| line.strip_prefix("data: "))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(event["sequence"], 5);
+    assert_eq!(
+        event["items"][0]["output"],
+        json!({"text":"ab","truncated":true})
+    );
+    assert_eq!(event["items"][0]["status"]["outcome"], "failed");
+    assert_eq!(event["items"][0]["result"]["error"], "failed");
+}
+
+#[tokio::test]
 async fn external_live_output_stream_authenticates_and_checks_the_session() {
     let state = state_with_running_turn().await;
 

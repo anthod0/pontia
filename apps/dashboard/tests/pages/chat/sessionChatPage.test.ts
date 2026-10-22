@@ -2783,8 +2783,10 @@ test("renders ordered live output over the active Turn transcript while preservi
     "aria-expanded",
     "false",
   );
-  expect(screen.getByText("Read 1 file")).toBeInTheDocument();
-  expect(screen.getByText("Run command")).toBeInTheDocument();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: /show agent work steps/i }));
+  await user.click(screen.getByRole("button", { name: "Show Read file parameters" }));
+  expect(screen.getByText("README.md")).toBeVisible();
   expect(screen.queryByText("transcript partial")).not.toBeInTheDocument();
 });
 

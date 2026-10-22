@@ -14,6 +14,7 @@ use tokio::{
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 mod tool_calls;
+mod tool_execution;
 
 enum Command {
     Notify(Value),

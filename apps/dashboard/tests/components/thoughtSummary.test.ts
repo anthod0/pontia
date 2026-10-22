@@ -16,6 +16,49 @@ function step(overrides: Partial<SessionChatThoughtStep> = {}): SessionChatThoug
   };
 }
 
+test("live output updates in place and the final result is not rendered twice", async () => {
+  const user = userEvent.setup();
+  const live = step({
+    id: "live-call",
+    kind: "tool_call",
+    title: "custom",
+    content: "input",
+    executionStatus: "running",
+    processOutput: { text: "first chunk", truncated: false },
+  });
+  const { rerender } = render(ThoughtSummary, { props: { steps: [live], active: true } });
+  await user.click(screen.getByRole("button", { name: "Show agent work steps" }));
+  expect(screen.getByText("first chunk")).toBeVisible();
+  const updated = { ...live, processOutput: { text: "first chunk and second", truncated: false } };
+  await rerender({ steps: [updated], active: true });
+  expect(screen.queryByText("first chunk")).not.toBeInTheDocument();
+  expect(screen.getByText("first chunk and second")).toBeVisible();
+  await rerender({
+    steps: [
+      {
+        ...updated,
+        executionStatus: "succeeded",
+        result: { content: "first chunk and second", status: null, occurredAt: null },
+      },
+    ],
+    active: true,
+  });
+  expect(screen.getAllByText("first chunk and second")).toHaveLength(1);
+  await rerender({
+    steps: [
+      {
+        ...updated,
+        executionStatus: "failed",
+        result: { content: "native failure", status: "error", occurredAt: null },
+      },
+    ],
+    active: true,
+  });
+  expect(screen.getByText("native failure")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Output", exact: true }));
+  expect(screen.getByText("first chunk and second")).toBeVisible();
+});
+
 test("completed work expands inline from its summary heading", async () => {
   const user = userEvent.setup();
   render(ThoughtSummary, {

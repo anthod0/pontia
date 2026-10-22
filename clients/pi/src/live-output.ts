@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { TurnContext } from "./context.js";
-import { RpcError, type PiConnection } from "./control-socket.js";
+import { MAX_RPC_FRAME_BYTES, RpcError, type PiConnection } from "./control-socket.js";
 import { asRecord, optionalString } from "./values.js";
 
 const DEFAULT_BATCH_DELAY_MS = 75;
@@ -15,6 +15,20 @@ export type ManagedToolUse = {
     | { type: "bash"; command: string; timeout?: number };
 };
 
+export interface LiveToolStatus {
+  phase: "running" | "ended";
+  outcome?: "succeeded" | "failed" | "rejected" | "interrupted";
+}
+export interface LiveToolOutput {
+  text: string;
+  truncated: boolean;
+}
+export interface LiveToolResult {
+  content?: unknown;
+  error?: unknown;
+  truncated: boolean;
+}
+
 export type LiveOutputItem =
   | { kind: "assistant_text"; item_id: string; text: string }
   | {
@@ -24,9 +38,16 @@ export type LiveOutputItem =
       tool_name: string;
       arguments: unknown;
       managed_tool_use?: ManagedToolUse;
+      status?: LiveToolStatus;
+      output?: LiveToolOutput;
+      result?: LiveToolResult;
     };
 
 export type LiveOutputUpdate =
+  | { type: "tool_status_updated"; call_id: string; status: LiveToolStatus }
+  | { type: "tool_result"; call_id: string; result: LiveToolResult }
+  | { type: "tool_output_delta"; call_id: string; delta: string; truncated: boolean }
+  | { type: "tool_output_updated"; call_id: string; text: string; truncated: boolean }
   | { type: "assistant_text_delta"; item_id: string; delta: string }
   | {
       type: "tool_call";
@@ -46,6 +67,7 @@ export interface CompleteToolCall {
 export interface LiveOutputPublisherLike {
   appendText(delta: string): void;
   appendToolCall(toolCall: CompleteToolCall): void;
+  toolExecution(event: unknown): void;
   close(): Promise<void>;
 }
 
@@ -93,6 +115,7 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
     if (this.closing || this.disabled || delta.length === 0) return;
     let item = this.items.at(-1);
     if (item?.kind !== "assistant_text") {
+      if (this.items.length >= 256) return;
       item = { kind: "assistant_text", item_id: this.nextItemId("text"), text: "" };
       this.items.push(item);
     }
@@ -107,7 +130,10 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
       this.items.some((item) => item.kind === "tool_call" && item.call_id === toolCall.callId)
     )
       return;
+    if (this.items.length >= 256) return;
     const managedToolUse = managedToolUseFor(toolCall);
+    const inputBytes = jsonBytes([toolCall.arguments, managedToolUse ?? null]);
+    if (inputBytes > 64 * 1024 || this.toolBytes() + inputBytes > 1024 * 1024) return;
     const item: LiveOutputItem = {
       kind: "tool_call",
       item_id: this.nextItemId("tool"),
@@ -125,6 +151,100 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
       arguments: item.arguments,
       ...(item.managed_tool_use ? { managed_tool_use: item.managed_tool_use } : {}),
     });
+  }
+
+  toolExecution(event: unknown): void {
+    if (this.closing || this.disabled) return;
+    const native = asRecord(event);
+    const callId = optionalString(native?.toolCallId);
+    if (!native || !callId) return;
+    if (
+      (native.type === "tool_execution_start" || native.type === "tool_execution_update") &&
+      "args" in native
+    ) {
+      const toolName = optionalString(native.toolName);
+      if (toolName) this.appendToolCall({ callId, toolName, arguments: native.args });
+    }
+    const item = this.items.find(
+      (item): item is Extract<LiveOutputItem, { kind: "tool_call" }> =>
+        item.kind === "tool_call" && item.call_id === callId,
+    );
+    if (!item) return;
+    if (native.type === "tool_execution_start") {
+      if (item.status) return;
+      item.status = { phase: "running" };
+      this.enqueue({ type: "tool_status_updated", call_id: callId, status: item.status });
+    } else if (native.type === "tool_execution_update") {
+      if (item.status?.phase === "ended" || !("partialResult" in native)) return;
+      const partial = asRecord(native.partialResult);
+      const content = partial?.content;
+      const text = Array.isArray(content)
+        ? content
+            .map((block) =>
+              typeof asRecord(block)?.text === "string"
+                ? asRecord(block)!.text
+                : JSON.stringify(block),
+            )
+            .join("\n")
+        : typeof native.partialResult === "string"
+          ? native.partialResult
+          : JSON.stringify(native.partialResult);
+      if (text === undefined) return;
+      const budget = Math.max(
+        0,
+        1024 * 1024 - this.toolBytes() + escapedTextBytes(item.output?.text ?? ""),
+      );
+      const retained = truncateText(text, budget);
+      const truncated = retained !== text || nativeTruncated(native.partialResult);
+      if (item.output?.text === retained && item.output.truncated === truncated) return;
+      item.output = { text: retained, truncated };
+      this.enqueue({ type: "tool_output_updated", call_id: callId, ...item.output });
+    } else if (native.type === "tool_execution_end") {
+      if (native.result !== undefined) {
+        const truncated = nativeTruncated(native.result);
+        const result: LiveToolResult =
+          native.isError === true
+            ? { error: native.result, truncated }
+            : { content: native.result, truncated };
+        const budget = Math.max(0, 1024 * 1024 - this.toolBytes() + resultBytes(item.result));
+        if (resultBytes(result) > budget) {
+          const key = native.isError === true ? "error" : "content";
+          const value = result[key];
+          result[key] = truncateText(
+            typeof value === "string" ? value : JSON.stringify(value),
+            budget,
+          );
+          result.truncated = true;
+        }
+        if (JSON.stringify(item.result) !== JSON.stringify(result)) {
+          item.result = result;
+          this.enqueue({ type: "tool_result", call_id: callId, result });
+        }
+      }
+      const status: LiveToolStatus = {
+        phase: "ended",
+        ...(typeof native.isError === "boolean"
+          ? { outcome: native.isError ? ("failed" as const) : ("succeeded" as const) }
+          : {}),
+      };
+      if (!item.status?.outcome && JSON.stringify(item.status) !== JSON.stringify(status)) {
+        item.status = status;
+        this.enqueue({ type: "tool_status_updated", call_id: callId, status });
+      }
+    }
+  }
+
+  private toolBytes(): number {
+    return this.items.reduce(
+      (size, item) =>
+        item.kind === "tool_call"
+          ? size +
+            jsonBytes([item.arguments, item.managed_tool_use ?? null]) +
+            escapedTextBytes(item.output?.text ?? "") +
+            resultBytes(item.result)
+          : size,
+      0,
+    );
   }
 
   async close(): Promise<void> {
@@ -146,7 +266,13 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
 
   private enqueue(update: LiveOutputUpdate): void {
     this.sequence += 1;
-    this.pending.push({ sequence: this.sequence, update });
+    this.pending.push({ sequence: this.sequence, update: structuredClone(update) });
+    // Bound retries during arbitrarily long disconnects. The snapshot covers
+    // everything omitted from the delta queue.
+    if (this.pending.length > 256 || jsonBytes(this.pending) > 1024 * 1024) {
+      this.pending.length = 0;
+      this.needsSnapshot = true;
+    }
     this.scheduleFlush(this.batchDelayMs);
   }
 
@@ -193,6 +319,7 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
   private async flushCurrent(): Promise<boolean> {
     if (this.sequence === 0) return true;
     const targetSequence = this.sequence;
+    this.boundSnapshotToFrame();
     const response = this.needsSnapshot
       ? await this.publish({
           ...this.baseRequest(),
@@ -211,9 +338,58 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
       (entry) => entry.sequence > response.accepted_sequence,
     );
     this.pending.splice(0, firstUnaccepted === -1 ? this.pending.length : firstUnaccepted);
-    this.needsSnapshot = response.resync_required;
-    if (this.pending.length > 0 && !this.closing) this.scheduleFlush(this.batchDelayMs);
+    this.needsSnapshot =
+      response.resync_required ||
+      (this.sequence > response.accepted_sequence &&
+        this.pending[0]?.sequence !== response.accepted_sequence + 1);
+    if ((this.pending.length > 0 || this.needsSnapshot) && !this.closing)
+      this.scheduleFlush(this.batchDelayMs);
     return !this.needsSnapshot;
+  }
+
+  private boundSnapshotToFrame(): void {
+    const excess = () =>
+      jsonBytes({
+        jsonrpc: "2.0",
+        id: `pi:${Number.MAX_SAFE_INTEGER}`,
+        method: "liveOutput.publish",
+        params: {
+          ...this.baseRequest(),
+          type: "snapshot",
+          sequence: this.sequence,
+          items: this.items,
+        },
+      }) - MAX_RPC_FRAME_BYTES;
+    if (excess() <= 0) return;
+    let changed = false;
+    for (const item of this.items) {
+      if (item.kind !== "tool_call") continue;
+      if (item.output && excess() > 0 && item.output.text) {
+        item.output.text = truncateText(
+          item.output.text,
+          Math.max(0, escapedTextBytes(item.output.text) - excess()),
+        );
+        item.output.truncated = true;
+        changed = true;
+      }
+      if (item.result) {
+        for (const key of ["content", "error"] as const) {
+          if (!(key in item.result) || excess() <= 0) continue;
+          const value = item.result[key];
+          const budget = Math.max(0, jsonBytes(value) - excess() - 2);
+          item.result[key] = truncateText(
+            typeof value === "string" ? value : JSON.stringify(value),
+            budget,
+          );
+          item.result.truncated = true;
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      this.pending.length = 0;
+      this.needsSnapshot = true;
+    }
   }
 
   private async publishAppend(targetSequence: number): Promise<LiveOutputResponse | undefined> {
@@ -268,6 +444,46 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
       return undefined;
     }
   }
+}
+
+function nativeTruncated(value: unknown): boolean {
+  const result = asRecord(value);
+  const details = asRecord(result?.details);
+  return (
+    result?.truncated === true ||
+    details?.truncated === true ||
+    asRecord(details?.truncation)?.truncated === true ||
+    asRecord(result?.structuredContent)?.truncated === true
+  );
+}
+
+function byteLength(text: string): number {
+  return Buffer.byteLength(text, "utf8");
+}
+function jsonBytes(value: unknown): number {
+  return byteLength(JSON.stringify(value) ?? "");
+}
+function resultBytes(result?: LiveToolResult): number {
+  if (!result) return 0;
+  return ["content", "error"].reduce((size, key) => {
+    if (!(key in result)) return size;
+    const value = result[key as "content" | "error"];
+    return size + (typeof value === "string" ? escapedTextBytes(value) : jsonBytes(value));
+  }, 0);
+}
+function escapedTextBytes(text: string): number {
+  return jsonBytes(text) - 2;
+}
+function truncateText(text: string, budget: number): string {
+  if (escapedTextBytes(text) <= budget) return text;
+  let end = 0;
+  let bytes = 0;
+  for (const char of text) {
+    bytes += escapedTextBytes(char);
+    if (bytes > budget) break;
+    end += char.length;
+  }
+  return text.slice(0, end);
 }
 
 function managedToolUseFor(toolCall: CompleteToolCall): ManagedToolUse | undefined {

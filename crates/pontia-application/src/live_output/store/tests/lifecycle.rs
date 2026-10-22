@@ -52,6 +52,7 @@ fn expired_streams_are_removed_lazily() {
             sequence: 1,
             items: Vec::new(),
             accepted_updates: VecDeque::new(),
+            accepted_update_bytes: 0,
             closed: false,
             updated_at: Instant::now() - ACTIVE_STREAM_TTL,
         },

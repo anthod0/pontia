@@ -1,4 +1,7 @@
-use pontia_application::{LiveOutputItem, LiveOutputUpdate};
+use pontia_application::{
+    LiveOutputItem, LiveOutputUpdate, LiveToolOutcome, LiveToolPhase, LiveToolResult,
+    LiveToolStatus,
+};
 use serde_json::{Value, json};
 
 pub(super) struct ToolCall {
@@ -15,6 +18,9 @@ impl ToolCall {
             tool_name: self.name,
             arguments: self.arguments,
             managed_tool_use: None,
+            status: None,
+            output: None,
+            result: None,
         }
     }
 
@@ -139,6 +145,111 @@ pub(super) fn from_native(item: &Value) -> Option<ToolCall> {
         name,
         arguments,
     })
+}
+
+/// Execution facts are separate from immutable invocation inputs. A bare
+/// completion proves an end, not success; nullable protocol fields mean absent.
+pub(super) fn execution(item: &Value, method: Option<&str>) -> Vec<LiveOutputUpdate> {
+    let Some(id) = nonempty(item, "id").filter(|id| !super::is_history_item_id(Some(id))) else {
+        return vec![];
+    };
+    let kind = item["type"].as_str().unwrap_or("");
+    let native = item["status"].as_str();
+    let ended = method == Some("item/completed")
+        || matches!(
+            native,
+            Some("completed" | "failed" | "declined" | "interrupted")
+        );
+    let outcome = if ended {
+        match native {
+            Some("declined") => Some(LiveToolOutcome::Rejected),
+            Some("interrupted") => Some(LiveToolOutcome::Interrupted),
+            Some("failed") => Some(LiveToolOutcome::Failed),
+            _ => match kind {
+                "commandExecution" => item["exitCode"].as_i64().map(|code| {
+                    if code == 0 {
+                        LiveToolOutcome::Succeeded
+                    } else {
+                        LiveToolOutcome::Failed
+                    }
+                }),
+                "dynamicToolCall" => item["success"].as_bool().map(|ok| {
+                    if ok {
+                        LiveToolOutcome::Succeeded
+                    } else {
+                        LiveToolOutcome::Failed
+                    }
+                }),
+                "mcpToolCall" if !item["error"].is_null() => Some(LiveToolOutcome::Failed),
+                "mcpToolCall" | "fileChange" | "collabAgentToolCall"
+                    if native == Some("completed") =>
+                {
+                    Some(LiveToolOutcome::Succeeded)
+                }
+                _ => None,
+            },
+        }
+    } else {
+        None
+    };
+    let mut updates = vec![];
+    if ended || native == Some("inProgress") || method == Some("item/started") {
+        updates.push(LiveOutputUpdate::ToolStatusUpdated {
+            call_id: id.into(),
+            status: LiveToolStatus {
+                phase: if ended {
+                    LiveToolPhase::Ended
+                } else {
+                    LiveToolPhase::Running
+                },
+                outcome,
+            },
+        });
+    }
+    if !ended
+        && kind == "commandExecution"
+        && let Some(text) = item["aggregatedOutput"].as_str()
+    {
+        updates.push(LiveOutputUpdate::ToolOutputUpdated {
+            call_id: id.into(),
+            text: text.into(),
+            truncated: true,
+        });
+    }
+    if ended {
+        let field = match kind {
+            "commandExecution" => "aggregatedOutput",
+            "mcpToolCall" => "result",
+            "dynamicToolCall" => "contentItems",
+            "collabAgentToolCall" => "agentsStates",
+            _ => "",
+        };
+        let mut content = item.get(field).filter(|v| !v.is_null()).cloned();
+        if kind == "collabAgentToolCall" {
+            let mut result = serde_json::Map::new();
+            if let Some(value) = content.take() {
+                result.insert("agentsStates".into(), value);
+            }
+            if let Some(value) = item.get("receiverThreadIds") {
+                result.insert("receiverThreadIds".into(), value.clone());
+            }
+            if !result.is_empty() {
+                content = Some(Value::Object(result));
+            }
+        }
+        let error = item.get("error").filter(|v| !v.is_null()).cloned();
+        if content.is_some() || error.is_some() {
+            updates.push(LiveOutputUpdate::ToolResult {
+                call_id: id.into(),
+                result: LiveToolResult {
+                    content,
+                    error,
+                    truncated: item["truncated"].as_bool().unwrap_or(false),
+                },
+            });
+        }
+    }
+    updates
 }
 
 fn nonempty<'a>(value: &'a Value, field: &str) -> Option<&'a str> {
