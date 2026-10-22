@@ -117,6 +117,13 @@ fn external_api_router(state: HttpState) -> Router {
             "/api/v1/workflow/patches/block",
             post(api::block_workflow_patch),
         )
+        .route("/api/v1/agent-clients", get(api::list_agent_clients))
+        .route(
+            "/api/v1/agent-clients/{client_type}/{client_key}",
+            get(api::get_agent_client)
+                .patch(api::patch_agent_client)
+                .delete(api::delete_agent_client),
+        )
         .route("/api/v1/auth/validate", get(api::validate_auth))
         .route("/api/v1/sessions", post(api::create_session))
         .route(

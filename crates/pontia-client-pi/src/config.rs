@@ -20,15 +20,24 @@ impl PiConfiguration {
 }
 
 impl ClientConfiguration for PiConfiguration {
+    fn keys(&self) -> Vec<String> {
+        vec!["default".into()]
+    }
+    fn presentation(&self, _key: &str, _effective: &Value) -> (String, String) {
+        ("Pi".into(), "pi".into())
+    }
     fn key(&self, _metadata: &Value) -> Result<String> {
         Ok("default".into())
     }
 
+    fn merged(&self, _key: &str, overrides: &Value) -> Value {
+        self.0.resolve(overrides)
+    }
     fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
         if key != "default" {
             return Err(Error::Domain("Pi requires the default client key".into()));
         }
-        let value = self.0.resolve(overrides);
+        let value = self.merged(key, overrides);
         command(&value)?;
         Ok(value)
     }

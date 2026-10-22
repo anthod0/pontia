@@ -2,6 +2,7 @@ import type { DashboardClient } from "../../apps/dashboard/src/clients/contract"
 
 export const dashboardClient: DashboardClient = {
   clientType: "acp",
+  customEntry: { label: "Add custom client", keyLabel: "ACP Agent ID" },
   defaultForCreation: false,
   workspaceCreation: false,
   profileSelection: false,

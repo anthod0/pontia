@@ -40,6 +40,23 @@ impl AcpConfiguration {
 }
 
 impl ClientConfiguration for AcpConfiguration {
+    fn keys(&self) -> Vec<String> {
+        self.defaults
+            .keys()
+            .chain(self.file.keys())
+            .cloned()
+            .collect()
+    }
+    fn presentation(&self, key: &str, effective: &Value) -> (String, String) {
+        (
+            effective["name"]
+                .as_str()
+                .filter(|name| !name.is_empty())
+                .unwrap_or(key)
+                .into(),
+            key.into(),
+        )
+    }
     fn key(&self, metadata: &Value) -> Result<String> {
         metadata["acp_agent_id"]
             .as_str()
@@ -48,16 +65,20 @@ impl ClientConfiguration for AcpConfiguration {
             .ok_or_else(|| Error::Domain("metadata.acp_agent_id must be a nonempty string".into()))
     }
 
-    fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
-        if key.is_empty() {
-            return Err(Error::Domain("ACP Agent ID must be nonempty".into()));
-        }
-        let value = ConfigurationLayers {
+    fn merged(&self, key: &str, overrides: &Value) -> Value {
+        ConfigurationLayers {
             defaults: self.defaults.get(key).cloned().unwrap_or_else(|| json!({})),
             file: self.file.get(key).cloned().unwrap_or_else(|| json!({})),
             environment: json!({}),
         }
-        .resolve(overrides);
+        .resolve(overrides)
+    }
+
+    fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
+        if key.is_empty() {
+            return Err(Error::Domain("ACP Agent ID must be nonempty".into()));
+        }
+        let value = self.merged(key, overrides);
         let _: AcpAgentConfig = serde_json::from_value(value.clone())?;
         Ok(value)
     }

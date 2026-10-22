@@ -10,6 +10,7 @@
 
   const sections: Section[] = [
     { label: 'Common', path: '/settings/common', match: ['/settings/common'] },
+    { label: 'Agent Clients', path: '/settings/clients', match: ['/settings/clients'] },
     { label: 'Workspaces', path: '/settings/workspaces', match: ['/settings/workspaces', '/workspaces'] },
   ]
 

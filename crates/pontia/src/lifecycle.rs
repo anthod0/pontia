@@ -62,6 +62,9 @@ pub trait ServiceManager {
         previous_definition: Option<&str>,
     ) -> Result<String, String>;
     fn persisted_home(&self, definition: &str) -> Result<PathBuf, String>;
+    fn persisted_client_paths(&self, _definition: &str) -> Result<Vec<(String, PathBuf)>, String> {
+        Ok(Vec::new())
+    }
     fn status(&self) -> Result<ServiceStatus, String>;
     fn failure_diagnostic(&self) -> Result<String, String>;
     fn apply(

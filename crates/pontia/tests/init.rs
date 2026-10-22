@@ -97,6 +97,8 @@ struct FakePlatform {
     events: RefCell<Vec<String>>,
     install_error: Option<&'static str>,
     dashboard_ready: bool,
+    enable_error: bool,
+    enabled: RefCell<Vec<(String, String)>>,
 }
 
 impl Default for FakePlatform {
@@ -105,6 +107,8 @@ impl Default for FakePlatform {
             events: RefCell::new(Vec::new()),
             install_error: None,
             dashboard_ready: true,
+            enable_error: false,
+            enabled: RefCell::new(Vec::new()),
         }
     }
 }
@@ -152,6 +156,20 @@ impl InitPlatform for FakePlatform {
                 .map(|(_, home)| home.display().to_string())
                 .unwrap_or_else(|| "-".to_string())
         ));
+        Ok(())
+    }
+
+    fn enable_client(&self, _config: &AppConfig, client: &str, key: &str) -> Result<(), String> {
+        assert!(
+            self.events
+                .borrow()
+                .iter()
+                .any(|event| event.starts_with("start:"))
+        );
+        if self.enable_error {
+            return Err("service rejected write".into());
+        }
+        self.enabled.borrow_mut().push((client.into(), key.into()));
         Ok(())
     }
 
@@ -212,6 +230,10 @@ fn default_initialization_installs_pi_writes_config_starts_service_and_returns_d
     );
     let expected_url = format!("http://127.0.0.1:8080/dashboard?token={token}");
     assert_eq!(outcome.local_dashboard_url, expected_url);
+    assert_eq!(
+        *platform.enabled.borrow(),
+        vec![("pi".into(), "default".into())]
+    );
 }
 
 #[test]
@@ -277,6 +299,10 @@ fn codex_can_be_initialized_without_pi() {
     .expect("initialize Codex")
     .expect("initialization completed");
 
+    assert_eq!(
+        *platform.enabled.borrow(),
+        vec![("codex".into(), "default".into())]
+    );
     let events = platform.events.borrow();
     assert!(events.iter().any(|event| event == "inspect-codex"));
     assert!(
@@ -570,11 +596,53 @@ fn failed_pi_install_does_not_write_config_or_start_service() {
     .expect_err("installation must fail");
 
     assert_eq!(error, "pi install failed");
+    assert!(platform.enabled.borrow().is_empty());
     assert_eq!(
         platform.events.borrow().as_slice(),
         ["preflight", "install-pi"]
     );
     assert!(!pontia_home.join("config.toml").exists());
+}
+
+#[test]
+fn partial_install_failure_enables_only_successfully_initialized_items() {
+    let root = tempfile::tempdir().unwrap();
+    let platform = FakePlatform {
+        install_error: Some("failed"),
+        ..Default::default()
+    };
+    assert!(
+        run(
+            &mut Cursor::new(b"pi,codex\n\n"),
+            &mut Vec::new(),
+            &vars(root.path(), &root.path().join("pontia")),
+            &platform
+        )
+        .is_err()
+    );
+    assert_eq!(
+        *platform.enabled.borrow(),
+        vec![("codex".into(), "default".into())]
+    );
+}
+
+#[test]
+fn failed_enable_write_fails_initialization() {
+    let root = tempfile::tempdir().unwrap();
+    let platform = FakePlatform {
+        enable_error: true,
+        ..Default::default()
+    };
+    assert!(
+        run(
+            &mut Cursor::new(b"\n\n"),
+            &mut Vec::new(),
+            &vars(root.path(), &root.path().join("pontia")),
+            &platform
+        )
+        .is_err()
+    );
+    assert!(platform.enabled.borrow().is_empty());
 }
 
 #[test]

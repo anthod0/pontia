@@ -48,6 +48,8 @@ struct Cli {
 enum Command {
     /// Configure Pontia interactively and start its per-user service
     Init,
+    /// Manage Agent Client settings through the Pontia service
+    Client(pontia::client::ClientCommand),
     /// Sign in to the Pontia cloud from a headless terminal
     Login,
     /// Configure remote device access
@@ -87,6 +89,15 @@ async fn main() -> ExitCode {
 async fn execute(command: Command) -> Result<bool, String> {
     match command {
         Command::Init => run_init().await,
+        Command::Client(command) => {
+            let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
+            let result = pontia::client::run(command, &config).await?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&result).map_err(|error| error.to_string())?
+            );
+            Ok(true)
+        }
         Command::Login => {
             let vars: HashMap<String, String> = env::vars().collect();
             login::run(&vars).await?;
@@ -144,6 +155,7 @@ async fn run_update() -> Result<bool, String> {
             }
             Ok(())
         })?;
+        maintain_updated_clients(config.as_ref(), &manager).await?;
         Ok(true)
     }
     #[cfg(target_os = "macos")]
@@ -166,6 +178,7 @@ async fn run_update() -> Result<bool, String> {
             }
             Ok(())
         })?;
+        maintain_updated_clients(config.as_ref(), &manager).await?;
         Ok(true)
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -173,6 +186,37 @@ async fn run_update() -> Result<bool, String> {
         let _ = update;
         Err("pontia update supports only Linux and macOS".into())
     }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+async fn maintain_updated_clients(
+    config: Option<&AppConfig>,
+    manager: &impl ServiceManager,
+) -> Result<(), String> {
+    let Some(config) = config else {
+        eprintln!("Client integration maintenance skipped: no managed service was restored.");
+        return Ok(());
+    };
+    let entries = pontia::client::ClientApi::new(config)?.list().await?;
+    let home = user_home()?;
+    let definition = FileDefinitionStore
+        .read(&manager.definition_path(&home))?
+        .ok_or("The restored service definition is missing")?;
+    let mut vars: HashMap<String, String> = env::vars().collect();
+    for name in pontia_clients::service_path_variables() {
+        vars.remove(name);
+    }
+    for (name, path) in manager.persisted_client_paths(&definition)? {
+        vars.insert(name, path.to_string_lossy().into_owned());
+    }
+    pontia::client_maintenance::maintain_enabled(
+        &entries,
+        &pontia_clients::integrations(),
+        &vars,
+        &home,
+        &ProcessCommandRunner,
+        &FileDefinitionStore,
+    )
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -380,6 +424,24 @@ impl InitPlatform for RealInitPlatform {
     ) -> Result<(), String> {
         service_manager_preflight()?;
         start_init_service(config, config_changed, environment_paths)
+    }
+
+    fn enable_client(&self, config: &AppConfig, client: &str, key: &str) -> Result<(), String> {
+        let config = config.clone();
+        let client = client.to_string();
+        let key = key.to_string();
+        std::thread::spawn(move || {
+            tokio::runtime::Runtime::new()
+                .map_err(|error| error.to_string())?
+                .block_on(async {
+                    pontia::client::ClientApi::new(&config)?
+                        .patch(&client, &key, serde_json::json!({"enabled": true}))
+                        .await
+                        .map(|_| ())
+                })
+        })
+        .join()
+        .map_err(|_| "Client enable request panicked".to_string())?
     }
 
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String> {

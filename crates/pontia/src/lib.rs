@@ -1,3 +1,5 @@
+pub mod client;
+pub mod client_maintenance;
 pub mod definition;
 pub mod init;
 pub mod lifecycle;

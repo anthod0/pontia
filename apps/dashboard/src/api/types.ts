@@ -1,5 +1,19 @@
 export type JsonObject = Record<string, unknown>;
 
+export interface AgentClientView {
+  id: string;
+  client_type: string;
+  client_key: string;
+  name: string;
+  short_id: string;
+  enabled: boolean;
+  has_record: boolean;
+  config_overrides: JsonObject;
+  effective_config: JsonObject;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 export type SessionState =
   | "created"
   | "starting"

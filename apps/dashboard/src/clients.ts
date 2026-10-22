@@ -4,6 +4,9 @@ import { dashboardClient as acp } from "../../../crates/pontia-client-acp/dashbo
 import type { SessionView } from "./api/types";
 
 const clients = [pi, codex, acp];
+export const customClientEntries = clients.flatMap((client) =>
+  client.customEntry ? [{ clientType: client.clientType, ...client.customEntry }] : [],
+);
 const defaultClient = clients.find((client) => client.defaultForCreation);
 if (!defaultClient) throw new Error("No default Agent Client is registered");
 

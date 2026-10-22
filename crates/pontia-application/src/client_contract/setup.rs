@@ -8,6 +8,21 @@ use std::{
 pub trait ClientIntegration: Send + Sync {
     fn client_type(&self) -> &'static str;
     fn selected_by_default(&self) -> bool;
+    fn client_key(&self) -> &'static str {
+        "default"
+    }
+    /// Maintain only integration artifacts, never upgrade the Agent Client itself.
+    fn maintain(
+        &self,
+        vars: &HashMap<String, String>,
+        user_home: &Path,
+        runner: &dyn CommandRunner,
+        definitions: &dyn DefinitionStore,
+    ) -> Result<(), String> {
+        let setup = self.prepare(vars, user_home, runner)?;
+        setup.preflight(runner)?;
+        setup.install(runner, definitions)
+    }
     fn skipped_summary(&self) -> Vec<String>;
     fn service_path_variables(&self) -> &'static [&'static str] {
         &[]

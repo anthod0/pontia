@@ -424,6 +424,10 @@ fn systemd_sets_and_preserves_codex_home() {
         )
         .expect("render configured CODEX_HOME");
     assert!(definition.contains("Environment=\"CODEX_HOME=/srv/codex home\""));
+    assert_eq!(
+        configured.persisted_client_paths(&definition).unwrap(),
+        vec![("CODEX_HOME".into(), "/srv/codex home".into())]
+    );
 
     let preserved = SystemdManager::with_environment_paths(&runner, vec!["CODEX_HOME"], &[])
         .render_definition(
@@ -455,6 +459,10 @@ fn launchd_sets_and_preserves_client_home_and_search_paths() {
         )
         .unwrap();
 
+    assert_eq!(
+        configured.persisted_client_paths(&definition).unwrap(),
+        vec![("CODEX_HOME".into(), "/Users/alice/Codex Home".into())]
+    );
     let preserved = LaunchdManager::with_environment_paths(
         &runner,
         501,

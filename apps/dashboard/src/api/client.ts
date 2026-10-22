@@ -9,6 +9,8 @@ import {
 import { ApiError } from "./errors";
 import type {
   Interaction,
+  AgentClientView,
+  JsonObject,
   AgentProfileView,
   ApiEnvelope,
   CreateSessionInput,
@@ -43,6 +45,38 @@ import type {
 } from "./types";
 
 const API_BASE = "/api/v1";
+
+function agentClientPath(target: Pick<AgentClientView, "client_type" | "client_key">): string {
+  return `/agent-clients/${encodeURIComponent(target.client_type)}/${encodeURIComponent(target.client_key)}`;
+}
+
+export async function listAgentClients(): Promise<AgentClientView[]> {
+  return (await request<{ agent_clients: AgentClientView[] }>("/agent-clients")).agent_clients;
+}
+
+export async function patchAgentClient(
+  target: Pick<AgentClientView, "client_type" | "client_key">,
+  settings: { enabled?: boolean; config_overrides?: JsonObject },
+): Promise<AgentClientView> {
+  return (
+    await request<{ agent_client: AgentClientView }>(agentClientPath(target), {
+      method: "PATCH",
+      body: settings,
+      mutating: true,
+      idempotency: false,
+      retryNetworkErrors: false,
+    })
+  ).agent_client;
+}
+
+export async function resetAgentClient(target: AgentClientView): Promise<void> {
+  await request(agentClientPath(target), {
+    method: "DELETE",
+    mutating: true,
+    idempotency: false,
+    retryNetworkErrors: false,
+  });
+}
 
 export async function listSessionCreationOptions(
   options: RequestOptions = {},

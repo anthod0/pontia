@@ -30,6 +30,7 @@ pub trait InitPlatform {
         config_changed: bool,
         environment_paths: &[(String, PathBuf)],
     ) -> Result<(), String>;
+    fn enable_client(&self, config: &AppConfig, client: &str, key: &str) -> Result<(), String>;
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String>;
 }
 
@@ -155,22 +156,45 @@ where
     for setup in prepared.iter().flatten() {
         setup.preflight(platform.command_runner())?;
     }
-    for setup in prepared.iter().flatten() {
-        setup.install(platform.command_runner(), platform.definition_store())?;
-        writeln!(output, "✓ {}", setup.completion()).map_err(io_error)?;
+    let mut installed = Vec::new();
+    let mut install_errors = Vec::new();
+    for (client, setup) in integrations.iter().zip(&prepared) {
+        let Some(setup) = setup else { continue };
+        match setup.install(platform.command_runner(), platform.definition_store()) {
+            Ok(()) => {
+                installed.push((client, setup));
+                writeln!(output, "✓ {}", setup.completion()).map_err(io_error)?;
+            }
+            Err(error) => install_errors.push(error),
+        }
+    }
+    if installed.is_empty() && !install_errors.is_empty() {
+        return Err(install_errors.join("; "));
     }
 
     let config_changed = local_config::persist_token(&existing, &token)?;
     writeln!(output, "✓ Wrote {}", config_path.display()).map_err(io_error)?;
 
     let config = local_config::load(vars)?;
-    let environment_paths = prepared
+    let environment_paths = installed
         .iter()
-        .flatten()
-        .flat_map(|setup| setup.service_environment_paths())
+        .flat_map(|(_, setup)| setup.service_environment_paths())
         .collect::<Vec<_>>();
     platform.start_service(&config, config_changed, &environment_paths)?;
     writeln!(output, "✓ Started Pontia service").map_err(io_error)?;
+    // Business settings belong to the running service, not the initialization CLI.
+    for (client, _) in installed {
+        match platform.enable_client(&config, client.client_type(), client.client_key()) {
+            Ok(()) => writeln!(output, "✓ Enabled {}", client.client_type()).map_err(io_error)?,
+            Err(error) => install_errors.push(format!(
+                "Failed to enable {}: {error}",
+                client.client_type()
+            )),
+        }
+    }
+    if !install_errors.is_empty() {
+        return Err(install_errors.join("; "));
+    }
 
     let dashboard_addr = local_health_addr(config.bind_addr);
     if !platform.dashboard_available(dashboard_addr)? {

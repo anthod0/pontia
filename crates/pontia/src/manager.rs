@@ -109,6 +109,17 @@ impl<R: CommandRunner> ServiceManager for SystemdManager<'_, R> {
         parse_systemd_home(definition)
     }
 
+    fn persisted_client_paths(&self, definition: &str) -> Result<Vec<(String, PathBuf)>, String> {
+        self.environment_names
+            .iter()
+            .filter_map(|name| {
+                parse_systemd_environment_path(definition, name)
+                    .transpose()
+                    .map(|path| path.map(|path| ((*name).to_string(), path)))
+            })
+            .collect()
+    }
+
     fn status(&self) -> Result<ServiceStatus, String> {
         let enabled_output = self.systemctl(&["is-enabled", SYSTEMD_SERVICE_NAME])?;
         let enabled_text = enabled_output.stdout.trim();
@@ -296,6 +307,17 @@ impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {
 
     fn persisted_home(&self, definition: &str) -> Result<PathBuf, String> {
         parse_launchd_home(definition)
+    }
+
+    fn persisted_client_paths(&self, definition: &str) -> Result<Vec<(String, PathBuf)>, String> {
+        self.environment_names
+            .iter()
+            .filter_map(|name| {
+                parse_launchd_environment_path(definition, name)
+                    .transpose()
+                    .map(|path| path.map(|path| ((*name).to_string(), path)))
+            })
+            .collect()
     }
 
     fn status(&self) -> Result<ServiceStatus, String> {
