@@ -128,6 +128,64 @@ test("gaps and duplicate batches cannot append tool output again; stale snapshot
   expect(overlay.t.awaitingSnapshot).toBe(true);
 });
 
+test("tool-first output keeps text and call identity across metadata replacement and reconnect", () => {
+  let overlay = applyLiveOutputEvent({}, "s", snapshot);
+  overlay = applyLiveOutputEvent(
+    overlay,
+    "s",
+    updates(2, [
+      { type: "assistant_text_delta", item_id: "response", delta: "body" },
+      { type: "tool_output_updated", call_id: "a", text: "a", truncated: false },
+      { type: "tool_output_updated", call_id: "a", text: "ab", truncated: false },
+      {
+        type: "tool_status_updated",
+        call_id: "a",
+        status: { phase: "ended", outcome: "succeeded" },
+      },
+      { type: "tool_result", call_id: "a", result: { content: "ab", truncated: false } },
+    ]),
+  );
+  overlay = applyLiveOutputEvent(overlay, "s", {
+    type: "snapshot",
+    ...identity,
+    sequence: 7,
+    items: overlay.t.items.map((item) =>
+      item.kind === "tool_call" && item.call_id === "a"
+        ? { ...item, tool_name: "Updated invocation", arguments: { command: "changed" } }
+        : item,
+    ),
+  });
+  const messages = mergeLiveOutputMessages([], [turn], overlay, "t");
+  expect(messages.at(-1)?.content).toBe("body");
+  expect(messages.at(-1)?.thoughtSteps).toMatchObject([
+    { callId: "a", status: "succeeded", processOutput: { text: "ab" }, result: { content: "ab" } },
+    { callId: "b", status: "generated" },
+  ]);
+  overlay = applyLiveOutputEvent(markLiveOutputDisconnected(overlay), "s", {
+    type: "snapshot",
+    ...identity,
+    sequence: 7,
+    items: overlay.t.items,
+  });
+  expect(mergeLiveOutputMessages([], [turn], overlay, "t")).toEqual(messages);
+  overlay = applyLiveOutputEvent(
+    overlay,
+    "s",
+    updates(8, [
+      { type: "tool_output_updated", call_id: "a", text: "", truncated: false },
+      { type: "tool_status_updated", call_id: "a", status: { phase: "running" } },
+      { type: "assistant_text_delta", item_id: "response", delta: " after" },
+    ]),
+  );
+  expect(mergeLiveOutputMessages([], [turn], overlay, "t").at(-1)).toMatchObject({
+    content: "body after",
+    thoughtSteps: [
+      { callId: "a", status: "succeeded", processOutput: { text: "" }, result: { content: "ab" } },
+      { callId: "b", status: "generated" },
+    ],
+  });
+});
+
 test("unknown calls discard the entire update batch and wait for a snapshot", () => {
   const initial = applyLiveOutputEvent({}, "s", snapshot);
   const overlay = applyLiveOutputEvent(

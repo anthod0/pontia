@@ -352,6 +352,7 @@ impl ClientSession for AcpAdapter {
                 turn: turn.into(),
                 started: false,
                 sequence: 0,
+                raw_results: Default::default(),
                 cancelled: false,
                 history_index,
                 history_end: history_index + input.len(),

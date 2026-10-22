@@ -11,6 +11,9 @@ use pontia_core::{Error, Result};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 
+#[path = "control_loop/live_output.rs"]
+mod live_output;
+
 #[path = "control_loop/permission_blocking.rs"]
 mod permission_blocking;
 

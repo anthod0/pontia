@@ -2,6 +2,7 @@ mod adapter;
 mod history;
 pub mod identity;
 mod interactions;
+mod live_output;
 mod peer;
 pub mod registry;
 mod spec;

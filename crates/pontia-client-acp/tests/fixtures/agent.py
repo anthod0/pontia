@@ -68,6 +68,15 @@ def prompt(request, ordinal, cancellation):
             "sessionId": "native-id", "update": {"sessionUpdate": "extension_running"}
         }})
         send({"id": "extension-barrier", "method": "_fixture_barrier", "params": {}})
+    if os.environ.get("ACP_LIVE_SCRIPT") == "1":
+        steps = json.loads((root / "live-script.json").read_text())
+        for index, updates in enumerate(steps):
+            wait_for(f"live-{ordinal}-{index}")
+            for params in updates:
+                if params.get("sessionId", "native-id") == "native-id":
+                    remember(params["update"])
+                send({"method": "session/update", "params": {"sessionId": "native-id", **params}})
+            send({"id": f"live-barrier-{ordinal}-{index}", "method": "_fixture_barrier", "params": {}})
     if os.environ.get("ACP_NO_UPDATES") != "1" and not (os.environ.get("ACP_SILENT_FIRST") == "1" and ordinal == 1):
         update = {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "streamed answer"}}
         remember(update)

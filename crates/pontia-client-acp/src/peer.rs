@@ -10,8 +10,7 @@ use agent_client_protocol::{
     schema::{ProtocolVersion, v1::*},
 };
 use pontia_application::{
-    EventIngestService, LiveOutputBatch, LiveOutputIdentity, LiveOutputProducer, LiveOutputSource,
-    LiveOutputUpdate, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
+    EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
 };
 use pontia_config::AcpAgentConfig;
 use pontia_core::{Error, Result, domain::EventType};
@@ -31,6 +30,8 @@ pub(crate) struct Prompt {
     pub turn: String,
     pub started: bool,
     pub sequence: u64,
+    // Only IDs of accepted calls; bounded by the shared stream item limit.
+    pub raw_results: std::collections::HashSet<String>,
     pub cancelled: bool,
     pub history_index: usize,
     pub history_end: usize,
@@ -274,6 +275,7 @@ impl Peer {
                             &update_runtime,
                             &update_state,
                             notification,
+                            &message.params()["update"],
                         )
                         .await
                         {
@@ -609,6 +611,7 @@ async fn update(
     runtime: &str,
     shared: &Mutex<SessionState>,
     notification: SessionNotification,
+    update: &Value,
 ) -> Result<()> {
     let mut state = shared.lock().await;
     if !state.current {
@@ -621,9 +624,10 @@ async fn update(
         }
         return Ok(());
     }
-    let update = serde_json::to_value(notification.update)?;
+    // Retain field presence: schema serialization omits empty collections and
+    // JSON null, which are meaningful replacement/return values for live tools.
     if let Some(replay) = &mut state.replay {
-        if crate::history::collect(replay, &update).is_err() {
+        if crate::history::collect(replay, update).is_err() {
             state.history_error = Some(
                 "ACP history replay contains unsupported or unassociated message content".into(),
             );
@@ -634,7 +638,7 @@ async fn update(
         return Ok(());
     }
     if update["sessionUpdate"] != "user_message_chunk" {
-        let _ = crate::history::collect(&mut state.history, &update);
+        let _ = crate::history::collect(&mut state.history, update);
     }
     let prompt = state.active.as_mut().expect("checked active prompt");
     // Only known prompt activity is evidence of started; extension notifications,
@@ -649,54 +653,8 @@ async fn update(
         ) => started(events, session, runtime, prompt).await?,
         _ => return Ok(()),
     }
-    if update["sessionUpdate"] == "agent_message_chunk"
-        && update.pointer("/content/type").and_then(Value::as_str) == Some("text")
-        && let Some(text) = update.pointer("/content/text").and_then(Value::as_str)
-        && let Some(output) = events.live_output()
-    {
-        let producer = LiveOutputProducer {
-            identity: LiveOutputIdentity {
-                session_id: session.into(),
-                turn_id: prompt.turn.clone(),
-                stream_id: format!("{runtime}:{}", prompt.turn),
-            },
-            source: LiveOutputSource::RuntimeBound {
-                runtime_id: runtime.into(),
-            },
-        };
-        let result = if prompt.sequence == 0 {
-            output
-                .replace_snapshot(pontia_application::LiveOutputSnapshotReplacement {
-                    producer,
-                    sequence: 1,
-                    items: vec![pontia_application::LiveOutputItem::AssistantText {
-                        item_id: "response".into(),
-                        text: text.into(),
-                    }],
-                })
-                .await?
-        } else {
-            output
-                .publish_batch(LiveOutputBatch {
-                    producer,
-                    first_sequence: prompt.sequence + 1,
-                    updates: vec![LiveOutputUpdate::AssistantTextDelta {
-                        item_id: "response".into(),
-                        delta: text.into(),
-                    }],
-                })
-                .await?
-        };
-        match result {
-            pontia_application::LiveOutputPublishOutcome::Accepted {
-                accepted_sequence, ..
-            } => prompt.sequence = accepted_sequence,
-            pontia_application::LiveOutputPublishOutcome::SnapshotRequired { .. } => {
-                return Err(Error::CapabilityUnavailable(
-                    "ACP live output stream was invalidated".into(),
-                ));
-            }
-        }
+    if let Some(output) = events.live_output() {
+        crate::live_output::publish(&output, session, runtime, prompt, update).await?;
     }
     Ok(())
 }
