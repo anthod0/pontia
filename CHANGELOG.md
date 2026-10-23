@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-23
+
+### Changed
+
+- Moved Settings to the Dashboard sidebar footer.
+
+### Fixed
+
+- Disabled agent clients without persisted management records for new sessions, including after restoring inherited settings.
+- Rejected reserved ACP agent IDs `.` and `..` during configuration and session selection.
+- Kept streamed tool output inside its collapsible tool details in Dashboard.
+
 ## [0.6.5] - 2026-10-22
 
 ### Added
@@ -389,7 +401,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/anthod0/pontia/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/anthod0/pontia/compare/v0.6.4...v0.6.5
 [0.4.0]: https://github.com/anthod0/pontia/compare/v0.3.6...v0.4.0
 [0.3.6]: https://github.com/anthod0/pontia/compare/v0.3.5...v0.3.6
