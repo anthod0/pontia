@@ -290,17 +290,6 @@
               </Sidebar.MenuButton>
             </Sidebar.MenuItem>
           {/each}
-          <Sidebar.MenuItem>
-            <Sidebar.MenuButton
-              isActive={isSettingsActive()}
-              class="h-9 px-3 text-[13px]"
-              tooltipContent="Settings"
-              onclick={() => go('/settings/common')}
-            >
-              <GearIcon />
-              <span>Settings</span>
-            </Sidebar.MenuButton>
-          </Sidebar.MenuItem>
         </Sidebar.Menu>
       </Sidebar.GroupContent>
     </Sidebar.Group>
@@ -415,6 +404,21 @@
       </Sidebar.Group>
     </div>
   </Sidebar.Content>
+  <Sidebar.Footer>
+    <Sidebar.Menu>
+      <Sidebar.MenuItem>
+        <Sidebar.MenuButton
+          isActive={isSettingsActive()}
+          class="h-9 px-3 text-[13px]"
+          tooltipContent="Settings"
+          onclick={() => go('/settings/common')}
+        >
+          <GearIcon />
+          <span>Settings</span>
+        </Sidebar.MenuButton>
+      </Sidebar.MenuItem>
+    </Sidebar.Menu>
+  </Sidebar.Footer>
   <Sidebar.Rail />
 </Sidebar.Root>
 
