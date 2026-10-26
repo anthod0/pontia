@@ -2,7 +2,7 @@ import type { DashboardStreamEvent } from "../api/types";
 import { agentProfileKeys } from "./agentProfiles";
 import { queryClient } from "./queryClient";
 import { sessionOverviewKeys } from "./sessionOverview";
-import { sessionKeys } from "./sessions";
+import { invalidateSessionDetail, sessionKeys } from "./sessions";
 import { timelineKeys } from "./timeline";
 import { workflowKeys } from "./workflows";
 import { workspaceKeys, workspaceRootKeys } from "./workspaces";
@@ -15,10 +15,7 @@ export async function invalidateQueriesForDashboardEvent(
   const sessionId = streamEvent.event.session_id;
   const invalidations = [
     queryClient.invalidateQueries({ queryKey: sessionOverviewKeys.all }),
-    queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId), exact: true }),
-    queryClient.invalidateQueries({ queryKey: sessionKeys.turns(sessionId) }),
-    queryClient.invalidateQueries({ queryKey: sessionKeys.inboxMessages(sessionId) }),
-    queryClient.invalidateQueries({ queryKey: sessionKeys.events(sessionId) }),
+    invalidateSessionDetail(sessionId, { includeModels: false }),
     queryClient.invalidateQueries({
       queryKey: timelineKeys.snapshot(sessionId),
       refetchType: "none" as const,

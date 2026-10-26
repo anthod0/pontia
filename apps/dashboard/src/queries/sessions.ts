@@ -60,7 +60,7 @@ export function sessionOptions(sessionId: string, enabled = true) {
   return queryOptions({
     queryKey: sessionKeys.detail(sessionId),
     enabled: enabled && sessionId.length > 0,
-    queryFn: ({ signal }) => getSession(sessionId, { signal }),
+    queryFn: ({ signal }) => fetchSessionSnapshot(sessionId, signal, getSession),
     refetchOnMount: false,
     retryOnMount: false,
   });
@@ -70,7 +70,7 @@ export function sessionTurnsOptions(sessionId: string, enabled = true) {
   return queryOptions({
     queryKey: sessionKeys.turns(sessionId),
     enabled: enabled && sessionId.length > 0,
-    queryFn: ({ signal }) => listTurns(sessionId, { signal }),
+    queryFn: ({ signal }) => fetchSessionSnapshot(sessionId, signal, listTurns),
     refetchOnMount: false,
     retryOnMount: false,
   });
@@ -80,7 +80,7 @@ export function sessionInboxMessagesOptions(sessionId: string, enabled = true) {
   return queryOptions({
     queryKey: sessionKeys.inboxMessages(sessionId),
     enabled: enabled && sessionId.length > 0,
-    queryFn: ({ signal }) => listInboxMessages(sessionId, { signal }),
+    queryFn: ({ signal }) => fetchSessionSnapshot(sessionId, signal, listInboxMessages),
     refetchOnMount: false,
     retryOnMount: false,
   });
@@ -90,7 +90,7 @@ export function sessionEventsOptions(sessionId: string, enabled = true) {
   return queryOptions({
     queryKey: sessionKeys.events(sessionId),
     enabled: enabled && sessionId.length > 0,
-    queryFn: ({ signal }) => listEvents(sessionId, { signal }),
+    queryFn: ({ signal }) => fetchSessionSnapshot(sessionId, signal, listEvents),
     refetchOnMount: false,
     retryOnMount: false,
   });
@@ -148,6 +148,27 @@ export function createSessionModelsQuery(sessionId: () => string) {
   );
 }
 
+const sessionSnapshotReads = new Set<{ sessionId: string; invalidated: boolean }>();
+
+async function fetchSessionSnapshot<T>(
+  sessionId: string,
+  signal: AbortSignal,
+  request: (sessionId: string, options: { signal: AbortSignal }) => Promise<T>,
+): Promise<T> {
+  const read = { sessionId, invalidated: false };
+  sessionSnapshotReads.add(read);
+  try {
+    while (true) {
+      read.invalidated = false;
+      const snapshot = await request(sessionId, { signal });
+      signal.throwIfAborted();
+      if (!read.invalidated) return snapshot;
+    }
+  } finally {
+    sessionSnapshotReads.delete(read);
+  }
+}
+
 export async function fetchSessionDetail(sessionId: string): Promise<SessionConsoleDetail> {
   const [session, turns, inboxMessages, events] = await Promise.all([
     queryClient.fetchQuery(sessionOptions(sessionId)),
@@ -158,8 +179,18 @@ export async function fetchSessionDetail(sessionId: string): Promise<SessionCons
   return { session, turns, inboxMessages, events };
 }
 
-export function invalidateSessionDetail(sessionId: string): Promise<void> {
-  return queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+export function invalidateSessionDetail(
+  sessionId: string,
+  { includeModels = true }: { includeModels?: boolean } = {},
+): Promise<void> {
+  // Invalidating a query does not supersede an older fetchQuery already in flight.
+  for (const read of sessionSnapshotReads) {
+    if (read.sessionId === sessionId) read.invalidated = true;
+  }
+  return queryClient.invalidateQueries({
+    queryKey: sessionKeys.detail(sessionId),
+    predicate: (query) => includeModels || query.queryKey[3] !== "models",
+  });
 }
 
 export function clearSessionQueries(): void {
