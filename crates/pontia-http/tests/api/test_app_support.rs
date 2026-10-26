@@ -1,8 +1,34 @@
-use crate::common::test_app::TestApp;
+use crate::common::test_app::{EnvGuard, TestApp};
 use pontia_application::EventIngestService;
 use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use serde_json::json;
 use sqlx::query_scalar;
+
+#[test]
+fn env_guard_restores_variables_and_can_be_reused_after_a_test_panics() {
+    const KEY: &str = "PONTIA_HTTP_TEST_ENV_GUARD_RECOVERY";
+    let original = {
+        let _env = EnvGuard::new();
+        std::env::var_os(KEY)
+    };
+    struct TestFailure;
+    let failure = std::panic::catch_unwind(|| {
+        let mut env = EnvGuard::new();
+        env.set(KEY, "first value".into());
+        env.set(KEY, "replacement value".into());
+        std::panic::panic_any(TestFailure);
+    });
+    assert!(failure.expect_err("test should panic").is::<TestFailure>());
+
+    {
+        let mut env = EnvGuard::new();
+        assert_eq!(std::env::var_os(KEY), original);
+        env.set(KEY, "next test value".into());
+        assert_eq!(std::env::var_os(KEY), Some("next test value".into()));
+    }
+    let _env = EnvGuard::new();
+    assert_eq!(std::env::var_os(KEY), original);
+}
 
 #[tokio::test]
 async fn test_app_creates_isolated_state_home_and_workspace() {

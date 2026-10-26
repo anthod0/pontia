@@ -1,3 +1,5 @@
+use std::{path::PathBuf, process::Command, time::Duration};
+
 use super::{AppState, StatusCode, json, post_upsert, request_json, test_state, upsert_body};
 #[tokio::test]
 async fn current_runtime_exit_abandons_its_active_turn() {
@@ -211,8 +213,10 @@ async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
 
 #[tokio::test]
 async fn registration_and_repeated_resume_preserve_custom_command_and_native_file() {
-    let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let (state, mut app) = test_state().await;
+    let tmux = TestTmuxServer::new();
+    app.set_env("TMUX", format!("{},0,0", tmux.socket_path().display()));
+    let workspace = app.temp_workspace();
     let workspace = workspace
         .path()
         .canonicalize()
@@ -248,7 +252,9 @@ async fn registration_and_repeated_resume_preserve_custom_command_and_native_fil
     .await;
     assert_persisted_start_command(&state, session_id, &command).await;
 
-    exit_and_resume(state.clone(), session_id, &first_resumed_runtime_id).await;
+    let last_runtime_id =
+        exit_and_resume(state.clone(), session_id, &first_resumed_runtime_id).await;
+    wait_for_runtime_pane_exit(&state, &last_runtime_id).await;
     assert_persisted_start_command(&state, session_id, &command).await;
     let bound_file: String =
         sqlx::query_scalar("SELECT client_session_file FROM agent_bindings WHERE session_id = ?")
@@ -333,6 +339,8 @@ async fn invalid_native_file_does_not_replace_runtime_or_change_resume_state() {
 }
 
 async fn exit_and_resume(state: AppState, session_id: &str, runtime_id: &str) -> String {
+    // The fixture command exits immediately; do not report its exit while it is still launching.
+    wait_for_runtime_pane_exit(&state, runtime_id).await;
     let (exit_status, exit) = crate::common::reporting::report_fact(
         state.clone(),
         json!({
@@ -361,6 +369,69 @@ async fn exit_and_resume(state: AppState, session_id: &str, runtime_id: &str) ->
         .fetch_one(&state.db())
         .await
         .expect("resumed runtime instance id")
+}
+
+async fn wait_for_runtime_pane_exit(state: &AppState, runtime_id: &str) {
+    let (socket, pane): (Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT tmux_socket_path, tmux_pane_id FROM session_runtimes WHERE runtime_id = ?",
+    )
+    .bind(runtime_id)
+    .fetch_one(&state.db())
+    .await
+    .expect("runtime pane binding");
+    if let (Some(socket), Some(pane)) = (socket, pane) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while pontia_runtime::GenericRuntimeManager.is_tmux_pane_alive(&socket, &pane) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("fixture command must exit before reporting session.exited");
+    }
+}
+
+struct TestTmuxServer(tempfile::TempDir);
+
+impl TestTmuxServer {
+    fn new() -> Self {
+        let server = Self(tempfile::tempdir().expect("tmux test root"));
+        let output = Command::new("tmux")
+            .arg("-S")
+            .arg(server.socket_path())
+            .args([
+                "-f",
+                "/dev/null",
+                "new-session",
+                "-d",
+                "-s",
+                "fixture",
+                "-c",
+            ])
+            .arg(server.0.path())
+            .arg("sh")
+            .output()
+            .expect("start isolated tmux server");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        server
+    }
+
+    fn socket_path(&self) -> PathBuf {
+        self.0.path().join("tmux.sock")
+    }
+}
+
+impl Drop for TestTmuxServer {
+    fn drop(&mut self) {
+        let _ = Command::new("tmux")
+            .arg("-S")
+            .arg(self.socket_path())
+            .arg("kill-server")
+            .output();
+    }
 }
 
 async fn assert_persisted_start_command(state: &AppState, session_id: &str, expected: &str) {

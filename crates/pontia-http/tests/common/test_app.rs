@@ -175,7 +175,10 @@ pub(crate) struct EnvGuard {
 impl EnvGuard {
     pub(crate) fn new() -> Self {
         Self {
-            _lock: env_lock().lock().expect("test env lock"),
+            // Drop restores the environment before releasing the lock, including on panic.
+            _lock: env_lock()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
             saved: Vec::new(),
         }
     }
