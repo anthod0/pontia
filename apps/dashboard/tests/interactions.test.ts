@@ -125,7 +125,11 @@ test("notifies on a failed response and lets the user retry the pending choice",
   await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(1));
   expect(screen.getByRole("button", { name: "Skip" })).toBeEnabled();
 
-  mocks.respond.mockResolvedValue({ ...interaction(), state: "resolved", response: { option_key: "skip-operation" } });
+  mocks.respond.mockResolvedValue({
+    ...interaction(),
+    state: "resolved",
+    response: { option_key: "skip-operation" },
+  });
   await fireEvent.click(screen.getByRole("button", { name: "Skip" }));
   await waitFor(() => expect(screen.queryByRole("button", { name: "Skip" })).toBeNull());
 });
