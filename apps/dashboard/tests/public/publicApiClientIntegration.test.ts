@@ -5,13 +5,14 @@ const { e2eFetch } = vi.hoisted(() => ({
     async () => new Response(JSON.stringify({ data: { workspaces: [] } }), { status: 200 }),
   ),
 }));
-vi.mock("../../src/modes/public/e2eTransport", () => ({
+vi.mock("../../src/modes/public/remote-access", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/modes/public/remote-access")>()),
   e2eFetch,
   clearE2eSession: vi.fn(),
 }));
 
 import { listWorkspaces } from "../../src/api/client";
-import { clearPublicApiTarget, setPublicApiTarget } from "../../src/modes/public/apiTarget";
+import { clearPublicApiTarget, setPublicApiTarget } from "../../src/modes/public/remote-access";
 
 afterEach(() => {
   clearPublicApiTarget();

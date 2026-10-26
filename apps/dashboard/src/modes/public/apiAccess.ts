@@ -1,5 +1,4 @@
-import { hasPublicApiTarget, publicApiSignal } from "./apiTarget";
-import { e2eFetch } from "./e2eTransport";
+import { e2eFetch, hasPublicApiTarget, publicApiSignal } from "./remote-access";
 
 export const apiCredentials: RequestCredentials = "include";
 export const apiStreamUnavailableMessage = "Remote device access is not ready.";

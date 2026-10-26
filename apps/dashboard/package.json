@@ -14,7 +14,7 @@
     "prepare": "svelte-kit sync",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.node.json",
+    "check": "bun scripts/check-remote-access-boundaries.ts && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.node.json",
     "test": "vitest run",
     "test:watch": "vitest"
   },

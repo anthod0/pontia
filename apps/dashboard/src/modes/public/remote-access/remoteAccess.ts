@@ -1,4 +1,4 @@
-import { isValidDeviceHandle } from "$lib/remoteDashboard";
+import { isValidDeviceHandle } from "../../../lib/deviceHandle";
 
 const CLOUD_ORIGIN = "https://pontia.dev";
 const PUBLIC_DASHBOARD_ORIGIN = "https://app.pontia.dev";

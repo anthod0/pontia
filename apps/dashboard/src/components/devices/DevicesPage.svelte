@@ -4,7 +4,7 @@
   import { Button } from '$lib/components/ui/button/index.js';
   import * as Card from '$lib/components/ui/card/index.js';
   import * as Empty from '$lib/components/ui/empty/index.js';
-  import { isValidDeviceHandle } from '$lib/remoteDashboard';
+  import { isValidDeviceHandle } from '$lib/deviceHandle';
 
   export type DeviceListItem = {
     handle: string;

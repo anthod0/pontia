@@ -2,16 +2,19 @@
   import type { Snippet } from 'svelte';
   import DevicesPage from '../../components/devices/DevicesPage.svelte';
   import RemoteDashboardPage from '../../components/devices/RemoteDashboardPage.svelte';
-  import { initialRemoteDashboardState, isValidDeviceHandle, type RemoteDashboardState } from '$lib/remoteDashboard';
+  import { initialRemoteDashboardState, type RemoteDashboardState } from '$lib/remoteDashboard';
+  import { isValidDeviceHandle } from '$lib/deviceHandle';
   import { clearDashboardRuntimeState, startDashboardRuntime, stopDashboardRuntime } from '../../services/dashboardRuntime';
-  import { clearPublicApiTarget, setPublicApiTarget } from './apiTarget';
   import { createPublicDevicesQuery } from './deviceQueries';
-  import { clearE2eSession, connectPublicDevice } from './e2eTransport';
   import {
+    clearPublicApiTarget,
+    setPublicApiTarget,
+    clearE2eSession,
+    connectPublicDevice,
     dashboardBootstrapUrl,
     dashboardSignInUrl,
     CloudRequestError,
-  } from './remoteAccess';
+  } from './remote-access';
 
   let { handle: handleProp, children }: { handle?: string; children: Snippet } = $props();
   // Route data may be replaced during navigation without changing the device.

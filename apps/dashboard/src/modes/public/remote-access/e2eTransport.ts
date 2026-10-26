@@ -2,8 +2,8 @@ import initWasm, {
   Identity,
   type Request as E2eRequest,
   type Session,
-} from "../../e2e-wasm/pontia_e2e";
-import wasmUrl from "../../e2e-wasm/pontia_e2e_bg.wasm?url";
+} from "../../../e2e-wasm/pontia_e2e";
+import wasmUrl from "../../../e2e-wasm/pontia_e2e_bg.wasm?url";
 import { publicApiTarget } from "./apiTarget";
 import { requestPublicDeviceConnection, type PublicDeviceTarget } from "./remoteAccess";
 const CONTENT_TYPE = "application/pontia-e2e";

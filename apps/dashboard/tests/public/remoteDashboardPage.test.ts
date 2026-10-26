@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import DevicesPage from "../../src/components/devices/DevicesPage.svelte";
 import RemoteDashboardPage from "../../src/components/devices/RemoteDashboardPage.svelte";
 import { match as matchHandle } from "../../src/params/handle";
-import { isValidDeviceHandle } from "../../src/lib/remoteDashboard";
+import { isValidDeviceHandle } from "../../src/lib/deviceHandle";
 
 const handle = "office-mac";
 

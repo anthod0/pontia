@@ -27,8 +27,9 @@ import {
   clearE2eSession,
   connectPublicDevice,
   e2eFetch,
-} from "../../src/modes/public/e2eTransport";
-import { clearPublicApiTarget, setPublicApiTarget } from "../../src/modes/public/apiTarget";
+  clearPublicApiTarget,
+  setPublicApiTarget,
+} from "../../src/modes/public/remote-access";
 
 const handle = "office-mac";
 const deviceId = "01234567-89ab-cdef-0123-456789abcdef";

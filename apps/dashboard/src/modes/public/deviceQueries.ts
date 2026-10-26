@@ -1,6 +1,6 @@
 import { createQuery, queryOptions } from "@tanstack/svelte-query";
 import { queryClient } from "../../queries/queryClient";
-import { listPublicDevices } from "./remoteAccess";
+import { listPublicDevices } from "./remote-access";
 
 export const publicDeviceKeys = {
   all: ["public-devices"] as const,

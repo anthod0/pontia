@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
   clearRuntime: vi.fn(),
 }));
 
-vi.mock("../../src/modes/public/e2eTransport", () => ({
+vi.mock("../../src/modes/public/remote-access", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/modes/public/remote-access")>()),
   connectPublicDevice: mocks.resolveTarget,
   clearE2eSession: vi.fn(),
 }));
