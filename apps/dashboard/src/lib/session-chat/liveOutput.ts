@@ -23,6 +23,7 @@ export interface LiveToolResult {
 
 export type LiveOutputItem =
   | { kind: "assistant_text"; item_id: string; text: string }
+  | { kind: "reasoning"; item_id: string; text: string; truncated?: boolean }
   | {
       kind: "tool_call";
       item_id: string;
@@ -41,6 +42,7 @@ export type LiveOutputUpdate =
   | { type: "tool_output_delta"; call_id: string; delta: string; truncated: boolean }
   | { type: "tool_output_updated"; call_id: string; text: string; truncated: boolean }
   | { type: "assistant_text_delta"; item_id: string; delta: string }
+  | { type: "reasoning_delta"; item_id: string; delta: string; truncated?: boolean }
   | {
       type: "tool_call";
       item_id: string;
@@ -209,32 +211,10 @@ function liveItemsToMessages(overlay: LiveOutputOverlay): SessionChatMessage[] {
     .join("\n\n");
   const thoughtSteps = overlay.items
     .filter(
-      (item): item is Extract<LiveOutputItem, { kind: "tool_call" }> => item.kind === "tool_call",
+      (item): item is Exclude<LiveOutputItem, { kind: "assistant_text" }> =>
+        item.kind !== "assistant_text",
     )
-    .map((item): SessionChatThoughtStep => ({
-      id: `live:${overlay.stream_id}:${item.item_id}`,
-      kind: "tool_call",
-      title: item.managed_tool_use ? managedToolUseTitle(item.managed_tool_use) : item.tool_name,
-      callId: item.call_id,
-      status: item.status?.outcome ?? item.status?.phase ?? "generated",
-      executionStatus: item.status?.outcome ?? item.status?.phase ?? "generated",
-      ...(item.output ? { processOutput: { ...item.output } } : {}),
-      ...(item.result
-        ? {
-            result: {
-              content: formatResult(item.result),
-              status: "error" in item.result || item.status?.outcome === "failed" ? "error" : null,
-              occurredAt: null,
-              truncated: item.result.truncated,
-            },
-          }
-        : {}),
-      content: item.managed_tool_use
-        ? managedToolUseContent(item.managed_tool_use)
-        : formatArguments(item.arguments),
-      occurredAt: null,
-      ...(item.managed_tool_use ? { managedToolUse: item.managed_tool_use } : {}),
-    }));
+    .map((item) => liveThoughtStep(overlay.stream_id, item));
 
   return [
     {
@@ -249,7 +229,63 @@ function liveItemsToMessages(overlay: LiveOutputOverlay): SessionChatMessage[] {
   ];
 }
 
+function liveThoughtStep(
+  streamId: string,
+  item: Exclude<LiveOutputItem, { kind: "assistant_text" }>,
+): SessionChatThoughtStep {
+  const id = `live:${streamId}:${item.item_id}`;
+  if (item.kind === "reasoning")
+    return {
+      id,
+      kind: "thinking",
+      title: "Thinking",
+      status: null,
+      content: item.text,
+      occurredAt: null,
+      ...(item.truncated ? { truncated: true } : {}),
+    };
+  return {
+    id,
+    kind: "tool_call",
+    title: item.managed_tool_use ? managedToolUseTitle(item.managed_tool_use) : item.tool_name,
+    callId: item.call_id,
+    status: item.status?.outcome ?? item.status?.phase ?? "generated",
+    executionStatus: item.status?.outcome ?? item.status?.phase ?? "generated",
+    ...(item.output ? { processOutput: { ...item.output } } : {}),
+    ...(item.result
+      ? {
+          result: {
+            content: formatResult(item.result),
+            status: "error" in item.result || item.status?.outcome === "failed" ? "error" : null,
+            occurredAt: null,
+            truncated: item.result.truncated,
+          },
+        }
+      : {}),
+    content: item.managed_tool_use
+      ? managedToolUseContent(item.managed_tool_use)
+      : formatArguments(item.arguments),
+    occurredAt: null,
+    ...(item.managed_tool_use ? { managedToolUse: item.managed_tool_use } : {}),
+  };
+}
+
 function applyUpdate(items: LiveOutputItem[], update: LiveOutputUpdate): boolean {
+  if (update.type === "reasoning_delta") {
+    const existing = items.find((item) => item.item_id === update.item_id);
+    if (existing?.kind === "reasoning") {
+      existing.text += update.delta;
+      existing.truncated = !!existing.truncated || !!update.truncated;
+    } else if (!existing) {
+      items.push({
+        kind: "reasoning",
+        item_id: update.item_id,
+        text: update.delta,
+        truncated: !!update.truncated,
+      });
+    }
+    return !existing || existing.kind === "reasoning";
+  }
   if (update.type === "assistant_text_delta") {
     const existing = items.find((item) => item.item_id === update.item_id);
     if (existing?.kind === "assistant_text") {
@@ -301,7 +337,7 @@ function applyUpdate(items: LiveOutputItem[], update: LiveOutputUpdate): boolean
 }
 
 function cloneItem(item: LiveOutputItem): LiveOutputItem {
-  return item.kind === "assistant_text"
+  return item.kind === "assistant_text" || item.kind === "reasoning"
     ? { ...item }
     : {
         ...item,

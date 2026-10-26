@@ -32,6 +32,8 @@ pub(crate) struct Prompt {
     pub sequence: u64,
     // Only IDs of accepted calls; bounded by the shared stream item limit.
     pub raw_results: std::collections::HashSet<String>,
+    // Live item extended by consecutive thought chunks; any other agent output ends it.
+    pub thought: Option<String>,
     pub cancelled: bool,
     pub history_index: usize,
     pub history_end: usize,

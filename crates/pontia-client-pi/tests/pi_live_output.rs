@@ -361,3 +361,54 @@ async fn terminal_facts_clear_live_output_and_reject_further_updates() {
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn reasoning_snapshots_and_deltas_are_accepted_and_kind_conflicts_require_resync() {
+    let session = Session::new().await;
+    session
+        .publish(json!({"type":"snapshot","sequence":1,"items":[
+            {"kind":"reasoning","item_id":"reasoning_1","text":"Reading"}
+        ]}))
+        .await;
+    let append = json!({"type":"append","first_sequence":2,"updates":[
+        {"type":"reasoning_delta","item_id":"reasoning_1","delta":" files"},
+        {"type":"assistant_text_delta","item_id":"text_2","delta":"answer"},
+        {"type":"reasoning_delta","item_id":"reasoning_3","delta":"Again","truncated":true}
+    ]});
+    assert_eq!(session.publish(append).await["accepted_sequence"], 4);
+    assert_eq!(
+        serde_json::to_value(
+            session
+                .state
+                .live_output()
+                .snapshot(&session.session, &session.turn)
+                .unwrap()
+                .items
+        )
+        .unwrap(),
+        json!([
+            {"kind":"reasoning","item_id":"reasoning_1","text":"Reading files","truncated":false},
+            {"kind":"assistant_text","item_id":"text_2","text":"answer"},
+            {"kind":"reasoning","item_id":"reasoning_3","text":"Again","truncated":true}
+        ])
+    );
+    let conflict = session
+        .peer
+        .call(
+            "liveOutput.publish",
+            session.request(json!({"type":"append","first_sequence":5,"updates":[
+                {"type":"reasoning_delta","item_id":"text_2","delta":"x"}
+            ]})),
+        )
+        .await;
+    assert!(conflict.is_err());
+    assert_eq!(
+        session
+            .state
+            .live_output()
+            .snapshot(&session.session, &session.turn)
+            .unwrap()
+            .sequence,
+        4
+    );
+}

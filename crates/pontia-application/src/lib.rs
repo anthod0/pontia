@@ -51,8 +51,8 @@ pub use live_output::{
     LiveOutputBatch, LiveOutputClose, LiveOutputCloseReason, LiveOutputIdentity, LiveOutputItem,
     LiveOutputProducer, LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshot,
     LiveOutputSnapshotReplacement, LiveOutputSource, LiveOutputStreamEvent, LiveOutputSubscription,
-    LiveOutputUpdate, LiveToolOutcome, LiveToolOutput, LiveToolPhase, LiveToolResult,
-    LiveToolStatus,
+    LiveOutputUpdate, LiveReasoningBound, LiveToolOutcome, LiveToolOutput, LiveToolPhase,
+    LiveToolResult, LiveToolStatus,
 };
 pub use queries::{ExternalQueryService, SessionOverviewRequest, SessionOverviewView};
 pub use raw_transcripts::{

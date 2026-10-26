@@ -404,7 +404,6 @@ async fn live_call_absent_from_history_still_streams_when_text_cannot_be_recover
 #[tokio::test]
 async fn unsupported_outputs_and_incomplete_calls_do_not_block_text_or_later_discovery() {
     let ignored = vec![
-        json!({"type":"reasoning","id":"reason","summary":["private"]}),
         json!({"type":"plan","id":"plan","text":"plan"}),
         json!({"type":"functionCallOutput","id":"output","name":"tool","output":"result"}),
         json!({"type":"subAgentActivity","id":"activity","kind":"spawn","agentThreadId":"agent"}),

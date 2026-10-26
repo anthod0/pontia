@@ -414,6 +414,7 @@ impl ClientSession for AcpAdapter {
                 started: false,
                 sequence: 0,
                 raw_results: Default::default(),
+                thought: None,
                 cancelled: false,
                 history_index,
                 history_end: history_index + input.len(),

@@ -10,6 +10,7 @@ use super::{
 const MAX_ITEMS_PER_STREAM: usize = 256;
 const MAX_TOTAL_TEXT_BYTES: usize = 1024 * 1024;
 pub(super) const MAX_TOTAL_TOOL_BYTES: usize = 1024 * 1024;
+pub(super) const MAX_TOTAL_REASONING_BYTES: usize = 1024 * 1024;
 const MAX_TOOL_CALL_BYTES: usize = 64 * 1024;
 const MAX_ID_BYTES: usize = 256;
 
@@ -63,6 +64,15 @@ pub(super) fn validate_update(update: &LiveOutputUpdate) -> Result<()> {
                 return Err(Error::Domain("assistant text delta is too large".into()));
             }
         }
+        LiveOutputUpdate::ReasoningDelta { item_id, delta, .. } => {
+            validate_non_empty("item_id", item_id)?;
+            if delta.is_empty() {
+                return Err(Error::Domain("reasoning delta must not be empty".into()));
+            }
+            if delta.len() > MAX_TOTAL_REASONING_BYTES {
+                return Err(Error::Domain("reasoning delta is too large".into()));
+            }
+        }
         LiveOutputUpdate::ToolCall {
             item_id,
             call_id,
@@ -87,6 +97,7 @@ pub(super) fn validate_items(items: &[LiveOutputItem]) -> Result<()> {
     }
 
     let mut total_text_bytes = 0usize;
+    let mut total_reasoning_bytes = 0usize;
     let mut total_tool_bytes = 0usize;
     let mut item_ids = std::collections::HashSet::new();
     let mut call_ids = std::collections::HashSet::new();
@@ -103,6 +114,11 @@ pub(super) fn validate_items(items: &[LiveOutputItem]) -> Result<()> {
                 total_text_bytes = total_text_bytes
                     .checked_add(text.len())
                     .ok_or_else(|| Error::Domain("live output text size overflow".into()))?;
+            }
+            LiveOutputItem::Reasoning { text, .. } => {
+                total_reasoning_bytes = total_reasoning_bytes
+                    .checked_add(text.len())
+                    .ok_or_else(|| Error::Domain("live output reasoning size overflow".into()))?;
             }
             LiveOutputItem::ToolCall {
                 call_id,
@@ -141,6 +157,11 @@ pub(super) fn validate_items(items: &[LiveOutputItem]) -> Result<()> {
     if total_text_bytes > MAX_TOTAL_TEXT_BYTES {
         return Err(Error::Domain(format!(
             "live output text exceeds {MAX_TOTAL_TEXT_BYTES} bytes"
+        )));
+    }
+    if total_reasoning_bytes > MAX_TOTAL_REASONING_BYTES {
+        return Err(Error::Domain(format!(
+            "live output reasoning exceeds {MAX_TOTAL_REASONING_BYTES} bytes"
         )));
     }
     if total_tool_bytes > MAX_TOTAL_TOOL_BYTES {

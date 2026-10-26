@@ -214,6 +214,11 @@ impl CodexObserver {
                                 tracing::warn!(%session, %error, "Codex live output delta rejected");
                             }
                         }
+                        Some("item/reasoning/summaryTextDelta") => {
+                            if let Err(error) = output.reasoning(&self.service, &runtime, &session, &event).await {
+                                tracing::warn!(%session, %error, "Codex live reasoning delta rejected");
+                            }
+                        }
                         Some("turn/completed") => {
                             let _operation = runtime.lock_session(&session).await;
                             let _current = runtime.current_guard().await?;

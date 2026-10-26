@@ -145,6 +145,7 @@ function install(
     isManagedPane: vi.fn(async () => paneManaged),
     makeLiveOutputPublisher: vi.fn((): LiveOutputPublisherLike => ({
       appendText: vi.fn(),
+      appendReasoning: vi.fn(),
       appendToolCall: vi.fn(),
       toolExecution: vi.fn(),
       close: vi.fn(async () => undefined),
@@ -1711,11 +1712,13 @@ describe("pontia pi extension lifecycle", () => {
 
   test("publishes assistant deltas and only complete tool calls to the turn live stream", async () => {
     const appendText = vi.fn();
+    const appendReasoning = vi.fn();
     const appendToolCall = vi.fn();
     const close = vi.fn(async () => undefined);
     const { handlers } = await installBound({
       makeLiveOutputPublisher: vi.fn(() => ({
         appendText,
+        appendReasoning,
         appendToolCall,
         toolExecution: vi.fn(),
         close,
@@ -1750,12 +1753,44 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.agent_end({ messages: [] }, {});
 
     expect(appendText.mock.calls).toEqual([["hello"], ["done"]]);
+    expect(appendReasoning).not.toHaveBeenCalled();
     expect(appendToolCall).toHaveBeenCalledWith({
       callId: "call_1",
       toolName: "read",
       arguments: { path: "README.md" },
     });
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  test("publishes thinking deltas as reasoning without adding them to the turn output", async () => {
+    const appendText = vi.fn();
+    const appendReasoning = vi.fn();
+    const { handlers, reported } = await installBound({
+      makeLiveOutputPublisher: vi.fn(() => ({
+        appendText,
+        appendReasoning,
+        appendToolCall: vi.fn(),
+        toolExecution: vi.fn(),
+        close: vi.fn(async () => undefined),
+      })),
+    });
+
+    await handlers.agent_start({}, {});
+    for (const assistantMessageEvent of [
+      { type: "thinking_start", contentIndex: 0 },
+      { type: "thinking_delta", contentIndex: 0, delta: "Reading" },
+      { type: "thinking_delta", contentIndex: 0, delta: "" },
+      { type: "thinking_end", contentIndex: 0, content: "Reading" },
+      { type: "text_delta", contentIndex: 1, delta: "answer" },
+    ])
+      await handlers.message_update({ assistantMessageEvent }, {});
+    await handlers.agent_end({ messages: [] }, {});
+
+    expect(appendReasoning.mock.calls).toEqual([["Reading"]]);
+    expect(appendText.mock.calls).toEqual([["answer"]]);
+    expect(reported.find((event) => event.type === "turn.output")?.data).toEqual({
+      output_summary: "answer",
+    });
   });
 
   test("tool failures publish execution content without failing the Turn", async () => {

@@ -147,11 +147,68 @@ async fn interleaved_tools_and_text_survive_partial_call_snapshots_and_reconnect
     h.stop().await;
 }
 
+fn thought(text: &str) -> Value {
+    notification(
+        json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":text}}),
+    )
+}
+
+#[tokio::test]
+async fn consecutive_thoughts_merge_and_separate_around_other_items() {
+    let (h, session, turn) = start(vec![
+        vec![thought("Reading"), thought(" files")],
+        vec![
+            notification(json!({"sessionUpdate":"tool_call","toolCallId":"a","title":"Execute","rawInput":{}})),
+            thought("Checking"),
+            thought(" output"),
+            notification(json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"answer"}})),
+            thought("Again"),
+            notification(json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" more"}})),
+            thought("Final"),
+        ],
+    ])
+    .await;
+    step(&h, 0).await;
+    let first = snapshot(&h, &session, &turn);
+    assert_eq!(
+        first["items"],
+        json!([{"kind":"reasoning","item_id":first["items"][0]["item_id"],"text":"Reading files","truncated":false}])
+    );
+    step(&h, 1).await;
+    let items = snapshot(&h, &session, &turn)["items"].clone();
+    let summary: Vec<_> = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| {
+            (
+                item["kind"].as_str().unwrap(),
+                item["text"].as_str().unwrap_or(""),
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        [
+            ("reasoning", "Reading files"),
+            ("tool_call", ""),
+            ("reasoning", "Checking output"),
+            ("assistant_text", "answer more"),
+            ("reasoning", "Again"),
+            ("reasoning", "Final"),
+        ]
+    );
+    h.release("release-1");
+    h.wait_turn(&session, &turn, "completed").await;
+    h.stop().await;
+}
+
 #[tokio::test]
 async fn unassociated_and_non_display_notifications_do_not_create_live_content() {
     let (h, session, turn) = start(vec![vec![
         notification(json!({"sessionUpdate":"tool_call_update","toolCallId":"unknown","status":"failed","content":text("orphan"),"rawOutput":"orphan"})),
-        notification(json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"private"}})),
+        notification(json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"image","data":"","mimeType":"image/png"}})),
+        notification(json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":""}})),
         notification(json!({"sessionUpdate":"plan","entries":[]})),
         json!({"sessionId":"wrong","update":{"sessionUpdate":"tool_call","toolCallId":"wrong","title":"Wrong"}}),
     ]]).await;
@@ -317,9 +374,10 @@ async fn shared_capacity_limits_reject_calls_and_bound_output_without_poisoning_
 }
 
 #[tokio::test]
-async fn load_replay_never_creates_live_tools() {
+async fn load_replay_never_creates_live_tools_or_reasoning() {
     let h = Harness::new(&[]).await;
-    std::fs::write(h.root.path().join("history.jsonl"), format!("{}\n{}\n",
+    std::fs::write(h.root.path().join("history.jsonl"), format!("{}\n{}\n{}\n",
+        json!({"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"old thought"}}),
         json!({"sessionUpdate":"tool_call","toolCallId":"history","title":"Old tool","status":"in_progress"}),
         json!({"sessionUpdate":"tool_call_update","toolCallId":"history","status":"completed","content":text("old output")}))).unwrap();
     let session = h.create("first").await.unwrap();

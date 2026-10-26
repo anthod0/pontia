@@ -2,11 +2,13 @@ use crate::client_contract::raw_transcripts::ManagedToolUse;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod reasoning;
 mod service;
 mod store;
 mod tools;
 mod validation;
 
+pub use reasoning::LiveReasoningBound;
 pub use service::LiveOutputService;
 pub(crate) use store::LiveOutputStore;
 pub use store::LiveOutputSubscription;
@@ -18,6 +20,12 @@ pub enum LiveOutputItem {
     AssistantText {
         item_id: String,
         text: String,
+    },
+    Reasoning {
+        item_id: String,
+        text: String,
+        #[serde(default)]
+        truncated: bool,
     },
     ToolCall {
         item_id: String,
@@ -38,7 +46,9 @@ pub enum LiveOutputItem {
 impl LiveOutputItem {
     fn item_id(&self) -> &str {
         match self {
-            Self::AssistantText { item_id, .. } | Self::ToolCall { item_id, .. } => item_id,
+            Self::AssistantText { item_id, .. }
+            | Self::Reasoning { item_id, .. }
+            | Self::ToolCall { item_id, .. } => item_id,
         }
     }
 }
@@ -69,6 +79,12 @@ pub enum LiveOutputUpdate {
     AssistantTextDelta {
         item_id: String,
         delta: String,
+    },
+    ReasoningDelta {
+        item_id: String,
+        delta: String,
+        #[serde(default)]
+        truncated: bool,
     },
     ToolCall {
         item_id: String,

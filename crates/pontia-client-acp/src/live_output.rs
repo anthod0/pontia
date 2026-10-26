@@ -3,7 +3,8 @@
 use pontia_application::{
     LiveOutputBatch, LiveOutputIdentity, LiveOutputItem, LiveOutputProducer,
     LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshotReplacement, LiveOutputSource,
-    LiveOutputUpdate, LiveToolOutcome, LiveToolPhase, LiveToolResult, LiveToolStatus,
+    LiveOutputUpdate, LiveReasoningBound, LiveToolOutcome, LiveToolPhase, LiveToolResult,
+    LiveToolStatus,
 };
 use pontia_core::{Error, Result};
 use serde_json::Value;
@@ -42,6 +43,12 @@ pub(crate) async fn publish(
         prompt,
         items,
     };
+    if matches!(
+        update["sessionUpdate"].as_str(),
+        Some("agent_message_chunk" | "tool_call" | "tool_call_update")
+    ) {
+        publisher.prompt.thought = None;
+    }
     match update["sessionUpdate"].as_str() {
         Some("agent_message_chunk")
             if update.pointer("/content/type").and_then(Value::as_str) == Some("text") =>
@@ -68,6 +75,17 @@ pub(crate) async fn publish(
                 }
             }
         }
+        Some("agent_thought_chunk")
+            if update.pointer("/content/type").and_then(Value::as_str) == Some("text") =>
+        {
+            if let Some(text) = update
+                .pointer("/content/text")
+                .and_then(Value::as_str)
+                .filter(|text| !text.is_empty())
+            {
+                publisher.thought(text).await?;
+            }
+        }
         Some("tool_call" | "tool_call_update") => publisher.tool(update).await?,
         _ => {}
     }
@@ -82,6 +100,38 @@ struct Publisher<'a> {
 }
 
 impl Publisher<'_> {
+    /// Consecutive thought chunks extend one item. Assistant text always extends
+    /// the single response item, so adjacency is tracked per update, not per item.
+    async fn thought(&mut self, text: &str) -> Result<()> {
+        let item_id = self
+            .prompt
+            .thought
+            .get_or_insert_with(|| format!("thought-{}", self.items.len()))
+            .clone();
+        let update = LiveOutputUpdate::ReasoningDelta {
+            item_id,
+            delta: text.into(),
+            truncated: false,
+        };
+        match update.bound_reasoning(&self.items) {
+            LiveReasoningBound::Update(LiveOutputUpdate::ReasoningDelta {
+                item_id,
+                delta,
+                truncated,
+            }) if self.prompt.sequence == 0 => {
+                self.snapshot(vec![LiveOutputItem::Reasoning {
+                    item_id,
+                    text: delta,
+                    truncated,
+                }])
+                .await
+            }
+            LiveReasoningBound::Update(update) => self.send(update).await,
+            LiveReasoningBound::Snapshot(items) => self.snapshot(items).await,
+            LiveReasoningBound::Drop => Ok(()),
+        }
+    }
+
     async fn tool(&mut self, update: &Value) -> Result<()> {
         let Some(call_id) = update["toolCallId"].as_str() else {
             return Ok(());

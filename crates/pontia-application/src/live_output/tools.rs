@@ -159,7 +159,7 @@ impl super::LiveOutputUpdate {
     }
 }
 
-fn truncate_text(text: &mut String, budget: usize) -> bool {
+pub(super) fn truncate_text(text: &mut String, budget: usize) -> bool {
     if text.len() <= budget {
         return false;
     }

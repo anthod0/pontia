@@ -3,7 +3,7 @@ use crate::runtime::{CodexRuntime, SubscriptionState, protocol::Notification};
 use pontia_application::{
     AgentBindingService, LiveOutputBatch, LiveOutputIdentity, LiveOutputItem, LiveOutputProducer,
     LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshotReplacement, LiveOutputSource,
-    LiveOutputUpdate,
+    LiveOutputUpdate, LiveReasoningBound,
 };
 use pontia_core::Result;
 use std::collections::{HashMap, HashSet};
@@ -136,10 +136,11 @@ impl CodexLiveOutput {
                 self.unavailable(session, native);
                 continue;
             };
-            // Legacy text IDs cannot cover queued deltas. Keep text fail-closed,
-            // but recover tools whose native call IDs remain stable in that history.
+            // Legacy text IDs cannot cover queued deltas. Keep text and reasoning
+            // fail-closed, but recover tools whose native call IDs remain stable.
             let unsafe_text = items.iter().any(|item| {
-                item["type"] == "agentMessage" && is_history_item_id(item["id"].as_str())
+                matches!(item["type"].as_str(), Some("agentMessage" | "reasoning"))
+                    && is_history_item_id(item["id"].as_str())
             });
             let mut recovered_items = Vec::new();
             let mut covered_tools = HashSet::new();
@@ -157,6 +158,37 @@ impl CodexLiveOutput {
                             })?
                             .into(),
                     });
+                } else if item["type"] == "reasoning" && !unsafe_text {
+                    let id = string(item, "id")?;
+                    let parts = item["summary"].as_array().map_or(&[][..], Vec::as_slice);
+                    for (index, part) in parts.iter().enumerate() {
+                        let text = part.as_str().ok_or_else(|| {
+                            pontia_core::Error::Domain(
+                                "Codex reasoning summary must be text".into(),
+                            )
+                        })?;
+                        if text.is_empty() {
+                            continue;
+                        }
+                        let update = LiveOutputUpdate::ReasoningDelta {
+                            item_id: reasoning_item_id(id, index as u64),
+                            delta: text.into(),
+                            truncated: false,
+                        };
+                        match update.bound_reasoning(&recovered_items) {
+                            LiveReasoningBound::Update(LiveOutputUpdate::ReasoningDelta {
+                                item_id,
+                                delta,
+                                truncated,
+                            }) => recovered_items.push(LiveOutputItem::Reasoning {
+                                item_id,
+                                text: delta,
+                                truncated,
+                            }),
+                            LiveReasoningBound::Snapshot(items) => recovered_items = items,
+                            _ => {}
+                        }
+                    }
                 } else if let Some(call) = tool_calls::from_native(item) {
                     recovered_items.push(call.into_item());
                 }
@@ -224,8 +256,9 @@ impl CodexLiveOutput {
             let covered_items = items
                 .iter()
                 .filter_map(|item| match item {
-                    LiveOutputItem::AssistantText { item_id, .. } => Some(item_id.clone()),
-                    _ => None,
+                    LiveOutputItem::AssistantText { item_id, .. }
+                    | LiveOutputItem::Reasoning { item_id, .. } => Some(item_id.clone()),
+                    LiveOutputItem::ToolCall { .. } => None,
                 })
                 .collect();
             self.output
@@ -285,6 +318,38 @@ impl CodexLiveOutput {
             LiveOutputUpdate::AssistantTextDelta {
                 item_id: item_id.into(),
                 delta: delta.into(),
+            },
+        )
+        .await
+    }
+
+    pub async fn reasoning(
+        &mut self,
+        service: &CodexService,
+        runtime: &CodexRuntime,
+        session: &str,
+        notification: &Notification,
+    ) -> Result<()> {
+        let params = &notification["params"];
+        let item_id = string(params, "itemId")?;
+        let index = params["summaryIndex"].as_u64().ok_or_else(|| {
+            pontia_core::Error::Domain("Codex reasoning summary index must be unsigned".into())
+        })?;
+        let delta = params["delta"].as_str().ok_or_else(|| {
+            pontia_core::Error::Domain("Codex reasoning delta must be text".into())
+        })?;
+        if delta.is_empty() {
+            return Ok(());
+        }
+        self.publish(
+            service,
+            runtime,
+            session,
+            notification,
+            LiveOutputUpdate::ReasoningDelta {
+                item_id: reasoning_item_id(item_id, index),
+                delta: delta.into(),
+                truncated: false,
             },
         )
         .await
@@ -363,8 +428,11 @@ impl CodexLiveOutput {
                 self.recovered.remove(session);
                 self.restore(service, runtime, session, thread).await?;
             }
-            if matches!(&update, LiveOutputUpdate::AssistantTextDelta { .. })
-                && matches!(self.recovered.get(session), Some(TextRecovery::Unavailable { turn_id }) if turn_id == native)
+            if matches!(
+                &update,
+                LiveOutputUpdate::AssistantTextDelta { .. }
+                    | LiveOutputUpdate::ReasoningDelta { .. }
+            ) && matches!(self.recovered.get(session), Some(TextRecovery::Unavailable { turn_id }) if turn_id == native)
             {
                 return Ok(());
             }
@@ -377,7 +445,7 @@ impl CodexLiveOutput {
             };
             // Full native items cover queued notifications for those items only.
             // Unfinished items may be absent from native history; retain their deltas.
-            if matches!(&update, LiveOutputUpdate::AssistantTextDelta { item_id, .. }
+            if matches!(&update, LiveOutputUpdate::AssistantTextDelta { item_id, .. } | LiveOutputUpdate::ReasoningDelta { item_id, .. }
                 if matches!(self.recovered.get(session), Some(TextRecovery::Ready { turn_id, boundary, items })
                     if turn_id == native && notification.sequence <= *boundary && items.contains(item_id)))
             {
@@ -461,15 +529,31 @@ impl CodexLiveOutput {
                     return Ok(());
                 }
             }
-            let bounded = update.clone().bound_tool_content(&snapshot.items);
-            let outcome = self
-                .output
-                .publish_batch(LiveOutputBatch {
-                    producer,
-                    first_sequence: snapshot.sequence + 1,
-                    updates: vec![bounded],
-                })
-                .await?;
+            let outcome = match update
+                .clone()
+                .bound_tool_content(&snapshot.items)
+                .bound_reasoning(&snapshot.items)
+            {
+                LiveReasoningBound::Update(bounded) => {
+                    self.output
+                        .publish_batch(LiveOutputBatch {
+                            producer,
+                            first_sequence: snapshot.sequence + 1,
+                            updates: vec![bounded],
+                        })
+                        .await?
+                }
+                LiveReasoningBound::Snapshot(items) => {
+                    self.output
+                        .replace_snapshot(LiveOutputSnapshotReplacement {
+                            producer,
+                            sequence: snapshot.sequence + 1,
+                            items,
+                        })
+                        .await?
+                }
+                LiveReasoningBound::Drop => return Ok(()),
+            };
             if matches!(outcome, LiveOutputPublishOutcome::Accepted { .. }) {
                 return Ok(());
             }
@@ -523,6 +607,12 @@ impl CodexLiveOutput {
             source: LiveOutputSource::SharedBackend,
         }))
     }
+}
+
+/// One live item per summary part. The numeric suffix keeps IDs distinct across
+/// parts of the same native item and across native items.
+fn reasoning_item_id(item: &str, summary_index: u64) -> String {
+    format!("reasoning:{item}:{summary_index}")
 }
 
 fn is_history_item_id(id: Option<&str>) -> bool {

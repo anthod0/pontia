@@ -20,6 +20,15 @@ export function assistantTextFromMessage(message: unknown): string | undefined {
   return textFromContent(record.content);
 }
 
+export function thinkingDeltaFromEvent(event: unknown): string | undefined {
+  if (!event || typeof event !== "object") return undefined;
+  const streamEvent = (event as Record<string, unknown>).assistantMessageEvent;
+  if (!streamEvent || typeof streamEvent !== "object") return undefined;
+  const record = streamEvent as Record<string, unknown>;
+  if (record.type !== "thinking_delta") return undefined;
+  return typeof record.delta === "string" && record.delta.length > 0 ? record.delta : undefined;
+}
+
 export function assistantDeltaFromEvent(event: unknown): string | undefined {
   if (!event || typeof event !== "object") return undefined;
   const record = event as Record<string, unknown>;

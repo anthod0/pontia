@@ -139,6 +139,9 @@
               {/if}
               <div class="min-w-0 flex-1 pt-0.5 text-sm leading-5">
                 <span class="break-words font-medium text-foreground/75">{step.content}</span>
+                {#if step.truncated}
+                  <span class="block text-xs text-muted-foreground">Truncated · remaining thinking not shown</span>
+                {/if}
               </div>
             </div>
           {/if}

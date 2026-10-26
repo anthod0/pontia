@@ -5,6 +5,7 @@ import { asRecord, optionalString } from "./values.js";
 
 const DEFAULT_BATCH_DELAY_MS = 75;
 const RETRY_DELAY_MS = 500;
+const MAX_REASONING_BYTES = 1024 * 1024;
 
 export type ManagedToolUse = {
   tool_name: string;
@@ -31,6 +32,7 @@ export interface LiveToolResult {
 
 export type LiveOutputItem =
   | { kind: "assistant_text"; item_id: string; text: string }
+  | { kind: "reasoning"; item_id: string; text: string; truncated: boolean }
   | {
       kind: "tool_call";
       item_id: string;
@@ -49,6 +51,7 @@ export type LiveOutputUpdate =
   | { type: "tool_output_delta"; call_id: string; delta: string; truncated: boolean }
   | { type: "tool_output_updated"; call_id: string; text: string; truncated: boolean }
   | { type: "assistant_text_delta"; item_id: string; delta: string }
+  | { type: "reasoning_delta"; item_id: string; delta: string; truncated: boolean }
   | {
       type: "tool_call";
       item_id: string;
@@ -66,6 +69,7 @@ export interface CompleteToolCall {
 
 export interface LiveOutputPublisherLike {
   appendText(delta: string): void;
+  appendReasoning(delta: string): void;
   appendToolCall(toolCall: CompleteToolCall): void;
   toolExecution(event: unknown): void;
   close(): Promise<void>;
@@ -121,6 +125,39 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
     }
     item.text += delta;
     this.enqueue({ type: "assistant_text_delta", item_id: item.item_id, delta });
+  }
+
+  appendReasoning(delta: string): void {
+    if (this.closing || this.disabled || delta.length === 0) return;
+    const reasoning = this.items.filter(
+      (item): item is Extract<LiveOutputItem, { kind: "reasoning" }> => item.kind === "reasoning",
+    );
+    // Once reasoning is incomplete, later reasoning would hide the gap.
+    if (reasoning.some((item) => item.truncated)) return;
+    const used = reasoning.reduce((size, item) => size + byteLength(item.text), 0);
+    const retained = truncateUtf8(delta, MAX_REASONING_BYTES - used);
+    const truncated = retained !== delta;
+    if (retained.length === 0) {
+      // No room for content: the marker can only be carried by a snapshot. A
+      // zero budget implies earlier reasoning already holds it.
+      reasoning.at(-1)!.truncated = true;
+      this.resync();
+      return;
+    }
+    let item = this.items.at(-1);
+    if (item?.kind !== "reasoning") {
+      if (this.items.length >= 256) return;
+      item = {
+        kind: "reasoning",
+        item_id: this.nextItemId("reasoning"),
+        text: "",
+        truncated: false,
+      };
+      this.items.push(item);
+    }
+    item.text += retained;
+    item.truncated = truncated;
+    this.enqueue({ type: "reasoning_delta", item_id: item.item_id, delta: retained, truncated });
   }
 
   appendToolCall(toolCall: CompleteToolCall): void {
@@ -276,6 +313,12 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
     this.scheduleFlush(this.batchDelayMs);
   }
 
+  private resync(): void {
+    this.sequence += 1;
+    this.needsSnapshot = true;
+    this.scheduleFlush(this.batchDelayMs);
+  }
+
   private nextItemId(prefix: string): string {
     this.itemSequence += 1;
     return `${prefix}_${this.itemSequence}`;
@@ -362,6 +405,14 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
       }) - MAX_RPC_FRAME_BYTES;
     if (excess() <= 0) return;
     let changed = false;
+    // Reasoning yields first. Trim the latest reasoning first so the visible
+    // reasoning stays a contiguous prefix.
+    for (const item of [...this.items].reverse()) {
+      if (item.kind !== "reasoning" || excess() <= 0 || !item.text) continue;
+      item.text = truncateText(item.text, Math.max(0, escapedTextBytes(item.text) - excess()));
+      item.truncated = true;
+      changed = true;
+    }
     for (const item of this.items) {
       if (item.kind !== "tool_call") continue;
       if (item.output && excess() > 0 && item.output.text) {
@@ -473,6 +524,17 @@ function resultBytes(result?: LiveToolResult): number {
 }
 function escapedTextBytes(text: string): number {
   return jsonBytes(text) - 2;
+}
+function truncateUtf8(text: string, budget: number): string {
+  if (byteLength(text) <= budget) return text;
+  let end = 0;
+  let bytes = 0;
+  for (const char of text) {
+    bytes += byteLength(char);
+    if (bytes > budget) break;
+    end += char.length;
+  }
+  return text.slice(0, end);
 }
 function truncateText(text: string, budget: number): string {
   if (escapedTextBytes(text) <= budget) return text;

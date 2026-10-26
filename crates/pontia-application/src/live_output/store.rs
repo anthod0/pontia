@@ -421,6 +421,30 @@ fn apply_update(items: &mut Vec<LiveOutputItem>, update: LiveOutputUpdate) -> Re
                 });
             }
         }
+        LiveOutputUpdate::ReasoningDelta {
+            item_id,
+            delta,
+            truncated: incoming,
+        } => {
+            if let Some(existing) = items.iter_mut().find(|item| item.item_id() == item_id) {
+                let LiveOutputItem::Reasoning {
+                    text, truncated, ..
+                } = existing
+                else {
+                    return Err(Error::StateConflict(format!(
+                        "live output item {item_id} is not reasoning"
+                    )));
+                };
+                text.push_str(&delta);
+                *truncated |= incoming;
+            } else {
+                items.push(LiveOutputItem::Reasoning {
+                    item_id,
+                    text: delta,
+                    truncated: incoming,
+                });
+            }
+        }
         LiveOutputUpdate::ToolCall {
             item_id,
             call_id,

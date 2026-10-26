@@ -38,6 +38,7 @@ import {
   assistantTextFromMessage,
   errorMessageFromAgentEnd,
   lastAssistantTextFromMessages,
+  thinkingDeltaFromEvent,
 } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
@@ -865,6 +866,8 @@ export function createPontiaPiExtension(
     if (!activeTurn || activeTurn.ended) return;
     await reportContextUsageFromHookEvent(event, ctx);
 
+    const thinking = thinkingDeltaFromEvent(event);
+    if (thinking) activeTurn.liveOutput.appendReasoning(thinking);
     const delta = assistantDeltaFromEvent(event);
     if (delta) activeTurn.liveOutput.appendText(delta);
     const toolCall = completeToolCallFromMessageUpdate(event);

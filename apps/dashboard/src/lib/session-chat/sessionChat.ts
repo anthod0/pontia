@@ -33,6 +33,7 @@ export interface SessionChatThoughtStep {
   managedToolUse?: ManagedToolUse;
   executionStatus?: SessionChatExecutionStatus;
   processOutput?: { text: string; truncated: boolean };
+  truncated?: boolean;
 }
 
 export interface SessionChatMessage {
