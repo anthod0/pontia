@@ -3,9 +3,17 @@ import adapter from "@sveltejs/adapter-cloudflare";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 import { mdsvex } from "mdsvex";
+import { generateLlms } from "./scripts/generate-llms";
 
 export default defineConfig({
   plugins: [
+    {
+      name: "generate-llms",
+      apply: "build",
+      async config() {
+        await generateLlms();
+      },
+    },
     tailwindcss(),
     sveltekit({
       extensions: [".svelte", ".svx"],

@@ -6,6 +6,8 @@ node_modules
 .netlify
 /.svelte-kit
 /build
+/static/llms.txt
+/static/docs/**/*.md
 worker-configuration.d.ts
 
 # OS
