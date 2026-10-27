@@ -33,11 +33,49 @@ use pontia::manager::LaunchdManager;
 #[cfg(target_os = "linux")]
 use pontia::manager::SystemdManager;
 
+const ROOT_HELP: &str = "\
+Quick start:
+  pontia init      Interactive setup (requires a terminal)
+  pontia up        Start the service without prompts
+  pontia status    Check service health
+
+Configuration and state live in $PONTIA_HOME (default: ~/.pontia).
+Use 'pontia <command> -h' for details, including nested commands.
+
+For setup without prompts, see https://pontia.dev/docs/initialization.md#non-interactive-initialization
+For more documents, see https://pontia.dev/llms.txt";
+
+const INIT_HELP: &str = "\
+Prompts on the terminal. Rerunning keeps the existing API token and Workspace roots.
+
+For setup without prompts, see https://pontia.dev/docs/initialization.md#non-interactive-initialization";
+
+const LOGIN_HELP: &str = "\
+Prints a URL and a one-time code, then waits until the user approves them in a browser.
+Saves the credential to $PONTIA_HOME/auth.json.";
+
+const UP_HELP: &str = "\
+Creates the API token if missing and restarts a running service.
+Run after editing $PONTIA_HOME/config.toml. The printed Dashboard URL contains the token.
+
+For configuration options, see https://pontia.dev/docs/configuration.md";
+
+const UPDATE_HELP: &str = "\
+Restarts a running service. To install a specific release, see https://pontia.dev/docs/updating.md";
+
+const DOWN_HELP: &str = "Configuration and state are kept; run 'pontia up' to start again.";
+
+const STATUS_HELP: &str = "\
+Exits 0 only when the service is running and HTTP is healthy.
+
+For diagnosing failures, see https://pontia.dev/docs/troubleshooting.md";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "pontia",
     version = pontia_version::version(),
-    about = "Control Pontia from the command line"
+    about = "Control Pontia from the command line",
+    after_help = ROOT_HELP
 )]
 struct Cli {
     #[command(subcommand)]
@@ -47,20 +85,26 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Configure Pontia interactively and start its per-user service
+    #[command(after_help = INIT_HELP)]
     Init,
     /// Manage Agent Client settings through the Pontia service
     Client(pontia::client::ClientCommand),
     /// Sign in to the Pontia cloud from a headless terminal
+    #[command(after_help = LOGIN_HELP)]
     Login,
     /// Configure remote device access
     Remote(remote::RemoteCommand),
     /// Install and start the per-user Pontia service
+    #[command(after_help = UP_HELP)]
     Up,
     /// Update pontia and pontiad to the latest stable release
+    #[command(after_help = UPDATE_HELP)]
     Update,
     /// Stop and disable the per-user Pontia service
+    #[command(after_help = DOWN_HELP)]
     Down,
     /// Show the Pontia service and health state
+    #[command(after_help = STATUS_HELP)]
     Status,
     /// Run and interact with Workflows
     Workflow(workflow::WorkflowCommand),

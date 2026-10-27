@@ -18,7 +18,27 @@ use pontia::private_file;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
+const REMOTE_HELP: &str = "\
+Requires 'pontia login'. enable, rotate-key, and disable restart a running service.
+
+Examples:
+  pontia remote edges
+  pontia remote enable --edge <EDGE_ID> --name \"Workstation\"
+  pontia remote status
+
+For remote access, see https://pontia.dev/docs/remote-access.md
+For device management, see https://pontia.dev/docs/device-management.md";
+
+const ENABLE_HELP: &str = "\
+Prompts for the edge and name unless both --edge and --name are given.
+An already registered device keeps its name and edge; use 'pontia remote edit' to change them.";
+
+const EDIT_HELP: &str = "\
+Prompts for both values unless --name or --handle is given.
+Changing the handle invalidates the previous Dashboard URL.";
+
 #[derive(Debug, Args)]
+#[command(after_help = REMOTE_HELP)]
 pub(crate) struct RemoteCommand {
     #[command(subcommand)]
     command: RemoteCommandKind,
@@ -29,23 +49,25 @@ enum RemoteCommandKind {
     /// List available edges as JSON
     Edges,
     /// Register this machine as a remote device
+    #[command(after_help = ENABLE_HELP)]
     Enable(EnableArgs),
-    /// Show this machine's remote registration and identity state
+    /// Show the registration state and Remote Dashboard URL
     Status,
     /// Edit this machine's Cloud device profile
+    #[command(after_help = EDIT_HELP)]
     Edit(EditArgs),
-    /// Replace the device E2E identity key
+    /// Replace the device E2E identity key; open browser sessions must reconnect
     RotateKey,
-    /// Unregister this machine and disable remote access
+    /// Unregister this machine and disable remote access; the login is kept
     Disable,
 }
 
 #[derive(Debug, Default, Args)]
 struct EnableArgs {
-    /// Register with this edge without prompting (requires --name)
+    /// Register with this edge from 'pontia remote edges' (requires --name)
     #[arg(long, value_name = "EDGE_ID", requires = "name")]
     edge: Option<String>,
-    /// Set the device name without prompting (requires --edge)
+    /// Set the device name (requires --edge)
     #[arg(long, value_name = "DEVICE_NAME", requires = "edge")]
     name: Option<String>,
 }
@@ -55,7 +77,7 @@ struct EditArgs {
     /// Set the device display name
     #[arg(long)]
     name: Option<String>,
-    /// Set the device Dashboard URL handle
+    /// Set the Dashboard URL handle: 4-48 of a-z, 0-9, -, _; starts with a letter
     #[arg(long)]
     handle: Option<String>,
 }

@@ -10,7 +10,41 @@ use pontia_config::AppConfig;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+const WORKFLOW_HELP: &str = "\
+Requires a running service.
+'submit' and 'patch' run inside the Pontia-managed tmux pane of the current
+Agent Node or Re-planner, and follow the steps in its instructions.
+
+For Workflows, see https://pontia.dev/docs/workflows.md";
+
+const RUN_HELP: &str = "\
+Prints the Workflow ID. Paths are relative to the definition file.
+
+Example definition:
+  title = \"Implement search\"
+  cwd = \".\"
+
+  [[handoffs]]
+  name = \"requirements.md\"
+  source = \"./requirements.md\"
+
+  [[nodes]]
+  type = \"agent\"
+  phase = \"Build\"
+  title = \"Implement\"
+  instructions = \"Implement and verify the requirements.\"
+  inputs = [\"requirements.md\"]
+  output = \"result.md\"
+
+For the definition format, see https://pontia.dev/docs/workflows.md#create-a-definition";
+
+const PATCH_HELP: &str = "\
+Write the files named in the Agent Node or Re-planner instructions first.
+
+For replanning, see https://pontia.dev/docs/workflows.md#request-replanning";
+
 #[derive(Debug, Args)]
+#[command(after_help = WORKFLOW_HELP)]
 pub(crate) struct WorkflowCommand {
     #[command(subcommand)]
     command: WorkflowCommandKind,
@@ -18,14 +52,19 @@ pub(crate) struct WorkflowCommand {
 
 #[derive(Debug, Subcommand)]
 enum WorkflowCommandKind {
+    /// Start a Workflow from a TOML definition
+    #[command(after_help = RUN_HELP)]
     Run(RunArgs),
-    /// Show a compact, agent-readable Workflow context
+    /// Show the Workflow context and current Node as Markdown
     Show(ShowArgs),
+    /// Submit the current Agent Node's output
     Submit,
+    /// Request, apply, or block a Workflow Patch
     Patch(PatchArgs),
 }
 
 #[derive(Debug, Args)]
+#[command(after_help = PATCH_HELP)]
 struct PatchArgs {
     #[command(subcommand)]
     command: PatchCommandKind,
@@ -33,19 +72,24 @@ struct PatchArgs {
 
 #[derive(Debug, Subcommand)]
 enum PatchCommandKind {
+    /// Report a blocking problem from an Agent Node and request replanning
     Request,
+    /// Apply the Re-planner's revised definition as a new revision
     Apply,
+    /// Finish the Patch without changing the definition
     Block,
 }
 
 #[derive(Debug, Args)]
 struct RunArgs {
+    /// Workflow definition TOML file
     #[arg(value_name = "WORKFLOW_FILE")]
     workflow_file: PathBuf,
 }
 
 #[derive(Debug, Args)]
 struct ShowArgs {
+    /// Workflow ID [default: $PONTIA_WORKFLOW_ID]
     #[arg(value_name = "WORKFLOW_ID")]
     workflow_id: Option<String>,
 }

@@ -5,7 +5,26 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
+const CLIENT_HELP: &str = "\
+Requires a running service. Output is JSON.
+Select an entry by short ID (pi, codex) or by --id from 'pontia client list'.
+Only enabled entries can start new Sessions.
+
+Examples:
+  pontia client list
+  pontia client enable pi
+
+For Client setup, see https://pontia.dev/docs/agent-clients.md";
+
+const SET_HELP: &str = "\
+The JSON object replaces all existing overrides. Supported key: tui_command.
+
+Example:
+  echo '{\"tui_command\": \"/usr/local/bin/pi\"}' > pi.json
+  pontia client set pi --config pi.json";
+
 #[derive(Debug, Args)]
+#[command(after_help = CLIENT_HELP)]
 pub struct ClientCommand {
     #[command(subcommand)]
     command: ClientCommandKind,
@@ -13,23 +32,33 @@ pub struct ClientCommand {
 
 #[derive(Debug, Subcommand)]
 enum ClientCommandKind {
+    /// List all Agent Client entries
     List,
+    /// Show one entry, including its effective configuration
     Show(Target),
+    /// Replace an entry's configuration overrides
+    #[command(after_help = SET_HELP)]
     Set {
         #[command(flatten)]
         target: Target,
+        /// JSON object with the new overrides
         #[arg(long, value_name = "JSON_FILE")]
         config: PathBuf,
     },
+    /// Allow new Sessions to use an entry
     Enable(Target),
+    /// Stop new Sessions from using an entry
     Disable(Target),
+    /// Delete an entry's saved settings, which also disables it
     Reset(Target),
 }
 
 #[derive(Debug, Args)]
 #[group(required = true, multiple = false)]
 struct Target {
+    /// Entry short ID, e.g. pi or codex
     client: Option<String>,
+    /// Entry ID from 'pontia client list', for ambiguous short IDs
     #[arg(long)]
     id: Option<String>,
 }
