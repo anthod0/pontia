@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-10-27
+
+### Added
+
+- Added non-interactive remote device registration with `pontia remote enable --edge EDGE_ID --name NAME`.
+- Added an initialization guide covering interactive and step-by-step setup.
+- Published the documentation as Markdown with an `llms.txt` index.
+
+### Changed
+
+- Expanded `pontia` command help with descriptions, usage notes, examples, and documentation links.
+
 ## [0.6.7] - 2026-10-27
 
 ### Added
@@ -415,7 +427,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.6.7...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.6.8...HEAD
+[0.6.8]: https://github.com/anthod0/pontia/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/anthod0/pontia/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/anthod0/pontia/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/anthod0/pontia/compare/v0.6.4...v0.6.5
