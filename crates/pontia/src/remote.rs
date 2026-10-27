@@ -26,8 +26,10 @@ pub(crate) struct RemoteCommand {
 
 #[derive(Debug, Subcommand)]
 enum RemoteCommandKind {
+    /// List available edges as JSON
+    Edges,
     /// Register this machine as a remote device
-    Enable,
+    Enable(EnableArgs),
     /// Show this machine's remote registration and identity state
     Status,
     /// Edit this machine's Cloud device profile
@@ -36,6 +38,16 @@ enum RemoteCommandKind {
     RotateKey,
     /// Unregister this machine and disable remote access
     Disable,
+}
+
+#[derive(Debug, Default, Args)]
+struct EnableArgs {
+    /// Register with this edge without prompting (requires --name)
+    #[arg(long, value_name = "EDGE_ID", requires = "name")]
+    edge: Option<String>,
+    /// Set the device name without prompting (requires --edge)
+    #[arg(long, value_name = "DEVICE_NAME", requires = "edge")]
+    name: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -58,7 +70,10 @@ pub(crate) async fn run(
     vars: &HashMap<String, String>,
 ) -> Result<ServiceRestart, String> {
     match command.command {
-        RemoteCommandKind::Enable => enable(vars).await.map(|_| ServiceRestart::Required),
+        RemoteCommandKind::Edges => edges(vars).await.map(|_| ServiceRestart::NotRequired),
+        RemoteCommandKind::Enable(args) => enable_with_args(vars, args)
+            .await
+            .map(|_| ServiceRestart::Required),
         RemoteCommandKind::Status => status(vars).await.map(|_| ServiceRestart::NotRequired),
         RemoteCommandKind::Edit(args) => {
             edit(vars, args).await.map(|_| ServiceRestart::NotRequired)
@@ -74,7 +89,7 @@ struct StoredCredential {
     token: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct Edge {
     id: String,
     name: String,
@@ -136,16 +151,36 @@ struct RegistrationApi<'a> {
     credential: &'a str,
 }
 
+async fn edges(vars: &HashMap<String, String>) -> Result<(), String> {
+    let home = login::pontia_home(vars)?;
+    let origin = login::auth_origin(vars)?;
+    let credential = read_credential(&home.join("auth.json"), "listing edges for")?;
+    let client = remote_client()?;
+    let api = RegistrationApi {
+        client: &client,
+        origin: &origin,
+        credential: &credential,
+    };
+    let edges = api.fetch_edges().await?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&edges).map_err(|error| error.to_string())?
+    );
+    Ok(())
+}
+
 pub async fn enable(vars: &HashMap<String, String>) -> Result<RemoteAccess, String> {
+    enable_with_args(vars, EnableArgs::default()).await
+}
+
+async fn enable_with_args(
+    vars: &HashMap<String, String>,
+    args: EnableArgs,
+) -> Result<RemoteAccess, String> {
     let home = login::pontia_home(vars)?;
     let origin = login::auth_origin(vars)?;
     let credential = read_credential(&home.join("auth.json"), "enabling")?;
-    let client = Client::builder()
-        .timeout(REQUEST_TIMEOUT)
-        .build()
-        .map_err(|error| {
-            format!("failed to create the remote registration HTTP client: {error}")
-        })?;
+    let client = remote_client()?;
     let api = RegistrationApi {
         client: &client,
         origin: &origin,
@@ -167,24 +202,43 @@ pub async fn enable(vars: &HashMap<String, String>) -> Result<RemoteAccess, Stri
     }
 
     let edges = api.fetch_edges().await?;
-    let edge = select_edge(&edges)?;
-    let default_name = hostname::get()
-        .map_err(|error| format!("failed to read the local hostname: {error}"))?
-        .to_string_lossy()
-        .trim()
-        .to_string();
-    if default_name.is_empty() {
-        return Err(
-            "the local hostname is empty; set a device name after fixing the hostname".to_string(),
-        );
+    if edges.is_empty() {
+        return Err("no edge is currently available for registration".to_string());
     }
-    let name = Input::<String>::new()
-        .with_prompt("Device name")
-        .default(default_name)
-        .interact_text()
-        .map_err(|error| format!("failed to read the device name: {error}"))?
-        .trim()
-        .to_string();
+    let (edge, name) = match (args.edge, args.name) {
+        (Some(edge_id), Some(name)) => {
+            let edge = edges
+                .iter()
+                .find(|edge| edge.id == edge_id)
+                .ok_or_else(|| {
+                    format!("edge {edge_id:?} is not available; use `pontia remote edges`")
+                })?;
+            (edge, name.trim().to_string())
+        }
+        (None, None) => {
+            let edge = select_edge(&edges)?;
+            let default_name = hostname::get()
+                .map_err(|error| format!("failed to read the local hostname: {error}"))?
+                .to_string_lossy()
+                .trim()
+                .to_string();
+            if default_name.is_empty() {
+                return Err(
+                    "the local hostname is empty; set a device name after fixing the hostname"
+                        .to_string(),
+                );
+            }
+            let name = Input::<String>::new()
+                .with_prompt("Device name")
+                .default(default_name)
+                .interact_text()
+                .map_err(|error| format!("failed to read the device name: {error}"))?
+                .trim()
+                .to_string();
+            (edge, name)
+        }
+        _ => return Err("--edge and --name must be provided together".to_string()),
+    };
     validate_name(&name)?;
 
     let pending = generate_identity(
@@ -315,8 +369,11 @@ async fn edit(vars: &HashMap<String, String>, args: EditArgs) -> Result<(), Stri
 }
 
 fn remote_client() -> Result<Client, String> {
-    Client::builder()
-        .timeout(REQUEST_TIMEOUT)
+    let builder = Client::builder().timeout(REQUEST_TIMEOUT);
+    // Loopback Cloud fixtures must not route through the host's proxy settings.
+    #[cfg(test)]
+    let builder = builder.no_proxy();
+    builder
         .build()
         .map_err(|error| format!("failed to create the remote registration HTTP client: {error}"))
 }
@@ -843,9 +900,6 @@ impl RegistrationApi<'_> {
             .json()
             .await
             .map_err(|_| "the cloud returned an invalid official edge list".to_string())?;
-        if edges.is_empty() {
-            return Err("no official edge is currently available for registration".to_string());
-        }
         if edges
             .iter()
             .any(|edge| !uuid_v7(&edge.id) || edge.name.is_empty())
