@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-10-27
+
+### Added
+
+- Added live reasoning from Codex, ACP, and Pi sessions to Dashboard as Thinking steps.
+
+### Changed
+
+- Loaded remote access in the Public Dashboard as a separately deployed module.
+
+### Fixed
+
+- Refreshed Dashboard session views when updates arrive while a session is still loading.
+
 ## [0.6.6] - 2026-10-23
 
 ### Changed
@@ -401,7 +415,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.6.6...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.6.7...HEAD
+[0.6.7]: https://github.com/anthod0/pontia/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/anthod0/pontia/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/anthod0/pontia/compare/v0.6.4...v0.6.5
 [0.4.0]: https://github.com/anthod0/pontia/compare/v0.3.6...v0.4.0
