@@ -20,5 +20,10 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "scripts/check-remote-access-boundaries.ts"]
+  "include": [
+    "vite.config.ts",
+    "vite.remote-access.config.ts",
+    "scripts/check-remote-access-boundaries.ts",
+    "scripts/check-public-build.ts"
+  ]
 }

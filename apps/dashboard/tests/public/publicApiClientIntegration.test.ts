@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeAll, expect, test, vi } from "vitest";
 
 const { e2eFetch } = vi.hoisted(() => ({
   e2eFetch: vi.fn(
@@ -12,7 +12,12 @@ vi.mock("../../src/modes/public/remote-access", async (importOriginal) => ({
 }));
 
 import { listWorkspaces } from "../../src/api/client";
+import { loadRemoteAccess } from "../../src/modes/public/remoteAccessLoader.svelte";
 import { clearPublicApiTarget, setPublicApiTarget } from "../../src/modes/public/remote-access";
+
+beforeAll(async () => {
+  await loadRemoteAccess();
+});
 
 afterEach(() => {
   clearPublicApiTarget();

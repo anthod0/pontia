@@ -8,7 +8,7 @@
     "icons:generate": "bun scripts/generate-icons.ts",
     "dev": "vite",
     "build": "bun run icons:generate && vite build",
-    "build:public": "bun run icons:generate && VITE_DASHBOARD_MODE=public vite build",
+    "build:public": "bun run icons:generate && VITE_DASHBOARD_MODE=public vite build && vite build --config vite.remote-access.config.ts && bun scripts/check-public-build.ts",
     "preview": "vite preview",
     "deploy": "bun run build:public && wrangler deploy",
     "prepare": "svelte-kit sync",

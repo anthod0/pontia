@@ -8,6 +8,8 @@ const publicMode = resolve(src, "modes/public");
 const remoteAccess = resolve(publicMode, "remote-access");
 const wasm = resolve(src, "e2e-wasm");
 const handleValidator = resolve(src, "lib/deviceHandle");
+// The only SPA module that may reference remote access; it loads the separately built module.
+const loader = resolve(publicMode, "remoteAccessLoader.svelte.ts");
 const imports: { file: string; specifier: string; target: string }[] = [];
 
 function within(file: string, directory: string): boolean {
@@ -65,13 +67,16 @@ for (const { file, specifier, target } of imports) {
     report("Remote access may depend only on its own modules, handle validation and E2E wasm.");
   }
   if (!within(file, remoteAccess) && !within(file, wasm)) {
-    if (
-      within(target, wasm) ||
-      (within(target, remoteAccess) &&
-        target !== remoteAccess &&
-        target !== resolve(remoteAccess, "index"))
+    if (within(target, wasm)) {
+      report("The SPA must not load E2E wasm; it belongs to remote access.");
+    } else if (within(target, remoteAccess) && file !== loader) {
+      report("The SPA must load remote access through remoteAccessLoader.");
+    } else if (
+      within(target, remoteAccess) &&
+      target !== remoteAccess &&
+      target !== resolve(remoteAccess, "index")
     ) {
-      report("The SPA must use the remote-access entry point, including for wasm loading.");
+      report("remoteAccessLoader must use the remote-access entry point.");
     }
   }
   if (

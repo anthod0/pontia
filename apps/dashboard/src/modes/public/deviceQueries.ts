@@ -1,6 +1,6 @@
 import { createQuery, queryOptions } from "@tanstack/svelte-query";
 import { queryClient } from "../../queries/queryClient";
-import { listPublicDevices } from "./remote-access";
+import { loadRemoteAccess } from "./remoteAccessLoader.svelte";
 
 export const publicDeviceKeys = {
   all: ["public-devices"] as const,
@@ -11,7 +11,7 @@ function publicDevicesOptions(enabled: boolean) {
   return queryOptions({
     queryKey: publicDeviceKeys.list(),
     enabled,
-    queryFn: ({ signal }) => listPublicDevices(signal),
+    queryFn: async ({ signal }) => (await loadRemoteAccess()).listPublicDevices(signal),
   });
 }
 

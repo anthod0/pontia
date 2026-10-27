@@ -1,20 +1,12 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
   import DevicesPage from '../../components/devices/DevicesPage.svelte';
   import RemoteDashboardPage from '../../components/devices/RemoteDashboardPage.svelte';
   import { initialRemoteDashboardState, type RemoteDashboardState } from '$lib/remoteDashboard';
   import { isValidDeviceHandle } from '$lib/deviceHandle';
   import { clearDashboardRuntimeState, startDashboardRuntime, stopDashboardRuntime } from '../../services/dashboardRuntime';
   import { createPublicDevicesQuery } from './deviceQueries';
-  import {
-    clearPublicApiTarget,
-    setPublicApiTarget,
-    clearE2eSession,
-    connectPublicDevice,
-    dashboardBootstrapUrl,
-    dashboardSignInUrl,
-    CloudRequestError,
-  } from './remote-access';
+  import { loadedRemoteAccess, loadRemoteAccess } from './remoteAccessLoader.svelte';
 
   let { handle: handleProp, children }: { handle?: string; children: Snippet } = $props();
   // Route data may be replaced during navigation without changing the device.
@@ -24,16 +16,17 @@
   let failedHandle = $state<string | null>(null);
   let targetFailureMessage = $state<string | null>(null);
   let targetSignInRequired = $state(false);
+  const remote = $derived(loadedRemoteAccess());
   const devicesQuery = createPublicDevicesQuery(() => !handle);
   const devices = $derived(devicesQuery.data ?? []);
   const devicesError = $derived(
     devicesQuery.error ? cloudFailureMessage(devicesQuery.error, 'list') : null,
   );
-  const devicesSignInRequired = $derived(
-    devicesQuery.error instanceof CloudRequestError && devicesQuery.error.status === 401,
-  );
-  const signInUrl = dashboardSignInUrl(
-    `${window.location.pathname}${window.location.search}${window.location.hash}`,
+  const devicesSignInRequired = $derived(cloudErrorStatus(devicesQuery.error) === 401);
+  const signInUrl = $derived(
+    remote?.dashboardSignInUrl(
+      `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    ),
   );
 
   const dashboardState = $derived.by((): RemoteDashboardState => {
@@ -54,21 +47,29 @@
   }
 
   function teardownRuntime(): void {
-    clearPublicApiTarget();
-    clearE2eSession();
+    // Not a dependency of the connection effects: loading remote access must not reconnect.
+    const remoteAccess = untrack(() => remote);
+    remoteAccess?.clearPublicApiTarget();
+    remoteAccess?.clearE2eSession();
     stopDashboardRuntime();
     clearDashboardRuntimeState();
     runtimeHandle = null;
   }
 
+  // Returns null when the error is not a Cloud request error.
+  function cloudErrorStatus(error: unknown): number | undefined | null {
+    return remote && error instanceof remote.CloudRequestError ? error.status : null;
+  }
+
   function cloudFailureMessage(error: unknown, operation: 'list' | 'target'): string {
-    if (error instanceof CloudRequestError && error.status === 401) {
+    const status = cloudErrorStatus(error);
+    if (status === 401) {
       return 'Sign in to Pontia to continue.';
     }
-    if (error instanceof CloudRequestError && error.status === 403) {
+    if (status === 403) {
       return 'Pontia refused this Dashboard request.';
     }
-    if (error instanceof CloudRequestError) {
+    if (status !== null) {
       return operation === 'list'
         ? 'Pontia returned an invalid device list.'
         : 'Pontia could not authorize this device connection.';
@@ -93,17 +94,17 @@
     targetSignInRequired = false;
     if (!isValidDeviceHandle(requestedHandle)) return;
 
-    if (import.meta.env.DEV && import.meta.env.MODE === 'development') {
-      runtimeHandle = requestedHandle;
-      startDashboardRuntime();
-      return teardownRuntime;
-    }
-
+    const developmentBridge = import.meta.env.DEV && import.meta.env.MODE === 'development';
     const controller = new AbortController();
-    void connectPublicDevice(requestedHandle, controller.signal)
-      .then((target) => {
+    void loadRemoteAccess()
+      .then(async (remoteAccess) => {
+        if (developmentBridge) return;
+        const target = await remoteAccess.connectPublicDevice(requestedHandle, controller.signal);
         if (controller.signal.aborted || handle !== requestedHandle) return;
-        setPublicApiTarget(target);
+        remoteAccess.setPublicApiTarget(target);
+      })
+      .then(() => {
+        if (controller.signal.aborted || handle !== requestedHandle) return;
         runtimeHandle = requestedHandle;
         startDashboardRuntime();
       })
@@ -111,7 +112,7 @@
         if (controller.signal.aborted || handle !== requestedHandle) return;
         failedHandle = requestedHandle;
         targetFailureMessage = cloudFailureMessage(error, 'target');
-        targetSignInRequired = error instanceof CloudRequestError && error.status === 401;
+        targetSignInRequired = cloudErrorStatus(error) === 401;
       });
 
     return () => {
@@ -127,7 +128,7 @@
     state={dashboardState}
     onRetry={retry}
     unavailableMessage={targetFailureMessage}
-    reauthorizationUrl={isValidDeviceHandle(handle) ? dashboardBootstrapUrl(handle) : undefined}
+    reauthorizationUrl={isValidDeviceHandle(handle) ? remote?.dashboardBootstrapUrl(handle) : undefined}
     signInUrl={targetSignInRequired ? signInUrl : undefined}
   >
     {#snippet dashboard()}
@@ -140,7 +141,7 @@
     loading={devicesQuery.isPending}
     error={devicesError}
     onRetry={retry}
-    openAction={dashboardBootstrapUrl}
+    openAction={remote?.dashboardBootstrapUrl}
     signInUrl={devicesSignInRequired ? signInUrl : undefined}
   />
 {/if}
