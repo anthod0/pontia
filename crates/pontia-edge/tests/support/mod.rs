@@ -31,7 +31,8 @@ use tokio_tungstenite::{
 use uuid::Uuid;
 
 pub type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
-pub const CLI_CREDENTIAL: &str = "ptr_v1_session_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+pub const CLI_CREDENTIAL: &str =
+    "ptr_v1_0199791c-6600-7000-8000-000000000001_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 pub const EDGE_CREDENTIAL: &str =
     "pec_v1_01a0e686-24d4-75e8-866d-5710ffe3b2b5_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
