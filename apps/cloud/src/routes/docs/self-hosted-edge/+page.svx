@@ -5,7 +5,7 @@
 
 # Self-host an Edge
 
-A self-hosted Edge relays end-to-end encrypted Dashboard traffic between browsers and your Pontia devices. It does not run agents and cannot decrypt device business traffic. Pontia Cloud still provides login, device ownership, Edge registration, and connection authorization.
+A self-hosted Edge relays Dashboard traffic that stays encrypted end to end between browsers and your Pontia devices. Agents run on your devices, while Pontia Cloud provides login, device ownership, Edge registration, and connection authorization.
 
 ## Requirements
 
@@ -26,7 +26,7 @@ The default deployment serves HTTPS and WSS on public port 443 and uses HTTP-01 
 
 If port 80 or 443 is unavailable, choose the alternative deployment in [Edge settings](/settings/edges). It uses a browser-safe custom HTTPS/WSS port—8443 is recommended—and DNS-01 certificate validation. Open the selected port in the host and provider firewalls.
 
-Pontia Cloud assigns and configures the Edge hostname under `edge.pontia.dev`; you do not create the DNS record manually.
+Pontia Cloud assigns the Edge hostname under `edge.pontia.dev` and configures its DNS record automatically.
 
 ## Deploy from Cloud
 
@@ -102,4 +102,4 @@ Keep `/etc/pontia/edge` private and backed up according to your server policy.
 
 ## Delete an Edge
 
-Deleting a self-hosted Edge in Cloud permanently removes its registration and associated devices. It does not stop or erase the server process. Stop and remove the server installation separately only after moving or disabling affected devices.
+Deleting a self-hosted Edge in Cloud permanently removes its registration and associated devices. The server installation is managed separately: move or disable the affected devices, then stop the service and remove its files from the server.

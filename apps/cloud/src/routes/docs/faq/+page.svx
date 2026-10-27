@@ -13,23 +13,23 @@ No. Agent Clients, tools, credentials, and project files stay on your device. Po
 
 No. Workspace roots limit what the Pontia browser exposes for activation and file discovery. The Agent Client still has the permissions and sandbox policy of its local process.
 
-## Can I use Pontia without an account?
+## How do I access my device remotely?
 
-Yes. The local Dashboard uses an External API token and listens on the device's loopback address; access from elsewhere requires a secure tunnel or forwarding configuration. The hosted Remote Dashboard requires a Pontia Cloud login and registered device.
+Sign in to Pontia Cloud, register your device, and open its Remote Dashboard at [app.pontia.dev](https://app.pontia.dev). Follow [Initialization](/docs/initialization) for the complete setup.
 
 ## Can Pontia read my prompts or project data?
 
 Pontia has three runtime components:
 
-- **Pontia Cloud** manages users, authentication, device registration, and access authorization. It does not receive Dashboard traffic or project files.
+- **Pontia Cloud** manages users, authentication, device registration, and access authorization. Dashboard traffic flows between the browser and device through an Edge.
 - **pontiad** runs on your device, coordinates Agent Clients, and serves prompts and agent data to your Dashboard.
-- **Pontia Edge** relays end-to-end encrypted traffic between the browser and `pontiad`. It cannot decrypt that traffic.
+- **Pontia Edge** relays traffic that stays encrypted end to end between the browser and `pontiad`.
 
 Your prompts and project data remain on your device.
 
 ## What should I back up?
 
-Back up project files independently. `$PONTIA_HOME` contains local control state, Workflow files, and sensitive credentials; back it up only to a trusted encrypted destination. Agent Client native conversation data may live outside `PONTIA_HOME` and follows that Client's own backup rules.
+Back up project files, `$PONTIA_HOME`, and your Agent Clients' native conversation data. Use a trusted encrypted destination for `$PONTIA_HOME`, which contains credentials as well as control state and Workflow files. Follow each Client's backup instructions for its conversation data.
 
 ## Does Pontia support Windows?
 

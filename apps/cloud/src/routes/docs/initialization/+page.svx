@@ -1,0 +1,210 @@
+<svelte:head>
+	<title>Initialization — Pontia</title>
+	<meta name="description" content="Initialize Pontia interactively, or set up clients, the local service, and remote access with commands an agent can run one at a time." />
+</svelte:head>
+
+# Initialization
+
+Initialize your device, connect it to Pontia Cloud, and open the Remote Dashboard to start working with your agents. Choose the interactive wizard for guided setup, or use separate commands when an agent or script needs to perform each step explicitly.
+
+First [install Pontia and the Agent Clients you want to use](/docs/getting-started). Run setup as the operating-system user who will run those clients. Local service management requires Linux with a running systemd user service manager, or macOS 11 or later.
+
+## Interactive initialization
+
+Run this command in a terminal:
+
+```sh
+pontia init
+```
+
+The wizard lets you:
+
+1. Select the Client integrations to install: pi, Codex, or both.
+2. Review and confirm the setup.
+3. Create or retain the local API token, start the Pontia service, and enable the selected Clients.
+4. Sign in to Pontia Cloud and register the device for remote access.
+
+When prompted to sign in and enable remote access, accept and complete the browser authorization. Select an available edge and confirm the device name. Pontia opens the Remote Dashboard when setup succeeds. Follow the [Dashboard guide](/docs/dashboard) to start your first Session.
+
+Existing configuration and Workspace Browser roots are retained. Without configured roots, the Workspace Browser defaults to your home directory.
+
+<h2 id="non-interactive-initialization">Non-interactive initialization</h2>
+
+Follow these steps in order, including the linked instructions for your platform. Each step includes commands and the results to check before continuing.
+
+Client authentication and Cloud login may require user authorization. Complete the authorization when prompted, then continue setup.
+
+### 1. Prepare the installation
+
+Choose the Clients to enable (pi, Codex, or both), the device display name, and the project directories to browse. Run every step as the same operating-system user.
+
+1. Install `pontia` and `pontiad` using [Getting started](/docs/getting-started). For missing Client tools, follow the official [pi quickstart](https://pi.dev/docs/latest/quickstart), [tmux installation guide](https://github.com/tmux/tmux/wiki/Installing), or [Codex CLI installation](https://learn.chatgpt.com/docs/codex/cli). Install only the selected Clients and their prerequisites; reuse working installations.
+2. Select one absolute `PONTIA_HOME` for all commands. Preserve an existing installation's configuration and credentials. The default is `~/.pontia`.
+3. For Codex, select its existing authenticated home: the configured `CODEX_HOME`, or `~/.codex` by default. Use this same directory for Codex authentication, its daemon, and Pontia.
+
+For the default paths, or to retain paths already set in the shell:
+
+```sh
+export PONTIA_HOME="${PONTIA_HOME:-$HOME/.pontia}"
+pontia --version
+```
+
+If using Codex, also set:
+
+```sh
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+```
+
+Use these environment values in every shell used for setup. Substitute your actual paths and IDs in the examples below.
+
+### 2. Install and verify the Client integrations
+
+Install the integrations for your selected Clients here, then enable them in Pontia in step 4.
+
+**pi:** with `pi` and `tmux` installed, install the plugin:
+
+```sh
+pi --version
+tmux -V
+pi install npm:@pontia/pi-client-plugin
+```
+
+After installation, use your existing provider credentials or open `pi` and run `/login` and `/model` inside pi, following the [pi quickstart](https://pi.dev/docs/latest/quickstart). See [pi Agent Client](/docs/agent-clients/pi) for executable overrides and troubleshooting.
+
+**Codex:** complete all of these steps before starting Pontia:
+
+1. Confirm the executable path and daemon support:
+
+   ```sh
+   command -v codex
+   codex --version
+   codex app-server daemon start --help
+   codex app-server daemon version --help
+   ```
+
+2. Complete [Codex authentication](https://learn.chatgpt.com/docs/auth) in the selected `CODEX_HOME`. For ChatGPT sign-in, check `codex login status`. To sign in, run `codex login --device-auth` and complete authorization at the printed URL with the one-time code. For other login methods, API keys, or model providers, follow the corresponding official authentication instructions.
+3. Read [Codex manual setup](/docs/codex#manual-setup). Install or check the startup definition for **your platform**, using the resolved executable and selected `CODEX_HOME`. On Linux, enable the systemd user service and lingering. On macOS, load the LaunchAgent. An existing working definition can be reused if its paths match.
+4. Verify the running daemon with the same executable and home:
+
+   ```sh
+   codex app-server daemon version
+   ```
+
+   A running daemon returns JSON with `"status": "running"`.
+
+These checks use the shell's `CODEX_HOME`. Step 4 saves the same path in Pontia's background service.
+
+<h3 id="start-the-local-service">3. Configure and start the local service</h3>
+
+Merge your listen address, Workspace Browser roots, and Client executable settings into `$PONTIA_HOME/config.toml`, retaining existing settings you want to keep. See [Configuration](/docs/configuration) for the available options.
+
+Use the same absolute `PONTIA_HOME` for every command. Store persistent service settings in `config.toml`.
+
+```sh
+pontia up
+pontia status
+```
+
+`pontia up` creates or retains the API token in `config.toml`, installs or refreshes the per-user service, waits for it to become healthy, and prints the Local Dashboard URL. It restarts the service if it is already running. The printed URL contains the local API token; keep it private.
+
+### 4. Align Client settings and enable the integrations
+
+**If using Codex, first match Pontia's saved `CODEX_HOME` to the daemon's home.** After `pontia up` has created the Pontia service definition, complete [Match Pontia's Codex home](/docs/codex#pontia-codex-home). This applies to both the default `~/.codex` and custom directories.
+
+If the saved value is missing or different, add or update it and reload the service:
+
+- **Linux:** set `Environment="CODEX_HOME=/the/selected/absolute/path"` under `[Service]` in `~/.config/systemd/user/pontia.service`, then run `pontia up`.
+- **macOS:** set the `CODEX_HOME` string in `EnvironmentVariables` in `~/Library/LaunchAgents/dev.pontia.pontiad.plist`, using the exact XML layout in the [Codex home instructions](/docs/codex#pontia-codex-home). Run `pontia down` followed by `pontia up` to reload the plist.
+
+Retain the other service settings. After reloading, check that the saved `CODEX_HOME` matches the daemon's home and that `pontia status` reports a healthy service. For pi-only setup, continue directly to the Client list.
+
+Now list the available Client entries:
+
+```sh
+pontia client list
+```
+
+The result is JSON with an `agent_clients` array. Locate each selected entry by its `client_type` and check its `effective_config`. Check that `tui_command` points to an executable available to the Pontia service.
+
+If you need an executable override, write a JSON file containing the desired `config_overrides`, preserving any existing values. For example:
+
+```json
+{"tui_command": "/absolute/path/to/client"}
+```
+
+Apply it to the entry's `id` from the list:
+
+```sh
+pontia client set --id <CLIENT_ID> --config <JSON_FILE>
+```
+
+Use the actual pi or Codex executable path in the file, then check that `effective_config` reflects the change.
+
+Enable only the Clients whose installation and configuration you completed:
+
+```sh
+# Run this if you installed the pi integration.
+pontia client enable pi
+
+# Run this if you configured the Codex daemon.
+pontia client enable codex
+```
+
+If a short selector is ambiguous, use the entry's `id` from `pontia client list`:
+
+```sh
+pontia client enable --id <CLIENT_ID>
+```
+
+Run `pontia client list` again to confirm `enabled: true` for each selected entry. Step 7 verifies these Clients by starting Sessions from the Remote Dashboard.
+
+### 5. Sign in to Pontia Cloud
+
+Sign in to authorize device registration with Pontia Cloud:
+
+```sh
+pontia login
+```
+
+Open the printed verification URL, sign in, and approve the one-time code. The command completes when authorization succeeds. When an agent runs setup, it can share the URL and code with you while waiting for approval.
+
+You can reuse an existing valid Cloud login; `pontia remote edges` in the next step confirms access. Keep the saved credential in `auth.json` private.
+
+### 6. Register the device without prompts
+
+List the edges available to the logged-in user:
+
+```sh
+pontia remote edges
+```
+
+The command outputs a JSON array of objects with `id` and `name` fields. Choose an available edge and pass its ID together with your device name:
+
+```sh
+pontia remote enable --edge <EDGE_ID> --name "Development workstation"
+pontia remote status
+```
+
+Replace `<EDGE_ID>` with an ID from the list and supply both `--edge` and `--name` for non-interactive registration.
+
+Registration creates the device identity and updates the running local service. An already registered device keeps its existing name and edge. To rename it, use `pontia remote edit --name "New name"`.
+
+### 7. Verify the Cloud-connected device
+
+Run:
+
+```sh
+pontia status
+pontia client list
+pontia remote status
+```
+
+Confirm the following results:
+
+- The local service is running and HTTP health is healthy.
+- Every selected Client entry is enabled.
+- The remote status reports a registered device and no missing or invalid local identity.
+
+Open the Remote Dashboard URL from `pontia remote status`. Follow the [Dashboard guide](/docs/dashboard) to activate a Workspace and start a Session with each selected Client. A successful Session confirms that the device is reachable and the Client is ready to use.
+
+For agent-assisted setup, finish with a summary of the configured Clients, service health, device name, Remote Dashboard URL, and verification results. If browser verification remains, include the URL and the steps above so you can complete it. See [Remote access](/docs/remote-access) and [Troubleshooting](/docs/troubleshooting) for help.

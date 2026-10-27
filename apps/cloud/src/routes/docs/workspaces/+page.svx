@@ -20,16 +20,16 @@ roots = [
 
 Each `root_id` must be unique. The path must be an existing absolute directory when Pontia uses it. On a first initialization, Pontia configures the user's home directory as the root; later `pontia init` runs preserve existing roots.
 
-Roots are a browsing boundary for Pontia, not an operating-system sandbox. The Agent Client still runs with the permissions of its local process.
+Roots control which directories the Dashboard can browse. The Agent Client's sandbox and local process permissions control its filesystem access.
 
 ## Activate a Workspace
 
 In [Workspaces](https://app.pontia.dev/workspaces), choose a root, browse to a project, and activate that directory. An active Workspace becomes available in New chat and can be associated with multiple Sessions.
 
-You can rename an active Workspace without moving its directory. Deactivating or revoking it prevents new selections but does not delete project files. If a directory moves outside all configured roots or disappears, the Dashboard marks the registration unavailable so you can revoke it.
+Renaming a Workspace keeps its directory in place. Deactivating or revoking it removes it from new selections while preserving project files. If a directory moves outside all configured roots or disappears, the Dashboard marks the registration unavailable so you can revoke it.
 
 ## File mentions
 
 Inside an active Workspace, type `@` in the composer to search for files and directories. File-picker behavior is configurable, including ignored files, hidden entries, symlink traversal, result limits, and timeouts. See [Configuration](/docs/configuration).
 
-A file mention identifies relevant local context for the Agent Client; it does not upload the Workspace to Pontia Cloud.
+A file mention points the Agent Client to relevant context in your local Workspace.

@@ -46,8 +46,8 @@ The service manager must be available to the target user. On a headless host, lo
 systemctl --user is-system-running
 ```
 
-Pontia does not install the local control plane as a root system service. Avoid running `pontia init` with `sudo`, because that would configure a different home and user service.
+Run `pontia init` and lifecycle commands as the user who runs your Agent Clients. Pontia uses that user's home directory, credentials, and systemd user service.
 
 ## Self-hosted Edge
 
-`pontia-edge` supports Linux only and requires root for initialization and service management. Its unit is `/etc/systemd/system/pontia-edge.service`. Do not substitute the Edge process for the local `pontiad` service; they have separate roles and installations.
+`pontia-edge` runs on Linux and requires root for initialization and service management. Its unit is `/etc/systemd/system/pontia-edge.service`. Deploy it separately from `pontiad` to relay encrypted connections between browsers and devices.

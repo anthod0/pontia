@@ -30,7 +30,7 @@ The updater:
 7. restarts a running managed service and checks health;
 8. restores the previous binaries and attempts service recovery if replacement or restart fails.
 
-`pontia` and `pontiad` must be regular files in the same directory, and the CLI must be running as the installed executable named `pontia`. A package-manager wrapper or renamed executable cannot self-update.
+For self-updates, keep `pontia` and `pontiad` as regular files in the same directory and run the installed executable named `pontia` directly.
 
 The Dashboard defaults to the release archive matching the binary version, so a successful update also moves the served Dashboard to that version unless `[dashboard].source` is overridden.
 
@@ -42,7 +42,7 @@ The installer accepts a release beginning with `v`:
 curl -fsSL https://get.pontia.dev/install.sh | PONTIA_VERSION=v0.5.2 sh
 ```
 
-This installs binaries but does not by itself update an existing service definition. Run `pontia up` afterward when changing installation locations or intentionally installing a specific version. Normal in-product updates follow only the stable channel and do not provide a downgrade command.
+After installing a specific release or changing the installation location, run `pontia up` to refresh the service definition and start that installation. Use `pontia update` for updates to the latest stable release.
 
 ## Update a self-hosted Edge
 
@@ -62,11 +62,11 @@ sudo pontia-edge auto-update enable
 sudo pontia-edge auto-update disable
 ```
 
-The timer checks hourly with up to ten minutes of random delay. Disabling the timer does not interrupt an update already running.
+The timer checks hourly with up to ten minutes of random delay. Disabling it stops future checks; an update already running continues to completion.
 
 ## Before and after updating
 
-Pontia applies bundled local database migrations during normal startup when `run_migrations` is enabled. Do not copy a newer local database into an older release and assume it is compatible.
+Pontia applies bundled local database migrations during normal startup when `run_migrations` is enabled. Back up your data before changing releases. When restoring a database, use a release compatible with its schema.
 
 After an update, run:
 

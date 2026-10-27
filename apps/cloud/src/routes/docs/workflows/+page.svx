@@ -38,9 +38,9 @@ inputs = ["research.md"]
 output = "result.md"
 ```
 
-`cwd` must resolve to an existing directory and becomes the launch directory for every Agent Client in the Workflow. It is not automatically a registered Pontia Workspace.
+Set `cwd` to an existing directory. Every Agent Client in the Workflow launches there. To also use the directory from New chat, [activate it as a Workspace](/docs/workspaces).
 
-Only `agent` Nodes are currently accepted. Nodes execute in definition order. An input must name an initial Handoff or an earlier Node output. Every output name must be unique and must be a single file name, not a path.
+Use `type = "agent"` for each Node. Nodes execute in definition order. Each input names an initial Handoff or an earlier Node output. Give every output a unique file name without directory components.
 
 ## Run and inspect
 
@@ -62,19 +62,19 @@ Inside a Workflow-managed Agent Session, `PONTIA_WORKFLOW_ID` supplies the curre
 
 ## Complete an Agent Node
 
-Pontia tells the Agent Node the exact output-file path. The Agent must write the complete result there and then run:
+Write the complete result to the output-file path provided by Pontia, then submit it from the Agent Node's managed `tmux` pane:
 
 ```sh
 pontia workflow submit
 ```
 
-This command works only in the current Pontia-managed `tmux` pane. A normal Turn completion without a successful submission leaves the Workflow idle for intervention; it does not mark the Node submitted.
+A successful submission marks the Node's output ready. If the Turn completes before submission, the Workflow becomes idle and awaits intervention.
 
 ## Pause, resume, and retry
 
 Use the Workflow detail page to pause a running Workflow or resume a paused one. Pausing requests interruption of a busy current Turn when supported. Resuming an interrupted current Session sends a continuation before scheduling proceeds.
 
-When a failed Workflow is recoverable, **Retry** continues the same Agent Node conversation. Earlier submitted Nodes remain complete, existing Workspace changes remain in place, and unsubmitted output is archived. The recovering Node must inspect prior side effects and submit a fresh complete output.
+When a failed Workflow is recoverable, **Retry** continues the same Agent Node conversation. Earlier submitted Nodes remain complete, existing Workspace changes remain in place, and unsubmitted output is archived. The recovering Node reviews the existing changes and submits a fresh complete output.
 
 ## Request replanning
 
@@ -91,4 +91,4 @@ pontia workflow patch apply
 pontia workflow patch block
 ```
 
-An applied Workflow Patch creates a new immutable graph revision. Existing Node identities and execution facts are not rewritten. The Dashboard lets you compare revisions and inspect Patch requests, Re-planner Sessions, outcomes, and resulting revisions.
+An applied Workflow Patch creates a new graph revision while preserving existing Node identities and execution history. The Dashboard lets you compare revisions and inspect Patch requests, Re-planner Sessions, outcomes, and resulting revisions.

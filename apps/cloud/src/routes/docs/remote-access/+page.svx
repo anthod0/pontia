@@ -9,9 +9,9 @@ Remote access lets you monitor and control agent sessions on your device through
 
 ## Enable remote access during setup
 
-`pontia init` asks whether you want to sign in and enable remote access. If you accept, it completes login, registers the device, restarts the local service with the remote configuration, and opens the dashboard for that device.
+When `pontia init` prompts you to sign in and enable remote access, accept and complete the browser authorization. Continue through device registration to connect your device to Pontia Cloud. Pontia restarts the local service with the remote configuration and opens the Remote Dashboard for that device.
 
-## Enable remote access later
+## Connect an existing installation
 
 First, sign in:
 
@@ -29,6 +29,8 @@ pontia remote enable
 
 Choose an available Edge and confirm the device name when prompted. Pontia generates the device identity used for end-to-end encrypted access and updates the running service when needed.
 
+For registration without terminal prompts, use `pontia remote edges` to get an edge ID, then run `pontia remote enable --edge EDGE_ID --name "Device name"`. Both options are required. See [non-interactive initialization](/docs/initialization#non-interactive-initialization) for the full sequence and browser authorization requirements.
+
 Open [app.pontia.dev](https://app.pontia.dev) to access your registered device.
 
 ## Check and manage the registration
@@ -45,9 +47,9 @@ You can change the device's display name or Dashboard URL handle with `pontia re
 
 The browser and your device establish an end-to-end encrypted session. The Edge carries the connection and relays ciphertext, while Pontia Cloud manages login, device registration, and access authorization.
 
-Agent execution and project files remain on your device. Enabling remote access does not move the execution environment into Pontia Cloud. See [Security](/docs/security) for protocol and credential details.
+Agent execution and project files remain on your device. See [Security](/docs/security) for protocol and credential details.
 
-You may select an official Edge or [deploy a self-hosted Edge](/docs/self-hosted-edge). Self-hosting changes where ciphertext is relayed, not the Cloud authorization boundary.
+You may select an official Edge or [deploy a self-hosted Edge](/docs/self-hosted-edge). Both use Pontia Cloud for authorization; self-hosting lets you choose where ciphertext is relayed.
 
 ## Disable remote access
 

@@ -69,7 +69,7 @@ ignore_globs = [
 ]
 ```
 
-Following symlinks can expand the search outside the visible directory tree when the operating-system user can access the target. Enable it only when that behavior is intended.
+Set `follow_symlinks = true` to include accessible symlink targets in searches, including targets outside the visible directory tree.
 
 ## Environment overrides
 
@@ -86,7 +86,7 @@ The running process accepts these overrides:
 | `PONTIA_PI_TUI_COMMAND` | `runtime.pi.tui_command`; an empty value clears it |
 | `PONTIA_AUTH_ORIGIN` | Pontia Cloud HTTPS origin; intended for controlled deployments and development |
 
-Environment values take precedence over file values for the same setting. The per-user service normally persists only `PONTIA_HOME`, `PONTIA_AUTH_ORIGIN`, and required Agent Client paths. Other variables supplied to `pontia init` are deliberately ignored for persistence; put lasting service configuration in `config.toml`.
+Environment values take precedence over file values for the running process. For persistent service configuration, use `config.toml`. The installed service stores `PONTIA_HOME`, `PONTIA_AUTH_ORIGIN`, and the required Agent Client paths separately.
 
 Boolean environment values accept `1`, `true`, `yes`, or `on`, and `0`, `false`, `no`, or `off`.
 
@@ -104,4 +104,4 @@ The default state directory contains sensitive and durable data:
 | `state/` | Runtime sockets, launch files, and integration logs |
 | `cache/dashboard/` | Cached remote Dashboard bundle |
 
-Do not publish or casually copy the state directory. Use [Device management](/docs/device-management) to rotate or revoke remote credentials rather than editing identity files by hand.
+Keep the state directory private and protect its backups as described in [Security](/docs/security). Use [Device management](/docs/device-management) to rotate or revoke remote credentials.

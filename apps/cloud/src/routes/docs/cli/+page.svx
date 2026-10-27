@@ -20,14 +20,18 @@ Use `pontia COMMAND --help` for the exact options in your installed version.
 | `pontia update` | Install the latest signed stable `pontia` and `pontiad` release |
 | `pontia --version` | Print the installed version |
 
-Stopping `pontiad` stops observation, input reception, and Workflow scheduling. It is not proof that a running Agent Client, Turn, or native conversation has ended.
+See [Initialization](/docs/initialization) for interactive setup and the equivalent step-by-step command sequence.
+
+Stopping `pontiad` stops observation, input reception, and Workflow scheduling. Agent Clients manage the lifecycle of their native conversations separately.
 
 ## Cloud login and remote access
 
 | Command | Purpose |
 | --- | --- |
 | `pontia login` | Complete browser-based device authorization and store a CLI credential |
-| `pontia remote enable` | Register this device, select an Edge, and create its E2E identity |
+| `pontia remote edges` | List available edges as a JSON array of IDs and names |
+| `pontia remote enable` | Register this device, select an edge interactively, and create its E2E identity |
+| `pontia remote enable --edge EDGE_ID --name NAME` | Register without prompts; both options are required |
 | `pontia remote status` | Compare local identity state with the Cloud registration |
 | `pontia remote edit --name NAME` | Change the device display name |
 | `pontia remote edit --handle HANDLE` | Change the device Dashboard URL handle |
@@ -47,11 +51,11 @@ Remote configuration changes that affect `pontiad` restart the local service aut
 | `pontia workflow patch apply` | Current Re-planner pane | Accept the candidate definition as a new revision |
 | `pontia workflow patch block` | Current Re-planner pane | Finish the Patch without applying the candidate definition |
 
-The pane-scoped commands reject calls outside the Pontia-managed `tmux` pane because they derive the Session and runtime identity from that pane.
+Run pane-scoped commands in the current Agent Node or Re-planner's Pontia-managed `tmux` pane.
 
 ## Exit status and errors
 
-Commands return success only when the requested operation reports an operational result. Errors are written to standard error with a `pontia:` prefix. Keep the full redacted error when diagnosing a failure.
+Use the exit status to check command success. Errors are written to standard error with a `pontia:` prefix. Include the redacted error when diagnosing a failure.
 
 ## `pontia-edge`
 

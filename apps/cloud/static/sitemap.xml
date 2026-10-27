@@ -3,11 +3,12 @@
   <url><loc>https://pontia.dev/</loc></url>
   <url><loc>https://pontia.dev/docs</loc></url>
   <url><loc>https://pontia.dev/docs/getting-started</loc></url>
+  <url><loc>https://pontia.dev/docs/initialization</loc></url>
   <url><loc>https://pontia.dev/docs/how-it-works</loc></url>
   <url><loc>https://pontia.dev/docs/dashboard</loc></url>
   <url><loc>https://pontia.dev/docs/agent-clients</loc></url>
   <url><loc>https://pontia.dev/docs/agent-clients/pi</loc></url>
-  <url><loc>https://pontia.dev/docs/agent-clients/codex</loc></url>
+  <url><loc>https://pontia.dev/docs/codex</loc></url>
   <url><loc>https://pontia.dev/docs/workspaces</loc></url>
   <url><loc>https://pontia.dev/docs/workflows</loc></url>
   <url><loc>https://pontia.dev/docs/remote-access</loc></url>

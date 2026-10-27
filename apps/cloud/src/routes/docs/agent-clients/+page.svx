@@ -12,7 +12,7 @@ Pontia currently includes two Agent Clients:
 | Client | Local requirement | Integration installed by `pontia init` |
 | --- | --- | --- |
 | [pi](/docs/agent-clients/pi) | `pi` and `tmux` | Pontia's pi plugin |
-| [Codex](/docs/agent-clients/codex) | A Codex CLI with app-server daemon support | Per-user Codex daemon startup |
+| [Codex](/docs/codex) | A Codex CLI with app-server daemon support | Per-user Codex daemon startup |
 
 ## Choose Clients during initialization
 
@@ -22,18 +22,18 @@ Run:
 pontia init
 ```
 
-The initializer checks the selected Clients before changing Pontia's configuration. pi is selected by default; Codex must be selected explicitly. You may select both or neither, although Pontia cannot start useful agent Sessions without an available Client.
+The initializer checks your selected Clients before applying the configuration. pi is selected by default; select Codex as well to use both. Enable the Clients you want to use for Sessions.
 
 Running `pontia init` again preserves the existing External API token and Workspace Browser roots. It can also install or repair a selected Client integration.
 
 ## Client capabilities differ
 
-Pontia uses one Session model across Clients, but it does not pretend that every Client supports the same controls. The Dashboard enables actions such as interruption, model changes, history branching, and queued delivery only when the active Client reports the corresponding capability.
+The Dashboard presents the controls supported by the selected Client, such as interruption, model changes, history branching, and queued delivery.
 
 A Pontia Session is durably associated with one client-native conversation identity after binding. Reopening the same native conversation continues the existing Session; a new native conversation belongs to a new Session.
 
 ## Client credentials and permissions
 
-Pontia does not replace the Client's own authentication or sandbox configuration. Sign in to pi or Codex and verify that it can perform the intended work before starting the integration. The agent can access only what its local process and configuration permit, even if the Workspace is visible in Pontia.
+Each Client uses its own credentials, sandbox, and local permissions. Sign in to pi or Codex and verify that it can perform the intended work before starting the integration.
 
 See [Troubleshooting](/docs/troubleshooting) when a Client is missing, cannot start, or stops reporting output.

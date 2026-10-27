@@ -21,7 +21,7 @@ pi --version
 tmux -V
 ```
 
-Configure pi's own model provider credentials separately. Pontia does not supply model credentials.
+Configure your model-provider credentials in pi before starting Sessions.
 
 ## Install the integration
 
@@ -41,11 +41,9 @@ The plugin reports native pi lifecycle and conversation facts to `pontiad` and a
 
 ## How pi Sessions run
 
-Pontia launches pi inside a managed `tmux` pane in the selected Workspace. The pane carries the Pontia Session and runtime identities used by Workflow commands and lifecycle reporting.
+Pontia launches pi inside a managed `tmux` pane in the selected Workspace. Run Workflow commands such as `pontia workflow submit` in the managed pane for the current Workflow Agent Node.
 
-Do not copy those pane-local identity values into another terminal. Commands such as `pontia workflow submit` intentionally work only inside the managed pane for the current Workflow Agent Node.
-
-Pontia reads complete conversation history from pi's native data rather than maintaining a second full transcript. If the native history is unavailable, the Dashboard may still show Pontia's control state while conversation recovery is limited.
+Conversation history is read from pi's native data. Keep that data available to browse and resume conversations through Pontia.
 
 ## Override the pi command
 
@@ -56,7 +54,7 @@ The default TUI command is `pi`. To use another executable or wrapper, set it in
 tui_command = "/absolute/path/to/pi"
 ```
 
-For a command-scoped override, use `PONTIA_PI_TUI_COMMAND`. Environment overrides supplied only to `pontia init` are not persisted into the installed service; put a lasting value in `config.toml` and restart Pontia.
+For a command-scoped override, use `PONTIA_PI_TUI_COMMAND`. For a persistent service setting, update `config.toml` and run `pontia up`.
 
 ## Diagnose the integration
 

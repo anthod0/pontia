@@ -19,7 +19,7 @@ The local Dashboard is available at <http://127.0.0.1:8080/dashboard> and uses t
 
 A Workspace is the project directory in which an agent runs. Before creating a Session, use [Workspaces](https://app.pontia.dev/workspaces) to browse one of the configured roots and activate the project directory.
 
-Only directories inside a configured Workspace Browser root can be activated. The first initialization uses your home directory as the default root. See [Workspaces](/docs/workspaces) to restrict or change the available roots.
+Activate directories within your configured Workspace Browser roots. The first initialization uses your home directory as the default root. See [Workspaces](/docs/workspaces) to restrict or change the available roots.
 
 ## Start a Session
 
@@ -42,7 +42,7 @@ The chat page streams the conversation and work steps exposed by the Agent Clien
 - type `@` to find files and directories in the active Workspace;
 - edit an eligible earlier user message to branch from that point in the native conversation history.
 
-A successful message submission does not by itself mean a new Turn has started. The Inbox shows input that Pontia is still tracking, including messages waiting for delivery or already queued by an Agent Client.
+The Inbox tracks submitted messages waiting for delivery or queued by an Agent Client.
 
 ## Chat commands
 
@@ -55,7 +55,7 @@ Type `/` in the composer to see commands available in the current context:
 | `/model` | Choose a model for subsequent Turns, when supported |
 | `/exit` | End Pontia's active control of the current Session |
 
-Ending a Session does not necessarily delete or terminate the Agent Client's native conversation. The exact lifecycle depends on the Client.
+`/exit` ends Pontia's control of the Session. The Agent Client manages the lifecycle and storage of its native conversation.
 
 ## Keyboard shortcuts
 

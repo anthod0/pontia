@@ -50,6 +50,7 @@
 			<div class="nav-group">
 				<span>Overview</span>
 				<a href="/docs/getting-started">Getting started</a>
+				<a href="/docs/initialization">Initialization</a>
 				<a href="/docs/how-it-works">How Pontia works</a>
 			</div>
 			<div class="nav-group">
@@ -63,6 +64,7 @@
 				<span>Using Pontia</span>
 				<a href="/docs/dashboard">Dashboard</a>
 				<a href="/docs/agent-clients">Agent Clients</a>
+				<a href="/docs/codex">Codex</a>
 				<a href="/docs/workspaces">Workspaces</a>
 				<a href="/docs/workflows">Workflows</a>
 			</div>

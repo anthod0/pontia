@@ -5,7 +5,7 @@
 
 # Getting started
 
-Install Pontia, select the coding agent integrations you use, and initialize the local service.
+Install Pontia, connect your device to Pontia Cloud, and start using your coding agents from the Remote Dashboard.
 
 ## Requirements
 
@@ -41,11 +41,13 @@ The initializer lets you:
 1. Select the pi integration, Codex integration, or both.
 2. Generate the local dashboard credential.
 3. Start the Pontia background service.
-4. Sign in and enable the Remote Dashboard, or continue with local access only.
+4. Sign in to Pontia Cloud and register your device for the Remote Dashboard.
 
 On first initialization, Pontia uses your home directory as the Workspace Browser root. Existing roots are preserved when you run the initializer again.
 
-When setup completes, Pontia opens the appropriate dashboard. If you skip remote access, you can enable it later.
+When prompted to sign in and enable remote access, accept and complete the browser authorization. Select an available edge and confirm your device name. Pontia opens the Remote Dashboard when setup completes.
+
+For an agent or script, follow [Initialization](/docs/initialization) to install Client integrations, start the service, and register remote access with separate commands instead of answering wizard prompts.
 
 ## Check the service
 
@@ -65,4 +67,4 @@ pontia update
 
 If the managed service is running, Pontia restarts it and waits for it to become healthy. If replacement or restart fails, Pontia restores the previous binaries and attempts to recover the service.
 
-Next, [enable remote access](/docs/remote-access), then follow the [Dashboard guide](/docs/dashboard) to activate a Workspace and start your first Session.
+Open your device's Remote Dashboard and follow the [Dashboard guide](/docs/dashboard) to activate a Workspace and start your first Session. If device registration is not yet complete, finish the [remote access setup](/docs/remote-access) first.

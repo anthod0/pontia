@@ -5,7 +5,7 @@
 
 # macOS
 
-Pontia supports macOS 11 and later on Intel and Apple Silicon. The local control plane and Codex daemon use per-user LaunchAgents. `pontia-edge` is not supported on macOS.
+Pontia supports macOS 11 and later on Intel and Apple Silicon. The local control plane and Codex daemon use per-user LaunchAgents. For a self-hosted Edge, use a [Linux server](/docs/self-hosted-edge).
 
 ## Install requirements
 
@@ -62,4 +62,4 @@ The LaunchAgent definitions store absolute executable paths and a controlled exe
 
 `pontia update` uses `/usr/sbin/lsof` to verify that the running CLI is the installed file before replacement. Keep `pontia` and `pontiad` together as regular files and run the installed `pontia` directly.
 
-Do not use `sudo` for the local initializer or lifecycle commands. Pontia is installed for the current user and uses that user's home, Agent Client credentials, and GUI LaunchAgent domain.
+Run initialization and lifecycle commands as the user who runs your Agent Clients. Pontia uses that user's home, credentials, and GUI LaunchAgent domain.

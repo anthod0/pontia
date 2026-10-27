@@ -26,7 +26,7 @@ pontia remote edit --name "Build workstation"
 pontia remote edit --handle build-workstation
 ```
 
-Both options may be supplied together. Changing the handle changes the device URL at `app.pontia.dev/HANDLE`; it does not rotate keys or change the selected Edge.
+Both options may be supplied together. Changing the handle updates the device URL at `app.pontia.dev/HANDLE` while preserving its encryption identity and selected Edge.
 
 ## Rotate the device key
 
@@ -38,7 +38,7 @@ pontia remote rotate-key
 
 Pontia creates a new device E2E identity, updates the Cloud registration, writes the replacement to `$PONTIA_HOME/e2e-identity.json`, and restarts the local service. Existing browser/device encrypted sessions no longer match the new identity and must reconnect.
 
-Rotate the key when the identity file may have been exposed or when deliberately replacing the device's cryptographic identity. Do not edit the key version or private key manually.
+Use this command when the identity file may have been exposed or you want to replace the device's cryptographic identity.
 
 ## Disable remote access
 
@@ -48,7 +48,7 @@ On the device:
 pontia remote disable
 ```
 
-This unregisters the device, removes its local E2E identity, updates local configuration, and restarts the service. It preserves the CLI credential, so `pontia remote enable` does not require another login.
+This unregisters the device, removes its local E2E identity, updates local configuration, and restarts the service. The CLI credential is preserved for subsequent Cloud commands.
 
 Removing a device in [Device settings](/settings/devices) also revokes all of your CLI credentials. Run `pontia login` before using Cloud commands again.
 
@@ -56,10 +56,10 @@ Removing a device in [Device settings](/settings/devices) also revokes all of yo
 
 In [Account settings](/settings/account), link Google or GitHub as sign-in methods. Each provider account can be linked to only one Pontia user. Pontia identifies provider accounts by their stable provider identity rather than treating matching email addresses as the same account.
 
-Do not unlink the only sign-in method you can still use.
+Keep at least one working sign-in method linked to your user.
 
 ## Manage browser sessions
 
 In [Session settings](/settings/sessions), you can revoke one browser session or sign out every other browser. A revoked browser session cannot refresh after its current access token expires.
 
-CLI credentials are revoked by removing a device through Device settings, not by `pontia remote disable`.
+To revoke CLI credentials, remove a device through Device settings.

@@ -30,7 +30,7 @@ On macOS, inspect the LaunchAgent:
 launchctl print gui/$(id -u)/dev.pontia.pontiad
 ```
 
-`pontia up` reinstalls the service definition using the current Pontia executable and restarts an existing service. `pontia down` stops and disables the service; it does not prove that an agent's native conversation has ended.
+`pontia up` refreshes the service definition using the current Pontia executable and restarts an existing service. `pontia down` stops and disables the Pontia service. Agent Clients manage their native conversations separately.
 
 ## The local Dashboard does not open
 
@@ -39,7 +39,7 @@ launchctl print gui/$(id -u)/dev.pontia.pontiad
 3. Enter the `external_api_token` from `$PONTIA_HOME/config.toml`.
 4. If a custom Dashboard archive is configured, verify `[dashboard].source`. Remove that override to return to the release-matched Dashboard.
 
-Treat the External API token as a secret. Do not paste it into issue reports or logs shared with others.
+Keep the External API token private. See [Security](/docs/security) for guidance on sharing diagnostics.
 
 ## No Workspace is available
 
@@ -64,7 +64,7 @@ Also check a custom `[runtime.pi].tui_command` for an invalid path or wrapper.
 
 ## Codex cannot connect
 
-Confirm that your Codex build supports the app-server daemon, then inspect its per-user service. See [Codex Agent Client](/docs/agent-clients/codex) for platform commands. Run `pontia init` again if the executable or `CODEX_HOME` changed.
+Confirm that your Codex build supports the app-server daemon, then inspect its per-user service. See [Codex](/docs/codex) for platform commands. Run `pontia init` again if the executable or `CODEX_HOME` changed.
 
 An agent can also appear stuck when its own sandbox requests an approval that is not available in the Dashboard. Interrupt the Turn if needed, then adjust the Client policy or handle the request through a compatible native interface.
 
@@ -77,7 +77,7 @@ pontia status
 pontia remote status
 ```
 
-Check that the device still has `$PONTIA_HOME/auth.json`, `e2e-identity.json`, and the `[remote]` device ID in `config.toml`. Do not recreate these files manually. Use `pontia login` and `pontia remote enable` to repair registration, or `pontia remote rotate-key` when replacing the device encryption identity.
+Check `$PONTIA_HOME/auth.json`, `e2e-identity.json`, and the `[remote]` device ID in `config.toml`. Use `pontia login` and `pontia remote enable` to repair registration, or `pontia remote rotate-key` to replace the device encryption identity.
 
 Verify that the selected Edge is healthy in [Edge settings](/settings/edges). For a self-hosted Edge, check:
 
@@ -94,10 +94,10 @@ Fix the network, DNS, port, or certificate error reported by the original comman
 sudo pontia-edge retry
 ```
 
-The pending initialization data is stored on that server. Generating a new deployment command is not the first recovery step.
+`retry` uses the initialization state saved on the server to continue the existing deployment.
 
 ## An update fails
 
 `pontia update` verifies signed release metadata and artifacts before replacing binaries. If service restart or health verification fails, it restores the previous binaries and attempts to recover the service. Inspect the platform service logs, resolve the startup problem, and run the update again.
 
-For further diagnosis, record the output of `pontia --version`, `pontia status`, the operating system, and the relevant redacted service errors. Never include API tokens, CLI credentials, device private keys, deployment commands, or Edge credentials.
+For further diagnosis, share the output of `pontia --version`, `pontia status`, the operating system, and relevant service errors after removing the sensitive values listed in [Security](/docs/security).
