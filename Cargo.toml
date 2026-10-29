@@ -14,6 +14,7 @@ members = [
     "crates/pontia-client-pi",
     "crates/pontia-client-codex",
     "crates/pontia-client-acp",
+    "crates/pontia-client-claude",
     "crates/pontia-clients",
     "crates/pontia-http",
     "crates/pontia",

@@ -2,6 +2,8 @@ import type { InboxDeliveryPolicy, SessionView } from "../api/types";
 
 export interface ClientControlDetails {
   connection: string;
+  refreshWhileActive?: boolean;
+  unavailableReason?: string | null;
   profile?: {
     profile_id?: string;
     version?: string;

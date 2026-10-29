@@ -55,6 +55,7 @@ pub fn registration(config: &AppConfig) -> ClientRegistry {
         ),
     ));
     clients.register(codex);
+    clients.register(pontia_client_claude::registration());
     clients.register(pontia_client_acp::registration_from_sources(
         sources.acp_file.clone(),
     ));

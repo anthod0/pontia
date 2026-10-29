@@ -1,9 +1,10 @@
 import { dashboardClient as pi } from "../../../crates/pontia-client-pi/dashboard";
 import { dashboardClient as codex } from "../../../crates/pontia-client-codex/dashboard";
 import { dashboardClient as acp } from "../../../crates/pontia-client-acp/dashboard";
+import { dashboardClient as claude } from "../../../crates/pontia-client-claude/dashboard";
 import type { SessionView } from "./api/types";
 
-const clients = [pi, codex, acp];
+const clients = [pi, codex, acp, claude];
 export const customClientEntries = clients.flatMap((client) =>
   client.customEntry ? [{ clientType: client.clientType, ...client.customEntry }] : [],
 );

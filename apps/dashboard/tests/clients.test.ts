@@ -14,13 +14,14 @@ const session = (client_type: string, extra = {}): SessionView =>
 describe("registered dashboard clients", () => {
   it("preserves the default and the client choices available to each creation flow", () => {
     expect(defaultClientType).toBe("pi");
-    expect(workspaceClientTypes).toEqual(["pi"]);
+    expect(workspaceClientTypes).toEqual(["pi", "claude-agent"]);
     expect(profileClientTypes).toEqual(["pi"]);
   });
   it("uses client-owned input delivery semantics", () => {
     expect(clientDeliveryPolicy(session("codex"))).toBe("steer");
     expect(clientDeliveryPolicy(session("pi"))).toBe("after_idle");
     expect(clientDeliveryPolicy(session("acp"))).toBe("after_idle");
+    expect(clientDeliveryPolicy(session("claude-agent"))).toBe("after_idle");
     expect(clientDeliveryPolicy(session("unregistered"))).toBe("after_idle");
     expect(clientDeliveryPolicy(null)).toBe("after_idle");
   });

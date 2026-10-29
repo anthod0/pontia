@@ -125,6 +125,18 @@
     autofocusComposer = claimChatEntryAutofocus(`/chat/${selectedSessionId}`)
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
     if (selectedSessionId) void loadSelectedSession(selectedSessionId)
+    // Some integrations expose control health independently of lifecycle facts.
+    let refreshingControl = false
+    const controlRefresh = setInterval(async () => {
+      if (refreshingControl || !controlDetails?.refreshWhileActive || !selectedSession || isTerminalSession(selectedSession)) return
+      refreshingControl = true
+      try {
+        await loadSessionDetail(selectedSession.session_id, { showLoading: false })
+      } finally {
+        refreshingControl = false
+      }
+    }, 2_000)
+    return () => clearInterval(controlRefresh)
   })
 
   onDestroy(() => {
@@ -173,6 +185,7 @@
     selectedTurns,
     liveOutputOverlays,
     selectedSession?.current_turn_id ?? null,
+    !sessionSupportsTimeline(selectedSession),
   )
   $: reconcileOptimisticMessages(selectedSessionId, timelineMessages)
   $: reconcileInboxSubmissions(selectedSessionId, timelineMessages)
@@ -872,9 +885,12 @@
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
-  {#if controlDetails && selectedSession?.capabilities.accept_task}
+  {#if selectedSession && controlDetails && (selectedSession.capabilities.accept_task || controlDetails.unavailableReason)}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
       <span>Control: {controlDetails.connection.replaceAll('_', ' ')}</span>
+      {#if controlDetails.unavailableReason}
+        <span class="text-destructive" role="alert">{controlDetails.unavailableReason}</span>
+      {/if}
       {#if controlDetails.profile}
         <span>Profile: {controlDetails.profile.profile_id}{controlDetails.profile.version ? `@${controlDetails.profile.version}` : ''} ({controlDetails.profile.status.replaceAll('_', ' ')})</span>
         {#if controlDetails.profile.error}
@@ -976,6 +992,8 @@
                   </Alert.Description>
                 </Alert.Root>
               {/each}
+            {/if}
+            {#if (sessionSupportsTimeline(selectedSession) && !timelineUnavailable) || (!sessionSupportsTimeline(selectedSession) && (selectedSession.capabilities.stream_output || Object.keys(liveOutputOverlays).length > 0))}
               {#key selectedSessionId}
                 <SessionConversation
                   {messages}

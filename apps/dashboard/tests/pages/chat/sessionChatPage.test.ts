@@ -9,6 +9,7 @@ import {
 } from "./fixtures";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
+import { tick } from "svelte";
 import { expect, test, vi } from "vitest";
 import type { CreateSessionResult, SessionView, TurnView } from "../../../src/api/types";
 import { rememberOptimisticMessage } from "../../../src/queries/optimisticChat";
@@ -2878,6 +2879,102 @@ test("retains terminal live output after a failed timeline refresh and removes i
 
   await waitFor(() => expect(screen.getByText("Final answer")).toBeInTheDocument());
   expect(screen.queryByText("Temporary answer")).not.toBeInTheDocument();
+});
+
+test("shows received live output without native history and keeps it after a confirmed terminal result", async () => {
+  const running = turn({
+    session_id: "session-live-only",
+    turn_id: "turn-live-only",
+    state: "running",
+    input: { summary: "Live-only input" },
+    output: null,
+  });
+  const selected = session({
+    session_id: "session-live-only",
+    state: "busy",
+    current_turn_id: running.turn_id,
+    capabilities: { accept_task: true, stream_output: true, timeline: false },
+  });
+  window.history.pushState({}, "", "/dashboard/chat/session-live-only");
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [running], inboxMessages: [], events: [] });
+  render(SessionChatPage);
+  await waitFor(() => expect(mocks.liveOutputListeners.has(selected.session_id)).toBe(true));
+  const live = mocks.liveOutputListeners.get(selected.session_id)!;
+  live.onEvent({
+    type: "snapshot",
+    session_id: selected.session_id,
+    turn_id: running.turn_id,
+    stream_id: "stream-only",
+    sequence: 1,
+    items: [{ kind: "assistant_text", item_id: "text", text: "Received live answer" }],
+  });
+  expect(await screen.findByText("Received live answer")).toBeVisible();
+  expect(screen.getByText("Live-only input")).toBeVisible();
+  expect(mocks.loadSessionTimeline).not.toHaveBeenCalled();
+  // Lifecycle and output use separate streams; terminal facts can arrive before output closes.
+  live.onDisconnected();
+  mocks.sessionDetail.set({
+    session: { ...selected, state: "idle", current_turn_id: null },
+    turns: [{ ...running, state: "completed" }],
+    inboxMessages: [],
+    events: [],
+  });
+  await tick();
+  expect(screen.getByText("Received live answer")).toBeVisible();
+  expect(mocks.refreshSessionTimeline).not.toHaveBeenCalled();
+  mocks.sessionDetail.set({
+    session: { ...selected, state: "exited", current_turn_id: null, capabilities: {} },
+    turns: [{ ...running, state: "completed" }],
+    inboxMessages: [],
+    events: [],
+  });
+  await tick();
+  expect(screen.getByText("Received live answer")).toBeVisible();
+});
+
+test("refreshes independent control health and disables input without ending an unconfirmed Turn", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const running = turn({ session_id: "session-health", state: "running" });
+    const selected = session({
+      session_id: "session-health",
+      client_type: "claude-agent",
+      state: "busy",
+      current_turn_id: running.turn_id,
+      capabilities: { accept_task: true, interrupt: true, stream_output: true },
+    });
+    window.history.pushState({}, "", "/dashboard/chat/session-health");
+    mocks.loadedSessions = [selected];
+    mocks.sessions.set([selected]);
+    mocks.sessionDetail.set({ session: selected, turns: [running], inboxMessages: [], events: [] });
+    const view = render(SessionChatPage);
+    await screen.findByRole("button", { name: "Interrupt agent" });
+    mocks.loadSessionDetail.mockImplementation(async () => {
+      mocks.sessionDetail.set({
+        session: {
+          ...selected,
+          capabilities: {},
+          "claude-agent": { unavailable_reason: "unsupported_result" },
+        },
+        turns: [running],
+        inboxMessages: [],
+        events: [],
+      });
+      return null;
+    });
+    await vi.advanceTimersByTimeAsync(2000);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Interrupt agent" })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
+    expect(screen.getByRole("alert")).toBeVisible();
+    expect(mocks.sessionDetail.get()?.turns[0].state).toBe("running");
+    view.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("closes the old live output stream when navigating to another Session", async () => {

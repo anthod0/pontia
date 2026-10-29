@@ -2682,6 +2682,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "pontia-client-claude"
+version = "0.0.0"
+dependencies = [
+ "pontia-application",
+ "pontia-core",
+ "pontia-runtime",
+ "pontia-storage-sqlite",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "pontia-client-codex"
 version = "0.0.0"
 dependencies = [
@@ -2726,6 +2742,7 @@ version = "0.0.0"
 dependencies = [
  "pontia-application",
  "pontia-client-acp",
+ "pontia-client-claude",
  "pontia-client-codex",
  "pontia-client-pi",
  "pontia-config",
@@ -2827,6 +2844,7 @@ dependencies = [
  "http-body-util",
  "pontia-application",
  "pontia-client-acp",
+ "pontia-client-claude",
  "pontia-client-codex",
  "pontia-client-pi",
  "pontia-config",

@@ -151,6 +151,7 @@ export function mergeLiveOutputMessages(
   turns: TurnView[],
   overlays: LiveOutputOverlays,
   activeTurnId: string | null = null,
+  withoutNativeHistory = false,
 ): SessionChatMessage[] {
   const turnsById = new Map(turns.map((turn) => [turn.turn_id, turn]));
   let messages = transcriptMessages.slice();
@@ -162,9 +163,12 @@ export function mergeLiveOutputMessages(
     const transcriptForTurn = messages.filter((message) => message.turnId === overlay.turn_id);
     const activeOnCurrentBranch =
       overlay.turn_id === activeTurnId && (turn.state === "queued" || turn.state === "running");
+    const terminalWithoutHistory =
+      withoutNativeHistory &&
+      ["completed", "failed", "interrupted", "abandoned"].includes(turn.state);
     if (
-      (!activeOnCurrentBranch && !transcriptForTurn.length) ||
-      (overlay.awaitingSnapshot && !overlay.closed)
+      (!activeOnCurrentBranch && !transcriptForTurn.length && !terminalWithoutHistory) ||
+      (overlay.awaitingSnapshot && !overlay.closed && !terminalWithoutHistory)
     )
       continue;
     const userMessages = transcriptForTurn.filter((message) => message.role === "user");
@@ -189,6 +193,9 @@ export function mergeLiveOutputMessages(
     }
 
     const liveMessages = liveItemsToMessages(overlay);
+    if (terminalWithoutHistory) {
+      for (const message of liveMessages) message.status = "sent";
+    }
     const lastTurnMessage = messages.reduce(
       (last, message, index) => (message.turnId === overlay.turn_id ? index : last),
       -1,

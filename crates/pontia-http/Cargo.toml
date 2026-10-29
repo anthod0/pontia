@@ -38,6 +38,7 @@ tokio = { version = "1", features = ["test-util"] }
 tracing-subscriber = { version = "0.3", features = ["fmt", "json"] }
 pontia-client-codex.workspace = true
 pontia-client-acp = { path = "../pontia-client-acp" }
+pontia-client-claude = { path = "../pontia-client-claude" }
 
 [features]
 default = []
