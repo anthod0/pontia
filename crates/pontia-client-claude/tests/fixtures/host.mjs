@@ -15,6 +15,12 @@ let sequence = 0;
 let active;
 let number = 0;
 let connected;
+const permissions = new Set();
+const expire = () => {
+  for (const id of permissions)
+    event({ kind: "permission_settled", permission_id: id, outcome: "expired" });
+  permissions.clear();
+};
 const record = (value) =>
   appendFileSync(
     join(config.cwd, "wire.jsonl"),
@@ -45,11 +51,28 @@ const server = createServer((socket) => {
       if (number === 1) event({ kind: "ready", native_session_id: native });
       // Receipt is deliberately delivered before execution begins.
       send({ type: "response", id: request.id, status: "accepted" });
+    } else if (request.method === "permission") {
+      if (active?.text === "approval-lost") process.exit(0);
+      if (
+        !permissions.delete(request.permission_id) ||
+        !["allow", "deny"].includes(request.option)
+      ) {
+        send({ type: "response", id: request.id, status: "rejected" });
+        return;
+      }
+      event({
+        kind: "permission_settled",
+        permission_id: request.permission_id,
+        outcome: "resolved",
+      });
+      send({ type: "response", id: request.id, status: "accepted" });
     } else if (request.method === "interrupt") {
       active.interrupt = true;
+      expire();
       send({ type: "response", id: request.id, status: "accepted" });
     } else if (request.method === "close") {
       clearInterval(timer);
+      expire();
       event({ kind: "closed" });
       send({ type: "response", id: request.id, status: "accepted" });
       socket.end();
@@ -65,6 +88,18 @@ const timer = setInterval(() => {
     active.started = true;
     event({ kind: "started", input_id: active.id });
     event({ kind: "text", input_id: active.id, item_id: "reply", delta: active.text });
+    if (active.text.startsWith("approval")) {
+      for (let n = 0; n < (active.text === "approval-pair" ? 2 : 1); n++) {
+        const id = `permission-${active.number}-${n}`;
+        permissions.add(id);
+        event({
+          kind: "permission_requested",
+          permission_id: id,
+          tool: "Write",
+          blocking: active.text !== "approval-background",
+        });
+      }
+    }
     if (active.text === "tool") {
       event({
         kind: "tool",
@@ -82,6 +117,8 @@ const timer = setInterval(() => {
       });
     }
   }
+  if (gate("cancel")) expire();
+  if (gate("lost")) process.exit(0);
   if (active.started && gate("finish")) {
     if (active.text === "unsupported") event({ kind: "unavailable", reason: "unsupported_result" });
     else

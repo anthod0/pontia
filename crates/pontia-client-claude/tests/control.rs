@@ -115,6 +115,53 @@ impl Harness {
         .await
         .unwrap();
     }
+    async fn interactions(&self, session: &str, expected: &[&str]) -> Vec<Value> {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let page = self
+                    .app
+                    .interactions()
+                    .list(session, None, 100, None)
+                    .await
+                    .unwrap();
+                let mut interactions = page.interactions;
+                interactions.sort_by(|a, b| a.interaction_id.cmp(&b.interaction_id));
+                let values: Vec<Value> = interactions
+                    .into_iter()
+                    .map(|v| serde_json::to_value(v).unwrap())
+                    .collect();
+                if values
+                    .iter()
+                    .map(|v| v["state"].as_str().unwrap())
+                    .collect::<Vec<_>>()
+                    == expected
+                {
+                    return values;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap()
+    }
+    async fn wait_session(&self, session: &str, expected: &str) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while self
+                .app
+                .queries()
+                .get_session(session)
+                .await
+                .unwrap()
+                .unwrap()
+                .state
+                != expected
+            {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
     async fn stop(self) {
         self.app.shutdown().notify();
         tokio::time::timeout(Duration::from_secs(5), self.tasks.join())
@@ -122,6 +169,168 @@ impl Harness {
             .unwrap()
             .unwrap();
     }
+}
+
+#[tokio::test]
+async fn parallel_approvals_are_claimed_once_and_never_release_the_turn_boundary() {
+    let h = Harness::new().await;
+    let session = h.create("approval-pair").await;
+    h.gate(&session, 1, "start");
+    h.wait_states(&session, &["running"]).await;
+    let approvals = h.interactions(&session, &["pending", "pending"]).await;
+    h.wait_session(&session, "waiting_for_interaction").await;
+    let a = approvals[0]["interaction_id"].as_str().unwrap();
+    let b = approvals[1]["interaction_id"].as_str().unwrap();
+    assert!(approvals.iter().all(|p| p["turn_id"].is_null()));
+    h.submit(&session, "next").await;
+    let service = h.app.interactions();
+    let (left, right) = tokio::join!(
+        service.respond(&h.app, &session, a, "allow"),
+        service.respond(&h.app, &session, a, "deny"),
+    );
+    assert!(left.is_ok() || right.is_ok());
+    h.interactions(&session, &["resolved", "pending"]).await;
+    h.wait_session(&session, "waiting_for_interaction").await;
+    service.respond(&h.app, &session, b, "deny").await.unwrap();
+    let resolved = h.interactions(&session, &["resolved", "resolved"]).await;
+    h.wait_session(&session, "busy").await;
+    service.respond(&h.app, &session, a, "allow").await.unwrap();
+    let choices: Vec<_> = h
+        .wire(&session)
+        .into_iter()
+        .filter(|v| v["method"] == "permission")
+        .collect();
+    assert_eq!(choices.len(), 2);
+    assert_ne!(choices[0]["permission_id"], choices[1]["permission_id"]);
+    assert_eq!(choices[0]["option"], resolved[0]["response"]["option_key"]);
+    assert_eq!(choices[1]["option"], "deny");
+    assert_eq!(h.turns(&session).await.len(), 1);
+    assert_eq!(h.turns(&session).await[0].1, "running");
+    assert_eq!(
+        h.wire(&session)
+            .iter()
+            .filter(|v| v["method"] == "input")
+            .count(),
+        1
+    );
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.wait_inputs(&session, 2).await;
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn cancellation_disconnect_and_host_loss_reject_stale_choices_without_turn_results() {
+    for action in ["cancel", "lost", "interrupt", "lost-during-choice"] {
+        let h = Harness::new().await;
+        let session = h
+            .create(if action == "lost-during-choice" {
+                "approval-lost"
+            } else {
+                "approval"
+            })
+            .await;
+        h.gate(&session, 1, "start");
+        let turn = h.wait_states(&session, &["running"]).await[0].0.clone();
+        let approvals = h.interactions(&session, &["pending"]).await;
+        let id = approvals[0]["interaction_id"].as_str().unwrap();
+        if action == "interrupt" {
+            h.app
+                .turn_commands()
+                .interrupt_turn(&session, &turn)
+                .await
+                .unwrap();
+        } else if action == "lost-during-choice" {
+            assert!(
+                h.app
+                    .interactions()
+                    .respond(&h.app, &session, id, "allow")
+                    .await
+                    .is_err()
+            );
+        } else {
+            h.gate(&session, 1, action);
+        }
+        h.interactions(&session, &["expired"]).await;
+        assert!(
+            h.app
+                .interactions()
+                .respond(&h.app, &session, id, "allow")
+                .await
+                .is_err()
+        );
+        assert_eq!(h.turns(&session).await[0].1, "running");
+        assert_eq!(
+            h.wire(&session)
+                .iter()
+                .filter(|v| v["method"] == "permission")
+                .count(),
+            usize::from(action == "lost-during-choice")
+        );
+        h.stop().await;
+    }
+}
+
+#[tokio::test]
+async fn background_approval_does_not_block_following_foreground_input() {
+    let h = Harness::new().await;
+    let session = h.create("approval-background").await;
+    h.gate(&session, 1, "start");
+    let approvals = h.interactions(&session, &["pending"]).await;
+    h.wait_session(&session, "busy").await;
+    h.submit(&session, "next").await;
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.wait_inputs(&session, 2).await;
+    h.gate(&session, 2, "start");
+    h.wait_states(&session, &["completed", "running"]).await;
+    h.interactions(&session, &["pending"]).await;
+    h.wait_session(&session, "busy").await;
+    h.app
+        .interactions()
+        .respond(
+            &h.app,
+            &session,
+            approvals[0]["interaction_id"].as_str().unwrap(),
+            "deny",
+        )
+        .await
+        .unwrap();
+    assert_eq!(h.turns(&session).await[1].1, "running");
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn approvals_cannot_be_resolved_from_another_session_in_the_same_workspace() {
+    let h = Harness::new().await;
+    let a = h.create("approval").await;
+    let b = h.create("approval").await;
+    h.gate(&a, 1, "start");
+    h.gate(&b, 1, "start");
+    let a_asks = h.interactions(&a, &["pending"]).await;
+    h.interactions(&b, &["pending"]).await;
+    let id = a_asks[0]["interaction_id"].as_str().unwrap();
+    assert!(
+        h.app
+            .interactions()
+            .respond(&h.app, &b, id, "allow")
+            .await
+            .is_err()
+    );
+    h.app
+        .interactions()
+        .respond(&h.app, &a, id, "allow")
+        .await
+        .unwrap();
+    h.interactions(&b, &["pending"]).await;
+    assert!(!h.wire(&b).iter().any(|v| v["method"] == "permission"));
+    h.app
+        .session_commands()
+        .terminate_session(&b)
+        .await
+        .unwrap();
+    h.interactions(&b, &["expired"]).await;
+    h.stop().await;
 }
 
 #[tokio::test]

@@ -1,3 +1,4 @@
+mod interactions;
 mod output;
 mod peer;
 mod spec;
@@ -29,12 +30,13 @@ pub fn registration() -> ClientRegistration {
 pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
     let adapter = Arc::new(Adapter {
         host,
+        interactions: Arc::new(OnceLock::new()),
         peers: Default::default(),
         stopped: Arc::new(AtomicBool::new(false)),
     });
     ClientRegistration {
         configuration: Some(Arc::new(Configuration)),
-        interactions: None,
+        interactions: Some(adapter.clone()),
         events: None,
         service: Some(adapter.clone()),
         profile: None,
@@ -72,6 +74,7 @@ impl ClientConfiguration for Configuration {
 #[derive(Clone)]
 struct Adapter {
     host: Option<PathBuf>,
+    interactions: Arc<OnceLock<pontia_application::interactions::InteractionService>>,
     peers: Arc<Mutex<HashMap<String, Arc<Peer>>>>,
     stopped: Arc<AtomicBool>,
 }
@@ -161,6 +164,7 @@ impl ClientSession for Adapter {
                 runtime,
                 cwd,
                 config_dir,
+                interactions: self.interactions.get().cloned().ok_or_else(unavailable)?,
                 state: Default::default(),
                 connection: OnceLock::new(),
             });
@@ -370,6 +374,23 @@ impl ClientSession for Adapter {
         Box::pin(async { Err(unsupported()) })
     }
 }
+impl ClientInteractions for Adapter {
+    fn resolve<'a>(
+        &'a self,
+        _events: EventIngestService,
+        session: &'a str,
+        interaction: &'a str,
+        option: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            if self.stopped.load(Ordering::Acquire) {
+                return Err(unavailable());
+            }
+            let peer = self.peer(session).await?;
+            interactions::resolve(&peer, interaction, option).await
+        })
+    }
+}
 impl ClientService for Adapter {
     fn phase(&self) -> ClientServicePhase {
         ClientServicePhase::Transport
@@ -380,6 +401,7 @@ impl ClientService for Adapter {
     ) -> ClientOperation<'a, Option<tokio::task::JoinHandle<Result<()>>>> {
         let adapter = self.clone();
         Box::pin(async move {
+            let _ = self.interactions.set(app.interactions());
             let mut shutdown = app.shutdown().subscribe();
             Ok(Some(tokio::spawn(async move {
                 let _ = shutdown.wait_for(|stop| *stop).await;

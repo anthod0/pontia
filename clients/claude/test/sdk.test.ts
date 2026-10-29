@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtempDisposable, writeFile } from "node:fs/promises";
+import { mkdir, mkdtempDisposable, writeFile, readFile, access } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,11 +11,8 @@ import type { HostEvent } from "../src/facts.js";
 
 // Opt-in runs the real SDK against a loopback-only model substitute, never a live model.
 test(
-  "real SDK: first input, sequential task, close and same-ID resume through the host",
-  {
-    skip: process.env.PONTIA_CLAUDE_SDK_TEST !== "1",
-    timeout: 60000,
-  },
+  "real SDK: sequential tasks, allow/deny tool approval, close and same-ID resume",
+  { skip: process.env.PONTIA_CLAUDE_SDK_TEST !== "1", timeout: 60000 },
   async () => {
     await using sandbox = await mkdtempDisposable(join(tmpdir(), "pontia-host-sdk-"));
     const testRoot = sandbox.path;
@@ -56,8 +53,20 @@ test(
                     input: { file_path: join(cwd, "input.txt") },
                   },
                 ]
-              : [{ type: "text", text: "fixture answer" }],
-          stop_reason: requests.length === 1 ? "tool_use" : "end_turn",
+              : [3, 5].includes(requests.length)
+                ? [
+                    {
+                      type: "tool_use",
+                      id: `write-${requests.length}`,
+                      name: "Write",
+                      input: {
+                        file_path: join(cwd, `write-${requests.length}.txt`),
+                        content: "approved write marker",
+                      },
+                    },
+                  ]
+                : [{ type: "text", text: "fixture answer" }],
+          stop_reason: [1, 3, 5].includes(requests.length) ? "tool_use" : "end_turn",
           stop_sequence: null,
           usage: { input_tokens: 12, output_tokens: 3 },
         };
@@ -82,7 +91,7 @@ test(
             index,
             delta:
               block.type === "text"
-                ? { type: "text_delta", text: block.text }
+                ? { type: "text_delta", text: "text" in block ? block.text : "" }
                 : { type: "input_json_delta", partial_json: JSON.stringify(block.input) },
           });
           send({ type: "content_block_stop", index });
@@ -136,14 +145,35 @@ test(
       hosts.push(host);
       return host;
     };
-    async function finish(host: Host, id: string, text: string, expected = "fixture answer") {
+    async function finish(
+      host: Host,
+      id: string,
+      text: string,
+      expected = "fixture answer",
+      choice?: "allow" | "deny",
+    ) {
+      const handled = new Set<string>();
       host.submit(id, text);
       const deadline = Date.now() + 20000;
       while (!events.some((event) => event.kind === "finished" && event.input_id === id)) {
         assert.equal(host.status().unavailable, null);
         assert.ok(Date.now() < deadline, "SDK did not finish the fixture task");
+        for (const event of events) {
+          if (
+            event.kind === "permission_requested" &&
+            !handled.has(event.permission_id) &&
+            !events.some(
+              (e) => e.kind === "permission_settled" && e.permission_id === event.permission_id,
+            )
+          ) {
+            assert.ok(choice, "unexpected SDK approval");
+            handled.add(event.permission_id);
+            host.resolvePermission(event.permission_id, choice);
+          }
+        }
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
+      assert.equal(handled.size, choice ? 1 : 0);
       assert.deepEqual(
         events.flatMap((e) => (e.kind === "finished" && e.input_id === id ? [e.outcome] : [])),
         ["completed"],
@@ -167,15 +197,21 @@ test(
       assert.ok(JSON.stringify(toolResults[0]!.content).includes("isolated tool result marker"));
       const native = host.status().native_session_id;
       assert.ok(native);
-      await finish(host, randomUUID(), "Second isolated task");
+      await finish(host, randomUUID(), "Second isolated task", "fixture answer", "allow");
+      assert.equal(await readFile(join(cwd, "write-3.txt"), "utf8"), "approved write marker");
+      await finish(host, randomUUID(), "Denied isolated task", "fixture answer", "deny");
+      await assert.rejects(access(join(cwd, "write-5.txt")));
+      assert.ok(
+        events.some((e) => e.kind === "tool_result" && e.call_id === "write-5" && e.failed),
+      );
       await host.close();
       assert.equal(host.status().closed, true);
       const restored = create(native);
       await finish(restored, randomUUID(), "Third isolated task");
       assert.equal(restored.status().native_session_id, native);
       await restored.close();
-      assert.equal(requests.length, 4);
-      const resumedHistory = JSON.stringify(requests[3]);
+      assert.equal(requests.length, 7);
+      const resumedHistory = JSON.stringify(requests[6]);
       assert.ok(resumedHistory.includes("First isolated task"));
       assert.ok(resumedHistory.includes("Second isolated task"));
     } finally {

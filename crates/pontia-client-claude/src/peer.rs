@@ -5,6 +5,7 @@ use pontia_application::{
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{Arc, OnceLock},
 };
@@ -24,6 +25,7 @@ pub(crate) struct State {
     pub closed: bool,
     pub native: Option<String>,
     pub input: Option<Input>,
+    pub permissions: HashMap<String, crate::interactions::Permission>,
 }
 pub(crate) struct Peer {
     pub session: String,
@@ -31,6 +33,7 @@ pub(crate) struct Peer {
     pub cwd: PathBuf,
     pub config_dir: PathBuf,
     pub state: Mutex<State>,
+    pub interactions: pontia_application::interactions::InteractionService,
     pub connection: OnceLock<Arc<Connection>>,
 }
 impl Peer {
@@ -39,6 +42,7 @@ impl Peer {
         if !state.closed && state.unavailable.is_none() {
             state.unavailable = Some(reason.into());
         }
+        crate::interactions::expire_all(self, &mut state).await;
     }
     pub fn connection(&self) -> Result<&Arc<Connection>> {
         self.connection
@@ -84,12 +88,17 @@ impl Peer {
                     .await?;
                 state.native = Some(native.into());
             }
+            Some("permission_requested" | "permission_settled") => {
+                crate::interactions::event(self, &mut state, events, host, event).await?;
+            }
             Some("closed") => {
                 state.closed = true;
+                crate::interactions::expire_all(self, &mut state).await;
             }
             Some("unavailable") => {
                 // Keep only the host's bounded diagnostics, never SDK payloads or credentials.
                 state.unavailable = Some(field(event, "reason")?.into());
+                crate::interactions::expire_all(self, &mut state).await;
                 tracing::warn!(session = %self.session, reason = ?state.unavailable, result = ?event.get("result"), "Claude Agent execution unavailable");
             }
             Some(kind @ ("started" | "finished" | "text" | "tool" | "tool_result")) => {

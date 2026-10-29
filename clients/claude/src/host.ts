@@ -1,5 +1,6 @@
 import { query, type Options, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Input } from "./input.js";
+import { Permissions } from "./permissions.js";
 import { FactError, InputFacts, type Emit, type ResultDiagnostic } from "./facts.js";
 
 export type QueryFactory = (
@@ -16,6 +17,7 @@ export class ControlError extends Error {
 
 export class Host {
   private readonly input = new Input();
+  private readonly permissions: Permissions;
   private execution?: ReturnType<QueryFactory>;
   private reader?: Promise<void>;
   private current?: InputFacts;
@@ -30,7 +32,9 @@ export class Host {
     private readonly options: { cwd: string; resume?: string },
     private readonly emit: Emit,
     private readonly createQuery: QueryFactory = query,
-  ) {}
+  ) {
+    this.permissions = new Permissions(emit);
+  }
 
   status() {
     return {
@@ -45,8 +49,7 @@ export class Host {
   }
 
   submit(id: string, text: string): void {
-    if (this.closed || this.closing || this.unavailable || !this.controlConnected)
-      throw new ControlError("rejected", "execution_unavailable");
+    if (!this.acceptsControl()) throw new ControlError("rejected", "execution_unavailable");
     if (
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ||
       !text.trim()
@@ -72,10 +75,11 @@ export class Host {
         permissionMode: "default",
         settingSources: ["user", "project", "local"],
         disallowedTools: ["AskUserQuestion"],
-        canUseTool: async () => ({
-          behavior: "deny",
-          message: "Pontia tool approval is not available.",
-        }),
+        canUseTool: (tool, input, context) => {
+          if (!this.acceptsControl())
+            return Promise.resolve({ behavior: "deny", message: "Tool approval is unavailable." });
+          return this.permissions.request(tool, input, context);
+        },
         onElicitation: async () => ({ action: "decline" }),
         // Raw stderr may include credentials or tool arguments. It is not a control fact.
         stderr: () => {},
@@ -108,9 +112,15 @@ export class Host {
     // The result, not this acknowledgement, decides whether interruption won.
   }
 
+  resolvePermission(id: string, option: string): void {
+    if (!this.acceptsControl() || !this.permissions.resolve(id, option))
+      throw new ControlError("rejected", "permission_expired_or_invalid");
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closing = true;
+    this.permissions.expire();
     if (this.execution) {
       try {
         this.execution.close();
@@ -128,6 +138,7 @@ export class Host {
 
   controlLost(): void {
     this.controlConnected = false;
+    this.permissions.expire();
   }
 
   controlRestored(factsCaughtUp: boolean): void {
@@ -136,9 +147,14 @@ export class Host {
     this.controlConnected = !this.execution || factsCaughtUp;
   }
 
+  private acceptsControl(): boolean {
+    return !this.closed && !this.closing && !this.unavailable && this.controlConnected;
+  }
+
   private fail(reason: string, result?: ResultDiagnostic): void {
     if (this.unavailable) return;
     this.unavailable = reason;
+    this.permissions.expire();
     this.emit({ kind: "unavailable", reason, ...(result ? { result } : {}) });
   }
 

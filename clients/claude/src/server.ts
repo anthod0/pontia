@@ -90,6 +90,9 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
         case "interrupt":
           await host.interrupt(string(request.input_id));
           break;
+        case "permission":
+          host.resolvePermission(string(request.permission_id), string(request.option));
+          break;
         case "close":
           await host.close();
           break;
@@ -148,6 +151,7 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
             if (current) {
               // A replacement does not inherit pending replies or replay missed facts.
               current.destroy();
+              current = undefined;
               host.controlLost();
             }
             current = socket;

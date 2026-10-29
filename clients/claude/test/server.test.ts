@@ -352,10 +352,7 @@ test(
     const child = spawn(
       process.execPath,
       [fileURLToPath(new URL("../src/main.js", import.meta.url))],
-      {
-        cwd: sandbox.path,
-        stdio: ["pipe", "pipe", "pipe"],
-      },
+      { cwd: sandbox.path, stdio: ["pipe", "pipe", "pipe"] },
     );
     const exit = once(child, "exit");
     try {
@@ -373,6 +370,71 @@ test(
         await exit;
       }
     }
+  },
+);
+
+test(
+  "socket approvals remain independent and duplicate choices cannot reexecute callbacks",
+  { timeout: 5000 },
+  async (t) => {
+    const { config, fixture } = await setup(t);
+    const connection = await attach(config);
+    connection.send({
+      host_id: connection.host,
+      id: 1,
+      method: "input",
+      input_id: first,
+      text: "task",
+    });
+    await connection.next((f) => f.type === "response");
+    fixture.messages.push(init());
+    fixture.messages.push(assistant());
+    await connection.next((f) => f.event?.kind === "started");
+    const abort = new AbortController();
+    const ask = (id: string) =>
+      fixture.options!.canUseTool!(
+        "Write",
+        {},
+        { signal: abort.signal, toolUseID: id, requestId: id },
+      );
+    const a = ask("a");
+    const b = ask("b");
+    const firstAsk = await connection.next((f) => f.event?.kind === "permission_requested");
+    const secondAsk = await connection.next((f) => f.event?.kind === "permission_requested");
+    const choice = {
+      host_id: connection.host,
+      id: 2,
+      method: "permission",
+      permission_id: secondAsk.event.permission_id,
+      option: "allow",
+    };
+    connection.send(choice);
+    connection.send(choice);
+    for (let n = 0; n < 2; n++)
+      assert.equal(
+        (await connection.next((f) => f.type === "response" && f.id === 2)).status,
+        "accepted",
+      );
+    assert.deepEqual(await b, { behavior: "allow" });
+    connection.send({ ...choice, id: 3, option: "deny" });
+    assert.equal(
+      (await connection.next((f) => f.type === "response" && f.id === 3)).status,
+      "rejected",
+    );
+    fixture.onInterrupt(async () => abort.abort());
+    connection.send({ host_id: connection.host, id: 4, method: "interrupt", input_id: first });
+    assert.equal(
+      (await connection.next((f) => f.type === "response" && f.id === 4)).status,
+      "accepted",
+    );
+    assert.equal((await a)?.behavior, "deny");
+    const expired = await connection.next(
+      (f) =>
+        f.event?.kind === "permission_settled" &&
+        f.event.permission_id === firstAsk.event.permission_id,
+    );
+    assert.equal(expired.event.outcome, "expired");
+    assert.equal(connection.frames.filter((f) => f.event?.kind === "finished").length, 0);
   },
 );
 

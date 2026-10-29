@@ -285,13 +285,13 @@ test("resume always selects the bound native identity and rejects a replacement"
   assert.equal(host.status().unavailable, "native_identity_mismatch");
 });
 
-test("unsupported approvals and elicitation decline without auto-approval or a new input", async (t) => {
+test("unsupported questions and elicitation decline without auto-approval or a new input", async (t) => {
   const { fixture, host } = setup();
   t.after(() => host.close());
   host.submit(first, "task");
   const options = fixture.options!;
   const permission = await options.canUseTool!(
-    "Write",
+    "AskUserQuestion",
     {},
     { signal: new AbortController().signal, toolUseID: "call", requestId: "permission" },
   );
