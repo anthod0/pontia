@@ -1,0 +1,182 @@
+name: pontia-e2e-docker
+
+# Pin the application domains even when a service is stopped. Docker DNS aliases
+# alone could fall back to public DNS after the last matching container exits.
+x-local-hosts: &local-hosts
+  - "pontia.dev=172.30.83.2"
+  - "app.pontia.dev=172.30.83.3"
+  - "docker-e2e.edge.pontia.dev=172.30.83.4"
+
+x-build: &build
+  context: ../..
+  dockerfile: docker/e2e/Dockerfile
+  network: host
+  entitlements:
+    - network.host
+
+services:
+  cloud:
+    build:
+      <<: *build
+      target: cloud
+    init: true
+    extra_hosts: *local-hosts
+    volumes:
+      - type: bind
+        source: ./.local/cloud.dev.vars
+        target: /app/.dev.vars
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local/tls
+        target: /tls
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local/cloud-bootstrap.sql
+        target: /app/e2e-bootstrap.sql
+        read_only: true
+        bind:
+          create_host_path: false
+      - cloud-state:/state
+    networks:
+      lab:
+        ipv4_address: 172.30.83.2
+      outbound: {}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--resolve", "pontia.dev:443:127.0.0.1", "https://pontia.dev/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  dashboard:
+    build:
+      <<: *build
+      target: dashboard
+    init: true
+    extra_hosts: *local-hosts
+    volumes:
+      - type: bind
+        source: ./.local/tls
+        target: /tls
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      lab:
+        ipv4_address: 172.30.83.3
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--resolve", "app.pontia.dev:443:127.0.0.1", "https://app.pontia.dev/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  edge:
+    build:
+      <<: *build
+      target: edge
+    init: true
+    environment:
+      E2E_EDGE_HOST: docker-e2e.edge.pontia.dev
+    extra_hosts: *local-hosts
+    volumes:
+      - type: bind
+        source: ./.local/edge
+        target: /etc/pontia/edge
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      lab:
+        ipv4_address: 172.30.83.4
+    depends_on:
+      cloud:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --resolve \"$$E2E_EDGE_HOST:443:127.0.0.1\" \"https://$$E2E_EDGE_HOST/healthz\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  device:
+    build:
+      <<: *build
+      target: device
+    init: true
+    cap_drop: [ALL]
+    # Moby profiles 4b8214fc4971e06172938a1f1554ccff6647ee80/seccomp/default.json,
+    # plus clone, unshare, mount, umount2, pivot_root and setns for Codex's
+    # nested user namespaces. Retain the default-deny policy and no capabilities.
+    security_opt:
+      - seccomp=./device-seccomp.json
+    environment:
+      PONTIA_AUTH_ORIGIN: https://pontia.dev
+    extra_hosts: *local-hosts
+    volumes:
+      - device-home:/home/e2e
+      - type: bind
+        source: ./.local/auth/device
+        target: /e2e-auth
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      lab: {}
+      outbound: {}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  browser:
+    build:
+      <<: *build
+      target: browser
+    hostname: pontia-e2e-browser
+    init: true
+    shm_size: 1gb
+    extra_hosts: *local-hosts
+    ports:
+      - "127.0.0.1:18179:6080"
+    volumes:
+      - browser-home:/home/e2e
+      - type: bind
+        source: ./.local/auth/browser
+        target: /e2e-auth
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      lab: {}
+      outbound: {}
+    depends_on:
+      cloud:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
+      device:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:6080/vnc.html"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+networks:
+  lab:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.83.0/24
+          ip_range: 172.30.83.128/25
+  outbound: {}
+
+volumes:
+  cloud-state:
+  device-home:
+  browser-home:

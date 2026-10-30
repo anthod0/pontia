@@ -1,0 +1,19 @@
+{
+	admin off
+	auto_https off
+}
+
+https://app.pontia.dev {
+	tls /tls/fullchain.pem /tls/privkey.pem
+	root * /srv/dashboard
+	encode gzip
+	# Missing JS/WASM must not return the SPA HTML fallback.
+	@assets path /_app/* /_remote-access/*
+	handle @assets {
+		file_server
+	}
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}

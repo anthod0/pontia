@@ -17,6 +17,7 @@ node_modules/
 Thumbs.db
 coverage/
 /pontia-dashboard.tar.gz
+/docker/e2e/.local/
 
 tmp/
 

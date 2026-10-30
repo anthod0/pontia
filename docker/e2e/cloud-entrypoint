@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+bun x --no-install wrangler d1 migrations apply DB --local --persist-to /state
+bun x --no-install wrangler d1 execute DB --local --persist-to /state --file /app/e2e-seed.sql
+bun x --no-install wrangler d1 execute DB --local --persist-to /state --file /app/e2e-bootstrap.sql
+exec bun x --no-install wrangler dev --local --ip 0.0.0.0 --port 443 \
+  --host pontia.dev --local-protocol https \
+  --https-cert-path /tls/fullchain.pem --https-key-path /tls/privkey.pem \
+  --persist-to /state --inspector-ip 127.0.0.1 --show-interactive-dev-session=false

@@ -1,0 +1,13 @@
+bind_addr = "0.0.0.0:8080"
+run_migrations = true
+
+[dashboard]
+source = "/opt/pontia/dashboard"
+
+[runtime.pi]
+tui_command = "pi"
+
+[workspace_browser]
+roots = [
+  { root_id = "e2e", label = "E2E Workspace", path = "/home/e2e/workspace" }
+]

@@ -1,0 +1,345 @@
+#!/usr/bin/env python3
+"""Operate the repository's isolated Docker E2E environment."""
+
+import argparse
+import base64
+from contextlib import closing
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import secrets
+import shlex
+import signal
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import tarfile
+
+ROOT = Path(__file__).resolve().parent.parent
+LAB = ROOT / "docker/e2e"
+STATE = LAB / ".local"
+PROJECT = "pontia-e2e-docker"
+EDGE_ID = "01900000-0000-7000-8000-000000000001"
+EDGE_OWNER_ID = "01900000-0000-7000-8000-000000000002"
+EDGE_NAME = "docker-e2e"
+EDGE_HOST = f"{EDGE_NAME}.edge.pontia.dev"
+AUTH_FILES = {
+    "device": {
+        "codex.json": "/home/e2e/.codex/auth.json",
+        "pi.json": "/home/e2e/.pi/agent/auth.json",
+    },
+    "browser": {
+        "Cookies": "/home/e2e/chromium/Default/Cookies",
+        "Local State": "/home/e2e/chromium/Local State",
+    },
+}
+
+
+def run(args, **kwargs):
+    return subprocess.run(args, check=True, **kwargs)
+
+
+def write_private(path, contents):
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as output:
+        temporary = Path(output.name)
+        output.write(contents.encode() if isinstance(contents, str) else contents)
+    try:
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def b64(value):
+    return base64.urlsafe_b64encode(value).decode().rstrip("=")
+
+
+def key_pair(algorithm):
+    private = run(
+        ["openssl", "genpkey", "-algorithm", algorithm, "-outform", "DER"],
+        capture_output=True,
+    ).stdout
+    public = run(
+        ["openssl", "pkey", "-inform", "DER", "-pubout", "-outform", "DER"],
+        input=private, capture_output=True,
+    ).stdout
+    # RFC 8410 SubjectPublicKeyInfo for Ed25519 / X25519 has a 32-byte key.
+    if len(public) != 44:
+        raise ValueError("Unexpected public key encoding")
+    return b64(private), b64(public[-32:])
+
+
+def initialize(state):
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    (state / "tls").mkdir(exist_ok=True, mode=0o700)
+    for service in AUTH_FILES:
+        (state / "auth" / service).mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not (state / "cloud.dev.vars").exists():
+        signing, verification = key_pair("ED25519")
+        proof_private, proof_public = key_pair("X25519")
+        values = {
+            "AUTH_ORIGIN": "https://pontia.dev",
+            "GOOGLE_CLIENT_ID": "",
+            "GOOGLE_CLIENT_SECRET": "",
+            "GITHUB_CLIENT_ID": "",
+            "GITHUB_CLIENT_SECRET": "",
+            "JWT_SECRET": secrets.token_urlsafe(32),
+            "OAUTH_COOKIE_SECRET": secrets.token_urlsafe(32),
+            "E2E_CAPABILITY_SIGNING_KEY": signing,
+            "E2E_CAPABILITY_VERIFICATION_KEY": verification,
+            "E2E_REGISTRATION_PROOF_PRIVATE_KEY": proof_private,
+            "E2E_REGISTRATION_PROOF_PUBLIC_KEY": proof_public,
+            # Never give this environment permission to manage public DNS.
+            "CLOUDFLARE_DNS_TOKEN": "disabled-in-local-e2e",
+            "CLOUDFLARE_DNS_ZONE_ID": "disabled-in-local-e2e",
+        }
+        write_private(state / "cloud.dev.vars", "".join(
+            f"{key}={json.dumps(value)}\n" for key, value in values.items()
+        ))
+
+
+def variables(path):
+    result = {}
+    for line in path.read_text().splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        key, value = line.split("=", 1)
+        parts = shlex.split(value, comments=True)
+        result[key.strip()] = " ".join(parts)
+    return result
+
+
+def check_certificates(state, hosts):
+    cert = state / "tls/fullchain.pem"
+    key = state / "tls/privkey.pem"
+    run(["openssl", "x509", "-in", str(cert), "-noout", "-checkend", "0"], capture_output=True)
+    cert_public = run(
+        ["openssl", "x509", "-in", str(cert), "-pubkey", "-noout"], capture_output=True,
+    ).stdout
+    key_public = run(
+        ["openssl", "pkey", "-in", str(key), "-passin", "pass:", "-pubout"], capture_output=True,
+    ).stdout
+    if cert_public != key_public:
+        raise ValueError("TLS certificate and private key do not match")
+    for host in hosts:
+        run([
+            "openssl", "verify", "-purpose", "sslserver", "-verify_hostname", host,
+            "-untrusted", str(cert), str(cert),
+        ], capture_output=True)
+
+
+def check(state):
+    values = variables(state / "cloud.dev.vars")
+    if values.get("AUTH_ORIGIN") != "https://pontia.dev":
+        raise ValueError("AUTH_ORIGIN must remain https://pontia.dev inside this lab")
+    if any(values.get(key) != "disabled-in-local-e2e" for key in (
+        "CLOUDFLARE_DNS_TOKEN", "CLOUDFLARE_DNS_ZONE_ID",
+    )):
+        raise ValueError("Public DNS credentials are not permitted in this environment")
+    if not any(all(values.get(f"{provider}_{key}") for key in ("CLIENT_ID", "CLIENT_SECRET"))
+               for provider in ("GOOGLE", "GITHUB")):
+        raise ValueError("Configure at least one OAuth provider in cloud.dev.vars")
+    hosts = ["pontia.dev", "app.pontia.dev", EDGE_HOST]
+    config = state / "edge/config.json"
+    check_certificates(state, hosts)
+    if config.exists():
+        # edge expects the full chain and private key in one PEM file.
+        write_private(state / "edge/tls.pem",
+                      (state / "tls/fullchain.pem").read_bytes().rstrip() + b"\n"
+                      + (state / "tls/privkey.pem").read_bytes())
+
+
+def compose(args, **kwargs):
+    # Ignore unrelated host Compose settings.
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith("COMPOSE_")}
+    return run([
+        "docker", "compose", "--ansi", "never", "--project-name", PROJECT,
+        "--file", str(LAB / "compose.yaml"),
+        *args,
+    ], env=env, **kwargs)
+
+
+def start_services():
+    check(STATE)
+    compose(["up", "-d", "--wait", "--wait-timeout", "180"])
+    print("Test browser: http://127.0.0.1:18179/vnc.html?autoconnect=1&resize=scale")
+
+
+def up():
+    for resource in ("container", "volume", "network"):
+        existing = run(["docker", resource, "ls", "-q", "--filter",
+                        f"label=com.docker.compose.project={PROJECT}"], capture_output=True)
+        if existing.stdout.strip():
+            raise ValueError("An E2E run already exists. Finish it with docker-e2e down before starting a fresh run.")
+    initialize(STATE)
+    try:
+        prepare_edge(STATE)
+        start_services()
+        for client in ("pi", "codex"):
+            compose(["exec", "-T", "device", "pontia", "client", "enable", client])
+    except BaseException:
+        down()
+        raise
+
+
+def login_device():
+    compose(["exec", "-T", "device", "pontia", "login"])
+    compose(["exec", "-T", "device", "pontia", "remote", "edges"])
+    compose(["exec", "-T", "device", "pontia", "remote", "enable",
+             "--edge", EDGE_ID, "--name", "Docker E2E Device"])
+    compose(["restart", "device"])
+    compose(["up", "-d", "--wait", "--wait-timeout", "180", "device"])
+    compose(["exec", "-T", "device", "pontia", "remote", "status"])
+
+
+def container_file(container, path):
+    result = subprocess.run(["docker", "cp", f"{container}:{path}", "-"], capture_output=True)
+    if result.returncode:
+        if b"Could not find the file" in result.stderr:
+            return None
+        raise ValueError(f"Could not preserve credentials from {container}; containers are stopped.")
+    with tarfile.open(fileobj=io.BytesIO(result.stdout)) as archive:
+        members = archive.getmembers()
+        if len(members) != 1 or not members[0].isfile():
+            raise ValueError("Expected a regular credential file")
+        return archive.extractfile(members[0]).read()
+
+
+def save_browser_credentials(container, state):
+    cookies = container_file(container, AUTH_FILES["browser"]["Cookies"])
+    if cookies is None:
+        return
+    # Keep provider login cookies, never the disposable Pontia login or profile.
+    with tempfile.TemporaryDirectory(prefix="pontia-e2e-cookies-") as temporary:
+        path = Path(temporary) / "Cookies"
+        write_private(path, cookies)
+        for suffix in ("-wal", "-journal"):
+            contents = container_file(container, AUTH_FILES["browser"]["Cookies"] + suffix)
+            if contents:
+                write_private(Path(str(path) + suffix), contents)
+        with closing(sqlite3.connect(path)) as database:
+            providers = ("github.com", "google.com", "openai.com", "anthropic.com", "claude.ai", "auth0.com")
+            keep = " OR ".join("(host_key = ? OR host_key LIKE ?)" for _ in providers)
+            database.execute(f"DELETE FROM cookies WHERE NOT ({keep})",
+                             [value for domain in providers for value in (domain, f"%.{domain}")])
+            database.commit()
+            database.execute("PRAGMA journal_mode=DELETE")
+            database.execute("VACUUM")
+        write_private(state / "auth/browser/Cookies", path.read_bytes())
+    local_state = container_file(container, AUTH_FILES["browser"]["Local State"])
+    if local_state is not None:
+        encryption = json.loads(local_state).get("os_crypt", {})
+        write_private(state / "auth/browser/Local State", json.dumps({"os_crypt": encryption}))
+
+
+def down():
+    containers = {}
+    for service in AUTH_FILES:
+        result = compose(["ps", "--all", "--quiet", service], capture_output=True)
+        if result.stdout.strip():
+            containers[service] = result.stdout.decode().strip()
+    compose(["stop"])
+    if "device" in containers:
+        for name, path in AUTH_FILES["device"].items():
+            contents = container_file(containers["device"], path)
+            if contents is not None:
+                write_private(STATE / "auth/device" / name, contents)
+    if "browser" in containers:
+        save_browser_credentials(containers["browser"], STATE)
+    compose(["down", "--volumes", "--remove-orphans"])
+    for name in ("edge/config.json", "edge/credential", "edge/tls.pem", "cloud-bootstrap.sql"):
+        (STATE / name).unlink(missing_ok=True)
+    print("E2E containers, networks and run data removed. Certificates and login credentials retained.")
+
+
+def run_task(args):
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt
+
+    previous = signal.signal(signal.SIGTERM, interrupted)
+    try:
+        up()
+        try:
+            with subprocess.Popen(args or ["bash"], cwd=ROOT) as task:
+                try:
+                    status = task.wait()
+                except BaseException:
+                    task.kill()
+                    task.wait()
+                    raise
+                if status:
+                    raise subprocess.CalledProcessError(status, args or ["bash"])
+        finally:
+            down()
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def prepare_edge(state):
+    # Only called for a fresh run. Keep Cloud's hash and the edge credential paired.
+    secret = secrets.token_urlsafe(32)
+    seed = (LAB / "cloud-edge.sql").read_text().format(
+        owner_id=EDGE_OWNER_ID, edge_id=EDGE_ID, name=EDGE_NAME, hostname=EDGE_HOST,
+        credential_hash=b64(hashlib.sha256(secret.encode()).digest()),
+    )
+    write_private(state / "cloud-bootstrap.sql", seed)
+    write_private(state / "edge/credential", f"pec_v1_{EDGE_ID}_{secret}\n")
+    write_private(state / "edge/config.json", json.dumps({
+        "hostname": EDGE_HOST,
+        "port": 443,
+        "acme_challenge": "http-01",
+        "browser_dashboard_origin": "https://app.pontia.dev",
+    }) + "\n")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("init", "check", "build", "up", "run", "login-device", "down", "compose"))
+    parser.add_argument("args", nargs=argparse.REMAINDER)
+    options = parser.parse_args()
+    if options.command not in ("compose", "run") and options.args:
+        parser.error("Extra arguments are only supported by compose and run")
+    if options.command == "init":
+        initialize(STATE)
+        print(f"Fill OAuth settings in {STATE / 'cloud.dev.vars'} and place certificates in {STATE / 'tls'}.")
+        return
+    if not (STATE / "cloud.dev.vars").exists():
+        raise ValueError("Run scripts/docker-e2e init first")
+    if options.command == "check":
+        check(STATE)
+        compose(["config", "--quiet"])
+        print("Configuration and certificates checked; this is not an E2E test result.")
+    elif options.command == "build":
+        definition = compose(["build", "--print"], capture_output=True)
+        run(["docker", "buildx", "bake", "--file", "-", "--allow=network.host", "--pull", "--load"],
+            input=definition.stdout, cwd=ROOT)
+    elif options.command == "up":
+        up()
+    elif options.command == "run":
+        run_task(options.args)
+    elif options.command == "login-device":
+        login_device()
+    elif options.command == "down":
+        down()
+    elif options.command == "compose":
+        compose(options.args)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except subprocess.CalledProcessError as error:
+        # Never echo stdin: it may contain credentials or a private key.
+        print(f"Command failed (exit {error.returncode}).", file=sys.stderr)
+        if error.stderr:
+            print(error.stderr.decode(errors="replace")[:4096], file=sys.stderr)
+        sys.exit(1)
+    except (ValueError, OSError) as error:
+        print(f"docker-e2e: {error}", file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        sys.exit(130)

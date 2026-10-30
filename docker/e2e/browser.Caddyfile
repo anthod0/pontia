@@ -1,0 +1,10 @@
+{
+	admin off
+	auto_https off
+}
+
+# Browser-local loopback is a secure context without another certificate.
+http://localhost:8080 {
+	bind 127.0.0.1
+	reverse_proxy device:8080
+}

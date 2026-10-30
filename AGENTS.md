@@ -12,6 +12,10 @@ Read `../pontia-docs/AGENTS.local.md` if it exists and treat it as part of this 
 - Do not restrict agent client release versions.
 - When performing a pure file split of Rust code without changing behavior, refer to [Rust Module Refactoring](docs/agents/rust-module-refactoring.md) and [Rust Test Refactoring](docs/agents/rust-test-refactoring.md).
 
+## End-to-end validation
+
+Run [Docker E2E](docs/docker-e2e.md) after relevant automated tests pass and before delivery when changes require full-chain validation; use frontend tests and browser validation for changes limited to presentation and local UI interactions.
+
 ## Runtime diagnostics
 
 - For runtime diagnostics, use the global log files in the Pontia state directory (by default, `${PONTIA_HOME:-$HOME/.pontia}/state/`), including `runtime.log` and client hook logs such as `pi-hook.log`.

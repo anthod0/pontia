@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+mkdir -p "$HOME/chromium/Default"
+if [[ ! -f "$HOME/chromium/Default/Cookies" && -f /e2e-auth/Cookies ]]; then
+  cp /e2e-auth/Cookies "$HOME/chromium/Default/Cookies"
+fi
+if [[ ! -f "$HOME/chromium/Local State" && -f '/e2e-auth/Local State' ]]; then
+  cp '/e2e-auth/Local State' "$HOME/chromium/Local State"
+fi
+pids=()
+cleanup() {
+  if ((${#pids[@]})); then
+    kill "${pids[@]}" 2>/dev/null || true
+    wait "${pids[@]}" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+trap 'exit 0' TERM INT
+Xvfb "$DISPLAY" -screen 0 1440x900x24 -nolisten tcp &
+pids+=("$!")
+for ((attempt = 0; attempt < 100; attempt++)); do
+  if xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then break; fi
+  sleep 0.1
+done
+xdpyinfo -display "$DISPLAY" >/dev/null
+openbox &
+pids+=("$!")
+x11vnc -display "$DISPLAY" -localhost -rfbport 5900 -nopw -forever -shared &
+pids+=("$!")
+websockify --web /usr/share/novnc 6080 localhost:5900 &
+pids+=("$!")
+caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
+pids+=("$!")
+# This disposable browser uses the container boundary, not Chromium's sandbox.
+# Never mount host HOME, a daily browser profile, or the Docker socket here.
+dbus-run-session -- chromium --no-sandbox --no-first-run \
+  --profile-directory=Default \
+  --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 \
+  --disable-background-networking --password-store=basic \
+  --user-data-dir="$HOME/chromium" https://pontia.dev &
+pids+=("$!")
+wait -n "${pids[@]}"
