@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.9] - 2026-10-31
+
+### Added
+
+- Added Claude Agent session control, streaming output, tool approvals, native history browsing, and resuming closed sessions. Requires a separately installed Claude Agent host.
+- Added a quick installation command and Getting started guide on the Account page for users without registered devices.
+
+### Changed
+
+- Highlighted Pontia's open-source positioning on the homepage and moved the GitHub link from the header to the Hero section.
+
 ## [0.6.8] - 2026-10-27
 
 ### Added
@@ -427,7 +438,8 @@ Pontia's first public preview establishes a local control plane for long-lived c
 - Pontia is experimental and currently supports Pi as its only active agent-client integration.
 - Agent-planned WorkItem DAG orchestration is not included in this release.
 
-[Unreleased]: https://github.com/anthod0/pontia/compare/v0.6.8...HEAD
+[Unreleased]: https://github.com/anthod0/pontia/compare/v0.6.9...HEAD
+[0.6.9]: https://github.com/anthod0/pontia/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/anthod0/pontia/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/anthod0/pontia/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/anthod0/pontia/compare/v0.6.5...v0.6.6
