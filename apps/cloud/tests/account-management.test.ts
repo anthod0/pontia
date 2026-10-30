@@ -25,6 +25,7 @@ const userId = "0199791c-6600-7000-8000-000000000001";
 const currentSessionId = "0199791c-6600-7000-8000-000000000002";
 const loadAccount = loadAccountPage as unknown as (event: RequestEvent) => Promise<{
   profile: { displayName: string | null };
+  hasDevices: boolean;
 }>;
 const loadSessions = loadSessionsPage as unknown as (event: RequestEvent) => Promise<{
   sessions: { id: string; current: boolean }[];
@@ -67,6 +68,33 @@ async function insertCurrentUser() {
   });
 }
 
+test("account setup is needed until the user has a registered device, regardless of other users' devices", async () => {
+  await insertCurrentUser();
+  const event = await signedInEvent();
+  expect((await loadAccount(event)).hasDevices).toBe(false);
+
+  const otherUserId = "0199791c-6600-7000-8000-000000000010";
+  const edgeId = "0199791c-6600-7000-8000-000000000020";
+  await database.db.insert(users).values({ id: otherUserId });
+  await database.db.insert(edges).values({
+    id: edgeId,
+    userId: otherUserId,
+    name: "Other edge",
+    dnsLabel: "other-edge",
+    tunnelUrl: "wss://other.example/tunnel",
+    serviceCredentialHash: "hash",
+  });
+  await database.db.insert(devices).values({
+    id: "0199791c-6600-7000-8000-000000000030",
+    userId: otherUserId,
+    edgeId,
+    handle: "other-device",
+    name: "Other device",
+  });
+
+  expect((await loadAccount(event)).hasDevices).toBe(false);
+});
+
 test("the settings pages return the current profile, browser logins, and registered devices", async () => {
   await insertCurrentUser();
   await database.db.insert(authSessions).values({
@@ -101,6 +129,7 @@ test("the settings pages return the current profile, browser logins, and registe
   ]);
 
   expect(accountPage.profile.displayName).toBe("Old name");
+  expect(accountPage.hasDevices).toBe(true);
   expect(sessionsPage.sessions).toEqual([
     expect.objectContaining({ id: currentSessionId, current: true }),
   ]);

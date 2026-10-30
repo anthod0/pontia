@@ -371,7 +371,6 @@ h2 {
   .site-header nav {
     gap: 15px;
   }
-  .site-header .source-link,
   .site-header .account-link {
     display: none;
   }

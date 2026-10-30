@@ -2,7 +2,7 @@ import { fail, redirect, type RequestEvent } from "@sveltejs/kit";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { currentLogin, environment } from "$lib/server/auth/http";
 import { database } from "$lib/server/db";
-import { accounts, authSessions, users } from "$lib/server/db/schema";
+import { accounts, authSessions, devices, users } from "$lib/server/db/schema";
 import type { Actions, PageServerLoad } from "./$types";
 
 async function authenticated(event: RequestEvent) {
@@ -15,7 +15,7 @@ export const load: PageServerLoad = async (event) => {
   const authentication = await authenticated(event);
   if (!authentication) redirect(303, "/login");
   const { login, db } = authentication;
-  const [profile, linked] = await Promise.all([
+  const [profile, linked, registeredDevice] = await Promise.all([
     db
       .select({
         displayName: users.displayName,
@@ -35,9 +35,20 @@ export const load: PageServerLoad = async (event) => {
       .from(accounts)
       .where(eq(accounts.userId, login.user_id))
       .orderBy(asc(accounts.provider)),
+    db
+      .select({ id: devices.id })
+      .from(devices)
+      .where(eq(devices.userId, login.user_id))
+      .limit(1)
+      .get(),
   ]);
   if (!profile) redirect(303, "/login");
-  return { profile, accounts: linked, error: event.url.searchParams.get("error") };
+  return {
+    profile,
+    accounts: linked,
+    hasDevices: registeredDevice !== undefined,
+    error: event.url.searchParams.get("error"),
+  };
 };
 
 function formText(data: FormData, name: string) {
