@@ -172,7 +172,7 @@ export class Host {
       }
       if (this.closing) {
         this.closed = true;
-        this.emit({ kind: "closed" });
+        this.emit({ kind: "closed", history_anchor: this.current?.historyAnchor });
       } else {
         this.fail("sdk_ended_without_close");
       }

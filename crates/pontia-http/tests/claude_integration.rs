@@ -155,6 +155,84 @@ impl Harness {
 }
 
 #[tokio::test]
+async fn claude_http_exit_history_and_resume_preserve_the_conversation() {
+    let h = Harness::new().await;
+    let (status, created) = call(&h.app, "POST", "/api/v1/sessions", json!({"client_type":"claude-agent","workspace":h.root.path(),"initial_task":{"input":"original conversation"}})).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let session = created["data"]["session"]["session_id"].as_str().unwrap();
+    h.gate(session, "start");
+    h.gate(session, "finish");
+    let first = wait_turn(&h.app, session, "completed").await;
+    let base = format!("/api/v1/sessions/{session}");
+    assert_eq!(
+        call(&h.app, "POST", &format!("{base}/exit"), Value::Null)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    let (status, history) = call(
+        &h.app,
+        "GET",
+        &format!("{base}/turns/tree/history"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{history}");
+    assert_eq!(
+        history["data"]["groups"][0]["items"][0]["content_preview"],
+        "original conversation"
+    );
+    let (_, view) = call(&h.app, "GET", &base, Value::Null).await;
+    assert_eq!(view["data"]["session"]["capabilities"]["accept_task"], true);
+    assert_eq!(
+        call(&h.app, "POST", &format!("{base}/resume"), Value::Null)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    let (status, submitted) = call(
+        &h.app,
+        "POST",
+        &format!("{base}/inbox/messages"),
+        json!({"input":"resumed conversation","delivery_policy":"after_idle","metadata":{}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{submitted}");
+    std::fs::write(h.root.path().join(format!("start-{session}-2")), "").unwrap();
+    let second = wait_turn(&h.app, session, "running").await;
+    assert_ne!(first, second);
+    std::fs::write(h.root.path().join(format!("finish-{session}-2")), "").unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let (status, history) = call(
+                &h.app,
+                "GET",
+                &format!("{base}/turns/tree/history"),
+                Value::Null,
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "{history}");
+            let groups = history["data"]["groups"].as_array().unwrap();
+            if groups.len() == 2 && groups[1]["state"] == "completed" {
+                assert_eq!(
+                    groups[0]["items"][0]["content_preview"],
+                    "original conversation"
+                );
+                assert_eq!(
+                    groups[1]["items"][0]["content_preview"],
+                    "resumed conversation"
+                );
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn claude_http_invalid_choice_preserves_pending_callback() {
     let h = Harness::new().await;
     let (session, _, paths) = h.approvals().await;

@@ -10,7 +10,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         interrupt: true,
         stream_output: true,
         heartbeat: false,
-        timeline: false,
+        timeline: true,
         topology: false,
         branch_control: false,
         list_models: false,

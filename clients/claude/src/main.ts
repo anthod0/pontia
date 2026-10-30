@@ -1,4 +1,5 @@
 import { bootstrap, serve } from "./server.js";
+import { readHistory } from "./history.js";
 
 async function main(): Promise<void> {
   let input = Buffer.alloc(0);
@@ -8,7 +9,14 @@ async function main(): Promise<void> {
     if (input.length > 64 * 1024) throw new Error("bootstrap_too_large");
     const newline = input.indexOf(10);
     if (newline < 0) continue;
-    const config = bootstrap(JSON.parse(input.subarray(0, newline).toString("utf8")));
+    const data = JSON.parse(input.subarray(0, newline).toString("utf8"));
+    if (process.argv[2] === "history") {
+      if (typeof data.session_id !== "string" || typeof data.cwd !== "string")
+        throw new Error("invalid_history_request");
+      process.stdout.write(JSON.stringify(await readHistory(data.session_id, data.cwd)) + "\n");
+      return;
+    }
+    const config = bootstrap(data);
     await serve(config);
     process.stdout.write('{"listening":true}\n');
     return;

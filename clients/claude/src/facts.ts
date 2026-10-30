@@ -10,12 +10,13 @@ export type HostEvent =
       kind: "finished";
       input_id: string;
       result_id: string;
+      history_anchor: string;
       outcome: "completed" | "failed" | "interrupted";
     }
   | { kind: "unavailable"; reason: string; result?: ResultDiagnostic }
   | { kind: "permission_requested"; permission_id: string; tool: string; blocking: boolean }
   | { kind: "permission_settled"; permission_id: string; outcome: "resolved" | "expired" }
-  | { kind: "closed" };
+  | { kind: "closed"; history_anchor?: string };
 
 export type Emit = (event: HostEvent) => void;
 export type ResultDiagnostic = Pick<
@@ -83,11 +84,14 @@ export class InputFacts {
   private streamed = new Set<string>();
   private complete = new Set<string>();
   private tools = new Set<string>();
+  historyAnchor: string;
 
   constructor(
     readonly id: string,
     private emit: Emit,
-  ) {}
+  ) {
+    this.historyAnchor = id;
+  }
 
   accept(message: SDKMessage): void {
     if ("parent_tool_use_id" in message && message.parent_tool_use_id) return;
@@ -108,6 +112,7 @@ export class InputFacts {
         kind: "finished",
         input_id: this.id,
         result_id: message.uuid,
+        history_anchor: this.historyAnchor,
         outcome: terminal,
       });
       return;
@@ -139,6 +144,7 @@ export class InputFacts {
         }
         if (event.type === "message_stop") this.streamMessage = undefined;
       } else {
+        this.historyAnchor = message.uuid;
         const reply = message.message;
         // The SDK emits distinct block envelopes sharing the API message ID.
         if (this.complete.has(message.uuid)) return;
@@ -162,6 +168,7 @@ export class InputFacts {
     if (message.type === "user" && Array.isArray(message.message.content)) {
       for (const block of message.message.content) {
         if (block.type === "tool_result" && this.tools.delete(block.tool_use_id)) {
+          if (message.uuid) this.historyAnchor = message.uuid;
           this.emit({
             kind: "tool_result",
             input_id: this.id,

@@ -19,6 +19,7 @@ export interface DashboardClient {
   workspaceCreation: boolean;
   profileSelection: boolean;
   deliveryPolicy: InboxDeliveryPolicy;
+  resumeWaitsForIdle?: boolean;
   controlDetails(session: SessionView): ClientControlDetails | null;
   sessionLabel?(session: SessionView): string;
 }

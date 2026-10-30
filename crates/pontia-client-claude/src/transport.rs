@@ -62,6 +62,7 @@ impl Connection {
             .arg(script)
             .current_dir(&peer.cwd)
             .envs(environment)
+            .env("CLAUDE_CONFIG_DIR", &peer.config_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -69,7 +70,11 @@ impl Connection {
             .spawn()?;
         let setup = async {
             let mut stdin = child.stdin.take().expect("piped stdin");
-            stdin.write_all(format!("{}\n", json!({"session_id":peer.session,"runtime_id":peer.runtime,"cwd":peer.cwd,"socket_path":socket,"token":token})).as_bytes()).await?;
+            let mut bootstrap = json!({"session_id":peer.session,"runtime_id":peer.runtime,"cwd":peer.cwd,"socket_path":socket,"token":token});
+            if let Some(resume) = &peer.resume {
+                bootstrap["resume"] = json!(resume);
+            }
+            stdin.write_all(format!("{bootstrap}\n").as_bytes()).await?;
             drop(stdin);
             let mut stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
             if frame(&mut stdout).await?["listening"] != true {

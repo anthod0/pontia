@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtempDisposable, writeFile, readFile, access } from "node:fs/promises";
+import { mkdir, mkdtempDisposable, writeFile, readFile, access, readdir } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { spawn } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { Host, type QueryFactory } from "../src/host.js";
 import type { HostEvent } from "../src/facts.js";
@@ -140,6 +141,21 @@ test(
       });
     const hosts: Host[] = [];
     const events: HostEvent[] = [];
+    async function history(session: string) {
+      const child = spawn(
+        process.execPath,
+        [new URL("../src/main.js", import.meta.url).pathname, "history"],
+        { env, stdio: ["pipe", "pipe", "ignore"] },
+      );
+      child.stdin.end(JSON.stringify({ session_id: session, cwd }) + "\n");
+      let output = "";
+      child.stdout.on("data", (chunk) => {
+        output += chunk;
+      });
+      const code = await new Promise<number | null>((resolve) => child.on("close", resolve));
+      assert.equal(code, 0);
+      return JSON.parse(output) as Array<{ uuid: string; session_id: string; message: unknown }>;
+    }
     const create = (resume?: string) => {
       const host = new Host({ cwd, resume }, (event) => events.push(event), factory);
       hosts.push(host);
@@ -206,6 +222,19 @@ test(
       );
       await host.close();
       assert.equal(host.status().closed, true);
+      const before = await history(native);
+      for (const event of events) {
+        if (event.kind === "finished") {
+          assert.ok(
+            before.some((m) => m.uuid === event.input_id),
+            "native history preserves input UUID",
+          );
+          assert.ok(
+            before.some((m) => m.uuid === event.history_anchor),
+            "native history preserves last message UUID",
+          );
+        }
+      }
       const restored = create(native);
       await finish(restored, randomUUID(), "Third isolated task");
       assert.equal(restored.status().native_session_id, native);
@@ -214,6 +243,22 @@ test(
       const resumedHistory = JSON.stringify(requests[6]);
       assert.ok(resumedHistory.includes("First isolated task"));
       assert.ok(resumedHistory.includes("Second isolated task"));
+      const after = await history(native);
+      assert.ok(after.length > before.length);
+      assert.ok(after.every((m) => m.session_id === native));
+      await assert.rejects(history(randomUUID()));
+      const transcript = (await readdir(config, { recursive: true })).find((path) =>
+        path.endsWith(`/${native}.jsonl`),
+      );
+      assert.ok(transcript);
+      const path = join(config, transcript);
+      const saved = await readFile(path);
+      try {
+        await writeFile(path, "invalid transcript\n");
+        await assert.rejects(history(native));
+      } finally {
+        await writeFile(path, saved);
+      }
     } finally {
       try {
         await Promise.all(hosts.map((host) => host.close()));

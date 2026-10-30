@@ -2688,6 +2688,41 @@ test("hides exit on exited sessions and waits for idle after automatic resume be
   );
 });
 
+test("resumes an exited Claude conversation by submitting the real input before SDK readiness", async () => {
+  const user = userEvent.setup();
+  const selected = session({
+    session_id: "claude-resume",
+    client_type: "claude-agent",
+    state: "exited",
+  });
+  const starting = { ...selected, state: "starting" };
+  window.history.pushState({}, "", "/dashboard/chat/claude-resume");
+  mocks.pathParams = { sessionId: "claude-resume" };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.resumeSession.mockImplementation(async () => {
+    mocks.sessions.set([starting]);
+    mocks.sessionDetail.set({ session: starting, turns: [], inboxMessages: [], events: [] });
+  });
+  mocks.submitInboxMessage.mockResolvedValue(undefined);
+  render(SessionChatPage);
+  await user.type(
+    await screen.findByPlaceholderText("Continue the thread…"),
+    "continue bound conversation",
+  );
+  await user.click(screen.getByRole("button", { name: /send/i }));
+  await waitFor(() =>
+    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("claude-resume", {
+      input: "continue bound conversation",
+      delivery_policy: "after_idle",
+      metadata: { source: "dashboard_chat" },
+    }),
+  );
+  expect(mocks.resumeSession).toHaveBeenCalledTimes(1);
+  expect(mocks.submitInboxMessage).toHaveBeenCalledTimes(1);
+});
+
 test("scrolls to a message selected from the conversation ruler", async () => {
   const user = userEvent.setup();
   const scrollIntoView = vi.fn();

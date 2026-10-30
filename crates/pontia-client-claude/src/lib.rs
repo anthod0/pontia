@@ -1,12 +1,14 @@
+mod history;
 mod interactions;
 mod output;
 mod peer;
+mod resume;
 mod spec;
 mod transport;
 
 use peer::{Input, Peer};
 use pontia_application::{
-    AppState, EventIngestService, PontiaEventType, client_contract::*, clients::ClientRegistration,
+    AppState, EventIngestService, client_contract::*, clients::ClientRegistration,
     control::InputReceipt, runtime::ControlTarget, sessions::SessionModel, turns::InputIntent,
 };
 use pontia_core::{Error, Result};
@@ -33,6 +35,7 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
         interactions: Arc::new(OnceLock::new()),
         peers: Default::default(),
         stopped: Arc::new(AtomicBool::new(false)),
+        context: Arc::new(OnceLock::new()),
     });
     ClientRegistration {
         configuration: Some(Arc::new(Configuration)),
@@ -41,11 +44,11 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
         service: Some(adapter.clone()),
         profile: None,
         in_process: None,
-        session: Some(adapter),
+        session: Some(adapter.clone()),
         prepare_on_input: true,
         steer: false,
         spec: &spec::SPEC,
-        data: None,
+        data: Some(adapter),
         launcher: None,
     }
 }
@@ -77,6 +80,7 @@ struct Adapter {
     interactions: Arc<OnceLock<pontia_application::interactions::InteractionService>>,
     peers: Arc<Mutex<HashMap<String, Arc<Peer>>>>,
     stopped: Arc<AtomicBool>,
+    context: Arc<OnceLock<(SqlitePool, PathBuf)>>,
 }
 fn unsupported() -> Error {
     Error::CapabilityUnavailable("This Claude Agent capability is not implemented".into())
@@ -85,6 +89,17 @@ fn unavailable() -> Error {
     Error::CapabilityUnavailable("Claude Agent host is unavailable".into())
 }
 impl Adapter {
+    fn script(&self, root: &Path) -> Result<PathBuf> {
+        let script = std::path::absolute(
+            self.host
+                .clone()
+                .unwrap_or_else(|| root.join("clients/claude/dist/src/main.js")),
+        )?;
+        if !script.is_file() {
+            return Err(Error::CapabilityUnavailable("Claude Agent SDK host is not installed; set PONTIA_CLAUDE_HOST_PATH to its built main.js".into()));
+        }
+        Ok(script)
+    }
     async fn peer(&self, session: &str) -> Result<Arc<Peer>> {
         self.peers
             .lock()
@@ -130,26 +145,12 @@ impl ClientSession for Adapter {
             if self.stopped.load(Ordering::Acquire) || peers.contains_key(&request.session_id) {
                 return Err(unavailable());
             }
-            let script = std::path::absolute(
-                self.host
-                    .clone()
-                    .unwrap_or_else(|| root.join("clients/claude/dist/src/main.js")),
-            )?;
-            if !script.is_file() {
-                return Err(Error::CapabilityUnavailable("Claude Agent SDK host is not installed; set PONTIA_CLAUDE_HOST_PATH to its built main.js".into()));
-            }
+            let script = self.script(root)?;
             let cwd = request
                 .workspace
                 .map(PathBuf::from)
                 .ok_or_else(|| Error::Domain("Claude Agent requires a Workspace".into()))?;
             let runtime = request.runtime_id.ok_or_else(unavailable)?;
-            let directory = std::path::absolute(root)?
-                .join("state/claude")
-                .join(&runtime);
-            // Build the private leaf atomically; never reuse a prior host's socket directory.
-            std::fs::create_dir_all(directory.parent().ok_or_else(unavailable)?)?;
-            use std::os::unix::fs::DirBuilderExt;
-            std::fs::DirBuilder::new().mode(0o700).create(&directory)?;
             let config_dir = request
                 .environment
                 .get("CLAUDE_CONFIG_DIR")
@@ -159,39 +160,19 @@ impl ClientSession for Adapter {
                     std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".claude"))
                 })
                 .ok_or_else(unavailable)?;
+            let config_dir = std::path::absolute(cwd.join(config_dir))?;
             let peer = Arc::new(Peer {
                 session: request.session_id,
                 runtime,
                 cwd,
                 config_dir,
+                resume: None,
                 interactions: self.interactions.get().cloned().ok_or_else(unavailable)?,
                 state: Default::default(),
                 connection: OnceLock::new(),
             });
-            peer.runtime_event(&events, PontiaEventType::RuntimeStarting, json!({}))
+            peer.start(&events, root, &script, &request.environment)
                 .await?;
-            match transport::Connection::spawn(
-                peer.clone(),
-                &script,
-                &directory.join("control.sock"),
-                &request.environment,
-                events.clone(),
-            )
-            .await
-            {
-                Ok(connection) => {
-                    let _ = peer.connection.set(connection);
-                }
-                Err(error) => {
-                    peer.runtime_event(
-                        &events,
-                        PontiaEventType::RuntimeExited,
-                        json!({"reason":"host_start_failed"}),
-                    )
-                    .await?;
-                    return Err(error);
-                }
-            }
             peers.insert(peer.session.clone(), peer);
             Ok(())
         })
@@ -306,12 +287,20 @@ impl ClientSession for Adapter {
         implementation: &'a AgentClientCapabilities,
     ) -> ClientOperation<'a, AgentClientCapabilities> {
         Box::pin(async move {
+            let mut offline = AgentClientCapabilities {
+                timeline: true,
+                ..Default::default()
+            };
+            if let Some((pool, _)) = self.context.get() {
+                offline.accept_task = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM sessions s WHERE s.session_id=? AND s.state='exited' AND json_extract((SELECT payload FROM events WHERE session_id=s.session_id AND event_type='session.exited' ORDER BY rowid DESC LIMIT 1),'$.reason')='claude_sdk_closed')")
+                    .bind(session).fetch_one(pool).await?;
+            }
             let Ok(peer) = self.peer(session).await else {
-                return Ok(AgentClientCapabilities::default());
+                return Ok(offline);
             };
             let state = peer.state.lock().await;
             if state.unavailable.is_some() || state.closed || state.closing {
-                return Ok(AgentClientCapabilities::default());
+                return Ok(offline);
             }
             Ok(implementation.clone())
         })
@@ -344,10 +333,10 @@ impl ClientSession for Adapter {
     }
     fn resume<'a>(
         &'a self,
-        _: EventIngestService,
-        _: &'a ControlTarget,
+        events: EventIngestService,
+        target: &'a ControlTarget,
     ) -> ClientOperation<'a, ()> {
-        Box::pin(async { Err(unsupported()) })
+        Box::pin(async move { self.resume_bound(events, target).await })
     }
     fn list_models<'a>(
         &'a self,
@@ -402,6 +391,7 @@ impl ClientService for Adapter {
         let adapter = self.clone();
         Box::pin(async move {
             let _ = self.interactions.set(app.interactions());
+            let _ = self.context.set((app.db(), app.pontia_home().into()));
             let mut shutdown = app.shutdown().subscribe();
             Ok(Some(tokio::spawn(async move {
                 let _ = shutdown.wait_for(|stop| *stop).await;

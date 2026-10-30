@@ -169,6 +169,347 @@ impl Harness {
             .unwrap()
             .unwrap();
     }
+
+    async fn history(
+        &self,
+        session: &str,
+    ) -> Result<pontia_application::TurnTreeHistoryPage, pontia_application::TurnTimelineServiceError>
+    {
+        pontia_application::TurnTimelineService::new(self.app.event_ingest_service())
+            .tree_history(session.into(), None, 50)
+            .await
+    }
+    async fn resume_input(&self, session: &str, text: &str) -> Value {
+        let message = uuid::Uuid::new_v4().to_string();
+        let result = self
+            .app
+            .inbox_commands()
+            .prepare_message_once(
+                &self.app.session_commands(),
+                &message,
+                session,
+                text.into(),
+                json!({}),
+            )
+            .await
+            .unwrap();
+        if result.data["inbox_message"]["state"] == "resuming" {
+            let runtime: String =
+                sqlx::query_scalar("SELECT runtime_id FROM session_runtimes WHERE session_id=?")
+                    .bind(session)
+                    .fetch_one(&self.app.db())
+                    .await
+                    .unwrap();
+            self.app
+                .inbox_commands()
+                .release_prepared_message(session, &message, &runtime)
+                .await
+                .unwrap();
+        }
+        result.data
+    }
+}
+
+#[tokio::test]
+async fn exited_sessions_read_and_resume_their_own_history_in_a_shared_workspace() {
+    let h = Harness::new().await;
+    let a = h.create("alpha history").await;
+    let b = h.create("beta history").await;
+    for session in [&a, &b] {
+        h.gate(session, 1, "start");
+        h.gate(session, 1, "finish");
+        h.wait_states(session, &["completed"]).await;
+        h.app
+            .session_commands()
+            .terminate_session(session)
+            .await
+            .unwrap();
+    }
+    for (session, text) in [(&a, "alpha history"), (&b, "beta history")] {
+        let page = h.history(session).await.unwrap();
+        assert_eq!(page.groups.len(), 1);
+        assert_eq!(
+            page.groups[0]
+                .items
+                .iter()
+                .map(|i| i.item.content_preview.as_str())
+                .collect::<Vec<_>>(),
+            [text, text]
+        );
+        assert!(
+            h.app
+                .queries()
+                .get_session(session)
+                .await
+                .unwrap()
+                .unwrap()
+                .capabilities
+                .timeline
+        );
+        let result = h.resume_input(session, &format!("{text} continued")).await;
+        assert_eq!(result["inbox_message"]["state"], "resuming", "{result}");
+        h.wait_inputs(session, 2).await;
+        h.gate(session, 2, "start");
+        h.gate(session, 2, "finish");
+        h.wait_states(session, &["completed", "completed"]).await;
+        let spawns: Vec<_> = h
+            .wire(session)
+            .into_iter()
+            .filter(|v| v["method"] == "spawn")
+            .collect();
+        assert_eq!(spawns.len(), 2);
+        assert_eq!(spawns[1]["resume"], spawns[0]["native"]);
+        assert_eq!(spawns[1]["native"], spawns[0]["native"]);
+        let page = h.history(session).await.unwrap();
+        assert_eq!(page.groups.len(), 2, "{page:?}");
+        assert_eq!(
+            page.groups[1].items[0].item.content_preview,
+            format!("{text} continued")
+        );
+        assert_eq!(page.groups[0].items[0].item.content_preview, text);
+    }
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn closing_before_first_turn_reports_unassociated_history_instead_of_empty_success() {
+    let h = Harness::new().await;
+    let session = h.create("persisted input without a turn").await;
+    h.wait_inputs(&session, 1).await;
+    h.wait_session(&session, "idle").await;
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    let result = pontia_application::TurnTimelineService::new(h.app.event_ingest_service())
+        .page(
+            session.clone(),
+            pontia_application::TurnTimelineDirection::Backward,
+            None,
+            50,
+        )
+        .await;
+    assert!(matches!(
+        result,
+        Err(pontia_application::TurnTimelineServiceError::CapabilityUnavailable)
+    ));
+    assert!(h.turns(&session).await.is_empty());
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn relative_config_directory_is_bound_to_the_execution_workspace() {
+    if std::env::var_os("PONTIA_TEST_RELATIVE_CONFIG").is_none() {
+        let result = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "relative_config_directory_is_bound_to_the_execution_workspace",
+                "--nocapture",
+            ])
+            .env("PONTIA_TEST_RELATIVE_CONFIG", "1")
+            .env("CLAUDE_CONFIG_DIR", "native-config")
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+        return;
+    }
+    let h = Harness::new().await;
+    let session = h.create("relative configuration").await;
+    h.gate(&session, 1, "start");
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    let binding = pontia_application::AgentBindingService::new(h.app.db())
+        .binding_for_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        binding.metadata["claude_config_dir"],
+        h.root.path().join("native-config").to_str().unwrap()
+    );
+    assert_eq!(
+        h.history(&session).await.unwrap().groups[0].items[0]
+            .item
+            .content_preview,
+        "relative configuration"
+    );
+    let result = h
+        .resume_input(&session, "same relative configuration")
+        .await;
+    assert_eq!(result["inbox_message"]["state"], "resuming", "{result}");
+    h.wait_inputs(&session, 2).await;
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn closed_history_and_resume_survive_a_control_service_restart() {
+    let h = Harness::new().await;
+    let session = h.create("durable conversation").await;
+    h.gate(&session, 1, "start");
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    h.app.shutdown().notify();
+    h.tasks.join().await.unwrap();
+    let mut clients = ClientRegistry::default();
+    clients.register(pontia_client_claude::registration_with_host(Some(
+        format!("{}/tests/fixtures/host.mjs", env!("CARGO_MANIFEST_DIR")).into(),
+    )));
+    let app = AppState::builder(h.app.db(), h.root.path().into())
+        .clients(clients.clone())
+        .build();
+    let tasks = clients
+        .start_services(app.clone(), ClientServicePhase::Transport)
+        .await
+        .unwrap();
+    let h = Harness {
+        app,
+        root: h.root,
+        tasks,
+    };
+    assert_eq!(
+        h.history(&session).await.unwrap().groups[0].items[0]
+            .item
+            .content_preview,
+        "durable conversation"
+    );
+    let result = h.resume_input(&session, "after service restart").await;
+    assert_eq!(result["inbox_message"]["state"], "resuming", "{result}");
+    h.wait_inputs(&session, 2).await;
+    h.gate(&session, 2, "start");
+    h.gate(&session, 2, "finish");
+    h.wait_states(&session, &["completed", "completed"]).await;
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn missing_history_is_an_error_and_never_starts_a_replacement_conversation() {
+    let h = Harness::new().await;
+    let session = h.create("history to remove").await;
+    h.gate(&session, 1, "start");
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    let binding = pontia_application::AgentBindingService::new(h.app.db())
+        .binding_for_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    // Remove only this test's native-source fixture under its owned TempDir.
+    std::fs::remove_file(
+        h.root
+            .path()
+            .join(format!("history-{}.jsonl", binding.client_session_key)),
+    )
+    .unwrap();
+    assert!(matches!(
+        h.history(&session).await,
+        Err(pontia_application::TurnTimelineServiceError::SourceUnavailable)
+    ));
+    let outcome = h.resume_input(&session, "new real input").await;
+    assert_eq!(outcome["inbox_message"]["state"], "failed");
+    assert_eq!(
+        h.wire(&session)
+            .iter()
+            .filter(|v| v["method"] == "spawn")
+            .count(),
+        1
+    );
+    assert_eq!(h.turns(&session).await.len(), 1);
+    assert_eq!(
+        pontia_application::AgentBindingService::new(h.app.db())
+            .binding_for_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .client_session_key,
+        binding.client_session_key
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn host_loss_keeps_history_readable_and_does_not_authorize_parallel_resume() {
+    let h = Harness::new().await;
+    let session = h.create("unfinished").await;
+    h.gate(&session, 1, "start");
+    h.wait_states(&session, &["running"]).await;
+    assert!(
+        h.app
+            .session_commands()
+            .resume_session(&session, h.root.path())
+            .await
+            .is_err()
+    );
+    h.gate(&session, 1, "lost");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let view = serde_json::to_value(
+                h.app
+                    .queries()
+                    .get_session(&session)
+                    .await
+                    .unwrap()
+                    .unwrap(),
+            )
+            .unwrap();
+            if view["claude-agent"]["unavailable_reason"] == "host_unavailable" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        h.app
+            .session_commands()
+            .resume_session(&session, h.root.path())
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        h.history(&session).await.unwrap().groups[0].items[0]
+            .item
+            .content_preview,
+        "unfinished"
+    );
+    h.app.inbox_commands().notify_available(&session);
+    h.app.inbox_commands().drain_inbox(&session).await.unwrap();
+    assert_eq!(h.turns(&session).await[0].1, "running");
+    assert_eq!(
+        h.wire(&session)
+            .iter()
+            .filter(|v| v["method"] == "spawn")
+            .count(),
+        1
+    );
+    assert_eq!(
+        h.wire(&session)
+            .iter()
+            .filter(|v| v["method"] == "input")
+            .count(),
+        1
+    );
+    h.stop().await;
 }
 
 #[tokio::test]
@@ -441,6 +782,9 @@ async fn explicit_sdk_close_abandons_active_turn_without_fabricating_result() {
         .await
         .unwrap();
     h.wait_states(&session, &["abandoned"]).await;
+    let history = h.history(&session).await.unwrap();
+    assert_eq!(history.groups[0].items[0].item.content_preview, "held");
+    assert!(history.groups[0].history_issue.is_none());
     let runtime: String =
         sqlx::query_scalar("SELECT state FROM session_runtimes WHERE session_id=?")
             .bind(&session)

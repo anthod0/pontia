@@ -39,3 +39,9 @@ export function clientDeliveryPolicy(session: SessionView | null | undefined) {
     "after_idle"
   );
 }
+
+export function clientResumeWaitsForIdle(session: SessionView | null | undefined): boolean {
+  return (
+    clients.find((client) => client.clientType === session?.client_type)?.resumeWaitsForIdle ?? true
+  );
+}

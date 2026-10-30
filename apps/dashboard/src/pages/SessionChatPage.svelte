@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { clientControlDetails, clientDeliveryPolicy } from '../clients'
+  import { clientControlDetails, clientDeliveryPolicy, clientResumeWaitsForIdle } from '../clients'
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
@@ -864,7 +864,7 @@
     try {
       if (waitForResume) {
         await resumeSession(selectedSessionId)
-        await waitForSessionIdle(selectedSessionId)
+        if (clientResumeWaitsForIdle(selectedSession)) await waitForSessionIdle(selectedSessionId)
         clearChatDraft()
       }
       await submitInboxMessage(selectedSessionId, {
