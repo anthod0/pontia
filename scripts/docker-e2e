@@ -30,6 +30,7 @@ AUTH_FILES = {
     "device": {
         "codex.json": "/home/e2e/.codex/auth.json",
         "pi.json": "/home/e2e/.pi/agent/auth.json",
+        "claude.json": "/home/e2e/.claude/.credentials.json",
     },
     "browser": {
         "Cookies": "/home/e2e/chromium/Default/Cookies",
@@ -169,6 +170,22 @@ def start_services():
     print("Test browser: http://127.0.0.1:18179/vnc.html?autoconnect=1&resize=scale")
 
 
+def prepare_claude(state):
+    key = variables(state / "cloud.dev.vars").get("OPENROUTER_API_KEY")
+    if key is None:
+        return
+    if not key.strip() or key.strip() == "xxx":
+        raise ValueError("Fill OPENROUTER_API_KEY in docker/e2e/.local/cloud.dev.vars with your OpenRouter API key")
+    path = state / "auth/device/claude-settings.json"
+    settings = json.loads(path.read_text()) if path.exists() else {}
+    settings.setdefault("env", {}).update({
+        "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+        "ANTHROPIC_AUTH_TOKEN": key,
+        "ANTHROPIC_API_KEY": "",
+    })
+    write_private(path, json.dumps(settings) + "\n")
+
+
 def up():
     for resource in ("container", "volume", "network"):
         existing = run(["docker", resource, "ls", "-q", "--filter",
@@ -176,10 +193,11 @@ def up():
         if existing.stdout.strip():
             raise ValueError("An E2E run already exists. Finish it with docker-e2e down before starting a fresh run.")
     initialize(STATE)
+    prepare_claude(STATE)
     try:
         prepare_edge(STATE)
         start_services()
-        for client in ("pi", "codex"):
+        for client in ("pi", "codex", "claude-agent"):
             compose(["exec", "-T", "device", "pontia", "client", "enable", client])
     except BaseException:
         down()

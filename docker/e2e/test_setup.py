@@ -85,6 +85,42 @@ class SetupTests(unittest.TestCase):
         self.assertEqual((self.state / "cloud.dev.vars").read_bytes(), original)
         self.assertEqual((self.state / "cloud.dev.vars").stat().st_mode & 0o777, 0o600)
 
+    def test_openrouter_key_refreshes_native_configuration(self):
+        path = self.state / "auth/device/claude-settings.json"
+        setup.write_private(path, json.dumps({
+            "model": "test-model", "env": {"ANTHROPIC_API_KEY": "old-key"},
+        }))
+        original = path.read_bytes()
+        setup.prepare_claude(self.state)
+        self.assertEqual(path.read_bytes(), original)
+        config = self.state / "cloud.dev.vars"
+        base = config.read_text()
+        for key in ("test-openrouter-first", "test-openrouter-rotated"):
+            config.write_text(base + f'OPENROUTER_API_KEY="{key}"\n')
+            setup.prepare_claude(self.state)
+            self.assertEqual(json.loads(path.read_text()), {
+                "model": "test-model",
+                "env": {
+                    "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+                    "ANTHROPIC_AUTH_TOKEN": key,
+                    "ANTHROPIC_API_KEY": "",
+                },
+            })
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_openrouter_placeholder_stops_startup_before_containers_are_created(self):
+        config = self.state / "cloud.dev.vars"
+        base = config.read_text()
+        for value in ('xxx', '""', '"  "'):
+            config.write_text(base + f"OPENROUTER_API_KEY={value}\n")
+            with patch.object(setup, "STATE", self.state), \
+                    patch.object(setup, "run", return_value=subprocess.CompletedProcess([], 0, b"")), \
+                    patch.object(setup, "compose") as compose:
+                with self.assertRaises(ValueError):
+                    setup.up()
+                compose.assert_not_called()
+            self.assertFalse((self.state / "auth/device/claude-settings.json").exists())
+
     def test_saved_browser_credentials_exclude_local_auth_and_browsing_state(self):
         cookie_path = self.root / "Cookies"
         with sqlite3.connect(cookie_path) as db:

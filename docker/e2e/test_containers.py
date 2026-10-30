@@ -27,6 +27,12 @@ class ContainerSmokeTests(unittest.TestCase):
         fixture.certificates()
         state = fixture.state
         test_setup.setup.write_private(state / "auth/device/codex.json", '{"test_credential":"retained"}')
+        test_setup.setup.write_private(state / "auth/device/claude.json", '{"test_credential":"original"}')
+        claude_settings = {"env": {
+            "ANTHROPIC_BASE_URL": "http://127.0.0.1:1",
+            "ANTHROPIC_AUTH_TOKEN": "fixture-not-a-secret",
+        }}
+        test_setup.setup.write_private(state / "auth/device/claude-settings.json", json.dumps(claude_settings))
         tls = state / "tls"
         shutil.copyfile(fixture.root / "ca.pem", tls / "test-ca.pem")
         edge = state / "edge"
@@ -87,6 +93,17 @@ class ContainerSmokeTests(unittest.TestCase):
             self.assertIn(b"<html", vnc.stdout)
             compose("exec", "-T", "device", "pi", "--version")
             compose("exec", "-T", "device", "codex", "--version")
+            compose("exec", "-T", "device", "claude", "--version")
+            auth = compose("exec", "-T", "device", "claude", "auth", "status")
+            self.assertTrue(json.loads(auth.stdout)["loggedIn"])
+            self.assertEqual(json.loads(auth.stdout)["configDirectory"], "/home/e2e/.claude")
+            compose("exec", "-T", "device", "pontia", "client", "enable", "claude-agent")
+            # Exercise the installed SDK, tools, approvals and native history with
+            # a loopback model substitute. This project has no external network.
+            compose("exec", "-T", "-e", "PONTIA_CLAUDE_SDK_TEST=1", "device", "node", "--test",
+                    "/opt/pontia/clients/claude/dist/test/sdk.test.js")
+            imported = compose("exec", "-T", "device", "cat", "/home/e2e/.claude/.credentials.json")
+            self.assertEqual(json.loads(imported.stdout), {"test_credential": "original"})
             sandbox = compose("exec", "-T", "device", "codex", "sandbox", "-c", 'sandbox_mode="workspace-write"',
                               "--", "sh", "-c", "printf sandbox-ok > /home/e2e/workspace/sandbox.txt && cat /home/e2e/workspace/sandbox.txt")
             self.assertEqual(sandbox.stdout, b"sandbox-ok")
@@ -125,11 +142,33 @@ class ContainerSmokeTests(unittest.TestCase):
                 "--fail", "https://pontia.dev/",
             ], env=env, capture_output=True)
             self.assertNotEqual(unavailable.returncode, 0)
-            compose("down", "--volumes")
+            compose("exec", "-T", "device", "python3", "-c",
+                    "from pathlib import Path; "
+                    "Path('/home/e2e/.claude/.credentials.json').write_text('{\"test_credential\":\"refreshed\"}'); "
+                    "Path('/home/e2e/.claude/settings.json').write_text('{\"permissions\":{\"allow\":[\"Bash\"]}}'); "
+                    "Path('/home/e2e/.claude/projects').mkdir(exist_ok=True); "
+                    "Path('/home/e2e/.claude/projects/discard-me').touch()")
+            with test_setup.patch.object(test_setup.setup, "STATE", state), \
+                    test_setup.patch.object(test_setup.setup, "compose", side_effect=lambda args, **kwargs:
+                        subprocess.run([*prefix, *args], env=env, check=True, **kwargs)):
+                test_setup.setup.down()
+            saved = state / "auth/device/claude.json"
+            self.assertEqual(json.loads(saved.read_text()), {"test_credential": "refreshed"})
+            self.assertEqual(saved.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(json.loads((state / "auth/device/claude-settings.json").read_text()), claude_settings)
+            test_setup.setup.prepare_edge(state)
+            with test_setup.patch.dict(os.environ, {"SSL_CERT_FILE": str(fixture.root / "ca.pem")}):
+                test_setup.setup.check(state)
             compose("up", "-d", "--wait", "--wait-timeout", "180")
             credentials = compose("exec", "-T", "device", "sh", "-c",
                                   "test ! -e /home/e2e/workspace/discard-me && cat /home/e2e/.codex/auth.json")
             self.assertEqual(json.loads(credentials.stdout), {"test_credential": "retained"})
+            credentials = compose("exec", "-T", "device", "sh", "-c",
+                                  "test ! -e /home/e2e/.claude/projects/discard-me && "
+                                  "cat /home/e2e/.claude/.credentials.json")
+            self.assertEqual(json.loads(credentials.stdout), {"test_credential": "refreshed"})
+            settings = compose("exec", "-T", "device", "cat", "/home/e2e/.claude/settings.json")
+            self.assertEqual(json.loads(settings.stdout), claude_settings)
             fresh = compose("exec", "-T", "cloud", "./node_modules/.bin/wrangler", "d1", "execute", "DB",
                             "--local", "--persist-to", "/state", "--json", "--command",
                             "SELECT count(*) AS count FROM hero_name_modifiers WHERE word='discard-me';")

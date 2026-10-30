@@ -51,21 +51,29 @@ FROM base AS edge
 COPY --from=rust-build /out/pontia-edge /usr/local/bin/pontia-edge
 CMD ["pontia-edge"]
 
+FROM base AS claude-build
+WORKDIR /opt/pontia/clients/claude
+COPY clients/claude ./
+RUN bun install --frozen-lockfile && bun run build
+
 FROM base AS device
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git tmux ripgrep procps python3 \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install --global @earendil-works/pi-coding-agent @openai/codex \
+    && npm install --global @earendil-works/pi-coding-agent @openai/codex @anthropic-ai/claude-code \
     && usermod --login e2e --home /home/e2e --move-home node \
     && groupmod --new-name e2e node
 COPY --from=rust-build /out/pontia /out/pontiad /usr/local/bin/
 COPY --from=dashboard-build /out/local /opt/pontia/dashboard
 COPY clients/pi /opt/pontia/clients/pi
+COPY --from=claude-build /opt/pontia/clients/claude /opt/pontia/clients/claude
 COPY docker/e2e/device-entrypoint /usr/local/bin/device-entrypoint
 COPY docker/e2e/device.toml /opt/pontia/config.toml
-RUN mkdir -p /home/e2e/.pontia /home/e2e/.pi/agent /home/e2e/.codex /home/e2e/workspace \
+RUN mkdir -p /home/e2e/.pontia /home/e2e/.pi/agent /home/e2e/.codex /home/e2e/.claude /home/e2e/workspace \
     && chown -R 1000:1000 /home/e2e
 ENV HOME=/home/e2e PONTIA_HOME=/home/e2e/.pontia
+ENV PONTIA_CLAUDE_HOST_PATH=/opt/pontia/clients/claude/dist/src/main.js \
+    CLAUDE_CONFIG_DIR=/home/e2e/.claude
 USER 1000:1000
 WORKDIR /home/e2e/workspace
 ENTRYPOINT ["bash", "/usr/local/bin/device-entrypoint"]
