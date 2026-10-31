@@ -8,7 +8,7 @@
   import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
 
   // Editorial estimate, updated manually rather than derived from capability counts.
-  const developmentProgress = 45;
+  const developmentProgress = 50;
 
   // SVG logo sources: https://pi.dev/press-kit; Claude symbol extracted from
   // the inline wordmark at https://claude.com/product/claude-code;
@@ -33,7 +33,7 @@
   const clients: { name: string; logo: string; coverage: Coverage[] }[] = [
     { name: 'Pi', logo: '/client-logos/pi.svg', coverage: ['supported', 'supported', 'notApplicable', 'supported', 'supported', 'supported'] },
     { name: 'Codex', logo: '/client-logos/codex.svg', coverage: ['supported', 'partial', 'supported', 'planning', 'partial', 'supported'] },
-    { name: 'Claude Code', logo: '/client-logos/claude-code.svg', coverage: ['planning', 'planning', 'planning', 'planning', 'planning', 'planning'] },
+    { name: 'Claude Code', logo: '/client-logos/claude-code.svg', coverage: ['supported', 'planning', 'supported', 'planning', 'planning', 'planning'] },
     { name: 'Grok Build', logo: '/client-logos/grok-build.svg', coverage: ['supported', 'planning', 'supported', 'planning', 'planning', 'planning'] },
     { name: 'OpenCode', logo: '/client-logos/opencode.svg', coverage: ['supported', 'planning', 'supported', 'planning', 'planning', 'planning'] },
   ];
