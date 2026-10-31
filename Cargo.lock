@@ -2685,12 +2685,15 @@ dependencies = [
 name = "pontia-client-claude"
 version = "0.0.0"
 dependencies = [
+ "flate2",
  "pontia-application",
  "pontia-core",
  "pontia-runtime",
  "pontia-storage-sqlite",
  "serde_json",
+ "sha2 0.10.9",
  "sqlx",
+ "tar",
  "tempfile",
  "tokio",
  "tracing",

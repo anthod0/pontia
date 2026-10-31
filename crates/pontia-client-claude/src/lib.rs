@@ -1,8 +1,10 @@
+mod bundle;
 mod history;
 mod interactions;
 mod output;
 mod peer;
 mod resume;
+pub mod setup;
 mod spec;
 mod transport;
 
@@ -93,7 +95,9 @@ impl Adapter {
         let script = std::path::absolute(
             self.host
                 .clone()
-                .unwrap_or_else(|| root.join("clients/claude/dist/src/main.js")),
+                .map(Ok)
+                .unwrap_or_else(|| bundle::install(root))
+                .map_err(Error::CapabilityUnavailable)?,
         )?;
         if !script.is_file() {
             return Err(Error::CapabilityUnavailable("Claude Agent SDK host is not installed; set PONTIA_CLAUDE_HOST_PATH to its built main.js".into()));
@@ -320,7 +324,13 @@ impl ClientSession for Adapter {
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async move {
             let reason = match self.peer(session).await {
-                Ok(peer) => peer.state.lock().await.unavailable.clone(),
+                Ok(peer) => {
+                    let state = peer.state.lock().await;
+                    state
+                        .unavailable
+                        .clone()
+                        .or_else(|| state.retry_reason.clone())
+                }
                 Err(_) => Some("host_unavailable".into()),
             };
             Ok(ClientSessionDetails {

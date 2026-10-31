@@ -43,6 +43,7 @@ def check() -> None:
     versions = {"Cargo.toml": workspace_version()}
     for relative in (
         "clients/pi/package.json",
+        "clients/claude/package.json",
         "apps/cloud/package.json",
         "apps/dashboard/package.json",
         "apps/cron/package.json",

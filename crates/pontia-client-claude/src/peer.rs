@@ -21,6 +21,7 @@ pub(crate) struct Input {
 #[derive(Default)]
 pub(crate) struct State {
     pub unavailable: Option<String>,
+    pub retry_reason: Option<String>,
     pub closing: bool,
     pub closed: bool,
     pub closed_anchor: Option<String>,
@@ -151,6 +152,7 @@ impl Peer {
             }
             Some("closed") => {
                 state.closed = true;
+                state.retry_reason = None;
                 state.closed_anchor = event["history_anchor"].as_str().map(str::to_owned);
                 crate::interactions::expire_all(self, &mut state).await;
             }
@@ -159,6 +161,15 @@ impl Peer {
                 state.unavailable = Some(field(event, "reason")?.into());
                 crate::interactions::expire_all(self, &mut state).await;
                 tracing::warn!(session = %self.session, reason = ?state.unavailable, result = ?event.get("result"), "Claude Agent execution unavailable");
+            }
+            Some("retry") => {
+                state.retry_reason = match event["reason"].as_str() {
+                    Some(reason @ ("authentication_failed_retrying" | "api_request_retrying")) => {
+                        Some(reason.into())
+                    }
+                    None if event["reason"].is_null() => None,
+                    _ => return Err(invalid()),
+                };
             }
             Some(kind @ ("started" | "finished" | "text" | "tool" | "tool_result")) => {
                 if state.closed {

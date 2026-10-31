@@ -1,7 +1,12 @@
 import { bootstrap, serve } from "./server.js";
 import { readHistory } from "./history.js";
+import { preflight } from "./preflight.js";
 
 async function main(): Promise<void> {
+  if (process.argv[2] === "preflight") {
+    await preflight();
+    return;
+  }
   let input = Buffer.alloc(0);
   // The parent supplies the connection capability privately, never in argv or a log.
   for await (const chunk of process.stdin) {

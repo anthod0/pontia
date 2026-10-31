@@ -24,12 +24,14 @@ fmt:
     bun run --cwd apps/dashboard fmt
     bun run --cwd apps/cloud fmt
     bun run --cwd clients/pi fmt
+    ./apps/dashboard/node_modules/.bin/oxfmt clients/claude/src clients/claude/test
 
 fmt-check:
     cargo fmt --check
     bun run --cwd apps/dashboard fmt:check
     bun run --cwd apps/cloud fmt:check
     bun run --cwd clients/pi fmt:check
+    ./apps/dashboard/node_modules/.bin/oxfmt --check clients/claude/src clients/claude/test
 
 sqlx-prepare:
     ./scripts/sqlx-prepare.sh
@@ -56,6 +58,7 @@ macos-check-target target:
         --workdir /io \
         --env CARGO_TARGET_DIR=/target \
         --env SQLX_OFFLINE=true \
+        --env MACOSX_DEPLOYMENT_TARGET=13.5 \
         ghcr.io/rust-cross/cargo-zigbuild@sha256:d8313491ec5798de0633fdc1c5753761bff79967bea69076020dc78121b2cca8 \
         sh -c 'set -eu; zig_dir="/opt/pontia-zig/zig-$(uname -m)-linux-0.15.2"; if [ ! -x "$zig_dir/zig" ]; then curl -fsSL "https://ziglang.org/download/0.15.2/zig-$(uname -m)-linux-0.15.2.tar.xz" | tar -xJ -C /opt/pontia-zig; fi; export CARGO_ZIGBUILD_ZIG_PATH="$zig_dir/zig"; rustup toolchain install stable --profile minimal; rustup target add --toolchain stable "$1"; cargo +stable zigbuild --locked --target "$1" --package pontia --package pontiad' \
         sh "{{ target }}"
@@ -76,7 +79,19 @@ pi-client-test:
     bun run --cwd clients/pi test
     bun run --cwd clients/pi typecheck
 
+claude-client-test:
+    bun run --cwd clients/claude typecheck
+    bun run --cwd clients/claude test
+
+claude-delivery-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    test_root=$(mktemp -d)
+    trap 'rm -rf "$test_root"' EXIT
+    bash scripts/build-claude-host.sh "$test_root/host.tar.gz"
+    PONTIA_CLAUDE_BUNDLE="$test_root/host.tar.gz" SQLX_OFFLINE=true cargo test -p pontia-client-claude --test delivery -- --ignored
+
 cloud-check:
     bun run --cwd apps/cloud check
 
-check: fmt-check sqlx-check clippy test dashboard-check dashboard-test pi-client-test cloud-check
+check: fmt-check sqlx-check clippy test dashboard-check dashboard-test pi-client-test claude-client-test cloud-check

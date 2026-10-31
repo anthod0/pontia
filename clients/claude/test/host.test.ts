@@ -17,6 +17,37 @@ function setup(resume?: string) {
 const rejects = (reason: string) => (error: unknown) =>
   error instanceof ControlError && error.reason === reason;
 
+test("authentication retries are visible without fabricating a Turn and clear when SDK execution recovers", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
+  host.submit(first, "task");
+  await fixture.next();
+  fixture.messages.push(init());
+  fixture.messages.push({
+    type: "system",
+    subtype: "api_retry",
+    session_id: native,
+    error: "authentication_failed",
+    error_status: 401,
+  });
+  await settle();
+  assert.deepEqual(
+    events.filter((e) => e.kind === "retry"),
+    [{ kind: "retry", reason: "authentication_failed_retrying" }],
+  );
+  assert.equal(events.filter((e) => e.kind === "started" || e.kind === "finished").length, 0);
+  assert.throws(() => host.submit(second, "next"), rejects("input_busy"));
+  fixture.messages.push(assistant());
+  fixture.messages.push(result());
+  await settle();
+  assert.deepEqual(events.filter((e) => e.kind === "retry").at(-1), {
+    kind: "retry",
+    reason: null,
+  });
+  assert.equal(events.filter((e) => e.kind === "finished").length, 1);
+  host.submit(second, "next");
+});
+
 test("starts with the actual first input and admits only one unresolved user task", async (t) => {
   const { fixture, events, host } = setup();
   t.after(() => host.close());

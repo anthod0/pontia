@@ -56,6 +56,7 @@ copy_paths=(
   apps/dashboard/node_modules apps/dashboard/.svelte-kit apps/dashboard/dist
   apps/cloud/node_modules apps/cloud/.svelte-kit apps/cloud/build
   clients/pi/node_modules
+  clients/claude/node_modules clients/claude/dist
   target
 )
 # Each shared path is authoritative in the primary checkout; missing paths are skipped.

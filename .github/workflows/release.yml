@@ -109,11 +109,22 @@ jobs:
             verify_codesign: true
     runs-on: ${{ matrix.runner }}
     env:
-      MACOSX_DEPLOYMENT_TARGET: "11.0"
+      MACOSX_DEPLOYMENT_TARGET: "13.5"
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Build Claude Agent host and platform dependencies
+        run: bash scripts/build-claude-host.sh "$RUNNER_TEMP/claude-host.tar.gz"
+      - name: Verify bundled Claude Agent on the release platform
+        run: PONTIA_CLAUDE_BUNDLE="$RUNNER_TEMP/claude-host.tar.gz" SQLX_OFFLINE=true cargo test --locked -p pontia-client-claude --test delivery -- --ignored
       - name: Build binaries
         env:
           RELEASE_PUBLIC_KEY: ${{ vars.RELEASE_PUBLIC_KEY }}
@@ -121,7 +132,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           test -n "$RELEASE_PUBLIC_KEY"
-          cargo build --release --locked --target "$TARGET" $PACKAGES
+          PONTIA_CLAUDE_BUNDLE="$RUNNER_TEMP/claude-host.tar.gz" cargo build --release --locked --target "$TARGET" $PACKAGES
       - name: Verify Apple Silicon code signature
         if: matrix.verify_codesign
         env:

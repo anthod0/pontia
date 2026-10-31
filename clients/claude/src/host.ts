@@ -23,6 +23,7 @@ export class Host {
   private current?: InputFacts;
   private native?: string;
   private unavailable?: string;
+  private retrying = false;
   private controlConnected = true;
   private closing = false;
   private closed = false;
@@ -196,9 +197,26 @@ export class Host {
       }
       return;
     }
+    if (message.type === "system" && message.subtype === "api_retry") {
+      if (!this.native || message.session_id !== this.native)
+        throw new Error("native_identity_mismatch");
+      this.retrying = true;
+      this.emit({
+        kind: "retry",
+        reason:
+          message.error === "authentication_failed"
+            ? "authentication_failed_retrying"
+            : "api_request_retrying",
+      });
+      return;
+    }
     if (["stream_event", "assistant", "result", "user"].includes(message.type)) {
       if (!this.native || message.session_id !== this.native)
         throw new Error("native_identity_mismatch");
+      if (this.retrying && message.type !== "user") {
+        this.retrying = false;
+        this.emit({ kind: "retry", reason: null });
+      }
       this.current?.accept(message);
     }
   }

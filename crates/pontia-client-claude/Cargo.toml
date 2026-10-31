@@ -13,7 +13,10 @@ sqlx.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "process", "sync", "io-util", "net", "time"] }
 tracing = "0.1.44"
+flate2 = "1"
+tar = "0.4"
+sha2 = "0.10"
+tempfile = "3"
 
 [dev-dependencies]
 pontia-storage-sqlite.workspace = true
-tempfile = "3"

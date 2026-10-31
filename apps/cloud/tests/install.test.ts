@@ -29,7 +29,7 @@ afterAll(async () => {
 
 async function fixture(
   script: string,
-  platform: { system: "Linux" | "Darwin"; architecture: "x86_64" | "arm64" } = {
+  platform: { system: "Linux" | "Darwin"; architecture: "x86_64" | "arm64"; version?: string } = {
     system: "Linux",
     architecture: linuxArchitecture,
   },
@@ -111,6 +111,11 @@ esac
 `,
   );
   await chmod(uname, 0o755);
+  await writeFile(
+    join(mocks, "sw_vers"),
+    `#!/bin/sh\nprintf '%s\\n' '${platform.version ?? "13.5"}'\n`,
+    { mode: 0o755 },
+  );
   const shasum = join(mocks, "shasum");
   await writeFile(
     shasum,
@@ -141,6 +146,17 @@ sha256sum "$3"
     },
   };
 }
+
+test("installer rejects macOS below the supported minimum before installation", async () => {
+  const context = await fixture("install.sh", {
+    system: "Darwin",
+    architecture: "arm64",
+    version: "13.4.1",
+  });
+  expect(context.run("latest").exitCode).not.toBe(0);
+  expect(await Bun.file(join(context.root, "install", "pontiad")).exists()).toBe(false);
+  expect(await Bun.file(join(context.root, "requests")).exists()).toBe(false);
+});
 
 test("publisher rejects mismatched Ed25519 signing keys", async () => {
   const context = await fixture("install.sh");

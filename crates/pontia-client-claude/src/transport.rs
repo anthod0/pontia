@@ -58,7 +58,7 @@ impl Connection {
             uuid::Uuid::new_v4().simple(),
             uuid::Uuid::new_v4().simple()
         );
-        let mut child = Command::new("node")
+        let mut child = Command::new(crate::setup::node())
             .arg(script)
             .current_dir(&peer.cwd)
             .envs(environment)

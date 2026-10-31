@@ -5,6 +5,7 @@ pub fn integrations() -> Vec<Arc<dyn ClientIntegration>> {
     vec![
         pontia_client_pi::setup::integration(),
         pontia_client_codex::setup::integration(),
+        pontia_client_claude::setup::integration(),
     ]
 }
 

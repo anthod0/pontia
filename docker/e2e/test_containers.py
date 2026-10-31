@@ -101,7 +101,7 @@ class ContainerSmokeTests(unittest.TestCase):
             # Exercise the installed SDK, tools, approvals and native history with
             # a loopback model substitute. This project has no external network.
             compose("exec", "-T", "-e", "PONTIA_CLAUDE_SDK_TEST=1", "device", "node", "--test",
-                    "/opt/pontia/clients/claude/dist/test/sdk.test.js")
+                    "/opt/pontia/claude-validation/dist/test/sdk.test.js")
             imported = compose("exec", "-T", "device", "cat", "/home/e2e/.claude/.credentials.json")
             self.assertEqual(json.loads(imported.stdout), {"test_credential": "original"})
             sandbox = compose("exec", "-T", "device", "codex", "sandbox", "-c", 'sandbox_mode="workspace-write"',

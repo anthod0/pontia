@@ -37,6 +37,14 @@ case "$system" in
     esac
     ;;
   Darwin)
+    require_command sw_vers
+    macos_version="$(sw_vers -productVersion)"
+    macos_major=${macos_version%%.*}
+    macos_minor=${macos_version#*.}
+    macos_minor=${macos_minor%%.*}
+    if [ "$macos_major" -lt 13 ] || { [ "$macos_major" -eq 13 ] && [ "$macos_minor" -lt 5 ]; }; then
+      fail "macOS 13.5 or later is required"
+    fi
     require_command shasum
     checksum() {
       shasum -a 256 "$1" | { read -r digest _; printf '%s\n' "$digest"; }
@@ -146,3 +154,4 @@ mv -f "$staged_pontiad" "$INSTALL_DIR/pontiad"
 staged_pontiad=""
 
 printf 'Installed pontia and pontiad to %s\n' "$INSTALL_DIR"
+printf 'Claude Agent requires Node.js LTS. Select claude-agent during pontia init to check its dependencies.\n'

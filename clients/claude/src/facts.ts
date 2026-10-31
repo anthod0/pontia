@@ -14,6 +14,7 @@ export type HostEvent =
       outcome: "completed" | "failed" | "interrupted";
     }
   | { kind: "unavailable"; reason: string; result?: ResultDiagnostic }
+  | { kind: "retry"; reason: "authentication_failed_retrying" | "api_request_retrying" | null }
   | { kind: "permission_requested"; permission_id: string; tool: string; blocking: boolean }
   | { kind: "permission_settled"; permission_id: string; outcome: "resolved" | "expired" }
   | { kind: "closed"; history_anchor?: string };

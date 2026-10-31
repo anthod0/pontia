@@ -14,7 +14,11 @@ export const dashboardClient: DashboardClient = {
       connection: session.state === "exited" ? "exited" : reason ? "unavailable" : "connected",
       refreshWhileActive: true,
       unavailableReason: reason
-        ? `Claude Agent control unavailable: ${reason.replaceAll("_", " ")}`
+        ? reason === "authentication_failed_retrying"
+          ? "Claude authentication failed. The SDK is retrying; check your Claude Code authentication."
+          : reason === "api_request_retrying"
+            ? "Claude's model request failed. The SDK is retrying."
+            : `Claude Agent control unavailable: ${reason.replaceAll("_", " ")}`
         : null,
     };
   },

@@ -104,7 +104,15 @@ where
     let mut ignored_overrides = vars
         .iter()
         .filter(|(key, value)| {
-            key.starts_with("PONTIA_") && key.as_str() != "PONTIA_HOME" && !value.trim().is_empty()
+            key.starts_with("PONTIA_")
+                && key.as_str() != "PONTIA_HOME"
+                && !value.trim().is_empty()
+                && !prepared.iter().flatten().any(|setup| {
+                    setup
+                        .service_environment_paths()
+                        .iter()
+                        .any(|(name, _)| name == *key)
+                })
         })
         .map(|(key, _)| key.as_str())
         .collect::<Vec<_>>();

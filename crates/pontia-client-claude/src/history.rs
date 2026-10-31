@@ -29,7 +29,7 @@ pub(crate) async fn read_sdk(
     config: &Path,
 ) -> Result<Vec<Value>> {
     let operation = async {
-        let mut child = Command::new("node")
+        let mut child = Command::new(crate::setup::node())
             .arg(script)
             .arg("history")
             .env("CLAUDE_CONFIG_DIR", config)
