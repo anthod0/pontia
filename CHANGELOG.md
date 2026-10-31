@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-10-31
+
+### Changed
+
+- Bundled the Claude Agent host and SDK dependencies with Pontia. Node.js LTS remains required; select `claude-agent` during `pontia init` to check dependencies and enable the integration.
+- Raised the minimum macOS version for Pontia's local control plane to 13.5.
+
+### Fixed
+
+- Show authentication and model-request failures while the Claude SDK retries, without reporting a false task result.
+
 ## [0.6.9] - 2026-10-31
 
 ### Added
