@@ -170,7 +170,9 @@ async fn execute(command: Command) -> Result<bool, String> {
 }
 
 async fn run_update() -> Result<bool, String> {
-    let update = update::prepare().await?;
+    let Some(update) = update::prepare().await? else {
+        return Ok(true);
+    };
     #[cfg(target_os = "linux")]
     {
         let runner = ProcessCommandRunner;

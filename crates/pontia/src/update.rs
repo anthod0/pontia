@@ -2,14 +2,14 @@ use std::path::PathBuf;
 
 pub struct PreparedUpdate(pontia_update::PreparedUpdate);
 
-pub async fn prepare() -> Result<PreparedUpdate, String> {
-    pontia_update::prepare("pontia", &["pontia", "pontiad"], None)
-        .await
-        .and_then(|update| {
-            update
-                .map(PreparedUpdate)
-                .ok_or_else(|| "no update prepared".into())
-        })
+pub async fn prepare() -> Result<Option<PreparedUpdate>, String> {
+    pontia_update::prepare(
+        "pontia",
+        &["pontia", "pontiad"],
+        Some(pontia_version::version()),
+    )
+    .await
+    .map(|update| update.map(PreparedUpdate))
 }
 
 impl PreparedUpdate {
