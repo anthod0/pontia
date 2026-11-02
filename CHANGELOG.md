@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.11] - 2026-11-03
+
+### Fixed
+
+- Keep other devices connected when removing a device from the same account.
+- Skip updates when the installed Pontia version is newer than the stable release.
+- Fix Claude Agent startup when Pontia's data directory has a long path, including on macOS.
+- Report Claude Agent startup errors without exposing private paths or credentials.
+
 ## [0.6.10] - 2026-10-31
 
 ### Changed
