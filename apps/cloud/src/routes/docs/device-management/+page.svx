@@ -50,7 +50,7 @@ pontia remote disable
 
 This unregisters the device, removes its local E2E identity, updates local configuration, and restarts the service. The CLI credential is preserved for subsequent Cloud commands.
 
-Removing a device in [Device settings](/settings/devices) also revokes all of your CLI credentials. Run `pontia login` before using Cloud commands again.
+Removing a device in [Device settings](/settings/devices) unregisters that device. Your CLI login and other registered devices remain available.
 
 ## Manage sign-in methods
 
@@ -61,5 +61,3 @@ Keep at least one working sign-in method linked to your user.
 ## Manage browser sessions
 
 In [Session settings](/settings/sessions), you can revoke one browser session or sign out every other browser. A revoked browser session cannot refresh after its current access token expires.
-
-To revoke CLI credentials, remove a device through Device settings.

@@ -1,8 +1,12 @@
 import { expect, test } from "bun:test";
 import type { RequestEvent } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
+import { base64url } from "jose";
 import { issueLogin } from "../src/lib/server/auth/jwt";
+import { sha256Base64url } from "../src/lib/server/crypto";
 import { accounts, authSessions, devices, edges, users } from "../src/lib/server/db/schema";
+import { redeemTunnelTicket } from "../src/lib/server/remote-access/tickets";
+import { POST as issueTunnelTicket } from "../src/routes/api/remote/devices/[device_id]/tunnel-tickets/+server";
 import { load as loadSettingsLayout } from "../src/routes/settings/+layout.server";
 import { load as loadSettings } from "../src/routes/settings/+page.server";
 import {
@@ -358,16 +362,21 @@ test("unlinking a provider revokes only browser sessions created with that provi
   ).toEqual(["0199791c-6600-7000-8000-000000000003", "0199791c-6600-7000-8000-000000000004"]);
 });
 
-test("removing a device also revokes its owner's CLI credentials", async () => {
+test("removing a device prevents its reconnection without revoking other devices' CLI credentials", async () => {
   await insertCurrentUser();
   const otherUserId = "0199791c-6600-7000-8000-000000000010";
+  const cliSessionId = "0199791c-6600-7000-8000-000000000011";
+  const cliSecret = base64url.encode(new Uint8Array(32).fill(31));
+  const removedDeviceId = "0199791c-6600-7000-8000-000000000030";
+  const retainedDeviceId = "0199791c-6600-7000-8000-000000000032";
+  const edgeId = "0199791c-6600-7000-8000-000000000020";
   await database.db.insert(users).values({ id: otherUserId });
   await database.db.insert(authSessions).values([
     {
-      id: "0199791c-6600-7000-8000-000000000011",
+      id: cliSessionId,
       userId,
       kind: "cli",
-      tokenHash: "owner-cli-hash",
+      tokenHash: await sha256Base64url(cliSecret),
     },
     {
       id: "0199791c-6600-7000-8000-000000000012",
@@ -377,7 +386,7 @@ test("removing a device also revokes its owner's CLI credentials", async () => {
     },
   ]);
   await database.db.insert(edges).values({
-    id: "0199791c-6600-7000-8000-000000000020",
+    id: edgeId,
     userId,
     name: "Edge",
     dnsLabel: "edge",
@@ -387,30 +396,68 @@ test("removing a device also revokes its owner's CLI credentials", async () => {
   });
   await database.db.insert(devices).values([
     {
-      id: "0199791c-6600-7000-8000-000000000030",
+      id: removedDeviceId,
       userId,
-      edgeId: "0199791c-6600-7000-8000-000000000020",
+      edgeId,
       handle: "owner-device",
       name: "Owner device",
     },
     {
       id: "0199791c-6600-7000-8000-000000000031",
       userId: otherUserId,
-      edgeId: "0199791c-6600-7000-8000-000000000020",
+      edgeId,
       handle: "other-device",
       name: "Other device",
     },
+    {
+      id: retainedDeviceId,
+      userId,
+      edgeId,
+      handle: "retained-device",
+      name: "Retained device",
+    },
   ]);
 
-  await (deviceActions.removeDevice as (event: RequestEvent) => Promise<unknown>)(
-    await signedInEvent({ device_id: "0199791c-6600-7000-8000-000000000030" }),
-  );
+  const requestTicket = (deviceId: string) =>
+    issueTunnelTicket({
+      params: { device_id: deviceId },
+      request: new Request(`https://pontia.example/api/remote/devices/${deviceId}/tunnel-tickets`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ptr_v1_${cliSessionId}_${cliSecret}` },
+      }),
+      platform: { env: { DB: database.binding } },
+    } as Parameters<typeof issueTunnelTicket>[0]);
+  const pendingResponse = await requestTicket(removedDeviceId);
+  expect(pendingResponse.status).toBe(200);
+  const pendingTicket = (await pendingResponse.json()) as { ticket: string };
+
+  expect(
+    await (deviceActions.removeDevice as (event: RequestEvent) => Promise<unknown>)(
+      await signedInEvent({ device_id: removedDeviceId }),
+    ),
+  ).toEqual({ success: "device_removed" });
 
   expect((await database.db.select().from(devices)).map((device) => device.id)).toEqual([
     "0199791c-6600-7000-8000-000000000031",
+    retainedDeviceId,
   ]);
   expect((await database.db.select().from(authSessions)).map((session) => session.id)).toEqual([
     currentSessionId,
+    cliSessionId,
     "0199791c-6600-7000-8000-000000000012",
   ]);
+
+  const retainedResponse = await requestTicket(retainedDeviceId);
+  expect(retainedResponse.status).toBe(200);
+  const retainedTicket = (await retainedResponse.json()) as { ticket: string };
+  expect(await redeemTunnelTicket(database.db, edgeId, retainedTicket.ticket)).toEqual({
+    deviceId: retainedDeviceId,
+  });
+
+  const removedResponse = await requestTicket(removedDeviceId);
+  expect(removedResponse.status).toBe(404);
+  expect((await removedResponse.json()) as { error: string }).toEqual({
+    error: "device_not_found",
+  });
+  expect(await redeemTunnelTicket(database.db, edgeId, pendingTicket.ticket)).toBeNull();
 });

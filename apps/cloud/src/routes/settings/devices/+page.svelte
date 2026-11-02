@@ -94,8 +94,8 @@
               type="submit"
               variant="destructive"
               size="icon"
-              aria-label={`Remove ${device.name} and revoke all CLI credentials`}
-              title="Remove device and revoke all CLI credentials"
+              aria-label={`Remove ${device.name}`}
+              title="Remove device"
             >
               <TrashIcon size={16} />
             </Button>
