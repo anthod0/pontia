@@ -51,7 +51,20 @@ if (process.argv[2] === "history") {
     );
   const send = (value) => connected?.write(JSON.stringify({ host_id: host, ...value }) + "\n");
   const event = (value) => send({ type: "event", sequence: ++sequence, event: value });
-  record({ method: "spawn", resume: config.resume ?? null, native });
+  record({
+    method: "spawn",
+    resume: config.resume ?? null,
+    native,
+    socket_path: config.socket_path,
+  });
+  const startupError = join(config.cwd, "startup-error.json");
+  if (existsSync(startupError)) {
+    process.stdout.write(
+      JSON.stringify({ listening: false, ...JSON.parse(readFileSync(startupError, "utf8")) }) +
+        "\n",
+    );
+    process.exit(1);
+  }
   const server = createServer((socket) => {
     connected = socket;
     const reader = createInterface({ input: socket });

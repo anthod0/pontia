@@ -12,9 +12,94 @@ struct Harness {
     root: tempfile::TempDir,
     tasks: ClientServiceTasks,
 }
+
+#[tokio::test]
+async fn long_home_uses_private_sockets_and_removes_them_on_exit_and_resume() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::Builder::new()
+        .prefix(&"long-pontia-home-".repeat(10))
+        .tempdir()
+        .unwrap();
+    let h = Harness::with_root(root).await;
+    let session = h.create("long home").await;
+    let mut previous = None;
+    for number in 1..=2 {
+        h.wait_inputs(&session, number).await;
+        h.gate(&session, number, "start");
+        h.gate(&session, number, "finish");
+        h.wait_states(&session, &vec!["completed"; number]).await;
+        let spawn = h
+            .wire(&session)
+            .into_iter()
+            .rev()
+            .find(|v| v["method"] == "spawn")
+            .unwrap();
+        let socket = std::path::PathBuf::from(spawn["socket_path"].as_str().unwrap());
+        let directory = socket.parent().unwrap();
+        assert!(socket.as_os_str().len() < 104);
+        assert_eq!(
+            std::fs::metadata(directory).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(
+            std::fs::metadata(&socket).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_ne!(previous.as_ref(), Some(&socket));
+        h.app
+            .session_commands()
+            .terminate_session(&session)
+            .await
+            .unwrap();
+        assert!(!directory.exists());
+        if number == 1 {
+            let resumed = h.resume_input(&session, "resumed long home").await;
+            assert_eq!(resumed["inbox_message"]["state"], "resuming");
+        }
+        previous = Some(socket);
+    }
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn failed_startup_cleans_socket_directory_and_only_reports_known_codes() {
+    for (code, expected) in [
+        ("EINVAL", "EINVAL"),
+        ("private-secret-path", "HOST_START_FAILED"),
+    ] {
+        let h = Harness::new().await;
+        std::fs::write(
+            h.root.path().join("startup-error.json"),
+            json!({"code":code,"message":"private-secret-path"}).to_string(),
+        )
+        .unwrap();
+        let request: CreateSessionRequest = serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"initial_task":{"input":"test startup"}})).unwrap();
+        let error = h
+            .app
+            .session_commands()
+            .create_session(request)
+            .await
+            .expect_err("startup must fail")
+            .to_string();
+        assert!(error.contains(expected), "{error}");
+        assert!(!error.contains("private-secret-path"), "{error}");
+        let wire = std::fs::read_to_string(h.root.path().join("wire.jsonl")).unwrap();
+        let spawn: Value = serde_json::from_str(wire.lines().next().unwrap()).unwrap();
+        assert!(
+            !std::path::Path::new(spawn["socket_path"].as_str().unwrap())
+                .parent()
+                .unwrap()
+                .exists()
+        );
+        h.stop().await;
+    }
+}
+
 impl Harness {
     async fn new() -> Self {
-        let root = tempfile::tempdir().unwrap();
+        Self::with_root(tempfile::tempdir().unwrap()).await
+    }
+    async fn with_root(root: tempfile::TempDir) -> Self {
         let pool = connect_sqlite("sqlite::memory:").await.unwrap();
         run_migrations(&pool).await.unwrap();
         let mut clients = ClientRegistry::default();

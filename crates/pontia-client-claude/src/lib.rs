@@ -175,8 +175,7 @@ impl ClientSession for Adapter {
                 state: Default::default(),
                 connection: OnceLock::new(),
             });
-            peer.start(&events, root, &script, &request.environment)
-                .await?;
+            peer.start(&events, &script, &request.environment).await?;
             peers.insert(peer.session.clone(), peer);
             Ok(())
         })

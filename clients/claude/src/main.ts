@@ -29,7 +29,18 @@ async function main(): Promise<void> {
   throw new Error("bootstrap_missing");
 }
 
-main().catch(() => {
+main().catch((error: unknown) => {
+  if (process.argv[2] !== "preflight" && process.argv[2] !== "history") {
+    const systemCode = error instanceof Error && "code" in error ? error.code : undefined;
+    const code =
+      typeof systemCode === "string" &&
+      ["EACCES", "EADDRINUSE", "EINVAL", "ENOENT", "ENAMETOOLONG", "ENOTDIR", "EPERM"].includes(
+        systemCode,
+      )
+        ? systemCode
+        : "HOST_START_FAILED";
+    process.stdout.write(JSON.stringify({ listening: false, code }) + "\n");
+  }
   process.stderr.write("Claude Agent host could not start.\n");
   process.exitCode = 1;
 });

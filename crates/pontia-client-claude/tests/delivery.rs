@@ -21,7 +21,7 @@ impl DefinitionStore for NoDefinitions {
 #[ignore = "build with PONTIA_CLAUDE_BUNDLE, then run --test delivery -- --ignored"]
 async fn bundled_install_reports_authentication_retries_without_fabricating_turns() {
     let root = tempfile::tempdir().unwrap();
-    let pontia = root.path().join("pontia");
+    let pontia = root.path().join("long-pontia-home-".repeat(10));
     let config = root.path().join("claude");
     std::fs::create_dir(&config).unwrap();
     let vars = HashMap::from([

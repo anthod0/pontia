@@ -43,28 +43,12 @@ impl Peer {
     pub async fn start(
         self: &Arc<Self>,
         events: &EventIngestService,
-        root: &std::path::Path,
         script: &std::path::Path,
         environment: &std::collections::BTreeMap<String, String>,
     ) -> Result<()> {
-        let directory = std::path::absolute(root)?
-            .join("state/claude")
-            .join(uuid::Uuid::new_v4().simple().to_string());
-        // Each invocation owns a fresh private socket directory, including resume.
-        std::fs::create_dir_all(directory.parent().ok_or_else(crate::unavailable)?)?;
-        use std::os::unix::fs::DirBuilderExt;
-        std::fs::DirBuilder::new().mode(0o700).create(&directory)?;
         self.runtime_event(events, PontiaEventType::RuntimeStarting, json!({}))
             .await?;
-        match Connection::spawn(
-            self.clone(),
-            script,
-            &directory.join("control.sock"),
-            environment,
-            events.clone(),
-        )
-        .await
-        {
+        match Connection::spawn(self.clone(), script, environment, events.clone()).await {
             Ok(connection) => {
                 let _ = self.connection.set(connection);
                 Ok(())

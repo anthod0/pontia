@@ -78,7 +78,7 @@ impl Adapter {
         let environment = workflow
             .map(|id| BTreeMap::from([("PONTIA_WORKFLOW_ID".into(), id)]))
             .unwrap_or_default();
-        peer.start(&events, root, &script, &environment).await?;
+        peer.start(&events, &script, &environment).await?;
         peers.insert(peer.session.clone(), peer);
         Ok(())
     }

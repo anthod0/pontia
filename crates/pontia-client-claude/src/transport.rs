@@ -1,7 +1,10 @@
 use pontia_application::EventIngestService;
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
-use std::{collections::HashMap, path::Path, process::Stdio, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap, os::unix::fs::PermissionsExt, path::Path, process::Stdio, sync::Arc,
+    time::Duration,
+};
 use tokio::{
     io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{UnixStream, unix::OwnedWriteHalf},
@@ -49,10 +52,15 @@ impl Connection {
     pub async fn spawn(
         peer: Arc<Peer>,
         script: &Path,
-        socket: &Path,
         environment: &std::collections::BTreeMap<String, String>,
         events: EventIngestService,
     ) -> Result<Arc<Self>> {
+        // Unix socket limits apply to the full path, including macOS's long TMPDIR.
+        let socket_directory = tempfile::Builder::new()
+            .prefix("pontia-claude-")
+            .permissions(std::fs::Permissions::from_mode(0o700))
+            .tempdir_in("/tmp")?;
+        let socket = socket_directory.path().join("control.sock");
         let token = format!(
             "{}{}",
             uuid::Uuid::new_v4().simple(),
@@ -77,10 +85,28 @@ impl Connection {
             stdin.write_all(format!("{bootstrap}\n").as_bytes()).await?;
             drop(stdin);
             let mut stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
-            if frame(&mut stdout).await?["listening"] != true {
-                return Err(Error::Domain("Claude Agent host did not start".into()));
+            let ready = frame(&mut stdout).await?;
+            if ready["listening"] != true {
+                let code = ready["code"]
+                    .as_str()
+                    .filter(|code| {
+                        matches!(
+                            *code,
+                            "EACCES"
+                                | "EADDRINUSE"
+                                | "EINVAL"
+                                | "ENOENT"
+                                | "ENAMETOOLONG"
+                                | "ENOTDIR"
+                                | "EPERM"
+                        )
+                    })
+                    .unwrap_or("HOST_START_FAILED");
+                return Err(Error::Domain(format!(
+                    "Claude Agent host did not start ({code})"
+                )));
             }
-            let mut stream = UnixStream::connect(socket).await?;
+            let mut stream = UnixStream::connect(&socket).await?;
             stream.write_all(format!("{}\n", json!({"method":"attach","session_id":peer.session,"runtime_id":peer.runtime,"token":token})).as_bytes()).await?;
             let (read, write) = stream.into_split();
             let mut reader = BufReader::new(read);
@@ -177,6 +203,7 @@ impl Connection {
             // Only our host is owned here; SDK internals are never observed or signalled.
             peer.unavailable("host_unavailable").await;
             connection_task.pending.lock().await.clear();
+            drop(socket_directory);
             let _ = exit.send(true);
         });
         Ok(connection)
