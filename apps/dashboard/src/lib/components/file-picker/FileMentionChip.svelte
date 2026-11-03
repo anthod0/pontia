@@ -19,7 +19,7 @@
       <Badge
         {...props}
         variant="secondary"
-        class="h-auto max-w-full cursor-default rounded-none px-1.5 py-0.5 align-baseline text-sm font-normal"
+        class="h-auto max-w-full cursor-default rounded-sm px-1.5 py-0.5 align-baseline text-sm font-normal"
         aria-label={`${kind === 'directory' ? 'Directory' : 'File'} ${path}`}
       >
         {#if kind === 'directory'}

@@ -94,7 +94,7 @@
           <span class="text-muted-foreground">Last cursor</span>
           <span class="max-w-48 truncate" title={$dashboardStreamCursor ?? ''}>{$dashboardStreamCursor ?? '—'}</span>
         </div>
-        {#if $lastConnectionError}<p class="rounded-none bg-destructive/10 p-2 text-destructive">{$lastConnectionError}</p>{/if}
+        {#if $lastConnectionError}<p class="rounded-md bg-destructive/10 p-2 text-destructive">{$lastConnectionError}</p>{/if}
         <div class="flex flex-wrap gap-2 pt-2">
           <Button variant="outline" onclick={reconnect} disabled={!$token.trim()}>Reconnect</Button>
           <Button variant="ghost" onclick={stopEventStream}>Disconnect</Button>
@@ -109,8 +109,8 @@
       <Card.Description>Use the SvelteKit static SPA build as the configured dashboard source.</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-2 text-sm text-muted-foreground">
-      <p>Build this app with <code class="rounded-none bg-muted px-1 py-0.5">bun run --cwd apps/dashboard build</code>.</p>
-      <p>Serve it with <code class="rounded-none bg-muted px-1 py-0.5">[dashboard].source = "apps/dashboard/dist"</code> or <code class="rounded-none bg-muted px-1 py-0.5">PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist</code>.</p>
+      <p>Build this app with <code class="rounded-sm bg-muted px-1 py-0.5">bun run --cwd apps/dashboard build</code>.</p>
+      <p>Serve it with <code class="rounded-sm bg-muted px-1 py-0.5">[dashboard].source = "apps/dashboard/dist"</code> or <code class="rounded-sm bg-muted px-1 py-0.5">PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist</code>.</p>
     </Card.Content>
   </Card.Root>
 </section>

@@ -112,6 +112,7 @@
 		width: 100%;
 		padding: 22px;
 		border: 1px solid var(--border);
+		border-radius: 4px;
 		background: var(--background);
 		font: 24px var(--font-mono);
 		letter-spacing: 0.12em;
@@ -122,6 +123,7 @@
 		margin-top: 28px;
 		padding: 20px;
 		border: 1px solid var(--border);
+		border-radius: 4px;
 		color: var(--heading) !important;
 		font: 28px var(--font-mono) !important;
 		letter-spacing: 0.12em;

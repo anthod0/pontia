@@ -34,7 +34,7 @@
 <main class="flex min-h-svh items-center justify-center bg-muted/20 p-4">
   <Card.Root class="w-full max-w-md">
     <Card.Header class="space-y-3 text-center">
-      <div class="mx-auto flex size-12 items-center justify-center rounded-none bg-primary/10 text-primary">
+      <div class="mx-auto flex size-12 items-center justify-center rounded-md bg-primary/10 text-primary">
         <KeyIcon class="size-6" />
       </div>
       <div class="space-y-1">

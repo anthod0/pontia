@@ -946,13 +946,13 @@
               role="status"
               aria-label="Loading conversation"
             >
-              <div class="flex justify-end"><Skeleton class="h-14 w-3/5 max-w-xl rounded-none" /></div>
+              <div class="flex justify-end"><Skeleton class="h-14 w-3/5 max-w-xl rounded-lg" /></div>
               <div class="w-4/5 max-w-2xl space-y-3">
                 <Skeleton class="h-4 w-full" />
                 <Skeleton class="h-4 w-11/12" />
                 <Skeleton class="h-4 w-2/3" />
               </div>
-              <div class="flex justify-end"><Skeleton class="h-10 w-2/5 max-w-md rounded-none" /></div>
+              <div class="flex justify-end"><Skeleton class="h-10 w-2/5 max-w-md rounded-lg" /></div>
               <div class="w-3/4 max-w-xl space-y-3">
                 <Skeleton class="h-4 w-full" />
                 <Skeleton class="h-4 w-4/5" />
@@ -1034,7 +1034,7 @@
                 type="button"
                 variant="secondary"
                 size="icon"
-                class="pointer-events-auto rounded-none shadow-none"
+                class="pointer-events-auto shadow-none"
                 aria-label="Scroll to bottom"
                 title="Scroll to bottom"
                 onclick={scrollChatToBottom}

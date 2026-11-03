@@ -62,15 +62,15 @@
 	h1 { font-size: clamp(42px, 6.5vw, 78px); font-weight: 500; line-height: 1.08; letter-spacing: -.055em; margin: 24px 0; }
 	h1 > span { color: var(--primary); }
 	.hero-description { max-width: 500px; margin-inline: auto; font-size: 16px; line-height: 1.8; color: var(--muted-foreground); }
-	.install-command { display: flex; align-items: center; width: min(620px, 100%); margin: 30px auto 0; padding: 7px 7px 7px 20px; background: #282828; border: 1px solid #45433e; color: #ebdbb2; text-align: left; }
+	.install-command { display: flex; align-items: center; width: min(620px, 100%); margin: 30px auto 0; padding: 7px 7px 7px 20px; background: #282828; border: 1px solid #45433e; border-radius: 6px; color: #ebdbb2; text-align: left; }
 	.install-command code { min-width: 0; padding: 6px 16px 6px 0; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; white-space: normal; }
-	.install-command button { display: flex; flex: 0 0 34px; align-items: center; justify-content: center; width: 34px; height: 34px; margin-left: auto; border: 1px solid #5d584e; background: transparent; color: #bdae93; }
+	.install-command button { display: flex; flex: 0 0 34px; align-items: center; justify-content: center; width: 34px; height: 34px; margin-left: auto; border: 1px solid #5d584e; border-radius: 4px; background: transparent; color: #bdae93; }
 	.install-command button:hover { color: #ebdbb2; background: #3c3836; }
 	.install-command button:focus-visible { outline-color: #8ec07c; }
 	.copy-feedback { min-height: 17px; margin-top: 7px; color: #6b7620; font: 10px/1.6 var(--font-mono); }
 	.hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 13px; }
 	.dashboard-preview { margin: 0 0 48px; }
-	.dashboard-image { display: block; overflow: hidden; border: 1px solid var(--border); background: var(--surface); box-shadow: 0 16px 48px -16px rgb(60 56 54 / 16%); }
+	.dashboard-image { display: block; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); box-shadow: 0 16px 48px -16px rgb(60 56 54 / 16%); }
 	.dashboard-image img { display: block; width: 100%; height: auto; }
 	.hero-divider { margin: 0; border: 0; border-top: 1px solid var(--border); }
 

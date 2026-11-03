@@ -49,7 +49,7 @@
     <div class="w-full max-w-xl space-y-5">
       <header class="flex items-center justify-between gap-4 px-1">
         <div class="flex items-center gap-3">
-          <span class="flex size-9 items-center justify-center border border-border bg-background text-primary">
+          <span class="flex size-9 items-center justify-center rounded-md border border-border bg-background text-primary">
             <DesktopTowerIcon class="size-5" />
           </span>
           <div>
@@ -63,7 +63,7 @@
       <Card.Root class="bg-background">
         <Card.Header class="border-b border-border pb-4">
           <div class="flex items-start gap-3">
-            <div class="mt-0.5 flex size-10 shrink-0 items-center justify-center bg-muted">
+            <div class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
               {#if effectiveState === 'connecting'}
                 <SpinnerGapIcon class="size-5 animate-spin text-primary" aria-hidden="true" />
               {:else if effectiveState === 'authorization-required'}
@@ -94,7 +94,7 @@
 
         <Card.Content class="space-y-4">
           {#if effectiveState !== 'invalid'}
-            <div class="border border-border bg-muted/40 px-3 py-2.5">
+            <div class="rounded-md border border-border bg-muted/40 px-3 py-2.5">
               <p class="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Device</p>
               <p class="truncate font-mono text-xs text-heading" title={handle}>{handle}</p>
             </div>

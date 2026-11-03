@@ -22,7 +22,7 @@
   const stateLabel = (session: SessionView) => isTerminalChatSession(session) ? 'Closed' : session.state
 </script>
 
-<div class="flex h-full flex-col rounded-none border bg-card">
+<div class="flex h-full flex-col rounded-lg border bg-card">
   <div class="border-b p-4">
     <div class="flex items-center justify-between gap-3">
       <div>
@@ -57,7 +57,7 @@
         {#each sessions as session}
           <button
             type="button"
-            class="w-full rounded-none border p-3 text-left transition hover:bg-muted/70 {selectedSessionId === session.session_id ? 'border-primary bg-muted' : 'bg-background'}"
+            class="w-full rounded-md border p-3 text-left transition hover:bg-muted/70 {selectedSessionId === session.session_id ? 'border-primary bg-muted' : 'bg-background'}"
             onclick={() => onSelect(session.session_id)}
           >
             <div class="flex items-start justify-between gap-2">

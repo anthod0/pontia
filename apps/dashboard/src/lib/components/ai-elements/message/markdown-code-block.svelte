@@ -41,12 +41,12 @@
   }
 </script>
 
-<div class="my-4 w-full max-w-full overflow-hidden rounded-none border border-border bg-muted" data-code-block>
+<div class="my-4 w-full max-w-full overflow-hidden rounded-lg border border-border bg-muted" data-code-block>
   <div class="flex items-center justify-between gap-3 px-3 py-1.5 font-mono text-[11px] text-muted-foreground" data-code-block-header>
     <span class="truncate font-medium uppercase tracking-wide">{language}</span>
     <button
       type="button"
-      class="inline-flex items-center gap-1.5 rounded-none px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      class="inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={copied ? 'Code block copied' : 'Copy code block'}
       title={copied ? 'Code block copied' : 'Copy code block'}
       onclick={copyCode}

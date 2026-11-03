@@ -294,7 +294,7 @@
           </div>
           <div class="space-y-2">
             <Label for="profile-agent-kind">Agent kind</Label>
-            <select id="profile-agent-kind" bind:value={draft.agent_kind} class="h-9 w-full rounded-none border border-input bg-background px-3 py-1 text-sm shadow-none">
+            <select id="profile-agent-kind" bind:value={draft.agent_kind} class="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-none">
               <option value="executor">executor</option>
             </select>
           </div>
@@ -373,7 +373,7 @@
         <Card.Content class="space-y-2">
           {#each sortedProfiles as profile}
             <button
-              class="w-full rounded-none border p-3 text-left transition hover:bg-muted {selectedProfile?.profile_id === profile.profile_id ? 'border-primary bg-muted' : ''}"
+              class="w-full rounded-lg border p-3 text-left transition hover:bg-muted {selectedProfile?.profile_id === profile.profile_id ? 'border-primary bg-muted' : ''}"
               onclick={() => selectProfile(profile.profile_id)}
             >
               <div class="flex items-start justify-between gap-2">
@@ -422,7 +422,7 @@
                   ['State', selectedVersionProfile.active ? 'Active' : 'Archived'],
                   ['Updated', formatDateTime(selectedVersionProfile.updated_at)],
                 ] as [label, value]}
-                  <div class="rounded-none border p-3">
+                  <div class="rounded-lg border p-3">
                     <div class="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
                     <div class="mt-1 break-words font-medium">{value}</div>
                   </div>
@@ -435,7 +435,7 @@
             <Card.Header><Card.Title>Versions</Card.Title><Card.Description>{versionsQuery.isFetching ? 'Loading versions…' : `${sortedVersions.length} version(s) for this profile.`}</Card.Description></Card.Header>
             <Card.Content class="space-y-2">
               {#each sortedVersions as version}
-                <button class="w-full rounded-none border p-3 text-left transition hover:bg-muted {selectedVersionProfile?.version === version.version ? 'border-primary bg-muted' : ''}" onclick={() => selectedVersion = version.version}>
+                <button class="w-full rounded-lg border p-3 text-left transition hover:bg-muted {selectedVersionProfile?.version === version.version ? 'border-primary bg-muted' : ''}" onclick={() => selectedVersion = version.version}>
                   <div class="flex items-center justify-between gap-2">
                     <span class="font-medium">v{version.version}</span>
                     <span class="text-xs text-muted-foreground">{formatDateTime(version.updated_at)}</span>
@@ -465,8 +465,8 @@
           <Card.Root>
             <Card.Header><Card.Title>Prompt templates</Card.Title><Card.Description>Selected profile version detail.</Card.Description></Card.Header>
             <Card.Content class="grid gap-4 xl:grid-cols-2">
-              <div class="space-y-2"><div class="text-sm font-medium">System prompt</div><pre class="max-h-72 overflow-auto rounded-none bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.system_prompt_template)}</pre></div>
-              <div class="space-y-2"><div class="text-sm font-medium">Turn prompt</div><pre class="max-h-72 overflow-auto rounded-none bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.turn_prompt_template)}</pre></div>
+              <div class="space-y-2"><div class="text-sm font-medium">System prompt</div><pre class="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.system_prompt_template)}</pre></div>
+              <div class="space-y-2"><div class="text-sm font-medium">Turn prompt</div><pre class="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.turn_prompt_template)}</pre></div>
             </Card.Content>
           </Card.Root>
 

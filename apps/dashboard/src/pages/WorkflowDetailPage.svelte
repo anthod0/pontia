@@ -188,7 +188,7 @@
               <button
                 type="button"
                 disabled={!node.session_id}
-                class="flex w-full items-center gap-3 rounded-none px-2 py-4 text-left disabled:cursor-default enabled:hover:bg-muted/50"
+                class="flex w-full items-center gap-3 rounded-md px-2 py-4 text-left disabled:cursor-default enabled:hover:bg-muted/50"
                 onclick={() => node.session_id && navigate(`/chat/${node.session_id}`)}
               >
                 <span class={cn('w-4 shrink-0 text-center text-lg leading-none', statusClass(node.status))}>{statusGlyph(node.status)}</span>

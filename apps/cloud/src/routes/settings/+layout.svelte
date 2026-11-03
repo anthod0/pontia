@@ -82,6 +82,7 @@
   }
   .settings-content :global(.auth-error) {
     border: 1px solid #dab0aa;
+    border-radius: 4px;
     margin-block: 20px;
     padding: 12px;
     color: #9d3229;

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="9.9 12.4 83 83" role="img" aria-label="Pontia">
+  <style>
+    .body { transform-box: view-box; transform-origin: 51px 83px; animation: breathe 3s ease-in-out infinite; }
+    .gaze { animation: glance 6s ease-in-out infinite; }
+    .eye { transform-box: fill-box; transform-origin: center; animation: blink 6s linear infinite; }
+    @keyframes breathe { 50% { transform: scale(1.015, 1.03); } }
+    @keyframes glance {
+      0%, 44%, 62%, 100% { transform: translate(0, 0); }
+      48%, 58% { transform: translate(-3.5px, -0.5px); }
+    }
+    @keyframes blink {
+      0%, 28%, 32%, 75%, 79%, 81%, 85%, 100% { transform: none; }
+      30%, 77%, 83% { transform: scale(1.25, 0.3); }
+    }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+  </style>
+  <g class="body">
+    <path fill="#458588" d="M19 38C26 23 46 22 55 30C61 35 69 30 78 32C93 36 95 62 81 74C67 86 31 86 18 72C8 61 13 47 19 38Z"/>
+    <g class="gaze">
+      <rect class="eye" fill="#fff" x="33" y="45" width="10" height="18" rx="5"/>
+      <rect class="eye" fill="#fff" x="57" y="45" width="10" height="18" rx="5"/>
+    </g>
+  </g>
+</svg>

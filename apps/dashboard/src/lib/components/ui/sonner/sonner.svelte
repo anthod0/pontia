@@ -12,7 +12,7 @@
 <Sonner
   class="toaster group"
   style="--normal-bg: var(--color-popover); --normal-text: var(--color-popover-foreground); --normal-border: var(--color-border);"
-  toastOptions={{ classes: { toast: '!rounded-none !shadow-none !font-sans' } }}
+  toastOptions={{ classes: { toast: '!rounded-lg !shadow-none !font-sans' } }}
   {...restProps}
   theme="light"
 >

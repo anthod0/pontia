@@ -221,14 +221,14 @@
           <Empty.Header>
             <Empty.Media variant="icon"><FolderIcon class="size-4" /></Empty.Media>
             <Empty.Title>No workspace roots configured</Empty.Title>
-            <Empty.Description>Run <code class="rounded-none bg-muted px-1 py-0.5 text-foreground">pontia init</code> on the Pontia host, configure at least one workspace root, then restart Pontia.</Empty.Description>
+            <Empty.Description>Run <code class="rounded-sm bg-muted px-1 py-0.5 text-foreground">pontia init</code> on the Pontia host, configure at least one workspace root, then restart Pontia.</Empty.Description>
           </Empty.Header>
         </Empty.Root>
       {:else}
         <div class="grid gap-3 md:grid-cols-[220px_1fr_auto] md:items-end">
           <div class="space-y-2">
             <Label for="workspace-root">Root</Label>
-            <select id="workspace-root" bind:value={rootId} onchange={() => void openPath('')} class="h-9 w-full rounded-none border bg-transparent px-3 text-sm">
+            <select id="workspace-root" bind:value={rootId} onchange={() => void openPath('')} class="h-9 w-full rounded-md border bg-transparent px-3 text-sm">
               {#each workspaceRoots as root (root.root_id)}
                 <option value={root.root_id}>{root.label}</option>
               {/each}
@@ -249,7 +249,7 @@
         {#if entriesQuery.isFetching && !listing}
           <div class="space-y-2"><Skeleton class="h-9 w-full" /><Skeleton class="h-9 w-full" /><Skeleton class="h-9 w-full" /></div>
         {:else if listing}
-          <div class="rounded-none border">
+          <div class="overflow-hidden rounded-lg border">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b p-3 text-sm">
               <div class="flex min-w-0 items-center gap-2">
                 {#if listing.parent_path !== null}

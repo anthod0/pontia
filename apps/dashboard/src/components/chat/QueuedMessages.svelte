@@ -24,7 +24,7 @@
 </script>
 
 {#if visibleMessages.length}
-  <section class="mb-2 overflow-hidden rounded-none border bg-background shadow-none" aria-labelledby="queued-messages-title">
+  <section class="mb-2 overflow-hidden rounded-lg border bg-background shadow-none" aria-labelledby="queued-messages-title">
     <div class="px-3 py-2">
       <h2 id="queued-messages-title" class="text-xs font-medium text-muted-foreground">
         Inbox · {waiting} waiting · {failed} failed

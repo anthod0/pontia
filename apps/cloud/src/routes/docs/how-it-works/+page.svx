@@ -81,6 +81,7 @@ To set up a device, continue with [Getting started](/docs/getting-started). To c
 	.architecture-diagram {
 		margin: 32px 0 44px;
 		border: 1px solid var(--border);
+		border-radius: 6px;
 		background: var(--surface);
 		padding: 24px;
 	}
@@ -91,6 +92,7 @@ To set up a device, continue with [Getting started](/docs/getting-started). To c
 		max-width: 420px;
 		margin: 0 auto 28px;
 		border: 1px dashed #9ebbbc;
+		border-radius: 6px;
 		background: var(--background);
 		padding: 14px 18px;
 		text-align: center;
@@ -152,6 +154,7 @@ To set up a device, continue with [Getting started](/docs/getting-started). To c
 		place-items: center;
 		min-height: 58px;
 		border: 1px solid var(--border);
+		border-radius: 6px;
 		background: var(--background);
 		padding: 10px;
 		font-size: 13px;
@@ -183,6 +186,7 @@ To set up a device, continue with [Getting started](/docs/getting-started). To c
 
 	.device-boundary {
 		border: 1px solid var(--primary);
+		border-radius: 6px;
 		padding: 12px;
 	}
 

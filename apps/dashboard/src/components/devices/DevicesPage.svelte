@@ -80,7 +80,7 @@
         {#each validDevices as device (device.handle)}
           <Card.Root>
             <Card.Header>
-              <span class="flex size-9 shrink-0 items-center justify-center bg-muted text-primary">
+              <span class="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
                 <DesktopTowerIcon class="size-5" />
               </span>
               <div class="mt-2 min-w-0">

@@ -22,25 +22,30 @@ test("dashboard head links the installable manifest", () => {
   );
 });
 
-test("dashboard SVG favicon uses the small-size logo variant", () => {
+test("dashboard SVG favicon uses the logo", () => {
   const head = new DOMParser().parseFromString(appHtml, "text/html").head;
   expect(head.querySelector('link[rel="icon"][type="image/svg+xml"]')?.getAttribute("href")).toBe(
-    "%sveltekit.assets%/logo-small.svg",
+    "%sveltekit.assets%/logo.svg",
   );
 });
 
-test.each(["logo.svg", "logo-small.svg"])("%s has a transparent background", (name) => {
+test("logo has a transparent background", () => {
   const svg = new DOMParser().parseFromString(
-    readFileSync(resolve(__dirname, "../public", name), "utf8"),
+    readFileSync(resolve(__dirname, "../public/logo.svg"), "utf8"),
     "image/svg+xml",
+  ).documentElement;
+  const [, , viewWidth, viewHeight] = svg.getAttribute("viewBox")!.split(" ").map(Number);
+  const backgrounds = [...svg.querySelectorAll("rect")].filter(
+    (rect) =>
+      Number(rect.getAttribute("width")) >= viewWidth &&
+      Number(rect.getAttribute("height")) >= viewHeight,
   );
-  expect(svg.querySelector("#background")).toBeNull();
-  expect(svg.querySelector(":root > rect")).toBeNull();
+  expect(backgrounds).toEqual([]);
 });
 
-test.each(["logo.svg", "logo-small.svg"])("cloud %s matches the dashboard copy", (name) => {
-  expect(readFileSync(resolve(__dirname, "../../cloud/static", name), "utf8")).toBe(
-    readFileSync(resolve(__dirname, "../public", name), "utf8"),
+test("cloud logo matches the dashboard copy", () => {
+  expect(readFileSync(resolve(__dirname, "../../cloud/static/logo.svg"), "utf8")).toBe(
+    readFileSync(resolve(__dirname, "../public/logo.svg"), "utf8"),
   );
 });
 

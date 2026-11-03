@@ -102,9 +102,9 @@
 	.docs-content :global(a) { color: #366e71; text-decoration: underline; text-decoration-color: #9ebbbc; text-underline-offset: 3px; }
 	.docs-content :global(a:hover) { color: var(--primary); text-decoration-color: currentColor; }
 	.docs-content :global(strong) { color: var(--foreground); font-weight: 500; }
-	.docs-content :global(code) { border: 1px solid var(--border); background: var(--muted); padding: 2px 5px; color: var(--foreground); font-size: 0.85em; }
-	.docs-content :global(pre) { position: relative; overflow-x: auto; margin: 20px 0; border: 1px solid #45433e; background: #282828; padding: 18px 82px 18px 20px; }
-	.docs-content :global(pre code) { border: 0; background: transparent; padding: 0; color: #ebdbb2; font-size: 13px; line-height: 1.7; white-space: pre; }
+	.docs-content :global(code) { border: 1px solid var(--border); border-radius: 4px; background: var(--muted); padding: 2px 5px; color: var(--foreground); font-size: 0.85em; }
+	.docs-content :global(pre) { position: relative; overflow-x: auto; margin: 20px 0; border: 1px solid #45433e; border-radius: 6px; background: #282828; padding: 18px 82px 18px 20px; }
+	.docs-content :global(pre code) { border: 0; border-radius: 0; background: transparent; padding: 0; color: #ebdbb2; font-size: 13px; line-height: 1.7; white-space: pre; }
 	.docs-content :global(pre code .token) { display: inline; }
 	.docs-content :global(pre code .token.punctuation) { color: #bdae93; }
 	.docs-content :global(pre code .token.key),
@@ -120,7 +120,7 @@
 	.docs-content :global(pre code .token.parameter) { color: #d3869b; }
 	.docs-content :global(pre code .token.operator),
 	.docs-content :global(pre code .token.keyword) { color: #fe8019; }
-	.docs-content :global(.code-copy-button) { position: absolute; top: 9px; right: 9px; min-width: 58px; height: 32px; border: 1px solid #5d584e; background: #282828; color: #bdae93; font: 11px var(--font-mono); }
+	.docs-content :global(.code-copy-button) { position: absolute; top: 9px; right: 9px; min-width: 58px; height: 32px; border: 1px solid #5d584e; border-radius: 4px; background: #282828; color: #bdae93; font: 11px var(--font-mono); }
 	.docs-content :global(.code-copy-button:hover) { background: #3c3836; color: #ebdbb2; }
 	.docs-content :global(.code-copy-button:focus-visible) { outline-color: #8ec07c; }
 	.docs-content :global(blockquote) { margin: 24px 0; border-left: 3px solid var(--primary); background: var(--surface); padding: 14px 18px; }

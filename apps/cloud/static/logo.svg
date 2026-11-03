@@ -1,17 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img">
-  <defs>
-    <clipPath id="sun-disc">
-      <circle cx="627" cy="648" r="482.929"/>
-    </clipPath>
-  </defs>
-  <g id="sunset">
-    <path id="sun-dome" fill="#d65d0e" d="M 160.529 773 A 482.929 482.929 0 1 1 1093.471 773 Z"/>
-    <g id="stripes" clip-path="url(#sun-disc)">
-      <path id="stripe-1" fill="#d79921" d="M 0 798 H 1254 V 846 H 0 Z"/>
-      <path id="stripe-2" fill="#98971a" d="M 0 871 H 1254 V 919 H 0 Z"/>
-      <path id="stripe-3" fill="#458588" d="M 0 944 H 1254 V 992 H 0 Z"/>
-      <path id="stripe-4" fill="#b16286" d="M 0 1017 H 1254 V 1065 H 0 Z"/>
-    </g>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="9.9 12.4 83 83" role="img" aria-label="Pontia">
+  <path fill="#458588" d="M19 38C26 23 46 22 55 30C61 35 69 30 78 32C93 36 95 62 81 74C67 86 31 86 18 72C8 61 13 47 19 38Z"/>
+  <rect fill="#fff" x="33" y="45" width="10" height="18" rx="5"/>
+  <rect fill="#fff" x="57" y="45" width="10" height="18" rx="5"/>
 </svg>

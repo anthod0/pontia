@@ -13,7 +13,7 @@
 
 <section class="mx-auto flex min-h-[calc(100svh-5.5rem)] max-w-5xl flex-col justify-center gap-6 md:min-h-[calc(100svh-6.5rem)]" aria-labelledby="workspace-onboarding-title">
   <div class="flex items-start gap-3 px-1">
-    <div class="flex size-10 shrink-0 items-center justify-center rounded-none bg-muted">
+    <div class="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
       <FolderPlusIcon class="size-5" aria-hidden="true" />
     </div>
     <div class="space-y-1">

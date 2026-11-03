@@ -35,6 +35,7 @@
 	.auth-content :global(.auth-error) {
 		color: #9d3229;
 		border: 1px solid #dab0aa;
+		border-radius: 4px;
 		padding: 12px;
 		margin-block: 20px;
 	}

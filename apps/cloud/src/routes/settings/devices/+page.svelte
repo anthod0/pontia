@@ -183,6 +183,7 @@
     align-items: center;
     justify-content: center;
     border: 1px solid var(--border);
+    border-radius: 4px;
     background: var(--background);
     color: var(--muted-foreground);
     cursor: pointer;

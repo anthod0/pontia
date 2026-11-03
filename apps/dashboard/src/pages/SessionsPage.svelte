@@ -41,7 +41,7 @@
           </div>
           {#if session.state !== 'exited'}
             <Badge variant="secondary" class="shrink-0 gap-1.5">
-              <span class={`size-2 rounded-none ${sessionStateDotClass(session.state)}`}></span>
+              <span class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}></span>
               {session.state}
             </Badge>
           {/if}

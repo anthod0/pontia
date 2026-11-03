@@ -18,7 +18,7 @@
 </script>
 
 {#if submissions.length}
-  <section class="mb-2 border bg-background p-3 text-sm" aria-label="Unconfirmed submissions">
+  <section class="mb-2 rounded-lg border bg-background p-3 text-sm" aria-label="Unconfirmed submissions">
     <p class="font-medium">Submission receipt unknown</p>
     <p class="text-xs text-muted-foreground">The server may have accepted these inputs. Check or recover the same submission.</p>
     {#each submissions as submission (submission.messageId)}

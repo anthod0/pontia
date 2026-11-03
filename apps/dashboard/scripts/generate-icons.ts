@@ -4,10 +4,6 @@ import sharp from "sharp";
 
 const publicDir = resolve(import.meta.dirname, "../public");
 const sourcePath = resolve(publicDir, "logo.svg");
-// The full logo's stripes drop below one pixel at favicon sizes, so small
-// rasters use the simplified, pixel-grid-aligned variant instead.
-const smallSourcePath = resolve(publicDir, "logo-small.svg");
-const smallSourceMaxSize = 48;
 const pngSizes = [32, 180, 192, 512] as const;
 const icoSizes = [16, 32, 48, 64] as const;
 // iOS fills transparent apple-touch-icon pixels with black, so that icon is
@@ -39,17 +35,13 @@ function createIco(images: ReadonlyArray<{ size: number; data: Buffer }>): Buffe
 }
 
 const startedAt = performance.now();
-const [source, smallSource] = await Promise.all([readFile(sourcePath), readFile(smallSourcePath)]);
+const source = await readFile(sourcePath);
+const { width: sourceSize } = await sharp(source).metadata();
 const sizes = [...new Set([...pngSizes, ...icoSizes])];
 
 async function render(size: number): Promise<Buffer> {
-  const small = size <= smallSourceMaxSize;
-  const intrinsicSize = small ? 32 : 1254;
-  // Rasterize the SVG directly at the target size (72 dpi = intrinsic size) so
-  // grid-aligned edges stay crisp instead of being resampled.
-  let image = sharp(small ? smallSource : source, {
-    density: (72 * size) / intrinsicSize,
-  }).resize(size, size);
+  // Rasterize the SVG directly at the target size instead of resampling.
+  let image = sharp(source, { density: (72 * size) / sourceSize }).resize(size, size);
   const background = opaqueSizes.get(size);
   if (background) image = image.flatten({ background });
   return image.png().toBuffer();

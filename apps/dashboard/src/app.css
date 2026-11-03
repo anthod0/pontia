@@ -52,15 +52,15 @@
   --color-sidebar-accent-foreground: var(--heading);
   --color-sidebar-border: var(--border);
   --color-sidebar-ring: var(--primary);
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 :root {
   color-scheme: light;
-  --radius: 0;
+  --radius: 6px;
   --background: #fffefc;
   --surface: #fafaf8;
   --card: #fffefc;

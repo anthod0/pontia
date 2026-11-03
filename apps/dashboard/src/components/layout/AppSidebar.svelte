@@ -213,7 +213,7 @@
         class={cn('pointer-events-none absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center transition-opacity group-has-[:focus-visible]/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden', sessionActionMenuOpenKey === actionKey ? 'opacity-0' : 'opacity-100')}
         aria-label={`${session.state} session`}
       >
-        <span class={`size-2 rounded-none ${sessionStateDotClass(session.state)}`}></span>
+        <span class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}></span>
       </span>
     {/if}
     <DropdownMenu.Root bind:open={() => sessionActionMenuOpenKey === actionKey, (open) => setSessionActionMenuOpen(actionKey, open)}>
@@ -263,7 +263,7 @@
       onclick={() => go('/')}
       aria-label="Open new chat"
     >
-      <span class="flex size-8 shrink-0 items-center justify-center rounded-none">
+      <span class="flex size-8 shrink-0 items-center justify-center">
         <img src={`${base}/logo.svg`} alt="" class="size-8 shrink-0 object-contain" />
       </span>
       <span class="truncate group-data-[collapsible=icon]:hidden">Pontia</span>
@@ -303,7 +303,7 @@
           <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
             <button
               type="button"
-              class="flex min-w-0 items-center gap-1 rounded-none text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+              class="flex min-w-0 items-center gap-1 rounded-sm text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
               aria-expanded={pinnedSessionsOpen}
               onclick={() => (pinnedSessionsOpen = !pinnedSessionsOpen)}
             >
@@ -326,7 +326,7 @@
         <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
           <button
             type="button"
-            class="flex min-w-0 items-center gap-1 rounded-none text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+            class="flex min-w-0 items-center gap-1 rounded-sm text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
             aria-expanded={recentSessionsOpen}
             onclick={() => (recentSessionsOpen = !recentSessionsOpen)}
           >
@@ -337,7 +337,7 @@
           <span class="flex items-center gap-2">
             <button
               type="button"
-              class="rounded-none hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+              class="rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
               aria-label="Open all sessions"
               title="All sessions"
               onclick={() => go('/sessions')}
@@ -346,7 +346,7 @@
             </button>
             <DropdownMenu.Root>
               <DropdownMenu.Trigger
-                class={cn('rounded-none hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden', selectedWorkspaceId && 'text-primary')}
+                class={cn('rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden', selectedWorkspaceId && 'text-primary')}
                 aria-label="Filter recent sessions by workspace"
                 title={selectedWorkspaceId ? `Workspace: ${selectedWorkspace?.name || selectedWorkspace?.display_path || selectedWorkspaceId}` : 'All workspaces'}
               >

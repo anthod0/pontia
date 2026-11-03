@@ -162,7 +162,7 @@
     {:else if activeWorkspaces.length}
       <ul class="max-h-[28rem] space-y-2 overflow-auto">
         {#each activeWorkspaces as workspace (workspace.workspace_id)}
-          <li class="space-y-1 rounded-none border p-3">
+          <li class="space-y-1 rounded-lg border p-3">
             <p class="break-all font-medium">{workspace.name ?? workspace.display_path}</p>
             <p class="break-all text-xs text-muted-foreground">{workspace.canonical_path}</p>
           </li>
@@ -186,7 +186,7 @@
     <div class="mt-4 max-h-[28rem] space-y-2 overflow-auto pr-1">
       {#each workspaceAvailabilityProblems as problem (problem.workspace.workspace_id)}
         {@const workspace = problem.workspace}
-        <div class="flex items-center justify-between gap-3 rounded-none border bg-card p-3">
+        <div class="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
           <div class="min-w-0 space-y-1">
             <div class="flex min-w-0 flex-wrap items-center gap-2">
               <span class="truncate font-medium">{workspace.name ?? workspace.display_path}</span>

@@ -278,7 +278,7 @@
   <div bind:this={editorElement}></div>
 
   {#if open}
-    <div bind:this={listbox} class="absolute bottom-full left-2 z-50 mb-2 max-h-64 w-[min(36rem,calc(100vw-3rem))] overflow-auto rounded-none border bg-popover p-1 text-popover-foreground shadow-none" role="listbox" aria-label="File suggestions">
+    <div bind:this={listbox} class="absolute bottom-full left-2 z-50 mb-2 max-h-64 w-[min(36rem,calc(100vw-3rem))] overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-none" role="listbox" aria-label="File suggestions">
       {#if loading && files.length === 0}
         <div class="px-3 py-2 text-sm text-muted-foreground">Searching files…</div>
       {:else if files.length === 0}
@@ -287,7 +287,7 @@
         {#each files as file, index (file.path)}
           <button
             type="button"
-            class={`flex w-full min-w-0 items-center gap-2 rounded-none px-3 py-2 text-left text-sm ${index === selectedIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent hover:text-accent-foreground'}`}
+            class={`flex w-full min-w-0 items-center gap-2 rounded-sm px-3 py-2 text-left text-sm ${index === selectedIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent hover:text-accent-foreground'}`}
             role="option"
             aria-selected={index === selectedIndex}
             data-file-suggestion-index={index}
