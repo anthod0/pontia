@@ -3,7 +3,7 @@
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
 
-	const dashboardScreenshot = 'https://files.pontia.dev/cloud/dashboard-1280-647254d2c10e.webp';
+	const dashboardScreenshot = 'https://files.pontia.dev/cloud/dashboard-1280-79de754face8.webp';
 	const installCommand = 'curl -fsSL https://get.pontia.dev/install.sh | sh && "$HOME/.local/bin/pontia" init';
 	let copyStatus = $state<'idle' | 'copied' | 'error'>('idle');
 
@@ -46,7 +46,7 @@
 			<img
 				src={dashboardScreenshot}
 				width="1280"
-				height="840"
+				height="960"
 				alt="Pontia Dashboard showing recent sessions, a coding conversation, tool execution, test results, and the message composer."
 				fetchpriority="high"
 			/>
