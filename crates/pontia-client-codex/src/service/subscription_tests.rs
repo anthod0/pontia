@@ -15,6 +15,8 @@ struct Fixture {
     rpc_errors: Arc<Mutex<HashMap<String, Value>>>,
     inputs: Arc<Mutex<Vec<Value>>>,
     turns: Arc<Mutex<Vec<Value>>>,
+    configuration: Arc<Mutex<Value>>,
+    thread_requests: Arc<Mutex<Vec<Value>>>,
     server: JoinHandle<()>,
 }
 
@@ -34,6 +36,10 @@ impl Fixture {
         let turns = Arc::new(Mutex::new(Vec::new()));
         let server_turns = turns.clone();
         let codex_home = root.path().canonicalize().unwrap();
+        let configuration = Arc::new(Mutex::new(json!({})));
+        let server_configuration = configuration.clone();
+        let thread_requests = Arc::new(Mutex::new(Vec::new()));
+        let server_thread_requests = thread_requests.clone();
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let mut wire = accept_async(stream).await.unwrap();
@@ -68,10 +74,15 @@ impl Fixture {
                 }
                 let thread = json!({"id":"thread-one","cwd":codex_home,"canAcceptDirectInput":true,"status":{"type":"idle"}});
                 let result = match method.as_str() {
+                    "config/read" => {
+                        assert_eq!(request["params"]["cwd"], json!(codex_home));
+                        json!({"config":server_configuration.lock().await.clone()})
+                    }
                     "initialize" => {
                         json!({"userAgent":"codex/test","codexHome":codex_home,"platformFamily":"unix","platformOs":"linux"})
                     }
                     "thread/start" | "thread/resume" => {
+                        server_thread_requests.lock().await.push(request.clone());
                         json!({"thread":thread,"model":"model-one"})
                     }
                     "thread/read" => json!({"thread":thread}),
@@ -141,6 +152,8 @@ impl Fixture {
             rpc_errors,
             inputs,
             turns,
+            configuration,
+            thread_requests,
             server,
         }
     }
@@ -157,6 +170,65 @@ impl Fixture {
         self.app.inbox_commands().stop_scheduling().await;
         CodexRuntime::shutdown(self.root.path()).await;
         self.server.abort();
+    }
+}
+
+#[tokio::test]
+async fn start_and_resume_preserve_environment_filters_and_override_session_identity() {
+    for (policy, expected_filter) in [
+        (json!({}), json!({})),
+        (json!({"include_only":[]}), json!({})),
+        (json!({"exclude":["PROBE_DROP"]}), json!({})),
+        (json!({"filters":{"PROBE_DROP":"exclude"}}), json!({})),
+        (
+            json!({"include_only":["PATH","PROBE_KEEP"]}),
+            json!({"shell_environment_policy.include_only":["PATH","PROBE_KEEP","PONTIA_SESSION_ID"]}),
+        ),
+        (
+            json!({"filters":{"PATH":"include","PROBE_KEEP":"include","PROBE_DROP":"exclude","pontia_session_id":"exclude"}}),
+            json!({"shell_environment_policy.filters":{"PATH":"include","PROBE_KEEP":"include","PROBE_DROP":"exclude","PONTIA_SESSION_ID":"include"}}),
+        ),
+    ] {
+        let fixture = Fixture::new().await;
+        *fixture.configuration.lock().await = json!({"shell_environment_policy":policy});
+        let mut environment = std::collections::BTreeMap::new();
+        environment.insert(
+            "PONTIA_SESSION_ID".into(),
+            "wrong-configured-session".into(),
+        );
+        environment.insert("PROBE_KEEP".into(), "keep".into());
+        super::CodexService::new(fixture.app.event_ingest_service())
+            .provision(
+                &fixture.session,
+                fixture.root.path(),
+                fixture.root.path(),
+                &environment,
+            )
+            .await
+            .unwrap();
+        fixture.dispatch_first_input().await;
+        fixture
+            .app
+            .session_commands()
+            .terminate_session(&fixture.session)
+            .await
+            .unwrap();
+        fixture
+            .app
+            .session_commands()
+            .resume_session(&fixture.session, fixture.root.path())
+            .await
+            .unwrap();
+        let requests = fixture.thread_requests.lock().await;
+        assert_eq!(requests.len(), 2);
+        let mut expected = expected_filter;
+        expected["shell_environment_policy.set"] =
+            json!({"PROBE_KEEP":"keep","PONTIA_SESSION_ID":fixture.session});
+        for request in requests.iter() {
+            assert_eq!(request["params"]["config"], expected);
+        }
+        drop(requests);
+        fixture.shutdown().await;
     }
 }
 

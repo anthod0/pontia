@@ -68,6 +68,7 @@ impl Fixture {
                                 shared.requests.lock().await.push(request.clone());
                                 let thread = request["params"]["threadId"].as_str().unwrap_or("thread-0");
                                 let result = match request["method"].as_str().unwrap() {
+                                    "config/read" => json!({"config":{}}),
                                     "initialize" => json!({"userAgent":"codex/test","codexHome":cwd,"platformFamily":"unix","platformOs":std::env::consts::OS}),
                                     "thread/resume" | "thread/read" => json!({"thread":{"id":thread,"cwd":cwd,"canAcceptDirectInput":true,"status":{"type":"idle"}},"model":"test-model"}),
                                     "thread/turns/list" => {

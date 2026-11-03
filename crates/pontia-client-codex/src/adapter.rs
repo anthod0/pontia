@@ -290,8 +290,13 @@ impl ClientSession for CodexClient {
             let command: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_tui_command') FROM sessions WHERE session_id=?")
                 .bind(session).fetch_one(&service.pool).await?;
             let command = command.as_deref().unwrap_or("codex");
+            let connection = codex_runtime.connection().await?;
+            let config = service
+                .session_config(session, &connection, &binding.launch_cwd)
+                .await?;
+            let config_args = crate::service::environment::tui_config_args(&config)?;
             let start_command = format!(
-                "exec {command} resume --remote {} {}",
+                "exec {command} resume --remote {} {}{config_args}",
                 quote(&endpoint),
                 quote(&binding.client_session_key)
             );

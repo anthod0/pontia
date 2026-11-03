@@ -3,6 +3,9 @@ pub(crate) use background::CodexBackgroundService;
 mod compaction;
 #[cfg(test)]
 mod compaction_tests;
+pub(crate) mod environment;
+#[cfg(test)]
+mod environment_tests;
 mod events;
 #[cfg(test)]
 mod interaction_tests;
@@ -153,13 +156,8 @@ impl CodexService {
                     .0
                     .or(row.1)
                     .ok_or_else(|| Error::StateConflict("Codex launch cwd is missing".into()))?;
-                let environment: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_environment') FROM sessions WHERE session_id=?")
-                    .bind(session_id).fetch_one(&self.pool).await?;
-                let environment: Value = environment
-                    .map(|value| serde_json::from_str(&value))
-                    .transpose()?
-                    .unwrap_or_else(|| json!({}));
-                let mut params = json!({"cwd":cwd,"historyMode":"legacy","config":{"shell_environment_policy.set":environment}});
+                let config = self.session_config(session_id, &connection, &cwd).await?;
+                let mut params = json!({"cwd":cwd,"historyMode":"legacy","config":config});
                 profile::apply_profile(&mut params, profile.as_ref())?;
                 let response = connection.call("thread/start", params).await?;
                 runtime.current_guard().await?;
@@ -363,7 +361,7 @@ impl CodexService {
         let resumed = connection
             .call(
                 "thread/resume",
-                self.resume_params(session, thread_id).await?,
+                self.resume_params(session, thread_id, &connection).await?,
             )
             .await;
         let (result, turns, subscription) = match resumed {

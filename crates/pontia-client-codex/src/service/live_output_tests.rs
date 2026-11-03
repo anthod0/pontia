@@ -87,6 +87,7 @@ impl Fixture {
                                 let Some(id) = request.get("id") else { continue };
                                 let thread = json!({"id":"thread", "cwd":codex_home,"canAcceptDirectInput":true,"status":{"type":"active"}});
                                 let result = match request["method"].as_str().unwrap() {
+                                    "config/read" => json!({"config":{}}),
                                     "initialize" => json!({"userAgent":"codex/dev","codexHome":codex_home,"platformFamily":"unix","platformOs":std::env::consts::OS}),
                                     "thread/resume" | "thread/read" => json!({"thread":thread,"model":"test-model"}),
                                     "thread/unsubscribe" => json!({"status":"unsubscribed"}),

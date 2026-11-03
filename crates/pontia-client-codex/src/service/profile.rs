@@ -8,9 +8,18 @@ impl CodexService {
         CodexProfiles::new(self.pool.clone())
     }
 
-    pub(super) async fn resume_params(&self, session: &str, thread: &str) -> Result<Value> {
+    pub(super) async fn resume_params(
+        &self,
+        session: &str,
+        thread: &str,
+        connection: &crate::runtime::protocol::Connection,
+    ) -> Result<Value> {
         let profile = self.profiles().configured_codex_binding(session).await?;
-        let mut params = json!({"threadId":thread,"excludeTurns":true});
+        let binding = self.binding(session).await?;
+        let config = self
+            .session_config(session, connection, &binding.launch_cwd)
+            .await?;
+        let mut params = json!({"threadId":thread,"excludeTurns":true,"config":config});
         apply_profile(&mut params, profile.as_ref())?;
         Ok(params)
     }
