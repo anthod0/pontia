@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.12] - 2026-11-03
+
+### Changed
+
+- Reduced Pontia download sizes by distributing the Claude Agent client separately as `@pontia/claude-client`. Selecting `claude-agent` during `pontia init` downloads the client and SDK dependencies from npm; Node.js LTS, npm, and internet access are required for first setup.
+- Reuse the installed Claude Agent client across Pontia updates. The client can be updated separately using the [Claude Agent setup guide](docs/claude-agent.md).
+
 ## [0.6.11] - 2026-11-03
 
 ### Fixed
