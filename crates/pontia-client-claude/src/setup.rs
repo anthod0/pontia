@@ -14,6 +14,12 @@ pub(crate) fn node() -> std::ffi::OsString {
     std::env::var_os("PONTIA_CLAUDE_NODE_PATH").unwrap_or_else(|| "node".into())
 }
 
+const HOST_SCRIPT: &str = "node_modules/@pontia/claude-client/dist/src/main.js";
+
+pub(crate) fn host_path(root: &Path) -> PathBuf {
+    root.join("clients/claude-client").join(HOST_SCRIPT)
+}
+
 struct Integration;
 struct Prepared {
     node: PathBuf,
@@ -82,35 +88,48 @@ impl PreparedClientIntegration for Prepared {
         vec!["Claude Agent integration: enable".into()]
     }
     fn preflight(&self, runner: &dyn CommandRunner) -> Result<(), String> {
-        let stage;
-        let host = if let Some(host) = &self.host {
-            host.clone()
-        } else {
-            stage = tempfile::tempdir().map_err(|e| e.to_string())?;
-            crate::bundle::unpack(stage.path())?
-        };
-        if !host.is_file() {
-            return Err("Claude Agent host is missing; reinstall Pontia".into());
+        if let Some(host) = &self.host {
+            return self.check_host(host, runner);
         }
-        let code = runner.run_status(
-            self.node.to_str().ok_or("Node path is not UTF-8")?,
-            &[
-                host.to_str().ok_or("Host path is not UTF-8")?.into(),
-                "preflight".into(),
-            ],
-        )?;
-        if code != 0 {
-            return Err(
-                "Claude Agent dependency check failed; install Node.js LTS and reinstall Pontia"
-                    .into(),
-            );
+        let host = host_path(&self.root);
+        if host.is_file() {
+            return self.check_host(&host, runner);
+        }
+        if runner.run_status("npm", &["--version".into()])? != 0 {
+            return Err("Install Node.js LTS and npm before enabling Claude Agent".into());
         }
         Ok(())
     }
-    fn install(&self, _: &dyn CommandRunner, _: &dyn DefinitionStore) -> Result<(), String> {
-        if self.host.is_none() {
-            crate::bundle::install(&self.root)?;
+    fn install(&self, runner: &dyn CommandRunner, _: &dyn DefinitionStore) -> Result<(), String> {
+        if self.host.is_some() || host_path(&self.root).is_file() {
+            return Ok(());
         }
+        let parent = self.root.join("clients");
+        std::fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
+        let stage = tempfile::tempdir_in(&parent).map_err(|e| e.to_string())?;
+        let code = runner.run_interactive(
+            "npm",
+            &[
+                "install".into(),
+                "--prefix".into(),
+                stage
+                    .path()
+                    .to_str()
+                    .ok_or("Client path is not UTF-8")?
+                    .into(),
+                "--omit=dev".into(),
+                "--no-audit".into(),
+                "--no-fund".into(),
+                "@pontia/claude-client".into(),
+            ],
+        )?;
+        if code != 0 {
+            return Err(format!(
+                "Claude Agent client installation failed with exit code {code}"
+            ));
+        }
+        self.check_host(&stage.path().join(HOST_SCRIPT), runner)?;
+        std::fs::rename(stage.path(), parent.join("claude-client")).map_err(|e| e.to_string())?;
         Ok(())
     }
     fn completion(&self) -> &'static str {
@@ -125,5 +144,26 @@ impl PreparedClientIntegration for Prepared {
             paths.push(("PONTIA_CLAUDE_HOST_PATH".into(), host.clone()));
         }
         paths
+    }
+}
+
+impl Prepared {
+    fn check_host(&self, host: &Path, runner: &dyn CommandRunner) -> Result<(), String> {
+        if !host.is_file() {
+            return Err(
+                "Claude Agent client is missing; run pontia init and select claude-agent".into(),
+            );
+        }
+        let code = runner.run_status(
+            self.node.to_str().ok_or("Node path is not UTF-8")?,
+            &[
+                host.to_str().ok_or("Host path is not UTF-8")?.into(),
+                "preflight".into(),
+            ],
+        )?;
+        if code != 0 {
+            return Err("Claude Agent dependency check failed; check Node.js LTS and the @pontia/claude-client installation".into());
+        }
+        Ok(())
     }
 }

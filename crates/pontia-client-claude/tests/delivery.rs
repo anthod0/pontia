@@ -1,10 +1,16 @@
 use pontia_application::{
     AppState, CreateSessionRequest, client_contract::ClientServicePhase, clients::ClientRegistry,
 };
-use pontia_runtime::local_service::{DefinitionStore, ProcessCommandRunner};
+use pontia_runtime::local_service::{
+    CommandOutput, CommandRunner, DefinitionStore, ProcessCommandRunner,
+};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
-use std::{collections::HashMap, path::Path, time::Duration};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use tokio::io::AsyncBufReadExt;
 
 struct NoDefinitions;
@@ -17,10 +23,33 @@ impl DefinitionStore for NoDefinitions {
     }
 }
 
+struct PackageRunner {
+    package: String,
+    cache: PathBuf,
+}
+impl CommandRunner for PackageRunner {
+    fn run(&self, program: &str, args: &[String]) -> Result<CommandOutput, String> {
+        let mut args = args.to_vec();
+        if program == "npm" {
+            for arg in &mut args {
+                if arg == "@pontia/claude-client" {
+                    *arg = self.package.clone();
+                }
+            }
+            args.extend(["--cache".into(), self.cache.to_str().unwrap().into()]);
+        }
+        ProcessCommandRunner.run(program, &args)
+    }
+}
+
 #[tokio::test]
-#[ignore = "build with PONTIA_CLAUDE_BUNDLE, then run --test delivery -- --ignored"]
-async fn bundled_install_reports_authentication_retries_without_fabricating_turns() {
+#[ignore = "set PONTIA_CLAUDE_TEST_PACKAGE to a packed npm tarball, then run --test delivery -- --ignored"]
+async fn npm_install_reports_authentication_retries_without_fabricating_turns() {
     let root = tempfile::tempdir().unwrap();
+    let runner = PackageRunner {
+        package: std::env::var("PONTIA_CLAUDE_TEST_PACKAGE").unwrap(),
+        cache: root.path().join("npm-cache"),
+    };
     let pontia = root.path().join("long-pontia-home-".repeat(10));
     let config = root.path().join("claude");
     std::fs::create_dir(&config).unwrap();
@@ -29,16 +58,15 @@ async fn bundled_install_reports_authentication_retries_without_fabricating_turn
         ("CLAUDE_CONFIG_DIR".into(), config.to_str().unwrap().into()),
     ]);
     let setup = pontia_client_claude::setup::integration()
-        .prepare(&vars, root.path(), &ProcessCommandRunner)
+        .prepare(&vars, root.path(), &runner)
         .unwrap();
-    setup.preflight(&ProcessCommandRunner).unwrap();
+    setup.preflight(&runner).unwrap();
     assert!(
         !pontia.exists(),
         "preflight must not install or initialize a conversation"
     );
-    setup
-        .install(&ProcessCommandRunner, &NoDefinitions)
-        .unwrap();
+    setup.install(&runner, &NoDefinitions).unwrap();
+    setup.preflight(&runner).unwrap();
     assert!(std::fs::read_dir(&config).unwrap().next().is_none());
 
     let mut server = tokio::process::Command::new("node")

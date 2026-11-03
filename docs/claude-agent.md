@@ -4,7 +4,7 @@ Claude Agent lets you run Claude coding tasks from Pontia's Dashboard or Externa
 
 ## Set up
 
-Use Linux or macOS 13.5 or later, with Node.js LTS available on your `PATH`. Install an official Pontia release, then configure authentication through Claude Code under the same operating-system user that runs Pontia.
+Use Linux or macOS 13.5 or later, with Node.js LTS and npm available on your `PATH`. Install an official Pontia release, then configure authentication through Claude Code under the same operating-system user that runs Pontia.
 
 Run:
 
@@ -12,7 +12,16 @@ Run:
 pontia init
 ```
 
-Select `claude-agent`. Initialization checks the runtime dependencies before enabling the integration. Pontia does not provide a Claude login screen or save or refresh Claude credentials.
+Select `claude-agent`. On first setup, initialization downloads `@pontia/claude-client` and its Claude Agent SDK dependencies from npm, then checks them before enabling the integration. This requires internet access and several hundred megabytes of disk space. Subsequent initialization reuses the installed client; updating Pontia does not update it. Pontia does not provide a Claude login screen or save or refresh Claude credentials.
+
+To update the Claude client separately, exit active Claude Agent Sessions, then run:
+
+```sh
+npm install --prefix "${PONTIA_HOME:-$HOME/.pontia}/clients/claude-client" --omit=dev @pontia/claude-client@latest
+pontia init
+```
+
+Select `claude-agent` again to verify the updated installation.
 
 If you use a custom native configuration directory, pass its absolute path during initialization:
 
@@ -30,6 +39,6 @@ Claude Agent does not attach to the native Claude Code terminal interface. Model
 
 ## Resolve setup and authentication problems
 
-If dependency checks fail, ensure Node.js LTS is available and reinstall the official Pontia release. A successful dependency check does not establish that your Claude credentials or model provider work.
+If dependency checks fail, ensure Node.js LTS and npm are available and update the Claude client using the commands above. A successful dependency check does not establish that your Claude credentials or model provider work.
 
 If Dashboard reports an authentication failure while the SDK retries, check Claude Code's native authentication or provider configuration for the service user. Pontia preserves the SDK's retry behavior; a retry notification is not a completed or failed task. You can exit the Session while it is retrying.

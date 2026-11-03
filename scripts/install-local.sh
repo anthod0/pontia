@@ -25,7 +25,7 @@ validate_root() {
 validate_root PREFIX "$PREFIX"
 validate_root PONTIA_HOME "$PONTIA_HOME"
 
-for command in cargo install bun node python3 pi; do
+for command in cargo install bun node npm python3 pi; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Required command not found: $command" >&2
     exit 1
@@ -43,8 +43,10 @@ bun run --cwd apps/dashboard build
 echo "Building release binaries..."
 host_stage=$(mktemp -d)
 trap 'rm -rf "$host_stage"' EXIT
-bash "$SCRIPT_DIR/build-claude-host.sh" "$host_stage/claude-host.tar.gz"
-PONTIA_CLAUDE_BUNDLE="$host_stage/claude-host.tar.gz" MACOSX_DEPLOYMENT_TARGET=13.5 SQLX_OFFLINE=true cargo build --release -p pontia -p pontiad
+bash "$SCRIPT_DIR/pack-claude-client.sh" "$host_stage/claude-client.tgz"
+npm install --prefix "$PONTIA_HOME/clients/claude-client" --omit=dev --no-audit --no-fund "$host_stage/claude-client.tgz"
+node "$PONTIA_HOME/clients/claude-client/node_modules/@pontia/claude-client/dist/src/main.js" preflight
+MACOSX_DEPLOYMENT_TARGET=13.5 SQLX_OFFLINE=true cargo build --release -p pontia -p pontiad
 
 if [[ "$TARGET_DIR" != /* ]]; then
   TARGET_DIR="$REPO_ROOT/$TARGET_DIR"

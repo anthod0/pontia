@@ -1,4 +1,3 @@
-mod bundle;
 mod history;
 mod interactions;
 mod output;
@@ -92,15 +91,13 @@ fn unavailable() -> Error {
 }
 impl Adapter {
     fn script(&self, root: &Path) -> Result<PathBuf> {
-        let script = std::path::absolute(
-            self.host
-                .clone()
-                .map(Ok)
-                .unwrap_or_else(|| bundle::install(root))
-                .map_err(Error::CapabilityUnavailable)?,
-        )?;
+        let script =
+            std::path::absolute(self.host.clone().unwrap_or_else(|| setup::host_path(root)))?;
         if !script.is_file() {
-            return Err(Error::CapabilityUnavailable("Claude Agent SDK host is not installed; set PONTIA_CLAUDE_HOST_PATH to its built main.js".into()));
+            return Err(Error::CapabilityUnavailable(
+                "Claude Agent client is not installed; run pontia init and select claude-agent"
+                    .into(),
+            ));
         }
         Ok(script)
     }

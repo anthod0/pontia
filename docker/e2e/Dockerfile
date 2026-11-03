@@ -11,9 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 FROM base AS claude-build
 WORKDIR /src
 COPY clients/claude ./clients/claude
-COPY scripts/build-claude-host.sh scripts/release-version.py ./scripts/
-COPY VERSION ./
-RUN bash scripts/build-claude-host.sh /out/claude-host.tar.gz
+COPY scripts/pack-claude-client.sh scripts/release-version.py ./scripts/
+COPY VERSION LICENSE ./
+RUN bash scripts/pack-claude-client.sh /out/claude-client.tgz \
+    && npm install --prefix /opt/pontia/claude-client --omit=dev --no-audit --no-fund /out/claude-client.tgz \
+    && node /opt/pontia/claude-client/node_modules/@pontia/claude-client/dist/src/main.js preflight
 
 FROM rust:1-bookworm AS rust-build
 WORKDIR /src
@@ -21,12 +23,11 @@ COPY Cargo.toml Cargo.lock VERSION ./
 COPY crates ./crates
 COPY .sqlx ./.sqlx
 COPY scripts/build-dashboard-wasm ./scripts/build-dashboard-wasm
-COPY --from=claude-build /out/claude-host.tar.gz /opt/claude-host.tar.gz
 RUN rustup target add wasm32-unknown-unknown
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/src/target \
-    PONTIA_CLAUDE_BUNDLE=/opt/claude-host.tar.gz SQLX_OFFLINE=true cargo build --locked --release -p pontia -p pontiad -p pontia-edge \
+    SQLX_OFFLINE=true cargo build --locked --release -p pontia -p pontiad -p pontia-edge \
     && mkdir -p /out \
     && cp target/release/pontia target/release/pontiad target/release/pontia-edge /out/ \
     && bash scripts/build-dashboard-wasm --install-bindgen
@@ -70,12 +71,14 @@ COPY --from=rust-build /out/pontia /out/pontiad /usr/local/bin/
 COPY --from=dashboard-build /out/local /opt/pontia/dashboard
 COPY clients/pi /opt/pontia/clients/pi
 COPY --from=claude-build /src/clients/claude /opt/pontia/claude-validation
+COPY --from=claude-build /opt/pontia/claude-client /opt/pontia/claude-client
 COPY docker/e2e/device-entrypoint /usr/local/bin/device-entrypoint
 COPY docker/e2e/device.toml /opt/pontia/config.toml
 RUN mkdir -p /home/e2e/.pontia /home/e2e/.pi/agent /home/e2e/.codex /home/e2e/.claude /home/e2e/workspace \
     && chown -R 1000:1000 /home/e2e
 ENV HOME=/home/e2e PONTIA_HOME=/home/e2e/.pontia
 ENV CLAUDE_CONFIG_DIR=/home/e2e/.claude
+ENV PONTIA_CLAUDE_HOST_PATH=/opt/pontia/claude-client/node_modules/@pontia/claude-client/dist/src/main.js
 USER 1000:1000
 WORKDIR /home/e2e/workspace
 ENTRYPOINT ["bash", "/usr/local/bin/device-entrypoint"]

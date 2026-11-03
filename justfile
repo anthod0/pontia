@@ -88,8 +88,8 @@ claude-delivery-test:
     set -euo pipefail
     test_root=$(mktemp -d)
     trap 'rm -rf "$test_root"' EXIT
-    bash scripts/build-claude-host.sh "$test_root/host.tar.gz"
-    PONTIA_CLAUDE_BUNDLE="$test_root/host.tar.gz" SQLX_OFFLINE=true cargo test -p pontia-client-claude --test delivery -- --ignored
+    bash scripts/pack-claude-client.sh "$test_root/claude-client.tgz"
+    PONTIA_CLAUDE_TEST_PACKAGE="$test_root/claude-client.tgz" SQLX_OFFLINE=true cargo test -p pontia-client-claude --test delivery -- --ignored
 
 cloud-check:
     bun run --cwd apps/cloud check

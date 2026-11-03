@@ -124,10 +124,10 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
-      - name: Build Claude Agent host and platform dependencies
-        run: bash scripts/build-claude-host.sh "$RUNNER_TEMP/claude-host.tar.gz"
-      - name: Verify bundled Claude Agent on the release platform
-        run: PONTIA_CLAUDE_BUNDLE="$RUNNER_TEMP/claude-host.tar.gz" SQLX_OFFLINE=true cargo test --locked -p pontia-client-claude --test delivery -- --ignored
+      - name: Pack Claude client
+        run: bash scripts/pack-claude-client.sh "$RUNNER_TEMP/claude-client.tgz"
+      - name: Verify npm Claude client on the release platform
+        run: PONTIA_CLAUDE_TEST_PACKAGE="$RUNNER_TEMP/claude-client.tgz" SQLX_OFFLINE=true cargo test --locked -p pontia-client-claude --test delivery -- --ignored
       - name: Build binaries
         env:
           RELEASE_PUBLIC_KEY: ${{ vars.RELEASE_PUBLIC_KEY }}
@@ -135,7 +135,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           test -n "$RELEASE_PUBLIC_KEY"
-          PONTIA_CLAUDE_BUNDLE="$RUNNER_TEMP/claude-host.tar.gz" cargo build --release --locked --target "$TARGET" $PACKAGES
+          cargo build --release --locked --target "$TARGET" $PACKAGES
       - name: Verify Apple Silicon code signature
         if: matrix.verify_codesign
         env:
@@ -186,6 +186,7 @@ jobs:
       - detect
       - build
       - build-dashboard
+      - publish-claude-client
     if: ${{ needs.detect.outputs.publish == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -237,6 +238,46 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           TAG: ${{ needs.detect.outputs.tag }}
         run: python3 .github/scripts/publish-release.py publish-release artifacts --version "$TAG"
+
+  publish-claude-client:
+    name: Publish Claude client
+    needs:
+      - detect
+      - build
+      - build-dashboard
+    if: ${{ needs.detect.outputs.publish == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install npm with Trusted Publishing support
+        run: npm install --global npm@11
+      - name: Pack Claude client
+        run: bash scripts/pack-claude-client.sh "$RUNNER_TEMP/claude-client.tgz"
+      - name: Publish with Trusted Publishing
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          if npm view "@pontia/claude-client@$VERSION" version >/dev/null 2>&1; then
+            echo "@pontia/claude-client@$VERSION is already published"
+          else
+            npm publish "$RUNNER_TEMP/claude-client.tgz" --access public
+          fi
 
   publish-pi-client:
     name: Publish Pi client
