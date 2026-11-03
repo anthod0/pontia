@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.13] - 2026-11-03
+
+### Changed
+
+- Refreshed the Pontia logo and favicon in the dashboard and on the website.
+- Switched the dashboard and website to rounded corners on buttons, inputs, cards, dialogs, menus, and other controls.
+- Changed session detail and workspace selector icons in the dashboard to neutral colors.
+- Updated the dashboard screenshot on the homepage.
+
 ## [0.6.12] - 2026-11-03
 
 ### Changed
