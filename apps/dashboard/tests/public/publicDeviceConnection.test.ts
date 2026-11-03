@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   sessionFree: vi.fn(),
   handshakeFree: vi.fn(),
   identityFree: vi.fn(),
+  content: vi.fn((bytes: Uint8Array) => bytes),
 }));
 
 vi.mock("../../src/e2e-wasm/pontia_e2e", () => ({
@@ -39,6 +40,7 @@ const encoded = (length: number) =>
 const cloudResponse = () =>
   new Response(
     JSON.stringify({
+      user_id: deviceId,
       device_handle: handle,
       device_id: deviceId,
       edge_api_origin: edge,
@@ -61,6 +63,7 @@ beforeEach(() => {
     request: () => {
       const events = [[0, 200, []], [1, new Uint8Array([111, 107])], [2]];
       return {
+        content: mocks.content,
         first_bytes: () => new Uint8Array([2]),
         finish_upload: () => new Uint8Array([3]),
         next_event: () => events.shift() ?? null,
@@ -248,4 +251,17 @@ test("staggered concurrent session rejections share one replacement handshake", 
   expect(await Promise.all(responses.map((response) => response.text()))).toEqual(["ok", "ok"]);
   expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/connect"))).toHaveLength(2);
   expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/sessions"))).toHaveLength(2);
+});
+
+test("encrypts binary request bytes without a text conversion", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(cloudResponse())
+    .mockResolvedValueOnce(new Response(new Uint8Array([1])))
+    .mockResolvedValueOnce(new Response(new Uint8Array([2])));
+  vi.stubGlobal("fetch", fetchMock);
+  setPublicApiTarget({ handle, deviceId, edgeApiOrigin: edge });
+  const bytes = new Uint8Array([0, 255, 128, 10]);
+  await (await e2eFetch("/api/v1/uploads/id?offset=0", { method: "PATCH", body: bytes })).text();
+  expect(mocks.content).toHaveBeenCalledWith(bytes);
 });

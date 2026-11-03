@@ -27,7 +27,7 @@
     onCancelInboxMessage: (message: InboxMessageView) => void
     onRetryInboxMessage: (message: InboxMessageView) => void
     onDismissInboxMessage: (message: InboxMessageView) => void
-    onSend: () => void
+    onSend: (message: string) => Promise<boolean>
     onInterrupt: () => void
     onFocus: () => void
     onNewChat: () => void
@@ -87,7 +87,7 @@
       onRetry={onRetryInboxMessage}
       onDismiss={onDismissInboxMessage}
     />
-    <MessageComposer bind:value={input} {commands} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {autofocus} {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus}>
+    <MessageComposer draftId={`session:${session.session_id}`} bind:value={input} {commands} workspaceId={session.workspace_id} busy={submitting} disabled={composerDisabled} submitDisabled={!canSend} fullscreen {autofocus} {interruptMode} interruptBusy={actionBusy} onSubmit={onSend} {onInterrupt} {onFocus}>
       {#snippet header()}
         <SessionMetadata {gitStatus} {metadataItems} {metadataSummary} />
       {/snippet}

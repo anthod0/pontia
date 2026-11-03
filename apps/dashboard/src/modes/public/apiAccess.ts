@@ -32,3 +32,7 @@ export function applyApiAuthentication(headers: Headers): boolean {
 }
 
 export function handleApiAuthenticationFailure(): void {}
+
+export function uploadStorageScope(): Promise<string> {
+  return remoteAccess().uploadStorageScope();
+}

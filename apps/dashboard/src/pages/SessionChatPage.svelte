@@ -206,7 +206,7 @@
   )
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
   $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
-  $: canSend = canSendSessionMessage(selectedSession, $chatDraft) && !submitting
+  $: canSend = canSendSessionMessage(selectedSession, 'x') && !submitting
   $: if (!timelineUnavailable && matchingPromptScrolls(messages, pendingPromptScrolls, selectedSessionId).length) {
     void scrollSubmittedPromptAfterLayout(selectedSessionId)
   }
@@ -848,11 +848,11 @@
     })
   }
 
-  async function sendMessage(): Promise<void> {
-    if (!canSend || !selectedSessionId) return
+  async function sendMessage(message: string): Promise<boolean> {
+    if (!canSend || !selectedSessionId || !message.trim()) return false
     submitting = true
     actionError = null
-    const message = $chatDraft.trim()
+    const originalDraft = $chatDraft
     const scrollRequest = {
       sessionId: selectedSessionId,
       input: message,
@@ -872,10 +872,12 @@
         delivery_policy: clientDeliveryPolicy(selectedSession),
         metadata: { source: 'dashboard_chat' },
       })
+      return true
     } catch (error) {
       pendingPromptScrolls = pendingPromptScrolls.filter((request) => request !== scrollRequest)
-      if (!(error instanceof SubmissionUnconfirmedError) && !get(chatDraft).trim()) chatDraft.set(message)
+      if (!get(chatDraft).trim()) chatDraft.set(originalDraft)
       actionError = error instanceof SubmissionUnconfirmedError ? null : error instanceof Error ? error.message : String(error)
+      return false
     } finally {
       submitting = false
     }
@@ -1061,7 +1063,7 @@
           onCancelInboxMessage={(message) => void cancelPendingInboxMessage(message)}
           onRetryInboxMessage={(message) => void retryFailedInboxMessage(message)}
           onDismissInboxMessage={(message) => void dismissFailedInboxMessage(message)}
-          onSend={() => void sendMessage()}
+          onSend={sendMessage}
           onNewChat={openNewChat}
           onRename={(title) => void renameSelectedSession(title)}
           onExit={() => void exitSelectedSession()}

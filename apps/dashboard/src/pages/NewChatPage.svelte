@@ -58,7 +58,7 @@
   $: if (creationOptions.length && !creationOptions.some((option) => option.id === creationOptionId)) creationOptionId = creationOptions[0].id
   $: selectedCreationOption = creationOptions.find((option) => option.id === creationOptionId)
   $: if (createWorkspaceId && workspaces.length && createWorkspaceId !== queryWorkspaceSelectionId && createWorkspaceId !== availableWorkspaceId(readQueryWorkspaceId())) rememberCreateWorkspaceSelection(createWorkspaceId)
-  $: canCreate = Boolean($chatDraft.trim() && createWorkspaceId && selectedCreationOption && !$creationOptionsQuery.isError && !creating)
+  $: canCreate = Boolean(createWorkspaceId && selectedCreationOption && !$creationOptionsQuery.isError && !creating)
   $: passiveErrorMessage = $creationOptionsQuery.error?.message ?? (workspacesError && !isTransientNetworkError(workspacesError) ? workspacesError : null)
   $: errorMessage = actionError ?? passiveErrorMessage
   $: {
@@ -143,12 +143,11 @@
     createWorkspaceId = preferredCreateWorkspaceId()
   }
 
-  async function startChat(): Promise<void> {
-    if (!canCreate || !selectedCreationOption) return
+  async function startChat(initialPrompt: string): Promise<boolean> {
+    if (!canCreate || !selectedCreationOption || !initialPrompt.trim()) return false
     creating = true
     actionError = null
     try {
-      const initialPrompt = $chatDraft.trim()
       const result = await createSession({
         client_type: selectedCreationOption.client_type,
         workspace_id: createWorkspaceId,
@@ -160,15 +159,17 @@
       clearChatDraft()
       resetTimelineState(result.session.session_id)
       navigate(`/chat/${result.session.session_id}`)
-      await Promise.all([
+      void Promise.all([
         loadSessionDetail(result.session.session_id),
         loadSessionTimeline(result.session.session_id, {
           mode: 'rebuild',
           ...(result.session.capabilities.topology === true ? { topology: true } : {}),
         }),
-      ])
+      ]).catch(error => { actionError = error instanceof Error ? error.message : String(error) })
+      return true
     } catch (error) {
       actionError = error instanceof Error ? error.message : String(error)
+      return false
     } finally {
       creating = false
     }
@@ -204,7 +205,7 @@
       {selectedWorkspace}
       {creationOptions}
       placement="bottom"
-      onStartChat={() => void startChat()}
+      onStartChat={startChat}
     />
   </section>
 {/if}

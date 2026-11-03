@@ -25,6 +25,7 @@ pub mod runtime;
 pub mod sessions;
 pub mod tasks;
 pub mod turns;
+pub mod uploads;
 pub mod views;
 pub mod workspaces;
 

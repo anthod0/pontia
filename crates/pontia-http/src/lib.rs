@@ -101,6 +101,15 @@ pub fn router(state: impl Into<HttpState>) -> Router {
 
 fn external_api_router(state: HttpState) -> Router {
     Router::new()
+        .route("/api/v1/uploads", post(api::create_upload))
+        .route(
+            "/api/v1/uploads/{upload_id}",
+            get(api::get_upload).patch(api::append_upload),
+        )
+        .route(
+            "/api/v1/uploads/{upload_id}/complete",
+            post(api::complete_upload),
+        )
         .route(
             "/api/v1/workflow/submissions",
             post(api::submit_workflow_output),

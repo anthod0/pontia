@@ -659,3 +659,43 @@ async fn malformed_authenticated_head_does_not_keep_the_session_alive() {
         StatusCode::CONFLICT
     );
 }
+
+#[tokio::test(start_paused = true)]
+async fn binary_body_can_arrive_for_longer_than_admission_deadline() {
+    let ingress = ingress(Router::new().route("/api/v1/echo", post(|body: Bytes| async { body })));
+    let session = connect(&ingress).await;
+    let content = vec![0xff; 100_000];
+    let request = encrypted_request(&session, Method::POST, "/api/v1/echo", &content);
+    let head_end = 65 + 5 + u32::from_be_bytes(request.wire[65..69].try_into().unwrap()) as usize;
+    let wire = request.wire;
+    let body = Body::from_stream(async_stream::stream! {
+        yield Ok::<_, Error>(Bytes::copy_from_slice(&wire[..head_end]));
+        for chunk in wire[head_end..].chunks(10_000) {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            yield Ok(Bytes::copy_from_slice(chunk));
+        }
+    });
+    let response = ingress.handle(outer(REQUESTS_PATH, body)).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let (status, _, actual) = decrypt(request.response, &bytes(response).await);
+    assert_eq!(status, 200);
+    assert_eq!(actual, content);
+}
+
+#[tokio::test(start_paused = true)]
+async fn admitted_body_times_out_when_no_new_data_arrives() {
+    let ingress = ingress(Router::new());
+    let session = connect(&ingress).await;
+    let request = encrypted_request(&session, Method::POST, "/api/v1/echo", b"data");
+    let head_end = 65 + 5 + u32::from_be_bytes(request.wire[65..69].try_into().unwrap()) as usize;
+    let wire = request.wire;
+    let body = Body::from_stream(async_stream::stream! {
+        yield Ok::<_, Error>(Bytes::copy_from_slice(&wire[..head_end]));
+        tokio::time::sleep(Duration::from_secs(31)).await;
+        yield Ok(Bytes::copy_from_slice(&wire[head_end..]));
+    });
+    assert_eq!(
+        ingress.handle(outer(REQUESTS_PATH, body)).await.status(),
+        StatusCode::REQUEST_TIMEOUT
+    );
+}

@@ -174,6 +174,7 @@ test("connect returns trusted routing and browser-bound signed authorization wit
   expect(response.status).toBe(200);
   const body = (await response.json()) as Record<string, unknown>;
   expect(body).toEqual({
+    user_id: ownerId,
     device_handle: "office-mac",
     device_id: ownerDeviceId,
     edge_api_origin: "https://brave-atlas.edge.pontia.dev",

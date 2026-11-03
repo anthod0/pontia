@@ -4,7 +4,7 @@ export {
   publicApiSignal,
   setPublicApiTarget,
 } from "./apiTarget";
-export { clearE2eSession, connectPublicDevice, e2eFetch } from "./e2eTransport";
+export { clearE2eSession, connectPublicDevice, e2eFetch, uploadStorageScope } from "./e2eTransport";
 export {
   CloudRequestError,
   dashboardBootstrapUrl,

@@ -18,6 +18,7 @@ const browserPublicKey = btoa(String.fromCharCode(...new Uint8Array(32).fill(9))
   "",
 );
 const connection = {
+  user_id: deviceId,
   device_handle: handle,
   device_id: deviceId,
   edge_api_origin: edgeApiOrigin,
@@ -72,6 +73,7 @@ test("gets routing and authorization together using the browser key and login", 
   const fetchMock = vi.fn(async () => json(connection));
   vi.stubGlobal("fetch", fetchMock);
   await expect(requestPublicDeviceConnection(handle, browserPublicKey)).resolves.toEqual({
+    userId: deviceId,
     target: { handle, deviceId, edgeApiOrigin },
     devicePublicKey: browserPublicKey,
     capability: connection.capability,

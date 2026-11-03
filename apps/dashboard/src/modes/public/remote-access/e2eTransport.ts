@@ -112,6 +112,7 @@ export async function connectPublicDevice(
         checkActive();
         session = handshake.confirm(bytes);
         sessionTarget = target;
+        storageScope = JSON.stringify([connection.userId, target.deviceId]);
         return target;
       } finally {
         handshake.free();
@@ -126,6 +127,8 @@ export async function connectPublicDevice(
   return waitForConnection(establishing, signal);
 }
 
+let storageScope: string | null = null;
+
 function encode(value: Uint8Array): string {
   let binary = "";
   for (const byte of value) binary += String.fromCharCode(byte);
@@ -138,11 +141,19 @@ function requestHeaders(headers: Headers): [string, string][] {
   return fields;
 }
 
-function encryptedBody(request: E2eRequest, body: BodyInit | null | undefined): Uint8Array {
-  if (body != null && typeof body !== "string")
-    throw new Error("Public E2E requests require a text body");
+async function encryptedBody(
+  request: E2eRequest,
+  body: BodyInit | null | undefined,
+): Promise<Uint8Array> {
+  let bytes: Uint8Array | undefined;
+  if (typeof body === "string") bytes = new TextEncoder().encode(body);
+  else if (body instanceof Blob) bytes = new Uint8Array(await body.arrayBuffer());
+  else if (body instanceof ArrayBuffer) bytes = new Uint8Array(body);
+  else if (ArrayBuffer.isView(body))
+    bytes = new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+  else if (body != null) throw new Error("Unsupported E2E request body");
   const chunks = [request.first_bytes()];
-  if (body) chunks.push(request.content(new TextEncoder().encode(body)));
+  if (bytes?.length) chunks.push(request.content(bytes));
   chunks.push(request.finish_upload());
   const size = chunks.reduce((total, chunk) => total + chunk.length, 0);
   const output = new Uint8Array(size);
@@ -238,15 +249,20 @@ export async function e2eFetch(
   const headers = new Headers(init.headers);
   headers.delete("authorization");
   const request = active.request(init.method ?? "GET", path, requestHeaders(headers));
-  const response = await fetch(
-    `${target.edgeApiOrigin}/devices/${target.deviceId}/e2e/v1/requests`,
-    {
+  let response: Response;
+  try {
+    const body = bodyBytes(await encryptedBody(request, init.body));
+    init.signal?.throwIfAborted();
+    response = await fetch(`${target.edgeApiOrigin}/devices/${target.deviceId}/e2e/v1/requests`, {
       method: "POST",
       headers: { "Content-Type": CONTENT_TYPE },
-      body: bodyBytes(encryptedBody(request, init.body)),
+      body,
       signal: init.signal,
-    },
-  );
+    });
+  } catch (error) {
+    request.free();
+    throw error;
+  }
   if ((response.status === 409 || response.status === 401) && !reauthorized) {
     request.free();
     // A delayed rejection must not invalidate a replacement session/handshake.
@@ -266,5 +282,12 @@ export function clearE2eSession(): void {
   session?.free();
   session = null;
   sessionTarget = null;
+  storageScope = null;
   establishing = null;
+}
+
+export async function uploadStorageScope(): Promise<string> {
+  await connectPublicDevice(publicApiTarget().handle);
+  if (!storageScope) throw new Error("Remote device access is not ready");
+  return storageScope;
 }

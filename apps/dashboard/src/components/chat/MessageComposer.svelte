@@ -10,6 +10,9 @@
   import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
+  import UploadAttachments from './UploadAttachments.svelte'
+  import { uploadMessage } from '$lib/uploads/message'
+  import { createUploadDraft, type UploadDraftState } from '$lib/uploads/draft'
   import ChatCommandInput from './ChatCommandInput.svelte'
   import { findChatCommand, type ChatCommand } from '$lib/chatCommands'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -33,7 +36,8 @@
     autofocus?: boolean
     commands?: ChatCommand[]
     header?: Snippet
-    onSubmit: () => void
+    draftId?: string
+    onSubmit: (message: string) => void | Promise<boolean | void>
     onInterrupt?: () => void
     onFocus?: () => void
   }
@@ -54,11 +58,26 @@
     autofocus = false,
     commands = [],
     header,
+    draftId,
     onSubmit,
     onInterrupt,
     onFocus,
   }: Props = $props()
 
+  let attachments = $state<UploadDraftState>({ ready: false, items: [], warning: null })
+  let uploads = $state<ReturnType<typeof createUploadDraft> | null>(null)
+  $effect(() => {
+    if (!draftId) return
+    const draft = createUploadDraft(draftId)
+    uploads = draft
+    const unsubscribe = draft.subscribe(state => { attachments = state })
+    return () => { unsubscribe(); draft.destroy() }
+  })
+  let sentAwaitingCleanup = $state(false)
+  let sending = $state(false)
+  let submissionError = $state<string | null>(null)
+  const uploadBlocked = $derived(Boolean(draftId) && (!attachments.ready || attachments.items.some(item => item.status !== 'complete')))
+  const completedFiles = $derived(attachments.items.flatMap(item => item.status === 'complete' && item.upload?.path ? [{ name: item.name, path: item.upload.path }] : []))
   let fullscreenOpen = $state(false)
   const commandActions: Record<ChatCommand['name'], { label: string; icon: typeof NotePencilIcon }> = {
     '/new': { label: 'New chat', icon: NotePencilIcon },
@@ -74,7 +93,7 @@
   const command = $derived(findChatCommand(value, commands))
   const commandAction = $derived(command ? commandActions[command.name] : undefined)
   const commandArgument = $derived(command ? value.trim().slice(command.name.length).trim() : '')
-  const cannotSubmit = $derived(disabled || busy || (command ? Boolean(command.disabledReason) || (command.name === '/rename' && !commandArgument) : submitDisabled))
+  const cannotSubmit = $derived(disabled || busy || sending || (command ? Boolean(command.disabledReason) || (command.name === '/rename' && !commandArgument) : submitDisabled || uploadBlocked || (!value.trim() && completedFiles.length === 0)))
 
   async function openFullscreen(): Promise<void> {
     fullscreenOpen = true
@@ -85,7 +104,24 @@
   function submit(): void {
     if (cannotSubmit) return
     if (command) executeCommand(command)
-    else onSubmit()
+    else void submitMessage()
+  }
+
+  async function submitMessage(): Promise<void> {
+    const draft = uploads
+    sending = true
+    submissionError = null
+    try {
+      if (!sentAwaitingCleanup) sentAwaitingCleanup = (await onSubmit(uploadMessage(value, completedFiles))) === true
+      if (sentAwaitingCleanup) {
+        await draft?.clear()
+        sentAwaitingCleanup = false
+      }
+    } catch (error) {
+      submissionError = error instanceof Error ? error.message : String(error)
+    } finally {
+      sending = false
+    }
   }
 
   function executeCommand(command: ChatCommand): void {
@@ -193,14 +229,16 @@
       {/if}
     </div>
   </PromptInput.Body>
+  {#if uploads}<UploadAttachments draft={uploads} disabled={disabled || busy || sending} />{/if}
+  {#if submissionError}<p role="alert" class="px-4 text-xs text-destructive">{submissionError}</p>{/if}
   {#if command?.disabledReason}<p role="status" class="px-4 pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
   <PromptInput.Toolbar class="justify-end pt-0">
-    {#if interruptMode}
+    {#if interruptMode && attachments.items.length === 0}
       <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt()}>
         <StopIcon class="size-4" />
       </Button>
     {:else}
-      <PromptInput.Submit disabled={cannotSubmit} {busy} label={commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} />
+      <PromptInput.Submit disabled={cannotSubmit} {busy} label={sentAwaitingCleanup ? 'Dismiss sent attachments' : commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} />
     {/if}
   </PromptInput.Toolbar>
 </PromptInput.Root>
@@ -226,13 +264,14 @@
           <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] pr-2" />
         </PromptInput.Body>
         {#if command?.disabledReason}<p role="status" class="pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
+        {#if uploads}<UploadAttachments draft={uploads} disabled={disabled || busy || sending} />{/if}
         <PromptInput.Toolbar class="shrink-0 justify-end pt-0">
-          {#if interruptMode}
+          {#if interruptMode && attachments.items.length === 0}
             <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt(true)}>
               <StopIcon class="size-4" />
             </Button>
           {:else}
-            <PromptInput.Submit disabled={cannotSubmit} {busy} label={commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} />
+            <PromptInput.Submit disabled={cannotSubmit} {busy} label={sentAwaitingCleanup ? 'Dismiss sent attachments' : commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} />
           {/if}
         </PromptInput.Toolbar>
       </PromptInput.Root>

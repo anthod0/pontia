@@ -28,3 +28,5 @@ mod workflow_queries;
 mod workflow_run;
 mod workflow_submission;
 mod workspace;
+
+mod uploads;

@@ -80,6 +80,7 @@ export async function connectDashboardDevice(
   capability.set(unsigned);
   capability.set(signature, unsigned.length);
   return {
+    user_id: userId,
     device_handle: device.handle,
     edge_api_origin: apiOrigin,
     device_id: device.id,

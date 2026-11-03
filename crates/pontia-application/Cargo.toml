@@ -20,6 +20,8 @@ time = { workspace = true, features = ["formatting", "parsing", "serde"] }
 tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
 tracing = "0.1"
 uuid = { workspace = true, features = ["v7", "serde"] }
+sha2 = "0.10"
+rustix = { version = "1", features = ["fs"] }
 
 [dev-dependencies]
 pontia-application = { path = ".", features = ["generic-test-client"] }

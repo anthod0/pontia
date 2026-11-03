@@ -28,6 +28,7 @@ pub const SESSIONS_PATH: &str = "/e2e/v1/sessions";
 pub const REQUESTS_PATH: &str = "/e2e/v1/requests";
 pub const CONTENT_TYPE: &str = "application/pontia-e2e";
 const ADMISSION_TIMEOUT: Duration = Duration::from_secs(10);
+const REQUEST_BODY_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_HANDSHAKE_BYTES: usize = 1024;
 
 /// This identity cannot be supplied by a header or by a tunnel connection.
@@ -92,15 +93,15 @@ impl E2eIngress {
             drop(permit);
             return match result {
                 Ok(Ok(bytes)) => ciphertext_response(Body::from(bytes)),
+                Ok(Err(_)) if input.timed_out => StatusCode::REQUEST_TIMEOUT.into_response(),
                 Ok(Err(error)) => transport_error(error),
                 Err(_) => StatusCode::REQUEST_TIMEOUT.into_response(),
             };
         }
-        let admitted = tokio::time::timeout(ADMISSION_TIMEOUT, self.admit(&mut input)).await;
-        match admitted {
-            Ok(Ok(admitted)) => self.dispatch(admitted, permit).await,
-            Ok(Err(error)) => transport_error(error),
-            Err(_) => StatusCode::REQUEST_TIMEOUT.into_response(),
+        match self.admit(&mut input).await {
+            Ok(admitted) => self.dispatch(admitted, permit).await,
+            Err(_) if input.timed_out => StatusCode::REQUEST_TIMEOUT.into_response(),
+            Err(error) => transport_error(error),
         }
     }
 
@@ -153,6 +154,9 @@ impl E2eIngress {
                 result = decoder.read_record(input) => result,
             }?;
         };
+        lease.accept_head(&head)?;
+        input.admitted = true;
+        input.deadline = tokio::time::Instant::now() + REQUEST_BODY_IDLE_TIMEOUT;
         let mut body = Vec::new();
         let mut ended = false;
         loop {
@@ -189,7 +193,6 @@ impl E2eIngress {
                 result = decoder.read_record(input) => result,
             }?;
         }
-        lease.accept_head(&head)?;
         Ok(Admitted {
             head,
             body: Bytes::from(body),
@@ -310,23 +313,38 @@ impl DecodedInput {
 struct Input {
     body: Body,
     pending: Bytes,
+    deadline: tokio::time::Instant,
+    admitted: bool,
+    timed_out: bool,
 }
 impl Input {
     fn new(body: Body) -> Self {
         Self {
             body,
             pending: Bytes::new(),
+            deadline: tokio::time::Instant::now() + ADMISSION_TIMEOUT,
+            admitted: false,
+            timed_out: false,
         }
     }
     async fn peek(&mut self) -> pontia_e2e::Result<Option<()>> {
         while self.pending.is_empty() {
-            let Some(frame) = self.body.frame().await else {
+            let frame = tokio::time::timeout_at(self.deadline, self.body.frame())
+                .await
+                .map_err(|_| {
+                    self.timed_out = true;
+                    Error::Truncated
+                })?;
+            let Some(frame) = frame else {
                 return Ok(None);
             };
             self.pending = frame
                 .map_err(|_| Error::Truncated)?
                 .into_data()
                 .map_err(|_| Error::Protocol)?;
+            if self.admitted && !self.pending.is_empty() {
+                self.deadline = tokio::time::Instant::now() + REQUEST_BODY_IDLE_TIMEOUT;
+            }
         }
         Ok(Some(()))
     }

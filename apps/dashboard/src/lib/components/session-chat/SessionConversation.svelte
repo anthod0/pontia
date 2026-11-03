@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { parseUploadMessage } from '$lib/uploads/message'
   import { onDestroy, tick } from 'svelte'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
@@ -343,6 +344,14 @@
                 </Button>
               </div>
             </div>
+          {:else if chatMessage.role === 'user'}
+            {@const parsed = parseUploadMessage(chatMessage.content)}
+            <Message.Response content={parsed.text} markdown={false} />
+            {#if parsed.files.length}
+              <ul class="mt-2 flex flex-wrap gap-2">
+                {#each parsed.files as file}<li class="rounded-md border px-2 py-1 text-xs" title={file.path}>Uploaded File: {file.name}</li>{/each}
+              </ul>
+            {/if}
           {:else}
             <Message.Response
               content={chatMessage.content}

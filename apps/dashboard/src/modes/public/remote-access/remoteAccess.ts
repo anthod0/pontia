@@ -104,6 +104,7 @@ export async function listPublicDevices(signal?: AbortSignal): Promise<PublicDev
 }
 
 export type PublicDeviceConnection = {
+  userId: string;
   target: PublicDeviceTarget;
   devicePublicKey: string;
   capability: string;
@@ -150,6 +151,7 @@ export async function requestPublicDeviceConnection(
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, [
+      "user_id",
       "device_handle",
       "device_id",
       "edge_api_origin",
@@ -157,6 +159,8 @@ export async function requestPublicDeviceConnection(
       "device_key_version",
       "capability",
     ]) ||
+    typeof value.user_id !== "string" ||
+    !UUID.test(value.user_id) ||
     !isEncodedBytes(value.device_public_key, 32) ||
     !isEncodedBytes(value.capability, 169) ||
     !Number.isSafeInteger(value.device_key_version) ||
@@ -168,6 +172,7 @@ export async function requestPublicDeviceConnection(
     throw new CloudRequestError("Cloud returned an invalid device target.");
   }
   return {
+    userId: value.user_id,
     target: {
       handle,
       deviceId: value.device_id,

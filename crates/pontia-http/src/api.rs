@@ -58,3 +58,6 @@ pub use workspaces::{
     delete_workspace, get_workspace, list_workspace_root_entries, list_workspace_roots,
     list_workspaces, pick_workspace_files, register_workspace, rename_workspace,
 };
+
+mod uploads;
+pub use uploads::{append_upload, complete_upload, create_upload, get_upload};

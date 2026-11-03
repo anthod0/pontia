@@ -1,3 +1,4 @@
+import { sha256 } from "@noble/hashes/sha2.js";
 import { get } from "svelte/store";
 import { token } from "./auth";
 
@@ -26,4 +27,12 @@ export function applyApiAuthentication(headers: Headers): boolean {
 
 export function handleApiAuthenticationFailure(): void {
   token.set("");
+}
+
+export async function uploadStorageScope(): Promise<string> {
+  const digest = sha256(new TextEncoder().encode(get(token)));
+  const identity = Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  return JSON.stringify([location.origin, identity]);
 }

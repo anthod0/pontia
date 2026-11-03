@@ -20,7 +20,7 @@
     promptDisabled?: boolean
     autofocus?: boolean
     placement?: 'center' | 'bottom'
-    onStartChat: () => void
+    onStartChat: (message: string) => Promise<boolean>
   }
 
   let {
@@ -61,6 +61,7 @@
     <SessionTargetSelector bind:workspaceId bind:creationOptionId {workspaces} {workspacesLoading} {selectedWorkspace} {creationOptions} {fixedWorkspace} />
     <MessageComposer
       bind:value={prompt}
+      draftId={`new:${workspaceId}`}
       {workspaceId}
       {commands}
       inputId="chat-prompt"
