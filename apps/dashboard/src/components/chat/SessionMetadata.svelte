@@ -20,13 +20,13 @@
   let { gitStatus, metadataItems, metadataSummary }: Props = $props()
   let sessionDetailsOpen = $state(false)
   const fields = [
-    { key: 'workspace', icon: FolderIcon, tone: 'text-repository' },
-    { key: 'git', icon: GitBranchIcon, tone: 'text-repository' },
-    { key: 'client', icon: TerminalWindowIcon, tone: 'text-success' },
-    { key: 'model', icon: CpuIcon, tone: 'text-success' },
-    { key: 'context', icon: GaugeIcon, tone: 'text-success' },
-    { key: 'profile', icon: RobotIcon, tone: 'text-muted-foreground' },
-    { key: 'handle', icon: AtIcon, tone: 'text-muted-foreground' },
+    { key: 'workspace', icon: FolderIcon },
+    { key: 'git', icon: GitBranchIcon },
+    { key: 'client', icon: TerminalWindowIcon },
+    { key: 'model', icon: CpuIcon },
+    { key: 'context', icon: GaugeIcon },
+    { key: 'profile', icon: RobotIcon },
+    { key: 'handle', icon: AtIcon },
   ]
   const visibleFields = $derived(fields.flatMap((field) => {
     const item = metadataItems.find((item) => item.key === field.key)
@@ -40,7 +40,7 @@
       <span data-chat-session-details-summary class="block min-w-0 flex-1 truncate">
         {#each visibleFields as field, index (field.key)}
           {#if index > 0}<span class="mx-1.5 inline-block h-2.5 border-l align-middle" aria-hidden="true"></span>{/if}
-          <span class={`inline-flex items-center gap-1 align-middle ${field.tone}`} title={field.item.title}>
+          <span class="inline-flex items-center gap-1 align-middle text-muted-foreground" title={field.item.title}>
             <field.icon class="size-[13px] shrink-0" aria-hidden="true" />
             {#if field.key === 'git' && gitStatus}<GitStatusInline {gitStatus} />{:else}<span>{field.item.value}</span>{/if}
           </span>
@@ -51,7 +51,7 @@
       <dl class="space-y-3 text-sm">
         {#each visibleFields as field (field.key)}
           <div class="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2">
-            <dt class={`flex items-start justify-center ${field.tone}`}>
+            <dt class="flex items-start justify-center text-muted-foreground">
               <field.icon class="size-4" aria-label={field.item.label} />
             </dt>
             <dd class="min-w-0 break-words font-mono text-xs" title={field.item.title} aria-label={`${field.item.label}: ${field.item.title}`}>

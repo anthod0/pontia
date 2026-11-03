@@ -31,7 +31,7 @@
   <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-1 text-sm text-muted-foreground sm:text-base">
     <span>Start a new agent session in</span>
     <span class="inline-flex h-7 max-w-64 items-center gap-1.5 px-1.5 text-sm font-medium text-foreground sm:text-base" title={selectedWorkspace?.canonical_path}>
-      <FolderIcon class="size-4 text-repository" aria-hidden="true" />
+      <FolderIcon class="size-4 text-muted-foreground" aria-hidden="true" />
       <span class="min-w-0 truncate">{selectedWorkspace ? workspaceTitle(selectedWorkspace) : 'Workspace'}</span>
     </span>
     <span>, use</span>
@@ -69,7 +69,7 @@
       <div id="new-chat-workspace-label" class="mb-2 font-mono text-[11px] tracking-[0.06em] text-muted-foreground uppercase">Workspace</div>
       <Select.Root type="single" bind:value={workspaceId} disabled={workspacesLoading || !workspaces.length}>
         <Select.Trigger class="h-auto min-h-11 w-full gap-2.5 bg-background px-3 py-2.5 text-left hover:bg-muted data-[state=open]:border-primary data-[state=open]:bg-selected" aria-labelledby="new-chat-workspace-label" title={selectedWorkspace?.canonical_path}>
-          <FolderIcon class="size-4 text-repository" aria-hidden="true" />
+          <FolderIcon class="size-4 text-muted-foreground" aria-hidden="true" />
           <span class="min-w-0 flex-1">
             <span class="block truncate text-[13px] font-medium text-heading">{selectedWorkspace ? workspaceTitle(selectedWorkspace) : workspacesLoading ? 'Loading workspaces…' : 'Choose a workspace'}</span>
             {#if selectedWorkspace}
