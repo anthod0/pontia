@@ -1,8 +1,9 @@
-# Pontia
-
-> **Your device. Your agent cloud.**
-
-[Website](https://pontia.dev) · [Dashboard](https://app.pontia.dev)
+<div align="center">
+  <img src="assets/brand/logo-idle.svg" width="120" alt="Pontia logo">
+  <h1>Pontia</h1>
+  <p><strong>Your device. Your agent cloud.</strong></p>
+  <p><a href="https://pontia.dev">Website</a> · <a href="https://app.pontia.dev">Dashboard</a></p>
+</div>
 
 Pontia is a remote control plane for coding agents. Your agents, development tools, and project files stay on your device while you can view and control agent sessions from a web dashboard wherever you are.
 
