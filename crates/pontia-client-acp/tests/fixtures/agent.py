@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import threading
 import time
 
@@ -42,6 +43,9 @@ def wait_for(name):
 def prompt(request, ordinal, cancellation):
     global active
     wait_for(f"update-{ordinal}")
+    if os.environ.get("ACP_READ_SESSION_ENV") == "1":
+        value = subprocess.check_output(["sh", "-c", 'printf %s "$PONTIA_SESSION_ID"'], text=True)
+        log({"session_environment": value, "native": native_id})
     if os.environ.get("ACP_PERMISSION") == "1":
         options = [
             {"optionId": "once:原", "name": "Allow once", "kind": "allow_once"},

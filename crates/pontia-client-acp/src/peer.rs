@@ -197,6 +197,7 @@ impl Peer {
         let mut child = Command::new(&config.command)
             .args(&config.args)
             .envs(&config.env)
+            .env("PONTIA_SESSION_ID", session)
             .current_dir(cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

@@ -30,7 +30,7 @@ export class Host {
   private usedInputs = new Set<string>();
 
   constructor(
-    private readonly options: { cwd: string; resume?: string },
+    private readonly options: { session_id: string; cwd: string; resume?: string },
     private readonly emit: Emit,
     private readonly createQuery: QueryFactory = query,
   ) {
@@ -75,6 +75,7 @@ export class Host {
         includePartialMessages: true,
         permissionMode: "default",
         settingSources: ["user", "project", "local"],
+        settings: { env: { PONTIA_SESSION_ID: this.options.session_id } },
         disallowedTools: ["AskUserQuestion"],
         canUseTool: (tool, input, context) => {
           if (!this.acceptsControl())

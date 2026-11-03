@@ -14,6 +14,59 @@ struct Harness {
 }
 
 #[tokio::test]
+async fn commands_use_their_own_session_environment_before_and_after_resume() {
+    let h = Harness::new().await;
+    let inherited = std::env::var_os("PONTIA_SESSION_ID");
+    let mut sessions = Vec::new();
+    for _ in 0..2 {
+        let mut request: CreateSessionRequest = serde_json::from_value(json!({
+            "client_type":"claude-agent", "workspace":h.root.path(),
+            "initial_task":{"input":"read-session-environment"}
+        }))
+        .unwrap();
+        request.runtime_environment.insert(
+            "PONTIA_SESSION_ID".into(),
+            "wrong-configured-session".into(),
+        );
+        let created = h
+            .app
+            .session_commands()
+            .create_session(request)
+            .await
+            .unwrap();
+        sessions.push(created.session_id().unwrap().to_owned());
+    }
+    for number in 1..=2 {
+        for session in &sessions {
+            h.gate(session, number, "start");
+            h.gate(session, number, "finish");
+        }
+        for session in &sessions {
+            h.wait_states(session, &vec!["completed"; number]).await;
+            let values: Vec<_> = h
+                .wire(session)
+                .into_iter()
+                .filter(|frame| frame["method"] == "session_environment")
+                .map(|frame| frame["value"].clone())
+                .collect();
+            assert_eq!(values, vec![json!(session); number]);
+            h.app
+                .session_commands()
+                .terminate_session(session)
+                .await
+                .unwrap();
+        }
+        if number == 1 {
+            for session in &sessions {
+                h.resume_input(session, "read-session-environment").await;
+            }
+        }
+    }
+    assert_eq!(std::env::var_os("PONTIA_SESSION_ID"), inherited);
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn long_home_uses_private_sockets_and_removes_them_on_exit_and_resume() {
     use std::os::unix::fs::PermissionsExt;
     let root = tempfile::Builder::new()

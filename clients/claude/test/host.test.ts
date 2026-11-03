@@ -8,7 +8,7 @@ function setup(resume?: string) {
   const fixture = sdk();
   const events: HostEvent[] = [];
   const host = new Host(
-    { cwd: "/unused-fixture-workspace", resume },
+    { session_id: "pontia-session", cwd: "/unused-fixture-workspace", resume },
     (event) => events.push(event),
     fixture.factory,
   );

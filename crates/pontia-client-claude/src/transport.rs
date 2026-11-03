@@ -70,6 +70,7 @@ impl Connection {
             .arg(script)
             .current_dir(&peer.cwd)
             .envs(environment)
+            .env("PONTIA_SESSION_ID", &peer.session)
             .env("CLAUDE_CONFIG_DIR", &peer.config_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

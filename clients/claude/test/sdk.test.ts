@@ -12,7 +12,7 @@ import type { HostEvent } from "../src/facts.js";
 
 // Opt-in runs the real SDK against a loopback-only model substitute, never a live model.
 test(
-  "real SDK: sequential tasks, allow/deny tool approval, close and same-ID resume",
+  "real SDK: sequential tasks, tool approval, and session environment across resume",
   { skip: process.env.PONTIA_CLAUDE_SDK_TEST !== "1", timeout: 60000 },
   async () => {
     await using sandbox = await mkdtempDisposable(join(tmpdir(), "pontia-host-sdk-"));
@@ -21,6 +21,17 @@ test(
     const config = join(testRoot, "config");
     const temporary = join(testRoot, "tmp");
     await Promise.all([cwd, config, temporary].map((path) => mkdir(path)));
+    await mkdir(join(cwd, ".claude"));
+    for (const path of [
+      join(config, "settings.json"),
+      join(cwd, ".claude", "settings.json"),
+      join(cwd, ".claude", "settings.local.json"),
+    ]) {
+      await writeFile(
+        path,
+        JSON.stringify({ env: { PONTIA_SESSION_ID: "wrong-settings-session" } }),
+      );
+    }
     await writeFile(join(cwd, "input.txt"), "isolated tool result marker\n");
     const requests: Array<{ messages: unknown }> = [];
     const server = createServer(async (request, response) => {
@@ -66,8 +77,17 @@ test(
                       },
                     },
                   ]
-                : [{ type: "text", text: "fixture answer" }],
-          stop_reason: [1, 3, 5].includes(requests.length) ? "tool_use" : "end_turn",
+                : [7, 9].includes(requests.length)
+                  ? [
+                      {
+                        type: "tool_use",
+                        id: `environment-${requests.length}`,
+                        name: "Bash",
+                        input: { command: "printenv PONTIA_SESSION_ID" },
+                      },
+                    ]
+                  : [{ type: "text", text: "fixture answer" }],
+          stop_reason: [1, 3, 5, 7, 9].includes(requests.length) ? "tool_use" : "end_turn",
           stop_sequence: null,
           usage: { input_tokens: 12, output_tokens: 3 },
         };
@@ -124,6 +144,7 @@ test(
       ANTHROPIC_API_KEY: "fixture-not-a-secret",
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
       DISABLE_AUTOUPDATER: "1",
+      PONTIA_SESSION_ID: "wrong-inherited-session",
     });
     const factory: QueryFactory = (args) =>
       query({
@@ -131,7 +152,6 @@ test(
         options: {
           ...args.options,
           env,
-          settingSources: [],
           strictMcpConfig: true,
           mcpServers: {},
           plugins: [],
@@ -157,7 +177,11 @@ test(
       return JSON.parse(output) as Array<{ uuid: string; session_id: string; message: unknown }>;
     }
     const create = (resume?: string) => {
-      const host = new Host({ cwd, resume }, (event) => events.push(event), factory);
+      const host = new Host(
+        { session_id: "pontia-session", cwd, resume },
+        (event) => events.push(event),
+        factory,
+      );
       hosts.push(host);
       return host;
     };
@@ -220,6 +244,7 @@ test(
       assert.ok(
         events.some((e) => e.kind === "tool_result" && e.call_id === "write-5" && e.failed),
       );
+      await finish(host, randomUUID(), "Read Session environment", "fixture answer", "allow");
       await host.close();
       assert.equal(host.status().closed, true);
       const before = await history(native);
@@ -236,11 +261,27 @@ test(
         }
       }
       const restored = create(native);
-      await finish(restored, randomUUID(), "Third isolated task");
+      await finish(
+        restored,
+        randomUUID(),
+        "Read resumed Session environment",
+        "fixture answer",
+        "allow",
+      );
       assert.equal(restored.status().native_session_id, native);
       await restored.close();
-      assert.equal(requests.length, 7);
-      const resumedHistory = JSON.stringify(requests[6]);
+      assert.equal(requests.length, 10);
+      const environmentResults = events.filter(
+        (event): event is Extract<HostEvent, { kind: "tool_result" }> =>
+          event.kind === "tool_result" && event.call_id.startsWith("environment-"),
+      );
+      assert.equal(environmentResults.length, 2);
+      for (const event of environmentResults) {
+        assert.equal(event.failed, false);
+        assert.ok(typeof event.content === "string");
+        assert.equal(event.content.trim(), "pontia-session");
+      }
+      const resumedHistory = JSON.stringify(requests[8]);
       assert.ok(resumedHistory.includes("First isolated task"));
       assert.ok(resumedHistory.includes("Second isolated task"));
       const after = await history(native);

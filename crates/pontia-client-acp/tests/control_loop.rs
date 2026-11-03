@@ -20,6 +20,9 @@ mod live_output;
 #[path = "control_loop/permission_blocking.rs"]
 mod permission_blocking;
 
+#[path = "control_loop/session_environment.rs"]
+mod session_environment;
+
 struct Harness {
     app: AppState,
     tasks: Option<ClientServiceTasks>,

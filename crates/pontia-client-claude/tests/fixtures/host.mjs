@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, chmodSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { execFileSync } from "node:child_process";
 
 const lines = createInterface({ input: process.stdin });
 const [line] = await Promise.all([new Promise((resolve) => lines.once("line", resolve))]);
@@ -127,6 +128,14 @@ if (process.argv[2] === "history") {
       existsSync(join(config.cwd, `${kind}-${config.session_id}-${active.number}`));
     if (!active.started && gate("start")) {
       active.started = true;
+      if (active.text === "read-session-environment") {
+        record({
+          method: "session_environment",
+          value: execFileSync("sh", ["-c", 'printf %s "$PONTIA_SESSION_ID"'], {
+            encoding: "utf8",
+          }),
+        });
+      }
       active.reply = randomUUID();
       history({
         type: "assistant",

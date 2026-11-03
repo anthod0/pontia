@@ -8,7 +8,7 @@ async function setup(t: TestContext) {
   const fixture = sdk();
   const events: HostEvent[] = [];
   const host = new Host(
-    { cwd: "/unused-fixture-workspace" },
+    { session_id: "pontia-session", cwd: "/unused-fixture-workspace" },
     (e) => events.push(e),
     fixture.factory,
   );
