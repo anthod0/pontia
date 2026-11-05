@@ -36,6 +36,23 @@ function decode(value: unknown): Record<string, unknown> {
 const identity = (value: unknown): value is string =>
   typeof value === "string" && !!value.trim() && value.length <= 512;
 
+function historyEntry(entry: Record<string, unknown>): Record<string, unknown> {
+  const message = entry.message as Record<string, unknown> | undefined;
+  if (entry.type !== "message" || !Array.isArray(message?.content)) return entry;
+  return {
+    ...entry,
+    message: {
+      ...message,
+      // Timeline readers use text and image metadata, not inline image bytes.
+      content: message.content.map((block) => {
+        if (block?.type !== "image") return block;
+        const { data, ...image } = block;
+        return image;
+      }),
+    },
+  };
+}
+
 /** Reads the current canonical manager; tokens contain identities, never file positions. */
 export function readHistory(context: HistoryContext, params: Record<string, unknown>): object {
   if (Object.keys(params).some((key) => !["page_size", "snapshot", "continuation"].includes(key)))
@@ -120,7 +137,7 @@ export function readHistory(context: HistoryContext, params: Record<string, unkn
   const page: unknown[] = [];
   let bytes = 0;
   for (let index = start; index <= upper && page.length < (size as number); index++) {
-    const entry = entries[index];
+    const entry = historyEntry(entries[index]);
     const encoded = JSON.stringify(entry);
     const length = Buffer.byteLength(encoded);
     if (length > PAGE_BYTES - 8192) return invalid("History entry exceeds response budget");

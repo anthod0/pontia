@@ -63,6 +63,66 @@ test("splits history larger than a frame into byte-bounded pages without truncat
 test.each([0, -1, 129, 1.5, "2", null])("rejects invalid page size %s", (page_size) => {
   expect(() => readHistory(fixture().context, { page_size })).toThrow(RpcError);
 });
+test.each([1, 128])(
+  "pages large images without changing native messages (page size %s)",
+  (page_size) => {
+    const { context } = fixture();
+    const entries = ["user", "toolResult", "custom"].map((role, index) => ({
+      id: `image-${index}`,
+      parentId: index ? `image-${index - 1}` : null,
+      type: "message",
+      timestamp: "2026-11-05T00:00:00Z",
+      message: {
+        role,
+        ...(role === "toolResult"
+          ? { toolCallId: "call-1", toolName: "read", isError: false }
+          : {}),
+        content: [
+          { type: "text", text: "中".repeat(120_000), data: "keep non-image data" },
+          { type: "image", mimeType: "image/png", data: "a".repeat(2_546_580) },
+          { type: "image", mimeType: "image/jpeg", data: "small image" },
+        ],
+      },
+    }));
+    context.sessionManager.getEntries = () => entries;
+    context.sessionManager.getLeafId = () => "image-2";
+    const original = JSON.stringify(entries);
+    const received: any[] = [];
+    let params: any = { page_size };
+    do {
+      const page = readHistory(context, params) as any;
+      expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThan(1024 * 1024);
+      expect(page.entry_count).toBe(3);
+      expect(page.upper_entry_id).toBe("image-2");
+      expect(page.leaf_id).toBe("image-2");
+      received.push(...page.entries);
+      params = page.continuation
+        ? { page_size, snapshot: page.snapshot, continuation: page.continuation }
+        : null;
+    } while (params);
+    expect(received).toEqual(
+      entries.map((entry) => ({
+        ...entry,
+        message: {
+          ...entry.message,
+          content: [
+            entry.message.content[0],
+            { type: "image", mimeType: "image/png" },
+            { type: "image", mimeType: "image/jpeg" },
+          ],
+        },
+      })),
+    );
+    expect(JSON.stringify(entries)).toBe(original);
+  },
+);
+
+test("preserves image-shaped custom data outside message content", () => {
+  const { context, entries } = fixture(1);
+  Object.assign(entries[0].data, { type: "image", data: "custom payload" });
+  expect((readHistory(context, {}) as any).entries).toEqual(entries);
+});
+
 test.each(["duplicate", "parent", "leaf", "timestamp", "oversized"])(
   "rejects %s snapshot evidence",
   (kind) => {

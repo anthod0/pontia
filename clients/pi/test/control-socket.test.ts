@@ -547,7 +547,7 @@ test.each(["interrupt", "shutdown"] as const)(
   },
 );
 
-test("serves history while branch.resolve awaits a reverse response", async () => {
+test("serves large image history while branch.resolve awaits a reverse response", async () => {
   let branchId: unknown;
   const root = await server((socket, message) => {
     if (message.method === "branch.resolve") {
@@ -557,6 +557,17 @@ test("serves history while branch.resolve awaits a reverse response", async () =
       );
     } else if (message.id === "history") {
       expect(message.result.entries[0].id).toBe("user");
+      expect(message.result.entries[1]).toMatchObject({
+        id: "image",
+        parentId: "user",
+        message: {
+          role: "toolResult",
+          toolCallId: "call-1",
+          content: [{ type: "image", mimeType: "image/png" }],
+        },
+      });
+      expect(message.result.entries[1].message.content[0]).not.toHaveProperty("data");
+      expect(Buffer.byteLength(JSON.stringify(message))).toBeLessThan(MAX_RPC_FRAME_BYTES);
       reply(socket, branchId, { target_entry_id: "user" });
     } else reply(socket, message.id, {});
   });
@@ -571,7 +582,7 @@ test("serves history while branch.resolve awaits a reverse response", async () =
       generation: 1,
       sessionManager: {
         getSessionId: () => "native",
-        getLeafId: () => "user",
+        getLeafId: () => "image",
         getEntries: () => [
           {
             id: "user",
@@ -579,6 +590,19 @@ test("serves history while branch.resolve awaits a reverse response", async () =
             type: "message",
             timestamp: "2026-10-11T00:00:00Z",
             message: { role: "user", content: "question" },
+          },
+          {
+            id: "image",
+            parentId: "user",
+            type: "message",
+            timestamp: "2026-10-11T00:00:01Z",
+            message: {
+              role: "toolResult",
+              toolCallId: "call-1",
+              toolName: "read",
+              content: [{ type: "image", mimeType: "image/png", data: "a".repeat(2_546_580) }],
+              isError: false,
+            },
           },
         ],
       },

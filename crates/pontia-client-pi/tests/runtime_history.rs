@@ -174,6 +174,74 @@ fn checkpoint(id: &str, parent: Option<&str>) -> Value {
 }
 
 #[tokio::test]
+async fn image_metadata_matches_native_history_order_and_turn_attribution() {
+    use pontia_application::client_contract::raw_transcripts::{
+        SessionTimelineSelection, SessionTimelineTurn,
+    };
+    let mut f = Fixture::new().await;
+    let mut entries = vec![
+        entry("user", None, "user"),
+        json!({
+            "id": "image", "parentId": "user", "type": "message",
+            "timestamp": "2026-11-05T00:00:00Z",
+            "message": {
+                "role": "toolResult", "toolCallId": "call-1", "toolName": "read",
+                "content": [
+                    {"type": "text", "text": "Read image"},
+                    {"type": "image", "mimeType": "image/png", "data": "a".repeat(2_546_580)}
+                ],
+                "isError": false
+            }
+        }),
+        entry("answer", Some("image"), "assistant"),
+        entry("next", Some("answer"), "user"),
+    ];
+    f.write_native("native", entries.clone());
+    let selection = SessionTimelineSelection {
+        turns: vec![
+            SessionTimelineTurn {
+                turn_id: "first".into(),
+                head_cursor: Some(f.cursor(None)),
+                tail_cursor: Some(f.cursor(Some("answer"))),
+            },
+            SessionTimelineTurn {
+                turn_id: "second".into(),
+                head_cursor: Some(f.cursor(Some("answer"))),
+                tail_cursor: None,
+            },
+        ],
+        selected_turn_ids: vec!["first".into(), "second".into()],
+    };
+    let native = f
+        .history()
+        .read_session_timeline(selection.clone())
+        .await
+        .unwrap();
+    entries[1]["message"]["content"][1]
+        .as_object_mut()
+        .unwrap()
+        .remove("data");
+    let (_, daemon) = f.serve(entries, 2).await;
+    let online = f.history().read_session_timeline(selection).await.unwrap();
+    assert_eq!(online, native);
+    assert_eq!(
+        online
+            .iter()
+            .map(|item| (item.item.item_id.as_str(), item.turn_id.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("pi:entry:user:block:0", Some("first")),
+            ("pi:entry:image:block:0", Some("first")),
+            ("pi:entry:answer:block:0", Some("first")),
+            ("pi:entry:next:block:0", Some("second")),
+        ]
+    );
+    assert_eq!(online[1].item.call_id.as_deref(), Some("call-1"));
+    assert_eq!(online[1].item.content_preview, "Read image");
+    daemon.close();
+}
+
+#[tokio::test]
 async fn tool_calls_and_results_expose_the_same_native_call_id() {
     use pontia_application::client_contract::raw_transcripts::{
         SessionTimelineSelection, SessionTimelineTurn,
