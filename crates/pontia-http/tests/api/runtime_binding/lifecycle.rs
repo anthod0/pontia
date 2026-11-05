@@ -390,24 +390,107 @@ async fn wait_for_runtime_pane_exit(state: &AppState, runtime_id: &str) {
     }
 }
 
-struct TestTmuxServer(tempfile::TempDir);
+#[tokio::test]
+async fn api_resumed_pi_can_register_from_its_launched_pane_in_c_locale() {
+    let (state, mut app) = test_state().await;
+    let tmux = TestTmuxServer::new();
+    app.remove_env("TMUX");
+    app.set_env("TMUX_TMPDIR", tmux.0.path());
+    app.set_env("LC_ALL", "C");
+    let workspace = app.temp_workspace();
+    let workspace_path = workspace.path().to_str().unwrap();
+    let session_file = workspace.path().join("session.jsonl");
+    std::fs::write(
+        &session_file,
+        "{\"type\":\"session\",\"id\":\"pi_session_123\"}\n",
+    )
+    .unwrap();
+    let client_script = workspace.path().join("client.sh");
+    std::fs::write(
+        &client_script,
+        "printf '%s\\n%s\\n' \"$TMUX\" \"$TMUX_PANE\" > pane.txt\nexec sleep 60\n",
+    )
+    .unwrap();
+    let mut body = upsert_body(workspace_path, Some("%42"));
+    body["client_session_file"] = json!(session_file);
+    body["start_command"] = json!(format!("sh '{}'", client_script.display()));
+    let (status, registered) = post_upsert(state.clone(), body.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{registered:?}");
+    let session_id = registered["session"]["session_id"].as_str().unwrap();
+    let runtime_id = registered["runtime"]["runtime_id"].as_str().unwrap();
+    exit_and_resume(state.clone(), session_id, runtime_id).await;
+
+    let pane_file = workspace.path().join("pane.txt");
+    let pane = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(contents) = std::fs::read_to_string(&pane_file)
+                && contents.lines().count() == 2
+            {
+                break contents;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let mut lines = pane.lines();
+    let socket = lines.next().unwrap().split(',').next().unwrap();
+    let pane_id = lines.next().unwrap();
+    let (status, context) =
+        super::get_session_context_by_client_session(state.clone(), "pi", "pi_session_123").await;
+    assert_eq!(status, StatusCode::OK, "{context:?}");
+    assert_eq!(
+        context["data"]["session_context"]["session_state"],
+        "starting"
+    );
+    body["runtime_id"] = context["data"]["session_context"]["runtime_id"].clone();
+    body["tmux"] = json!({"socket_path": socket, "pane_id": pane_id});
+    let (status, rebound) = post_upsert(state.clone(), body).await;
+    assert_eq!(status, StatusCode::OK, "{rebound:?}");
+    assert_eq!(rebound["session"]["session_id"], session_id);
+    assert_eq!(rebound["runtime"]["runtime_id"], runtime_id);
+    let (status, ready) = crate::common::reporting::report_fact(
+        state.clone(),
+        json!({
+            "session_id": session_id, "type": "session.ready",
+            "data": {"runtime_id": runtime_id, "client_session_key": "pi_session_123"}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{ready:?}");
+    let (_, session) = request_json(
+        state,
+        "GET",
+        &format!("/api/v1/sessions/{session_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(session["data"]["session"]["state"], "idle");
+}
+
+struct TestTmuxServer(tempfile::TempDir, PathBuf);
 
 impl TestTmuxServer {
     fn new() -> Self {
-        let server = Self(tempfile::tempdir().expect("tmux test root"));
+        let root = tempfile::tempdir().expect("tmux test root");
         let output = Command::new("tmux")
-            .arg("-S")
-            .arg(server.socket_path())
+            .env_remove("TMUX")
+            .env("TMUX_TMPDIR", root.path())
             .args([
+                "-L",
+                "default",
                 "-f",
                 "/dev/null",
                 "new-session",
                 "-d",
+                "-P",
+                "-F",
+                "#{socket_path}",
                 "-s",
                 "fixture",
                 "-c",
             ])
-            .arg(server.0.path())
+            .arg(root.path())
             .arg("sh")
             .output()
             .expect("start isolated tmux server");
@@ -416,11 +499,12 @@ impl TestTmuxServer {
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        server
+        let socket_path = String::from_utf8(output.stdout).expect("tmux socket path");
+        Self(root, PathBuf::from(socket_path.trim()))
     }
 
     fn socket_path(&self) -> PathBuf {
-        self.0.path().join("tmux.sock")
+        self.1.clone()
     }
 }
 

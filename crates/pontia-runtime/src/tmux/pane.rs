@@ -70,6 +70,8 @@ pub(crate) fn is_pane_alive(socket_path: &str, pane_id: &str) -> bool {
 pub fn pane_binding(runtime_handle: &str) -> Option<TmuxPaneBinding> {
     let output = Command::new("tmux")
         .args([
+            // Without UTF-8 output, tmux replaces the tab separator in the C locale.
+            "-u",
             "display-message",
             "-p",
             "-t",

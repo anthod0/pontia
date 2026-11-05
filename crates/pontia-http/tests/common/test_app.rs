@@ -49,6 +49,10 @@ impl TestApp {
     pub(crate) fn set_env(&mut self, key: &str, value: impl Into<OsString>) {
         self._env.set(key, value.into());
     }
+
+    pub(crate) fn remove_env(&mut self, key: &str) {
+        self._env.remove(key);
+    }
 }
 
 #[derive(Default)]
