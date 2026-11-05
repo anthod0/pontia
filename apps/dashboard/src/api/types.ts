@@ -438,7 +438,18 @@ export interface InboxMessageView {
   cancelled_at: string | null;
 }
 
+export interface SharedFile {
+  file_id: string;
+  turn_id: string | null;
+  name: string;
+  path: string;
+  size: number;
+  media_type: string;
+  created_at: string;
+}
+
 export interface EventView {
+  file?: SharedFile;
   event_id: string;
   session_id: string;
   turn_id: string | null;

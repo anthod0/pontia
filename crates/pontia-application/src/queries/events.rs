@@ -75,7 +75,12 @@ impl ExternalQueryService {
             .list_session_stream_rows_after(after_rowid, limit)
             .await?;
 
-        rows.into_iter().map(row_to_item).collect()
+        self.enrich_file_events(
+            rows.into_iter()
+                .map(row_to_item)
+                .collect::<Result<Vec<_>>>()?,
+        )
+        .await
     }
 
     pub async fn list_task_event_stream_items_after(
@@ -114,6 +119,33 @@ impl ExternalQueryService {
             }
         };
 
-        rows.into_iter().map(row_to_item).collect()
+        self.enrich_file_events(
+            rows.into_iter()
+                .map(row_to_item)
+                .collect::<Result<Vec<_>>>()?,
+        )
+        .await
+    }
+    async fn enrich_file_events(
+        &self,
+        mut items: Vec<EventStreamItem>,
+    ) -> Result<Vec<EventStreamItem>> {
+        let files = pontia_storage_sqlite::repositories::session_files::SessionFileRepository::new(
+            self.pool.clone(),
+        );
+        for item in &mut items {
+            if item.event.event_type == "session.file_shared" {
+                let id = item.event.payload["file_id"]
+                    .as_str()
+                    .ok_or_else(|| Error::Domain("File event missing file_id".into()))?;
+                item.event.file = Some(
+                    files
+                        .get(&item.event.session_id, id)
+                        .await?
+                        .ok_or_else(|| Error::NotFound(format!("Shared file {id} not found")))?,
+                );
+            }
+        }
+        Ok(items)
     }
 }

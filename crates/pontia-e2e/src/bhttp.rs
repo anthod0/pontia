@@ -12,6 +12,8 @@ const SCHEME: &[u8] = b"https";
 const AUTHORITY: &[u8] = b"pontia-device";
 const REQUEST_HEADERS: &[&str] = &["accept", "content-type", "idempotency-key", "last-event-id"];
 const RESPONSE_HEADERS: &[&str] = &[
+    "content-length",
+    "x-content-type-options",
     "content-type",
     "cache-control",
     "etag",

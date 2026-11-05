@@ -61,3 +61,6 @@ pub use workspaces::{
 
 mod uploads;
 pub use uploads::{append_upload, complete_upload, create_upload, get_upload};
+
+mod session_files;
+pub use session_files::{list_session_files, share_file, shared_file_content};

@@ -71,6 +71,7 @@
   import { openLiveOutputStream } from '../services/liveOutputStream'
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
   import SessionInteractions from '../components/chat/SessionInteractions.svelte'
+  import SessionFiles from '../components/chat/SessionFiles.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
   import { isExecutingSessionState, isTerminalSession } from '$lib/sessionState'
@@ -887,6 +888,9 @@
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
+  {#if selectedSession}
+    {#key selectedSessionId}<SessionFiles sessionId={selectedSessionId} />{/key}
+  {/if}
   {#if selectedSession && controlDetails && (selectedSession.capabilities.accept_task || controlDetails.unavailableReason)}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
       <span>Control: {controlDetails.connection.replaceAll('_', ' ')}</span>

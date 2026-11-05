@@ -84,6 +84,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Share one file with the user of the current Session
+    #[command(
+        after_help = "Requires PONTIA_SESSION_ID and a running pontiad. Relative paths use the current directory.\nPrints the file ID on success. The file is read when the user downloads it."
+    )]
+    SendFile { path: PathBuf },
     /// Configure Pontia interactively and start its per-user service
     #[command(after_help = INIT_HELP)]
     Init,
@@ -133,6 +138,11 @@ async fn main() -> ExitCode {
 async fn execute(command: Command) -> Result<bool, String> {
     match command {
         Command::Init => run_init().await,
+        Command::SendFile { path } => {
+            let config = pontia_clients::config_from_env().map_err(|e| e.to_string())?;
+            println!("{}", pontia::send_file::run(path, &config).await?);
+            Ok(true)
+        }
         Command::Client(command) => {
             let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
             let result = pontia::client::run(command, &config).await?;

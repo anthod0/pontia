@@ -301,6 +301,14 @@ fn external_api_router(state: HttpState) -> Router {
             "/api/v1/sessions/{session_id}/interactions/{interaction_id}/response",
             put(api::respond_interaction),
         )
+        .route(
+            "/api/v1/sessions/{session_id}/files",
+            get(api::list_session_files).post(api::share_file),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/files/{file_id}/content",
+            get(api::shared_file_content),
+        )
         .route("/api/v1/sessions/{session_id}/turns", get(api::list_turns))
         .route(
             "/api/v1/sessions/{session_id}/turns/timeline",

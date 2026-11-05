@@ -16,6 +16,8 @@ pub struct EventView {
     pub event_type: String,
     pub time: String,
     pub payload: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<crate::session_files::SharedFile>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -50,6 +52,7 @@ pub(crate) fn row_to_view(row: EventRow) -> Result<EventView> {
         event_type: row.event_type,
         time: row.occurred_at,
         payload: serde_json::from_str(&row.payload)?,
+        file: None,
     })
 }
 

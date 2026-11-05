@@ -86,3 +86,5 @@ pub use workspaces::{
 pub use workspaces::{WorkspaceRecord, get_workspace_record, upsert_workspace};
 
 pub mod client_contract;
+
+pub mod session_files;

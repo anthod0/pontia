@@ -132,6 +132,7 @@ impl ProjectionState {
             && session.state.is_terminal()
             && !(session.state == SessionState::Exited
                 && event.event_type == EventType::SessionResuming)
+            && event.event_type != EventType::SessionFileShared
             && event.event_type != EventType::SessionTitleUpdated
             && event.event_type != EventType::SessionContextUsageUpdated
             && event.event_type != EventType::SessionModelUpdated
@@ -175,7 +176,8 @@ impl ProjectionState {
                     .map(|session| session.state)
                     .unwrap_or(SessionState::Created),
             ),
-            EventType::SessionCompactionStarted
+            EventType::SessionFileShared
+            | EventType::SessionCompactionStarted
             | EventType::SessionCompactionCompleted
             | EventType::SessionCompactionFailed
             | EventType::RuntimeStarting

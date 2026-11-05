@@ -742,3 +742,36 @@ fn bhttp_rejects_post_completion_padding() {
         Err(Error::Protocol)
     ));
 }
+
+#[test]
+fn response_profile_preserves_download_size_and_security_headers() {
+    let mut headers = HeaderMap::new();
+    headers.insert("content-length", HeaderValue::from_static("3"));
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        "content-disposition",
+        HeaderValue::from_static("attachment"),
+    );
+    let (mut encoder, mut wire) = Encoder::new(&Head::Response {
+        status: 200,
+        headers: pontia_e2e::bhttp::response_headers(&headers),
+    })
+    .unwrap();
+    wire.extend(encoder.content(b"abc").unwrap());
+    wire.extend(encoder.finish().unwrap());
+    let mut decoder = Decoder::new(Kind::Response);
+    let mut remaining = wire.as_slice();
+    let mut decoded_headers = None;
+    while !remaining.is_empty() {
+        let (used, event) = decoder.feed(remaining).unwrap();
+        remaining = &remaining[used..];
+        if let Some(Event::Head(Head::Response { headers, .. })) = event {
+            decoded_headers = Some(headers);
+        }
+    }
+    decoder.finish().unwrap();
+    assert_eq!(decoded_headers.unwrap(), headers);
+}

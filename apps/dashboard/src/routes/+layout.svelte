@@ -1,5 +1,8 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import { onMount, type Snippet } from 'svelte';
+  import { cleanupDownloads } from '$lib/downloads/save';
+
+  onMount(() => { void cleanupDownloads().catch(console.error); });
   import '../app.css';
   import { QueryClientProvider } from '@tanstack/svelte-query';
   import { Toaster } from '$lib/components/ui/sonner/index.js';
