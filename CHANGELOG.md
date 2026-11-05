@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.14] - 2026-11-05
+
+### Added
+
+- Added file attachments to Dashboard chats. Uploads are end-to-end encrypted over remote access, resume after interruptions, and support files up to 1 GiB.
+- Added `pontia send-file PATH` for agents to share a file with the user of the current session. Shared files appear in the session chat in Dashboard and can be previewed or downloaded, up to 1 GiB.
+- Exposed the current Pontia session ID to commands run by Codex, ACP, Claude Agent, and Pi sessions through `PONTIA_SESSION_ID`.
+- Added an animated mascot to the Dashboard new session page.
+
+### Fixed
+
+- Kept tmux session bindings working when Pontia runs in the C locale.
+- Omitted inline image data from Pi session history so pages with images load within the response size limit.
+
 ## [0.6.13] - 2026-11-03
 
 ### Changed
