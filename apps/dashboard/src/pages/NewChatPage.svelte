@@ -5,6 +5,7 @@
   import { navigate } from '$lib/navigation'
   import { toast } from 'svelte-sonner'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
+  import PontiaMascot from '../components/chat/PontiaMascot.svelte'
   import WorkspaceOnboarding from '../components/workspaces/WorkspaceOnboarding.svelte'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import { isTransientNetworkError } from '../api/client'
@@ -189,6 +190,7 @@
   <section class="flex min-h-[calc(100svh-3.25rem)] flex-col gap-6">
     <div class="mx-auto flex w-full max-w-[720px] flex-1 items-center justify-center py-12 text-center">
       <div>
+        <PontiaMascot class="mx-auto mb-4 size-20" />
         <h1 class="mb-2 text-[28px] font-semibold tracking-tight text-heading">Start a session</h1>
         <p class="text-sm text-foreground">Choose a workspace and agent client, then describe the job.</p>
       </div>
