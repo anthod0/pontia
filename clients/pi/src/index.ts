@@ -150,6 +150,7 @@ export function createPontiaPiExtension(
   dependencies: PontiaPiExtensionDependencies = {},
 ): void {
   const sourceEnv = dependencies.env ?? process.env;
+  delete sourceEnv.PONTIA_SESSION_ID;
   if (!pontiaHomeFromEnv(sourceEnv) || !hasTmuxPaneEnvironment(sourceEnv)) return;
   // Environment extensions may load PONTIA_HOME after extension registration.
   const currentPontiaHome = () => pontiaHomeFromEnv(sourceEnv)!;
@@ -573,6 +574,7 @@ export function createPontiaPiExtension(
       reason !== "fork"
     )
       return;
+    delete sourceEnv.PONTIA_SESSION_ID;
     await closeControlSocket();
     const parentSessionId = boundSessionContext?.sessionId;
     boundSessionContext = undefined;
@@ -694,6 +696,7 @@ export function createPontiaPiExtension(
       }
 
       boundSessionContext = context;
+      sourceEnv.PONTIA_SESSION_ID = context.sessionId;
       piContext = ctx;
       controlSocket!.registered(context);
       readyReported = reportAccepted(
@@ -714,6 +717,7 @@ export function createPontiaPiExtension(
   });
 
   pi.on("session_shutdown", async (event) => {
+    delete sourceEnv.PONTIA_SESSION_ID;
     piContext = undefined;
     readyReported = false;
     try {
@@ -794,6 +798,7 @@ export function createPontiaPiExtension(
           currentEnv(),
           sessionDetails,
         );
+        if (boundSessionContext) sourceEnv.PONTIA_SESSION_ID = boundSessionContext.sessionId;
         if (boundSessionContext && !readyReported) {
           piContext = ctx;
           controlSocket!.registered(boundSessionContext);
