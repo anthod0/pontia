@@ -595,6 +595,43 @@ test("top bar trigger closes and reopens the sidebar", async () => {
   expect(onOpenChange.mock.calls).toEqual([[false], [true]]);
 });
 
+test("top bar session title opens the rename dialog", async () => {
+  mocks.sessions.set([
+    {
+      session_id: "session-active",
+      client_type: "pi",
+      title: "Original title",
+      handle: "main",
+      role: "coder",
+      description: null,
+      execution_profile_id: null,
+      execution_profile_version: null,
+      state: "idle",
+      current_turn_id: null,
+      workspace_id: "workspace-1",
+      workspace: null,
+      capabilities: {},
+      created_at: "2026-05-14T00:00:00Z",
+      updated_at: "2026-05-14T01:00:00Z",
+      metadata: {},
+    },
+  ]);
+  window.history.pushState({}, "", "/dashboard/chat/session-active");
+  render(TopBarHost);
+
+  await fireEvent.click(
+    within(screen.getByRole("banner")).getByRole("button", { name: "Original title" }),
+  );
+
+  const dialog = screen.getByRole("dialog", { name: "Rename session" });
+  const titleInput = within(dialog).getByLabelText("Session title");
+  expect(titleInput).toHaveValue("Original title");
+  await fireEvent.input(titleInput, { target: { value: "Renamed session" } });
+  await fireEvent.click(within(dialog).getByRole("button", { name: "Rename session" }));
+
+  expect(mocks.updateSessionTitle).toHaveBeenCalledWith("session-active", "Renamed session");
+});
+
 test("sidebar header trigger collapses and expands the sidebar", async () => {
   render(AppSidebarHost);
 
