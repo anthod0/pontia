@@ -1,25 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { navigate } from '$lib/navigation'
+  import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { createSessionOverviewQuery, snapshotSessionOverview } from '../../queries/sessionOverview'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
-  import * as Kbd from '$lib/components/ui/kbd/index.js'
+  import ShortcutKeys from '$lib/components/shortcuts/ShortcutKeys.svelte'
   import { adjacentActiveSessionId, isChatRoute, sessionIdAtShortcutIndex, sessionIdFromChatPath } from '$lib/shortcuts/sessionNavigation'
-
-  type Shortcut = {
-    keys: string[]
-    label: string
-    description: string
-  }
-
-  const shortcuts: Shortcut[] = [
-    { keys: ['Alt', 'J'], label: 'Next active chat', description: 'Switch to the next active session chat.' },
-    { keys: ['Alt', 'K'], label: 'Previous active chat', description: 'Switch to the previous active session chat.' },
-    { keys: ['Alt', '1-9'], label: 'Open active chat by position', description: 'Open one of the first nine active session chats in sidebar order.' },
-    { keys: ['Alt', 'N'], label: 'New chat', description: 'Open the new chat screen.' },
-    { keys: ['Alt', 'L'], label: 'Focus chat input', description: 'Move focus to the new chat prompt or current session composer.' },
-    { keys: ['Alt', '?'], label: 'Keyboard shortcuts', description: 'Show this shortcut reference.' },
-  ]
+  import { helpShortcuts, matchChatShortcut } from '$lib/shortcuts/definitions'
 
   let shortcutsOpen = $state(false)
   const overviewQuery = createSessionOverviewQuery()
@@ -31,13 +18,6 @@
     return () => document.removeEventListener('pontia:open-chat-shortcuts', openShortcuts)
   })
 
-  function shouldIgnoreShortcut(event: KeyboardEvent): boolean {
-    if (event.isComposing) return true
-    const target = event.target instanceof Element ? event.target : document.activeElement
-    if (!target) return false
-    return Boolean(target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]'))
-  }
-
   function openChat(path: string, options?: Record<string, string>): void {
     if (options) navigate(path, options)
     else navigate(path)
@@ -45,7 +25,7 @@
   }
 
   function openNewChatFromCurrentRoute(): void {
-    const currentSessionId = sessionIdFromChatPath(window.location.pathname)
+    const currentSessionId = sessionIdFromChatPath(dashboardRelativePath())
     const currentSession = currentSessionId
       ? [overview.pinned, overview.active, overview.list]
           .flat()
@@ -62,69 +42,50 @@
   }
 
   function handleKeydown(event: KeyboardEvent): void {
-    if (!event.altKey || event.ctrlKey || event.metaKey || !isChatRoute(window.location.pathname)) return
+    if (!isChatRoute(dashboardRelativePath())) return
+    const shortcut = matchChatShortcut(event)
+    if (!shortcut) return
 
-    const key = event.key.toLowerCase()
-    if (key === '?' || (event.code === 'Slash' && event.shiftKey)) {
+    if (shortcut.action === 'showHelp') {
       event.preventDefault()
       shortcutsOpen = true
       return
     }
-
-    if (key === 'l') {
+    if (shortcut.action === 'focusInput') {
       event.preventDefault()
       focusChatInput()
       return
     }
-
-    if (shouldIgnoreShortcut(event)) return
-
-    if (key === 'n') {
+    if (shortcut.action === 'newChat') {
       event.preventDefault()
       openNewChatFromCurrentRoute()
       return
     }
 
-    let sessionId: string | null = null
-    if (key === 'j') {
-      sessionId = adjacentActiveSessionId(overview.active, sessionIdFromChatPath(window.location.pathname), 1)
-    } else if (key === 'k') {
-      sessionId = adjacentActiveSessionId(overview.active, sessionIdFromChatPath(window.location.pathname), -1)
-    } else if (/^[1-9]$/.test(key)) {
-      sessionId = sessionIdAtShortcutIndex(overview.active, key)
-    }
-
-    if (!sessionId) return
+    const currentSessionId = sessionIdFromChatPath(dashboardRelativePath())
+    const sessionId = shortcut.action === 'openChatByPosition'
+      ? sessionIdAtShortcutIndex(overview.active, shortcut.position)
+      : adjacentActiveSessionId(overview.active, currentSessionId, shortcut.action === 'nextChat' ? 1 : -1)
+    // Consume the key even when there is nowhere to go, so Option+letter does not type a symbol.
     event.preventDefault()
-    openChat(`/chat/${sessionId}`)
+    if (sessionId) openChat(`/chat/${sessionId}`)
   }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-{#snippet shortcutKeys(keys: string[])}
-  <Kbd.Group class="shrink-0 text-muted-foreground">
-    {#each keys as key}
-      <Kbd.Root>{key}</Kbd.Root>
-    {/each}
-  </Kbd.Group>
-{/snippet}
-
 <Dialog.Root bind:open={shortcutsOpen}>
   <Dialog.Content class="sm:max-w-lg">
     <Dialog.Header>
       <Dialog.Title>Keyboard shortcuts</Dialog.Title>
-      <Dialog.Description>Chat shortcuts are available on New Chat and session chat pages.</Dialog.Description>
+      <Dialog.Description>Chat shortcuts work on New Chat and session chat pages. The sidebar shortcut works on every page.</Dialog.Description>
     </Dialog.Header>
 
-    <div class="space-y-3 py-2">
-      {#each shortcuts as shortcut}
-        <div class="flex items-start justify-between gap-4 rounded-lg border bg-card/50 p-3">
-          <div class="min-w-0 space-y-1">
-            <div class="text-sm font-medium">{shortcut.label}</div>
-            <div class="text-xs text-muted-foreground">{shortcut.description}</div>
-          </div>
-          {@render shortcutKeys(shortcut.keys)}
+    <div class="space-y-1">
+      {#each helpShortcuts as shortcut}
+        <div class="flex items-center justify-between gap-4 py-1.5">
+          <div class="min-w-0 text-sm">{shortcut.label}</div>
+          <ShortcutKeys keys={shortcut.keys} class="shrink-0 border border-border bg-transparent" />
         </div>
       {/each}
     </div>

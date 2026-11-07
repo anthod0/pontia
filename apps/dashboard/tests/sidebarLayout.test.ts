@@ -675,18 +675,18 @@ test("chat shortcuts switch among active sessions on chat routes", async () => {
 
   render(AppShellHost);
 
-  await fireEvent.keyDown(window, { key: "j", altKey: true });
+  await fireEvent.keyDown(window, { key: "j", code: "KeyJ", altKey: true });
   expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-busy");
 
   window.history.pushState({}, "", "/dashboard/chat/session-busy");
-  await fireEvent.keyDown(window, { key: "k", altKey: true });
+  await fireEvent.keyDown(window, { key: "k", code: "KeyK", altKey: true });
   expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-older");
 });
 
 test("chat help shortcut opens a kbd shortcut reference dialog", async () => {
   render(AppShellHost);
 
-  await fireEvent.keyDown(window, { key: "?", altKey: true, shiftKey: true });
+  await fireEvent.keyDown(window, { key: "?", code: "Slash", altKey: true, shiftKey: true });
 
   const dialog = screen.getByRole("dialog", { name: /keyboard shortcuts/i });
   expect(within(dialog).getByText(/next active chat/i)).toBeInTheDocument();
@@ -712,31 +712,31 @@ test("chat numeric shortcuts open active sessions by sidebar order and skip inac
 
   render(AppShellHost);
 
-  await fireEvent.keyDown(window, { key: "1", altKey: true });
+  await fireEvent.keyDown(window, { key: "1", code: "Digit1", altKey: true });
   expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-pinned");
 
-  await fireEvent.keyDown(window, { key: "2", altKey: true });
+  await fireEvent.keyDown(window, { key: "2", code: "Digit2", altKey: true });
   expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-recent");
 
-  await fireEvent.keyDown(window, { key: "3", altKey: true });
+  await fireEvent.keyDown(window, { key: "3", code: "Digit3", altKey: true });
   expect(mocks.navigate).not.toHaveBeenLastCalledWith("/chat/session-error");
 });
 
-test("chat shortcuts are scoped to chat routes and do not interrupt typing", async () => {
+test("chat shortcuts are scoped to chat routes and work while typing", async () => {
   mocks.sessions.set([chatSession("session-recent", "idle", "2026-05-14T04:00:00Z")]);
 
   render(AppShellHost);
 
   window.history.pushState({}, "", "/dashboard/settings/common");
-  await fireEvent.keyDown(window, { key: "1", altKey: true });
+  await fireEvent.keyDown(window, { key: "1", code: "Digit1", altKey: true });
   expect(mocks.navigate).not.toHaveBeenCalled();
 
   window.history.pushState({}, "", "/dashboard");
   const input = document.createElement("textarea");
   document.body.appendChild(input);
   input.focus();
-  await fireEvent.keyDown(window, { key: "1", altKey: true });
-  expect(mocks.navigate).not.toHaveBeenCalled();
+  await fireEvent.keyDown(input, { key: "1", code: "Digit1", altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-recent");
   input.remove();
 });
 
@@ -746,10 +746,10 @@ test("chat new and focus shortcuts work on chat routes", async () => {
   input.setAttribute("data-chat-shortcut-focus-target", "true");
   document.body.appendChild(input);
 
-  await fireEvent.keyDown(window, { key: "n", altKey: true });
+  await fireEvent.keyDown(window, { key: "n", code: "KeyN", altKey: true });
   expect(mocks.navigate).toHaveBeenLastCalledWith("/");
 
-  await fireEvent.keyDown(window, { key: "l", altKey: true });
+  await fireEvent.keyDown(window, { key: "l", code: "KeyL", altKey: true });
   expect(document.activeElement).toBe(input);
   input.remove();
 });
@@ -765,7 +765,7 @@ test("chat new shortcut on a session route preserves the current session workspa
 
   render(AppShellHost);
 
-  await fireEvent.keyDown(window, { key: "n", altKey: true });
+  await fireEvent.keyDown(window, { key: "n", code: "KeyN", altKey: true });
 
   expect(mocks.navigate).toHaveBeenLastCalledWith("/", { workspace: "workspace-current" });
 });

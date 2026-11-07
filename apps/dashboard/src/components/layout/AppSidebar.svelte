@@ -16,7 +16,9 @@
   import { navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
-  import * as Kbd from '$lib/components/ui/kbd/index.js'
+  import ShortcutKeys from '$lib/components/shortcuts/ShortcutKeys.svelte'
+  import { chatShortcuts } from '$lib/shortcuts/definitions'
+  import { formatShortcutKeys } from '$lib/shortcuts/format'
   import { cn } from '$lib/utils.js'
   import { archiveSession, pinSession, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
   import { createSessionOverviewQuery, snapshotSessionOverview } from '../../queries/sessionOverview'
@@ -194,13 +196,6 @@
 
 <svelte:window onpopstate={() => (currentPath = dashboardRelativePath())} />
 
-{#snippet shortcutHint(key: string)}
-  <Kbd.Group class="ml-auto shrink-0 text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden" aria-hidden="true">
-    <Kbd.Root class="px-1 py-0 text-[10px]">Alt</Kbd.Root>
-    <Kbd.Root class="px-1 py-0 text-[10px]">{key}</Kbd.Root>
-  </Kbd.Group>
-{/snippet}
-
 {#snippet sessionMenuItem(session: SessionView, actionKey: string)}
   <Sidebar.MenuItem>
     <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
@@ -284,7 +279,7 @@
                 <item.icon />
                 <span class="group-data-[collapsible=icon]:hidden">{item.label}</span>
                 {#if item.path === '/'}
-                  {@render shortcutHint('N')}
+                  <ShortcutKeys keys={chatShortcuts.newChat.keys} class="ml-auto shrink-0 border border-primary-foreground/40 bg-transparent px-1 py-0 text-[10px] text-primary-foreground/80 group-data-[collapsible=icon]:hidden" aria-hidden="true" />
                 {/if}
               </Sidebar.MenuButton>
             </Sidebar.MenuItem>
@@ -416,9 +411,9 @@
           <span>Settings</span>
         </Sidebar.MenuButton>
         <Sidebar.MenuAction
-          class="top-2 hidden md:flex"
+          class="peer-data-[size=default]/menu-button:top-2 hidden md:flex"
           aria-label="Keyboard shortcuts"
-          title="Keyboard shortcuts (Alt+?)"
+          title={`Keyboard shortcuts (${formatShortcutKeys(chatShortcuts.showHelp.keys)})`}
           onclick={() => document.dispatchEvent(new CustomEvent('pontia:open-chat-shortcuts'))}
         >
           <QuestionIcon />

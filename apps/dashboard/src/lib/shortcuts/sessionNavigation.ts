@@ -28,13 +28,11 @@ export function adjacentActiveSessionId(
   return activeSessions[nextIndex]?.session_id ?? null;
 }
 
-export function sessionIdFromChatPath(pathname: string): string | null {
-  const normalized = pathname.replace(/^\/dashboard/, "");
-  const match = normalized.match(/^\/chat\/([^/?#]+)/);
+export function sessionIdFromChatPath(relativePath: string): string | null {
+  const match = relativePath.match(/^\/chat\/([^/?#]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-export function isChatRoute(pathname: string): boolean {
-  const normalized = pathname.replace(/^\/dashboard/, "");
-  return normalized === "/" || normalized === "" || normalized.startsWith("/chat/");
+export function isChatRoute(relativePath: string): boolean {
+  return relativePath === "/" || relativePath.startsWith("/chat/");
 }
