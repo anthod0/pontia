@@ -69,7 +69,7 @@
       <h1 class="mx-1 min-w-0 max-w-80">
         <button
           type="button"
-          class="group flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-0.5 text-left text-base font-normal text-heading focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          class="group flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-0.5 text-left text-sm font-normal text-heading focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           title={`Rename ${title}`}
           onclick={openRenameDialog}
         >
