@@ -181,6 +181,68 @@ async function installBound(overrides: Parameters<typeof install>[0] = {}) {
 }
 
 describe("pontia pi extension lifecycle", () => {
+  test("custom runs do not inherit a pending user prompt", async () => {
+    const { handlers, reported } = await installBound();
+    await handlers.before_agent_start({ messageType: "user", prompt: "previous prompt" }, {});
+    await handlers.before_agent_start(
+      {
+        messageType: "custom",
+        message: {
+          role: "custom",
+          customType: "notification",
+          content: "background notification",
+          display: false,
+          timestamp: 0,
+        },
+      },
+      {},
+    );
+    await handlers.agent_start({}, {});
+
+    const started = reported.find((event) => event.type === "turn.started")!;
+    expect(started).toBeDefined();
+    expect(started.data.input_summary).toBeUndefined();
+    expect(started.data).not.toHaveProperty("inbox_message_id");
+  });
+
+  test("Dashboard input is rejected while the initial user run is preparing", async () => {
+    let submit!: (input: { input: string; inboxMessageId?: string }) => void;
+    const workspace = await realpath(defaultPontiaHome);
+    const { handlers, reported, sendUserMessage } = install({
+      env: { PONTIA_SESSION_ID: "sess_1", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1" },
+      request: async (method) => {
+        if (method === "workspaces.list")
+          return { workspaces: [{ canonical_path: workspace, state: "active" }] };
+        if (method === "session.get") return { session: {} };
+        throw new Error(`Unexpected RPC: ${method}`);
+      },
+      connectPi: async (_home, _error, onSubmit) => {
+        submit = onSubmit;
+        return { request: async () => null, registered() {}, close: async () => {} };
+      },
+    });
+    const ctx = {
+      isIdle: () => false,
+      sessionManager: { getSessionId: () => "native_1", getCwd: () => workspace },
+    };
+    await handlers.session_start({ reason: "startup" }, ctx);
+    // Pi 1.2+ is already busy before before_agent_start has finished.
+    const preparing = handlers.before_agent_start(
+      { messageType: "user", prompt: "typed in tui" },
+      ctx,
+    );
+    expect(() => submit({ input: "from dashboard", inboxMessageId: "msg_busy" })).toThrow(
+      expect.objectContaining({ code: -32010 }),
+    );
+    expect(sendUserMessage).not.toHaveBeenCalled();
+    await preparing;
+    await handlers.agent_start({}, ctx);
+
+    const started = reported.find((event) => event.type === "turn.started")!;
+    expect(started.data).toMatchObject({ input_summary: "typed in tui" });
+    expect(started.data).not.toHaveProperty("inbox_message_id");
+  });
+
   test("socket input retains its Inbox identity across async hooks and never labels manual input", async () => {
     let submit: ((input: { input: string; inboxMessageId?: string }) => void) | undefined;
     let idle = true;
@@ -212,13 +274,16 @@ describe("pontia pi extension lifecycle", () => {
     sendUserMessage.mockImplementation((input: string) => {
       started = (async () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
-        await handlers.before_agent_start({ prompt: input }, ctx);
+        await handlers.before_agent_start({ messageType: "user", prompt: input }, ctx);
         await handlers.agent_start({}, ctx);
       })();
       if (input === "from dashboard") {
         retry = (async () => {
           await retryGate;
-          await handlers.before_agent_start({ prompt: "retry continuation" }, ctx);
+          await handlers.before_agent_start(
+            { messageType: "user", prompt: "retry continuation" },
+            ctx,
+          );
           await handlers.agent_start({}, ctx);
         })();
       }
@@ -253,7 +318,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(second.data).toMatchObject({ inbox_message_id: "msg_next" });
     await handlers.agent_end({ messages: [] }, ctx);
 
-    await handlers.before_agent_start({ prompt: "typed manually" }, ctx);
+    await handlers.before_agent_start({ messageType: "user", prompt: "typed manually" }, ctx);
     await handlers.agent_start({}, ctx);
     const manual = reported.filter((event) => event.type === "turn.started")[3];
     expect(manual.data).toMatchObject({ input_summary: "typed manually" });
@@ -321,7 +386,7 @@ describe("pontia pi extension lifecycle", () => {
         calls.push("send");
         started = (async () => {
           await Promise.resolve();
-          await handlers.before_agent_start({ prompt: input }, ctx);
+          await handlers.before_agent_start({ messageType: "user", prompt: input }, ctx);
           await handlers.agent_start({}, ctx);
         })();
       },
@@ -829,7 +894,10 @@ describe("pontia pi extension lifecycle", () => {
     expect(requestImpl).not.toHaveBeenCalledWith("runtime.register", expect.anything());
     expect(reported).toEqual([]);
 
-    await handlers.before_agent_start({ prompt: "first message", systemPrompt: "Base prompt" }, {});
+    await handlers.before_agent_start(
+      { messageType: "user", prompt: "first message", systemPrompt: "Base prompt" },
+      {},
+    );
     await handlers.agent_start(
       {},
       {
@@ -870,7 +938,10 @@ describe("pontia pi extension lifecycle", () => {
         sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => workspace },
       },
     );
-    await handlers.before_agent_start({ prompt: "typed in tui", systemPrompt: "Base prompt" }, {});
+    await handlers.before_agent_start(
+      { messageType: "user", prompt: "typed in tui", systemPrompt: "Base prompt" },
+      {},
+    );
     await handlers.agent_start({}, {});
 
     expect(requestImpl).toHaveBeenCalledTimes(1);
@@ -977,7 +1048,10 @@ describe("pontia pi extension lifecycle", () => {
     env.PONTIA_HOME = stableHome;
     const sessionManager = { getSessionId: () => "pi_session_late_env", getCwd: () => workspace };
     await handlers.session_start({ reason: "startup" }, { sessionManager });
-    await handlers.before_agent_start({ prompt: "first message", systemPrompt: "Base prompt" }, {});
+    await handlers.before_agent_start(
+      { messageType: "user", prompt: "first message", systemPrompt: "Base prompt" },
+      {},
+    );
     await handlers.agent_start({}, { sessionManager });
 
     expect(requestImpl).toHaveBeenCalledTimes(4);
@@ -1030,7 +1104,10 @@ describe("pontia pi extension lifecycle", () => {
         sessionManager: { getSessionId: () => "pi_session_manual", getCwd: () => workspace },
       },
     );
-    await handlers.before_agent_start({ prompt: "typed in tui", systemPrompt: "Base prompt" }, {});
+    await handlers.before_agent_start(
+      { messageType: "user", prompt: "typed in tui", systemPrompt: "Base prompt" },
+      {},
+    );
     await handlers.agent_start({}, {});
 
     expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
@@ -1081,7 +1158,10 @@ describe("pontia pi extension lifecycle", () => {
         sessionManager: { getSessionId: () => "pi_child", getCwd: () => workspace },
       },
     );
-    await handlers.before_agent_start({ prompt: "fork prompt", systemPrompt: "Base prompt" }, {});
+    await handlers.before_agent_start(
+      { messageType: "user", prompt: "fork prompt", systemPrompt: "Base prompt" },
+      {},
+    );
     await handlers.agent_start({}, {});
 
     expect(reported.map((event) => event.type)).toEqual([
@@ -1424,6 +1504,8 @@ describe("pontia pi extension lifecycle", () => {
     });
 
     const event = {
+      messageType: "user",
+      prompt: "review",
       systemPrompt: "Base prompt",
       systemPromptOptions: { sections: {} as Record<string, string> },
     };
@@ -1434,9 +1516,13 @@ describe("pontia pi extension lifecycle", () => {
     expect(requestImpl).not.toHaveBeenCalled();
   });
 
-  test.each(["Reviewer instructions", null, "error"])(
-    "uses the bound session profile prompt %s",
-    async (prompt) => {
+  test.each(
+    (["user", "custom"] as const).flatMap((messageType) =>
+      ["Reviewer instructions", null, "error"].map((prompt) => ({ messageType, prompt })),
+    ),
+  )(
+    "uses the bound session profile prompt $prompt for $messageType runs",
+    async ({ messageType, prompt }) => {
       const workspace = await realpath(await tempDir());
       const request = vi.fn(async (method: string, params: object) => {
         if (method === "workspaces.list")
@@ -1461,6 +1547,18 @@ describe("pontia pi extension lifecycle", () => {
         },
       );
       const event = {
+        ...(messageType === "user"
+          ? { messageType, prompt: "review" }
+          : {
+              messageType,
+              message: {
+                role: "custom",
+                customType: "review",
+                content: "review",
+                display: false,
+                timestamp: 0,
+              },
+            }),
         systemPrompt: "Base prompt",
         systemPromptOptions: { sections: {} as Record<string, string> },
       };
@@ -1860,14 +1958,14 @@ describe("pontia pi extension lifecycle", () => {
     const { handlers, reported } = await installBound();
 
     await handlers.before_agent_start(
-      { prompt: "first from dashboard", systemPrompt: "Base prompt" },
+      { messageType: "user", prompt: "first from dashboard", systemPrompt: "Base prompt" },
       {},
     );
     await handlers.agent_start({}, {});
     await handlers.agent_end({ messages: [{ role: "assistant", content: "first answer" }] }, {});
 
     await handlers.before_agent_start(
-      { prompt: "second from tui", systemPrompt: "Base prompt" },
+      { messageType: "user", prompt: "second from tui", systemPrompt: "Base prompt" },
       {},
     );
     await handlers.agent_start({}, {});

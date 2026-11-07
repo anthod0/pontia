@@ -525,7 +525,7 @@ export function createPontiaPiExtension(
   }
 
   pi.on("before_agent_start", async (event) => {
-    pendingPrompt = event.prompt;
+    pendingPrompt = event.messageType === "user" ? event.prompt : undefined;
     if (reportingDisabled || !(await confirmManagedPane())) return;
     try {
       const profilePrompt = await loadProfileSystemPrompt(
