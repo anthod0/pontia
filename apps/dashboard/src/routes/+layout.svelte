@@ -12,6 +12,6 @@
 </script>
 
 <QueryClientProvider client={queryClient}>
-  <Toaster richColors />
+  <Toaster richColors position="top-center" />
   {@render children()}
 </QueryClientProvider>

@@ -143,3 +143,15 @@ test("synchronizes external plain text without fabricating file identities", asy
   expect(editor.querySelector("br")).toBeInTheDocument();
   expect(editor.querySelector('[data-type="mention"]')).not.toBeInTheDocument();
 });
+
+test("updates the editor class when the class prop changes", async () => {
+  const { rerender } = render(FileMentionEditor, {
+    props: { value: "", workspaceId: "workspace-1", class: "pl-1" },
+  });
+  expect(screen.getByRole("textbox")).toHaveClass("pl-1");
+
+  await rerender({ class: "pl-6" });
+
+  await waitFor(() => expect(screen.getByRole("textbox")).toHaveClass("pl-6"));
+  expect(screen.getByRole("textbox")).not.toHaveClass("pl-1");
+});

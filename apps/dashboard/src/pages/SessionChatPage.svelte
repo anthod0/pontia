@@ -1039,9 +1039,9 @@
             <div class="mx-auto flex w-full max-w-[760px] justify-end">
               <Button
                 type="button"
-                variant="secondary"
+                variant="outline"
                 size="icon"
-                class="pointer-events-auto shadow-none"
+                class="pointer-events-auto bg-white shadow-none"
                 aria-label="Scroll to bottom"
                 title="Scroll to bottom"
                 onclick={scrollChatToBottom}

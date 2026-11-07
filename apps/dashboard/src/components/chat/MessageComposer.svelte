@@ -17,6 +17,7 @@
   import ChatCommandInput from './ChatCommandInput.svelte'
   import { findChatCommand, type ChatCommand } from '$lib/chatCommands'
   import { Button } from '$lib/components/ui/button/index.js'
+  import { cn } from '$lib/utils.js'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
   import type { FilePickerFileView } from '../../api/types'
@@ -82,6 +83,10 @@
   const uploadBlocked = $derived(Boolean(draftId) && (!attachments.ready || attachments.items.some(item => item.status !== 'complete')))
   const completedFiles = $derived(attachments.items.flatMap(item => item.status === 'complete' && item.upload?.path ? [{ name: item.name, path: item.upload.path }] : []))
   let fullscreenOpen = $state(false)
+  let inlineInput = $state<HTMLDivElement | null>(null)
+  // Sticky until the draft is cleared, so a line that only wraps in the narrow compact row cannot flip layouts back and forth.
+  let multiline = $state(false)
+  const compact = $derived(fullscreen && !multiline)
   let uploadPicker = $state<{ choose: () => void } | null>(null)
   let fullscreenUploadPicker = $state<{ choose: () => void } | null>(null)
   const commandActions: Record<ChatCommand['name'], { label: string; icon: typeof NotePencilIcon }> = {
@@ -99,6 +104,24 @@
   const commandAction = $derived(command ? commandActions[command.name] : undefined)
   const commandArgument = $derived(command ? value.trim().slice(command.name.length).trim() : '')
   const cannotSubmit = $derived(disabled || busy || sending || (command ? Boolean(command.disabledReason) || (command.name === '/rename' && !commandArgument) : submitDisabled || uploadBlocked || (!value.trim() && completedFiles.length === 0)))
+
+  $effect(() => {
+    if (!value) multiline = false
+  })
+
+  $effect(() => {
+    const wrapper = inlineInput
+    if (!fullscreen || !wrapper) return
+    const observer = new ResizeObserver(() => {
+      const textbox = wrapper.querySelector<HTMLElement>('[role="textbox"]')
+      if (multiline || !textbox) return
+      const style = getComputedStyle(textbox)
+      const contentHeight = textbox.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+      if (contentHeight > parseFloat(style.lineHeight) * 1.5) multiline = true
+    })
+    observer.observe(wrapper)
+    return () => observer.disconnect()
+  })
 
   async function openFullscreen(): Promise<void> {
     fullscreenOpen = true
@@ -229,16 +252,16 @@
 {/snippet}
 
 {#if header || menuItems || availableCommands.length > 0}
-  <div class="mb-2 flex min-w-0 items-center justify-end gap-2">
+  <div class="mb-1 flex min-w-0 items-center justify-end gap-2">
     {@render header?.()}
     {@render actions()}
   </div>
 {/if}
 
-<PromptInput.Root class="w-full" onSubmit={submit}>
-  <PromptInput.Body>
-    <div class="relative">
-      <ChatCommandInput bind:this={editor} id={inputId} bind:value {commands} onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? 'min-h-[52px] px-4 py-3 pr-10 text-base sm:text-[13.5px]' : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
+<PromptInput.Root class={compact ? 'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center' : 'w-full'} onSubmit={submit}>
+  <PromptInput.Body class={compact ? 'col-start-2 row-start-1' : undefined}>
+    <div bind:this={inlineInput} class="relative">
+      <ChatCommandInput bind:this={editor} id={inputId} bind:value {commands} onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 pr-10 text-base sm:text-[13.5px] ${compact ? 'pl-0 sm:pr-0' : 'pl-3 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
       {#if fullscreen}
         <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label="Expand message composer" onclick={() => void openFullscreen()}>
           <ArrowsOutIcon class="size-4" />
@@ -246,18 +269,24 @@
       {/if}
     </div>
   </PromptInput.Body>
-  {#if uploads}<UploadAttachments bind:this={uploadPicker} draft={uploads} disabled={disabled || busy || sending} />{/if}
-  {#if submissionError}<p role="alert" class="px-4 text-xs text-destructive">{submissionError}</p>{/if}
-  {#if command?.disabledReason}<p role="status" class="px-4 pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
-  <PromptInput.Toolbar class={uploads ? 'pt-0' : 'justify-end pt-0'}>
-    {@render uploadButton(uploadPicker)}
-    {#if interruptMode && attachments.items.length === 0}
-      <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt()}>
-        <StopIcon class="size-4" />
-      </Button>
-    {:else}
-      <PromptInput.Submit disabled={cannotSubmit} {busy} label={sentAwaitingCleanup ? 'Dismiss sent attachments' : commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} />
-    {/if}
+  <div class={compact ? 'col-span-3' : 'contents'}>
+    {#if uploads}<UploadAttachments bind:this={uploadPicker} draft={uploads} disabled={disabled || busy || sending} />{/if}
+    {#if submissionError}<p role="alert" class="px-4 text-xs text-destructive">{submissionError}</p>{/if}
+    {#if command?.disabledReason}<p role="status" class="px-4 pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
+  </div>
+  <PromptInput.Toolbar class={compact ? 'contents' : cn(fullscreen && 'px-1 pb-1', uploads ? 'pt-0' : 'justify-end pt-0')}>
+    <div class={compact ? 'col-start-1 row-start-1 py-1 pl-1' : 'contents'}>
+      {@render uploadButton(uploadPicker)}
+    </div>
+    <div class={compact ? 'col-start-3 row-start-1 p-1' : 'contents'}>
+      {#if interruptMode && attachments.items.length === 0}
+        <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt()}>
+          <StopIcon class="size-4" />
+        </Button>
+      {:else}
+        <PromptInput.Submit disabled={cannotSubmit} {busy} label={sentAwaitingCleanup ? 'Dismiss sent attachments' : commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} class={fullscreen ? 'h-7 gap-1.5 px-3 text-xs font-semibold' : undefined} />
+      {/if}
+    </div>
   </PromptInput.Toolbar>
 </PromptInput.Root>
 

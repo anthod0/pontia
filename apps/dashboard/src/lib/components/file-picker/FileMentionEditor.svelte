@@ -160,6 +160,13 @@
     return false
   }
 
+  function editorClass(): string {
+    return cn(
+      'tiptap-prompt block max-h-48 min-h-10 w-full overflow-y-auto border-0 bg-transparent px-2 py-2 text-sm outline-none focus-visible:ring-0',
+      className,
+    )
+  }
+
   onMount(() => {
     if (!editorElement) return
 
@@ -212,10 +219,7 @@
           'aria-placeholder': placeholder,
           placeholder,
           ...(shortcutFocusTarget ? { 'data-chat-shortcut-focus-target': 'true' } : {}),
-          class: cn(
-            'tiptap-prompt block max-h-48 min-h-10 w-full overflow-y-auto border-0 bg-transparent px-2 py-2 text-sm outline-none focus-visible:ring-0',
-            className,
-          ),
+          class: editorClass(),
         },
         handleKeyDown: handleEditorKeyDown,
         handleDOMEvents: {
@@ -242,6 +246,15 @@
       editor.destroy()
       editorState.editor = null
     }
+  })
+
+  $effect(() => {
+    const editor = editorState.editor
+    if (!editor) return
+    const nextClass = editorClass()
+    const { editorProps } = editor.options
+    if (editorProps.attributes && typeof editorProps.attributes === 'object' && editorProps.attributes.class === nextClass) return
+    editor.setOptions({ editorProps: { ...editorProps, attributes: { ...editorProps.attributes, class: nextClass } } })
   })
 
   $effect(() => {
