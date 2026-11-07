@@ -1,5 +1,4 @@
 <script lang="ts">
-  import PaperclipIcon from 'phosphor-svelte/lib/PaperclipIcon'
   import { Progress } from '$lib/components/ui/progress/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { type createUploadDraft, type UploadItem } from '$lib/uploads/draft'
@@ -7,7 +6,7 @@
   let { draft, disabled = false }: { draft: ReturnType<typeof createUploadDraft>; disabled?: boolean } = $props()
   let picker: HTMLInputElement
   let resumeItem: UploadItem | undefined
-  function choose(item?: UploadItem) { resumeItem = item; picker.multiple = !item; picker.click() }
+  export function choose(item?: UploadItem) { resumeItem = item; picker.multiple = !item; picker.click() }
   async function selected() {
     const files = Array.from(picker.files ?? [])
     picker.value = ''
@@ -18,11 +17,9 @@
 </script>
 
 <svelte:window ononline={() => draft.reconnect()} />
+<input bind:this={picker} type="file" class="hidden" aria-label="Select files to upload" onchange={() => void selected()} />
+{#if $draft.warning || $draft.items.length > 0}
 <div class="px-3 pb-2">
-  <input bind:this={picker} type="file" class="hidden" aria-label="Select files to upload" onchange={() => void selected()} />
-  <Button type="button" variant="ghost" size="sm" disabled={disabled || !$draft.ready} onclick={() => choose()}>
-    <PaperclipIcon class="size-4" /> Upload files
-  </Button>
   {#if $draft.warning}<p role="alert" class="text-xs text-destructive">{$draft.warning}</p>{/if}
   <ul class="space-y-1">
     {#each $draft.items as item (item.id)}
@@ -42,3 +39,4 @@
     {/each}
   </ul>
 </div>
+{/if}

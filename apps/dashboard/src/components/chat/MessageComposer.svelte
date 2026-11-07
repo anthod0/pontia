@@ -7,7 +7,8 @@
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import CpuIcon from 'phosphor-svelte/lib/CpuIcon'
   import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon'
-  import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
+  import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
+  import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import UploadAttachments from './UploadAttachments.svelte'
@@ -36,6 +37,7 @@
     autofocus?: boolean
     commands?: ChatCommand[]
     header?: Snippet
+    menuItems?: Snippet
     draftId?: string
     onSubmit: (message: string) => void | Promise<boolean | void>
     onInterrupt?: () => void
@@ -58,6 +60,7 @@
     autofocus = false,
     commands = [],
     header,
+    menuItems,
     draftId,
     onSubmit,
     onInterrupt,
@@ -79,6 +82,8 @@
   const uploadBlocked = $derived(Boolean(draftId) && (!attachments.ready || attachments.items.some(item => item.status !== 'complete')))
   const completedFiles = $derived(attachments.items.flatMap(item => item.status === 'complete' && item.upload?.path ? [{ name: item.name, path: item.upload.path }] : []))
   let fullscreenOpen = $state(false)
+  let uploadPicker = $state<{ choose: () => void } | null>(null)
+  let fullscreenUploadPicker = $state<{ choose: () => void } | null>(null)
   const commandActions: Record<ChatCommand['name'], { label: string; icon: typeof NotePencilIcon }> = {
     '/new': { label: 'New chat', icon: NotePencilIcon },
     '/rename': { label: 'Rename', icon: PencilSimpleIcon },
@@ -183,18 +188,30 @@
   }
 </script>
 
+{#snippet uploadButton(picker: { choose: () => void } | null)}
+  {#if uploads}
+    <Button type="button" variant="ghost" size="icon-sm" aria-label="Upload files" title="Upload files" disabled={disabled || busy || sending || !attachments.ready} onclick={() => picker?.choose()}>
+      <PlusIcon class="size-4" />
+    </Button>
+  {/if}
+{/snippet}
+
 {#snippet actions()}
-  {#if availableCommands.length > 0}
+  {#if menuItems || availableCommands.length > 0}
     <div class="shrink-0">
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
             <Button {...props} type="button" variant="ghost" size="icon-sm" aria-label="Chat actions" title="Chat actions" disabled={disabled || busy}>
-              <DotsThreeIcon class="size-5" />
+              <DotsThreeVerticalIcon class="size-5" />
             </Button>
           {/snippet}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content side="top" align="end" class="w-64" preventScroll={false} onCloseAutoFocus={restoreCommandFocus}>
+          {#if menuItems}
+            {@render menuItems()}
+            {#if availableCommands.length > 0}<DropdownMenu.Separator />{/if}
+          {/if}
           {#each availableCommands as item (item.name)}
             {@const action = commandActions[item.name]}
             <DropdownMenu.Item variant={item.name === '/exit' ? 'destructive' : 'default'} onSelect={() => chooseMenuCommand(item)}>
@@ -211,7 +228,7 @@
   {/if}
 {/snippet}
 
-{#if header || availableCommands.length > 0}
+{#if header || menuItems || availableCommands.length > 0}
   <div class="mb-2 flex min-w-0 items-center justify-end gap-2">
     {@render header?.()}
     {@render actions()}
@@ -229,10 +246,11 @@
       {/if}
     </div>
   </PromptInput.Body>
-  {#if uploads}<UploadAttachments draft={uploads} disabled={disabled || busy || sending} />{/if}
+  {#if uploads}<UploadAttachments bind:this={uploadPicker} draft={uploads} disabled={disabled || busy || sending} />{/if}
   {#if submissionError}<p role="alert" class="px-4 text-xs text-destructive">{submissionError}</p>{/if}
   {#if command?.disabledReason}<p role="status" class="px-4 pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
-  <PromptInput.Toolbar class="justify-end pt-0">
+  <PromptInput.Toolbar class={uploads ? 'pt-0' : 'justify-end pt-0'}>
+    {@render uploadButton(uploadPicker)}
     {#if interruptMode && attachments.items.length === 0}
       <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt()}>
         <StopIcon class="size-4" />
@@ -264,8 +282,9 @@
           <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] pr-2" />
         </PromptInput.Body>
         {#if command?.disabledReason}<p role="status" class="pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
-        {#if uploads}<UploadAttachments draft={uploads} disabled={disabled || busy || sending} />{/if}
-        <PromptInput.Toolbar class="shrink-0 justify-end pt-0">
+        {#if uploads}<UploadAttachments bind:this={fullscreenUploadPicker} draft={uploads} disabled={disabled || busy || sending} />{/if}
+        <PromptInput.Toolbar class={uploads ? 'shrink-0 pt-0' : 'shrink-0 justify-end pt-0'}>
+          {@render uploadButton(fullscreenUploadPicker)}
           {#if interruptMode && attachments.items.length === 0}
             <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt(true)}>
               <StopIcon class="size-4" />

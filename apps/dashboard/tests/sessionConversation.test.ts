@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { expect, test, vi } from "vitest";
 import SessionConversation from "../src/lib/components/session-chat/SessionConversation.svelte";
 import type { TurnView } from "../src/api/types";
@@ -732,4 +732,29 @@ test("conversation renders assistant loading placeholder when session is startin
   ).not.toBeInTheDocument();
   expect(screen.queryByText("Working")).not.toBeInTheDocument();
   expect(screen.queryByText("No messages yet")).not.toBeInTheDocument();
+});
+
+test("conversation shows shared files on the Turn they are bound to", () => {
+  const file = (file_id: string, turn_id: string | null) => ({
+    file_id,
+    turn_id,
+    name: `${file_id}.txt`,
+    path: `/tmp/${file_id}.txt`,
+    size: 3,
+    media_type: "text/plain",
+    created_at: "2026-06-11T00:00:05Z",
+  });
+  render(SessionConversation, {
+    props: {
+      messages: messages.map((message) => ({ ...message, turnId: "turn-1" })),
+      sessionId: "session-1",
+      sharedFiles: [file("bound", "turn-1"), file("other", "turn-missing"), file("unbound", null)],
+    },
+  });
+  const turn = document.querySelector('[data-chat-turn-id="turn-1"]');
+  const list = screen.getByRole("list", { name: "Shared files in this turn" });
+  expect(turn).toContainElement(list);
+  expect(within(list).getByText("bound.txt")).toBeInTheDocument();
+  expect(screen.queryByText("other.txt")).not.toBeInTheDocument();
+  expect(screen.queryByText("unbound.txt")).not.toBeInTheDocument();
 });

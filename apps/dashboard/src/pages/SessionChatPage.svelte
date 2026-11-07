@@ -70,8 +70,8 @@
   import { subscribeDashboardEvents } from '../services/eventStream'
   import { openLiveOutputStream } from '../services/liveOutputStream'
   import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
+  import { createSessionFilesStore } from '../stores/sessionFiles'
   import SessionInteractions from '../components/chat/SessionInteractions.svelte'
-  import SessionFiles from '../components/chat/SessionFiles.svelte'
   import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
   import { isExecutingSessionState, isTerminalSession } from '$lib/sessionState'
@@ -151,6 +151,7 @@
   })
 
   $: selectedSession = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : null
+  $: sharedFiles = selectedSessionId ? createSessionFilesStore(selectedSessionId) : null
   $: controlDetails = selectedSession ? clientControlDetails(selectedSession) : null
   $: liveOutputKey = selectedSession ? `${selectedSession.session_id}:${selectedSession.capabilities.stream_output === true}` : ''
   let activeLiveOutputKey = ''
@@ -888,9 +889,6 @@
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
-  {#if selectedSession}
-    {#key selectedSessionId}<SessionFiles sessionId={selectedSessionId} />{/key}
-  {/if}
   {#if selectedSession && controlDetails && (selectedSession.capabilities.accept_task || controlDetails.unavailableReason)}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
       <span>Control: {controlDetails.connection.replaceAll('_', ' ')}</span>
@@ -1003,6 +1001,8 @@
               {#key selectedSessionId}
                 <SessionConversation
                   {messages}
+                  sessionId={selectedSessionId}
+                  sharedFiles={$sharedFiles?.files ?? []}
                   turns={selectedTurns}
                   sessionState={selectedSession.state}
                   activeTurnId={selectedSession.current_turn_id}
@@ -1051,7 +1051,8 @@
           </div>
         {/if}
 
-        <SessionComposerDock
+        {#if sharedFiles}<SessionComposerDock
+          sharedFiles={sharedFiles}
           bind:height={composerHeight}
           bind:input={$chatDraft}
           session={selectedSession}
@@ -1073,7 +1074,7 @@
           onExit={() => void exitSelectedSession()}
           onInterrupt={() => void interruptSelectedSession()}
           onFocus={() => void refreshCurrentSessionGitStatus()}
-        />
+        />{/if}
       {/if}
     </div>
   </div>

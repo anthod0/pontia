@@ -158,6 +158,11 @@ vi.mock("../../../src/api/client", async (importOriginal) => ({
   registerWorkspace: (input: unknown) => mocks.registerWorkspace(input),
 }));
 
+vi.mock("../../../src/api/sessionFiles", () => ({
+  listSessionFiles: vi.fn(async () => ({ files: [], next_cursor: null })),
+  sharedFileContent: vi.fn(),
+}));
+
 vi.mock("../../../src/stores/sessions", () => ({
   sessionDetail: mocks.sessionDetail,
   sessionDetailLoading: mocks.sessionDetailLoading,

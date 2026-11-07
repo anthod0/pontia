@@ -4,7 +4,8 @@
   import { Progress } from '$lib/components/ui/progress/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
-  import * as Collapsible from '$lib/components/ui/collapsible/index.js'
+  import FileIcon from 'phosphor-svelte/lib/FileIcon'
+  import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import { filePreview, PREVIEW_LIMIT, PREVIEW_TYPES } from '$lib/downloads/preview'
   import { saveDownload, type DownloadProgress } from '$lib/downloads/save'
   import { sharedFileContent } from '../../api/sessionFiles'
@@ -64,34 +65,34 @@
 </script>
 
 <div use:observePreview>
-  <Card.Root class="gap-3 py-4">
-    <Card.Header class="px-4">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <Card.Title class="break-all text-sm">{file.name}</Card.Title>
-          <Card.Description class="mt-1">{sizeLabel(file.size)} · <time datetime={file.created_at}>{new Date(file.created_at).toLocaleString()}</time></Card.Description>
-        </div>
-        <Button size="sm" variant="outline" onclick={download} disabled={downloading}>{downloading ? 'Receiving…' : 'Download'}</Button>
-      </div>
-    </Card.Header>
-    <Card.Content class="space-y-3 px-4">
+  <Card.Root size="sm" class="gap-2 py-2">
+    <Card.Content class="flex items-center gap-2 px-2">
       {#if previewUrl}
-        <button type="button" class="block max-w-full" onclick={() => { enlarged = true }} aria-label={`Enlarge ${file.name}`}>
-          <img src={previewUrl} alt={file.name} class="max-h-48 rounded object-contain" />
+        <button type="button" class="shrink-0" onclick={() => { enlarged = true }} aria-label={`Enlarge ${file.name}`}>
+          <img src={previewUrl} alt={file.name} class="size-10 rounded object-cover" />
         </button>
+      {:else}
+        <div class="flex size-10 shrink-0 items-center justify-center rounded bg-muted"><FileIcon class="size-5 text-muted-foreground" aria-hidden="true" /></div>
       {/if}
-      {#if progress}
-        <div class="space-y-1" role="status">
-          <Progress value={progress.total === null ? null : progress.total === 0 ? 100 : progress.received / progress.total * 100} aria-label="File reception progress" />
-          <p class="text-xs text-muted-foreground">{sizeLabel(progress.received)}{progress.total !== null ? ` / ${sizeLabel(progress.total)}` : ''}</p>
-        </div>
-      {/if}
-      {#if error}<p class="text-sm text-destructive" role="alert">{error}</p>{/if}
-      <Collapsible.Root>
-        <Collapsible.Trigger class="text-xs text-muted-foreground underline underline-offset-4">Show full path</Collapsible.Trigger>
-        <Collapsible.Content><p class="mt-2 break-all font-mono text-xs">{file.path}</p></Collapsible.Content>
-      </Collapsible.Root>
+      <div class="min-w-0 flex-1">
+        <Card.Title class="truncate text-sm" title={file.name}>{file.name}</Card.Title>
+        <Card.Description class="truncate text-xs" title={new Date(file.created_at).toLocaleString()}>{sizeLabel(file.size)}</Card.Description>
+      </div>
+      <Button size="icon-sm" variant="ghost" onclick={download} disabled={downloading} aria-label={downloading ? `Receiving ${file.name}` : `Download ${file.name}`} title={downloading ? 'Receiving…' : 'Download'}>
+        <DownloadSimpleIcon class="size-4" />
+      </Button>
     </Card.Content>
+    {#if progress || error}
+      <div class="space-y-1 px-2">
+        {#if progress}
+          <div class="space-y-1" role="status">
+            <Progress value={progress.total === null ? null : progress.total === 0 ? 100 : progress.received / progress.total * 100} aria-label="File reception progress" />
+            <p class="text-xs text-muted-foreground">{sizeLabel(progress.received)}{progress.total !== null ? ` / ${sizeLabel(progress.total)}` : ''}</p>
+          </div>
+        {/if}
+        {#if error}<p class="text-xs text-destructive" role="alert">{error}</p>{/if}
+      </div>
+    {/if}
   </Card.Root>
 </div>
 

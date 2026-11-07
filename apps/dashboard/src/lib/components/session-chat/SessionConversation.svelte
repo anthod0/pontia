@@ -13,12 +13,15 @@
   import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
-  import type { TurnView } from '../../../api/types'
+  import SharedFileCard from '../../../components/chat/SharedFileCard.svelte'
+  import type { SharedFile, TurnView } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
 
   interface Props {
     messages: SessionChatMessage[]
     turns?: TurnView[]
+    sessionId?: string
+    sharedFiles?: SharedFile[]
     sessionState?: string | null
     activeTurnId?: string | null
     loading?: boolean
@@ -34,6 +37,8 @@
   let {
     messages,
     turns = [],
+    sessionId = '',
+    sharedFiles = [],
     sessionState = null,
     activeTurnId = null,
     loading = false,
@@ -53,6 +58,7 @@
   const displayMessages = $derived(messages)
   const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState, activeTurnId))
   const displayTurns = $derived(conversationDisplayTurns(displayItems))
+  const sharedFilesByTurn = $derived(groupFilesByTurn(sharedFiles))
   const turnsById = $derived(new Map(turns.map((turn) => [turn.turn_id, turn])))
   const activeLoadingMessageId = $derived(activePendingAssistantMessageId(displayMessages, activeTurnId))
   const branchActionMessageIdSet = $derived(new Set(Object.keys(branchActionInputs)))
@@ -61,6 +67,14 @@
   let topHistoryPullDistance = $state(0)
   let topHistoryTouchStartY: number | null = null
   const TOP_HISTORY_PULL_THRESHOLD_PX = 96
+
+  function groupFilesByTurn(files: SharedFile[]): Map<string, SharedFile[]> {
+    const groups = new Map<string, SharedFile[]>()
+    for (const file of [...files].reverse()) {
+      if (file.turn_id) groups.set(file.turn_id, [...(groups.get(file.turn_id) ?? []), file])
+    }
+    return groups
+  }
 
   onDestroy(() => {
     if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
@@ -463,6 +477,11 @@
               </div>
             {/if}
           {/each}
+          {#if displayTurn.turnId && sharedFilesByTurn.get(displayTurn.turnId)?.length}
+            <ul class="max-w-md space-y-2" aria-label="Shared files in this turn" data-chat-turn-files>
+              {#each sharedFilesByTurn.get(displayTurn.turnId) ?? [] as file (file.file_id)}<li><SharedFileCard {file} {sessionId} /></li>{/each}
+            </ul>
+          {/if}
         </div>
       {/each}
     </Conversation.Content>

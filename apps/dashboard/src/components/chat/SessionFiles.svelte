@@ -1,58 +1,35 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
-  import { listSessionFiles } from '../../api/sessionFiles'
-  import type { SharedFile } from '../../api/types'
-  import { subscribeDashboardEvents } from '../../services/eventStream'
+  import * as Dialog from '$lib/components/ui/dialog/index.js'
+  import type { SessionFilesStore } from '../../stores/sessionFiles'
   import SharedFileCard from './SharedFileCard.svelte'
 
-  let { sessionId }: { sessionId: string } = $props()
-  let files = $state<SharedFile[]>([])
-  let loading = $state(true)
-  let error = $state<string | null>(null)
-  let controller: AbortController
-
-  function merge(incoming: SharedFile[]) {
-    const entries = new Map(files.map(file => [file.file_id, file]))
-    for (const file of incoming) entries.set(file.file_id, file)
-    files = [...entries.values()].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.file_id.localeCompare(a.file_id))
-  }
-
-  async function load() {
-    loading = true
-    error = null
-    try {
-      let cursor: string | undefined
-      do {
-        const page = await listSessionFiles(sessionId, cursor, controller.signal)
-        merge(page.files)
-        cursor = page.next_cursor ?? undefined
-      } while (cursor)
-    } catch (cause) {
-      if (!controller.signal.aborted) error = cause instanceof Error ? cause.message : String(cause)
-    } finally {
-      loading = false
-    }
-  }
-
-  onMount(() => {
-    controller = new AbortController()
-    const unsubscribe = subscribeDashboardEvents(event => {
-      if (event.kind === 'session_event' && event.event.session_id === sessionId && event.event.file) merge([event.event.file])
-    })
-    void load()
-    return () => { controller.abort(); unsubscribe() }
-  })
+  let { sessionId, files: store, open = $bindable(false) }: { sessionId: string; files: SessionFilesStore; open?: boolean } = $props()
+  const files = $derived($store.files)
+  const loading = $derived($store.loading)
+  const error = $derived($store.error)
 </script>
 
-<Collapsible.Root class="mx-auto w-full max-w-[760px] px-4">
-  <Collapsible.Trigger class="rounded-md border px-3 py-2 text-sm font-medium">Shared files ({files.length}{loading ? '…' : ''})</Collapsible.Trigger>
-  <Collapsible.Content class="mt-3 space-y-3">
+<Dialog.Root bind:open>
+  <Dialog.Content class="flex max-h-[80svh] max-w-lg flex-col">
+    <Dialog.Header>
+      <Dialog.Title>Shared files</Dialog.Title>
+      <Dialog.Description>Files the Agent shared in this session.</Dialog.Description>
+    </Dialog.Header>
     {#if error}
-      <p role="alert" class="text-sm text-destructive">{error}</p>
-      <Button variant="outline" onclick={load}>Retry</Button>
+      <div class="flex items-center gap-2">
+        <p role="alert" class="text-sm text-destructive">{error}</p>
+        <Button size="sm" variant="outline" onclick={() => store.retry()} disabled={loading}>Retry</Button>
+      </div>
     {/if}
-    {#each files as file (file.file_id)}<SharedFileCard {file} {sessionId} />{/each}
-  </Collapsible.Content>
-</Collapsible.Root>
+    {#if files.length > 0}
+      <ul class="-mx-1 min-h-0 space-y-2 overflow-y-auto px-1">
+        {#each files as file (file.file_id)}<li><SharedFileCard {file} {sessionId} /></li>{/each}
+      </ul>
+    {:else if loading}
+      <p role="status" class="text-sm text-muted-foreground">Loading shared files…</p>
+    {:else if !error}
+      <p class="text-sm text-muted-foreground">No shared files yet.</p>
+    {/if}
+  </Dialog.Content>
+</Dialog.Root>
