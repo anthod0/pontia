@@ -258,17 +258,14 @@
 
 <Sidebar.Root collapsible="icon">
   <Sidebar.Header class="group/brand relative h-14 flex-row items-center gap-1 px-2 py-0">
-    <button
-      type="button"
-      class="flex h-full min-w-0 flex-1 items-center gap-3 px-2 text-left text-sm font-semibold text-heading hover:bg-sidebar-accent group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:group-hover/brand:invisible group-data-[collapsible=icon]:group-has-[:focus-visible]/brand:invisible"
-      onclick={() => go('/')}
-      aria-label="Open new chat"
+    <div
+      class="flex h-full min-w-0 flex-1 items-center gap-3 px-2 text-sm font-semibold text-heading group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:group-hover/brand:invisible group-data-[collapsible=icon]:group-has-[:focus-visible]/brand:invisible"
     >
       <span class="flex size-8 shrink-0 items-center justify-center">
         <img src={`${base}/logo.svg`} alt="" class="size-8 shrink-0 object-contain" />
       </span>
       <span class="truncate group-data-[collapsible=icon]:hidden">Pontia</span>
-    </button>
+    </div>
     <Sidebar.Trigger class="shrink-0 group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:inset-0 group-data-[collapsible=icon]:m-auto group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:group-hover/brand:opacity-100 group-data-[collapsible=icon]:focus-visible:opacity-100" />
   </Sidebar.Header>
   <Sidebar.Separator class="mx-4 data-[orientation=horizontal]:w-auto group-data-[collapsible=icon]:mx-2" />
@@ -280,7 +277,7 @@
             <Sidebar.MenuItem>
               <Sidebar.MenuButton
                 isActive={isActive(item.path)}
-                class={item.path === '/' ? 'mb-2 h-10 justify-center bg-primary text-[13px] font-semibold text-primary-foreground hover:bg-primary-hover hover:text-primary-foreground active:bg-primary-active data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary-hover' : 'h-9 px-3 text-[13px]'}
+                class={item.path === '/' ? 'mb-2 h-10 justify-center bg-primary text-[13px] font-semibold text-primary-foreground hover:bg-primary-hover hover:text-primary-foreground active:bg-primary-active data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary-hover group-data-[collapsible=icon]:mb-0 group-data-[collapsible=icon]:bg-transparent! group-data-[collapsible=icon]:text-sidebar-foreground! group-data-[collapsible=icon]:hover:bg-sidebar-accent! group-data-[collapsible=icon]:hover:text-sidebar-accent-foreground!' : 'h-9 px-3 text-[13px]'}
                 tooltipContent={item.label}
                 onclick={() => go(item.path)}
               >
