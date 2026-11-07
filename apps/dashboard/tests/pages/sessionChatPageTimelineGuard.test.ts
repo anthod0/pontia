@@ -113,6 +113,7 @@ vi.mock("../../src/queries/inbox", () => ({
   createOptimisticInboxQuery: () => mocks.optimisticInboxQuery,
   consumeInboxSubmission: vi.fn(),
   inboxSubmissionMessages: (loadedMessages: unknown[]) => loadedMessages,
+  queuedInboxMessages: (messages: unknown[]) => messages,
   reconcileInboxSubmissions: vi.fn(),
 }));
 vi.mock("../../src/stores/workspaces", () => ({

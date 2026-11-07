@@ -19,18 +19,11 @@
   let visibleMessages = $derived(messages.filter((message) =>
     message.session_id === sessionId && !message.retried_by_message_id &&
     (message.state === 'pending' || message.state === 'failed')))
-  let waiting = $derived(visibleMessages.filter((message) => message.state === 'pending').length)
-  let failed = $derived(visibleMessages.filter((message) => message.state === 'failed').length)
 </script>
 
 {#if visibleMessages.length}
-  <section class="mb-2 overflow-hidden rounded-lg border bg-background shadow-none" aria-labelledby="queued-messages-title">
-    <div class="px-3 py-2">
-      <h2 id="queued-messages-title" class="text-xs font-medium text-muted-foreground">
-        Inbox · {waiting} waiting · {failed} failed
-      </h2>
-    </div>
-    <ul class="max-h-40 overflow-y-auto">
+  <section class="mb-2 overflow-hidden rounded-lg border bg-background shadow-none" aria-label="Inbox">
+    <ul class="max-h-40 overflow-y-auto py-1">
       {#each visibleMessages as message (message.message_id)}
         <li class="group flex min-w-0 items-center gap-2 px-3 py-1.5 text-sm" title={message.failure_message ?? undefined}>
           <div class="min-w-0 flex-1">

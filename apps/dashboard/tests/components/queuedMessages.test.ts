@@ -55,8 +55,8 @@ test("only pending and failed messages without a replacement are eligible", () =
   const messages = states.map((state) => message(state, { message_id: state }));
   messages.push(message("pending", { message_id: "replaced", retried_by_message_id: "retry" }));
   expect(visibleChatInboxMessages(messages).map((item) => item.message_id)).toEqual([
-    "failed",
     "pending",
+    "failed",
   ]);
 });
 

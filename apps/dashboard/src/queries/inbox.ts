@@ -24,6 +24,7 @@ import type {
 import type { SessionChatMessage } from "$lib/session-chat/sessionChat";
 import { readable } from "svelte/store";
 import {
+  exposeSubmission,
   forgetSubmission,
   rememberSubmission,
   SubmissionUnconfirmedError,
@@ -61,6 +62,24 @@ interface InboxMessageVariables {
 
 const consumedInboxMessageIds = new Set<string>();
 const MAX_CONSUMED_INBOX_MESSAGE_IDS = 500;
+// Submissions already rendered as chat messages; their pending state is not a queue entry.
+const chatShownInboxMessageIds = new Set<string>();
+const MAX_CHAT_SHOWN_INBOX_MESSAGE_IDS = 500;
+
+function rememberChatShownInboxMessage(messageId: string): void {
+  chatShownInboxMessageIds.add(messageId);
+  if (chatShownInboxMessageIds.size > MAX_CHAT_SHOWN_INBOX_MESSAGE_IDS) {
+    const oldestMessageId = chatShownInboxMessageIds.values().next().value;
+    if (oldestMessageId) chatShownInboxMessageIds.delete(oldestMessageId);
+  }
+}
+
+/** Inbox messages to list as queued; pending inputs already shown in the chat are excluded. */
+export function queuedInboxMessages(messages: InboxMessageView[]): InboxMessageView[] {
+  return messages.filter(
+    (message) => message.state !== "pending" || !chatShownInboxMessageIds.has(message.message_id),
+  );
+}
 
 export function inboxMessageOptions(sessionId: string, messageId: string) {
   return queryOptions({
@@ -298,11 +317,13 @@ async function deliverSubmission(
       forgetSubmission(submission.messageId);
       throw error;
     }
+    exposeSubmission(submission);
     throw new SubmissionUnconfirmedError();
   }
   try {
     forgetSubmission(submission.messageId);
   } catch {
+    exposeSubmission(submission);
     throw new SubmissionUnconfirmedError();
   }
   return message;
@@ -337,6 +358,7 @@ const submitInboxMutationOptions = () => ({
     const visible =
       showInChat ??
       (!submission.input.branch_target_turn_id && !isExecutingSessionState(session?.state));
+    if (visible) rememberChatShownInboxMessage(submission.messageId);
     return { localId: beginInboxSubmission(submission, visible) };
   },
   onError: (_error: Error, { submission }: SubmitInboxVariables, context?: { localId: string }) => {

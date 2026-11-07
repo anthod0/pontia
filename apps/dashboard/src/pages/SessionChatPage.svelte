@@ -36,6 +36,7 @@
   import {
     createOptimisticInboxQuery,
     inboxSubmissionMessages,
+    queuedInboxMessages,
     reconcileInboxSubmissions,
   } from '../queries/inbox'
   import { chatDraft, clearChatDraft } from '../stores/chatDraft'
@@ -207,7 +208,7 @@
     $timelineState.sessionId === selectedSessionId ? $timelineState.latestTurnId : null,
   )
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
-  $: visibleInboxMessages = visibleChatInboxMessages(selectedInboxMessages)
+  $: visibleInboxMessages = queuedInboxMessages(visibleChatInboxMessages(selectedInboxMessages))
   $: canSend = canSendSessionMessage(selectedSession, 'x') && !submitting
   $: if (!timelineUnavailable && matchingPromptScrolls(messages, pendingPromptScrolls, selectedSessionId).length) {
     void scrollSubmittedPromptAfterLayout(selectedSessionId)

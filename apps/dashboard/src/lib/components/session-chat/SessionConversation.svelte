@@ -376,20 +376,19 @@
           {/if}
           {#if chatMessage.role === 'assistant'}
             {@const isCopied = copiedMessageId === chatMessage.id}
-            <div class="mt-2 flex justify-start">
+            <div class="mt-2 flex justify-start text-muted-foreground">
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
-                class="h-8 text-[11px] text-muted-foreground"
+                variant="ghost"
+                size="icon-sm"
                 aria-label={isCopied ? 'Assistant reply copied' : 'Copy assistant reply'}
                 title={isCopied ? 'Copied' : 'Copy assistant reply'}
                 onclick={() => copyMessage(chatMessage)}
               >
                 {#if isCopied}
-                  <CheckIcon class="size-3.5" /> Copied
+                  <CheckIcon class="size-3.5" />
                 {:else}
-                  <CopyIcon class="size-3.5" /> Copy
+                  <CopyIcon class="size-3.5" />
                 {/if}
               </Button>
             </div>
