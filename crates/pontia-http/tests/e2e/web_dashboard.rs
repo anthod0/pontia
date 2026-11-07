@@ -247,6 +247,72 @@ async fn remote_dashboard_rejects_a_symlinked_pontia_home_before_cache_access() 
 }
 
 #[tokio::test]
+async fn remote_dashboard_serves_targz_with_root_directory_entry() {
+    let (_dir, root) = build_local_dashboard("release dashboard", "release.js");
+    let encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    let mut archive = tar::Builder::new(encoder);
+    archive
+        .append_dir_all(".", &root)
+        .expect("archive dashboard");
+    let bytes = archive
+        .into_inner()
+        .expect("finish tar")
+        .finish()
+        .expect("finish gzip");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind archive server");
+    let addr = listener.local_addr().expect("local addr");
+    let server = tokio::spawn(async move {
+        let app = Router::new().route(
+            "/pontia-dashboard.tar.gz",
+            get(move || {
+                let bytes = bytes.clone();
+                async move { bytes }
+            }),
+        );
+        axum::serve(listener, app).await.expect("archive server");
+    });
+
+    let pontia_home = tempfile::tempdir().expect("pontia home");
+    let dashboard = resolve_dashboard(
+        &DashboardConfig {
+            source: Some(format!("http://{addr}/pontia-dashboard.tar.gz")),
+        },
+        pontia_home.path(),
+    )
+    .await;
+    server.abort();
+    let app = http::router(test_state_with_dashboard(dashboard).await);
+    for (url, file) in [
+        ("/dashboard", "index.html"),
+        ("/dashboard/assets/release.js", "assets/release.js"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(url)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK, "{url}");
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body")
+            .to_bytes();
+        assert_eq!(
+            &body[..],
+            std::fs::read(root.join(file)).expect("source file")
+        );
+    }
+}
+
+#[tokio::test]
 async fn remote_dashboard_refreshes_cache_and_falls_back_when_refresh_fails() {
     let archive = build_dashboard_zip("remote dashboard", "remote.js");
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")

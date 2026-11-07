@@ -60,6 +60,9 @@ fn extract_targz(bytes: &[u8], destination: &Path) -> Result<(), String> {
         if !(entry_type.is_file() || entry_type.is_dir()) {
             return Err(format!("unsupported tar entry type for {}", path.display()));
         }
+        if entry_type.is_dir() && path.as_ref() == Path::new(".") {
+            continue;
+        }
         let safe_path = safe_relative_path(&path)?;
         entry
             .unpack(destination.join(safe_path))
@@ -81,4 +84,52 @@ fn safe_relative_path(path: &Path) -> Result<PathBuf, String> {
         return Err("empty archive entry path".to_string());
     }
     Ok(clean)
+}
+
+#[cfg(test)]
+mod tests {
+    use flate2::{Compression, write::GzEncoder};
+    use tar::{Builder, EntryType, Header};
+
+    use super::extract;
+
+    #[test]
+    fn targz_rejects_invalid_root_entries_and_parent_paths() {
+        for (name, kind) in [
+            (".", EntryType::Regular),
+            ("./", EntryType::Regular),
+            ("", EntryType::Directory),
+            ("../outside", EntryType::Directory),
+            ("./../outside", EntryType::Directory),
+            (".", EntryType::Symlink),
+            (".", EntryType::Link),
+        ] {
+            let root = tempfile::tempdir().expect("test root");
+            let destination = root.path().join("extracted");
+            std::fs::create_dir(&destination).expect("destination");
+            let mut archive = Builder::new(GzEncoder::new(Vec::new(), Compression::default()));
+            let mut header = Header::new_gnu();
+            // Write raw names so the builder does not reject or normalize malformed paths.
+            header.as_mut_bytes()[..name.len()].copy_from_slice(name.as_bytes());
+            header.set_entry_type(kind);
+            header.set_size(0);
+            header.set_mode(0o755);
+            if kind.is_symlink() || kind.is_hard_link() {
+                header.set_link_name("../outside").expect("link target");
+            }
+            header.set_cksum();
+            archive.append(&header, &[][..]).expect("archive entry");
+            let bytes = archive.into_inner().expect("tar").finish().expect("gzip");
+
+            assert!(
+                extract("dashboard.tar.gz", &bytes, &destination).is_err(),
+                "{name:?} ({kind:?})"
+            );
+            assert_eq!(
+                std::fs::read_dir(&destination).expect("contents").count(),
+                0
+            );
+            assert!(!root.path().join("outside").exists());
+        }
+    }
 }
