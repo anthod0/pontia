@@ -595,6 +595,31 @@ test("top bar trigger closes and reopens the sidebar", async () => {
   expect(onOpenChange.mock.calls).toEqual([[false], [true]]);
 });
 
+test("sidebar header trigger collapses and expands the sidebar", async () => {
+  render(AppSidebarHost);
+
+  const header = document.querySelector<HTMLElement>('[data-slot="sidebar-header"]')!;
+  const trigger = within(header).getByRole("button", { name: /toggle sidebar/i });
+  const sidebar = header.closest('[data-slot="sidebar"]');
+  expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await fireEvent.click(trigger);
+  expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  await fireEvent.click(trigger);
+  expect(sidebar).toHaveAttribute("data-state", "expanded");
+});
+
+test("sidebar footer opens the keyboard shortcuts reference", async () => {
+  const listener = vi.fn();
+  document.addEventListener("pontia:open-chat-shortcuts", listener);
+  try {
+    render(AppSidebarHost);
+    await fireEvent.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
+    expect(listener).toHaveBeenCalledOnce();
+  } finally {
+    document.removeEventListener("pontia:open-chat-shortcuts", listener);
+  }
+});
+
 test("sidebar settings button navigates directly to common settings without document reload", async () => {
   render(AppSidebarHost);
 

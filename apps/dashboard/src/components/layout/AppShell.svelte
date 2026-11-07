@@ -5,6 +5,7 @@
   import AppSidebar from './AppSidebar.svelte'
   import TopBar from './TopBar.svelte'
   import ChatShortcuts from '../chat/ChatShortcuts.svelte'
+  import ConnectionNotice from './ConnectionNotice.svelte'
   import SettingsShell from '../settings/SettingsShell.svelte'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { installVisualViewportCssVars } from '$lib/visualViewport'
@@ -48,6 +49,7 @@
 
 <Sidebar.Provider>
   <ChatShortcuts />
+  <ConnectionNotice />
   <AppSidebar />
   <Sidebar.Inset class="bg-surface">
     <TopBar />

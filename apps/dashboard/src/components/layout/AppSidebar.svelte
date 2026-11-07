@@ -9,6 +9,7 @@
   import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon'
   import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon'
   import GearIcon from 'phosphor-svelte/lib/GearIcon'
+  import QuestionIcon from 'phosphor-svelte/lib/QuestionIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
   import { base } from '$app/paths'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
@@ -256,10 +257,10 @@
 {/snippet}
 
 <Sidebar.Root collapsible="icon">
-  <Sidebar.Header class="px-2 py-0">
+  <Sidebar.Header class="group/brand relative h-14 flex-row items-center gap-1 px-2 py-0">
     <button
       type="button"
-      class="flex h-14 items-center gap-3 px-2 text-left text-sm font-semibold text-heading hover:bg-sidebar-accent group-data-[collapsible=icon]:px-0"
+      class="flex h-full min-w-0 flex-1 items-center gap-3 px-2 text-left text-sm font-semibold text-heading hover:bg-sidebar-accent group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:group-hover/brand:invisible group-data-[collapsible=icon]:group-has-[:focus-visible]/brand:invisible"
       onclick={() => go('/')}
       aria-label="Open new chat"
     >
@@ -268,6 +269,7 @@
       </span>
       <span class="truncate group-data-[collapsible=icon]:hidden">Pontia</span>
     </button>
+    <Sidebar.Trigger class="shrink-0 group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:inset-0 group-data-[collapsible=icon]:m-auto group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:group-hover/brand:opacity-100 group-data-[collapsible=icon]:focus-visible:opacity-100" />
   </Sidebar.Header>
   <Sidebar.Separator class="mx-4 data-[orientation=horizontal]:w-auto group-data-[collapsible=icon]:mx-2" />
   <Sidebar.Content class="overflow-hidden">
@@ -283,7 +285,7 @@
                 onclick={() => go(item.path)}
               >
                 <item.icon />
-                <span>{item.label}</span>
+                <span class="group-data-[collapsible=icon]:hidden">{item.label}</span>
                 {#if item.path === '/'}
                   {@render shortcutHint('N')}
                 {/if}
@@ -416,6 +418,14 @@
           <GearIcon />
           <span>Settings</span>
         </Sidebar.MenuButton>
+        <Sidebar.MenuAction
+          class="top-2 hidden md:flex"
+          aria-label="Keyboard shortcuts"
+          title="Keyboard shortcuts (Alt+?)"
+          onclick={() => document.dispatchEvent(new CustomEvent('pontia:open-chat-shortcuts'))}
+        >
+          <QuestionIcon />
+        </Sidebar.MenuAction>
       </Sidebar.MenuItem>
     </Sidebar.Menu>
   </Sidebar.Footer>
