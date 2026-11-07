@@ -17,7 +17,8 @@ pub fn spawn_tmux_session(
     launch_command: &str,
 ) -> std::io::Result<ExitStatus> {
     let command = || {
-        Command::new("tmux")
+        let mut command = tmux_launcher()?;
+        command
             .args([
                 "new-session",
                 "-d",
@@ -37,6 +38,36 @@ pub fn spawn_tmux_session(
 
     thread::sleep(Duration::from_millis(50));
     command()
+}
+
+fn tmux_launcher() -> std::io::Result<Command> {
+    #[cfg(target_os = "linux")]
+    if Path::new("/run/systemd/system").is_dir() {
+        // A newly created server must outlive pontiad's service cgroup, including
+        // user sessions subsequently added to the same default tmux server.
+        let mut command = Command::new("systemd-run");
+        let help = Command::new("systemd-run").arg("--help").output()?;
+        if !help.status.success() {
+            return Err(std::io::Error::other(
+                String::from_utf8_lossy(&help.stderr).into_owned(),
+            ));
+        }
+        // Before this option was introduced, scopes never expanded variables.
+        if String::from_utf8_lossy(&help.stdout).contains("--expand-environment=") {
+            command.arg("--expand-environment=no");
+        }
+        command.args([
+            "--user",
+            "--scope",
+            "--quiet",
+            "--collect",
+            "--description=Pontia tmux",
+            "--",
+            "tmux",
+        ]);
+        return Ok(command);
+    }
+    Ok(Command::new("tmux"))
 }
 
 pub(crate) fn terminate_session(runtime_handle: &str) -> Result<()> {
