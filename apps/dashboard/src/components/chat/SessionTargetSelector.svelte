@@ -1,10 +1,9 @@
 <script lang="ts">
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
-  import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon'
-  import { Button } from '$lib/components/ui/button/index.js'
   import * as Select from '$lib/components/ui/select/index.js'
   import type { SessionCreationOption, WorkspaceView } from '../../api/types'
   import { workspaceTitle } from './sessionMetadata'
+  import ClientIcon from './ClientIcon.svelte'
 
   interface Props {
     workspaceId: string
@@ -25,6 +24,8 @@
     creationOptions,
     fixedWorkspace = false,
   }: Props = $props()
+
+  const selectedOption = $derived(creationOptions.find((option) => option.id === creationOptionId))
 </script>
 
 {#if fixedWorkspace}
@@ -37,58 +38,50 @@
     <span>, use</span>
     <Select.Root type="single" bind:value={creationOptionId}>
       <Select.Trigger class="h-7 max-w-44 border-0 bg-transparent px-1.5 font-medium text-foreground hover:bg-muted" aria-label="Client">
-        <TerminalWindowIcon class="size-4 text-primary" aria-hidden="true" />
-        <span class="min-w-0 truncate">{creationOptions.find((option) => option.id === creationOptionId)?.name ?? 'Choose an agent'}</span>
+        <ClientIcon option={selectedOption} class="size-4 text-foreground" />
+        <span class="min-w-0 truncate">{selectedOption?.name ?? 'Choose an agent'}</span>
       </Select.Trigger>
       <Select.Content align="start">
         {#each creationOptions as option (option.id)}
-          <Select.Item value={option.id} label={option.name}>{option.name}</Select.Item>
+          <Select.Item value={option.id} label={option.name}>
+            <ClientIcon {option} class="size-3.5 text-foreground" />
+            {option.name}
+          </Select.Item>
         {/each}
       </Select.Content>
     </Select.Root>
   </div>
 {:else}
-  <div class="space-y-3">
-    <div role="group" aria-labelledby="new-chat-client-label">
-      <div id="new-chat-client-label" class="mb-2 font-mono text-[11px] tracking-[0.06em] text-muted-foreground uppercase">Agent client</div>
-      <div class="flex flex-wrap gap-2">
+  <div class="flex min-w-0 items-center gap-2">
+    <Select.Root type="single" bind:value={creationOptionId} disabled={!creationOptions.length}>
+      <Select.Trigger class="h-[34px] max-w-48 shrink-0 gap-1.5 bg-background px-3 text-[13px] font-medium text-heading hover:bg-muted data-[state=open]:border-primary data-[state=open]:bg-selected" aria-label="Agent client">
+        <ClientIcon option={selectedOption} class="size-3.5 text-foreground" />
+        <span class="min-w-0 truncate">{selectedOption?.name ?? 'Agent client'}</span>
+      </Select.Trigger>
+      <Select.Content align="start">
         {#each creationOptions as option (option.id)}
-          <Button
-            variant="outline"
-            class={`h-[34px] gap-1.5 px-3 text-[13px] ${creationOptionId === option.id ? 'border-primary bg-selected' : ''}`}
-            aria-pressed={creationOptionId === option.id}
-            onclick={() => (creationOptionId = option.id)}
-          >
-            <TerminalWindowIcon class="size-3.5 text-primary" aria-hidden="true" />
+          <Select.Item value={option.id} label={option.name}>
+            <ClientIcon {option} class="size-3.5 text-foreground" />
             {option.name}
-          </Button>
+          </Select.Item>
         {/each}
-      </div>
-    </div>
-    <div>
-      <div id="new-chat-workspace-label" class="mb-2 font-mono text-[11px] tracking-[0.06em] text-muted-foreground uppercase">Workspace</div>
-      <Select.Root type="single" bind:value={workspaceId} disabled={workspacesLoading || !workspaces.length}>
-        <Select.Trigger class="h-auto min-h-11 w-full gap-2.5 bg-background px-3 py-2.5 text-left hover:bg-muted data-[state=open]:border-primary data-[state=open]:bg-selected" aria-labelledby="new-chat-workspace-label" title={selectedWorkspace?.canonical_path}>
-          <FolderIcon class="size-4 text-muted-foreground" aria-hidden="true" />
-          <span class="min-w-0 flex-1">
-            <span class="block truncate text-[13px] font-medium text-heading">{selectedWorkspace ? workspaceTitle(selectedWorkspace) : workspacesLoading ? 'Loading workspaces…' : 'Choose a workspace'}</span>
-            {#if selectedWorkspace}
-              <span class="block truncate font-mono text-[11px] text-muted-foreground">{selectedWorkspace.display_path}</span>
-            {/if}
-          </span>
-          <span class="font-mono text-[10px] text-muted-foreground" aria-label={`${workspaces.length} workspaces`}>{workspaces.length}</span>
-        </Select.Trigger>
-        <Select.Content align="start" class="w-[var(--bits-select-anchor-width)]">
-          {#each workspaces as workspace (workspace.workspace_id)}
-            <Select.Item value={workspace.workspace_id} label={workspaceTitle(workspace)} class="py-2">
-              <div class="flex min-w-0 flex-col">
-                <span class="truncate">{workspaceTitle(workspace)}</span>
-                <span class="truncate font-mono text-[11px] text-muted-foreground">{workspace.display_path}</span>
-              </div>
-            </Select.Item>
-          {/each}
-        </Select.Content>
-      </Select.Root>
-    </div>
+      </Select.Content>
+    </Select.Root>
+    <Select.Root type="single" bind:value={workspaceId} disabled={workspacesLoading || !workspaces.length}>
+      <Select.Trigger class="h-[34px] max-w-48 shrink-0 gap-1.5 bg-background px-3 text-[13px] font-medium text-heading hover:bg-muted data-[state=open]:border-primary data-[state=open]:bg-selected" aria-label="Workspace" title={selectedWorkspace?.canonical_path}>
+        <FolderIcon class="size-3.5 text-muted-foreground" aria-hidden="true" />
+        <span class="min-w-0 truncate">{selectedWorkspace ? workspaceTitle(selectedWorkspace) : workspacesLoading ? 'Loading…' : 'Workspace'}</span>
+      </Select.Trigger>
+      <Select.Content align="start" class="w-72">
+        {#each workspaces as workspace (workspace.workspace_id)}
+          <Select.Item value={workspace.workspace_id} label={workspaceTitle(workspace)} class="py-2">
+            <div class="flex min-w-0 flex-col">
+              <span class="truncate">{workspaceTitle(workspace)}</span>
+              <span class="truncate font-mono text-[11px] text-muted-foreground">{workspace.display_path}</span>
+            </div>
+          </Select.Item>
+        {/each}
+      </Select.Content>
+    </Select.Root>
   </div>
 {/if}

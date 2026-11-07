@@ -1,5 +1,5 @@
 import { mocks, session, turn, workspace } from "./fixtures";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import type { CreateSessionResult } from "../../../src/api/types";
@@ -184,12 +184,12 @@ test("offers Pi and Codex and requires a task before submission", async () => {
   render(NewChatPage);
 
   expect(await screen.findByRole("heading", { name: "Start a session" })).toBeInTheDocument();
-  const clients = screen.getByRole("group", { name: "Agent client" });
-  expect(within(clients).getByRole("button", { name: "codex" })).toBeInTheDocument();
-  expect(within(clients).getByRole("button", { name: "pi" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  const clientSelector = screen.getByLabelText("Agent client");
+  expect(clientSelector).toHaveTextContent("pi");
+  await userEvent.click(clientSelector);
+  expect(await screen.findByText("codex")).toBeInTheDocument();
+  await userEvent.keyboard("{Escape}");
+  document.body.style.pointerEvents = "";
   expect(screen.getByRole("button", { name: "Start session" })).toBeDisabled();
   await userEvent.type(screen.getByRole("textbox"), "Inspect this workspace");
   expect(screen.getByRole("button", { name: "Start session" })).toBeEnabled();

@@ -56,8 +56,8 @@
   ]
 </script>
 
-<div data-testid="new-chat-panel" class:justify-center={placement === 'center'} class:justify-end={placement === 'bottom'} class="flex min-h-0 shrink-0 flex-col">
-  <div class={`mx-auto w-full space-y-3 ${fixedWorkspace ? 'max-w-4xl' : 'max-w-[720px]'}`}>
+<div data-testid="new-chat-panel" class:justify-center={placement === 'center'} class:justify-end={placement === 'bottom'} class={`flex min-h-0 shrink-0 flex-col ${placement === 'bottom' ? 'pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-[max(1.25rem,env(safe-area-inset-bottom))]' : ''}`}>
+  <div class={`mx-auto w-full space-y-3 ${fixedWorkspace ? 'max-w-4xl' : 'max-w-[760px]'}`}>
     <SessionTargetSelector bind:workspaceId bind:creationOptionId {workspaces} {workspacesLoading} {selectedWorkspace} {creationOptions} {fixedWorkspace} />
     <MessageComposer
       bind:value={prompt}
@@ -65,6 +65,7 @@
       {workspaceId}
       {commands}
       inputId="chat-prompt"
+      fullscreen
       {autofocus}
       placeholder="What should the agent do?"
       disabled={promptDisabled}

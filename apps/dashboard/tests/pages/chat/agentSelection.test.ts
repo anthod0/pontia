@@ -14,7 +14,9 @@ test("submits the selected configured agent's opaque metadata through ordinary S
   ]);
   mocks.createSession.mockResolvedValue({ session: session(), initial_turn: turn() });
   render(NewChatPage);
-  await user.click(await screen.findByRole("button", { name: "Company Agent" }));
+  await user.click(await screen.findByLabelText("Agent client"));
+  await user.click(await screen.findByText("Company Agent"));
+  document.body.style.pointerEvents = "";
   await user.type(screen.getByRole("textbox"), "Review the changes");
   await user.click(screen.getByRole("button", { name: "Start session" }));
   await waitFor(() =>
