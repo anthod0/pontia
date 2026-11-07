@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.15] - 2026-11-07
+
+### Changed
+
+- Moved file uploads in Dashboard chats to a + button in the composer, and moved the shared file list into a dialog in the chat actions menu. Files shared during a turn appear as cards at the end of that turn.
+- Kept the chat composer on one line while the draft fits, and gave the new chat page the same composer with compact agent client and workspace selectors. Agent clients show their brand icons.
+- Made the chat top bar float over the conversation, moved the sidebar toggle next to the Pontia brand, and moved the shortcuts button to the sidebar footer.
+- Replaced the always-on connection icon with a toast shown after 3 seconds of lost connection. Toasts now appear at the top center.
+
+### Fixed
+
+- Stopped Inbox panels from flashing when sending a message. Messages sent to an idle session no longer also appear in the Inbox queue, and queued messages are listed in delivery order.
+- Showed the configured display names for Pi and Codex in new session options.
+- Showed the plain New Chat icon in the collapsed sidebar.
+
 ## [0.6.14] - 2026-11-05
 
 ### Added
