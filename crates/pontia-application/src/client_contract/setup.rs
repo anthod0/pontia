@@ -37,6 +37,12 @@ pub trait ClientIntegration: Send + Sync {
 
 /// Preparation is read-only. Installation runs only after the CLI's confirmation.
 pub trait PreparedClientIntegration {
+    fn options(&self) -> Vec<IntegrationOption> {
+        Vec::new()
+    }
+    fn set_option(&mut self, key: &str, _enabled: bool) -> Result<(), String> {
+        Err(format!("Unknown integration option: {key}"))
+    }
     fn summary(&self) -> Vec<String>;
     fn preflight(&self, runner: &dyn CommandRunner) -> Result<(), String>;
     fn install(
@@ -48,4 +54,10 @@ pub trait PreparedClientIntegration {
     fn service_environment_paths(&self) -> Vec<(String, PathBuf)> {
         Vec::new()
     }
+}
+
+pub struct IntegrationOption {
+    pub key: &'static str,
+    pub prompt: &'static str,
+    pub enabled: bool,
 }

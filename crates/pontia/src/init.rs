@@ -85,7 +85,7 @@ where
     writeln!(output, "Pontia initialization\n").map_err(io_error)?;
     let integrations = platform.integrations();
     let selected = select_agents(input, output, &integrations)?;
-    let prepared = integrations
+    let mut prepared = integrations
         .iter()
         .enumerate()
         .map(|(index, client)| {
@@ -95,6 +95,29 @@ where
                 .transpose()
         })
         .collect::<Result<Vec<_>, _>>()?;
+
+    for setup in prepared.iter_mut().flatten() {
+        for option in setup.options() {
+            write!(
+                output,
+                "{} [{}]: ",
+                option.prompt,
+                if option.enabled { "Y/n" } else { "y/N" }
+            )
+            .map_err(io_error)?;
+            let enabled = match read_answer(input, output)?
+                .trim()
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "" => option.enabled,
+                "y" | "yes" => true,
+                "n" | "no" => false,
+                answer => return Err(format!("expected yes or no, got {answer:?}")),
+            };
+            setup.set_option(option.key, enabled)?;
+        }
+    }
 
     let token = match existing.external_api_token.as_deref() {
         Some(token) => token.to_string(),

@@ -19,8 +19,13 @@ impl ClientService for CodexBackgroundService {
         Box::pin(async move {
             let observer = CodexObserver::new(&state, state.pontia_home().to_path_buf());
             observer.prepare().await?;
+            let proxy = crate::proxy::Proxy::bind(state.pontia_home()).await?;
             tokio::spawn(observer.run(state.shutdown().subscribe()));
-            Ok(None)
+            Ok(Some(tokio::spawn(
+                proxy.run(state.shutdown().subscribe(), || {
+                    crate::runtime::daemon::Endpoint::resolve().map(|endpoint| endpoint.socket)
+                }),
+            )))
         })
     }
 }

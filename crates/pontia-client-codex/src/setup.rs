@@ -5,7 +5,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pontia_application::client_contract::{ClientIntegration, PreparedClientIntegration};
+use pontia_application::client_contract::{
+    ClientIntegration, IntegrationOption, PreparedClientIntegration,
+};
 use pontia_runtime::local_service::{
     CommandOutput, CommandRunner, DefinitionStore, absolute_utf8_path,
     launchd_executable_search_path, systemd_quote, xml_escape,
@@ -13,6 +15,13 @@ use pontia_runtime::local_service::{
 
 pub const CODEX_SYSTEMD_SERVICE_NAME: &str = "pontia-codex.service";
 pub const CODEX_LAUNCHD_LABEL: &str = "dev.pontia.codex-daemon";
+
+mod shim;
+
+struct PreparedSetup {
+    daemon: CodexSetup,
+    shim: shim::ShimSetup,
+}
 
 pub fn integration() -> std::sync::Arc<dyn ClientIntegration> {
     std::sync::Arc::new(CodexIntegration)
@@ -39,22 +48,40 @@ impl ClientIntegration for CodexIntegration {
         user_home: &Path,
         runner: &dyn CommandRunner,
     ) -> Result<Box<dyn PreparedClientIntegration>, String> {
-        Ok(Box::new(inspect(vars, user_home, runner)?))
+        Ok(Box::new(PreparedSetup {
+            daemon: inspect(vars, user_home, runner)?,
+            shim: shim::ShimSetup::inspect(vars, user_home)?,
+        }))
     }
 }
 
-impl PreparedClientIntegration for CodexSetup {
+impl PreparedClientIntegration for PreparedSetup {
+    fn options(&self) -> Vec<IntegrationOption> {
+        vec![IntegrationOption {
+            key: "shim",
+            prompt: "Use the Pontia Codex launcher for TUI commands",
+            enabled: self.shim.enabled,
+        }]
+    }
+    fn set_option(&mut self, key: &str, enabled: bool) -> Result<(), String> {
+        if key != "shim" {
+            return Err(format!("Unknown Codex integration option: {key}"));
+        }
+        self.shim.enabled = enabled;
+        Ok(())
+    }
     fn summary(&self) -> Vec<String> {
         let summary = vec![
             "Codex integration: register autostart".into(),
-            format!("Codex executable: {}", self.executable.display()),
-            format!("CODEX_HOME: {}", self.home.display()),
-            format!("Codex service: {}", self.service_path.display()),
+            format!("Codex executable: {}", self.daemon.executable.display()),
+            format!("CODEX_HOME: {}", self.daemon.home.display()),
+            format!("Codex service: {}", self.daemon.service_path.display()),
+            self.shim.summary(),
         ];
         #[cfg(target_os = "linux")]
         let summary = {
             let mut summary = summary;
-            if let ServiceUserIdentity::SystemdUsername(username) = &self.service_user {
+            if let ServiceUserIdentity::SystemdUsername(username) = &self.daemon.service_user {
                 summary.push(format!("user linger: enable for {username}"));
             }
             summary
@@ -62,20 +89,21 @@ impl PreparedClientIntegration for CodexSetup {
         summary
     }
     fn preflight(&self, _runner: &dyn CommandRunner) -> Result<(), String> {
-        Ok(())
+        self.shim.preflight()
     }
     fn install(
         &self,
         runner: &dyn CommandRunner,
         definitions: &dyn DefinitionStore,
     ) -> Result<(), String> {
-        initialize(self, runner, definitions, &DaemonProbe)
+        initialize(&self.daemon, runner, definitions, &DaemonProbe)?;
+        self.shim.install()
     }
     fn completion(&self) -> &'static str {
         "Configured Codex autostart and control connection"
     }
     fn service_environment_paths(&self) -> Vec<(String, PathBuf)> {
-        vec![("CODEX_HOME".into(), self.home.clone())]
+        vec![("CODEX_HOME".into(), self.daemon.home.clone())]
     }
 }
 
@@ -501,7 +529,7 @@ fn resolve_executable(vars: &HashMap<String, String>) -> Result<PathBuf, String>
         } else {
             current_dir.join(directory).join("codex")
         };
-        if candidate.is_file() && is_executable(&candidate)? {
+        if candidate.is_file() && is_executable(&candidate)? && !shim::is_shim(&candidate)? {
             return Ok(candidate);
         }
     }

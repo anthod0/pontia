@@ -3,7 +3,7 @@ use pontia_core::Result;
 use std::path::PathBuf;
 use tokio::net::UnixStream;
 
-pub(super) struct Endpoint {
+pub(crate) struct Endpoint {
     pub socket: PathBuf,
     pub home: PathBuf,
 }

@@ -1,4 +1,4 @@
-mod daemon;
+pub(crate) mod daemon;
 pub mod protocol;
 
 use pontia_core::{Error, Result};

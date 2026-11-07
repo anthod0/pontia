@@ -1,7 +1,9 @@
 use std::{cell::RefCell, collections::HashMap, fs, io::Cursor, net::SocketAddr, path::Path};
 
 use pontia::init::{InitPlatform, run};
-use pontia_application::client_contract::{ClientIntegration, PreparedClientIntegration};
+use pontia_application::client_contract::{
+    ClientIntegration, IntegrationOption, PreparedClientIntegration,
+};
 use pontia_config::AppConfig;
 use pontia_runtime::local_service::{CommandOutput, CommandRunner, DefinitionStore};
 use std::{path::PathBuf, sync::Arc};
@@ -13,6 +15,7 @@ struct FakeIntegration {
 struct FakeSetup {
     name: &'static str,
     home: PathBuf,
+    option: Option<bool>,
 }
 impl ClientIntegration for FakeIntegration {
     fn client_type(&self) -> &'static str {
@@ -26,7 +29,7 @@ impl ClientIntegration for FakeIntegration {
     }
     fn prepare(
         &self,
-        _vars: &HashMap<String, String>,
+        vars: &HashMap<String, String>,
         home: &Path,
         runner: &dyn CommandRunner,
     ) -> Result<Box<dyn PreparedClientIntegration>, String> {
@@ -36,10 +39,28 @@ impl ClientIntegration for FakeIntegration {
         Ok(Box::new(FakeSetup {
             name: self.name,
             home: home.join(".codex"),
+            option: vars
+                .contains_key("TEST_INTEGRATION_OPTION")
+                .then_some(false),
         }))
     }
 }
 impl PreparedClientIntegration for FakeSetup {
+    fn options(&self) -> Vec<IntegrationOption> {
+        self.option
+            .map(|enabled| IntegrationOption {
+                key: "launcher",
+                prompt: "Enable launcher",
+                enabled,
+            })
+            .into_iter()
+            .collect()
+    }
+    fn set_option(&mut self, key: &str, enabled: bool) -> Result<(), String> {
+        assert_eq!(key, "launcher");
+        self.option = Some(enabled);
+        Ok(())
+    }
     fn summary(&self) -> Vec<String> {
         Vec::new()
     }
@@ -51,6 +72,9 @@ impl PreparedClientIntegration for FakeSetup {
         runner: &dyn CommandRunner,
         _definitions: &dyn DefinitionStore,
     ) -> Result<(), String> {
+        if self.option == Some(true) {
+            runner.run("install-launcher", &[])?;
+        }
         let event = match self.name {
             "pi" => "install-pi".to_string(),
             _ => format!("initialize-codex:{}", self.home.display()),
@@ -706,4 +730,30 @@ fn initialization_only_consumes_agent_selection_and_confirmation_input() {
             .starts_with("http://127.0.0.1:8080/dashboard?token=")
     );
     assert_eq!(input.position(), 2);
+}
+
+#[test]
+fn integration_options_are_applied_only_after_final_confirmation() {
+    for (answers, installed, launcher) in [
+        ("codex\ny\ny\n", true, true),
+        ("codex\n\ny\n", true, false),
+        ("codex\ny\nn\n", false, false),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let user_home = root.path().join("user");
+        fs::create_dir(&user_home).unwrap();
+        let mut vars = vars(&user_home, &root.path().join("pontia"));
+        vars.insert("TEST_INTEGRATION_OPTION".into(), "1".into());
+        let platform = FakePlatform::default();
+        let outcome = run(&mut Cursor::new(answers), &mut Vec::new(), &vars, &platform).unwrap();
+        assert_eq!(outcome.is_some(), installed);
+        assert_eq!(
+            platform
+                .events
+                .borrow()
+                .iter()
+                .any(|event| event == "install-launcher"),
+            launcher
+        );
+    }
 }
