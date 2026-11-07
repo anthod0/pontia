@@ -45,7 +45,7 @@ test.each(["pi", "codex"] as const)(
       timelineStateValue({ sessionId: "session-1", status: "empty", mode: "linear" }),
     );
 
-    expect(await screen.findByPlaceholderText("Continue the thread…")).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText("Follow up…")).toBeInTheDocument();
     await waitFor(() => expect(mocks.liveOutputListeners.has("session-1")).toBe(true));
     expect(screen.queryByText("Unable to connect")).not.toBeInTheDocument();
     expect(mocks.submitInboxMessage).not.toHaveBeenCalled();

@@ -86,7 +86,7 @@ test("focuses the composer and refreshes git only on the first entry, then refre
 
   const firstPage = render(SessionChatPage);
 
-  const composer = await screen.findByPlaceholderText("Continue the thread…");
+  const composer = await screen.findByPlaceholderText("Follow up…");
   await waitFor(() => expect(composer).toHaveFocus());
   expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(1);
   expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith("workspace-1");
@@ -98,7 +98,7 @@ test("focuses the composer and refreshes git only on the first entry, then refre
   firstPage.unmount();
   mocks.refreshWorkspaceGitStatus.mockClear();
   render(SessionChatPage);
-  const revisitedComposer = await screen.findByPlaceholderText("Continue the thread…");
+  const revisitedComposer = await screen.findByPlaceholderText("Follow up…");
   expect(revisitedComposer).not.toHaveFocus();
   expect(mocks.refreshWorkspaceGitStatus).not.toHaveBeenCalled();
 });
@@ -225,7 +225,7 @@ test.each([
 
     render(SessionChatPage);
 
-    await screen.findByPlaceholderText("Continue the thread…");
+    await screen.findByPlaceholderText("Follow up…");
     expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^send$/i })).toBeInTheDocument();
   },
@@ -252,7 +252,7 @@ test.each(["busy", "waiting_for_interaction"])(
 
     render(SessionChatPage);
 
-    const input = await screen.findByPlaceholderText("Continue the thread…");
+    const input = await screen.findByPlaceholderText("Follow up…");
     await userEvent.type(input, "Queue this follow-up");
 
     expect(screen.queryByRole("button", { name: /interrupt agent/i })).not.toBeInTheDocument();
@@ -857,7 +857,7 @@ test("shows the initial prompt immediately after starting a chat while timeline 
   });
   render(NewChatPage);
 
-  await user.type(await screen.findByPlaceholderText("What should the agent do?"), "hi");
+  await user.type(await screen.findByPlaceholderText("Describe a task…"), "hi");
   await fireEvent.click(screen.getByRole("button", { name: /start session/i }));
 
   await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/chat/session-new"));
@@ -948,7 +948,7 @@ test("shows workspace git status in the selected chat composer summary", async (
 
   render(SessionChatPage);
 
-  const composer = await screen.findByPlaceholderText("Continue the thread…");
+  const composer = await screen.findByPlaceholderText("Follow up…");
   composer.focus();
   await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith("workspace-1"));
   const sessionDetailsButton = await screen.findByRole("button", {
@@ -986,7 +986,7 @@ test("does not show the empty conversation state while the selected chat is init
 
   render(SessionChatPage);
 
-  await screen.findByPlaceholderText("Continue the thread…");
+  await screen.findByPlaceholderText("Follow up…");
   expect(screen.queryByText("No messages yet")).not.toBeInTheDocument();
   expect(document.querySelector("[data-chat-conversation-skeleton]")).not.toBeInTheDocument();
 
@@ -1526,12 +1526,12 @@ test("mobile composer resize button opens a fullscreen follow-up composer sharin
   try {
     render(SessionChatPage);
 
-    const composerInput = await screen.findByPlaceholderText("Continue the thread…");
+    const composerInput = await screen.findByPlaceholderText("Follow up…");
     await user.type(composerInput, "mobile draft");
     await fireEvent.click(screen.getByRole("button", { name: "Expand message composer" }));
 
     const fullscreenComposer = screen.getByRole("dialog", { name: "Expanded message composer" });
-    const fullscreenInput = within(fullscreenComposer).getByPlaceholderText("Continue the thread…");
+    const fullscreenInput = within(fullscreenComposer).getByPlaceholderText("Follow up…");
     expect(fullscreenInput).toHaveTextContent("mobile draft");
 
     await user.type(fullscreenInput, " plus more");
@@ -1899,7 +1899,7 @@ test("renders an existing session title in the top bar and metadata above the pr
   expect(screen.getAllByLabelText("Handle: second")[0]).toBeInTheDocument();
   const workspaceBadge = screen.getAllByLabelText("Workspace: /repo/pontia")[0];
   expect(workspaceBadge).toHaveTextContent("/repo/pontia");
-  const followUpInput = screen.getByPlaceholderText("Continue the thread…");
+  const followUpInput = screen.getByPlaceholderText("Follow up…");
   expect(
     sessionDetailsButton.compareDocumentPosition(followUpInput) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
@@ -1951,7 +1951,7 @@ test("shows supported context usage in chat session metadata while hiding unsupp
 
   render(SessionChatPage);
 
-  await screen.findByPlaceholderText("Continue the thread…");
+  await screen.findByPlaceholderText("Follow up…");
   expect(screen.queryByText(/context/i)).not.toBeInTheDocument();
   expect(screen.queryByText("example-model")).not.toBeInTheDocument();
 });
@@ -1981,7 +1981,7 @@ test("shows delivery loading on the submit button instead of below the optimisti
 
   render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText("Continue the thread…");
+  const followUpInput = await screen.findByPlaceholderText("Follow up…");
   await user.type(followUpInput, "slow network message");
   await user.click(screen.getByRole("button", { name: /send/i }));
 
@@ -2049,7 +2049,7 @@ test("follow-up composer submits with Enter while preserving modified Enter for 
 
   render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText("Continue the thread…");
+  const followUpInput = await screen.findByPlaceholderText("Follow up…");
   expect(
     screen.queryByText("Enter to send · Shift+Enter / Ctrl+Enter for newline"),
   ).not.toBeInTheDocument();
@@ -2256,7 +2256,7 @@ test("scrolls once when the submitted user message mounts, not again on acceptan
       document.querySelector('[data-chat-initial-scroll-pending="false"]'),
     ).toBeInTheDocument(),
   );
-  const followUpInput = screen.getByPlaceholderText("Continue the thread…");
+  const followUpInput = screen.getByPlaceholderText("Follow up…");
   await user.type(followUpInput, "continue this session");
   scrollTo.mockClear();
   scrollTo.mockImplementation(() => {
@@ -2343,7 +2343,7 @@ test("scrolls once for each queued submission, not on unrelated assistant update
       document.querySelector('[data-chat-initial-scroll-pending="false"]'),
     ).toBeInTheDocument(),
   );
-  const followUpInput = screen.getByPlaceholderText("Continue the thread…");
+  const followUpInput = screen.getByPlaceholderText("Follow up…");
   await user.type(followUpInput, "continue this session");
   scrollTo.mockClear();
   await user.click(screen.getByRole("button", { name: /send/i }));
@@ -2425,7 +2425,7 @@ test("waits for the native user message if the optimistic message disappears bef
       document.querySelector('[data-chat-initial-scroll-pending="false"]'),
     ).toBeInTheDocument(),
   );
-  await user.type(screen.getByPlaceholderText("Continue the thread…"), "A new prompt");
+  await user.type(screen.getByPlaceholderText("Follow up…"), "A new prompt");
   scrollTo.mockClear();
 
   const frames: FrameRequestCallback[] = [];
@@ -2484,7 +2484,7 @@ test("does not consume a submit scroll until the unavailable conversation mounts
     timelineStateValue({ sessionId: "session-2", error: "Timeline unavailable" }),
   );
   await screen.findByText("Conversation history unavailable");
-  await user.type(screen.getByPlaceholderText("Continue the thread…"), "Prompt during an outage");
+  await user.type(screen.getByPlaceholderText("Follow up…"), "Prompt during an outage");
   scrollTo.mockClear();
   await user.click(screen.getByRole("button", { name: /^send$/i }));
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
@@ -2558,7 +2558,7 @@ test("does not toast passive chat errors", async () => {
 
   render(SessionChatPage);
 
-  await screen.findByPlaceholderText("Continue the thread…");
+  await screen.findByPlaceholderText("Follow up…");
   expect(mocks.toastError).not.toHaveBeenCalled();
 });
 
@@ -2659,7 +2659,7 @@ test("hides exit on exited sessions and waits for idle after automatic resume be
 
   render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText("Continue the thread…");
+  const followUpInput = await screen.findByPlaceholderText("Follow up…");
   expect(followUpInput).not.toBeDisabled();
   expect(screen.queryByRole("button", { name: /exit session/i })).not.toBeInTheDocument();
 
@@ -2708,7 +2708,7 @@ test("resumes an exited Claude conversation by submitting the real input before 
   mocks.submitInboxMessage.mockResolvedValue(undefined);
   render(SessionChatPage);
   await user.type(
-    await screen.findByPlaceholderText("Continue the thread…"),
+    await screen.findByPlaceholderText("Follow up…"),
     "continue bound conversation",
   );
   await user.click(screen.getByRole("button", { name: /send/i }));

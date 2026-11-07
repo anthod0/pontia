@@ -325,12 +325,19 @@
     margin: 0;
   }
 
+  :global(.tiptap-prompt p.is-editor-empty:first-child) {
+    position: relative;
+  }
+
   :global(.tiptap-prompt p.is-editor-empty:first-child::before) {
     color: var(--muted-foreground);
     content: attr(data-placeholder);
-    float: left;
-    height: 0;
+    inset: 0;
+    overflow: hidden;
     pointer-events: none;
+    position: absolute;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   :global(.tiptap-prompt[aria-disabled='true']) {

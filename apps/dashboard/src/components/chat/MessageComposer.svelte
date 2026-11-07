@@ -49,7 +49,7 @@
     value = $bindable(''),
     disabled = false,
     submitDisabled = false,
-    placeholder = 'Continue the thread…',
+    placeholder = 'Follow up…',
     busy = false,
     workspaceId = null,
     inputId,
@@ -280,7 +280,7 @@
     </div>
     <div class={compact ? 'col-start-3 row-start-1 p-1' : 'contents'}>
       {#if interruptMode && attachments.items.length === 0}
-        <Button type="button" size="icon" disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt()}>
+        <Button type="button" size={fullscreen ? 'icon-sm' : 'icon'} disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt()}>
           <StopIcon class="size-4" />
         </Button>
       {:else}

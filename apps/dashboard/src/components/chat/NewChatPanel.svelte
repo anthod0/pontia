@@ -67,7 +67,7 @@
       inputId="chat-prompt"
       fullscreen
       {autofocus}
-      placeholder="What should the agent do?"
+      placeholder="Describe a task…"
       disabled={promptDisabled}
       submitDisabled={!canCreate}
       busy={creating}

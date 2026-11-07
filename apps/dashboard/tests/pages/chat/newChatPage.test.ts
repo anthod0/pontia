@@ -37,12 +37,12 @@ test("keeps first-time users in workspace setup until they continue explicitly",
     }),
   );
   expect(screen.getByRole("heading", { name: "Set up your first workspace" })).toBeInTheDocument();
-  expect(screen.queryByPlaceholderText("What should the agent do?")).not.toBeInTheDocument();
+  expect(screen.queryByPlaceholderText("Describe a task…")).not.toBeInTheDocument();
   expect(continueButton).toBeEnabled();
 
   await user.click(continueButton);
 
-  expect(await screen.findByPlaceholderText("What should the agent do?")).toBeInTheDocument();
+  expect(await screen.findByPlaceholderText("Describe a task…")).toBeInTheDocument();
   expect(
     screen.queryByRole("heading", { name: "Set up your first workspace" }),
   ).not.toBeInTheDocument();
@@ -68,7 +68,7 @@ test.each([true, false])(
     resolveWorkspaces(hasWorkspace ? [workspace()] : []);
 
     if (hasWorkspace) {
-      expect(await screen.findByPlaceholderText("What should the agent do?")).toBeInTheDocument();
+      expect(await screen.findByPlaceholderText("Describe a task…")).toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: "Continue to New Chat" }),
       ).not.toBeInTheDocument();
@@ -92,12 +92,12 @@ test("explains how to configure Pontia when no workspace roots exist", async () 
 test("focuses the prompt only on the first entry to the new chat page", async () => {
   const firstPage = render(NewChatPage);
 
-  const firstPrompt = await screen.findByPlaceholderText("What should the agent do?");
+  const firstPrompt = await screen.findByPlaceholderText("Describe a task…");
   await waitFor(() => expect(firstPrompt).toHaveFocus());
   firstPage.unmount();
 
   render(NewChatPage);
-  const revisitedPrompt = await screen.findByPlaceholderText("What should the agent do?");
+  const revisitedPrompt = await screen.findByPlaceholderText("Describe a task…");
   expect(revisitedPrompt).not.toHaveFocus();
 });
 
@@ -116,7 +116,7 @@ test("prefers the new chat workspace query parameter over the remembered workspa
 
   render(NewChatPage);
 
-  await screen.findByPlaceholderText("What should the agent do?");
+  await screen.findByPlaceholderText("Describe a task…");
   expect(screen.getByLabelText(/^Workspace$/i)).toHaveTextContent("sandbox");
   expect(window.localStorage.getItem("pontia.chat.lastWorkspaceId")).toBe("workspace-1");
 });
@@ -134,7 +134,7 @@ test("updates the selected workspace when the mounted page query changes", async
 
   render(NewChatPage);
 
-  await screen.findByPlaceholderText("What should the agent do?");
+  await screen.findByPlaceholderText("Describe a task…");
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(screen.getByLabelText(/^Workspace$/i)).toHaveTextContent("pontia");
 
@@ -163,13 +163,13 @@ test("remembers the selected new chat workspace after starting a chat", async ()
 
   render(NewChatPage);
 
-  await screen.findByPlaceholderText("What should the agent do?");
+  await screen.findByPlaceholderText("Describe a task…");
   const workspaceSelector = screen.getByLabelText(/^Workspace$/i);
   await user.click(workspaceSelector);
   await user.click(await screen.findByText("sandbox"));
   expect(workspaceSelector).toHaveTextContent("sandbox");
   document.body.style.pointerEvents = "";
-  await user.type(screen.getByPlaceholderText("What should the agent do?"), "Use sandbox");
+  await user.type(screen.getByPlaceholderText("Describe a task…"), "Use sandbox");
   await user.click(screen.getByRole("button", { name: /start session/i }));
 
   await vi.waitFor(() =>
@@ -226,7 +226,7 @@ test("creates a session with initial prompt, workspace, and client then opens it
   render(NewChatPage);
 
   await user.type(
-    await screen.findByPlaceholderText("What should the agent do?"),
+    await screen.findByPlaceholderText("Describe a task…"),
     "Implement the dashboard chat flow",
   );
   await fireEvent.click(screen.getByRole("button", { name: /start session/i }));
