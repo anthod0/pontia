@@ -116,9 +116,18 @@ impl ClientRegistry {
                 continue;
             }
             let client = registration.spec.client_type;
+            let name = registration
+                .configuration
+                .as_ref()
+                .and_then(|configuration| {
+                    let key = configuration.keys().into_iter().next()?;
+                    let effective = configuration.merged(&key, &serde_json::json!({}));
+                    Some(configuration.presentation(&key, &effective).0)
+                })
+                .unwrap_or_else(|| client.into());
             options.push(crate::client_contract::SessionCreationOption {
                 id: client.into(),
-                name: client.into(),
+                name,
                 client_type: client.into(),
                 metadata: serde_json::json!({}),
             });
