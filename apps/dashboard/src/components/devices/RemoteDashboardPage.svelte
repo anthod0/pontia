@@ -38,6 +38,32 @@
 
 {#if effectiveState === 'available'}
   {@render dashboard?.()}
+{:else if effectiveState === 'connecting'}
+  <div class="flex min-h-96 flex-col items-center justify-center gap-3 bg-surface p-4" role="status">
+    <SpinnerGapIcon class="size-6 animate-spin text-primary" aria-hidden="true" />
+    <p class="text-sm text-muted-foreground">
+      Connecting to <span class="font-mono text-heading">{handle}</span>…
+    </p>
+  </div>
+{:else if effectiveState === 'unavailable'}
+  <div class="flex min-h-96 flex-col items-center justify-center gap-3 bg-surface p-4 text-center">
+    <WifiSlashIcon class="size-6 text-destructive" aria-hidden="true" />
+    <div class="space-y-1">
+      <h1 class="text-sm font-medium text-heading">Device unavailable</h1>
+      <p class="text-sm text-muted-foreground">
+        {#if unavailableMessage}
+          {unavailableMessage}
+        {:else}
+          Could not connect to <span class="font-mono text-heading">{handle}</span>.
+        {/if}
+      </p>
+    </div>
+    {#if signInUrl}
+      <Button size="sm" href={signInUrl}>Sign in</Button>
+    {:else if onRetry}
+      <Button size="sm" variant="outline" onclick={onRetry}>Try again</Button>
+    {/if}
+  </div>
 {:else}
   <div class="relative flex min-h-96 items-center justify-center overflow-hidden bg-surface p-4 sm:p-8">
     <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 top-0 h-px bg-primary/60"></div>
@@ -59,26 +85,16 @@
         <Card.Header class="border-b border-border pb-4">
           <div class="flex items-start gap-3">
             <div class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
-              {#if effectiveState === 'connecting'}
-                <SpinnerGapIcon class="size-5 animate-spin text-primary" aria-hidden="true" />
-              {:else if effectiveState === 'authorization-required'}
+              {#if effectiveState === 'authorization-required'}
                 <LockKeyIcon class="size-5 text-warning" aria-hidden="true" />
-              {:else if effectiveState === 'unavailable'}
-                <WifiSlashIcon class="size-5 text-destructive" aria-hidden="true" />
               {:else}
                 <WarningCircleIcon class="size-5 text-destructive" aria-hidden="true" />
               {/if}
             </div>
             <div class="min-w-0 space-y-1">
-              {#if effectiveState === 'connecting'}
-                <Card.Title role="heading" aria-level={1}>Connecting to device</Card.Title>
-                <Card.Description>Preparing a secure connection to your Pontia device.</Card.Description>
-              {:else if effectiveState === 'authorization-required'}
+              {#if effectiveState === 'authorization-required'}
                 <Card.Title role="heading" aria-level={1}>Authorization required</Card.Title>
                 <Card.Description>Your browser needs renewed access before it can connect to this device.</Card.Description>
-              {:else if effectiveState === 'unavailable'}
-                <Card.Title role="heading" aria-level={1}>Device unavailable</Card.Title>
-                <Card.Description>Pontia could not establish a secure connection to this device.</Card.Description>
               {:else}
                 <Card.Title role="heading" aria-level={1}>Invalid device</Card.Title>
                 <Card.Description>This link does not contain a valid Pontia device handle.</Card.Description>
@@ -95,15 +111,8 @@
             </div>
           {/if}
 
-          {#if effectiveState === 'connecting'}
-            <div class="flex items-center gap-2 text-xs text-muted-foreground" role="status">
-              <span class="size-1.5 animate-pulse bg-primary"></span>
-              Establishing a secure connection…
-            </div>
-          {:else if effectiveState === 'authorization-required'}
+          {#if effectiveState === 'authorization-required'}
             <p class="text-sm text-muted-foreground">Return to Pontia to authorize this browser again. No access credentials are entered on this page.</p>
-          {:else if effectiveState === 'unavailable'}
-            <p class="text-sm text-muted-foreground">{unavailableMessage ?? 'Try connecting to the device again.'}</p>
           {:else}
             <p class="text-sm text-muted-foreground">Open the device from Pontia again or check that the complete link was copied.</p>
           {/if}
@@ -112,14 +121,6 @@
         {#if effectiveState === 'authorization-required' && reauthorizationUrl}
           <Card.Footer class="justify-end border-t border-border bg-muted/30 px-4 py-3">
             <Button href={reauthorizationUrl}>Authorize again</Button>
-          </Card.Footer>
-        {:else if effectiveState === 'unavailable' && signInUrl}
-          <Card.Footer class="justify-end border-t border-border bg-muted/30 px-4 py-3">
-            <Button href={signInUrl}>Sign in</Button>
-          </Card.Footer>
-        {:else if effectiveState === 'unavailable' && onRetry}
-          <Card.Footer class="justify-end border-t border-border bg-muted/30 px-4 py-3">
-            <Button variant="outline" onclick={onRetry}>Try again</Button>
           </Card.Footer>
         {/if}
       </Card.Root>
