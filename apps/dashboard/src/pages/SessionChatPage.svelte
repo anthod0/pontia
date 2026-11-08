@@ -1037,12 +1037,10 @@
                   <Alert.Title>Some history could not be associated</Alert.Title>
                   <Alert.Description>
                     {#if group.history_issue === 'topology_unknown'}
-                      The earlier branch for this turn could not be confirmed. Showing the history that can be verified.
+                      The earlier branch could not be confirmed
                     {:else}
                       The native history range for this turn could not be confirmed. Other verified turns remain available.
                     {/if}
-                    <span class="block break-all text-xs">Turn: {group.turn_id}</span>
-                    The original conversation may still be available in the agent client.
                   </Alert.Description>
                 </Alert.Root>
               {/each}
