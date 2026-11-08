@@ -1,0 +1,346 @@
+<script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
+  import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon'
+  import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon'
+  import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
+  import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
+  import FunnelIcon from 'phosphor-svelte/lib/FunnelIcon'
+  import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon'
+  import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
+  import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon'
+  import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon'
+  import { dashboardRelativePath, dashboardScope } from '$lib/dashboardRoutes'
+  import { navigate } from '$lib/navigation'
+  import * as Sidebar from '$lib/components/ui/sidebar/index.js'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
+  import { cn } from '$lib/utils.js'
+  import { snapshotSessionOverview } from "../../queries/sessionOverview";
+  import { sessionChatTitle } from '$lib/session-chat/sessionChat'
+  import { sessionStateDotClass } from '$lib/sessionState'
+  import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
+  import type { SessionView } from '../../api/types'
+  const device = useDeviceRuntime();
+  const { archiveSession, pinSession, terminateSession, unpinSession, updateSessionTitle } = device.sessions;
+  const { createSessionOverviewQuery } = device.sessionOverview;
+  const { createWorkspacesQuery } = device.workspaceQueries;
+
+  let { handle }: { handle?: string } = $props()
+
+  let currentPath = $state(window.location.pathname)
+  let renamingSessionId = $state<string | null>(null)
+  let renamingSession = $state<SessionView | null>(null)
+  let renameDialogOpen = $state(false)
+  let renameError = $state<string | null>(null)
+  let sessionManagementBusyId = $state<string | null>(null)
+  let sessionActionMenuOpenKey = $state<string | null>(null)
+  let pinnedSessionsOpen = $state(true)
+  let recentSessionsOpen = $state(true)
+  let selectedWorkspaceId = $state('')
+  const workspacesQuery = createWorkspacesQuery()
+  const selectedWorkspace = $derived(workspacesQuery.data?.find((workspace) => workspace.workspace_id === selectedWorkspaceId))
+  const overviewQuery = createSessionOverviewQuery(false, () => selectedWorkspaceId || undefined)
+  const overview = $derived(snapshotSessionOverview(overviewQuery.data))
+  let recentSessions = $derived.by(() => {
+    // The overview API scopes only list; active is complete and remains global.
+    const active = selectedWorkspaceId
+      ? overview.active.filter((session) => session.workspace_id === selectedWorkspaceId)
+      : overview.active
+    const activeIds = new Set(active.map((session) => session.session_id))
+    return [
+      ...active,
+      ...overview.list.filter((session) => !activeIds.has(session.session_id)),
+    ]
+  })
+
+  $effect(() => {
+    if (!renameDialogOpen && renamingSession && renamingSessionId === null) cancelRenameSession()
+  })
+
+  function activeSessionIdFromPath(): string | null {
+    const match = dashboardRelativePath(currentPath).match(/^\/chat\/([^/?#]+)/)
+    return match ? decodeURIComponent(match[1]) : null
+  }
+
+  function isSessionActive(sessionId: string) {
+    return (handle === undefined || dashboardScope(currentPath) === `/${handle}`) && activeSessionIdFromPath() === sessionId
+  }
+
+  function isSessionVisibleState(state: string) {
+    return state !== 'exited' && state !== 'error'
+  }
+
+  function isTerminalSessionState(state: string) {
+    return state === 'exited' || state === 'error'
+  }
+
+  function go(path: string) {
+    if (handle === undefined) void navigate(path)
+    else void navigate(path, undefined, { scope: `/${handle}` })
+  }
+
+  function openSession(sessionId: string) {
+    go(`/chat/${sessionId}`)
+  }
+
+  function setSessionActionMenuOpen(actionKey: string, open: boolean): void {
+    sessionActionMenuOpenKey = open ? actionKey : null
+  }
+
+  function startRenamingSession(session: SessionView) {
+    renamingSession = session
+    renameError = null
+    renameDialogOpen = true
+  }
+
+  async function togglePinSession(session: SessionView): Promise<void> {
+    sessionManagementBusyId = session.session_id
+    try {
+      if (session.pinned_at) await unpinSession(session.session_id)
+      else await pinSession(session.session_id)
+    } finally {
+      sessionManagementBusyId = null
+    }
+  }
+
+  async function archiveSessionFromSidebar(session: SessionView): Promise<void> {
+    sessionManagementBusyId = session.session_id
+    try {
+      await archiveSession(session.session_id)
+    } finally {
+      sessionManagementBusyId = null
+    }
+  }
+
+  async function exitSessionFromSidebar(session: SessionView): Promise<void> {
+    sessionManagementBusyId = session.session_id
+    try {
+      await terminateSession(session.session_id)
+    } finally {
+      sessionManagementBusyId = null
+    }
+  }
+
+  async function togglePinSessionFromMenu(session: SessionView): Promise<void> {
+    sessionActionMenuOpenKey = null
+    await togglePinSession(session)
+  }
+
+  async function archiveSessionFromMenu(session: SessionView): Promise<void> {
+    sessionActionMenuOpenKey = null
+    await archiveSessionFromSidebar(session)
+  }
+
+  async function exitSessionFromMenu(session: SessionView): Promise<void> {
+    sessionActionMenuOpenKey = null
+    await exitSessionFromSidebar(session)
+  }
+
+  async function confirmRenameSession(title: string | null): Promise<void> {
+    if (!renamingSession) return
+    renamingSessionId = renamingSession.session_id
+    renameError = null
+    try {
+      await updateSessionTitle(renamingSession.session_id, title)
+      renameDialogOpen = false
+      renamingSession = null
+    } catch (error) {
+      renameError = error instanceof Error ? error.message : String(error)
+    } finally {
+      renamingSessionId = null
+    }
+  }
+
+  function cancelRenameSession(): void {
+    renameError = null
+    renamingSession = null
+  }
+
+  function handleSessionListScroll(event: Event): void {
+    const target = event.currentTarget as HTMLElement
+    if (
+      target.scrollHeight - target.scrollTop - target.clientHeight <= 80 &&
+      overview.nextCursor &&
+      !overviewQuery.isFetchingNextPage
+    ) {
+      void overviewQuery.fetchNextPage()
+    }
+  }
+</script>
+
+<svelte:window onpopstate={() => (currentPath = window.location.pathname)} />
+
+{#snippet sessionMenuItem(session: SessionView, actionKey: string)}
+  <Sidebar.MenuItem>
+    <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
+      {#if session.pinned_at}
+        <PushPinIcon class="size-3.5 shrink-0" aria-label="Pinned session" />
+      {/if}
+      <span class="line-clamp-1">{sessionChatTitle(session)}</span>
+    </Sidebar.MenuButton>
+    {#if isSessionVisibleState(session.state)}
+      <span
+        class={cn('pointer-events-none absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center transition-opacity group-has-[:focus-visible]/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden', sessionActionMenuOpenKey === actionKey ? 'opacity-0' : 'opacity-100')}
+        aria-label={`${session.state} session`}
+      >
+        <span class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}></span>
+      </span>
+    {/if}
+    <DropdownMenu.Root bind:open={() => sessionActionMenuOpenKey === actionKey, (open) => setSessionActionMenuOpen(actionKey, open)}>
+      <Sidebar.MenuAction
+        showOnHover
+        aria-label={`Open session actions for ${sessionChatTitle(session)}`}
+        title="Session actions"
+        disabled={renamingSessionId === session.session_id || sessionManagementBusyId === session.session_id}
+        onclick={(event) => event.stopPropagation()}
+      >
+        {#snippet child({ props })}
+          <DropdownMenu.Trigger {...props}>
+            <DotsThreeVerticalIcon />
+          </DropdownMenu.Trigger>
+        {/snippet}
+      </Sidebar.MenuAction>
+      <DropdownMenu.Content side="right" align="start" class="w-44">
+        <DropdownMenu.Item onclick={() => startRenamingSession(session)}>
+          <PencilSimpleIcon class="size-4" /> Rename
+        </DropdownMenu.Item>
+        <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void togglePinSessionFromMenu(session)}>
+          {#if session.pinned_at}
+            <PushPinSlashIcon class="size-4" /> Unpin
+          {:else}
+            <PushPinIcon class="size-4" /> Pin
+          {/if}
+        </DropdownMenu.Item>
+        <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void archiveSessionFromMenu(session)}>
+          <ArchiveIcon class="size-4" /> Archive
+        </DropdownMenu.Item>
+        {#if !isTerminalSessionState(session.state)}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item variant="destructive" disabled={sessionManagementBusyId === session.session_id} onclick={() => void exitSessionFromMenu(session)}>
+            <SignOutIcon class="size-4" /> Exit
+          </DropdownMenu.Item>
+        {/if}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  </Sidebar.MenuItem>
+{/snippet}
+
+<div class={cn("no-scrollbar min-h-0 overflow-y-auto group-data-[collapsible=icon]:hidden", handle === undefined ? "flex-1" : "max-h-[55svh]")} onscroll={handleSessionListScroll}>
+  {#if overviewQuery.error}
+    <p role="alert" class="px-4 py-2 text-xs text-destructive">Sidebar refresh failed. {overviewQuery.error.message}</p>
+  {/if}
+  {#if overview.pinned.length}
+    <Sidebar.Group>
+      <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
+        <button
+          type="button"
+          class="flex min-w-0 items-center gap-1 rounded-sm text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+          aria-expanded={pinnedSessionsOpen}
+          onclick={() => (pinnedSessionsOpen = !pinnedSessionsOpen)}
+        >
+          <span>Pinned Sessions</span>
+          <CaretRightIcon class={cn('size-3 transition-transform', pinnedSessionsOpen && 'rotate-90')} />
+        </button>
+      </Sidebar.GroupLabel>
+      {#if pinnedSessionsOpen}
+        <Sidebar.GroupContent class="pr-1">
+          <Sidebar.Menu>
+            {#each overview.pinned as session}
+              {@render sessionMenuItem(session, `pinned:${session.session_id}`)}
+            {/each}
+          </Sidebar.Menu>
+        </Sidebar.GroupContent>
+      {/if}
+    </Sidebar.Group>
+  {/if}
+  <Sidebar.Group>
+    <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
+      <button
+        type="button"
+        class="flex min-w-0 items-center gap-1 rounded-sm text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+        aria-expanded={recentSessionsOpen}
+        onclick={() => (recentSessionsOpen = !recentSessionsOpen)}
+      >
+        <span>Recent Sessions</span>
+        <CaretRightIcon class={cn('size-3 transition-transform', recentSessionsOpen && 'rotate-90')} />
+      </button>
+      <span class="flex-1"></span>
+      <span class="flex items-center gap-2">
+        {#if handle === undefined}
+        <button
+          type="button"
+          class="rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+          aria-label="Open all sessions"
+          title="All sessions"
+          onclick={() => go('/sessions')}
+        >
+          <ArrowUpRightIcon class="size-4" />
+        </button>
+        {/if}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger
+            class={cn('rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden', selectedWorkspaceId && 'text-primary')}
+            aria-label="Filter recent sessions by workspace"
+            title={selectedWorkspaceId ? `Workspace: ${selectedWorkspace?.name || selectedWorkspace?.display_path || selectedWorkspaceId}` : 'All workspaces'}
+          >
+            <FunnelIcon class="size-4" weight={selectedWorkspaceId ? 'fill' : 'regular'} />
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content side="right" align="start" class="max-h-80 w-72 overflow-y-auto">
+            <DropdownMenu.Label>Workspace</DropdownMenu.Label>
+            <DropdownMenu.RadioGroup bind:value={selectedWorkspaceId}>
+              <DropdownMenu.RadioItem value="">All workspaces</DropdownMenu.RadioItem>
+              <DropdownMenu.Separator />
+              {#each workspacesQuery.data ?? [] as workspace (workspace.workspace_id)}
+                <DropdownMenu.RadioItem value={workspace.workspace_id}>
+                  <span class="min-w-0" title={workspace.canonical_path}>
+                    <span class="block truncate">{workspace.name || workspace.display_path}</span>
+                    {#if workspace.name}
+                      <span class="block truncate text-xs text-muted-foreground">{workspace.display_path}</span>
+                    {/if}
+                  </span>
+                </DropdownMenu.RadioItem>
+              {/each}
+            </DropdownMenu.RadioGroup>
+            {#if workspacesQuery.error}
+              <p role="alert" class="px-2 py-1 text-xs text-destructive">Could not load workspaces.</p>
+              <DropdownMenu.Item onclick={() => void workspacesQuery.refetch()}>Retry</DropdownMenu.Item>
+            {:else if workspacesQuery.isPending}
+              <p role="status" class="px-2 py-1 text-xs text-muted-foreground">Loading workspaces…</p>
+            {:else if !workspacesQuery.data?.length}
+              <p class="px-2 py-1 text-xs text-muted-foreground">No workspaces</p>
+            {/if}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      </span>
+    </Sidebar.GroupLabel>
+  {#if recentSessionsOpen}
+    <Sidebar.GroupContent class="pr-1">
+      <Sidebar.Menu>
+        {#if overviewQuery.isPending && !recentSessions.length}
+          <Sidebar.MenuSkeleton />
+          <Sidebar.MenuSkeleton />
+        {:else if recentSessions.length}
+          {#each recentSessions as session}
+            {@render sessionMenuItem(session, `recent:${session.session_id}`)}
+          {/each}
+        {:else if !overviewQuery.error}
+          <Sidebar.MenuItem>
+            <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No recent sessions</div>
+          </Sidebar.MenuItem>
+        {/if}
+        {#if overviewQuery.isFetchingNextPage}
+          <Sidebar.MenuSkeleton />
+        {/if}
+      </Sidebar.Menu>
+    </Sidebar.GroupContent>
+  {/if}
+  </Sidebar.Group>
+</div>
+
+<RenameSessionDialog
+  bind:open={renameDialogOpen}
+  session={renamingSession}
+  busy={renamingSessionId !== null}
+  error={renameError}
+  onConfirm={(title) => void confirmRenameSession(title)}
+  onCancel={cancelRenameSession}
+/>

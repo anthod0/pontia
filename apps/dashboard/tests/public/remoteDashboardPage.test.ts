@@ -1,6 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import DevicesPage from "../../src/components/devices/DevicesPage.svelte";
 import RemoteDashboardPage from "../../src/components/devices/RemoteDashboardPage.svelte";
 import { match as matchHandle } from "../../src/params/handle";
 import { isValidDeviceHandle } from "../../src/lib/deviceHandle";
@@ -31,42 +30,6 @@ describe("device handle", () => {
     expect(matchHandle(handle)).toBe(true);
     expect(matchHandle("workflows")).toBe(false);
   });
-});
-
-test("renders the public device list empty state", () => {
-  render(DevicesPage);
-
-  expect(screen.getByRole("heading", { name: "Devices" })).toBeInTheDocument();
-  expect(screen.getByText("No devices yet")).toBeInTheDocument();
-});
-
-test("renders a sign-in action when loading devices requires authentication", () => {
-  const signInUrl = "https://pontia.dev/login?return_to=https%3A%2F%2Fapp.pontia.dev%2F";
-  render(DevicesPage, {
-    props: { error: "Sign in to Pontia to continue.", signInUrl },
-  });
-
-  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", signInUrl);
-  expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
-});
-
-test("renders valid devices as handle-scoped dashboard links", () => {
-  render(DevicesPage, {
-    props: {
-      devices: [
-        { handle, name: "Office Mac" },
-        { handle: "2invalid_handle", name: "Invalid" },
-      ],
-      openAction: (deviceHandle: string) => `https://app.pontia.dev/${deviceHandle}`,
-    },
-  });
-
-  expect(screen.getByRole("link", { name: "Open Dashboard" })).toHaveAttribute(
-    "href",
-    `https://app.pontia.dev/${handle}`,
-  );
-  expect(screen.getByText("Office Mac")).toBeInTheDocument();
-  expect(screen.queryByText("Invalid")).not.toBeInTheDocument();
 });
 
 test("invalid handles override any requested connection state", () => {

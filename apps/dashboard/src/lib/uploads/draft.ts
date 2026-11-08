@@ -39,6 +39,7 @@ export async function fileDigest(file: Blob, signal?: AbortSignal): Promise<stri
   return Array.from(hash.digest(), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 export function createUploadDrafts(device: DeviceRuntime) {
+  const retainedDrafts = new Map<string, ReturnType<typeof createUploadDraft>>();
   function uploadKey(): string {
     const bytes = crypto.getRandomValues(new Uint8Array(16));
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -259,7 +260,21 @@ export function createUploadDrafts(device: DeviceRuntime) {
       },
     };
   }
-  return { createUploadDraft };
+  return {
+    createUploadDraft,
+    getRetainedUploadDraft(draft: string) {
+      let retained = retainedDrafts.get(draft);
+      if (!retained) {
+        retained = createUploadDraft(draft);
+        retainedDrafts.set(draft, retained);
+      }
+      return retained;
+    },
+    dispose() {
+      for (const draft of retainedDrafts.values()) draft.destroy();
+      retainedDrafts.clear();
+    },
+  };
 }
 
 export type UploadDraft = ReturnType<ReturnType<typeof createUploadDrafts>["createUploadDraft"]>;

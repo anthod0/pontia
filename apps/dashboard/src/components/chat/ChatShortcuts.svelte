@@ -11,6 +11,8 @@
   const device = useDeviceRuntime();
   const { createSessionOverviewQuery } = device.sessionOverview;
 
+  let { newChatHandle }: { newChatHandle?: string } = $props()
+
   let shortcutsOpen = $state(false)
   const overviewQuery = createSessionOverviewQuery()
   const overview = $derived(snapshotSessionOverview(overviewQuery.data))
@@ -22,8 +24,9 @@
   })
 
   function openChat(path: string, options?: Record<string, string>): void {
-    if (options) navigate(path, options)
-    else navigate(path)
+    if (newChatHandle) void navigate(path, options, { scope: `/${newChatHandle}` })
+    else if (options) void navigate(path, options)
+    else void navigate(path)
 
   }
 
@@ -35,6 +38,10 @@
           .find((session) => session.session_id === currentSessionId)
       : null
     const workspaceId = currentSession?.workspace_id?.trim()
+    if (newChatHandle) {
+      void navigate('/', { device: newChatHandle, workspace: workspaceId }, { scope: '' })
+      return
+    }
     if (workspaceId) openChat('/', { workspace: workspaceId })
     else openChat('/')
   }

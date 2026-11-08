@@ -1,7 +1,11 @@
 <script lang="ts">
+  import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
   import { onMount, type Snippet } from 'svelte';
   import { writable } from 'svelte/store';
-  import DevicesPage from '../../components/devices/DevicesPage.svelte';
+  import PublicNewChatPage from './PublicNewChatPage.svelte';
+  import DeviceSessionList from '../../components/layout/DeviceSessionList.svelte';
+  import { provideDeviceDirectory, deviceStateLabel } from './deviceDirectory';
+  import { navigate } from '$lib/navigation';
   import RemoteDashboardPage from '../../components/devices/RemoteDashboardPage.svelte';
   import AppShell from '../../components/layout/AppShell.svelte';
   import AppSidebar from '../../components/layout/AppSidebar.svelte';
@@ -35,6 +39,21 @@
     : $signInRequired || selected?.state === 'offline' || moduleError || (!$loading && !selected)
       ? 'unavailable' : 'connecting');
 
+  provideDeviceDirectory({ get devices() { return $devices }, get handle() { return handle }, rememberDevice });
+  let lastHandle = $state<string | null>(null);
+  const settingsHandle = $derived(handle || ($devices.some(target => target.handle === lastHandle)
+    ? lastHandle : $devices.find(target => target.state === 'online')?.handle));
+  $effect(() => {
+    if (handle && $devices.some(target => target.handle === handle)) {
+      rememberDevice(handle);
+    }
+  });
+
+  function rememberDevice(handle: string): void {
+    lastHandle = handle;
+    try { window.localStorage.setItem('pontia.lastDeviceHandle', handle); } catch { /* Storage is optional. */ }
+  }
+
   async function start(): Promise<void> {
     if (loadingModule) return;
     loadingModule = true;
@@ -62,6 +81,7 @@
   }
 
   onMount(() => {
+    try { lastHandle = window.localStorage.getItem('pontia.lastDeviceHandle'); } catch { /* Storage is optional. */ }
     void start();
     return () => {
       disposed = true;
@@ -75,40 +95,34 @@
   if (document.visibilityState === 'visible') connections?.focus();
 }} />
 
-<AppShell settingsEnabled={!!device}>
+<AppShell>
   {#snippet sidebar()}
+    <AppSidebar onNewChat={() => void navigate('/', undefined, { scope: '' })}
+      settingsDisabled={!settingsHandle}
+      onSettings={() => { if (settingsHandle) void navigate('/settings/common', undefined, { scope: `/${settingsHandle}` }) }}>
+      {#snippet groups()}
+        {#each $devices as target (target.handle)}
+          <section class="shrink-0 group-data-[collapsible=icon]:hidden" aria-label={`${target.name} sessions`}>
+            <Sidebar.Group>
+              <Sidebar.GroupLabel class="h-auto min-h-9 gap-2">
+                <button class="min-w-0 flex-1 truncate text-left hover:text-primary" onclick={() => void navigate('/', undefined, { scope: `/${target.handle}` })}>{target.name}</button>
+                <span class="text-[10px]">{deviceStateLabel[target.state]}</span>
+                <a aria-label={`All sessions on ${target.name}`} title="All sessions" href={`/${target.handle}/sessions`} onclick={(event) => {
+                  event.preventDefault(); void navigate('/sessions', undefined, { scope: `/${target.handle}` });
+                }}><ArrowUpRightIcon class="size-4" /></a>
+              </Sidebar.GroupLabel>
+            </Sidebar.Group>
+            {#if target.state === 'online' && target.runtime}
+              {#key target.runtime}
+                <DeviceProvider device={target.runtime}><DeviceSessionList handle={target.handle} /></DeviceProvider>
+              {/key}
+            {/if}
+          </section>
+        {/each}
+      {/snippet}
+    </AppSidebar>
     {#if device}
-      {#key device}
-        <DeviceProvider {device}>
-          <ChatShortcuts />
-          <AppSidebar />
-        </DeviceProvider>
-      {/key}
-    {:else}
-      <Sidebar.Root collapsible="icon">
-        <Sidebar.Header><a href="/" class="px-2 py-1 font-semibold">Pontia</a></Sidebar.Header>
-        <Sidebar.Content>
-          <Sidebar.Group>
-            <Sidebar.Menu>
-              <Sidebar.MenuItem><Sidebar.MenuButton>
-                {#snippet child({ props })}<a {...props} href="/">Devices</a>{/snippet}
-              </Sidebar.MenuButton></Sidebar.MenuItem>
-              {#each $devices as target (target.handle)}
-                <Sidebar.MenuItem>
-                  <Sidebar.MenuButton isActive={handle === target.handle}>
-                    {#snippet child({ props })}
-                      <a {...props} href={`/${target.handle}`}>
-                        <span>{target.name}</span>
-                        <span class="ml-auto text-xs">{{ connecting: 'Connecting', online: 'Online', offline: 'Offline', 'sign-in-required': 'Sign in required' }[target.state]}</span>
-                      </a>
-                    {/snippet}
-                  </Sidebar.MenuButton>
-                </Sidebar.MenuItem>
-              {/each}
-            </Sidebar.Menu>
-          </Sidebar.Group>
-        </Sidebar.Content>
-      </Sidebar.Root>
+      {#key device}<DeviceProvider {device}><ChatShortcuts newChatHandle={handle} /></DeviceProvider>{/key}
     {/if}
   {/snippet}
   {#snippet topbar()}
@@ -130,9 +144,9 @@
         />
       {/if}
     {:else}
-      <DevicesPage devices={$devices} loading={$loading && !moduleError}
+      <PublicNewChatPage devices={$devices} loading={$loading && !moduleError}
         error={$error ?? moduleError} onRetry={() => connections ? void connections.refreshDevices() : void start()}
-        openAction={(target) => `/${target}`} {signInUrl} />
+        onRetryDevice={(handle) => connections?.retry(handle)} {signInUrl} />
     {/if}
   {/snippet}
 </AppShell>

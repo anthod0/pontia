@@ -21,8 +21,11 @@ test("retries a failed device list request", async () => {
   vi.mocked(fixture.remote.listPublicDevices).mockRejectedValueOnce(new Error("503"));
   render(PublicDashboardHarness, { props: { handle: "" } });
   await fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
-  const links = await screen.findAllByRole("link", { name: "Open Dashboard" });
-  expect(links.map((link) => link.getAttribute("href"))).toEqual(["/office-mac", "/travel-laptop"]);
+  const links = await screen.findAllByRole("link", { name: /^All sessions on/ });
+  expect(links.map((link) => link.getAttribute("href"))).toEqual([
+    "/office-mac/sessions",
+    "/travel-laptop/sessions",
+  ]);
 });
 
 test("cross-device navigation preserves the AppShell and both device connections", async () => {
@@ -38,7 +41,7 @@ test("cross-device navigation preserves the AppShell and both device connections
   expect(firstSignals.every((signal) => !signal.aborted)).toBe(true);
   expect(fixture.connect).toHaveBeenCalledTimes(2);
   await view.rerender({ handle: "" });
-  await screen.findAllByRole("link", { name: "Open Dashboard" });
+  await screen.findAllByRole("link", { name: /^All sessions on/ });
   expect(document.querySelector('[data-slot="sidebar-wrapper"]')).toBe(shell);
   expect(firstSignals.every((signal) => !signal.aborted)).toBe(true);
 });

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { useDeviceRuntime } from '../device/context';
-  import { onDestroy, onMount } from 'svelte'
+  import { onDestroy, onMount, type Snippet } from 'svelte'
   import { defaultClientType } from '../clients'
   import { navigate } from '$lib/navigation'
   import { toast } from 'svelte-sonner'
@@ -20,7 +20,9 @@
 
   let mounted = true
   onDestroy(() => { mounted = false })
-  let createWorkspaceId = ''
+  export let createWorkspaceId = ''
+  export let workspaceSelector: Snippet<[boolean]> | undefined = undefined
+  export let routeScope: string | undefined = undefined
   let creationOptionId = defaultClientType
   let creating = false
   let actionError: string | null = null
@@ -87,6 +89,7 @@
   }
 
   function readQueryWorkspaceId(): string | null {
+    if (workspaceSelector) return null
     return new URLSearchParams(window.location.search).get('workspace')
   }
 
@@ -165,7 +168,8 @@
       rememberCreateWorkspaceSelection(workspaceId)
       clearChatDraft()
       resetTimelineState(result.session.session_id)
-      navigate(`/chat/${result.session.session_id}`)
+      if (routeScope === undefined) void navigate(`/chat/${result.session.session_id}`)
+      else void navigate(`/chat/${result.session.session_id}`, undefined, { scope: routeScope })
       void Promise.all([
         loadSessionDetail(result.session.session_id),
         loadSessionTimeline(result.session.session_id, {
@@ -206,6 +210,8 @@
       bind:workspaceId={createWorkspaceId}
       bind:creationOptionId
       {creating}
+      {workspaceSelector}
+      deviceHandle={routeScope?.slice(1)}
       {canCreate}
       autofocus={autofocusComposer}
       {workspaces}

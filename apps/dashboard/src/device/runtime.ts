@@ -173,6 +173,7 @@ export class DeviceRuntime {
   }
 
   dispose(): void {
+    this._uploadDrafts?.dispose();
     this.queryClient.unmount();
     this.lifecycle.stopDashboardRuntime();
     this.lifecycle.clearDashboardRuntimeState();

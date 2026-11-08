@@ -44,6 +44,7 @@
     header?: Snippet
     menuItems?: Snippet
     draftId?: string
+    retainDraft?: boolean
     onSubmit: (message: string) => void | Promise<boolean | void>
     onInterrupt?: () => void
     onFocus?: () => void
@@ -67,6 +68,7 @@
     header,
     menuItems,
     draftId,
+    retainDraft = false,
     onSubmit,
     onInterrupt,
     onFocus,
@@ -76,10 +78,11 @@
   let uploads = $state<ReturnType<typeof createUploadDraft> | null>(null)
   $effect(() => {
     if (!draftId) return
-    const draft = createUploadDraft(draftId)
+    const retained = retainDraft
+    const draft = retained ? device.uploadDrafts.getRetainedUploadDraft(draftId) : createUploadDraft(draftId)
     uploads = draft
     const unsubscribe = draft.subscribe(state => { attachments = state })
-    return () => { unsubscribe(); draft.destroy() }
+    return () => { unsubscribe(); if (!retained) draft.destroy() }
   })
   let sentAwaitingCleanup = $state(false)
   let sending = $state(false)

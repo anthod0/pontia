@@ -557,19 +557,6 @@ test("sidebar only marks new chat active on the default route", () => {
   expect(chat).toHaveAttribute("data-active", "true");
 });
 
-test("sidebar New Chat notifies mounted route components about the route change", async () => {
-  window.history.pushState({}, "", "/dashboard/chat/session-active");
-  const popstateListener = vi.fn();
-  window.addEventListener("popstate", popstateListener);
-
-  render(AppSidebarHost);
-  await fireEvent.click(screen.getByText("New Chat"));
-
-  expect(mocks.navigate).toHaveBeenCalledWith("/");
-  expect(popstateListener).toHaveBeenCalledTimes(1);
-  window.removeEventListener("popstate", popstateListener);
-});
-
 test("sidebar highlights the matching recent session on chat routes", () => {
   mocks.sessions.set([
     {
