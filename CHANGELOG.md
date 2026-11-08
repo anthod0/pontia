@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-08
+
+### Added
+
+- Added an animated mascot to the Cloud homepage hero.
+
+### Changed
+
+- The public Dashboard now connects to all of an account's devices at the same time. The sidebar lists sessions grouped by device, and the new chat page and settings have a device selector. The separate Devices page has been removed.
+- Browser connections to Edge now require a one-time admission ticket issued by Cloud.
+- Hid the chat title in the top bar on phone screens, and made the single-line chat composer more compact on phones.
+- Improved Cloud documentation navigation on phones, and made wide documentation tables scroll horizontally.
+
+### Fixed
+
+- Queued Inbox messages sent during a manual `/compact` until compaction finishes.
+- Kept sent messages visible in Dashboard chats until the agent's own history loads, so the page no longer jumps back to the previous turn.
+
 ## [0.7.0] - 2026-11-08
 
 ### Added
