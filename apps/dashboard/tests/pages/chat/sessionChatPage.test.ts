@@ -479,6 +479,8 @@ test("offers branch actions only on the primary user message represented by a pr
   expect(
     screen.getByRole("button", { name: /^Copy user message: Primary user input/ }),
   ).toBeInTheDocument();
+  expect(document.querySelector('time[datetime="2026-05-14T00:00:00Z"]')).toBeInTheDocument();
+  expect(document.querySelector('time[datetime="2026-05-14T00:00:02Z"]')).toBeInTheDocument();
 });
 
 test("edits completed history while busy and interrupts only when the edit is saved", async () => {
@@ -2707,10 +2709,7 @@ test("resumes an exited Claude conversation by submitting the real input before 
   });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
   render(SessionChatPage);
-  await user.type(
-    await screen.findByPlaceholderText("Follow up…"),
-    "continue bound conversation",
-  );
+  await user.type(await screen.findByPlaceholderText("Follow up…"), "continue bound conversation");
   await user.click(screen.getByRole("button", { name: /send/i }));
   await waitFor(() =>
     expect(mocks.submitInboxMessage).toHaveBeenCalledWith("claude-resume", {

@@ -14,6 +14,7 @@
   import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
   import CompactionCheckpoint from './CompactionCheckpoint.svelte'
+  import MessageTime from './MessageTime.svelte'
   import SharedFileCard from '../../../components/chat/SharedFileCard.svelte'
   import type { SharedFile, TurnView, TimelineItem } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
@@ -402,7 +403,8 @@
           {/if}
           {#if chatMessage.role === 'assistant'}
             {@const isCopied = copiedMessageId === chatMessage.id}
-            <div class="mt-2 flex justify-start text-muted-foreground">
+            <div class="mt-2 flex items-center justify-start text-muted-foreground">
+              {#if chatMessage.createdAt}<MessageTime value={chatMessage.createdAt} />{/if}
               <Button
                 type="button"
                 variant="ghost"
@@ -424,9 +426,10 @@
       {#if chatMessage.role === 'user' && editingMessageId !== chatMessage.id}
         {@const isCopied = copiedMessageId === chatMessage.id}
         <div
-          class="flex justify-end gap-0.5 text-muted-foreground"
+          class="flex items-center justify-end gap-0.5 text-muted-foreground"
           data-user-message-actions
         >
+          {#if chatMessage.createdAt}<MessageTime value={chatMessage.createdAt} />{/if}
           {#if branchActionMessageIdSet.has(chatMessage.id)}
             <Button
               type="button"
