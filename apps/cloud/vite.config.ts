@@ -4,6 +4,7 @@ import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 import { mdsvex } from "mdsvex";
 import { generateLlms } from "./scripts/generate-llms";
+import { rehypeTableScroll } from "./scripts/rehype-table-scroll";
 
 export default defineConfig({
   plugins: [
@@ -21,6 +22,7 @@ export default defineConfig({
         mdsvex({
           extensions: [".svx"],
           highlight: { alias: { sh: "bash" } },
+          rehypePlugins: [rehypeTableScroll],
         }),
       ],
       compilerOptions: {
