@@ -15,7 +15,9 @@
   import ChatRuler from '$lib/components/session-chat/ChatRuler.svelte'
   import { SubmissionUnconfirmedError } from '../stores/inboxRecovery'
   import { retryInboxMessage } from '../stores/sessions'
-  import type { DashboardStreamEvent, InboxMessageView, SessionView, TurnView } from '../api/types'
+  import type { DashboardStreamEvent, EventView, InboxMessageView, SessionView, TurnView } from '../api/types'
+  import { compactSession } from '../api/client'
+  import { compactionDisabledReason, compactionStatus } from '$lib/session-chat/compaction'
   import type { ChatMessageRole, SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
     canSendSessionMessage,
@@ -87,6 +89,8 @@
   let actionBusy = false
   let inboxActionMessageId: string | null = null
   let actionError: string | null = null
+  let compactionEvents: EventView[] = []
+  let requestedCompaction: string | null = null
   let unsubscribeDashboardEvents: (() => void) | null = null
   let closeLiveOutputStream: (() => void) | null = null
   let liveOutputOverlays: LiveOutputOverlays = {}
@@ -180,9 +184,13 @@
   $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, workspaces, selectedSessionGitStatus, workspaceGitStatusErrors) : []
   $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
   $: transcriptMessages = $timelineState.sessionId === selectedSessionId
-    ? timelineItemsToChatMessages($timelineState.items, $timelineState.mode === 'tree')
+    ? timelineItemsToChatMessages($timelineState.items, true)
     : []
   $: selectedTurns = $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.turns : []
+  $: selectedCompaction = compactionStatus([
+    ...($sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.events : []),
+    ...compactionEvents,
+  ], requestedCompaction)
   $: timelineMessages = mergeLiveOutputMessages(
     transcriptMessages,
     selectedTurns,
@@ -531,6 +539,14 @@
   function handleDashboardEvent(streamEvent: DashboardStreamEvent): void {
     if (streamEvent.kind === 'session_event') {
       if (streamEvent.event.session_id !== selectedSessionId) return
+      if (streamEvent.event.type.startsWith('session.compaction_')) {
+        compactionEvents = [...compactionEvents.filter(event => event.event_id !== streamEvent.event.event_id), streamEvent.event]
+        void loadSessionDetail(selectedSessionId, { showLoading: false })
+        if (streamEvent.event.type === 'session.compaction_completed' && sessionSupportsTimeline(currentSelectedSession())) {
+          void refreshSessionTimeline(selectedSessionId)
+        }
+        return
+      }
       if (streamEvent.event.type === 'session.model_updated') {
         void loadSessionDetail(selectedSessionId, { showLoading: false })
         return
@@ -579,6 +595,8 @@
     closeLiveOutputStream?.()
     closeLiveOutputStream = null
     liveOutputOverlays = {}
+    compactionEvents = []
+    requestedCompaction = null
     selectedSessionId = nextSessionId
     selectSession(selectedSessionId || null)
     resetTimelineState(selectedSessionId)
@@ -596,7 +614,7 @@
   }
 
   function sessionSupportsTimeline(session: SessionView | null): boolean {
-    return session?.capabilities.timeline === true
+    return session?.capabilities.timeline === true || session?.capabilities.compaction_history === true
   }
 
   function timelineMode(topology: boolean): 'linear' | 'tree' {
@@ -744,6 +762,27 @@
     try {
       await updateSessionTitle(sessionId, title)
       if (selectedSessionId === sessionId && $chatDraft === commandInput) clearChatDraft()
+    } catch (error) {
+      if (selectedSessionId === sessionId) actionError = error instanceof Error ? error.message : String(error)
+    } finally {
+      actionBusy = false
+    }
+  }
+
+  async function compactSelectedSession(): Promise<void> {
+    if (!selectedSession || actionBusy || compactionDisabledReason(selectedSession, selectedCompaction?.busy ?? false)) return
+    const sessionId = selectedSessionId
+    actionBusy = true
+    actionError = null
+    try {
+      const receipt = await compactSession(sessionId)
+      if (selectedSessionId !== sessionId) return
+      requestedCompaction = receipt.operation_id
+      if ($chatDraft.trim() === '/compact') clearChatDraft()
+      await loadSessionDetail(sessionId, { showLoading: false })
+      if (selectedSessionId === sessionId && $sessionDetail?.events.some(event => event.type === 'session.compaction_completed' && event.payload.operation_id === receipt.operation_id)) {
+        await refreshSessionTimeline(sessionId)
+      }
     } catch (error) {
       if (selectedSessionId === sessionId) actionError = error instanceof Error ? error.message : String(error)
     } finally {
@@ -902,7 +941,7 @@
           <span class="text-destructive" role="alert">{controlDetails.profile.error}</span>
         {/if}
       {/if}
-      {#if !selectedSession.capabilities.timeline}<span>Native history is currently unavailable.</span>{/if}
+      {#if !sessionSupportsTimeline(selectedSession)}<span>Native history is currently unavailable.</span>{/if}
     </div>
   {/if}
   {#if $sessionDetailError && selectedSession}
@@ -982,6 +1021,16 @@
               {#if $timelineState.status === 'pending'}
                 <p role="status" class="py-2 text-sm text-muted-foreground">Waiting for native history…</p>
               {/if}
+              {#if $timelineState.compactionHistoryError}
+                <Alert.Root class="my-3" role="status">
+                  <WarningCircleIcon class="size-4" />
+                  <Alert.Title>Some compaction history is unavailable</Alert.Title>
+                  <Alert.Description>
+                    {$timelineState.compactionHistoryError}
+                    <Button variant="outline" size="sm" disabled={$timelineState.refreshing} onclick={() => void refreshSessionTimeline(selectedSessionId)}>Retry</Button>
+                  </Alert.Description>
+                </Alert.Root>
+              {/if}
               {#each $timelineState.groups.filter((group) => group.history_issue) as group (group.turn_id)}
                 <Alert.Root class="my-3" role="status">
                   <WarningCircleIcon class="size-4" />
@@ -1002,6 +1051,7 @@
               {#key selectedSessionId}
                 <SessionConversation
                   {messages}
+                  timelineItems={$timelineState.sessionId === selectedSessionId ? $timelineState.items : []}
                   sessionId={selectedSessionId}
                   sharedFiles={$sharedFiles?.files ?? []}
                   turns={selectedTurns}
@@ -1064,6 +1114,7 @@
           inboxBusyMessageId={inboxActionMessageId}
           {submitting}
           {actionBusy}
+          compaction={selectedCompaction}
           {canSend}
           autofocus={autofocusComposer}
           onCancelInboxMessage={(message) => void cancelPendingInboxMessage(message)}
@@ -1073,6 +1124,7 @@
           onNewChat={openNewChat}
           onRename={(title) => void renameSelectedSession(title)}
           onExit={() => void exitSelectedSession()}
+          onCompact={() => void compactSelectedSession()}
           onInterrupt={() => void interruptSelectedSession()}
           onFocus={() => void refreshCurrentSessionGitStatus()}
         />{/if}

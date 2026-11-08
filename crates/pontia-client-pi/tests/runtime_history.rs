@@ -382,7 +382,12 @@ async fn session_checkpoints_keep_native_order_and_turn_or_gap_page_ownership() 
             None
         ]
     );
-    assert_eq!(items[1].item.content_preview, "native private summary");
+    assert!(
+        items
+            .iter()
+            .filter(|i| i.item.kind == "context_compaction")
+            .all(|i| i.item.content_preview.is_empty())
+    );
     let first = history
         .read_session_timeline(selection(&["one"]))
         .await
@@ -433,11 +438,9 @@ async fn checkpoints_without_pontia_turns_come_only_from_the_native_branch() {
             .collect::<Vec<_>>(),
         vec!["pi:entry:first:block:0", "pi:entry:summary:block:0"]
     );
-    assert!(
-        items
-            .iter()
-            .all(|i| i.turn_id.is_none() && i.item.kind == "context_compaction")
-    );
+    assert!(items.iter().all(|i| i.turn_id.is_none()
+        && i.item.kind == "context_compaction"
+        && i.item.content_preview.is_empty()));
     daemon.close();
 }
 
@@ -1285,11 +1288,9 @@ async fn offline_session_without_turns_only_returns_checkpoints_on_the_persisted
             .collect::<Vec<_>>(),
         vec!["pi:entry:first:block:0", "pi:entry:summary:block:0"]
     );
-    assert!(
-        items
-            .iter()
-            .all(|i| i.turn_id.is_none() && i.item.kind == "context_compaction")
-    );
+    assert!(items.iter().all(|i| i.turn_id.is_none()
+        && i.item.kind == "context_compaction"
+        && i.item.content_preview.is_empty()));
 }
 
 #[tokio::test]

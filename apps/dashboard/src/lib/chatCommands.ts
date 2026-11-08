@@ -5,7 +5,7 @@ interface ChatCommandInfo {
 
 export type ChatCommand = ChatCommandInfo &
   (
-    | { name: "/new" | "/exit" | "/model"; run: () => void }
+    | { name: "/new" | "/exit" | "/model" | "/compact"; run: () => void }
     | { name: "/rename"; run: (title: string) => void }
   );
 

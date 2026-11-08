@@ -11,6 +11,7 @@ import type {
 } from "../src/api/types";
 import SessionConversation from "../src/lib/components/session-chat/SessionConversation.svelte";
 import { timelineItemsToChatMessages } from "../src/lib/session-chat/sessionChat";
+import { queryClient } from "../src/queries/queryClient";
 
 const mocks = vi.hoisted(() => ({
   getTurnTimeline: vi.fn(),
@@ -45,6 +46,126 @@ function item(turnId: string, itemId: string, preview: string): TurnTimelineItem
     turn_id: turnId,
   };
 }
+
+function checkpoint(id: string): TurnTimelineItem {
+  return { ...item("", id, ""), turn_id: null, kind: "context_compaction" };
+}
+
+test("linear pagination retains separate session checkpoints and refreshes only the returned suffix", async () => {
+  mocks.getTurnTimeline
+    .mockResolvedValueOnce(
+      page({
+        items: [checkpoint("gap-2"), item("turn-2", "two", ""), checkpoint("tail")],
+        next_turn_id: "turn-1",
+      }),
+    )
+    .mockResolvedValueOnce(
+      page({ items: [checkpoint("gap-1"), item("turn-1", "one", "")], next_turn_id: null }),
+    )
+    .mockResolvedValueOnce(
+      page({
+        direction: "forward",
+        items: [
+          checkpoint("gap-2"),
+          item("turn-2", "two", ""),
+          checkpoint("tail"),
+          checkpoint("new-tail"),
+        ],
+        next_turn_id: null,
+      }),
+    );
+  await loadSessionTimeline("sess-1");
+  expect(get(timelineState).latestTurnId).toBe("turn-2");
+  await loadSessionTimeline("sess-1", { mode: "more" });
+  await refreshSessionTimeline("sess-1");
+  expect(get(timelineState).items.map((item) => item.item_id)).toEqual([
+    "gap-1",
+    "one",
+    "gap-2",
+    "two",
+    "tail",
+    "new-tail",
+  ]);
+});
+
+test("tree history supplements session checkpoints while excluding abandoned branch checkpoints", async () => {
+  queryClient.setQueryData(["sessions", "detail", "sess-1"], {
+    capabilities: { compaction_history: true },
+  });
+  mocks.getTurnTreeHistory.mockResolvedValueOnce(
+    historyPage({ groups: [group("turn-1"), group("turn-3")], next_from_turn_id: null }),
+  );
+  mocks.getTurnTimeline.mockResolvedValueOnce(
+    page({
+      items: [
+        checkpoint("start"),
+        item("turn-1", "a", ""),
+        checkpoint("old-branch"),
+        item("turn-2", "b", ""),
+        checkpoint("gap"),
+        item("turn-3", "c", ""),
+        checkpoint("tail"),
+      ],
+      next_turn_id: null,
+    }),
+  );
+  await loadSessionTimeline("sess-1", { topology: true });
+  expect(get(timelineState).items.map((item) => item.item_id)).toEqual([
+    "start",
+    "item-turn-1",
+    "gap",
+    "item-turn-3",
+    "tail",
+  ]);
+  expect(
+    get(timelineState)
+      .items.filter((item) => item.kind === "context_compaction")
+      .every((item) => item.turn_id === null),
+  ).toBe(true);
+
+  mocks.getTurnTreeUpdates.mockResolvedValueOnce(
+    updatesPage({
+      retain_through_turn_id: "turn-1",
+      groups: [group("turn-4")],
+      current_turn_id: "turn-4",
+    }),
+  );
+  mocks.getTurnTimeline.mockResolvedValueOnce(
+    page({
+      items: [
+        checkpoint("start"),
+        item("turn-1", "a", ""),
+        item("turn-3", "c", ""),
+        checkpoint("new-gap"),
+        item("turn-4", "d", ""),
+      ],
+      next_turn_id: null,
+    }),
+  );
+  await refreshSessionTimeline("sess-1");
+  expect(get(timelineState).items.map((item) => item.item_id)).toEqual([
+    "start",
+    "item-turn-1",
+    "new-gap",
+    "item-turn-4",
+  ]);
+});
+
+test("unavailable session ranges do not hide readable tree history", async () => {
+  queryClient.setQueryData(["sessions", "detail", "sess-1"], {
+    capabilities: { compaction_history: true },
+  });
+  mocks.getTurnTreeHistory.mockResolvedValueOnce(
+    historyPage({ groups: [group("turn-1")], next_from_turn_id: null }),
+  );
+  mocks.getTurnTimeline.mockRejectedValueOnce(
+    new ApiError("Unavailable range", "turn_timeline_unavailable", 409),
+  );
+  await loadSessionTimeline("sess-1", { topology: true });
+  expect(get(timelineState).items.map((item) => item.item_id)).toEqual(["item-turn-1"]);
+  expect(get(timelineState).compactionHistoryError).not.toBeNull();
+  expect(get(timelineState).status).toBe("ready");
+});
 
 function group(
   turnId: string,

@@ -8,6 +8,7 @@ import type {
 } from "../api/types";
 import { readCachedTimeline, writeCachedTimeline } from "../lib/session-chat/timelineCache";
 import { queryClient } from "../queries/queryClient";
+import { treeTimelineWithCheckpoints } from "../queries/compactionHistory";
 import {
   cancelTimelineRequests,
   fetchTurnTimeline,
@@ -46,6 +47,7 @@ export interface TimelineState {
   status: TimelineStatus;
   errorCode: string | null;
   error: string | null;
+  compactionHistoryError?: string | null;
 }
 
 type LoadMode = "rebuild" | "more";
@@ -230,11 +232,13 @@ function prependUnseenTurnGroups(
   currentItems: TurnTimelineItem[],
   previousItems: TurnTimelineItem[],
 ): TurnTimelineItem[] {
-  const currentTurnIds = new Set(currentItems.map((item) => item.turn_id));
-  return [
-    ...uniqueTimelineItems(previousItems.filter((item) => !currentTurnIds.has(item.turn_id))),
+  const currentTurnIds = new Set(
+    currentItems.flatMap((item) => (item.turn_id ? [item.turn_id] : [])),
+  );
+  return uniqueTimelineItems([
+    ...previousItems.filter((item) => !item.turn_id || !currentTurnIds.has(item.turn_id)),
     ...currentItems,
-  ];
+  ]);
 }
 
 function replaceReturnedTurnGroups(
@@ -242,23 +246,18 @@ function replaceReturnedTurnGroups(
   returnedItems: TurnTimelineItem[],
 ): TurnTimelineItem[] {
   const replacement = uniqueTimelineItems(returnedItems);
-  const returnedTurnIds = new Set(replacement.map((item) => item.turn_id));
-  if (!returnedTurnIds.size) return currentItems;
+  const returnedTurnIds = new Set(
+    replacement.flatMap((item) => (item.turn_id ? [item.turn_id] : [])),
+  );
+  if (!replacement.length) return currentItems;
 
-  const firstReturnedIndex = currentItems.findIndex((item) => returnedTurnIds.has(item.turn_id));
-  if (firstReturnedIndex < 0) return [...currentItems, ...replacement];
-
-  return [
-    ...currentItems
-      .slice(0, firstReturnedIndex)
-      .filter((item) => !returnedTurnIds.has(item.turn_id)),
-    ...replacement,
-    ...currentItems.slice(firstReturnedIndex).filter((item) => !returnedTurnIds.has(item.turn_id)),
-  ];
-}
-
-function flattenTurnGroups(groups: TurnTimelineGroup[]): TurnTimelineItem[] {
-  return groups.flatMap((group) => uniqueTimelineItems(group.items));
+  const firstReturnedIndex = currentItems.findIndex(
+    (item) => item.turn_id !== null && returnedTurnIds.has(item.turn_id),
+  );
+  if (firstReturnedIndex < 0) return uniqueTimelineItems([...currentItems, ...replacement]);
+  let start = firstReturnedIndex;
+  while (start > 0 && currentItems[start - 1].turn_id === null) start--;
+  return uniqueTimelineItems([...currentItems.slice(0, start), ...replacement]);
 }
 
 function prependUnseenGroups(
@@ -405,15 +404,21 @@ export async function loadSessionTimeline(
         options.limit ?? DEFAULT_HISTORY_LIMIT,
       );
       if (generation !== timelineGeneration) return null;
+      const groups =
+        mode === "more" ? prependUnseenGroups(get(timelineState).groups, page.groups) : page.groups;
+      const { items, error: compactionHistoryError } = await treeTimelineWithCheckpoints(
+        sessionId,
+        groups,
+        options.limit ?? DEFAULT_HISTORY_LIMIT,
+      );
+      if (generation !== timelineGeneration) return null;
       timelineState.update((state) => {
         if (state.sessionId !== sessionId) return state;
-        const groups =
-          mode === "more" ? prependUnseenGroups(state.groups, page.groups) : page.groups;
-        const items = flattenTurnGroups(groups);
         return {
           ...state,
           groups,
           items,
+          compactionHistoryError,
           nextOlderTurnId: page.next_from_turn_id,
           latestTurnId: groups.at(-1)?.turn_id ?? null,
           hasMore: page.next_from_turn_id !== null,
@@ -451,7 +456,7 @@ export async function loadSessionTimeline(
         latestTurnId:
           mode === "rebuild" && options.latestTurnId
             ? options.latestTurnId
-            : (items.at(-1)?.turn_id ?? state.latestTurnId),
+            : (items.findLast((item) => item.turn_id !== null)?.turn_id ?? state.latestTurnId),
         hasMore: page.next_turn_id !== null,
         loading: false,
         refreshing: false,
@@ -525,7 +530,7 @@ async function refreshSessionTimelineUpdates(
       return {
         ...state,
         items,
-        latestTurnId: items.at(-1)?.turn_id ?? latestTurnId,
+        latestTurnId: items.findLast((item) => item.turn_id !== null)?.turn_id ?? latestTurnId,
         loading: false,
         refreshing: false,
         refreshKind: null,
@@ -572,14 +577,24 @@ async function refreshSessionTreeUpdates(
   try {
     const updates = await fetchTurnTreeUpdates(sessionId, latestTurnId);
     if (generation !== timelineGeneration) return false;
+    const groups = applyTreeUpdates(
+      get(timelineState).groups,
+      updates.retain_through_turn_id,
+      updates.groups,
+    );
+    const { items, error: compactionHistoryError } = await treeTimelineWithCheckpoints(
+      sessionId,
+      groups,
+      DEFAULT_HISTORY_LIMIT,
+    );
+    if (generation !== timelineGeneration) return false;
     timelineState.update((state) => {
       if (state.sessionId !== sessionId) return state;
-      const groups = applyTreeUpdates(state.groups, updates.retain_through_turn_id, updates.groups);
-      const items = flattenTurnGroups(groups);
       return {
         ...state,
         groups,
         items,
+        compactionHistoryError,
         latestTurnId: updates.current_turn_id,
         nextOlderTurnId: groups[0]?.parent_turn_id ?? null,
         hasMore: groups[0]?.parent_turn_id != null,

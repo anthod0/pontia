@@ -20,6 +20,7 @@ import type {
   RegisterWorkspaceInput,
   RenameWorkspaceInput,
   SessionView,
+  SessionCompactionAccepted,
   SessionCreationOption,
   SessionModels,
   SessionOverviewSection,
@@ -774,6 +775,13 @@ export async function getTurnTreeUpdates(
 
 export async function interruptSession(sessionId: string): Promise<unknown> {
   return request(`/sessions/${sessionId}/interrupt`, { method: "POST", mutating: true });
+}
+
+export function compactSession(sessionId: string): Promise<SessionCompactionAccepted> {
+  return request(`/sessions/${encodeURIComponent(sessionId)}/compact`, {
+    method: "POST",
+    mutating: true,
+  });
 }
 
 export async function resumeSession(sessionId: string): Promise<unknown> {

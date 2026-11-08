@@ -197,6 +197,10 @@ export function timelineItemsToChatMessages(
     ? items
     : items.slice().sort((a, b) => timelineTimestamp(a).localeCompare(timelineTimestamp(b)));
   for (const item of orderedItems) {
+    if (item.kind === "context_compaction") {
+      flushPendingTurn();
+      continue;
+    }
     if (pendingTurnId && item.turn_id && item.turn_id !== pendingTurnId) flushPendingTurn();
 
     if (item.kind === "user") {

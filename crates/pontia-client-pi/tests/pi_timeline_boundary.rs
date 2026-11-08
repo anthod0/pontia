@@ -74,7 +74,7 @@ fn legacy_session_history_keeps_old_messages_and_recovers_offline_compaction_che
     assert_eq!(items[0].item.content_preview, "old conversation");
     assert_eq!(items[1].item.content_preview, "old response");
     assert_eq!(items[2].turn_id, None);
-    assert_eq!(items[2].item.content_preview, "native summary");
+    assert!(items[2].item.content_preview.is_empty());
 }
 
 #[test]

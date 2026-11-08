@@ -14,6 +14,7 @@
   import { type SessionMetadataItem } from './sessionMetadata'
   import type { ChatCommand } from '$lib/chatCommands'
   import { isExecutingSessionState, isTerminalSession } from '$lib/sessionState'
+  import { compactionDisabledReason, type compactionStatus } from '$lib/session-chat/compaction'
 
   interface Props {
     session: SessionView
@@ -27,6 +28,7 @@
     height?: number
     submitting?: boolean
     actionBusy?: boolean
+    compaction?: ReturnType<typeof compactionStatus>
     canSend?: boolean
     autofocus?: boolean
     onCancelInboxMessage: (message: InboxMessageView) => void
@@ -38,6 +40,7 @@
     onNewChat: () => void
     onRename: (title: string) => void
     onExit: () => void
+    onCompact: () => void
   }
 
   let {
@@ -52,6 +55,7 @@
     height = $bindable(0),
     submitting = false,
     actionBusy = false,
+    compaction = null,
     canSend = false,
     autofocus = false,
     onCancelInboxMessage,
@@ -63,6 +67,7 @@
     onNewChat,
     onRename,
     onExit,
+    onCompact,
   }: Props = $props()
 
   let modelDialogSessionId = $state<string | null>(null)
@@ -72,6 +77,7 @@
   let interruptMode = $derived(isExecutingSessionState(session.state) && session.capabilities?.interrupt === true && input.trim() === '')
   const commands: ChatCommand[] = $derived([
     { name: '/model', description: 'Choose a model', disabledReason: modelPickerDisabledReason(session), run: () => { modelDialogSessionId = session.session_id; input = '' } },
+    { name: '/compact', description: 'Summarize older context', disabledReason: compactionDisabledReason(session, compaction?.busy ?? false), run: onCompact },
     { name: '/new', description: 'Start a new chat in this workspace', run: onNewChat },
     { name: '/rename', description: 'Rename the current session', run: onRename },
     {
@@ -86,6 +92,9 @@
 <div bind:clientHeight={height} data-chat-composer-dock="fixed" class="fixed bottom-0 left-0 right-0 z-30 bg-surface px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-[max(1.25rem,env(safe-area-inset-bottom))] md:left-[var(--sidebar-width)] md:px-8 transition-[left] duration-200 ease-linear group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)]">
   <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 bottom-full h-6 bg-linear-to-t from-surface to-surface/0 backdrop-blur-sm mask-t-from-0%"></div>
   <div class="mx-auto w-full max-w-[760px]">
+    {#if compaction}
+      <p role={compaction.phase === 'failed' ? 'alert' : 'status'} class={`mb-2 text-xs ${compaction.phase === 'failed' ? 'text-destructive' : 'text-muted-foreground'}`}>{compaction.message}</p>
+    {/if}
     <InboxSubmissionRecovery sessionId={session.session_id} />
     <QueuedMessages
       sessionId={session.session_id}

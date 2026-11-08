@@ -21,11 +21,7 @@ pub(crate) fn pi_entry_to_items(entry: &Value, start: usize) -> Vec<TimelineItem
             "system",
             None,
             None,
-            entry
-                .get("summary")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
+            String::new(),
             None,
         )],
         Some("model_change") => vec![timeline_item(
@@ -140,11 +136,7 @@ fn pi_message_entry_to_items(entry: &Value) -> Vec<TimelineItem> {
             "system",
             None,
             None,
-            message
-                .get("summary")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
+            String::new(),
             None,
         )],
         Some(raw_kind) => vec![timeline_item(

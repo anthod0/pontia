@@ -2,6 +2,7 @@
   import { tick, type Snippet } from 'svelte'
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
   import ArrowsInIcon from 'phosphor-svelte/lib/ArrowsInIcon'
+  import StackSimpleIcon from 'phosphor-svelte/lib/StackSimpleIcon'
   import StopIcon from 'phosphor-svelte/lib/StopIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
@@ -94,6 +95,7 @@
     '/rename': { label: 'Rename', icon: PencilSimpleIcon },
     '/exit': { label: 'Exit', icon: SignOutIcon },
     '/model': { label: 'Choose model', icon: CpuIcon },
+    '/compact': { label: 'Compact context', icon: StackSimpleIcon },
   }
   const mentionIdentities = new Map<string, FilePickerFileView>()
   let fullscreenEditor = $state<{ focusEnd: () => void } | null>(null)

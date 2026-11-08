@@ -3,6 +3,66 @@ import { expect, test, vi } from "vitest";
 import SessionConversation from "../src/lib/components/session-chat/SessionConversation.svelte";
 import type { TurnView } from "../src/api/types";
 import type { SessionChatMessage } from "../src/lib/session-chat/sessionChat";
+import { timelineItemsToChatMessages } from "../src/lib/session-chat/sessionChat";
+import type { TurnTimelineItem } from "../src/api/types";
+
+test("checkpoints preserve their native positions inside and between Turns without becoming messages", () => {
+  const item = (id: string, kind: string, turnId: string | null): TurnTimelineItem => ({
+    item_id: id,
+    kind,
+    turn_id: turnId,
+    role: null,
+    status: null,
+    title: null,
+    occurred_at: null,
+    content_preview: id,
+  });
+  const timelineItems = [
+    item("user", "user", "turn-1"),
+    item("before", "assistant", "turn-1"),
+    item("inside", "context_compaction", "turn-1"),
+    item("after", "assistant", "turn-1"),
+    item("gap", "context_compaction", null),
+    item("next", "user", "turn-2"),
+    item("tail", "context_compaction", null),
+  ];
+  const { container } = render(SessionConversation, {
+    messages: timelineItemsToChatMessages(timelineItems, true),
+    timelineItems,
+  });
+  const entries = [
+    ...container.querySelectorAll<HTMLElement>("[data-chat-message-id], [data-context-compaction]"),
+  ];
+  expect(
+    entries.map((element) => element.dataset.chatMessageId ?? element.dataset.contextCompaction),
+  ).toEqual(["user", "before", "inside", "after", "gap", "next", "tail"]);
+  expect(container.querySelectorAll("[data-chat-message-id]")).toHaveLength(4);
+  const checkpoint = within(
+    container.querySelector('[data-context-compaction="inside"]') as HTMLElement,
+  );
+  expect(checkpoint.queryByRole("button")).not.toBeInTheDocument();
+  expect(checkpoint.queryByText("inside")).not.toBeInTheDocument();
+});
+
+test("a checkpoint is visible when no Pontia Turn exists yet", () => {
+  const { container } = render(SessionConversation, {
+    messages: [],
+    timelineItems: [
+      {
+        item_id: "standalone",
+        kind: "context_compaction",
+        turn_id: null,
+        role: null,
+        title: null,
+        status: null,
+        occurred_at: null,
+        content_preview: null,
+      },
+    ],
+  });
+  expect(container.querySelector('[data-context-compaction="standalone"]')).toBeInTheDocument();
+  expect(container.querySelector("[data-chat-turn]")).not.toBeInTheDocument();
+});
 
 class TestIntersectionObserver implements IntersectionObserver {
   static instances: TestIntersectionObserver[] = [];

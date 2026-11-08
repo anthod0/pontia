@@ -13,12 +13,14 @@
   import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
+  import CompactionCheckpoint from './CompactionCheckpoint.svelte'
   import SharedFileCard from '../../../components/chat/SharedFileCard.svelte'
-  import type { SharedFile, TurnView } from '../../../api/types'
+  import type { SharedFile, TurnView, TimelineItem } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
 
   interface Props {
     messages: SessionChatMessage[]
+    timelineItems?: TimelineItem[]
     turns?: TurnView[]
     sessionId?: string
     sharedFiles?: SharedFile[]
@@ -36,6 +38,7 @@
 
   let {
     messages,
+    timelineItems = [],
     turns = [],
     sessionId = '',
     sharedFiles = [],
@@ -56,7 +59,7 @@
   let editedInput = $state('')
   let copiedMessageResetTimer: ReturnType<typeof setTimeout> | null = null
   const displayMessages = $derived(messages)
-  const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState, activeTurnId))
+  const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState, activeTurnId, timelineItems))
   const displayTurns = $derived(conversationDisplayTurns(displayItems))
   const sharedFilesByTurn = $derived(groupFilesByTurn(sharedFiles))
   const turnsById = $derived(new Map(turns.map((turn) => [turn.turn_id, turn])))
@@ -151,14 +154,16 @@
 
   type ConversationDisplayItem =
     | { kind: 'message'; id: string; message: SessionChatMessage; showAgentStatus: boolean }
+    | { kind: 'compaction'; id: string; checkpoint: TimelineItem }
     | { kind: 'agent_status'; id: string }
     | { kind: 'agent_bottom_status'; id: string }
 
   type ConversationDisplayGroup =
     | { kind: 'user_message'; id: string; item: Extract<ConversationDisplayItem, { kind: 'message' }> }
+    | { kind: 'compaction'; id: string; item: Extract<ConversationDisplayItem, { kind: 'compaction' }> }
     | { kind: 'assistant_group'; id: string; items: ConversationDisplayItem[] }
 
-  function conversationDisplayItems(chatMessages: SessionChatMessage[], state: string | null, turnId: string | null): ConversationDisplayItem[] {
+  function conversationDisplayItems(chatMessages: SessionChatMessage[], state: string | null, turnId: string | null, nativeItems: TimelineItem[]): ConversationDisplayItem[] {
     const showBottomStatus = state === 'starting' || state === 'exited' || state === 'interrupted'
     const showStatus = Boolean(state && state !== 'idle' && !showBottomStatus)
     const latestAssistantId = chatMessages.at(-1)?.role === 'assistant' ? chatMessages.at(-1)?.id : null
@@ -168,6 +173,19 @@
       message,
       showAgentStatus: showStatus && message.id === latestAssistantId,
     }))
+    const positions = new Map(nativeItems.map((item, index) => [item.item_id, index]))
+    for (const [index, checkpoint] of nativeItems.entries()) {
+      if (checkpoint.kind !== 'context_compaction') continue
+      const nextIndex = items.findIndex(item => {
+        if (item.kind !== 'message') return false
+        const message = item.message
+        const position = message.thoughtSteps?.map(step => positions.get(step.id)).find(position => position !== undefined)
+          ?? positions.get(message.id)
+        if (position === undefined && message.role === 'assistant' && message.status === 'pending' && message.turnId === checkpoint.turn_id) return true
+        return position !== undefined ? position > index : Boolean(checkpoint.occurred_at && message.createdAt > checkpoint.occurred_at)
+      })
+      items.splice(nextIndex < 0 ? items.length : nextIndex, 0, { kind: 'compaction', id: `compaction:${checkpoint.item_id}`, checkpoint })
+    }
     if (showBottomStatus) return [...items, { kind: 'agent_bottom_status', id: `agent-bottom-status:${state}` }]
     if (!showStatus || latestAssistantId || (state === 'busy' && activePendingAssistantMessageId(chatMessages, turnId))) return items
     return [...items, { kind: 'agent_status', id: `agent-status:${state}` }]
@@ -183,8 +201,9 @@
     const turns: ConversationDisplayTurn[] = []
     for (const item of items) {
       let turn = turns.at(-1)
-      if (!turn || (item.kind === 'message' && item.message.turnId !== turn.turnId)) {
-        turn = { id: item.id, turnId: item.kind === 'message' ? item.message.turnId : null, items: [] }
+      const itemTurnId = item.kind === 'message' ? item.message.turnId : item.kind === 'compaction' ? item.checkpoint.turn_id ?? null : turn?.turnId ?? null
+      if (!turn || itemTurnId !== turn.turnId) {
+        turn = { id: item.id, turnId: itemTurnId, items: [] }
         turns.push(turn)
       }
       turn.items.push(item)
@@ -203,6 +222,11 @@
     }
 
     for (const item of items) {
+      if (item.kind === 'compaction') {
+        flushAssistantGroup()
+        groups.push({ kind: 'compaction', id: item.id, item })
+        continue
+      }
       if (item.kind === 'message' && item.message.role === 'user') {
         flushAssistantGroup()
         groups.push({ kind: 'user_message', id: `user:${item.id}`, item })
@@ -301,7 +325,9 @@
 />
 
 {#snippet conversationItem(displayItem: ConversationDisplayItem)}
-  {#if displayItem.kind === 'agent_status'}
+  {#if displayItem.kind === 'compaction'}
+    <CompactionCheckpoint item={displayItem.checkpoint} />
+  {:else if displayItem.kind === 'agent_status'}
     <Message.Root from="assistant" data-chat-agent-status>
       <Message.Content>
         {#if sessionState === 'busy'}
@@ -438,7 +464,7 @@
 <Conversation.Root class="h-auto min-h-0 min-w-0 flex-1 overflow-visible">
   {#if loading}
     <Conversation.EmptyState title="Loading conversation…" description="Fetching the latest session transcript." />
-  {:else if !displayMessages.length}
+  {:else if !displayMessages.length && !timelineItems.some(item => item.kind === 'context_compaction')}
     <Empty.Root class="h-full">
       <Empty.Header>
         <Empty.Media><RobotIcon class="size-6" /></Empty.Media>
@@ -460,13 +486,13 @@
       {/if}
       {#each displayTurns as displayTurn, index (displayTurn.id)}
         <div
-          data-chat-turn
+          data-chat-turn={displayTurn.turnId ? '' : undefined}
           data-chat-turn-id={displayTurn.turnId}
           class="flex min-w-0 flex-col gap-6"
-          class:latest-turn={index === displayTurns.length - 1}
+          class:latest-turn={index === displayTurns.length - 1 && displayTurn.turnId !== null}
         >
           {#each conversationDisplayGroups(displayTurn.items) as displayGroup (displayGroup.id)}
-            {#if displayGroup.kind === 'user_message'}
+            {#if displayGroup.kind === 'user_message' || displayGroup.kind === 'compaction'}
               {@render conversationItem(displayGroup.item)}
             {:else}
               <div class="space-y-3" data-chat-assistant-group>
