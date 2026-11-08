@@ -14,9 +14,7 @@
   const startedAt = $derived(timestamp(turn?.started_at ?? null))
   const completedAt = $derived(timestamp(turn?.completed_at ?? null))
   const endAt = $derived(running ? now : completedAt)
-  const visible = $derived(
-    startedAt !== null && endAt !== null && (running || turn?.state === 'completed'),
-  )
+  const visible = $derived(startedAt !== null && endAt !== null)
   const elapsedSeconds = $derived(
     visible ? Math.max(0, Math.floor((endAt! - startedAt!) / 1000)) : 0,
   )
