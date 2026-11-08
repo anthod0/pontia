@@ -4,6 +4,8 @@ import type { Database } from "../db";
 import { devices, edges } from "../db/schema";
 import { edgeApiOrigin } from "../edge-network";
 import { isValidDeviceHandle } from "./device-handle";
+import { issueEdgeTicket } from "../edge-tickets";
+import { decodeDeviceTunnelPayload } from "./tickets";
 
 const LABEL = new TextEncoder().encode("pontia-e2e-capability-v1\0");
 
@@ -37,12 +39,14 @@ export async function connectDashboardDevice(
   try {
     browserKey = base64url.decode(browserPublicKey);
   } catch {
-    return null;
+    throw new InvalidBrowserKey();
   }
-  if (browserKey.length !== 32 || base64url.encode(browserKey) !== browserPublicKey) return null;
+  if (browserKey.length !== 32 || base64url.encode(browserKey) !== browserPublicKey)
+    throw new InvalidBrowserKey();
   const device = await db
     .select({
       id: devices.id,
+      edgeId: edges.id,
       handle: devices.handle,
       tunnelUrl: edges.tunnelUrl,
       publicKey: devices.e2ePublicKey,
@@ -79,6 +83,15 @@ export async function connectDashboardDevice(
   const capability = new Uint8Array(169);
   capability.set(unsigned);
   capability.set(signature, unsigned.length);
+  const admissionTicket = await issueEdgeTicket(db, {
+    purpose: "browser_admission",
+    userId,
+    expectedEdgeId: device.edgeId,
+    payload: { device_id: device.id },
+    expiresAt: new Date(now.getTime() + 60_000),
+    createdAt: now,
+    decodePayload: decodeDeviceTunnelPayload,
+  });
   return {
     user_id: userId,
     device_handle: device.handle,
@@ -87,5 +100,8 @@ export async function connectDashboardDevice(
     device_public_key: device.publicKey,
     device_key_version: device.keyVersion,
     capability: base64url.encode(capability),
+    admission_ticket: admissionTicket,
   };
 }
+
+export class InvalidBrowserKey extends Error {}

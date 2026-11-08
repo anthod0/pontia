@@ -43,6 +43,7 @@ fn new_ticket() -> String {
 #[derive(Clone)]
 struct CloudState {
     tickets: Arc<Mutex<HashMap<String, Uuid>>>,
+    admission_tickets: Arc<Mutex<HashMap<String, Uuid>>>,
     issued: Arc<AtomicUsize>,
     delay_redemption: Arc<AtomicBool>,
     tunnel_url: String,
@@ -62,6 +63,7 @@ pub struct TestEdge {
     pub connector: Connector,
     pub http: reqwest::Client,
     tickets: Arc<Mutex<HashMap<String, Uuid>>>,
+    admission_tickets: Arc<Mutex<HashMap<String, Uuid>>>,
     issued: Arc<AtomicUsize>,
     delay_redemption: Arc<AtomicBool>,
     edge_handle: Handle<std::net::SocketAddr>,
@@ -116,10 +118,12 @@ impl TestEdge {
             cloud_listener.local_addr().unwrap().port()
         );
         let tickets = Arc::new(Mutex::new(HashMap::new()));
+        let admission_tickets = Arc::new(Mutex::new(HashMap::new()));
         let issued = Arc::new(AtomicUsize::new(0));
         let delay_redemption = Arc::new(AtomicBool::new(false));
         let cloud_state = CloudState {
             tickets: tickets.clone(),
+            admission_tickets: admission_tickets.clone(),
             issued: issued.clone(),
             delay_redemption: delay_redemption.clone(),
             tunnel_url: tunnel_url.clone(),
@@ -130,6 +134,10 @@ impl TestEdge {
                 post(issue),
             )
             .route("/api/edge/tunnel-tickets/redeem", post(redeem))
+            .route(
+                "/api/edge/browser-admission-tickets/redeem",
+                post(redeem_admission),
+            )
             .with_state(cloud_state);
         let cloud_handle = Handle::new();
         let cloud_task = tokio::spawn(
@@ -172,6 +180,7 @@ impl TestEdge {
             connector,
             http,
             tickets,
+            admission_tickets,
             issued,
             delay_redemption,
             edge_handle,
@@ -200,6 +209,31 @@ impl TestEdge {
             .unwrap()
             .insert(ticket.clone(), device_id);
         ticket
+    }
+
+    pub fn issue_admission_ticket(&self, device_id: Uuid) -> String {
+        let ticket = new_ticket();
+        self.admission_tickets
+            .lock()
+            .unwrap()
+            .insert(ticket.clone(), device_id);
+        ticket
+    }
+
+    pub async fn admit(&self, device_id: Uuid) -> String {
+        let response = self
+            .http
+            .post(format!("{}/browser-admissions", self.edge_origin))
+            .header(header::ORIGIN, "https://app.pontia.dev")
+            .json(&serde_json::json!({ "ticket": self.issue_admission_ticket(device_id) }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        response.json::<serde_json::Value>().await.unwrap()["token"]
+            .as_str()
+            .unwrap()
+            .to_owned()
     }
 
     pub async fn connect(
@@ -365,4 +399,38 @@ pub async fn wait_for(mut condition: impl FnMut() -> bool) {
     })
     .await
     .expect("condition should become true");
+}
+
+async fn redeem_admission(
+    State(state): State<CloudState>,
+    headers: HeaderMap,
+    Json(request): Json<RedeemRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if authenticate_edge(&headers).is_err() || request.ticket == "invalid-credentials" {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "invalid_edge_credentials" })),
+        );
+    }
+    if request.ticket == "uncertain" {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "error": "service_unavailable" })),
+        );
+    }
+    match state
+        .admission_tickets
+        .lock()
+        .unwrap()
+        .remove(&request.ticket)
+    {
+        Some(device_id) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "device_id": device_id })),
+        ),
+        None => (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "invalid_admission_ticket" })),
+        ),
+    }
 }

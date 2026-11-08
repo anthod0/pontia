@@ -108,6 +108,7 @@ export type PublicDeviceConnection = {
   target: PublicDeviceTarget;
   devicePublicKey: string;
   capability: string;
+  admissionTicket: string;
 };
 
 function isEncodedBytes(value: unknown, length: number): value is string {
@@ -158,11 +159,14 @@ export async function requestPublicDeviceConnection(
       "device_public_key",
       "device_key_version",
       "capability",
+      "admission_ticket",
     ]) ||
     typeof value.user_id !== "string" ||
     !UUID.test(value.user_id) ||
     !isEncodedBytes(value.device_public_key, 32) ||
     !isEncodedBytes(value.capability, 169) ||
+    typeof value.admission_ticket !== "string" ||
+    !value.admission_ticket ||
     !Number.isSafeInteger(value.device_key_version) ||
     (value.device_key_version as number) <= 0 ||
     value.device_handle !== handle ||
@@ -180,6 +184,7 @@ export async function requestPublicDeviceConnection(
     },
     devicePublicKey: value.device_public_key,
     capability: value.capability,
+    admissionTicket: value.admission_ticket,
   };
 }
 

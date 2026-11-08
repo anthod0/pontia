@@ -101,7 +101,7 @@ export const edgeTickets = sqliteTable(
   {
     id: integer().notNull().primaryKey(),
     purpose: text({
-      enum: ["edge_deployment", "device_tunnel"],
+      enum: ["edge_deployment", "device_tunnel", "browser_admission"],
     }).notNull(),
     secretHash: text("secret_hash").notNull(),
     userId: text("user_id")
@@ -116,7 +116,7 @@ export const edgeTickets = sqliteTable(
   (table) => [
     check(
       "edge_tickets_purpose_check",
-      sql`${table.purpose} IN ('edge_deployment', 'device_tunnel')`,
+      sql`${table.purpose} IN ('edge_deployment', 'device_tunnel', 'browser_admission')`,
     ),
     check("edge_tickets_payload_json_check", sql`json_valid(${table.payload})`),
     uniqueIndex("idx_edge_tickets_secret_hash").on(table.secretHash),

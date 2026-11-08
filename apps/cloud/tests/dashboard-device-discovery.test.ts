@@ -181,6 +181,7 @@ test("connect returns trusted routing and browser-bound signed authorization wit
     device_public_key: browserPublicKey,
     device_key_version: 1,
     capability: expect.any(String),
+    admission_ticket: expect.stringMatching(/^pet_v1_[A-Za-z0-9_-]{43}$/),
   });
   const capability = Buffer.from(body.capability as string, "base64url");
   const signed = Buffer.concat([
@@ -191,6 +192,7 @@ test("connect returns trusted routing and browser-bound signed authorization wit
     await crypto.subtle.verify("Ed25519", signingKeys.publicKey, capability.subarray(105), signed),
   ).toBe(true);
   expect(capability.subarray(25, 57).toString("base64url")).toBe(browserPublicKey);
+  expect(response.headers.get("cache-control")).toBe("no-store");
   expectCredentialedCors(response);
 });
 
@@ -280,8 +282,8 @@ test("connect rejects malformed browser keys and extra request fields", async ()
   for (const [body, status] of [
     [{}, 400],
     [{ browser_public_key: 12 }, 400],
-    [{ browser_public_key: "invalid" }, 404],
-    [{ browser_public_key: `${browserPublicKey}=` }, 404],
+    [{ browser_public_key: "invalid" }, 400],
+    [{ browser_public_key: `${browserPublicKey}=` }, 400],
     [{ browser_public_key: browserPublicKey, device_id: ownerDeviceId }, 400],
   ] as const) {
     const response = await callConnect(
@@ -325,5 +327,22 @@ test("device listing and connect enforce authenticated credentialed Dashboard CO
     const preflight = await options(event(path, { method: "OPTIONS", origin: dashboardOrigin }));
     expect(preflight.status).toBe(204);
     expectCredentialedCors(preflight);
+  }
+});
+
+test("connect returns unavailable without partial credentials if ticket storage fails", async () => {
+  const token = await seedDashboardFixtureAndLogin();
+  await database.binding.exec(
+    "CREATE TRIGGER reject_admission BEFORE INSERT ON edge_tickets BEGIN SELECT RAISE(ABORT, 'unavailable'); END",
+  );
+  try {
+    const response = await callConnect(
+      event("/api/dashboard/devices/office-mac/connect", { origin: dashboardOrigin, token }),
+    );
+    expect(response.status).toBe(503);
+    expect((await response.json()) as unknown).toEqual({ error: "unavailable" });
+    expectCredentialedCors(response);
+  } finally {
+    await database.binding.exec("DROP TRIGGER reject_admission");
   }
 });

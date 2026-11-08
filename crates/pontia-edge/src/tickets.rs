@@ -11,6 +11,7 @@ const REDEEM_TIMEOUT: Duration = Duration::from_secs(10);
 #[derive(Clone)]
 pub struct TicketRedeemer {
     tunnel_endpoint: Url,
+    admission_endpoint: Url,
     service_credential: String,
     client: Client,
 }
@@ -54,8 +55,10 @@ impl TicketRedeemer {
         );
         origin.set_path("/");
         let tunnel_endpoint = origin.join("api/edge/tunnel-tickets/redeem")?;
+        let admission_endpoint = origin.join("api/edge/browser-admission-tickets/redeem")?;
         Ok(Self {
             tunnel_endpoint,
+            admission_endpoint,
             service_credential,
             client,
         })
@@ -68,6 +71,34 @@ impl TicketRedeemer {
                 .await
                 .map(|response: RedeemResponse| response.device_id),
             StatusCode::UNAUTHORIZED => Err(RedeemError::Rejected),
+            _ => Err(RedeemError::Unavailable),
+        }
+    }
+
+    pub(crate) async fn redeem_admission(&self, ticket: &str) -> Result<Uuid, RedeemError> {
+        let response = self
+            .request(self.admission_endpoint.clone(), ticket)
+            .await?;
+        match response.status() {
+            StatusCode::OK => {
+                let response: RedeemResponse = decode_response(response).await?;
+                if response.device_id.get_version_num() != 7 {
+                    return Err(RedeemError::Unavailable);
+                }
+                Ok(response.device_id)
+            }
+            StatusCode::UNAUTHORIZED => {
+                #[derive(Deserialize)]
+                struct Rejection {
+                    error: String,
+                }
+                let rejection: Rejection = decode_response(response).await?;
+                if rejection.error == "invalid_admission_ticket" {
+                    Err(RedeemError::Rejected)
+                } else {
+                    Err(RedeemError::Unavailable)
+                }
+            }
             _ => Err(RedeemError::Unavailable),
         }
     }

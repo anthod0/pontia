@@ -1,12 +1,15 @@
 use axum::{
+    Json,
     body::Body,
     extract::{OriginalUri, Path, State},
     http::{HeaderMap, HeaderValue, Method, Request, StatusCode, header},
+    middleware::Next,
     response::{IntoResponse, Response},
 };
 use pontia_tunnel::TunnelError;
+use serde::Deserialize;
 
-use crate::Edge;
+use crate::{Edge, tickets::RedeemError};
 
 pub const SESSIONS_PATH: &str = "/devices/{device_id}/e2e/v1/sessions";
 pub const REQUESTS_PATH: &str = "/devices/{device_id}/e2e/v1/requests";
@@ -25,24 +28,66 @@ impl Default for BrowserOrigins {
     }
 }
 
-pub(crate) async fn preflight(State(edge): State<Edge>, headers: HeaderMap) -> Response {
-    if !exact_origin(&headers, &edge.origins.dashboard)
-        || headers
-            .get(header::ACCESS_CONTROL_REQUEST_METHOD)
-            .and_then(|value| value.to_str().ok())
-            != Some("POST")
+pub(crate) async fn cors(State(edge): State<Edge>, request: Request<Body>, next: Next) -> Response {
+    if !exact_origin(request.headers(), &edge.origins.dashboard) {
+        return error(StatusCode::FORBIDDEN, "invalid_origin");
+    }
+    let mut response = next.run(request).await;
+    add_cors(response.headers_mut(), &edge.origins.dashboard);
+    response
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AdmissionRequest {
+    ticket: String,
+}
+
+pub(crate) async fn admit(
+    State(edge): State<Edge>,
+    body: Result<Json<AdmissionRequest>, axum::extract::rejection::JsonRejection>,
+) -> Response {
+    let Ok(Json(body)) = body else {
+        return error(StatusCode::BAD_REQUEST, "invalid_request");
+    };
+    let device_id = match tokio::time::timeout(
+        edge.limits.ticket_redeem_timeout,
+        edge.redeemer.redeem_admission(&body.ticket),
+    )
+    .await
+    {
+        Ok(Ok(device_id)) => device_id,
+        Ok(Err(RedeemError::Rejected)) => {
+            return error(StatusCode::UNAUTHORIZED, "invalid_admission_ticket");
+        }
+        _ => return error(StatusCode::SERVICE_UNAVAILABLE, "service_unavailable"),
+    };
+    let Ok(token) = edge.admissions.issue(device_id) else {
+        return error(StatusCode::SERVICE_UNAVAILABLE, "service_unavailable");
+    };
+    (
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(serde_json::json!({ "token": token })),
+    )
+        .into_response()
+}
+
+pub(crate) async fn preflight(headers: HeaderMap) -> Response {
+    if headers
+        .get(header::ACCESS_CONTROL_REQUEST_METHOD)
+        .and_then(|value| value.to_str().ok())
+        != Some("POST")
     {
         return StatusCode::FORBIDDEN.into_response();
     }
     let mut response = StatusCode::NO_CONTENT.into_response();
-    add_cors(response.headers_mut(), &edge.origins.dashboard);
     response.headers_mut().insert(
         header::ACCESS_CONTROL_ALLOW_METHODS,
         HeaderValue::from_static("POST"),
     );
     response.headers_mut().insert(
         header::ACCESS_CONTROL_ALLOW_HEADERS,
-        HeaderValue::from_static("content-type"),
+        HeaderValue::from_static("content-type, authorization"),
     );
     response
 }
@@ -55,7 +100,6 @@ pub(crate) async fn relay(
 ) -> Response {
     if request.method() != Method::POST
         || uri.query().is_some()
-        || !exact_origin(request.headers(), &edge.origins.dashboard)
         || request
             .headers()
             .get(header::CONTENT_TYPE)
@@ -72,6 +116,11 @@ pub(crate) async fn relay(
         return StatusCode::NOT_FOUND.into_response();
     }
     let device_id = parsed_device_id;
+    if !admission_token(request.headers())
+        .is_some_and(|token| edge.admissions.authenticate(token, device_id))
+    {
+        return error(StatusCode::UNAUTHORIZED, "invalid_admission_token");
+    }
     let internal_path = if uri.path().ends_with("/sessions") {
         "/e2e/v1/sessions"
     } else if uri.path().ends_with("/requests") {
@@ -80,7 +129,7 @@ pub(crate) async fn relay(
         return StatusCode::NOT_FOUND.into_response();
     };
     let Some(connection) = edge.online.connection(device_id) else {
-        return tunnel_error(TunnelError::Unavailable, &edge.origins.dashboard);
+        return tunnel_error(TunnelError::Unavailable);
     };
     let mut forwarded = Request::new(request.into_body());
     *forwarded.method_mut() = Method::POST;
@@ -103,10 +152,9 @@ pub(crate) async fn relay(
                 headers.insert(header::CACHE_CONTROL, cache_control.clone());
             }
             parts.headers = headers;
-            add_cors(&mut parts.headers, &edge.origins.dashboard);
             Response::from_parts(parts, body)
         }
-        Err(error) => tunnel_error(error, &edge.origins.dashboard),
+        Err(error) => tunnel_error(error),
     }
 }
 
@@ -115,19 +163,38 @@ fn exact_origin(headers: &HeaderMap, expected: &str) -> bool {
     values.next().and_then(|value| value.to_str().ok()) == Some(expected) && values.next().is_none()
 }
 
+fn admission_token(headers: &HeaderMap) -> Option<&str> {
+    let mut values = headers.get_all(header::AUTHORIZATION).iter();
+    let token = values.next()?.to_str().ok()?.strip_prefix("Bearer ")?;
+    if values.next().is_some()
+        || token.is_empty()
+        || token.bytes().any(|byte| byte.is_ascii_whitespace())
+    {
+        return None;
+    }
+    Some(token)
+}
+
+fn error(status: StatusCode, code: &str) -> Response {
+    (
+        status,
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(serde_json::json!({ "error": code })),
+    )
+        .into_response()
+}
+
 fn add_cors(headers: &mut HeaderMap, origin: &str) {
     headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin.parse().unwrap());
     headers.insert(header::VARY, HeaderValue::from_static("Origin"));
 }
 
-fn tunnel_error(error: TunnelError, origin: &str) -> Response {
+fn tunnel_error(error: TunnelError) -> Response {
     let status = match error {
         TunnelError::Unavailable | TunnelError::Overloaded => StatusCode::SERVICE_UNAVAILABLE,
         TunnelError::Timeout => StatusCode::GATEWAY_TIMEOUT,
         TunnelError::Failure => StatusCode::BAD_GATEWAY,
         TunnelError::InvalidRequest => StatusCode::BAD_REQUEST,
     };
-    let mut response = status.into_response();
-    add_cors(response.headers_mut(), origin);
-    response
+    status.into_response()
 }

@@ -89,7 +89,7 @@ CREATE TABLE `edge_tickets` (
 	`consumed_at` text,
 	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	CONSTRAINT `fk_edge_tickets_user_id_users_id_fk` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
-	CONSTRAINT "edge_tickets_purpose_check" CHECK("purpose" IN ('edge_deployment', 'device_tunnel')),
+	CONSTRAINT "edge_tickets_purpose_check" CHECK("purpose" IN ('edge_deployment', 'device_tunnel', 'browser_admission')),
 	CONSTRAINT "edge_tickets_payload_json_check" CHECK(json_valid("payload"))
 );
 

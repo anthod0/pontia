@@ -15,6 +15,8 @@ export function createRemoteConnection(
   const lifetime = new AbortController();
   let session: Session | null = null;
   let sessionTarget: PublicDeviceTarget | null = null;
+  let admissionToken: string | null = null;
+  let sessionLifetime = new AbortController();
   type Establishment = {
     promise: Promise<PublicDeviceTarget>;
     controller: AbortController;
@@ -93,6 +95,26 @@ export function createRemoteConnection(
         );
         checkActive();
         const { target } = connection;
+        const admission = await fetch(`${target.edgeApiOrigin}/browser-admissions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ticket: connection.admissionTicket }),
+          signal: connectionSignal,
+        });
+        if (!admission.ok) throw new Error(`Browser admission failed (${admission.status})`);
+        const admitted: unknown = await admission.json();
+        if (
+          !admitted ||
+          typeof admitted !== "object" ||
+          Array.isArray(admitted) ||
+          Object.keys(admitted).length !== 1 ||
+          !("token" in admitted) ||
+          typeof admitted.token !== "string" ||
+          !admitted.token
+        )
+          throw new Error("Edge returned an invalid admission token");
+        const token = admitted.token;
+        checkActive();
         const handshake = identity.start(
           decode(connection.devicePublicKey),
           decode(connection.capability),
@@ -102,7 +124,7 @@ export function createRemoteConnection(
             `${target.edgeApiOrigin}/devices/${target.deviceId}/e2e/v1/sessions`,
             {
               method: "POST",
-              headers: { "Content-Type": CONTENT_TYPE },
+              headers: { "Content-Type": CONTENT_TYPE, Authorization: `Bearer ${token}` },
               body: bodyBytes(handshake.bytes()),
               signal: connectionSignal,
             },
@@ -112,6 +134,7 @@ export function createRemoteConnection(
           checkActive();
           session = handshake.confirm(bytes);
           sessionTarget = target;
+          admissionToken = token;
           storageScope = JSON.stringify([connection.userId, target.deviceId]);
           return target;
         } finally {
@@ -253,25 +276,34 @@ export function createRemoteConnection(
     if (!session || sessionTarget !== target)
       throw new DOMException("Connection was superseded", "AbortError");
     const active = session;
+    const token = admissionToken;
+    const requestSignal = AbortSignal.any([signal, sessionLifetime.signal]);
     const headers = new Headers(init.headers);
     headers.delete("authorization");
     const request = active.request(init.method ?? "GET", path, requestHeaders(headers));
     let response: Response;
     try {
       const body = bodyBytes(await encryptedBody(request, init.body));
-      init.signal?.throwIfAborted();
+      requestSignal.throwIfAborted();
       response = await fetch(`${target.edgeApiOrigin}/devices/${target.deviceId}/e2e/v1/requests`, {
         method: "POST",
-        headers: { "Content-Type": CONTENT_TYPE },
+        headers: { "Content-Type": CONTENT_TYPE, Authorization: `Bearer ${token}` },
         body,
-        signal: init.signal,
+        signal: requestSignal,
       });
     } catch (error) {
       request.free();
       if (!signal.aborted && session === active) onConnectionFailure?.(error);
       throw error;
     }
-    if ((response.status === 409 || response.status === 401) && !reauthorized) {
+    if (response.status === 401) {
+      request.free();
+      // A delayed rejection must not invalidate a replacement session/handshake.
+      if (session === active) clearE2eSession();
+      await connectPublicDevice(signal);
+      throw new Error("Device connection renewed; the request was not replayed");
+    }
+    if (response.status === 409 && !reauthorized) {
       request.free();
       // A delayed rejection must not invalidate a replacement session/handshake.
       if (session === active) clearE2eSession();
@@ -289,9 +321,12 @@ export function createRemoteConnection(
   function clearE2eSession(): void {
     generation += 1;
     establishing?.controller.abort();
+    sessionLifetime.abort();
+    sessionLifetime = new AbortController();
     session?.free();
     session = null;
     sessionTarget = null;
+    admissionToken = null;
     storageScope = null;
     establishing = null;
   }

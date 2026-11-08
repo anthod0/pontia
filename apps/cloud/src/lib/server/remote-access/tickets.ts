@@ -71,9 +71,26 @@ export async function redeemTunnelTicket(
   edgeId: string,
   ticket: string,
 ): Promise<{ deviceId: string } | null> {
+  return redeemDeviceTicket(db, edgeId, ticket, "device_tunnel");
+}
+
+export async function redeemBrowserAdmissionTicket(
+  db: Database,
+  edgeId: string,
+  ticket: string,
+): Promise<{ deviceId: string } | null> {
+  return redeemDeviceTicket(db, edgeId, ticket, "browser_admission");
+}
+
+async function redeemDeviceTicket(
+  db: Database,
+  edgeId: string,
+  ticket: string,
+  purpose: "device_tunnel" | "browser_admission",
+): Promise<{ deviceId: string } | null> {
   const consumed = await consumeEdgeTicket(db, {
     ticket,
-    purpose: "device_tunnel",
+    purpose,
     expectedEdgeId: edgeId,
     decodePayload: decodeDeviceTunnelPayload,
     additionalCondition: ({ userId, expectedEdgeId, payload }) =>

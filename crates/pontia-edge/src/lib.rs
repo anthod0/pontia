@@ -1,5 +1,6 @@
 pub mod acme;
 mod acme_dns;
+mod admissions;
 mod browser_http;
 pub mod challenge;
 pub mod config;
@@ -20,6 +21,7 @@ use std::{sync::Arc, time::Duration};
 use axum::{
     Router,
     extract::DefaultBodyLimit,
+    middleware,
     routing::{get, post},
 };
 use tokio::sync::{Semaphore, watch};
@@ -47,6 +49,7 @@ impl Default for ConnectionLimits {
 pub struct Edge {
     pub(crate) redeemer: TicketRedeemer,
     pub(crate) origins: BrowserOrigins,
+    admissions: admissions::Admissions,
     online: OnlineDevices,
     pending: Arc<Semaphore>,
     limits: ConnectionLimits,
@@ -62,6 +65,7 @@ impl Edge {
         Self {
             redeemer,
             origins,
+            admissions: admissions::Admissions::default(),
             online: OnlineDevices::default(),
             pending: Arc::new(Semaphore::new(limits.max_pending)),
             limits,
@@ -77,13 +81,24 @@ impl Edge {
         Router::new()
             .route("/healthz", get(|| async { "ok" }))
             .route("/tunnel", get(connection::upgrade))
-            .route(
-                browser_http::SESSIONS_PATH,
-                post(browser_http::relay).options(browser_http::preflight),
-            )
-            .route(
-                browser_http::REQUESTS_PATH,
-                post(browser_http::relay).options(browser_http::preflight),
+            .merge(
+                Router::new()
+                    .route(
+                        "/browser-admissions",
+                        post(browser_http::admit).options(browser_http::preflight),
+                    )
+                    .route(
+                        browser_http::SESSIONS_PATH,
+                        post(browser_http::relay).options(browser_http::preflight),
+                    )
+                    .route(
+                        browser_http::REQUESTS_PATH,
+                        post(browser_http::relay).options(browser_http::preflight),
+                    )
+                    .route_layer(middleware::from_fn_with_state(
+                        self.clone(),
+                        browser_http::cors,
+                    )),
             )
             .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
             .with_state(self.clone())
