@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-08
+
+### Added
+
+- Added an optional Pontia Codex launcher to `pontia init`. When enabled, interactive `codex` commands in new shells connect to the Pontia-managed Codex daemon, so those sessions appear in Pontia. Other Codex subcommands run the original executable unchanged.
+- Added context compaction checkpoints to Dashboard chats, and a `/compact` command to compact a session's context manually.
+- Added message times to Dashboard chats.
+- Added renaming a session from its title in the chat top bar.
+
+### Changed
+
+- `pontia init` now prints shell activation instructions when it finishes.
+- Shortened the composer placeholders so they fit on phone screens, and reduced the top bar title size.
+- Shortened the warning shown when some history cannot be associated with a turn.
+
+### Fixed
+
+- Kept tmux sessions running when the Pontia service restarts or stops under systemd.
+- Made chat shortcuts work on the public Dashboard and while the composer is focused, including Option shortcuts on macOS. The shortcuts dialog shows ⌘/⌥ on Apple platforms and Ctrl/Alt elsewhere.
+- Showed the duration of failed turns.
+- Adapted the Pi extension to Pi 1.5.0, and recorded editing or replaying input in Pi as a new turn.
+- Accepted Dashboard release archives that contain a root directory entry.
+
 ## [0.6.15] - 2026-11-07
 
 ### Changed
