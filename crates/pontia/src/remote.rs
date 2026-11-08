@@ -24,7 +24,7 @@ Requires 'pontia login'. enable, rotate-key, and disable restart a running servi
 Examples:
   pontia remote edges
   pontia remote enable --edge <EDGE_ID> --name \"Workstation\"
-  pontia remote status
+  pontia status
 
 For remote access, see https://pontia.dev/docs/remote-access.md
 For device management, see https://pontia.dev/docs/device-management.md";
@@ -51,8 +51,6 @@ enum RemoteCommandKind {
     /// Register this machine as a remote device
     #[command(after_help = ENABLE_HELP)]
     Enable(EnableArgs),
-    /// Show the registration state and Remote Dashboard URL
-    Status,
     /// Edit this machine's Cloud device profile
     #[command(after_help = EDIT_HELP)]
     Edit(EditArgs),
@@ -96,7 +94,6 @@ pub(crate) async fn run(
         RemoteCommandKind::Enable(args) => enable_with_args(vars, args)
             .await
             .map(|_| ServiceRestart::Required),
-        RemoteCommandKind::Status => status(vars).await.map(|_| ServiceRestart::NotRequired),
         RemoteCommandKind::Edit(args) => {
             edit(vars, args).await.map(|_| ServiceRestart::NotRequired)
         }
@@ -118,15 +115,15 @@ struct Edge {
 }
 
 #[derive(Debug, Deserialize)]
-struct Device {
-    id: String,
+pub(crate) struct Device {
+    pub(crate) id: String,
     #[serde(rename = "device_handle")]
-    handle: String,
-    name: String,
-    edge_id: String,
-    edge_name: String,
+    pub(crate) handle: String,
+    pub(crate) name: String,
+    pub(crate) edge_id: String,
+    pub(crate) edge_name: String,
     e2e_public_key: String,
-    e2e_key_version: u64,
+    pub(crate) e2e_key_version: u64,
     capability_verification_key: String,
 }
 
@@ -282,11 +279,23 @@ async fn enable_with_args(
     remote_access(device)
 }
 
-pub async fn status(vars: &HashMap<String, String>) -> Result<(), String> {
+pub(crate) enum RegistrationStatus {
+    Disabled,
+    Missing {
+        device_id: String,
+    },
+    Registered {
+        device: Device,
+        identity: Result<bool, String>,
+    },
+}
+
+pub(crate) async fn registration_status(
+    vars: &HashMap<String, String>,
+) -> Result<RegistrationStatus, String> {
     let home = login::pontia_home(vars)?;
     let Some(device_id) = read_device_id(&home.join("config.toml"))? else {
-        println!("remote: disabled");
-        return Ok(());
+        return Ok(RegistrationStatus::Disabled);
     };
     let origin = login::auth_origin(vars)?;
     let credential = read_credential(&home.join("auth.json"), "checking")?;
@@ -297,24 +306,10 @@ pub async fn status(vars: &HashMap<String, String>) -> Result<(), String> {
         credential: &credential,
     };
     let Some(device) = api.find_device(&device_id).await? else {
-        println!("remote: registration missing");
-        println!("device ID: {device_id}");
-        println!("hint: run `pontia remote enable`");
-        return Ok(());
+        return Ok(RegistrationStatus::Missing { device_id });
     };
-
-    println!("remote: registered");
-    println!("device: {}", device.name);
-    println!("handle: {}", device.handle);
-    println!("device ID: {}", device.id);
-    println!("edge: {}", device.edge_name);
-    println!("identity key: version {}", device.e2e_key_version);
-    println!("dashboard: {}", dashboard_url(&device.handle));
-    if !stored_identity_matches_for_status(&home.join("e2e-identity.json"), &device)? {
-        println!("identity: invalid or missing");
-        println!("hint: run `pontia remote enable`");
-    }
-    Ok(())
+    let identity = stored_identity_matches_for_status(&home.join("e2e-identity.json"), &device);
+    Ok(RegistrationStatus::Registered { device, identity })
 }
 
 async fn edit(vars: &HashMap<String, String>, args: EditArgs) -> Result<(), String> {
@@ -632,7 +627,7 @@ fn read_document(path: &Path) -> Result<DocumentMut, String> {
     } else {
         original
             .parse::<DocumentMut>()
-            .map_err(|error| format!("failed to parse {}: {error}", path.display()))
+            .map_err(|_| format!("failed to parse {}", path.display()))
     }
 }
 

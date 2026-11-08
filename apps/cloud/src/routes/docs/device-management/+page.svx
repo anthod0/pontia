@@ -12,7 +12,7 @@ A registered device is a remote control target owned by your Pontia Cloud user. 
 Run on the registered device:
 
 ```sh
-pontia remote status
+pontia doctor
 ```
 
 The command checks the local device ID, Cloud registration, selected Edge, and stored end-to-end encryption identity. It requires a valid CLI credential from `pontia login`.

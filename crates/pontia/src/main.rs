@@ -1,3 +1,4 @@
+mod diagnostics;
 mod login;
 mod remote;
 mod update;
@@ -17,7 +18,7 @@ use clap::{Parser, Subcommand};
 use dialoguer::Confirm;
 use pontia::{
     init::{self, InitPlatform},
-    lifecycle::{EnabledState, Lifecycle, LifecycleStatus, RunState, ServiceManager, UpOptions},
+    lifecycle::{Lifecycle, RunState, ServiceManager, UpOptions},
     manager::ProcessCommandRunner,
     runtime_io::{FileDefinitionStore, HttpHealthProbe},
 };
@@ -37,7 +38,8 @@ const ROOT_HELP: &str = "\
 Quick start:
   pontia init      Interactive setup (requires a terminal)
   pontia up        Start the service without prompts
-  pontia status    Check service health
+  pontia status    Show service, account, and remote access
+  pontia doctor    Diagnose configuration and connectivity
 
 Configuration and state live in $PONTIA_HOME (default: ~/.pontia).
 Use 'pontia <command> -h' for details, including nested commands.
@@ -68,7 +70,7 @@ const DOWN_HELP: &str = "Configuration and state are kept; run 'pontia up' to st
 const STATUS_HELP: &str = "\
 Exits 0 only when the service is running and HTTP is healthy.
 
-For diagnosing failures, see https://pontia.dev/docs/troubleshooting.md";
+Run 'pontia doctor' for detailed checks and repair hints.";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -108,9 +110,11 @@ enum Command {
     /// Stop and disable the per-user Pontia service
     #[command(after_help = DOWN_HELP)]
     Down,
-    /// Show the Pontia service and health state
+    /// Show service health, the signed-in user, and remote registration
     #[command(after_help = STATUS_HELP)]
     Status,
+    /// Explain service, configuration, login, and remote access checks
+    Doctor,
     /// Run and interact with Workflows
     Workflow(workflow::WorkflowCommand),
 }
@@ -119,7 +123,6 @@ enum Command {
 enum LifecycleCommand {
     Up,
     Down,
-    Status,
 }
 
 #[tokio::main]
@@ -175,7 +178,8 @@ async fn execute(command: Command) -> Result<bool, String> {
         Command::Update => run_update().await,
         Command::Up => run_lifecycle(LifecycleCommand::Up),
         Command::Down => run_lifecycle(LifecycleCommand::Down),
-        Command::Status => run_lifecycle(LifecycleCommand::Status),
+        Command::Status => run_diagnostics(false).await,
+        Command::Doctor => run_diagnostics(true).await,
     }
 }
 
@@ -433,11 +437,6 @@ fn run_with_manager<M: ServiceManager>(
             println!("Pontia is down.");
             Ok(true)
         }
-        LifecycleCommand::Status => {
-            let status = lifecycle.status(&user_home()?)?;
-            print_status(&status);
-            Ok(status.is_operational())
-        }
     }
 }
 
@@ -685,48 +684,22 @@ fn dashboard_available(addr: SocketAddr) -> Result<bool, String> {
         .is_some_and(|line| line.starts_with("HTTP/1.0 200 ") || line.starts_with("HTTP/1.1 200 ")))
 }
 
-fn print_status(status: &LifecycleStatus) {
-    println!(
-        "definition: {}",
-        if status.definition_installed {
-            "installed"
-        } else {
-            "missing"
-        }
+async fn run_diagnostics(verbose: bool) -> Result<bool, String> {
+    let vars = env::vars().collect();
+    let home = user_home()?;
+    let runner = ProcessCommandRunner;
+    #[cfg(target_os = "linux")]
+    let manager = SystemdManager::with_environment_paths(
+        &runner,
+        pontia_clients::service_path_variables(),
+        &[],
     );
-    println!(
-        "enabled: {}",
-        match status.service.enabled {
-            EnabledState::Enabled => "enabled",
-            EnabledState::Disabled => "disabled",
-            EnabledState::Unknown => "unknown",
-        }
-    );
-    println!(
-        "state: {}",
-        match status.service.run_state {
-            RunState::Running => "running",
-            RunState::Stopped => "stopped",
-            RunState::Starting => "starting",
-            RunState::Failed => "failed",
-        }
-    );
-    println!(
-        "http: {}",
-        if status.http_healthy {
-            "healthy"
-        } else {
-            "unhealthy"
-        }
-    );
-    println!(
-        "PONTIA_HOME: {}",
-        status
-            .persisted_home
-            .as_deref()
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "-".to_string())
-    );
+    #[cfg(target_os = "macos")]
+    let manager = launchd_manager(&runner, &[])?;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    return diagnostics::run(&manager, &home, &vars, verbose).await;
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    Err("service diagnostics are supported only on Linux and macOS".to_string())
 }
 
 fn user_home() -> Result<PathBuf, String> {

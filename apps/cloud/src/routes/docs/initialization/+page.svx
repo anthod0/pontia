@@ -182,7 +182,7 @@ The command outputs a JSON array of objects with `id` and `name` fields. Choose 
 
 ```sh
 pontia remote enable --edge <EDGE_ID> --name "Development workstation"
-pontia remote status
+pontia doctor
 ```
 
 Replace `<EDGE_ID>` with an ID from the list and supply both `--edge` and `--name` for non-interactive registration.
@@ -196,15 +196,15 @@ Run:
 ```sh
 pontia status
 pontia client list
-pontia remote status
+pontia doctor
 ```
 
 Confirm the following results:
 
 - The local service is running and HTTP health is healthy.
 - Every selected Client entry is enabled.
-- The remote status reports a registered device and no missing or invalid local identity.
+- The diagnostic report confirms a registered device and a matching local encryption identity.
 
-Open the Remote Dashboard URL from `pontia remote status`. Follow the [Dashboard guide](/docs/dashboard) to activate a Workspace and start a Session with each selected Client. A successful Session confirms that the device is reachable and the Client is ready to use.
+Open the Remote Dashboard URL from `pontia doctor`. Follow the [Dashboard guide](/docs/dashboard) to activate a Workspace and start a Session with each selected Client. A successful Session confirms that the device is reachable and the Client is ready to use.
 
 For agent-assisted setup, finish with a summary of the configured Clients, service health, device name, Remote Dashboard URL, and verification results. If browser verification remains, include the URL and the steps above so you can complete it. See [Remote access](/docs/remote-access) and [Troubleshooting](/docs/troubleshooting) for help.

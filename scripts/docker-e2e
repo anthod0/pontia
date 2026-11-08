@@ -211,7 +211,13 @@ def login_device():
              "--edge", EDGE_ID, "--name", "Docker E2E Device"])
     compose(["restart", "device"])
     compose(["up", "-d", "--wait", "--wait-timeout", "180", "device"])
-    compose(["exec", "-T", "device", "pontia", "remote", "status"])
+    # Docker supervises pontiad without a systemd user service. Doctor still
+    # reports the account, registration, and Dashboard URL before exiting 1.
+    try:
+        compose(["exec", "-T", "device", "pontia", "doctor"])
+    except subprocess.CalledProcessError as error:
+        if error.returncode != 1:
+            raise
 
 
 def container_file(container, path):

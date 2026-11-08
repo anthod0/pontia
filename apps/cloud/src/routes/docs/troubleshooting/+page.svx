@@ -5,13 +5,13 @@
 
 # Troubleshooting
 
-Start with Pontia's own status check:
+Start with Pontia's diagnostic report:
 
 ```sh
-pontia status
+pontia doctor
 ```
 
-It reports whether the per-user service is installed, enabled, running, and healthy. If configuration changed, restart the service with `pontia up`.
+Each line explains a service, configuration, login, or remote-registration check and suggests a repair when needed. If configuration changed, restart the service with `pontia up`.
 
 ## The service does not start
 
@@ -74,7 +74,7 @@ On the device:
 
 ```sh
 pontia status
-pontia remote status
+pontia doctor
 ```
 
 Check `$PONTIA_HOME/auth.json`, `e2e-identity.json`, and the `[remote]` device ID in `config.toml`. Use `pontia login` and `pontia remote enable` to repair registration, or `pontia remote rotate-key` to replace the device encryption identity.

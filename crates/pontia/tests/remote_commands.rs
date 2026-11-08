@@ -402,3 +402,35 @@ async fn missing_login_rejects_noninteractive_commands_without_creating_configur
         assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
     }
 }
+
+#[tokio::test]
+async fn registration_diagnostics_distinguish_registered_missing_and_invalid_login() {
+    let cloud = Cloud::new();
+    cloud
+        .run(&["enable", "--edge", SECOND_EDGE, "--name", "Agent device"])
+        .await
+        .unwrap();
+    let config_path = cloud.root.path().join("config.toml");
+    let identity_path = cloud.root.path().join("e2e-identity.json");
+    let config = fs::read(&config_path).unwrap();
+    let identity = fs::read(&identity_path).unwrap();
+    match remote::registration_status(&cloud.vars).await.unwrap() {
+        remote::RegistrationStatus::Registered { device, identity } => {
+            assert_eq!(device.handle, "test-device");
+            assert_eq!(device.edge_id, SECOND_EDGE);
+            assert!(identity.unwrap());
+        }
+        _ => panic!("expected registered device"),
+    }
+    cloud.state.lock().unwrap().unauthorized = true;
+    assert!(remote::registration_status(&cloud.vars).await.is_err());
+    cloud.state.lock().unwrap().unauthorized = false;
+    cloud.state.lock().unwrap().device = None;
+    assert!(matches!(
+        remote::registration_status(&cloud.vars).await.unwrap(),
+        remote::RegistrationStatus::Missing { .. }
+    ));
+    assert_eq!(fs::read(config_path).unwrap(), config);
+    assert_eq!(fs::read(identity_path).unwrap(), identity);
+    assert_eq!(cloud.state.lock().unwrap().registrations.len(), 1);
+}

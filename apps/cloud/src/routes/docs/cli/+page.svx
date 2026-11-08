@@ -15,7 +15,8 @@ Use `pontia COMMAND --help` for the exact options in your installed version.
 | --- | --- |
 | `pontia init` | Select Agent Clients, create persistent configuration, install integrations, start the per-user service, and offer remote setup |
 | `pontia up` | Install or refresh the per-user service definition and start or restart the service |
-| `pontia status` | Show installation, enabled, running, and HTTP health state |
+| `pontia status` | Show the data directory, local service health, signed-in user, remote handle, and selected edge |
+| `pontia doctor` | Explain service, configuration, login, and remote-registration checks, with repair hints |
 | `pontia down` | Stop and disable the per-user service |
 | `pontia update` | Install the latest signed stable `pontia` and `pontiad` release |
 | `pontia --version` | Print the installed version |
@@ -32,7 +33,6 @@ Stopping `pontiad` stops observation, input reception, and Workflow scheduling. 
 | `pontia remote edges` | List available edges as a JSON array of IDs and names |
 | `pontia remote enable` | Register this device, select an edge interactively, and create its E2E identity |
 | `pontia remote enable --edge EDGE_ID --name NAME` | Register without prompts; both options are required |
-| `pontia remote status` | Compare local identity state with the Cloud registration |
 | `pontia remote edit --name NAME` | Change the device display name |
 | `pontia remote edit --handle HANDLE` | Change the device Dashboard URL handle |
 | `pontia remote rotate-key` | Replace the device E2E identity and key version |
@@ -54,6 +54,8 @@ Remote configuration changes that affect `pontiad` restart the local service aut
 Run pane-scoped commands in the current Agent Node or Re-planner's Pontia-managed `tmux` pane.
 
 ## Exit status and errors
+
+`pontia status` and `pontia doctor` exit successfully when the local service is running and its HTTP health check passes. Read the account and remote results separately; cloud registration does not prove that the device is reachable from the internet.
 
 Use the exit status to check command success. Errors are written to standard error with a `pontia:` prefix. Include the redacted error when diagnosing a failure.
 

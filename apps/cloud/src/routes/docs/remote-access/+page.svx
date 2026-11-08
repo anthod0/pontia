@@ -38,7 +38,7 @@ Open [app.pontia.dev](https://app.pontia.dev) to access your registered device.
 Run this command on the device to compare its local identity with the Cloud registration:
 
 ```sh
-pontia remote status
+pontia doctor
 ```
 
 You can change the device's display name or Dashboard URL handle with `pontia remote edit`, and replace its encryption identity with `pontia remote rotate-key`. Cloud provides [Device settings](/settings/devices), [Session settings](/settings/sessions), and [Account settings](/settings/account). See [Device and account management](/docs/device-management) for the effect of each operation.

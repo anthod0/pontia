@@ -217,6 +217,64 @@ pub(super) fn has_valid_credential(vars: &HashMap<String, String>) -> Result<boo
     Ok(validate_token(stored.token).is_ok())
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct Account {
+    pub(crate) id: String,
+    display_name: Option<String>,
+}
+
+impl Account {
+    pub(crate) fn name(&self) -> &str {
+        self.display_name
+            .as_deref()
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or(&self.id)
+    }
+}
+
+pub(crate) async fn account(vars: &HashMap<String, String>) -> Result<Option<Account>, String> {
+    let path = pontia_home(vars)?.join("auth.json");
+    let contents = match std::fs::read(&path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("cannot read the login credential: {error}")),
+    };
+    let stored = serde_json::from_slice::<StoredCredential<'_>>(&contents)
+        .map_err(|_| "invalid saved credential; run `pontia login` again".to_string())?;
+    validate_token(stored.token)
+        .map_err(|_| "invalid saved credential; run `pontia login` again".to_string())?;
+    let client = Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .map_err(|error| format!("cannot create the login HTTP client: {error}"))?;
+    let response = client
+        .get(
+            auth_origin(vars)?
+                .join("api/auth/me")
+                .map_err(|error| error.to_string())?,
+        )
+        .bearer_auth(stored.token)
+        .send()
+        .await
+        .map_err(|_| "unable to reach the cloud; login validity is unknown".to_string())?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("credential is invalid; run `pontia login` again".into());
+    }
+    if !response.status().is_success() {
+        return Err(format!(
+            "cloud returned HTTP {}; login validity is unknown",
+            response.status()
+        ));
+    }
+    let account: Account = response.json().await.map_err(|_| {
+        "cloud returned an invalid user response; login validity is unknown".to_string()
+    })?;
+    if account.id.trim().is_empty() {
+        return Err("cloud returned an empty user ID; login validity is unknown".into());
+    }
+    Ok(Some(account))
+}
+
 pub(super) fn pontia_home(vars: &HashMap<String, String>) -> Result<PathBuf, String> {
     let (key, value, append) = match vars.get("PONTIA_HOME") {
         Some(value) => ("PONTIA_HOME", value.as_str(), false),

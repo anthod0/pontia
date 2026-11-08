@@ -551,22 +551,9 @@ fn login_rejects_plaintext_http_without_writing_a_credential() {
 }
 
 #[test]
-fn remote_status_reports_disabled_without_login_or_cloud_access() {
-    let dir = temp_dir("remote-status-disabled");
-    let output = pontia()
-        .args(["remote", "status"])
-        .env("PONTIA_HOME", dir.path())
-        .env(
-            "PONTIA_AUTH_ORIGIN",
-            "https://must-not-be-requested.invalid",
-        )
-        .output()
-        .expect("run remote status");
-
-    assert!(output.status.success());
-    assert!(!output.stdout.is_empty());
-    assert!(output.stderr.is_empty());
-    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
+fn removed_remote_status_is_rejected() {
+    let output = pontia().args(["remote", "status"]).output().unwrap();
+    assert_eq!(output.status.code(), Some(2));
 }
 
 #[test]
