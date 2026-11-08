@@ -5,7 +5,17 @@ import { revisionSelection, workflowRevisions } from "../src/pages/workflows/rev
 import type { WorkflowGraphRevisionView } from "../src/api/types";
 
 const mocks = vi.hoisted(() => ({ getWorkflowRevision: vi.fn(), navigate: vi.fn() }));
-vi.mock("../src/api/client", () => ({ getWorkflowRevision: mocks.getWorkflowRevision }));
+vi.mock("../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    getWorkflowRevision: mocks.getWorkflowRevision,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
 const detail = (revision = 1): WorkflowGraphRevisionView => ({
   workflow_id: "wf",

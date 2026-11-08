@@ -1,18 +1,12 @@
+import { testDevice } from "./deviceFixture";
 import { File, Blob } from "node:buffer";
 import { get } from "svelte/store";
 import { afterEach, expect, test, vi } from "vitest";
-import { createUploadDraft, fileDigest } from "../src/lib/uploads/draft";
+import { fileDigest } from "../src/lib/uploads/draft";
+const { createUploadDraft } = testDevice.uploadDrafts;
 import { loadUploadRecords, saveUploadRecord } from "../src/lib/uploads/records";
 import { parseUploadMessage, uploadMessage } from "../src/lib/uploads/message";
-vi.mock("$dashboard-mode/apiAccess", () => ({
-  uploadStorageScope: async () => "user:device",
-  apiCredentials: "same-origin",
-  apiUrl: (path: string) => path,
-  apiFetch: (path: string, init: RequestInit) => fetch(path, init),
-  apiSignal: (signal: AbortSignal) => signal,
-  applyApiAuthentication: () => true,
-  handleApiAuthenticationFailure: vi.fn(),
-}));
+testDevice.access.uploadStorageScope = async () => "user:device";
 afterEach(() => vi.unstubAllGlobals());
 const file = (content = "abc") => new File([content], "log.txt") as unknown as globalThis.File;
 const digest = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
@@ -159,7 +153,8 @@ test("removed references stay removed when IndexedDB deletion fails", async () =
 });
 
 test("uploads on Local HTTP origins without secure-context crypto APIs", async () => {
-  const { uploadStorageScope } = await import("../src/modes/local/apiAccess");
+  const { createApiAccess } = await import("../src/modes/local/apiAccess");
+  const { uploadStorageScope } = createApiAccess();
   const draftId = crypto.randomUUID();
   const random = crypto.getRandomValues.bind(crypto);
   vi.stubGlobal("crypto", { getRandomValues: random });

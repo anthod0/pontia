@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../device/context';
   import { clientControlDetails, clientDeliveryPolicy, clientResumeWaitsForIdle } from '../clients'
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
@@ -14,9 +15,7 @@
   import AgentStatus from '$lib/components/session-chat/AgentStatus.svelte'
   import ChatRuler from '$lib/components/session-chat/ChatRuler.svelte'
   import { SubmissionUnconfirmedError } from '../stores/inboxRecovery'
-  import { retryInboxMessage } from '../stores/sessions'
   import type { DashboardStreamEvent, EventView, InboxMessageView, SessionView, TurnView } from '../api/types'
-  import { compactSession } from '../api/client'
   import { compactionDisabledReason, compactionStatus } from '$lib/session-chat/compaction'
   import type { ChatMessageRole, SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
@@ -30,24 +29,32 @@
     mergeLiveOutputMessages,
     removeLiveOutputOverlay,
   } from '$lib/session-chat/liveOutput'
-  import {
+  import { hasTimelineSnapshot } from "../stores/timeline";
+  import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
+  import SessionInteractions from '../components/chat/SessionInteractions.svelte'
+  import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
+  import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
+  import { isExecutingSessionState, isTerminalSession } from '$lib/sessionState'
+  const device = useDeviceRuntime();
+  const { retryInboxMessage } = device.sessions;
+  const { compactSession } = device.api;
+  const {
     chatMessagesWithOptimistic,
     createOptimisticChatQuery,
     reconcileOptimisticMessages,
-  } from '../queries/optimisticChat'
-  import {
+  } = device.optimisticChat;
+  const {
     createOptimisticInboxQuery,
     inboxSubmissionMessages,
-    queuedInboxMessages,
     reconcileInboxSubmissions,
-  } from '../queries/inbox'
-  import { chatDraft, clearChatDraft } from '../stores/chatDraft'
-  import {
+  } = device.inboxQueries;
+  const { chatDraft, clearChatDraft } = device.chatDraft;
+  const {
     createRefreshWorkspaceGitStatusMutation,
     createWorkspaceGitStatusesStore,
     createWorkspacesStore,
-  } from '../queries/workspaces'
-  import {
+  } = device.workspaceQueries;
+  const {
     cancelInboxMessage,
     dismissInboxMessage,
     loadSessionDetail,
@@ -61,23 +68,19 @@
     selectSession,
     submitInboxMessage,
     updateSessionTitle,
-  } from '../stores/sessions'
-  import {
-    hasTimelineSnapshot,
+  } = device.sessions;
+  const {
     loadSessionTimeline,
     refreshSessionTimeline,
     resetTimelineState,
     restoreSessionTimeline,
     timelineState,
-  } from '../stores/timeline'
-  import { subscribeDashboardEvents } from '../services/eventStream'
-  import { openLiveOutputStream } from '../services/liveOutputStream'
-  import SessionComposerDock from '../components/chat/SessionComposerDock.svelte'
-  import { createSessionFilesStore } from '../stores/sessionFiles'
-  import SessionInteractions from '../components/chat/SessionInteractions.svelte'
-  import { scrollDocumentToBottom } from '../lib/session-chat/autoScroll'
-  import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
-  import { isExecutingSessionState, isTerminalSession } from '$lib/sessionState'
+  } = device.timeline;
+  const { subscribeDashboardEvents } = device.events;
+  const { openLiveOutputStream } = device.liveOutput;
+  const { createSessionFilesStore } = device.sessionFiles;
+
+  const { queuedInboxMessages } = device.inboxQueries;
 
   export let routeSessionId: string | null = null
 
@@ -128,7 +131,7 @@
   onMount(() => {
     selectedSessionId = requestedSessionIdFromLocation()
     selectSession(selectedSessionId || null)
-    autofocusComposer = claimChatEntryAutofocus(`/chat/${selectedSessionId}`)
+    autofocusComposer = claimChatEntryAutofocus(`${device.id}:/chat/${selectedSessionId}`)
     unsubscribeDashboardEvents = subscribeDashboardEvents(handleDashboardEvent)
     if (selectedSessionId) void loadSelectedSession(selectedSessionId)
     // Some integrations expose control health independently of lifecycle facts.
@@ -401,7 +404,6 @@
     return submitBranchEdit(message, replacementInput)
   }
 
-
   function setScrollDownButtonVisible(visible: boolean): void {
     if (scrollDownButtonHideTimer) {
       clearTimeout(scrollDownButtonHideTimer)
@@ -604,7 +606,7 @@
     actionError = null
     branchActionError = null
     if (selectedSessionId) {
-      autofocusComposer = claimChatEntryAutofocus(`/chat/${selectedSessionId}`)
+      autofocusComposer = claimChatEntryAutofocus(`${device.id}:/chat/${selectedSessionId}`)
       await loadSelectedSession(selectedSessionId)
     } else {
       historyObserverEnabled = false

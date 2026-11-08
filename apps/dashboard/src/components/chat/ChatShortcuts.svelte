@@ -1,12 +1,15 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import { onMount } from 'svelte'
   import { navigate } from '$lib/navigation'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
-  import { createSessionOverviewQuery, snapshotSessionOverview } from '../../queries/sessionOverview'
+  import { snapshotSessionOverview } from "../../queries/sessionOverview";
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import ShortcutKeys from '$lib/components/shortcuts/ShortcutKeys.svelte'
   import { adjacentActiveSessionId, isChatRoute, sessionIdAtShortcutIndex, sessionIdFromChatPath } from '$lib/shortcuts/sessionNavigation'
   import { helpShortcuts, matchChatShortcut } from '$lib/shortcuts/definitions'
+  const device = useDeviceRuntime();
+  const { createSessionOverviewQuery } = device.sessionOverview;
 
   let shortcutsOpen = $state(false)
   const overviewQuery = createSessionOverviewQuery()

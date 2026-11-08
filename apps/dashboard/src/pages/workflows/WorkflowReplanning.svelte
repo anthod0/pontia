@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import { untrack } from 'svelte'
   import * as Card from '$lib/components/ui/card/index.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
@@ -6,10 +7,11 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { navigate } from '$lib/navigation'
   import type { WorkflowDetailView } from '../../api/types'
-  import { selectedWorkflowHistorySessionIds } from '../../stores/workflows'
-  import { createWorkflowPatchesQuery } from '../../queries/workflows'
   import WorkflowDocument from './WorkflowDocument.svelte'
   import WorkflowSession from './WorkflowSession.svelte'
+  const device = useDeviceRuntime();
+  const { selectedWorkflowHistorySessionIds } = device.workflows;
+  const { createWorkflowPatchesQuery } = device.workflowQueries;
 
   let { snapshot, revision, onrevision }: {
     snapshot: WorkflowDetailView; revision: number;

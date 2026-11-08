@@ -1,16 +1,9 @@
+import { testDevice } from "../deviceFixture";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, expect, test, vi } from "vitest";
 import MessageComposer from "../../src/components/chat/MessageComposer.svelte";
 import { loadUploadRecords, saveUploadRecord } from "../../src/lib/uploads/records";
-vi.mock("$dashboard-mode/apiAccess", () => ({
-  uploadStorageScope: async () => "composer-test",
-  apiCredentials: "same-origin",
-  apiUrl: (path: string) => path,
-  apiFetch: (path: string, init: RequestInit) => fetch(path, init),
-  apiSignal: (signal: AbortSignal) => signal,
-  applyApiAuthentication: () => true,
-  handleApiAuthenticationFailure: vi.fn(),
-}));
+testDevice.access.uploadStorageScope = async () => "composer-test";
 afterEach(() => vi.unstubAllGlobals());
 async function seed(completed: boolean) {
   const draft = crypto.randomUUID();

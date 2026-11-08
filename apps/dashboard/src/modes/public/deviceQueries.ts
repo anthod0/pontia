@@ -1,5 +1,6 @@
 import { createQuery, queryOptions } from "@tanstack/svelte-query";
-import { queryClient } from "../../queries/queryClient";
+import { QueryClient } from "@tanstack/svelte-query";
+import { onMount } from "svelte";
 import { loadRemoteAccess } from "./remoteAccessLoader.svelte";
 
 export const publicDeviceKeys = {
@@ -16,6 +17,14 @@ function publicDevicesOptions(enabled: boolean) {
 }
 
 export function createPublicDevicesQuery(enabled: () => boolean = () => true) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  onMount(() => {
+    queryClient.mount();
+    return () => {
+      queryClient.unmount();
+      queryClient.clear();
+    };
+  });
   return createQuery(
     () => publicDevicesOptions(enabled()),
     () => queryClient,

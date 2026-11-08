@@ -1,15 +1,16 @@
+import { testDevice } from "../deviceFixture";
 import { afterEach, expect, test } from "vitest";
 import type { DashboardStreamEvent } from "../../src/api/types";
-import {
+const {
   clearDashboardQueries,
   invalidateQueriesAfterConnectionRecovery,
   invalidateQueriesForDashboardEvent,
-} from "../../src/queries/dashboardInvalidation";
-import { queryClient } from "../../src/queries/queryClient";
-import { sessionOverviewKeys } from "../../src/queries/sessionOverview";
-import { sessionKeys } from "../../src/queries/sessions";
-import { timelineKeys } from "../../src/queries/timeline";
-import { workflowKeys } from "../../src/queries/workflows";
+} = testDevice.invalidation;
+const { queryClient } = testDevice;
+const { sessionOverviewKeys } = testDevice.sessionOverview;
+const { sessionKeys } = testDevice.sessionQueries;
+const { timelineKeys } = testDevice.timelineQueries;
+const { workflowKeys } = testDevice.workflowQueries;
 
 function sessionEvent(type: string, sessionId = "session-1"): DashboardStreamEvent {
   return {

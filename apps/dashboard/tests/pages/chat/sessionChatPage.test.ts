@@ -7,15 +7,16 @@ import {
   turn,
   workspace,
 } from "./fixtures";
+import { testDevice } from "../../deviceFixture";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { tick } from "svelte";
 import { expect, test, vi } from "vitest";
 import type { CreateSessionResult, SessionView, TurnView } from "../../../src/api/types";
-import { rememberOptimisticMessage } from "../../../src/queries/optimisticChat";
-import { queryClient } from "../../../src/queries/queryClient";
-import { sessionKeys } from "../../../src/queries/sessions";
-import * as api from "../../../src/api/client";
+const { rememberOptimisticMessage } = testDevice.optimisticChat;
+const { queryClient } = testDevice;
+const { sessionKeys } = testDevice.sessionQueries;
+const api = testDevice.api;
 import { stubWrappedComposer } from "../../components/wrappedComposer";
 
 const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).default;
@@ -1532,7 +1533,9 @@ test("mobile composer resize button opens a fullscreen follow-up composer sharin
 
     const composerInput = await screen.findByPlaceholderText("Follow up…");
     await user.type(composerInput, "mobile draft");
-    expect(screen.queryByRole("button", { name: "Expand message composer" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Expand message composer" }),
+    ).not.toBeInTheDocument();
     wrap();
     await fireEvent.click(await screen.findByRole("button", { name: "Expand message composer" }));
 

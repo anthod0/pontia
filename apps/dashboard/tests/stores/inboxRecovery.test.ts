@@ -17,7 +17,15 @@ const api = vi.hoisted(() => ({
   listInboxMessages: vi.fn(async () => []),
   listEvents: vi.fn(async () => []),
 }));
-vi.mock("../../src/api/client", () => api);
+vi.mock("../../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = await (() => api)(importOriginal);
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 
 beforeEach(() => {
   localStorage.clear();
@@ -36,18 +44,18 @@ const message = (messageId: string) => ({
 });
 
 test("lost receipt survives reload and recovery queries the same identity without executing again", async () => {
-  const actions = await import("../../src/stores/sessions");
+  const actions = (await import("../deviceFixture")).testDevice.sessions;
   api.submitInboxMessage.mockRejectedValue(new TypeError("Failed to fetch"));
   await expect(actions.submitInboxMessage("session", { input: "same text" })).rejects.toThrow(
     "receipt unknown",
   );
   const originalId = api.submitInboxMessage.mock.calls[0][2];
   vi.resetModules();
-  const saved = await import("../../src/stores/inboxRecovery");
+  const saved = (await import("../deviceFixture")).testDevice.inboxRecovery;
   const restored = get(saved.unconfirmedSubmissions)[0];
   expect(restored.messageId).toBe(originalId);
   api.getInboxMessage.mockResolvedValue(message(originalId));
-  await (await import("../../src/stores/sessions")).recoverInboxSubmission(restored);
+  await (await import("../deviceFixture")).testDevice.sessions.recoverInboxSubmission(restored);
   expect(api.getInboxMessage).toHaveBeenCalledWith(
     "session",
     originalId,
@@ -58,8 +66,8 @@ test("lost receipt survives reload and recovery queries the same identity withou
 });
 
 test("unaccepted recovery resends its identity while intentionally identical new input gets another", async () => {
-  const actions = await import("../../src/stores/sessions");
-  const saved = await import("../../src/stores/inboxRecovery");
+  const actions = (await import("../deviceFixture")).testDevice.sessions;
+  const saved = (await import("../deviceFixture")).testDevice.inboxRecovery;
   const { ApiError } = await import("../../src/api/errors");
   api.submitInboxMessage.mockRejectedValueOnce(new TypeError("response lost"));
   await expect(actions.submitInboxMessage("session", { input: "same text" })).rejects.toThrow();
@@ -74,8 +82,8 @@ test("unaccepted recovery resends its identity while intentionally identical new
 });
 
 test("unknown retry response preserves the original link and explicit duplicate-execution acknowledgement", async () => {
-  const actions = await import("../../src/stores/sessions");
-  const saved = await import("../../src/stores/inboxRecovery");
+  const actions = (await import("../deviceFixture")).testDevice.sessions;
+  const saved = (await import("../deviceFixture")).testDevice.inboxRecovery;
   const { ApiError } = await import("../../src/api/errors");
   api.retryInboxMessage.mockRejectedValueOnce(new TypeError("response lost"));
   await expect(
@@ -92,8 +100,8 @@ test("unknown retry response preserves the original link and explicit duplicate-
 });
 
 test("a refusal during manual recovery cannot erase uncertainty from an earlier attempt", async () => {
-  const actions = await import("../../src/stores/sessions");
-  const saved = await import("../../src/stores/inboxRecovery");
+  const actions = (await import("../deviceFixture")).testDevice.sessions;
+  const saved = (await import("../deviceFixture")).testDevice.inboxRecovery;
   const { ApiError } = await import("../../src/api/errors");
   api.submitInboxMessage.mockRejectedValueOnce(new TypeError("response lost"));
   await expect(actions.submitInboxMessage("session", { input: "same text" })).rejects.toThrow();

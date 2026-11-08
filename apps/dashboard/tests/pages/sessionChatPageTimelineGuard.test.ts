@@ -85,37 +85,69 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
 vi.mock("svelte-sonner", () => ({ toast: { error: vi.fn() } }));
-vi.mock("../../src/stores/sessions", () => ({
-  sessionDetail: mocks.sessionDetail,
-  sessionDetailLoading: mocks.sessionDetailLoading,
-  sessionDetailError: mocks.sessionDetailError,
-  sessionDetailErrorKind: mocks.sessionDetailErrorKind,
-  selectSession: vi.fn(),
-  loadSessionDetail: mocks.loadSessionDetail,
-  submitInboxMessage: mocks.submitInboxMessage,
-  cancelInboxMessage: mocks.cancelInboxMessage,
-  dismissInboxMessage: mocks.dismissInboxMessage,
-  interruptSession: mocks.interruptSession,
-  resumeSession: mocks.resumeSession,
-  terminateSession: mocks.terminateSession,
-  updateSessionTitle: mocks.updateSessionTitle,
-}));
-vi.mock("../../src/stores/chatDraft", () => ({
-  chatDraft: mocks.chatDraft,
-  clearChatDraft: vi.fn(),
-}));
-vi.mock("../../src/queries/optimisticChat", () => ({
-  createOptimisticChatQuery: () => mocks.optimisticChatQuery,
-  chatMessagesWithOptimistic: (loadedMessages: unknown[]) => loadedMessages,
-  reconcileOptimisticMessages: vi.fn(),
-}));
-vi.mock("../../src/queries/inbox", () => ({
-  createOptimisticInboxQuery: () => mocks.optimisticInboxQuery,
-  consumeInboxSubmission: vi.fn(),
-  inboxSubmissionMessages: (loadedMessages: unknown[]) => loadedMessages,
-  queuedInboxMessages: (messages: unknown[]) => messages,
-  reconcileInboxSubmissions: vi.fn(),
-}));
+vi.mock("../../src/stores/sessions", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    sessionDetail: mocks.sessionDetail,
+    sessionDetailLoading: mocks.sessionDetailLoading,
+    sessionDetailError: mocks.sessionDetailError,
+    sessionDetailErrorKind: mocks.sessionDetailErrorKind,
+    selectSession: vi.fn(),
+    loadSessionDetail: mocks.loadSessionDetail,
+    submitInboxMessage: mocks.submitInboxMessage,
+    cancelInboxMessage: mocks.cancelInboxMessage,
+    dismissInboxMessage: mocks.dismissInboxMessage,
+    interruptSession: mocks.interruptSession,
+    resumeSession: mocks.resumeSession,
+    terminateSession: mocks.terminateSession,
+    updateSessionTitle: mocks.updateSessionTitle,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createSessions: (device) => ({ ...original.createSessions(device), ...mocked }),
+  };
+});
+vi.mock("../../src/stores/chatDraft", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    chatDraft: mocks.chatDraft,
+    clearChatDraft: vi.fn(),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createChatDraft: (device) => ({ ...original.createChatDraft(device), ...mocked }),
+  };
+});
+vi.mock("../../src/queries/optimisticChat", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    createOptimisticChatQuery: () => mocks.optimisticChatQuery,
+    chatMessagesWithOptimistic: (loadedMessages: unknown[]) => loadedMessages,
+    reconcileOptimisticMessages: vi.fn(),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createOptimisticChat: (device) => ({ ...original.createOptimisticChat(device), ...mocked }),
+  };
+});
+vi.mock("../../src/queries/inbox", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    createOptimisticInboxQuery: () => mocks.optimisticInboxQuery,
+    consumeInboxSubmission: vi.fn(),
+    inboxSubmissionMessages: (loadedMessages: unknown[]) => loadedMessages,
+    queuedInboxMessages: (messages: unknown[]) => messages,
+    reconcileInboxSubmissions: vi.fn(),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createInboxQueries: (device) => ({ ...original.createInboxQueries(device), ...mocked }),
+  };
+});
 vi.mock("../../src/stores/workspaces", () => ({
   workspaces: mocks.workspaces,
   workspacesError: mocks.workspacesError,
@@ -124,17 +156,33 @@ vi.mock("../../src/stores/workspaces", () => ({
   loadWorkspaces: mocks.loadWorkspaces,
   refreshWorkspaceGitStatus: mocks.refreshWorkspaceGitStatus,
 }));
-vi.mock("../../src/stores/timeline", () => ({
-  timelineState: mocks.timelineState,
-  loadSessionTimeline: mocks.loadSessionTimeline,
-  restoreSessionTimeline: mocks.restoreSessionTimeline,
-  resetTimelineState: mocks.resetTimelineState,
-  refreshSessionTimeline: mocks.refreshSessionTimeline,
-  hasTimelineSnapshot: () => false,
-}));
-vi.mock("../../src/services/eventStream", () => ({
-  subscribeDashboardEvents: mocks.subscribeDashboardEvents,
-}));
+vi.mock("../../src/stores/timeline", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    timelineState: mocks.timelineState,
+    loadSessionTimeline: mocks.loadSessionTimeline,
+    restoreSessionTimeline: mocks.restoreSessionTimeline,
+    resetTimelineState: mocks.resetTimelineState,
+    refreshSessionTimeline: mocks.refreshSessionTimeline,
+    hasTimelineSnapshot: () => false,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createTimeline: (device) => ({ ...original.createTimeline(device), ...mocked }),
+  };
+});
+vi.mock("../../src/services/eventStream", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    subscribeDashboardEvents: mocks.subscribeDashboardEvents,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createEvents: (device) => ({ ...original.createEvents(device), ...mocked }),
+  };
+});
 
 const session = (overrides: Partial<SessionView> = {}): SessionView => ({
   session_id: "session-1",

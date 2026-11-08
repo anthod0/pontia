@@ -1,5 +1,6 @@
+import { testDevice } from "./deviceFixture";
 import { describe, expect, test, vi } from "vitest";
-import { refreshWorkspaceGitStatus } from "../src/api/client";
+const { refreshWorkspaceGitStatus } = testDevice.api;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

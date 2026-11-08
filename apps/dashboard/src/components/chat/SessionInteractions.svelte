@@ -1,13 +1,15 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import { onMount } from 'svelte'
   import { toast } from 'svelte-sonner'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
-  import { getInteraction, listPendingInteractions, respondInteraction } from '../../api/client'
   import { ApiError } from '../../api/errors'
   import type { Interaction } from '../../api/types'
-  import { subscribeDashboardEvents } from '../../services/eventStream'
-  import { sseStatus } from '../../stores/connection'
+  const device = useDeviceRuntime();
+  const { getInteraction, listPendingInteractions, respondInteraction } = device.api;
+  const { subscribeDashboardEvents } = device.events;
+  const { sseStatus } = device.connection;
 
   export let sessionId: string
   let interactions: Interaction[] = []

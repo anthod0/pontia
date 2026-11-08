@@ -1,18 +1,19 @@
+import { testDevice } from "./deviceFixture";
 import { render } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { token } from "../src/stores/auth";
-import { dashboardStreamCursor, sseStatus } from "../src/stores/connection";
-import { loadSessionDetail, selectSession, sessionDetail } from "../src/stores/sessions";
-import { fetchWorkspaces } from "../src/queries/workspaces";
-import { startEventStream, stopEventStream } from "../src/services/eventStream";
-import { refreshDashboardSnapshot } from "../src/services/dashboardSnapshotRefresh";
-import { selectedWorkflowId } from "../src/stores/workflows";
-import { workflowKeys } from "../src/queries/workflows";
-import { sessionKeys } from "../src/queries/sessions";
+const { dashboardStreamCursor, sseStatus } = testDevice.connection;
+const { loadSessionDetail, selectSession, sessionDetail } = testDevice.sessions;
+const { fetchWorkspaces } = testDevice.workspaceQueries;
+const { startEventStream, stopEventStream } = testDevice.events;
+const { refreshDashboardSnapshot } = testDevice.snapshotRefresh;
+const { selectedWorkflowId } = testDevice.workflows;
+const { workflowKeys } = testDevice.workflowQueries;
+const { sessionKeys } = testDevice.sessionQueries;
 import type { WorkflowDetailView } from "../src/api/types";
-import * as timeline from "../src/stores/timeline";
-import { queryClient } from "../src/queries/queryClient";
+const timeline = testDevice.timeline;
+const { queryClient } = testDevice;
 import type { SessionOverviewSnapshot } from "../src/queries/sessionOverview";
 import SessionOverviewQueryHarness from "./components/SessionOverviewQueryHarness.svelte";
 import WorkspacesQueryHarness from "./components/WorkspacesQueryHarness.svelte";
@@ -200,8 +201,8 @@ test("keeps a recovery requested during an older snapshot in flight", async () =
   online = true;
   render(WorkspacesQueryHarness, { onData: () => undefined });
   await fetchWorkspaces();
-  const { listWorkspaces } = await import("../src/api/client");
-  const api = await import("../src/api/client");
+  const { listWorkspaces } = (await import("./deviceFixture")).testDevice.api;
+  const api = (await import("./deviceFixture")).testDevice.api;
   let release!: () => void;
   vi.spyOn(api, "listWorkspaces")
     .mockImplementationOnce(async () => {
@@ -222,7 +223,7 @@ test("keeps a recovery requested during an older snapshot in flight", async () =
   release();
   await Promise.all([first, recovery]);
   expect(get(sessionDetail)?.session.state).toBe("idle");
-  expect(queryClient.getQueryData(["workspaces", "list"])).toHaveLength(1);
+  expect(queryClient.getQueryData(["local", "workspaces", "list"])).toHaveLength(1);
   expect(requests.filter((path) => path === "/sessions/current")).toHaveLength(2);
 });
 

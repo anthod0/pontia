@@ -45,7 +45,15 @@ const api = vi.hoisted(() => ({
   terminateSession: vi.fn(),
 }));
 
-vi.mock("../../src/api/client", () => api);
+vi.mock("../../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = await (() => api)(importOriginal);
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 
 describe("sessions store createSession", () => {
   beforeEach(() => {
@@ -60,8 +68,8 @@ describe("sessions store createSession", () => {
     } satisfies CreateSessionResult);
     api.getSession.mockImplementation(() => new Promise(() => {}));
 
-    const { createSession, selectSession, sessionDetail } =
-      await import("../../src/stores/sessions");
+    const { createSession, selectSession, sessionDetail } = (await import("../deviceFixture"))
+      .testDevice.sessions;
     const result = await createSession({ client_type: "pi", workspace_id: "workspace-1" });
 
     expect(result.session.session_id).toBe("session-fast");

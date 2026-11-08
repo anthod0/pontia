@@ -4,7 +4,9 @@
   import RemoteDashboardPage from '../../components/devices/RemoteDashboardPage.svelte';
   import { initialRemoteDashboardState, type RemoteDashboardState } from '$lib/remoteDashboard';
   import { isValidDeviceHandle } from '$lib/deviceHandle';
-  import { clearDashboardRuntimeState, startDashboardRuntime, stopDashboardRuntime } from '../../services/dashboardRuntime';
+  import DeviceProvider from '../../device/DeviceProvider.svelte';
+  import { DeviceRuntime } from '../../device/runtime';
+  import { createApiAccess } from './apiAccess';
   import { createPublicDevicesQuery } from './deviceQueries';
   import { loadedRemoteAccess, loadRemoteAccess } from './remoteAccessLoader.svelte';
 
@@ -13,6 +15,7 @@
   const handle = $derived(handleProp);
   let retryGeneration = $state(0);
   let runtimeHandle = $state<string | null>(null);
+  let device = $state.raw<DeviceRuntime | null>(null);
   let failedHandle = $state<string | null>(null);
   let targetFailureMessage = $state<string | null>(null);
   let targetSignInRequired = $state(false);
@@ -47,12 +50,8 @@
   }
 
   function teardownRuntime(): void {
-    // Not a dependency of the connection effects: loading remote access must not reconnect.
-    const remoteAccess = untrack(() => remote);
-    remoteAccess?.clearPublicApiTarget();
-    remoteAccess?.clearE2eSession();
-    stopDashboardRuntime();
-    clearDashboardRuntimeState();
+    untrack(() => device)?.dispose();
+    device = null;
     runtimeHandle = null;
   }
 
@@ -96,17 +95,18 @@
 
     const developmentBridge = import.meta.env.DEV && import.meta.env.MODE === 'development';
     const controller = new AbortController();
+    let connection: ReturnType<NonNullable<typeof remote>['createRemoteConnection']> | undefined;
     void loadRemoteAccess()
       .then(async (remoteAccess) => {
-        if (developmentBridge) return;
-        const target = await remoteAccess.connectPublicDevice(requestedHandle, controller.signal);
+        if (controller.signal.aborted) return;
+        connection = remoteAccess.createRemoteConnection(requestedHandle);
+        if (!developmentBridge) await connection.connect(controller.signal);
         if (controller.signal.aborted || handle !== requestedHandle) return;
-        remoteAccess.setPublicApiTarget(target);
-      })
-      .then(() => {
+        const id = developmentBridge ? requestedHandle : await connection.uploadStorageScope();
         if (controller.signal.aborted || handle !== requestedHandle) return;
+        device = new DeviceRuntime(id, createApiAccess(connection));
         runtimeHandle = requestedHandle;
-        startDashboardRuntime();
+        device.lifecycle.startDashboardRuntime();
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted || handle !== requestedHandle) return;
@@ -117,12 +117,24 @@
 
     return () => {
       controller.abort();
+      connection?.dispose();
       teardownRuntime();
     };
   });
 </script>
 
 {#if handle}
+  {#if device && runtimeHandle === handle}
+    {#key device}
+      <DeviceProvider {device}>
+        <RemoteDashboardPage {handle} state="available">
+          {#snippet dashboard()}
+            {@render children()}
+          {/snippet}
+        </RemoteDashboardPage>
+      </DeviceProvider>
+    {/key}
+  {:else}
   <RemoteDashboardPage
     {handle}
     state={dashboardState}
@@ -130,11 +142,8 @@
     unavailableMessage={targetFailureMessage}
     reauthorizationUrl={isValidDeviceHandle(handle) ? remote?.dashboardBootstrapUrl(handle) : undefined}
     signInUrl={targetSignInRequired ? signInUrl : undefined}
-  >
-    {#snippet dashboard()}
-      {@render children()}
-    {/snippet}
-  </RemoteDashboardPage>
+  />
+  {/if}
 {:else}
   <DevicesPage
     {devices}

@@ -1,8 +1,9 @@
+import { testDevice } from "./deviceFixture";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, expect, test, vi } from "vitest";
 import WorkflowDetailPage from "../src/pages/WorkflowDetailPage.svelte";
-import { queryClient } from "../src/queries/queryClient";
-import { workflowKeys } from "../src/queries/workflows";
+const { queryClient } = testDevice;
+const { workflowKeys } = testDevice.workflowQueries;
 import type { WorkflowDetailView } from "../src/api/types";
 const mocks = vi.hoisted(() => ({
   getWorkflow: vi.fn(),
@@ -10,12 +11,20 @@ const mocks = vi.hoisted(() => ({
   listWorkflowPatches: vi.fn(),
   retryWorkflow: vi.fn(),
 }));
-vi.mock("../src/api/client", () => ({
-  ...mocks,
-  listWorkflows: vi.fn(),
-  pauseWorkflow: vi.fn(),
-  resumeWorkflow: vi.fn(),
-}));
+vi.mock("../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    ...mocks,
+    listWorkflows: vi.fn(),
+    pauseWorkflow: vi.fn(),
+    resumeWorkflow: vi.fn(),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 vi.mock("$lib/navigation", () => ({
   navigate: async (
     path: string,

@@ -1,3 +1,5 @@
+import { hasTimelineSnapshot } from "../src/stores/timeline";
+import { testDevice } from "./deviceFixture";
 import { get } from "svelte/store";
 import { cleanup, render, screen } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -11,7 +13,7 @@ import type {
 } from "../src/api/types";
 import SessionConversation from "../src/lib/components/session-chat/SessionConversation.svelte";
 import { timelineItemsToChatMessages } from "../src/lib/session-chat/sessionChat";
-import { queryClient } from "../src/queries/queryClient";
+const { queryClient } = testDevice;
 
 const mocks = vi.hoisted(() => ({
   getTurnTimeline: vi.fn(),
@@ -19,20 +21,27 @@ const mocks = vi.hoisted(() => ({
   getTurnTreeUpdates: vi.fn(),
 }));
 
-vi.mock("../src/api/client", () => ({
-  getTurnTimeline: mocks.getTurnTimeline,
-  getTurnTreeHistory: mocks.getTurnTreeHistory,
-  getTurnTreeUpdates: mocks.getTurnTreeUpdates,
-}));
+vi.mock("../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    getTurnTimeline: mocks.getTurnTimeline,
+    getTurnTreeHistory: mocks.getTurnTreeHistory,
+    getTurnTreeUpdates: mocks.getTurnTreeUpdates,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 
 const {
   loadSessionTimeline,
   refreshSessionTimeline,
   resetTimelineState,
   restoreSessionTimeline,
-  hasTimelineSnapshot,
   timelineState,
-} = await import("../src/stores/timeline");
+} = (await import("./deviceFixture")).testDevice.timeline;
 
 function item(turnId: string, itemId: string, preview: string): TurnTimelineItem {
   return {
@@ -89,7 +98,7 @@ test("linear pagination retains separate session checkpoints and refreshes only 
 });
 
 test("tree history supplements session checkpoints while excluding abandoned branch checkpoints", async () => {
-  queryClient.setQueryData(["sessions", "detail", "sess-1"], {
+  queryClient.setQueryData(["local", "sessions", "detail", "sess-1"], {
     capabilities: { compaction_history: true },
   });
   mocks.getTurnTreeHistory.mockResolvedValueOnce(
@@ -152,7 +161,7 @@ test("tree history supplements session checkpoints while excluding abandoned bra
 });
 
 test("unavailable session ranges do not hide readable tree history", async () => {
-  queryClient.setQueryData(["sessions", "detail", "sess-1"], {
+  queryClient.setQueryData(["local", "sessions", "detail", "sess-1"], {
     capabilities: { compaction_history: true },
   });
   mocks.getTurnTreeHistory.mockResolvedValueOnce(

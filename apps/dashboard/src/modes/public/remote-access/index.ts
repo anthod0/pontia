@@ -1,10 +1,4 @@
-export {
-  clearPublicApiTarget,
-  hasPublicApiTarget,
-  publicApiSignal,
-  setPublicApiTarget,
-} from "./apiTarget";
-export { clearE2eSession, connectPublicDevice, e2eFetch, uploadStorageScope } from "./e2eTransport";
+export { createRemoteConnection } from "./e2eTransport";
 export {
   CloudRequestError,
   dashboardBootstrapUrl,

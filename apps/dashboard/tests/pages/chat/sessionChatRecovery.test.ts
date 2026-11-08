@@ -1,4 +1,5 @@
 import { mocks, session, timelineStateValue } from "./fixtures";
+import { testDevice } from "../../deviceFixture";
 import { render, screen, waitFor } from "@testing-library/svelte";
 import { expect, test } from "vitest";
 import SessionChatPage from "../../../src/pages/SessionChatPage.svelte";

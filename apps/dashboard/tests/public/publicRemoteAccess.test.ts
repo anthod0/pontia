@@ -5,9 +5,7 @@ import {
   listPublicDevices,
   requestPublicDeviceConnection,
   CloudRequestError,
-  clearPublicApiTarget,
-  publicApiSignal,
-  setPublicApiTarget,
+  createRemoteConnection,
 } from "../../src/modes/public/remote-access";
 
 const handle = "office-mac";
@@ -28,7 +26,6 @@ const connection = {
 };
 
 afterEach(() => {
-  clearPublicApiTarget();
   vi.unstubAllGlobals();
 });
 
@@ -142,14 +139,11 @@ test("constructs a direct public Dashboard device path", () => {
   expect(dashboardBootstrapUrl(handle)).toBe(`https://app.pontia.dev/${handle}`);
 });
 
-test("changing target aborts requests bound to the previous target", () => {
-  setPublicApiTarget({ handle, deviceId, edgeApiOrigin });
-  const oldSignal = publicApiSignal();
-  setPublicApiTarget({
-    handle: "travel-laptop",
-    deviceId: "12345678-9abc-def0-1234-56789abcdef0",
-    edgeApiOrigin: "https://calm-blue-arthur.edge.pontia.dev",
-  });
-  expect(oldSignal.aborted).toBe(true);
-  expect(publicApiSignal().aborted).toBe(false);
+test("disposing one device cancels only that device's requests", () => {
+  const first = createRemoteConnection(handle);
+  const second = createRemoteConnection("travel-laptop");
+  first.dispose();
+  expect(first.signal.aborted).toBe(true);
+  expect(second.signal.aborted).toBe(false);
+  second.dispose();
 });

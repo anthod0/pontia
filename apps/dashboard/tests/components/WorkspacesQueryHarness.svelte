@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { testDevice } from "../deviceFixture";
+
   import type { WorkspaceView } from '../../src/api/types'
-  import { createWorkspacesQuery } from '../../src/queries/workspaces'
+  const { createWorkspacesQuery } = testDevice.workspaceQueries;
 
   let { onData }: { onData: (workspaces: WorkspaceView[]) => void } = $props()
   const query = createWorkspacesQuery()

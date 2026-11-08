@@ -1,11 +1,10 @@
+import { testDevice } from "../deviceFixture";
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { SessionOverviewView, SessionView } from "../../src/api/types";
-import { queryClient } from "../../src/queries/queryClient";
-import {
-  invalidateSessionOverview,
-  type SessionOverviewSnapshot,
-} from "../../src/queries/sessionOverview";
+const { queryClient } = testDevice;
+import { type SessionOverviewSnapshot } from "../../src/queries/sessionOverview";
+const { invalidateSessionOverview } = testDevice.sessionOverview;
 import SessionOverviewQueryHarness from "../components/SessionOverviewQueryHarness.svelte";
 
 function session(session_id: string, title = session_id): SessionView {

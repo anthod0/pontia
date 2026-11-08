@@ -1,6 +1,6 @@
 import type { TurnTimelineGroup, TurnTimelineItem } from "../../api/types";
 
-const DATABASE_NAME = "pontia-dashboard";
+const DATABASE_NAME = "pontia-device-timelines";
 const DATABASE_VERSION = 1;
 const STORE_NAME = "session-timelines";
 const CACHED_TIMELINE_LIMIT = 30;
@@ -8,6 +8,7 @@ const SNAPSHOT_VERSION = 2;
 
 export interface CachedTimelineSnapshot {
   version: typeof SNAPSHOT_VERSION;
+  deviceId: string;
   sessionId: string;
   mode: "linear" | "tree";
   groups: TurnTimelineGroup[];
@@ -22,15 +23,16 @@ let databasePromise: Promise<IDBDatabase> | null = null;
 let writeQueue = Promise.resolve();
 
 export async function readCachedTimeline(
+  deviceId: string,
   sessionId: string,
 ): Promise<CachedTimelineSnapshot | null> {
   if (!sessionId || !indexedDbAvailable()) return null;
   try {
     const database = await openDatabase();
     const snapshot = await requestResult<CachedTimelineSnapshot | undefined>(
-      database.transaction(STORE_NAME).objectStore(STORE_NAME).get(sessionId),
+      database.transaction(STORE_NAME).objectStore(STORE_NAME).get([deviceId, sessionId]),
     );
-    return isCachedTimelineSnapshot(snapshot, sessionId) ? snapshot : null;
+    return isCachedTimelineSnapshot(snapshot, deviceId, sessionId) ? snapshot : null;
   } catch {
     return null;
   }
@@ -60,6 +62,7 @@ async function storeSnapshot(snapshot: CachedTimelineSnapshot): Promise<void> {
     database.transaction(STORE_NAME).objectStore(STORE_NAME).getAll(),
   );
   const expiredSessionIds = snapshots
+    .filter((entry) => entry.deviceId === snapshot.deviceId)
     .sort(
       (left, right) =>
         right.cachedAt - left.cachedAt || left.sessionId.localeCompare(right.sessionId),
@@ -70,7 +73,7 @@ async function storeSnapshot(snapshot: CachedTimelineSnapshot): Promise<void> {
 
   const cleanupTransaction = database.transaction(STORE_NAME, "readwrite");
   const store = cleanupTransaction.objectStore(STORE_NAME);
-  for (const sessionId of expiredSessionIds) store.delete(sessionId);
+  for (const sessionId of expiredSessionIds) store.delete([snapshot.deviceId, sessionId]);
   await transactionCompleted(cleanupTransaction);
 }
 
@@ -85,7 +88,7 @@ function openDatabase(): Promise<IDBDatabase> {
     request.onupgradeneeded = () => {
       const database = request.result;
       if (!database.objectStoreNames.contains(STORE_NAME)) {
-        database.createObjectStore(STORE_NAME, { keyPath: "sessionId" });
+        database.createObjectStore(STORE_NAME, { keyPath: ["deviceId", "sessionId"] });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -119,12 +122,14 @@ function transactionCompleted(transaction: IDBTransaction): Promise<void> {
 
 function isCachedTimelineSnapshot(
   value: unknown,
+  deviceId: string,
   sessionId: string,
 ): value is CachedTimelineSnapshot {
   if (!value || typeof value !== "object") return false;
   const snapshot = value as Partial<CachedTimelineSnapshot>;
   return (
     snapshot.version === SNAPSHOT_VERSION &&
+    snapshot.deviceId === deviceId &&
     snapshot.sessionId === sessionId &&
     (snapshot.mode === "linear" || snapshot.mode === "tree") &&
     Array.isArray(snapshot.groups) &&

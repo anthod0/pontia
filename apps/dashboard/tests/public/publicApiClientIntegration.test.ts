@@ -1,43 +1,19 @@
-import { afterEach, beforeAll, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
+import { DeviceRuntime } from "../../src/device/runtime";
+import { createApiAccess } from "../../src/modes/public/apiAccess";
+import { createRemoteConnection } from "../../src/modes/public/remote-access";
 
-const { e2eFetch } = vi.hoisted(() => ({
-  e2eFetch: vi.fn(
-    async () => new Response(JSON.stringify({ data: { workspaces: [] } }), { status: 200 }),
-  ),
-}));
-vi.mock("../../src/modes/public/remote-access", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../src/modes/public/remote-access")>()),
-  e2eFetch,
-  clearE2eSession: vi.fn(),
-}));
-
-import { listWorkspaces } from "../../src/api/client";
-import { loadRemoteAccess } from "../../src/modes/public/remoteAccessLoader.svelte";
-import { clearPublicApiTarget, setPublicApiTarget } from "../../src/modes/public/remote-access";
-
-beforeAll(async () => {
-  await loadRemoteAccess();
-});
-
-afterEach(() => {
-  clearPublicApiTarget();
-  e2eFetch.mockClear();
-});
-
-test("routes ordinary API requests through the public E2E transport seam", async () => {
-  setPublicApiTarget({
-    handle: "office-mac",
-    deviceId: "01234567-89ab-cdef-0123-456789abcdef",
-    edgeApiOrigin: "https://brave-silver-atlas.edge.pontia.dev",
-  });
-
-  await expect(listWorkspaces()).resolves.toEqual([]);
-
+test("routes ordinary API requests through its public E2E connection", async () => {
+  const connection = createRemoteConnection("office-mac");
+  const e2eFetch = vi
+    .spyOn(connection, "e2eFetch")
+    .mockResolvedValue(new Response(JSON.stringify({ data: { workspaces: [] } }), { status: 200 }));
+  const device = new DeviceRuntime("office-mac", createApiAccess(connection));
+  await expect(device.api.listWorkspaces()).resolves.toEqual([]);
   const [path, init] = e2eFetch.mock.calls[0];
   expect(path).toBe("/api/v1/workspaces");
   expect((init.headers as Headers).has("Authorization")).toBe(false);
   expect(init.signal).toBeInstanceOf(AbortSignal);
-
-  clearPublicApiTarget();
+  device.dispose();
   expect(init.signal?.aborted).toBe(true);
 });

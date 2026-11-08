@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../device/context';
   import { onMount } from 'svelte'
   import WorkflowVersions from './workflows/WorkflowVersions.svelte'
   import WorkflowReplanning from './workflows/WorkflowReplanning.svelte'
@@ -16,10 +17,16 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import { Separator } from '$lib/components/ui/separator/index.js'
-  import { selectedWorkflowId } from '../stores/workflows'
-  import { createPauseWorkflowMutation, createResumeWorkflowMutation, createRetryWorkflowMutation, createWorkflowQuery } from '../queries/workflows'
   import { groupWorkflowPhases, selectedPhaseOrdinal } from './workflows/phases'
   import type { WorkflowAgentStatus } from '../api/types'
+  const device = useDeviceRuntime();
+  const { selectedWorkflowId } = device.workflows;
+  const {
+    createPauseWorkflowMutation,
+    createResumeWorkflowMutation,
+    createRetryWorkflowMutation,
+    createWorkflowQuery,
+  } = device.workflowQueries;
 
   let { routeWorkflowId }: { routeWorkflowId: string } = $props()
   const workflowQuery = createWorkflowQuery(() => routeWorkflowId, () => true, () => true)

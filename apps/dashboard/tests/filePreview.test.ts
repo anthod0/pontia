@@ -1,9 +1,20 @@
+import { testDevice } from "./deviceFixture";
 import { Blob } from "node:buffer";
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
-import { filePreview } from "../src/lib/downloads/preview";
-import { sharedFileContent } from "../src/api/sessionFiles";
-vi.mock("$dashboard-mode/apiAccess", () => ({ uploadStorageScope: async () => "test-device" }));
-vi.mock("../src/api/sessionFiles", () => ({ sharedFileContent: vi.fn() }));
+const { filePreview } = testDevice.previews;
+const { sharedFileContent } = testDevice.fileApi;
+testDevice.access.uploadStorageScope = async () => "test-device";
+vi.mock("../src/api/sessionFiles", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    sharedFileContent: vi.fn(),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createFileApi: (device) => ({ ...original.createFileApi(device), ...mocked }),
+  };
+});
 beforeEach(() => {
   vi.stubGlobal("Blob", Blob);
 });

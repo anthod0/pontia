@@ -12,15 +12,30 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../src/modes/public/remote-access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../src/modes/public/remote-access")>()),
-  connectPublicDevice: mocks.resolveTarget,
-  clearE2eSession: vi.fn(),
+  createRemoteConnection: (handle: string) => {
+    const controller = new AbortController();
+    return {
+      connect: (signal: AbortSignal) => mocks.resolveTarget(handle, signal),
+      uploadStorageScope: async () => handle,
+      signal: controller.signal,
+      dispose: () => controller.abort(),
+    };
+  },
 }));
 
-vi.mock("../../src/services/dashboardRuntime", () => ({
-  startDashboardRuntime: mocks.startRuntime,
-  stopDashboardRuntime: mocks.stopRuntime,
-  clearDashboardRuntimeState: mocks.clearRuntime,
-}));
+vi.mock("../../src/services/dashboardRuntime", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    startDashboardRuntime: mocks.startRuntime,
+    stopDashboardRuntime: mocks.stopRuntime,
+    clearDashboardRuntimeState: mocks.clearRuntime,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createLifecycle: (device) => ({ ...original.createLifecycle(device), ...mocked }),
+  };
+});
 
 const target = (handle: string) => ({
   handle,
@@ -132,4 +147,25 @@ test("leaving a pending connection prevents a late result from starting the dash
   finish(target("office-mac"));
   await Promise.resolve();
   expect(mocks.startRuntime).not.toHaveBeenCalled();
+});
+
+test("a device-list request paused offline resumes when the browser comes online", async () => {
+  const { onlineManager } = await import("@tanstack/svelte-query");
+  const fetchMock = vi.fn(
+    async () =>
+      new Response(JSON.stringify([{ device_handle: "office-mac", name: "Office Mac" }]), {
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  onlineManager.setOnline(false);
+  try {
+    render(PublicDashboardHarness, { props: { handle: "" } });
+    expect(fetchMock).not.toHaveBeenCalled();
+    onlineManager.setOnline(true);
+    await screen.findByRole("link", { name: "Open Dashboard" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  } finally {
+    onlineManager.setOnline(true);
+  }
 });

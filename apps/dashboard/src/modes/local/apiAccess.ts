@@ -2,37 +2,56 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { get } from "svelte/store";
 import { token } from "./auth";
 
-export const apiCredentials: RequestCredentials = "same-origin";
-export const apiStreamUnavailableMessage =
-  "Set an API token in Settings to open the dashboard event stream.";
+import type { ApiAccess } from "../../device/apiAccess";
 
-export function apiUrl(path: string): string {
-  return path;
-}
+export function createApiAccess(): ApiAccess {
+  const credential = get(token);
+  const lifetime = new AbortController();
+  const apiCredentials: RequestCredentials = "same-origin";
+  const apiStreamUnavailableMessage =
+    "Set an API token in Settings to open the dashboard event stream.";
 
-export function apiFetch(path: string, init: RequestInit): Promise<Response> {
-  return fetch(path, init);
-}
+  function apiUrl(path: string): string {
+    return path;
+  }
 
-export function apiSignal(signal?: AbortSignal | null): AbortSignal | undefined {
-  return signal ?? undefined;
-}
+  function apiFetch(path: string, init: RequestInit): Promise<Response> {
+    lifetime.signal.throwIfAborted();
+    return fetch(path, init);
+  }
 
-export function applyApiAuthentication(headers: Headers): boolean {
-  const bearer = get(token).trim();
-  if (!bearer) return false;
-  headers.set("Authorization", `Bearer ${bearer}`);
-  return true;
-}
+  function apiSignal(signal?: AbortSignal | null): AbortSignal {
+    return signal ? AbortSignal.any([lifetime.signal, signal]) : lifetime.signal;
+  }
 
-export function handleApiAuthenticationFailure(): void {
-  token.set("");
-}
+  function applyApiAuthentication(headers: Headers): boolean {
+    const bearer = credential.trim();
+    if (!bearer) return false;
+    headers.set("Authorization", `Bearer ${bearer}`);
+    return true;
+  }
 
-export async function uploadStorageScope(): Promise<string> {
-  const digest = sha256(new TextEncoder().encode(get(token)));
-  const identity = Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-  return JSON.stringify([location.origin, identity]);
+  function handleApiAuthenticationFailure(): void {
+    if (!lifetime.signal.aborted && get(token) === credential) token.set("");
+  }
+
+  async function uploadStorageScope(): Promise<string> {
+    const digest = sha256(new TextEncoder().encode(credential));
+    const identity = Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    return JSON.stringify([location.origin, identity]);
+  }
+
+  return {
+    apiCredentials,
+    apiStreamUnavailableMessage,
+    apiUrl,
+    apiFetch,
+    apiSignal,
+    applyApiAuthentication,
+    handleApiAuthenticationFailure,
+    uploadStorageScope,
+    dispose: () => lifetime.abort(),
+  };
 }

@@ -24,13 +24,8 @@ vi.mock("../../src/e2e-wasm/pontia_e2e", () => ({
   },
 }));
 
-import {
-  clearE2eSession,
-  connectPublicDevice,
-  e2eFetch,
-  clearPublicApiTarget,
-  setPublicApiTarget,
-} from "../../src/modes/public/remote-access";
+import { createRemoteConnection } from "../../src/modes/public/remote-access";
+let remote: ReturnType<typeof createRemoteConnection>;
 
 const handle = "office-mac";
 const deviceId = "01234567-89ab-cdef-0123-456789abcdef";
@@ -53,6 +48,7 @@ const cloudResponse = () =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  remote = createRemoteConnection(handle);
   mocks.start.mockReturnValue({
     bytes: () => new Uint8Array([1]),
     confirm: mocks.confirm,
@@ -75,8 +71,7 @@ beforeEach(() => {
   }));
 });
 afterEach(() => {
-  clearE2eSession();
-  clearPublicApiTarget();
+  remote.dispose();
   vi.unstubAllGlobals();
 });
 
@@ -93,7 +88,7 @@ test("does not complete connection until the device confirms the handshake", asy
     );
   vi.stubGlobal("fetch", fetchMock);
   let completed = false;
-  const connecting = connectPublicDevice(handle).then((target) => {
+  const connecting = remote.connect().then((target) => {
     completed = true;
     return target;
   });
@@ -106,7 +101,7 @@ test("does not complete connection until the device confirms the handshake", asy
   resolveHandshake(new Response(new Uint8Array([4])));
   await expect(connecting).resolves.toEqual({ handle, deviceId, edgeApiOrigin: edge });
   expect(mocks.confirm).toHaveBeenCalledWith(new Uint8Array([4]));
-  await connectPublicDevice(handle);
+  await remote.connect();
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
@@ -116,7 +111,7 @@ test("shares one connection establishment across concurrent callers", async () =
     .mockResolvedValueOnce(cloudResponse())
     .mockResolvedValueOnce(new Response("confirmation"));
   vi.stubGlobal("fetch", fetchMock);
-  const targets = await Promise.all([connectPublicDevice(handle), connectPublicDevice(handle)]);
+  const targets = await Promise.all([remote.connect(), remote.connect()]);
   expect(targets[0]).toEqual(targets[1]);
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
@@ -129,9 +124,9 @@ test("a failed handshake can be retried with fresh authorization", async () => {
     .mockResolvedValueOnce(cloudResponse())
     .mockResolvedValueOnce(new Response("confirmation"));
   vi.stubGlobal("fetch", fetchMock);
-  await expect(connectPublicDevice(handle)).rejects.toThrow();
+  await expect(remote.connect()).rejects.toThrow();
   expect(mocks.confirm).not.toHaveBeenCalled();
-  await expect(connectPublicDevice(handle)).resolves.toMatchObject({ deviceId });
+  await expect(remote.connect()).resolves.toMatchObject({ deviceId });
   expect(fetchMock).toHaveBeenCalledTimes(4);
 });
 
@@ -148,18 +143,17 @@ test("a cancelled handshake cannot install a stale session", async () => {
     );
   vi.stubGlobal("fetch", fetchMock);
   const controller = new AbortController();
-  const connecting = connectPublicDevice(handle, controller.signal);
+  const connecting = remote.connect(controller.signal);
   const rejected = expect(connecting).rejects.toMatchObject({ name: "AbortError" });
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   controller.abort();
-  clearE2eSession();
   resolveHandshake(new Response("old confirmation"));
   await rejected;
   expect(mocks.confirm).not.toHaveBeenCalled();
   fetchMock
     .mockResolvedValueOnce(cloudResponse())
     .mockResolvedValueOnce(new Response("new confirmation"));
-  await expect(connectPublicDevice(handle)).resolves.toMatchObject({ deviceId });
+  await expect(remote.connect()).resolves.toMatchObject({ deviceId });
   expect(fetchMock).toHaveBeenCalledTimes(4);
 });
 
@@ -175,8 +169,8 @@ test.each([401, 409])(
       .mockResolvedValueOnce(new Response("confirmation"))
       .mockResolvedValueOnce(new Response("ciphertext"));
     vi.stubGlobal("fetch", fetchMock);
-    setPublicApiTarget(await connectPublicDevice(handle));
-    const response = await e2eFetch("/api/v1/workspaces");
+    await remote.connect();
+    const response = await remote.e2eFetch("/api/v1/workspaces");
     expect(await response.text()).toBe("ok");
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       `https://pontia.dev/api/dashboard/devices/${handle}/connect`,
@@ -204,9 +198,7 @@ test.each([0, 1])(
       );
     vi.stubGlobal("fetch", fetchMock);
     const controllers = [new AbortController(), new AbortController()];
-    const connections = controllers.map((controller) =>
-      connectPublicDevice(handle, controller.signal),
-    );
+    const connections = controllers.map((controller) => remote.connect(controller.signal));
     const rejected = expect(connections[cancelled]).rejects.toMatchObject({ name: "AbortError" });
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     controllers[cancelled].abort();
@@ -241,8 +233,8 @@ test("staggered concurrent session rejections share one replacement handshake", 
     )
     .mockImplementation(async () => new Response("ciphertext"));
   vi.stubGlobal("fetch", fetchMock);
-  setPublicApiTarget(await connectPublicDevice(handle));
-  const requests = [e2eFetch("/api/v1/workspaces"), e2eFetch("/api/v1/tasks")];
+  await remote.connect();
+  const requests = [remote.e2eFetch("/api/v1/workspaces"), remote.e2eFetch("/api/v1/tasks")];
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
   rejectSecond(new Response(null, { status: 401 }));
   await Promise.resolve();
@@ -260,8 +252,55 @@ test("encrypts binary request bytes without a text conversion", async () => {
     .mockResolvedValueOnce(new Response(new Uint8Array([1])))
     .mockResolvedValueOnce(new Response(new Uint8Array([2])));
   vi.stubGlobal("fetch", fetchMock);
-  setPublicApiTarget({ handle, deviceId, edgeApiOrigin: edge });
   const bytes = new Uint8Array([0, 255, 128, 10]);
-  await (await e2eFetch("/api/v1/uploads/id?offset=0", { method: "PATCH", body: bytes })).text();
+  await (
+    await remote.e2eFetch("/api/v1/uploads/id?offset=0", { method: "PATCH", body: bytes })
+  ).text();
   expect(mocks.content).toHaveBeenCalledWith(bytes);
+});
+
+test("devices on the same edge keep independent encrypted sessions and reauthorization", async () => {
+  const otherHandle = "travel-laptop";
+  const otherId = "12345678-9abc-def0-1234-56789abcdef0";
+  const other = createRemoteConnection(otherHandle);
+  let rejectFirstDevice = false;
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url.includes("/connect")) {
+      if (url.includes(otherHandle)) {
+        const body = await cloudResponse().json();
+        return new Response(
+          JSON.stringify({ ...body, device_handle: otherHandle, device_id: otherId }),
+        );
+      }
+      return cloudResponse();
+    }
+    if (url.endsWith("/sessions")) return new Response("confirmation");
+    if (rejectFirstDevice && url.includes(deviceId)) {
+      rejectFirstDevice = false;
+      return new Response(null, { status: 401 });
+    }
+    return new Response("ciphertext");
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  try {
+    await Promise.all([remote.connect(), other.connect()]);
+    rejectFirstDevice = true;
+    await Promise.all([
+      remote.e2eFetch("/api/v1/sessions/same").then((response) => response.text()),
+      other.e2eFetch("/api/v1/sessions/same").then((response) => response.text()),
+    ]);
+    const urls = fetchMock.mock.calls.map(([url]) => url);
+    expect(
+      urls.filter((url) => url === `${edge}/devices/${deviceId}/e2e/v1/requests`),
+    ).toHaveLength(2);
+    expect(urls.filter((url) => url === `${edge}/devices/${otherId}/e2e/v1/requests`)).toHaveLength(
+      1,
+    );
+    expect(urls.filter((url) => url.endsWith(`/${handle}/connect`))).toHaveLength(2);
+    expect(urls.filter((url) => url.endsWith(`/${otherHandle}/connect`))).toHaveLength(1);
+    remote.dispose();
+    expect(await (await other.e2eFetch("/api/v1/workspaces")).text()).toBe("ok");
+  } finally {
+    other.dispose();
+  }
 });

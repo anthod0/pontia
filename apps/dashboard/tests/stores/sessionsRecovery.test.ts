@@ -1,11 +1,12 @@
+import { testDevice } from "../deviceFixture";
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ApiError } from "../../src/api/errors";
 import type { DashboardStreamEvent, SessionView, TurnView } from "../../src/api/types";
-import { invalidateQueriesForDashboardEvent } from "../../src/queries/dashboardInvalidation";
+const { invalidateQueriesForDashboardEvent } = testDevice.invalidation;
 import { createDashboardRefreshScheduler } from "../../src/services/dashboardRefreshScheduler";
-import * as api from "../../src/api/client";
-import {
+const api = testDevice.api;
+const {
   loadSessionDetail,
   selectSession,
   selectedSessionId,
@@ -13,7 +14,7 @@ import {
   sessionDetailError,
   sessionDetailErrorKind,
   sessionDetailLoading,
-} from "../../src/stores/sessions";
+} = testDevice.sessions;
 
 const session = (id: string, state = "idle") =>
   ({ session_id: id, state, capabilities: {} }) as SessionView;

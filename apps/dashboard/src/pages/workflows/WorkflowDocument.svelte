@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
-  import { createWorkflowDocumentQuery } from '../../queries/workflows'
+  const device = useDeviceRuntime();
+  const { createWorkflowDocumentQuery } = device.workflowQueries;
 
   let { workflowId, documentRef, label }: { workflowId: string; documentRef: string | null; label: string } = $props()
   let open = $state(false)

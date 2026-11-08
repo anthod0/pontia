@@ -3,14 +3,10 @@ import {
   infiniteQueryOptions,
   type InfiniteData,
 } from "@tanstack/svelte-query";
-import { getSessionOverview } from "../api/client";
-import type { SessionOverviewView, SessionView } from "../api/types";
-import { queryClient } from "./queryClient";
 
-const listLimit = 50;
-export const sessionOverviewKeys = {
-  all: ["sessions", "overview"] as const,
-};
+import type { SessionOverviewView, SessionView } from "../api/types";
+import type { DeviceRuntime } from "../device/runtime";
+
 type PageParam = string | null;
 
 export type SessionOverviewSnapshot = {
@@ -20,50 +16,6 @@ export type SessionOverviewSnapshot = {
   archived: SessionView[];
   nextCursor: string | null;
 };
-
-function sessionOverviewOptions(includeArchived: boolean, workspaceId: string | undefined) {
-  return infiniteQueryOptions({
-    queryKey: [
-      ...sessionOverviewKeys.all,
-      { includeArchived, workspaceId: workspaceId ?? null },
-    ] as const,
-    queryFn: ({ pageParam, signal }) =>
-      getSessionOverview(
-        {
-          sections: pageParam
-            ? ["list"]
-            : includeArchived
-              ? ["pinned", "active", "list", "archived"]
-              : ["pinned", "active", "list"],
-          limit: listLimit,
-          workspaceId,
-          ...(pageParam ? { cursor: pageParam } : {}),
-        },
-        { signal },
-      ),
-    initialPageParam: null as PageParam,
-    getNextPageParam: (lastPage) => lastPage.groups.list?.next_cursor ?? undefined,
-  });
-}
-
-export function createSessionOverviewQuery(
-  includeArchived = false,
-  workspaceId: () => string | undefined = () => undefined,
-) {
-  return createInfiniteQuery(
-    () => sessionOverviewOptions(includeArchived, workspaceId()),
-    () => queryClient,
-  );
-}
-
-export function invalidateSessionOverview(): Promise<void> {
-  return queryClient.invalidateQueries({ queryKey: sessionOverviewKeys.all });
-}
-
-export function clearSessionOverviewQuery(): void {
-  void queryClient.cancelQueries({ queryKey: sessionOverviewKeys.all });
-  queryClient.removeQueries({ queryKey: sessionOverviewKeys.all });
-}
 
 export function snapshotSessionOverview(
   data: InfiniteData<SessionOverviewView, unknown> | undefined,
@@ -81,5 +33,62 @@ export function snapshotSessionOverview(
     list: [...listById.values()],
     archived: first?.groups.archived?.sessions ?? [],
     nextCursor: data?.pages.at(-1)?.groups.list?.next_cursor ?? null,
+  };
+}
+export function createSessionOverview(device: DeviceRuntime) {
+  const listLimit = 50;
+
+  const sessionOverviewKeys = {
+    all: [device.id, "sessions", "overview"] as const,
+  };
+
+  function sessionOverviewOptions(includeArchived: boolean, workspaceId: string | undefined) {
+    return infiniteQueryOptions({
+      queryKey: [
+        ...sessionOverviewKeys.all,
+        { includeArchived, workspaceId: workspaceId ?? null },
+      ] as const,
+      queryFn: ({ pageParam, signal }) =>
+        device.api.getSessionOverview(
+          {
+            sections: pageParam
+              ? ["list"]
+              : includeArchived
+                ? ["pinned", "active", "list", "archived"]
+                : ["pinned", "active", "list"],
+            limit: listLimit,
+            workspaceId,
+            ...(pageParam ? { cursor: pageParam } : {}),
+          },
+          { signal },
+        ),
+      initialPageParam: null as PageParam,
+      getNextPageParam: (lastPage) => lastPage.groups.list?.next_cursor ?? undefined,
+    });
+  }
+
+  function createSessionOverviewQuery(
+    includeArchived = false,
+    workspaceId: () => string | undefined = () => undefined,
+  ) {
+    return createInfiniteQuery(
+      () => sessionOverviewOptions(includeArchived, workspaceId()),
+      () => device.queryClient,
+    );
+  }
+
+  function invalidateSessionOverview(): Promise<void> {
+    return device.queryClient.invalidateQueries({ queryKey: sessionOverviewKeys.all });
+  }
+
+  function clearSessionOverviewQuery(): void {
+    void device.queryClient.cancelQueries({ queryKey: sessionOverviewKeys.all });
+    device.queryClient.removeQueries({ queryKey: sessionOverviewKeys.all });
+  }
+  return {
+    sessionOverviewKeys,
+    createSessionOverviewQuery,
+    invalidateSessionOverview,
+    clearSessionOverviewQuery,
   };
 }

@@ -1,5 +1,6 @@
+import { testDevice } from "./deviceFixture";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import {
+const {
   setSessionModel,
   getSessionOverview,
   getTurnTimeline,
@@ -12,7 +13,7 @@ import {
   listWorkspaces,
   refreshWorkspaceGitStatus,
   terminateSession,
-} from "../src/api/client";
+} = testDevice.api;
 import { token } from "../src/stores/auth";
 
 beforeEach(() => {

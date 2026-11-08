@@ -1,4 +1,5 @@
 import { mocks, session, turn } from "./fixtures";
+import { testDevice } from "../../deviceFixture";
 import { render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";

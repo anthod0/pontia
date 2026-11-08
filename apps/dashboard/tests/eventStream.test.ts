@@ -1,13 +1,10 @@
+import { testDevice } from "./deviceFixture";
 import { afterEach, expect, test, vi } from "vitest";
 import { waitFor } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { token } from "../src/stores/auth";
-import { dashboardStreamCursor, lastConnectionError } from "../src/stores/connection";
-import {
-  startEventStream,
-  stopEventStream,
-  subscribeDashboardEvents,
-} from "../src/services/eventStream";
+const { dashboardStreamCursor, lastConnectionError } = testDevice.connection;
+const { startEventStream, stopEventStream, subscribeDashboardEvents } = testDevice.events;
 import type { DashboardStreamEvent } from "../src/api/types";
 
 const refreshDashboardSnapshotMock = vi.hoisted(() => vi.fn(async () => {}));
@@ -32,9 +29,17 @@ function createAbortableStreamFetch(signals: AbortSignal[] = []) {
   });
 }
 
-vi.mock("../src/services/dashboardSnapshotRefresh", () => ({
-  refreshDashboardSnapshot: refreshDashboardSnapshotMock,
-}));
+vi.mock("../src/services/dashboardSnapshotRefresh", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    refreshDashboardSnapshot: refreshDashboardSnapshotMock,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createSnapshotRefresh: (device) => ({ ...original.createSnapshotRefresh(device), ...mocked }),
+  };
+});
 
 afterEach(() => {
   stopEventStream();

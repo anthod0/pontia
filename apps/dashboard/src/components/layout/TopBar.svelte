@@ -1,11 +1,14 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
-  import { sessionDetail, sessionDetailError, updateSessionTitle } from '../../stores/sessions'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
-  import { createSessionOverviewQuery, snapshotSessionOverview } from '../../queries/sessionOverview'
+  import { snapshotSessionOverview } from "../../queries/sessionOverview";
+  const device = useDeviceRuntime();
+  const { sessionDetail, sessionDetailError, updateSessionTitle } = device.sessions;
+  const { createSessionOverviewQuery } = device.sessionOverview;
 
   let currentPath = $state(dashboardRelativePath())
   const overviewQuery = createSessionOverviewQuery()

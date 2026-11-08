@@ -1,16 +1,17 @@
+import { testDevice } from "../deviceFixture";
 import { beforeEach, expect, test } from "vitest";
 import type { DashboardStreamEvent, InboxMessageView } from "../../src/api/types";
 import type { SessionChatMessage } from "../../src/lib/session-chat/sessionChat";
-import {
+import { type OptimisticInboxSubmission } from "../../src/queries/inbox";
+const {
   inboxSubmissionMessages,
   reconcileInboxSubmissionForDashboardEvent,
   optimisticInboxSubmissions,
   reconcileInboxSubmissions,
   syncInboxSubmissions,
-  type OptimisticInboxSubmission,
-} from "../../src/queries/inbox";
-import { queryClient } from "../../src/queries/queryClient";
-import { sessionKeys } from "../../src/queries/sessions";
+} = testDevice.inboxQueries;
+const { queryClient } = testDevice;
+const { sessionKeys } = testDevice.sessionQueries;
 
 const acceptedInboxMessage = (overrides: Partial<InboxMessageView> = {}): InboxMessageView => ({
   message_id: "message-1",

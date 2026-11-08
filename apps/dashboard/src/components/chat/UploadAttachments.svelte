@@ -1,9 +1,9 @@
 <script lang="ts">
   import { Progress } from '$lib/components/ui/progress/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
-  import { type createUploadDraft, type UploadItem } from '$lib/uploads/draft'
+  import { type UploadDraft, type UploadItem } from '$lib/uploads/draft'
 
-  let { draft, disabled = false }: { draft: ReturnType<typeof createUploadDraft>; disabled?: boolean } = $props()
+  let { draft, disabled = false }: { draft: UploadDraft; disabled?: boolean } = $props()
   let picker: HTMLInputElement
   let resumeItem: UploadItem | undefined
   export function choose(item?: UploadItem) { resumeItem = item; picker.multiple = !item; picker.click() }

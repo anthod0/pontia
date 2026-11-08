@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon'
   import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
@@ -20,13 +21,15 @@
   import { chatShortcuts } from '$lib/shortcuts/definitions'
   import { formatShortcutKeys } from '$lib/shortcuts/format'
   import { cn } from '$lib/utils.js'
-  import { archiveSession, pinSession, terminateSession, unpinSession, updateSessionTitle } from '../../stores/sessions'
-  import { createSessionOverviewQuery, snapshotSessionOverview } from '../../queries/sessionOverview'
-  import { createWorkspacesQuery } from '../../queries/workspaces'
+  import { snapshotSessionOverview } from "../../queries/sessionOverview";
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
   import type { SessionView } from '../../api/types'
+  const device = useDeviceRuntime();
+  const { archiveSession, pinSession, terminateSession, unpinSession, updateSessionTitle } = device.sessions;
+  const { createSessionOverviewQuery } = device.sessionOverview;
+  const { createWorkspacesQuery } = device.workspaceQueries;
 
   type Item = {
     label: string

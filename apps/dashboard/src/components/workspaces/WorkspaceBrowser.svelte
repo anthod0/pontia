@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import { onMount, tick } from 'svelte'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import ArrowBendUpLeftIcon from 'phosphor-svelte/lib/ArrowBendUpLeftIcon'
@@ -18,14 +19,15 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Table from '$lib/components/ui/table/index.js'
   import type { WorkspaceDirectoryEntryView, WorkspaceView } from '../../api/types'
-  import {
+  const device = useDeviceRuntime();
+  const {
     createDeleteWorkspaceMutation,
     createRegisterWorkspaceMutation,
     createRenameWorkspaceMutation,
     createWorkspaceRootEntriesQuery,
     createWorkspaceRootsQuery,
     createWorkspacesQuery,
-  } from '../../queries/workspaces'
+  } = device.workspaceQueries;
 
   interface Props {
     workspaceViews?: WorkspaceView[]

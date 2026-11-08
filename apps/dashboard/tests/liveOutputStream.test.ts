@@ -1,6 +1,7 @@
+import { testDevice } from "./deviceFixture";
 import { afterEach, expect, test, vi } from "vitest";
 import { token } from "../src/stores/auth";
-import { openLiveOutputStream } from "../src/services/liveOutputStream";
+const { openLiveOutputStream } = testDevice.liveOutput;
 
 function eventStream(data: unknown): ReadableStream<Uint8Array> {
   return new ReadableStream({

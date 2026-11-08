@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../device/context';
   import { defaultClientType } from '../clients'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -21,6 +22,14 @@
   import type { AgentProfileView } from '../api/types'
   import { formatDateTime } from '../components/tasks/format'
   import {
+    buildAgentProfileInput,
+    createAgentProfileDraft,
+    createAgentProfileDraftFromProfile,
+    type AgentProfileDraft,
+    type AgentProfileDraftErrors,
+  } from './agentProfiles/form'
+  const device = useDeviceRuntime();
+  const {
     createAgentProfilesQuery,
     createAgentProfileVersionsQuery,
     createAgentProfileMutation,
@@ -28,14 +37,7 @@
     deleteAgentProfileMutation,
     deleteAgentProfileVersionMutation,
     updateAgentProfileVersionMutation,
-  } from '../queries/agentProfiles'
-  import {
-    buildAgentProfileInput,
-    createAgentProfileDraft,
-    createAgentProfileDraftFromProfile,
-    type AgentProfileDraft,
-    type AgentProfileDraftErrors,
-  } from './agentProfiles/form'
+  } = device.agentProfileQueries;
 
   type FormMode = 'create' | 'edit' | 'new-version'
 

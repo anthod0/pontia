@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import { untrack } from 'svelte'
   import type { WorkflowDetailView } from '../../api/types'
-  import { createSessionQuery } from '../../queries/sessions'
   import { Button } from '$lib/components/ui/button/index.js'
   import { navigate } from '$lib/navigation'
+  const device = useDeviceRuntime();
+  const { createSessionQuery } = device.sessionQueries;
 
   let { sessionId, snapshot }: { sessionId: string; snapshot: WorkflowDetailView } = $props()
   const sessionQuery = createSessionQuery(() => sessionId, () => false)

@@ -1,8 +1,9 @@
+import { testDevice } from "./deviceFixture";
 import { render, screen, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import WorkspacesPage from "../src/pages/WorkspacesPage.svelte";
-import { queryClient } from "../src/queries/queryClient";
+const { queryClient } = testDevice;
 import type {
   WorkspaceDirectoryListingView,
   WorkspaceRootView,
@@ -61,20 +62,28 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("../src/api/client", () => ({
-  listWorkspaces: async (options: unknown) => {
-    await mocks.loadWorkspaces(options);
-    const error = mocks.workspacesError.get();
-    if (error) throw new Error(error);
-    return mocks.workspaces.get();
-  },
-  listWorkspaceRoots: mocks.listWorkspaceRoots,
-  listWorkspaceRootEntries: mocks.listWorkspaceRootEntries,
-  registerWorkspace: mocks.registerWorkspace,
-  renameWorkspace: (workspaceId: string, input: unknown) =>
-    mocks.renameWorkspace(workspaceId, input),
-  deleteWorkspace: mocks.deleteWorkspace,
-}));
+vi.mock("../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    listWorkspaces: async (options: unknown) => {
+      await mocks.loadWorkspaces(options);
+      const error = mocks.workspacesError.get();
+      if (error) throw new Error(error);
+      return mocks.workspaces.get();
+    },
+    listWorkspaceRoots: mocks.listWorkspaceRoots,
+    listWorkspaceRootEntries: mocks.listWorkspaceRootEntries,
+    registerWorkspace: mocks.registerWorkspace,
+    renameWorkspace: (workspaceId: string, input: unknown) =>
+      mocks.renameWorkspace(workspaceId, input),
+    deleteWorkspace: mocks.deleteWorkspace,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 
 const workspace = (overrides: Partial<WorkspaceView> = {}): WorkspaceView => ({
   workspace_id: "workspace-1",

@@ -2,7 +2,6 @@ import "@testing-library/jest-dom/vitest";
 import "fake-indexeddb/auto";
 import { cleanup } from "@testing-library/svelte";
 import { afterEach, vi } from "vitest";
-import { queryClient } from "../src/queries/queryClient";
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,
@@ -46,11 +45,22 @@ Object.defineProperty(Range.prototype, "getBoundingClientRect", {
 
 afterEach(async () => {
   cleanup();
-  queryClient.clear();
+  const { testDevice } = await import("./deviceFixture");
+  testDevice.queryClient.clear();
 
   // bits-ui schedules body scroll-lock cleanup with a short timeout when overlays unmount.
   // Let that cleanup run before Vitest tears down jsdom, otherwise it can fire after
   // `document` has been removed and surface as an unhandled error.
   vi.useRealTimers();
   await new Promise((resolve) => window.setTimeout(resolve, 30));
+});
+
+vi.mock("../src/device/context", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../src/device/context")>();
+  const { getContext } = await import("svelte");
+  const { testDevice } = await import("./deviceFixture");
+  return {
+    ...original,
+    useDeviceRuntime: () => getContext(original.deviceContext) ?? testDevice,
+  };
 });

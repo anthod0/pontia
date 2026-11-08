@@ -38,31 +38,39 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
-vi.mock("../../src/queries/sessionOverview", () => ({
-  createSessionOverviewQuery: () => ({
-    get data() {
-      return {
-        active: mocks.active.value,
-        archived: mocks.archived.value,
-        list: mocks.list.value,
-        pinned: mocks.pinned.value,
-        nextCursor: mocks.nextCursor.value,
-      };
-    },
-    get isPending() {
-      return mocks.loading.value;
-    },
-    get isFetchingNextPage() {
-      return mocks.loadingMore.value;
-    },
-    get error() {
-      const message = mocks.error.value;
-      return message ? new Error(message) : null;
-    },
-    fetchNextPage: mocks.loadMore,
-  }),
-  snapshotSessionOverview: (data: unknown) => data,
-}));
+vi.mock("../../src/queries/sessionOverview", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    createSessionOverviewQuery: () => ({
+      get data() {
+        return {
+          active: mocks.active.value,
+          archived: mocks.archived.value,
+          list: mocks.list.value,
+          pinned: mocks.pinned.value,
+          nextCursor: mocks.nextCursor.value,
+        };
+      },
+      get isPending() {
+        return mocks.loading.value;
+      },
+      get isFetchingNextPage() {
+        return mocks.loadingMore.value;
+      },
+      get error() {
+        const message = mocks.error.value;
+        return message ? new Error(message) : null;
+      },
+      fetchNextPage: mocks.loadMore,
+    }),
+    snapshotSessionOverview: (data: unknown) => data,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createSessionOverview: (device) => ({ ...original.createSessionOverview(device), ...mocked }),
+  };
+});
 
 const session = (overrides: Partial<SessionView> = {}): SessionView => ({
   session_id: "session-1",

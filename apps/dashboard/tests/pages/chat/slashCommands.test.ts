@@ -1,11 +1,12 @@
 import { mocks, session } from "./fixtures";
+import { testDevice } from "../../deviceFixture";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { get } from "svelte/store";
 import { afterEach, expect, test, vi } from "vitest";
-import { chatDraft } from "../../../src/stores/chatDraft";
+const { chatDraft } = testDevice.chatDraft;
 import type { SessionView } from "../../../src/api/types";
-import * as api from "../../../src/api/client";
+const api = testDevice.api;
 
 afterEach(() => vi.restoreAllMocks());
 

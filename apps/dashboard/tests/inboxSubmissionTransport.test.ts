@@ -1,8 +1,9 @@
+import { testDevice } from "./deviceFixture";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { get } from "svelte/store";
-import { submitInboxMessage } from "../src/stores/sessions";
+const { submitInboxMessage } = testDevice.sessions;
 import { token } from "../src/stores/auth";
-import { unconfirmedSubmissions } from "../src/stores/inboxRecovery";
+const { unconfirmedSubmissions } = testDevice.inboxRecovery;
 
 beforeEach(() => {
   localStorage.clear();

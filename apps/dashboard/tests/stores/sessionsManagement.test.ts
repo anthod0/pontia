@@ -69,7 +69,15 @@ const api = vi.hoisted(() => ({
   archiveSession: vi.fn(),
 }));
 
-vi.mock("../../src/api/client", () => api);
+vi.mock("../../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = await (() => api)(importOriginal);
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 
 describe("sessions store management actions", () => {
   beforeEach(() => {
@@ -99,10 +107,11 @@ describe("sessions store management actions", () => {
     api.listInboxMessages.mockResolvedValue([accepted]);
     api.listEvents.mockResolvedValue([]);
 
-    const { selectSession, sessionDetail, submitInboxMessage } =
-      await import("../../src/stores/sessions");
-    const { setSessionDetail } = await import("../../src/queries/sessions");
-    const { optimisticInboxSubmissions } = await import("../../src/queries/inbox");
+    const { selectSession, sessionDetail, submitInboxMessage } = (await import("../deviceFixture"))
+      .testDevice.sessions;
+    const { setSessionDetail } = (await import("../deviceFixture")).testDevice.sessionQueries;
+    const { optimisticInboxSubmissions } = (await import("../deviceFixture")).testDevice
+      .inboxQueries;
     selectSession(current.session_id);
     setSessionDetail({ session: current, turns: [], inboxMessages: [], events: [] });
 
@@ -134,9 +143,11 @@ describe("sessions store management actions", () => {
     });
     api.submitInboxMessage.mockImplementation(() => new Promise(() => undefined));
 
-    const { selectSession, submitInboxMessage } = await import("../../src/stores/sessions");
-    const { setSessionDetail } = await import("../../src/queries/sessions");
-    const { optimisticInboxSubmissions } = await import("../../src/queries/inbox");
+    const { selectSession, submitInboxMessage } = (await import("../deviceFixture")).testDevice
+      .sessions;
+    const { setSessionDetail } = (await import("../deviceFixture")).testDevice.sessionQueries;
+    const { optimisticInboxSubmissions } = (await import("../deviceFixture")).testDevice
+      .inboxQueries;
     selectSession(busy.session_id);
     setSessionDetail({ session: busy, turns: [], inboxMessages: [], events: [] });
 
@@ -157,9 +168,10 @@ describe("sessions store management actions", () => {
   ] as const)("%s updates the cached Inbox message", async (_name, actionName, state) => {
     const updated = inboxMessage({ state });
     api[actionName].mockResolvedValue(updated);
-    const actions = await import("../../src/stores/sessions");
-    const { queryClient } = await import("../../src/queries/queryClient");
-    const { sessionKeys, setSessionDetail } = await import("../../src/queries/sessions");
+    const actions = (await import("../deviceFixture")).testDevice.sessions;
+    const { queryClient } = (await import("../deviceFixture")).testDevice;
+    const { sessionKeys, setSessionDetail } = (await import("../deviceFixture")).testDevice
+      .sessionQueries;
     setSessionDetail({
       session: session({ session_id: "session-current" }),
       turns: [],
@@ -190,9 +202,9 @@ describe("sessions store management actions", () => {
     api.listInboxMessages.mockResolvedValue([]);
     api.listEvents.mockResolvedValue([]);
 
-    const { selectSession, sessionDetail, terminateSession } =
-      await import("../../src/stores/sessions");
-    const { setSessionDetail } = await import("../../src/queries/sessions");
+    const { selectSession, sessionDetail, terminateSession } = (await import("../deviceFixture"))
+      .testDevice.sessions;
+    const { setSessionDetail } = (await import("../deviceFixture")).testDevice.sessionQueries;
     selectSession(current.session_id);
     setSessionDetail({ session: current, turns: [], inboxMessages: [], events: [] });
 

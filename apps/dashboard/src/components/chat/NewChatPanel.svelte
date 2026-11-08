@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import type { SessionCreationOption, WorkspaceView } from '../../api/types'
   import MessageComposer from './MessageComposer.svelte'
   import SessionTargetSelector from './SessionTargetSelector.svelte'
   import { navigate } from '$lib/navigation'
-  import { clearChatDraft } from '../../stores/chatDraft'
   import type { ChatCommand } from '$lib/chatCommands'
+  const device = useDeviceRuntime();
+  const { clearChatDraft } = device.chatDraft;
 
   interface Props {
     prompt: string

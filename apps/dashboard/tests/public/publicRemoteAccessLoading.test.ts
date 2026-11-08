@@ -15,20 +15,35 @@ vi.mock("../../src/modes/public/remote-access", async (importOriginal) => {
   }
   return {
     ...(await importOriginal<typeof import("../../src/modes/public/remote-access")>()),
-    connectPublicDevice: async (handle: string) => ({
-      handle,
-      deviceId: "01234567-89ab-cdef-0123-456789abcdef",
-      edgeApiOrigin: "https://brave-silver-atlas.edge.pontia.dev",
-    }),
-    clearE2eSession: vi.fn(),
+    createRemoteConnection: (handle: string) => {
+      const controller = new AbortController();
+      return {
+        connect: async () => ({
+          handle,
+          deviceId: "01234567-89ab-cdef-0123-456789abcdef",
+          edgeApiOrigin: "https://brave-silver-atlas.edge.pontia.dev",
+        }),
+        uploadStorageScope: async () => handle,
+        signal: controller.signal,
+        dispose: () => controller.abort(),
+      };
+    },
   };
 });
 
-vi.mock("../../src/services/dashboardRuntime", () => ({
-  startDashboardRuntime: mocks.startRuntime,
-  stopDashboardRuntime: vi.fn(),
-  clearDashboardRuntimeState: vi.fn(),
-}));
+vi.mock("../../src/services/dashboardRuntime", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    startDashboardRuntime: mocks.startRuntime,
+    stopDashboardRuntime: vi.fn(),
+    clearDashboardRuntimeState: vi.fn(),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createLifecycle: (device) => ({ ...original.createLifecycle(device), ...mocked }),
+  };
+});
 
 describe("remote access loading", () => {
   test("a failed module load does not start the dashboard and can be retried", async () => {

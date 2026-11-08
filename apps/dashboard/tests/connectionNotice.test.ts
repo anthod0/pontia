@@ -1,8 +1,9 @@
+import { testDevice } from "./deviceFixture";
 import { render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import ConnectionNotice from "../src/components/layout/ConnectionNotice.svelte";
-import { sseStatus } from "../src/stores/connection";
+const { sseStatus } = testDevice.connection;
 
 const toast = vi.hoisted(() => ({ warning: vi.fn(), dismiss: vi.fn() }));
 vi.mock("svelte-sonner", () => ({ toast }));

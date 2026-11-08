@@ -1,3 +1,4 @@
+import { testDevice } from "../../deviceFixture";
 import { cleanup } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { SessionConsoleDetail } from "../../../src/stores/sessions";
@@ -12,14 +13,12 @@ import type {
   WorkspaceRootView,
   WorkspaceView,
 } from "../../../src/api/types";
-import { chatDraft } from "../../../src/stores/chatDraft";
-import { queryClient } from "../../../src/queries/queryClient";
-import { sessionKeys } from "../../../src/queries/sessions";
-import {
-  confirmInboxSubmission,
-  reconcileInboxSubmissionForDashboardEvent,
-  type OptimisticInboxSubmission,
-} from "../../../src/queries/inbox";
+const { chatDraft } = testDevice.chatDraft;
+const { queryClient } = testDevice;
+const { sessionKeys } = testDevice.sessionQueries;
+import { type OptimisticInboxSubmission } from "../../../src/queries/inbox";
+const { confirmInboxSubmission, reconcileInboxSubmissionForDashboardEvent } =
+  testDevice.inboxQueries;
 import { resetChatEntryAutofocus } from "../../../src/lib/chatEntryAutofocus";
 
 const mocks = vi.hoisted(() => {
@@ -136,154 +135,203 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../../src/api/client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../src/api/client")>()),
-  listWorkspaces: mocks.listWorkspaces,
-  listSessionCreationOptions: mocks.listSessionCreationOptions,
-  listPendingInteractions: vi.fn(async () => []),
-  listWorkspaceRoots: vi.fn(async () => mocks.workspaceRoots.get()),
-  listWorkspaceRootEntries: vi.fn(async (rootId: string, path = "") =>
-    mocks.browseWorkspaceRoot(rootId, path),
-  ),
-  refreshWorkspaceGitStatus: vi.fn(async (workspaceId: string) => {
-    await mocks.refreshWorkspaceGitStatus(workspaceId);
-    return (
-      mocks.workspaceGitStatuses.get()[workspaceId] ?? {
-        workspace_id: workspaceId,
-        state: "unknown",
-        observed_at: null,
-      }
-    );
-  }),
-  registerWorkspace: (input: unknown) => mocks.registerWorkspace(input),
-}));
+vi.mock("../../../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    listWorkspaces: mocks.listWorkspaces,
+    listSessionCreationOptions: mocks.listSessionCreationOptions,
+    listPendingInteractions: vi.fn(async () => []),
+    listWorkspaceRoots: vi.fn(async () => mocks.workspaceRoots.get()),
+    listWorkspaceRootEntries: vi.fn(async (rootId: string, path = "") =>
+      mocks.browseWorkspaceRoot(rootId, path),
+    ),
+    refreshWorkspaceGitStatus: vi.fn(async (workspaceId: string) => {
+      await mocks.refreshWorkspaceGitStatus(workspaceId);
+      return (
+        mocks.workspaceGitStatuses.get()[workspaceId] ?? {
+          workspace_id: workspaceId,
+          state: "unknown",
+          observed_at: null,
+        }
+      );
+    }),
+    registerWorkspace: (input: unknown) => mocks.registerWorkspace(input),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 
-vi.mock("../../../src/api/sessionFiles", () => ({
-  listSessionFiles: vi.fn(async () => ({ files: [], next_cursor: null })),
-  sharedFileContent: vi.fn(),
-}));
+vi.mock("../../../src/api/sessionFiles", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    listSessionFiles: vi.fn(async () => ({ files: [], next_cursor: null })),
+    sharedFileContent: vi.fn(),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createFileApi: (device) => ({ ...original.createFileApi(device), ...mocked }),
+  };
+});
 
-vi.mock("../../../src/stores/sessions", () => ({
-  sessionDetail: mocks.sessionDetail,
-  sessionDetailLoading: mocks.sessionDetailLoading,
-  sessionDetailError: mocks.sessionDetailError,
-  sessionDetailErrorKind: mocks.sessionDetailErrorKind,
-  selectSession: vi.fn(),
-  loadSessionDetail: mocks.loadSessionDetail,
-  submitInboxMessage: async (
-    sessionId: string,
-    input: import("../../../src/api/types").SubmitInboxMessageInput,
-    options: { showInChat?: boolean } = {},
-  ) => {
-    const detailSession = mocks.sessionDetail.get()?.session;
-    const currentSession = detailSession?.session_id === sessionId ? detailSession : null;
-    const localId = `test_${crypto.randomUUID()}`;
-    const optimistic: OptimisticInboxSubmission = {
-      localId,
-      sessionId,
-      input: input.input.trim(),
-      deliveryPolicy: input.delivery_policy,
-      metadata: input.metadata,
-      branchTargetTurnId: input.branch_target_turn_id ?? null,
-      showInChat:
-        options.showInChat ??
-        (!input.branch_target_turn_id &&
-          !["busy", "waiting_for_interaction"].includes(currentSession?.state ?? "")),
-      submittedAt: new Date().toISOString(),
-      acceptedMessage: null,
-    };
-    queryClient.setQueryData<Record<string, OptimisticInboxSubmission[]>>(
-      sessionKeys.optimisticInbox(),
-      (submissions) => ({
-        ...(submissions ?? {}),
-        [sessionId]: [...(submissions?.[sessionId] ?? []), optimistic],
-      }),
-    );
-    try {
-      const message = await mocks.submitInboxMessage(sessionId, input);
-      if (message) confirmInboxSubmission(sessionId, localId, message);
-      return message;
-    } catch (error) {
+vi.mock("../../../src/stores/sessions", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    sessionDetail: mocks.sessionDetail,
+    sessionDetailLoading: mocks.sessionDetailLoading,
+    sessionDetailError: mocks.sessionDetailError,
+    sessionDetailErrorKind: mocks.sessionDetailErrorKind,
+    selectSession: vi.fn(),
+    loadSessionDetail: mocks.loadSessionDetail,
+    submitInboxMessage: async (
+      sessionId: string,
+      input: import("../../../src/api/types").SubmitInboxMessageInput,
+      options: { showInChat?: boolean } = {},
+    ) => {
+      const detailSession = mocks.sessionDetail.get()?.session;
+      const currentSession = detailSession?.session_id === sessionId ? detailSession : null;
+      const localId = `test_${crypto.randomUUID()}`;
+      const optimistic: OptimisticInboxSubmission = {
+        localId,
+        sessionId,
+        input: input.input.trim(),
+        deliveryPolicy: input.delivery_policy,
+        metadata: input.metadata,
+        branchTargetTurnId: input.branch_target_turn_id ?? null,
+        showInChat:
+          options.showInChat ??
+          (!input.branch_target_turn_id &&
+            !["busy", "waiting_for_interaction"].includes(currentSession?.state ?? "")),
+        submittedAt: new Date().toISOString(),
+        acceptedMessage: null,
+      };
       queryClient.setQueryData<Record<string, OptimisticInboxSubmission[]>>(
         sessionKeys.optimisticInbox(),
         (submissions) => ({
           ...(submissions ?? {}),
-          [sessionId]: (submissions?.[sessionId] ?? []).filter(
-            (submission) => submission.localId !== localId,
-          ),
+          [sessionId]: [...(submissions?.[sessionId] ?? []), optimistic],
         }),
       );
-      throw error;
-    }
-  },
-  retryInboxMessage: mocks.retryInboxMessage,
-  recoverInboxSubmission: mocks.recoverInboxSubmission,
-  cancelInboxMessage: mocks.cancelInboxMessage,
-  dismissInboxMessage: mocks.dismissInboxMessage,
-  resumeSession: mocks.resumeSession,
-  interruptSession: mocks.interruptSession,
-  terminateSession: mocks.terminateSession,
-  updateSessionTitle: mocks.updateSessionTitle,
-  createSession: async (input: import("../../../src/api/types").CreateSessionInput) => {
-    const result = await mocks.createSession(input);
-    if (input.initial_task?.input) {
-      const identity = result.initial_turn?.turn_id ?? `test_${crypto.randomUUID()}`;
-      queryClient.setQueryData<
-        Record<string, import("../../../src/lib/session-chat/sessionChat").SessionChatMessage[]>
-      >(sessionKeys.optimisticChat(), (messages) => ({
-        ...(messages ?? {}),
-        [result.session.session_id]: [
-          ...(messages?.[result.session.session_id] ?? []),
-          {
-            id: `optimistic:${identity}:user`,
-            turnId: identity,
-            role: "user",
-            content: input.initial_task.input.trim(),
-            status: "pending",
-            createdAt: result.initial_turn?.created_at ?? new Date().toISOString(),
-          },
-        ],
-      }));
-    }
-    return result;
-  },
-}));
-
-vi.mock("../../../src/stores/timeline", () => ({
-  timelineState: mocks.timelineState,
-  loadSessionTimeline: mocks.loadSessionTimeline,
-  refreshSessionTimeline: mocks.refreshSessionTimeline,
-  restoreSessionTimeline: mocks.restoreSessionTimeline,
-  hasTimelineSnapshot: (state: TimelineState, sessionId: string) =>
-    state.sessionId === sessionId && (state.status === "ready" || state.status === "empty"),
-  resetTimelineState: mocks.resetTimelineState,
-}));
-
-vi.mock("../../../src/services/eventStream", () => ({
-  subscribeDashboardEvents: (
-    listener: (event: import("../../../src/api/types").DashboardStreamEvent) => void,
-  ) => {
-    const coordinatedListener = (event: import("../../../src/api/types").DashboardStreamEvent) => {
-      reconcileInboxSubmissionForDashboardEvent(event);
-      listener(event);
-    };
-    mocks.dashboardEventListeners.add(coordinatedListener);
-    return () => mocks.dashboardEventListeners.delete(coordinatedListener);
-  },
-}));
-
-vi.mock("../../../src/services/liveOutputStream", () => ({
-  openLiveOutputStream: (
-    sessionId: string,
-    handlers: {
-      onEvent: (event: unknown) => void;
-      onDisconnected: () => void;
+      try {
+        const message = await mocks.submitInboxMessage(sessionId, input);
+        if (message) confirmInboxSubmission(sessionId, localId, message);
+        return message;
+      } catch (error) {
+        queryClient.setQueryData<Record<string, OptimisticInboxSubmission[]>>(
+          sessionKeys.optimisticInbox(),
+          (submissions) => ({
+            ...(submissions ?? {}),
+            [sessionId]: (submissions?.[sessionId] ?? []).filter(
+              (submission) => submission.localId !== localId,
+            ),
+          }),
+        );
+        throw error;
+      }
     },
-  ) => {
-    mocks.liveOutputListeners.set(sessionId, handlers);
-    return () => mocks.liveOutputListeners.delete(sessionId);
-  },
-}));
+    retryInboxMessage: mocks.retryInboxMessage,
+    recoverInboxSubmission: mocks.recoverInboxSubmission,
+    cancelInboxMessage: mocks.cancelInboxMessage,
+    dismissInboxMessage: mocks.dismissInboxMessage,
+    resumeSession: mocks.resumeSession,
+    interruptSession: mocks.interruptSession,
+    terminateSession: mocks.terminateSession,
+    updateSessionTitle: mocks.updateSessionTitle,
+    createSession: async (input: import("../../../src/api/types").CreateSessionInput) => {
+      const result = await mocks.createSession(input);
+      if (input.initial_task?.input) {
+        const identity = result.initial_turn?.turn_id ?? `test_${crypto.randomUUID()}`;
+        queryClient.setQueryData<
+          Record<string, import("../../../src/lib/session-chat/sessionChat").SessionChatMessage[]>
+        >(sessionKeys.optimisticChat(), (messages) => ({
+          ...(messages ?? {}),
+          [result.session.session_id]: [
+            ...(messages?.[result.session.session_id] ?? []),
+            {
+              id: `optimistic:${identity}:user`,
+              turnId: identity,
+              role: "user",
+              content: input.initial_task.input.trim(),
+              status: "pending",
+              createdAt: result.initial_turn?.created_at ?? new Date().toISOString(),
+            },
+          ],
+        }));
+      }
+      return result;
+    },
+  };
+  return {
+    ...original,
+    ...mocked,
+    createSessions: (device) => ({ ...original.createSessions(device), ...mocked }),
+  };
+});
+
+vi.mock("../../../src/stores/timeline", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    timelineState: mocks.timelineState,
+    loadSessionTimeline: mocks.loadSessionTimeline,
+    refreshSessionTimeline: mocks.refreshSessionTimeline,
+    restoreSessionTimeline: mocks.restoreSessionTimeline,
+    hasTimelineSnapshot: (state: TimelineState, sessionId: string) =>
+      state.sessionId === sessionId && (state.status === "ready" || state.status === "empty"),
+    resetTimelineState: mocks.resetTimelineState,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createTimeline: (device) => ({ ...original.createTimeline(device), ...mocked }),
+  };
+});
+
+vi.mock("../../../src/services/eventStream", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    subscribeDashboardEvents: (
+      listener: (event: import("../../../src/api/types").DashboardStreamEvent) => void,
+    ) => {
+      const coordinatedListener = (
+        event: import("../../../src/api/types").DashboardStreamEvent,
+      ) => {
+        reconcileInboxSubmissionForDashboardEvent(event);
+        listener(event);
+      };
+      mocks.dashboardEventListeners.add(coordinatedListener);
+      return () => mocks.dashboardEventListeners.delete(coordinatedListener);
+    },
+  };
+  return {
+    ...original,
+    ...mocked,
+    createEvents: (device) => ({ ...original.createEvents(device), ...mocked }),
+  };
+});
+
+vi.mock("../../../src/services/liveOutputStream", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    openLiveOutputStream: (
+      sessionId: string,
+      handlers: {
+        onEvent: (event: unknown) => void;
+        onDisconnected: () => void;
+      },
+    ) => {
+      mocks.liveOutputListeners.set(sessionId, handlers);
+      return () => mocks.liveOutputListeners.delete(sessionId);
+    },
+  };
+  return {
+    ...original,
+    ...mocked,
+    createLiveOutput: (device) => ({ ...original.createLiveOutput(device), ...mocked }),
+  };
+});
 
 vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
 

@@ -1,25 +1,24 @@
-import { startEventStream, stopEventStream } from "./eventStream";
-import { resetConnectionState } from "../stores/connection";
-import { resetSessions } from "../stores/sessions";
-import { resetTimelineState } from "../stores/timeline";
-import { fetchWorkspaces } from "../queries/workspaces";
-import { resetWorkflows } from "../stores/workflows";
-import { fetchWorkflows } from "../queries/workflows";
-import { clearDashboardQueries } from "../queries/dashboardInvalidation";
+import type { DeviceRuntime } from "../device/runtime";
 
-export function startDashboardRuntime(): void {
-  void Promise.all([fetchWorkspaces(), fetchWorkflows()]);
-  startEventStream();
-}
+export function createLifecycle(device: DeviceRuntime) {
+  function startDashboardRuntime(): void {
+    void Promise.all([
+      device.workspaceQueries.fetchWorkspaces(),
+      device.workflowQueries.fetchWorkflows(),
+    ]);
+    device.events.startEventStream();
+  }
 
-export function stopDashboardRuntime(): void {
-  stopEventStream();
-}
+  function stopDashboardRuntime(): void {
+    device.events.stopEventStream();
+  }
 
-export function clearDashboardRuntimeState(): void {
-  clearDashboardQueries();
-  resetConnectionState();
-  resetTimelineState();
-  resetSessions();
-  resetWorkflows();
+  function clearDashboardRuntimeState(): void {
+    device.invalidation.clearDashboardQueries();
+    device.connection.resetConnectionState();
+    device.timeline.resetTimelineState();
+    device.sessions.resetSessions();
+    device.workflows.resetWorkflows();
+  }
+  return { startDashboardRuntime, stopDashboardRuntime, clearDashboardRuntimeState };
 }

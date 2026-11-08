@@ -4,14 +4,10 @@
 
   onMount(() => { void cleanupDownloads().catch(console.error); });
   import '../app.css';
-  import { QueryClientProvider } from '@tanstack/svelte-query';
   import { Toaster } from '$lib/components/ui/sonner/index.js';
-  import { queryClient } from '../queries/queryClient';
 
   let { children }: { children: Snippet } = $props();
 </script>
 
-<QueryClientProvider client={queryClient}>
-  <Toaster richColors position="top-center" />
-  {@render children()}
-</QueryClientProvider>
+<Toaster richColors position="top-center" />
+{@render children()}

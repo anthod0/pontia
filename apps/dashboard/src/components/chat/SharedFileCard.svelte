@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import { onDestroy } from 'svelte'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Progress } from '$lib/components/ui/progress/index.js'
@@ -6,11 +7,13 @@
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import FileIcon from 'phosphor-svelte/lib/FileIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
-  import { filePreview, PREVIEW_LIMIT, PREVIEW_TYPES } from '$lib/downloads/preview'
+  import { PREVIEW_LIMIT, PREVIEW_TYPES } from "$lib/downloads/preview";
   import { saveDownload, type DownloadProgress } from '$lib/downloads/save'
-  import { sharedFileContent } from '../../api/sessionFiles'
   import { ApiError } from '../../api/errors'
   import type { SharedFile } from '../../api/types'
+  const device = useDeviceRuntime();
+  const { filePreview } = device.previews;
+  const { sharedFileContent } = device.fileApi;
 
   let { file, sessionId }: { file: SharedFile; sessionId: string } = $props()
   let previewUrl = $state<string | null>(null)

@@ -1,11 +1,7 @@
+import { testDevice } from "./deviceFixture";
 import { afterEach, expect, test, vi } from "vitest";
-import {
-  getSession,
-  getWorkflow,
-  getWorkflowDocument,
-  listWorkflowPatches,
-  retryWorkflow,
-} from "../src/api/client";
+const { getSession, getWorkflow, getWorkflowDocument, listWorkflowPatches, retryWorkflow } =
+  testDevice.api;
 
 function response(data: unknown) {
   return new Response(JSON.stringify({ data }), { status: 200 });

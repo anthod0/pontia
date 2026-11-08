@@ -1,7 +1,8 @@
+import { testDevice } from "../deviceFixture";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { WorkspaceGitStatusView } from "../../src/api/types";
-import { queryClient } from "../../src/queries/queryClient";
-import { refreshWorkspaceGitStatus, workspaceKeys } from "../../src/queries/workspaces";
+const { queryClient } = testDevice;
+const { refreshWorkspaceGitStatus, workspaceKeys } = testDevice.workspaceQueries;
 
 const refreshedStatus: WorkspaceGitStatusView = {
   workspace_id: "workspace-1",
@@ -23,10 +24,17 @@ const refreshedStatus: WorkspaceGitStatusView = {
 
 const requestRefreshWorkspaceGitStatus = vi.hoisted(() => vi.fn(async () => refreshedStatus));
 
-vi.mock("../../src/api/client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../src/api/client")>()),
-  refreshWorkspaceGitStatus: requestRefreshWorkspaceGitStatus,
-}));
+vi.mock("../../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    refreshWorkspaceGitStatus: requestRefreshWorkspaceGitStatus,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 
 beforeEach(() => {
   queryClient.clear();

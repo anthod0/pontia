@@ -1,4 +1,5 @@
 import { mocks, session, turn, workspace } from "./fixtures";
+import { testDevice } from "../../deviceFixture";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
@@ -103,7 +104,7 @@ test("focuses the prompt only on the first entry to the new chat page", async ()
 
 test("prefers the new chat workspace query parameter over the remembered workspace", async () => {
   window.history.pushState({}, "", "/dashboard?workspace=workspace-2");
-  window.localStorage.setItem("pontia.chat.lastWorkspaceId", "workspace-1");
+  window.localStorage.setItem("pontia.chat.lastWorkspaceId:local", "workspace-1");
   mocks.workspaces.set([
     workspace({ workspace_id: "workspace-1", name: "pontia" }),
     workspace({
@@ -118,7 +119,7 @@ test("prefers the new chat workspace query parameter over the remembered workspa
 
   await screen.findByPlaceholderText("Describe a task…");
   expect(screen.getByLabelText(/^Workspace$/i)).toHaveTextContent("sandbox");
-  expect(window.localStorage.getItem("pontia.chat.lastWorkspaceId")).toBe("workspace-1");
+  expect(window.localStorage.getItem("pontia.chat.lastWorkspaceId:local")).toBe("workspace-1");
 });
 
 test("updates the selected workspace when the mounted page query changes", async () => {
@@ -177,7 +178,7 @@ test("remembers the selected new chat workspace after starting a chat", async ()
       expect.objectContaining({ workspace_id: "workspace-2" }),
     ),
   );
-  expect(window.localStorage.getItem("pontia.chat.lastWorkspaceId")).toBe("workspace-2");
+  expect(window.localStorage.getItem("pontia.chat.lastWorkspaceId:local")).toBe("workspace-2");
 });
 
 test("offers Pi and Codex and requires a task before submission", async () => {

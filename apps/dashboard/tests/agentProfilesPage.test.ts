@@ -39,15 +39,26 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("../src/queries/agentProfiles", () => ({
-  createAgentProfilesQuery: () => mocks.profilesQuery,
-  createAgentProfileVersionsQuery: () => mocks.versionsQuery,
-  createAgentProfileMutation: () => mocks.createProfileMutation,
-  createAgentProfileVersionMutation: () => mocks.createVersionMutation,
-  updateAgentProfileVersionMutation: () => mocks.updateVersionMutation,
-  deleteAgentProfileMutation: () => mocks.deleteProfileMutation,
-  deleteAgentProfileVersionMutation: () => mocks.deleteVersionMutation,
-}));
+vi.mock("../src/queries/agentProfiles", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    createAgentProfilesQuery: () => mocks.profilesQuery,
+    createAgentProfileVersionsQuery: () => mocks.versionsQuery,
+    createAgentProfileMutation: () => mocks.createProfileMutation,
+    createAgentProfileVersionMutation: () => mocks.createVersionMutation,
+    updateAgentProfileVersionMutation: () => mocks.updateVersionMutation,
+    deleteAgentProfileMutation: () => mocks.deleteProfileMutation,
+    deleteAgentProfileVersionMutation: () => mocks.deleteVersionMutation,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createAgentProfileQueries: (device) => ({
+      ...original.createAgentProfileQueries(device),
+      ...mocked,
+    }),
+  };
+});
 
 const profile = (overrides: Partial<AgentProfileView> = {}): AgentProfileView => ({
   profile_id: "executor",

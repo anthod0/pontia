@@ -1,13 +1,22 @@
+import { testDevice } from "../deviceFixture";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import FileMentionEditor from "../../src/lib/components/file-picker/FileMentionEditor.svelte";
 import FileMentionHarness from "./FileMentionHarness.svelte";
-import { listWorkspaceFilePickerEntries } from "../../src/api/client";
+const { listWorkspaceFilePickerEntries } = testDevice.api;
 
-vi.mock("../../src/api/client", () => ({
-  listWorkspaceFilePickerEntries: vi.fn(),
-}));
+vi.mock("../../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    listWorkspaceFilePickerEntries: vi.fn(),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 
 const files = [
   { path: "src", name: "src", kind: "directory" },

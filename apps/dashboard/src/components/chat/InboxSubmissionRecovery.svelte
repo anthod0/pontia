@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import { Button } from '$lib/components/ui/button/index.js'
-  import { unconfirmedSubmissions, type UnconfirmedSubmission } from '../../stores/inboxRecovery'
-  import { recoverInboxSubmission } from '../../stores/sessions'
+  import { type UnconfirmedSubmission } from "../../stores/inboxRecovery";
+  const device = useDeviceRuntime();
+  const { unconfirmedSubmissions } = device.inboxRecovery;
+  const { recoverInboxSubmission } = device.sessions;
 
   let { sessionId }: { sessionId: string } = $props()
   let busy = $state<string | null>(null)

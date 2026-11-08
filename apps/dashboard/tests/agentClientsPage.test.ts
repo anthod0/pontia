@@ -9,7 +9,15 @@ const api = vi.hoisted(() => ({
   patchAgentClient: vi.fn(),
   resetAgentClient: vi.fn(),
 }));
-vi.mock("../src/api/client", () => api);
+vi.mock("../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = await (() => api)(importOriginal);
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 const peer = (key: string): AgentClientView => ({
   id: `opaque-${key}`,
   client_type: "acp",

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import { tick, type Snippet } from 'svelte'
   import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOutIcon'
   import ArrowsInIcon from 'phosphor-svelte/lib/ArrowsInIcon'
@@ -14,7 +15,7 @@
   import * as PromptInput from '$lib/components/ai-elements/prompt-input/index.js'
   import UploadAttachments from './UploadAttachments.svelte'
   import { uploadMessage } from '$lib/uploads/message'
-  import { createUploadDraft, type UploadDraftState } from '$lib/uploads/draft'
+  import { type UploadDraftState } from "$lib/uploads/draft";
   import ChatCommandInput from './ChatCommandInput.svelte'
   import { findChatCommand, type ChatCommand } from '$lib/chatCommands'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -22,6 +23,8 @@
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
   import type { FilePickerFileView } from '../../api/types'
+  const device = useDeviceRuntime();
+  const { createUploadDraft } = device.uploadDrafts;
 
   interface Props {
     value: string

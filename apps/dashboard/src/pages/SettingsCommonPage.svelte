@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../device/context';
   import { onMount } from 'svelte'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import KeyIcon from 'phosphor-svelte/lib/KeyIcon'
@@ -9,9 +10,16 @@
   import * as Card from '$lib/components/ui/card/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
-  import { startEventStream, stopEventStream } from '../services/eventStream'
   import { token } from '$dashboard-mode/auth'
-  import { dashboardStreamCursor, lastConnectionError, reconnectCount, resetConnectionState, sseStatus } from '../stores/connection'
+  const device = useDeviceRuntime();
+  const { startEventStream, stopEventStream } = device.events;
+  const {
+    dashboardStreamCursor,
+    lastConnectionError,
+    reconnectCount,
+    resetConnectionState,
+    sseStatus,
+  } = device.connection;
 
   let draftToken = ''
   let saved = false

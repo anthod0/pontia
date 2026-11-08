@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import { toast } from 'svelte-sonner'
-  import { sseStatus } from '../../stores/connection'
+  const device = useDeviceRuntime();
+  const { sseStatus } = device.connection;
 
   const graceMs = 3000
   const toastId = 'connection-lost'

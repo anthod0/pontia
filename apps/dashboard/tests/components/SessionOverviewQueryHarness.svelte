@@ -1,9 +1,8 @@
 <script lang="ts">
-  import {
-    createSessionOverviewQuery,
-    snapshotSessionOverview,
-    type SessionOverviewSnapshot,
-  } from '../../src/queries/sessionOverview';
+  import { testDevice } from "../deviceFixture";
+
+  import { snapshotSessionOverview, type SessionOverviewSnapshot } from '../../src/queries/sessionOverview';
+  const { createSessionOverviewQuery } = testDevice.sessionOverview;
 
   let {
     includeArchived = false,

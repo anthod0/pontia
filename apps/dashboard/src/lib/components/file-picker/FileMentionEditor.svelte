@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../../device/context';
   import { onMount, tick } from 'svelte'
   import { Editor, Extension, type Extensions } from '@tiptap/core'
   import Document from '@tiptap/extension-document'
@@ -10,11 +11,12 @@
   import { exitSuggestion, type SuggestionProps } from '@tiptap/suggestion'
   import FileIcon from 'phosphor-svelte/lib/FileIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
-  import { fetchWorkspaceFilePickerEntries } from '../../../queries/workspaces'
   import type { FilePickerFileView } from '../../../api/types'
   import { cn } from '$lib/utils.js'
   import { promptDocumentFromText, promptTextFromDocument } from '../../file-picker/fileMention'
   import { createFileMentionExtension } from '../../file-picker/fileMentionExtension'
+  const device = useDeviceRuntime();
+  const { fetchWorkspaceFilePickerEntries } = device.workspaceQueries;
 
   interface Props {
     value: string

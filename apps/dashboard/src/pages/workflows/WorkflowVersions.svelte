@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import { navigate } from '$lib/navigation'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -8,7 +9,8 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import { Separator } from '$lib/components/ui/separator/index.js'
-  import { createWorkflowRevisionQuery } from '../../queries/workflows'
+  const device = useDeviceRuntime();
+  const { createWorkflowRevisionQuery } = device.workflowQueries;
 
   let { workflowId, revision, requestedPhase = null, onphase }: {
     workflowId: string; revision: number | null; requestedPhase?: string | null;

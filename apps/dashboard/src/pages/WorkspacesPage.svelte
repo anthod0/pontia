@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../device/context';
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -6,12 +7,13 @@
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import WorkspaceBrowser from '../components/workspaces/WorkspaceBrowser.svelte'
   import type { WorkspaceRootView, WorkspaceView } from '../api/types'
-  import {
+  const device = useDeviceRuntime();
+  const {
     createDeleteWorkspaceMutation,
     createWorkspaceRootsQuery,
     createWorkspacesQuery,
     fetchWorkspaceRootEntries,
-  } from '../queries/workspaces'
+  } = device.workspaceQueries;
 
   type WorkspaceAvailabilityProblem = {
     workspace: WorkspaceView

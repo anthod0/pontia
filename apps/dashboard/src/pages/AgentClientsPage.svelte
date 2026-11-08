@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../device/context';
   import { onMount } from 'svelte'
-  import { listAgentClients, patchAgentClient, resetAgentClient } from '../api/client'
   import type { AgentClientView, JsonObject } from '../api/types'
   import { customClientEntries } from '../clients'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -10,6 +10,8 @@
   import * as Card from '$lib/components/ui/card/index.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js'
+  const device = useDeviceRuntime();
+  const { listAgentClients, patchAgentClient, resetAgentClient } = device.api;
 
   let clients = $state<AgentClientView[]>([])
   let selected = $state<AgentClientView | null>(null)

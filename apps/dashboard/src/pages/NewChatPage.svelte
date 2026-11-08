@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { useDeviceRuntime } from '../device/context';
+  import { onDestroy, onMount } from 'svelte'
   import { defaultClientType } from '../clients'
-  import { createSessionCreationOptionsStore } from '../queries/sessionCreation'
   import { navigate } from '$lib/navigation'
   import { toast } from 'svelte-sonner'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
@@ -11,11 +11,15 @@
   import { isTransientNetworkError } from '../api/client'
   import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { titleFromInitialPrompt } from '$lib/session-chat/sessionChat'
-  import { chatDraft, clearChatDraft } from '../stores/chatDraft'
-  import { createWorkspacesStore } from '../queries/workspaces'
-  import { createSession, loadSessionDetail } from '../stores/sessions'
-  import { loadSessionTimeline, resetTimelineState } from '../stores/timeline'
+  const device = useDeviceRuntime();
+  const { createSessionCreationOptionsStore } = device.sessionCreation;
+  const { chatDraft, clearChatDraft } = device.chatDraft;
+  const { createWorkspacesStore } = device.workspaceQueries;
+  const { createSession, loadSessionDetail } = device.sessions;
+  const { loadSessionTimeline, resetTimelineState } = device.timeline;
 
+  let mounted = true
+  onDestroy(() => { mounted = false })
   let createWorkspaceId = ''
   let creationOptionId = defaultClientType
   let creating = false
@@ -28,7 +32,7 @@
   let workspaceOnboardingActive = false
 
   const creationOptionsQuery = createSessionCreationOptionsStore()
-  const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = 'pontia.chat.lastWorkspaceId'
+  const LAST_NEW_CHAT_WORKSPACE_STORAGE_KEY = `pontia.chat.lastWorkspaceId:${device.id}`
   const workspacesQuery = createWorkspacesStore()
 
   onMount(() => {
@@ -51,7 +55,7 @@
 
   $: if (workspaces.length) ensureCreateWorkspaceSelection()
   $: if (!$workspacesQuery.isPending && !initialWorkspaceQueryHandled) {
-    if (workspaces.length) autofocusComposer = claimChatEntryAutofocus('/')
+    if (workspaces.length) autofocusComposer = claimChatEntryAutofocus(`${device.id}:/`)
     initialWorkspaceQueryHandled = true
   }
   $: selectedWorkspace = workspaces.find((workspace) => workspace.workspace_id === createWorkspaceId) ?? null
@@ -146,17 +150,19 @@
 
   async function startChat(initialPrompt: string): Promise<boolean> {
     if (!canCreate || !selectedCreationOption || !initialPrompt.trim()) return false
+    const workspaceId = createWorkspaceId
     creating = true
     actionError = null
     try {
       const result = await createSession({
         client_type: selectedCreationOption.client_type,
-        workspace_id: createWorkspaceId,
+        workspace_id: workspaceId,
         title: titleFromInitialPrompt(initialPrompt),
         initial_task: { input: initialPrompt, metadata: { source: 'dashboard_chat' } },
         metadata: { ...selectedCreationOption.metadata, source: 'dashboard_chat' },
       })
-      rememberCreateWorkspaceSelection(createWorkspaceId)
+      if (!mounted) return true
+      rememberCreateWorkspaceSelection(workspaceId)
       clearChatDraft()
       resetTimelineState(result.session.session_id)
       navigate(`/chat/${result.session.session_id}`)

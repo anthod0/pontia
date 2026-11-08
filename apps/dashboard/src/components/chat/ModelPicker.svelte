@@ -1,11 +1,13 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../../device/context';
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { modelPickerDisabledReason } from '$lib/modelControls'
   import type { SessionView } from '../../api/types'
-  import { createSessionModelsQuery, createSetSessionModelMutation } from '../../queries/sessions'
+  const device = useDeviceRuntime();
+  const { createSessionModelsQuery, createSetSessionModelMutation } = device.sessionQueries;
 
   let { session, onClose }: { session: SessionView; onClose: () => void } = $props()
   const modelsQuery = createSessionModelsQuery(() => session.session_id)

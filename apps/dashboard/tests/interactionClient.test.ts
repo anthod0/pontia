@@ -1,5 +1,6 @@
+import { testDevice } from "./deviceFixture";
 import { afterEach, expect, test, vi } from "vitest";
-import { listPendingInteractions, respondInteraction } from "../src/api/client";
+const { listPendingInteractions, respondInteraction } = testDevice.api;
 
 function response(data: unknown) {
   return new Response(JSON.stringify({ data, meta: {}, error: null }), { status: 200 });

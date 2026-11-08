@@ -1,15 +1,18 @@
 import { QueryObserver } from "@tanstack/svelte-query";
-import { readable } from "svelte/store";
-import { listSessionCreationOptions } from "../api/client";
-import { queryClient } from "./queryClient";
 
-export function createSessionCreationOptionsStore() {
-  const observer = new QueryObserver(queryClient, {
-    queryKey: ["session-creation-options"],
-    queryFn: ({ signal }) => listSessionCreationOptions({ signal }),
-  });
-  return readable(observer.getCurrentResult(), (set) => {
-    set(observer.getCurrentResult());
-    return observer.subscribe(set);
-  });
+import { readable } from "svelte/store";
+import type { DeviceRuntime } from "../device/runtime";
+
+export function createSessionCreation(device: DeviceRuntime) {
+  function createSessionCreationOptionsStore() {
+    const observer = new QueryObserver(device.queryClient, {
+      queryKey: [device.id, "session-creation-options"],
+      queryFn: ({ signal }) => device.api.listSessionCreationOptions({ signal }),
+    });
+    return readable(observer.getCurrentResult(), (set) => {
+      set(observer.getCurrentResult());
+      return observer.subscribe(set);
+    });
+  }
+  return { createSessionCreationOptionsStore };
 }

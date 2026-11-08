@@ -53,67 +53,100 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
-vi.mock("../src/services/eventStream", () => ({
-  startEventStream: mocks.startEventStream,
-  stopEventStream: mocks.stopEventStream,
-}));
-vi.mock("../src/stores/sessions", () => ({
-  sessionDetail: mocks.sessionDetail,
-  sessionDetailError: mocks.sessionDetailError,
-  updateSessionTitle: mocks.updateSessionTitle,
-  pinSession: mocks.pinSession,
-  unpinSession: mocks.unpinSession,
-  archiveSession: mocks.archiveSession,
-  terminateSession: mocks.terminateSession,
-}));
-vi.mock("../src/queries/workspaces", () => ({
-  createWorkspacesQuery: () => ({
-    data: [
-      {
-        workspace_id: "workspace-1",
-        name: "First workspace",
-        display_path: "/first",
-        canonical_path: "/first",
+vi.mock("../src/services/eventStream", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    startEventStream: mocks.startEventStream,
+    stopEventStream: mocks.stopEventStream,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createEvents: (device) => ({ ...original.createEvents(device), ...mocked }),
+  };
+});
+vi.mock("../src/stores/sessions", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    sessionDetail: mocks.sessionDetail,
+    sessionDetailError: mocks.sessionDetailError,
+    updateSessionTitle: mocks.updateSessionTitle,
+    pinSession: mocks.pinSession,
+    unpinSession: mocks.unpinSession,
+    archiveSession: mocks.archiveSession,
+    terminateSession: mocks.terminateSession,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createSessions: (device) => ({ ...original.createSessions(device), ...mocked }),
+  };
+});
+vi.mock("../src/queries/workspaces", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    createWorkspacesQuery: () => ({
+      data: [
+        {
+          workspace_id: "workspace-1",
+          name: "First workspace",
+          display_path: "/first",
+          canonical_path: "/first",
+        },
+        {
+          workspace_id: "workspace-2",
+          name: "Second workspace",
+          display_path: "/second",
+          canonical_path: "/second",
+        },
+      ],
+      isPending: false,
+      error: null,
+    }),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createWorkspaceQueries: (device) => ({ ...original.createWorkspaceQueries(device), ...mocked }),
+  };
+});
+vi.mock("../src/queries/sessionOverview", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    createSessionOverviewQuery: (_includeArchived = false, workspaceId = () => undefined) => ({
+      get data() {
+        return {
+          pinned: mocks.sidebarPinnedSessions.value,
+          active: mocks.sidebarActiveSessions.value,
+          list: mocks.sidebarRecentSessions.value.filter(
+            (session) =>
+              !workspaceId() ||
+              (session as { workspace_id: string }).workspace_id === workspaceId(),
+          ),
+          archived: [],
+          nextCursor: mocks.sidebarSessionsNextCursor.value,
+        };
       },
-      {
-        workspace_id: "workspace-2",
-        name: "Second workspace",
-        display_path: "/second",
-        canonical_path: "/second",
+      get isPending() {
+        return mocks.sidebarSessionsLoading.value;
       },
-    ],
-    isPending: false,
-    error: null,
-  }),
-}));
-vi.mock("../src/queries/sessionOverview", () => ({
-  createSessionOverviewQuery: (_includeArchived = false, workspaceId = () => undefined) => ({
-    get data() {
-      return {
-        pinned: mocks.sidebarPinnedSessions.value,
-        active: mocks.sidebarActiveSessions.value,
-        list: mocks.sidebarRecentSessions.value.filter(
-          (session) =>
-            !workspaceId() || (session as { workspace_id: string }).workspace_id === workspaceId(),
-        ),
-        archived: [],
-        nextCursor: mocks.sidebarSessionsNextCursor.value,
-      };
-    },
-    get isPending() {
-      return mocks.sidebarSessionsLoading.value;
-    },
-    get isFetchingNextPage() {
-      return mocks.sidebarSessionsLoadingMore.value;
-    },
-    get error() {
-      const message = mocks.sidebarSessionsError.value;
-      return message ? new Error(message) : null;
-    },
-    fetchNextPage: mocks.loadMoreSidebarSessions,
-  }),
-  snapshotSessionOverview: (data: unknown) => data,
-}));
+      get isFetchingNextPage() {
+        return mocks.sidebarSessionsLoadingMore.value;
+      },
+      get error() {
+        const message = mocks.sidebarSessionsError.value;
+        return message ? new Error(message) : null;
+      },
+      fetchNextPage: mocks.loadMoreSidebarSessions,
+    }),
+    snapshotSessionOverview: (data: unknown) => data,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createSessionOverview: (device) => ({ ...original.createSessionOverview(device), ...mocked }),
+  };
+});
 beforeEach(() => {
   window.history.pushState({}, "", "/dashboard");
   mocks.sessions.set([]);

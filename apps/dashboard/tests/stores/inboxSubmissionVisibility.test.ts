@@ -16,7 +16,15 @@ const api = vi.hoisted(() => ({
   listInboxMessages: vi.fn(async () => []),
   listEvents: vi.fn(async () => []),
 }));
-vi.mock("../../src/api/client", () => api);
+vi.mock("../../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = await (() => api)(importOriginal);
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
 
 beforeEach(() => {
   localStorage.clear();
@@ -38,8 +46,8 @@ const pending = (messageId: string) =>
   }) as unknown as InboxMessageView;
 
 async function seedSession(state: string) {
-  const { queryClient } = await import("../../src/queries/queryClient");
-  const { sessionKeys } = await import("../../src/queries/sessions");
+  const { queryClient } = (await import("../deviceFixture")).testDevice;
+  const { sessionKeys } = (await import("../deviceFixture")).testDevice.sessionQueries;
   queryClient.setQueryData(sessionKeys.detail("session"), {
     session_id: "session",
     state,
@@ -47,19 +55,15 @@ async function seedSession(state: string) {
 }
 
 test("an in-flight submission is persisted but not shown for recovery", async () => {
-  const recovery = await import("../../src/stores/inboxRecovery");
-  const actions = await import("../../src/stores/sessions");
+  const recovery = (await import("../deviceFixture")).testDevice.inboxRecovery;
+  const actions = (await import("../deviceFixture")).testDevice.sessions;
   let observedDuringRequest: unknown[] = [];
   let persistedDuringRequest: string | null = null;
-  api.submitInboxMessage.mockImplementation(
-    async (_session, _input, id: string) => {
-      observedDuringRequest = get(recovery.unconfirmedSubmissions);
-      persistedDuringRequest = localStorage.getItem(
-        "pontia:inbox-submissions:v1",
-      );
-      return pending(id);
-    },
-  );
+  api.submitInboxMessage.mockImplementation(async (_session, _input, id: string) => {
+    observedDuringRequest = get(recovery.unconfirmedSubmissions);
+    persistedDuringRequest = localStorage.getItem("pontia:inbox-submissions:v2:local");
+    return pending(id);
+  });
 
   await actions.submitInboxMessage("session", { input: "hello" });
 
@@ -70,29 +74,23 @@ test("an in-flight submission is persisted but not shown for recovery", async ()
 
 test("a pending message sent to an idle Session stays out of the Inbox queue", async () => {
   await seedSession("idle");
-  const inbox = await import("../../src/queries/inbox");
-  const actions = await import("../../src/stores/sessions");
-  api.submitInboxMessage.mockImplementation(
-    async (_session, _input, id: string) => pending(id),
-  );
+  const inbox = (await import("../deviceFixture")).testDevice.inboxQueries;
+  const actions = (await import("../deviceFixture")).testDevice.sessions;
+  api.submitInboxMessage.mockImplementation(async (_session, _input, id: string) => pending(id));
 
   const message = await actions.submitInboxMessage("session", {
     input: "hello",
   });
 
   expect(inbox.queuedInboxMessages([message])).toEqual([]);
-  expect(
-    inbox.queuedInboxMessages([{ ...message, state: "failed" }]),
-  ).toHaveLength(1);
+  expect(inbox.queuedInboxMessages([{ ...message, state: "failed" }])).toHaveLength(1);
 });
 
 test("a message sent to a busy Session is listed in the Inbox queue", async () => {
   await seedSession("busy");
-  const inbox = await import("../../src/queries/inbox");
-  const actions = await import("../../src/stores/sessions");
-  api.submitInboxMessage.mockImplementation(
-    async (_session, _input, id: string) => pending(id),
-  );
+  const inbox = (await import("../deviceFixture")).testDevice.inboxQueries;
+  const actions = (await import("../deviceFixture")).testDevice.sessions;
+  api.submitInboxMessage.mockImplementation(async (_session, _input, id: string) => pending(id));
 
   const message = await actions.submitInboxMessage("session", {
     input: "hello",

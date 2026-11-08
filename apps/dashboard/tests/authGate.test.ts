@@ -12,40 +12,88 @@ const mocks = vi.hoisted(() => ({
   loadWorkflows: vi.fn(async () => undefined),
 }));
 
-vi.mock("../src/services/eventStream", () => ({
-  startEventStream: mocks.startEventStream,
-  stopEventStream: mocks.stopEventStream,
-}));
-vi.mock("../src/stores/sessions", () => ({
-  sessionDetail: writable(null),
-  sessionDetailError: writable(null),
-}));
-vi.mock("../src/queries/sessionOverview", () => ({
-  createSessionOverviewQuery: () => ({
-    data: undefined,
-    isPending: false,
-    isFetchingNextPage: false,
-    error: null,
-    fetchNextPage: vi.fn(),
-  }),
-  snapshotSessionOverview: () => ({
-    pinned: [],
-    active: [],
-    list: [],
-    archived: [],
-    nextCursor: null,
-  }),
-}));
-vi.mock("../src/queries/workspaces", () => ({
-  fetchWorkspaces: mocks.loadWorkspaces,
-  createWorkspacesQuery: () => ({ data: [], isPending: false, error: null }),
-}));
-vi.mock("../src/stores/workflows", () => ({
-  resetWorkflows: vi.fn(),
-}));
-vi.mock("../src/queries/workflows", () => ({
-  fetchWorkflows: mocks.loadWorkflows,
-}));
+vi.mock("../src/services/eventStream", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    startEventStream: mocks.startEventStream,
+    stopEventStream: mocks.stopEventStream,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createEvents: (device) => ({ ...original.createEvents(device), ...mocked }),
+  };
+});
+vi.mock("../src/stores/sessions", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    sessionDetail: writable(null),
+    sessionDetailError: writable(null),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createSessions: (device) => ({ ...original.createSessions(device), ...mocked }),
+  };
+});
+vi.mock("../src/queries/sessionOverview", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    createSessionOverviewQuery: () => ({
+      data: undefined,
+      isPending: false,
+      isFetchingNextPage: false,
+      error: null,
+      fetchNextPage: vi.fn(),
+    }),
+    snapshotSessionOverview: () => ({
+      pinned: [],
+      active: [],
+      list: [],
+      archived: [],
+      nextCursor: null,
+    }),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createSessionOverview: (device) => ({ ...original.createSessionOverview(device), ...mocked }),
+  };
+});
+vi.mock("../src/queries/workspaces", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    fetchWorkspaces: mocks.loadWorkspaces,
+    createWorkspacesQuery: () => ({ data: [], isPending: false, error: null }),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createWorkspaceQueries: (device) => ({ ...original.createWorkspaceQueries(device), ...mocked }),
+  };
+});
+vi.mock("../src/stores/workflows", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    resetWorkflows: vi.fn(),
+  };
+  return {
+    ...original,
+    ...mocked,
+    createWorkflows: (device) => ({ ...original.createWorkflows(device), ...mocked }),
+  };
+});
+vi.mock("../src/queries/workflows", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    fetchWorkflows: mocks.loadWorkflows,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createWorkflowQueries: (device) => ({ ...original.createWorkflowQueries(device), ...mocked }),
+  };
+});
 
 beforeEach(() => {
   window.history.pushState({}, "", "/dashboard/tasks");

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../device/context';
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { navigate } from '$lib/navigation'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
@@ -9,8 +10,10 @@
   import * as Card from '$lib/components/ui/card/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
-  import { createSessionOverviewQuery, snapshotSessionOverview } from '../queries/sessionOverview'
+  import { snapshotSessionOverview } from "../queries/sessionOverview";
   import type { SessionView } from '../api/types'
+  const device = useDeviceRuntime();
+  const { createSessionOverviewQuery } = device.sessionOverview;
 
   let selectedTab = $state('all')
   const overviewQuery = createSessionOverviewQuery(true)

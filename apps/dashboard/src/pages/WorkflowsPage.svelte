@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useDeviceRuntime } from '../device/context';
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import { navigate } from '$lib/navigation'
@@ -9,7 +10,8 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Table from '$lib/components/ui/table/index.js'
   import { formatDateTime, shortId } from '../components/tasks/format'
-  import { createWorkflowsQuery } from '../queries/workflows'
+  const device = useDeviceRuntime();
+  const { createWorkflowsQuery } = device.workflowQueries;
 
   const workflowsQuery = createWorkflowsQuery()
   let workflows = $derived(workflowsQuery.data ?? [])

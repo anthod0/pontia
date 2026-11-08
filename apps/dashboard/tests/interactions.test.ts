@@ -1,9 +1,10 @@
+import { testDevice } from "./deviceFixture";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import SessionInteractions from "../src/components/chat/SessionInteractions.svelte";
 import type { DashboardStreamEvent, Interaction } from "../src/api/types";
 import { ApiError } from "../src/api/errors";
-import { sseStatus } from "../src/stores/connection";
+const { sseStatus } = testDevice.connection;
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -15,19 +16,35 @@ const mocks = vi.hoisted(() => ({
 vi.mock("svelte-sonner", () => ({
   toast: { error: mocks.toastError },
 }));
-vi.mock("../src/api/client", () => ({
-  listPendingInteractions: mocks.list,
-  respondInteraction: mocks.respond,
-  getInteraction: mocks.get,
-}));
-vi.mock("../src/services/eventStream", () => ({
-  subscribeDashboardEvents: (listener: (event: DashboardStreamEvent) => void) => {
-    mocks.listener = listener;
-    return () => {
-      mocks.listener = null;
-    };
-  },
-}));
+vi.mock("../src/api/client", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    listPendingInteractions: mocks.list,
+    respondInteraction: mocks.respond,
+    getInteraction: mocks.get,
+  };
+  return {
+    ...original,
+    ...mocked,
+    createApi: (device) => ({ ...original.createApi(device), ...mocked }),
+  };
+});
+vi.mock("../src/services/eventStream", async (importOriginal) => {
+  const original = await importOriginal();
+  const mocked = {
+    subscribeDashboardEvents: (listener: (event: DashboardStreamEvent) => void) => {
+      mocks.listener = listener;
+      return () => {
+        mocks.listener = null;
+      };
+    },
+  };
+  return {
+    ...original,
+    ...mocked,
+    createEvents: (device) => ({ ...original.createEvents(device), ...mocked }),
+  };
+});
 
 function interaction(): Interaction {
   return {
