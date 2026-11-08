@@ -110,8 +110,11 @@ impl ClientControlChannel for Channel {
     fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
         Box::pin(async { Ok(()) })
     }
-    fn submit<'a>(&'a self, _: &'a str, _: Option<&'a str>) -> ClientControlOperation<'a> {
-        Box::pin(async { Ok(()) })
+    fn submit<'a>(&'a self, input: &'a str, _: Option<&'a str>) -> ClientControlOperation<'a> {
+        Box::pin(async move {
+            self.operations.lock().unwrap().push(input.into());
+            Ok(())
+        })
     }
 }
 

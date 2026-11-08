@@ -14,6 +14,88 @@ fn fact(kind: EventType, data: Value) -> ReportedFact {
 }
 
 #[tokio::test]
+async fn manual_compaction_holds_inbox_until_completion_failure_or_cancellation() {
+    for (kind, aborted) in [
+        (EventType::SessionCompactionCompleted, false),
+        (EventType::SessionCompactionFailed, false),
+        (EventType::SessionCompactionFailed, true),
+    ] {
+        let fixture = Fixture::new(&SPEC, false).await;
+        fixture.seed().await;
+        let service = fixture.state.event_ingest_service();
+        service
+            .report_fact(fact(
+                EventType::SessionCompactionStarted,
+                json!({"operation_id":"manual", "trigger":"manual"}),
+            ))
+            .await
+            .unwrap();
+        let (status, body) = fixture
+            .request("GET", "/api/v1/sessions/session", None, true)
+            .await;
+        assert_eq!(status, axum::http::StatusCode::OK);
+        assert_eq!(body["data"]["session"]["state"], "busy");
+
+        let submitted = fixture
+            .state
+            .inbox_commands()
+            .submit_message_once(
+                "queued",
+                "session",
+                pontia_application::SubmitInboxMessageRequest {
+                    input: "hi".into(),
+                    delivery_policy: "after_idle".into(),
+                    branch_target_turn_id: None,
+                    metadata: json!({}),
+                },
+            )
+            .await;
+        assert_eq!(submitted.unwrap().data["inbox_message"]["state"], "pending");
+        assert!(fixture.channel.operations.lock().unwrap().is_empty());
+
+        for trigger in ["threshold", "overflow", "unknown"] {
+            service
+                .report_fact(fact(
+                    EventType::SessionCompactionCompleted,
+                    json!({"operation_id":trigger, "trigger":trigger}),
+                ))
+                .await
+                .unwrap();
+        }
+        assert_eq!(
+            service.get_session("session").await.unwrap().unwrap().state,
+            pontia_core::domain::SessionState::Busy
+        );
+        assert!(fixture.channel.operations.lock().unwrap().is_empty());
+
+        let mut data = json!({"operation_id":"manual", "trigger":"manual"});
+        if kind == EventType::SessionCompactionFailed {
+            data["aborted"] = json!(aborted);
+        }
+        service.report_fact(fact(kind, data)).await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                let message = fixture
+                    .state
+                    .inbox_commands()
+                    .get_message("session", "queued")
+                    .await
+                    .unwrap()
+                    .unwrap();
+                if message.state == "dispatched" {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(*fixture.channel.operations.lock().unwrap(), ["hi"]);
+        fixture.state.inbox_commands().stop_scheduling().await;
+    }
+}
+
+#[tokio::test]
 async fn session_scoped_wait_can_be_interrupted_without_creating_a_turn() {
     static INTERRUPTIBLE: pontia_application::client_contract::AgentClientSpec =
         pontia_application::client_contract::AgentClientSpec {

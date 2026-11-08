@@ -121,16 +121,23 @@ impl InboxAssociations {
                 .await?;
             }
         }
-        if matches!(
-            event.event_type,
-            EventType::SessionReady
-                | EventType::TurnStarted
-                | EventType::TurnCompleted
-                | EventType::TurnFailed
-                | EventType::TurnDispatchFailed
-                | EventType::TurnAbandoned
-                | EventType::TurnInterrupted
-        ) {
+        let manual_compaction_finished = event.payload["trigger"] == "manual"
+            && matches!(
+                event.event_type,
+                EventType::SessionCompactionCompleted | EventType::SessionCompactionFailed
+            );
+        if manual_compaction_finished
+            || matches!(
+                event.event_type,
+                EventType::SessionReady
+                    | EventType::TurnStarted
+                    | EventType::TurnCompleted
+                    | EventType::TurnFailed
+                    | EventType::TurnDispatchFailed
+                    | EventType::TurnAbandoned
+                    | EventType::TurnInterrupted
+            )
+        {
             scheduler.wake(event.session_id.clone());
         }
         Ok(())

@@ -1,3 +1,4 @@
+mod compaction;
 mod fixture;
 mod interaction;
 mod session_lifecycle;

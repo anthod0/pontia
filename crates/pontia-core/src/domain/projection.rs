@@ -176,6 +176,20 @@ impl ProjectionState {
                     .map(|session| session.state)
                     .unwrap_or(SessionState::Created),
             ),
+            EventType::SessionCompactionStarted
+            | EventType::SessionCompactionCompleted
+            | EventType::SessionCompactionFailed
+                if event.payload["trigger"] == "manual" =>
+            {
+                let state = match event.event_type {
+                    EventType::SessionCompactionStarted => SessionState::Busy,
+                    EventType::SessionCompactionFailed if event.payload["aborted"] == true => {
+                        SessionState::Interrupted
+                    }
+                    _ => SessionState::Idle,
+                };
+                self.apply_session(event, state)
+            }
             EventType::SessionFileShared
             | EventType::SessionCompactionStarted
             | EventType::SessionCompactionCompleted
