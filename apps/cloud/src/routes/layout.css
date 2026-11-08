@@ -159,12 +159,6 @@ code {
   background: #3c7478;
   border-color: #3c7478;
 }
-.button-small {
-  min-height: 36px;
-  padding: 8px 13px;
-  font-size: 12px;
-  gap: 13px;
-}
 .button-secondary {
   background: transparent;
   border-color: #d5d2ca;
@@ -194,6 +188,9 @@ code {
 }
 .status-dot.ochre {
   background: #b58a31;
+}
+.status-dot.green {
+  background: #79740e;
 }
 .section-block {
   padding-block: 93px 64px;
@@ -240,6 +237,12 @@ h2 {
   justify-content: space-between;
   color: var(--primary);
   margin-bottom: 30px;
+}
+.feature-top.green {
+  color: #79740e;
+}
+.feature-top.ochre {
+  color: #b57614;
 }
 .feature-top > span {
   font: 10px var(--font-mono);
@@ -377,16 +380,8 @@ h2 {
   .site-header nav {
     gap: 15px;
   }
-  .site-header .account-link {
-    display: none;
-  }
   .nav-link {
     font-size: 11px;
-  }
-  .button-small {
-    font-size: 11px;
-    padding: 8px 10px;
-    gap: 7px;
   }
   .eyebrow {
     font-size: 8px;

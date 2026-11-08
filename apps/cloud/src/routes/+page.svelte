@@ -19,7 +19,7 @@
 
 <a class="skip-link" href="#main">Skip to content</a>
 
-<SiteHeader />
+<SiteHeader logo={false} />
 
 <main id="main">
 	<HeroSection />
@@ -38,13 +38,13 @@
 				<div class="feature-detail"><span class="surface-tag">Device</span><span>↔</span><span class="surface-tag">Web</span></div>
 			</article>
 			<article class="feature">
-				<div class="feature-top"><ShieldCheckIcon size={25} weight="light" /><span>02</span></div>
+				<div class="feature-top green"><ShieldCheckIcon size={25} weight="light" /><span>02</span></div>
 				<h3>Encrypted end to end.</h3>
 				<p>Dashboard traffic is encrypted between your browser and your device. The Edge relays ciphertext without seeing your session data.</p>
-				<div class="feature-detail"><span class="status-dot"></span>Private by design</div>
+				<div class="feature-detail"><span class="status-dot green"></span>Private by design</div>
 			</article>
 			<article class="feature">
-				<div class="feature-top"><TerminalWindowIcon size={25} weight="light" /><span>03</span></div>
+				<div class="feature-top ochre"><TerminalWindowIcon size={25} weight="light" /><span>03</span></div>
 				<h3>Execution stays local.</h3>
 				<p>Your agents keep running with the development tools and project files on your device. Pontia provides access, not the execution environment.</p>
 				<div class="feature-detail"><span class="status-dot ochre"></span>Local-first execution</div>
