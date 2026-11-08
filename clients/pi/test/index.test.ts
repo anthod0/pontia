@@ -1657,7 +1657,7 @@ describe("pontia pi extension lifecycle", () => {
       "turn.completed",
     ]);
     expect(reported[0]).toMatchObject({
-      report_key: "entry_1",
+      report_key: expect.any(String),
       data: {
         runtime_id: "rtinst_1",
         input_summary: undefined,
@@ -1708,7 +1708,7 @@ describe("pontia pi extension lifecycle", () => {
     await vi.waitFor(() => expect(report).toHaveBeenCalledTimes(1));
     expect(observations).toEqual(["leaf:entry_before_turn", "report:turn.started"]);
     expect(report.mock.calls[0]?.[1]).toMatchObject({
-      report_key: "entry_before_turn",
+      report_key: expect.any(String),
       data: { previous_leaf_id: "entry_before_turn" },
     });
     releaseStarted();
@@ -1979,6 +1979,57 @@ describe("pontia pi extension lifecycle", () => {
     ).toEqual(["turn_server_1", "turn_server_2"]);
     expect(reported.map((event) => event.type)).not.toContain("turn.created");
   });
+
+  test.each(["edited prompt", "original prompt"])(
+    "reports a new turn when replaying %s from the same Pi leaf after interruption",
+    async (prompt) => {
+      const appendText = vi.fn();
+      const { handlers, reported } = await installBound({
+        makeLiveOutputPublisher: () => ({
+          appendText,
+          appendReasoning: vi.fn(),
+          appendToolCall: vi.fn(),
+          toolExecution: vi.fn(),
+          close: vi.fn(async () => undefined),
+        }),
+      });
+      let leafId = "previous_answer";
+      const ctx = { sessionManager: { getLeafId: () => leafId } };
+      await handlers.before_agent_start({ messageType: "user", prompt: "original prompt" }, ctx);
+      await handlers.agent_start({}, ctx);
+      leafId = "aborted_answer";
+      await handlers.agent_end(
+        { messages: [{ role: "assistant", content: [], stopReason: "aborted" }] },
+        ctx,
+      );
+
+      leafId = "previous_answer";
+      await handlers.before_agent_start({ messageType: "user", prompt }, ctx);
+      await handlers.agent_start({}, ctx);
+      await handlers.message_update(
+        { assistantMessageEvent: { text_delta: "replacement answer" } },
+        ctx,
+      );
+      leafId = "replacement_answer";
+      await handlers.agent_end({ messages: [] }, ctx);
+
+      const started = reported.filter((event) => event.type === "turn.started");
+      expect(started).toHaveLength(2);
+      expect(started[1].report_key).not.toBe(started[0].report_key);
+      expect(started[1].data.input_summary).toBe(prompt);
+      expect(started.map((event) => event.data.previous_leaf_id)).toEqual([
+        "previous_answer",
+        "previous_answer",
+      ]);
+      expect(appendText).toHaveBeenCalledWith("replacement answer");
+      expect(reported.filter((event) => event.type === "turn.interrupted")).toMatchObject([
+        { turn_id: "turn_server_1" },
+      ]);
+      expect(reported.filter((event) => event.type === "turn.completed")).toMatchObject([
+        { turn_id: "turn_server_2", data: { terminal_leaf_id: "replacement_answer" } },
+      ]);
+    },
+  );
 
   test("does not report completion when context is missing", async () => {
     const { handlers, reported } = install();

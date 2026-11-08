@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { HistoryContext } from "./history.js";
 import { PiCompaction } from "./compaction.js";
@@ -745,7 +746,7 @@ export function createPontiaPiExtension(
 
   pi.on("agent_start", async (_event, ctx) => {
     const topologyContext = topologyContextFromHookContext(ctx);
-    const reportKey = leafIdFromHookContext(ctx);
+    const previousLeafId = leafIdFromHookContext(ctx);
     if (reportingDisabled) return;
     try {
       const dispatch = directInput.getStore();
@@ -755,7 +756,7 @@ export function createPontiaPiExtension(
           : undefined;
       if (dispatch) dispatch.consumed = true;
       const logFile = currentHookLogFile();
-      if (!reportKey) {
+      if (!previousLeafId) {
         activeTurn = undefined;
         pendingPrompt = undefined;
         await logDiagnostic(logFile, {
@@ -830,9 +831,10 @@ export function createPontiaPiExtension(
       }
       const reporter = makeReporter(logFile);
       lastContextUsageJson = undefined;
+      // Editing and replaying input can start another run from the same Pi leaf.
       const started = await reporter.report(
         turnContext,
-        buildTurnStartedEvent(turnContext, reportKey, reportKey, topologyContext),
+        buildTurnStartedEvent(turnContext, randomUUID(), previousLeafId, topologyContext),
       );
       const canonicalTurnId = typeof started === "boolean" ? turnContext.turnId : started.turnId;
       if (!reportAccepted(started) || !canonicalTurnId) {
