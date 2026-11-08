@@ -16,6 +16,7 @@ import { rememberOptimisticMessage } from "../../../src/queries/optimisticChat";
 import { queryClient } from "../../../src/queries/queryClient";
 import { sessionKeys } from "../../../src/queries/sessions";
 import * as api from "../../../src/api/client";
+import { stubWrappedComposer } from "../../components/wrappedComposer";
 
 const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).default;
 const SessionChatPage = (await import("../../../src/pages/SessionChatPage.svelte")).default;
@@ -1524,13 +1525,16 @@ test("mobile composer resize button opens a fullscreen follow-up composer sharin
   mocks.sessions.set([selected]);
   mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
   mocks.submitInboxMessage.mockResolvedValue(undefined);
+  const wrap = stubWrappedComposer();
 
   try {
     render(SessionChatPage);
 
     const composerInput = await screen.findByPlaceholderText("Follow up…");
     await user.type(composerInput, "mobile draft");
-    await fireEvent.click(screen.getByRole("button", { name: "Expand message composer" }));
+    expect(screen.queryByRole("button", { name: "Expand message composer" })).not.toBeInTheDocument();
+    wrap();
+    await fireEvent.click(await screen.findByRole("button", { name: "Expand message composer" }));
 
     const fullscreenComposer = screen.getByRole("dialog", { name: "Expanded message composer" });
     const fullscreenInput = within(fullscreenComposer).getByPlaceholderText("Follow up…");

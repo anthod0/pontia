@@ -263,8 +263,8 @@
 <PromptInput.Root class={compact ? 'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center' : 'w-full'} onSubmit={submit}>
   <PromptInput.Body class={compact ? 'col-start-2 row-start-1' : undefined}>
     <div bind:this={inlineInput} class="relative">
-      <ChatCommandInput bind:this={editor} id={inputId} bind:value {commands} onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 pr-10 text-base sm:text-[13.5px] ${compact ? 'pl-0 sm:pr-0' : 'pl-3 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
-      {#if fullscreen}
+      <ChatCommandInput bind:this={editor} id={inputId} bind:value {commands} onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 text-base sm:text-[13.5px] ${compact ? 'px-0' : 'pl-3 pr-10 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
+      {#if fullscreen && !compact}
         <Button type="button" variant="ghost" size="icon-sm" class="absolute right-1 top-1 sm:hidden" aria-label="Expand message composer" onclick={() => void openFullscreen()}>
           <ArrowsOutIcon class="size-4" />
         </Button>
@@ -286,7 +286,7 @@
           <StopIcon class="size-4" />
         </Button>
       {:else}
-        <PromptInput.Submit disabled={cannotSubmit} {busy} label={sentAwaitingCleanup ? 'Dismiss sent attachments' : commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} class={fullscreen ? 'h-7 gap-1.5 px-3 text-xs font-semibold' : undefined} />
+        <PromptInput.Submit disabled={cannotSubmit} {busy} label={sentAwaitingCleanup ? 'Dismiss sent attachments' : commandAction?.label ?? submitLabel} icon={commandAction?.icon} startSession={startSession && !command} class={fullscreen ? cn('h-7 gap-1.5 px-3 text-xs font-semibold', compact && 'max-sm:w-7 max-sm:px-0') : undefined} labelClass={compact ? 'max-sm:sr-only' : undefined} />
       {/if}
     </div>
   </PromptInput.Toolbar>

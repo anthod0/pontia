@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import MessageComposer from "../../src/components/chat/MessageComposer.svelte";
 import type { ChatCommand } from "../../src/lib/chatCommands";
+import { stubWrappedComposer } from "./wrappedComposer";
 
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
@@ -208,8 +209,10 @@ test("does not execute a command while confirming IME input or inserting a newli
 test("executes a selected command in the fullscreen composer and closes the dialog", async () => {
   const items = commands();
   const onSubmit = vi.fn();
+  const wrap = stubWrappedComposer();
   render(MessageComposer, { value: "/", commands: items, fullscreen: true, onSubmit });
-  await fireEvent.click(screen.getByRole("button", { name: "Expand message composer" }));
+  wrap();
+  await fireEvent.click(await screen.findByRole("button", { name: "Expand message composer" }));
   await screen.findByRole("dialog");
   const option = await screen.findByRole("option", { name: /\/exit/ });
   await fireEvent.click(option);
@@ -219,13 +222,15 @@ test("executes a selected command in the fullscreen composer and closes the dial
 });
 
 test("an unknown slash command does not consume Escape in the fullscreen composer", async () => {
+  const wrap = stubWrappedComposer();
   render(MessageComposer, {
     value: "/unknown",
     commands: commands(),
     fullscreen: true,
     onSubmit: vi.fn(),
   });
-  await fireEvent.click(screen.getByRole("button", { name: "Expand message composer" }));
+  wrap();
+  await fireEvent.click(await screen.findByRole("button", { name: "Expand message composer" }));
   const dialog = await screen.findByRole("dialog");
 
   await fireEvent.keyDown(dialog.querySelector('[role="textbox"]')!, { key: "Escape" });

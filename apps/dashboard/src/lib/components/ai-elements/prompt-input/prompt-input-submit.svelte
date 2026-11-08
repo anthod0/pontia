@@ -6,6 +6,7 @@
     label?: string
     startSession?: boolean
     icon?: typeof ArrowUpIcon
+    labelClass?: string
   }
 </script>
 
@@ -13,7 +14,7 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon'
 
-  let { children, disabled, busy = false, label = 'Send', startSession = false, icon: Icon = ArrowUpIcon, ...restProps }: PromptInputSubmitProps = $props()
+  let { children, disabled, busy = false, label = 'Send', startSession = false, icon: Icon = ArrowUpIcon, labelClass, ...restProps }: PromptInputSubmitProps = $props()
 </script>
 
 <Button type="submit" class="h-8 gap-1.5 px-4 text-xs font-semibold" disabled={disabled || busy} aria-busy={busy} aria-label={busy && !startSession ? 'Sending message' : label} {...restProps}>
@@ -23,7 +24,7 @@
     {#if busy}
       <SpinnerGapIcon class="size-3.5 animate-spin" aria-hidden="true" />
     {/if}
-    {label}
+    <span class={labelClass}>{label}</span>
     {#if !busy}<Icon class="size-3.5" aria-hidden="true" />{/if}
   {/if}
 </Button>
