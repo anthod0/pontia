@@ -15,9 +15,14 @@ vi.mock("../../src/modes/public/remote-access", async (importOriginal) => {
   }
   return {
     ...(await importOriginal<typeof import("../../src/modes/public/remote-access")>()),
+    listPublicDevices: async () => [{ handle: "office-mac", name: "Office Mac" }],
     createRemoteConnection: (handle: string) => {
       const controller = new AbortController();
       return {
+        e2eFetch: async () =>
+          new Response(
+            JSON.stringify({ data: { workspaces: [], active: [], pinned: [], list: [] } }),
+          ),
         connect: async () => ({
           handle,
           deviceId: "01234567-89ab-cdef-0123-456789abcdef",
@@ -41,7 +46,14 @@ vi.mock("../../src/services/dashboardRuntime", async (importOriginal) => {
   return {
     ...original,
     ...mocked,
-    createLifecycle: (device) => ({ ...original.createLifecycle(device), ...mocked }),
+    createLifecycle: (device) => ({
+      ...original.createLifecycle(device),
+      ...mocked,
+      startDashboardRuntime() {
+        mocks.startRuntime();
+        device.connection.sseStatus.set("open");
+      },
+    }),
   };
 });
 

@@ -1,12 +1,12 @@
 import type { DeviceRuntime } from "../device/runtime";
 
 export function createLifecycle(device: DeviceRuntime) {
-  function startDashboardRuntime(): void {
-    void Promise.all([
+  function startDashboardRuntime(onDisconnected?: () => void): void {
+    void Promise.allSettled([
       device.workspaceQueries.fetchWorkspaces(),
       device.workflowQueries.fetchWorkflows(),
     ]);
-    device.events.startEventStream();
+    device.events.startEventStream(onDisconnected);
   }
 
   function stopDashboardRuntime(): void {

@@ -9,7 +9,6 @@
   import { Badge } from '$lib/components/ui/badge/index.js';
   import { Button } from '$lib/components/ui/button/index.js';
   import * as Card from '$lib/components/ui/card/index.js';
-  import AppShell from '../layout/AppShell.svelte';
   import { initialRemoteDashboardState, type RemoteDashboardState } from '$lib/remoteDashboard';
 
   type Props = {
@@ -38,13 +37,9 @@
 </script>
 
 {#if effectiveState === 'available'}
-  <AppShell>
-    {#snippet children()}
-      {@render dashboard?.()}
-    {/snippet}
-  </AppShell>
+  {@render dashboard?.()}
 {:else}
-  <main class="relative flex min-h-svh items-center justify-center overflow-hidden bg-surface p-4 sm:p-8">
+  <div class="relative flex min-h-96 items-center justify-center overflow-hidden bg-surface p-4 sm:p-8">
     <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 top-0 h-px bg-primary/60"></div>
     <div class="w-full max-w-xl space-y-5">
       <header class="flex items-center justify-between gap-4 px-1">
@@ -134,5 +129,5 @@
         Device handles identify a target; authorization stays in your browser.
       </p>
     </div>
-  </main>
+  </div>
 {/if}

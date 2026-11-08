@@ -10,7 +10,12 @@
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { installVisualViewportCssVars } from '$lib/visualViewport'
 
-  let { children }: { children: Snippet } = $props()
+  let { children, sidebar, topbar, settingsEnabled = true }: {
+    children: Snippet
+    sidebar?: Snippet
+    topbar?: Snippet
+    settingsEnabled?: boolean
+  } = $props()
   let currentPath = $state(dashboardRelativePath())
 
   function updatePath(): void {
@@ -48,14 +53,22 @@
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
 <Sidebar.Provider>
-  <ChatShortcuts />
-  <ConnectionNotice />
-  <AppSidebar />
+  {#if sidebar}
+    {@render sidebar()}
+  {:else}
+    <ChatShortcuts />
+    <ConnectionNotice />
+    <AppSidebar />
+  {/if}
   <Sidebar.Inset class="bg-surface">
-    <TopBar />
+    {#if topbar}
+      {@render topbar()}
+    {:else}
+      <TopBar />
+    {/if}
     <main class={mainClass}>
       <div class={contentClass}>
-        {#if settingsPath}
+        {#if settingsPath && settingsEnabled}
           <SettingsShell>
             {@render children()}
           </SettingsShell>

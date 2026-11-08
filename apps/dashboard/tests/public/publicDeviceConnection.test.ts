@@ -304,3 +304,67 @@ test("devices on the same edge keep independent encrypted sessions and reauthori
     other.dispose();
   }
 });
+
+test.each(["initial", "renewal"])(
+  "reports central 401 during %s authorization so the tab can terminate all access",
+  async (phase) => {
+    const expired = vi.fn(() => remote.dispose());
+    remote.dispose();
+    remote = createRemoteConnection(handle, expired);
+    const fetchMock = vi.fn();
+    if (phase === "renewal")
+      fetchMock
+        .mockResolvedValueOnce(cloudResponse())
+        .mockResolvedValueOnce(new Response("confirmation"))
+        .mockResolvedValueOnce(new Response(null, { status: 409 }));
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const request = phase === "initial" ? remote.connect() : remote.e2eFetch("/api/v1/workspaces");
+    await expect(request).rejects.toBeInstanceOf(Error);
+    expect(expired).toHaveBeenCalledOnce();
+    expect(remote.signal.aborted).toBe(true);
+    const requests = fetchMock.mock.calls.length;
+    await expect(remote.e2eFetch("/api/v1/workspaces")).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(requests);
+  },
+);
+
+test("an edge rejection renews only that connection without reporting central login expiry", async () => {
+  const expired = vi.fn();
+  remote.dispose();
+  remote = createRemoteConnection(handle, expired);
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(cloudResponse())
+      .mockResolvedValueOnce(new Response("confirmation"))
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(cloudResponse())
+      .mockResolvedValueOnce(new Response("confirmation"))
+      .mockResolvedValueOnce(new Response("ciphertext")),
+  );
+  expect(await (await remote.e2eFetch("/api/v1/workspaces")).text()).toBe("ok");
+  expect(expired).not.toHaveBeenCalled();
+});
+
+test("a failed renewal reports the device connection failure", async () => {
+  const failed = vi.fn();
+  remote.dispose();
+  remote = createRemoteConnection(handle, failed);
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(cloudResponse())
+      .mockResolvedValueOnce(new Response("confirmation"))
+      .mockResolvedValueOnce(new Response(null, { status: 409 }))
+      .mockResolvedValueOnce(cloudResponse())
+      .mockResolvedValueOnce(new Response(null, { status: 503 })),
+  );
+  await remote.connect();
+  await expect(remote.e2eFetch("/api/v1/workspaces")).rejects.toThrow();
+  expect(failed).toHaveBeenCalledOnce();
+});

@@ -1,156 +1,138 @@
 <script lang="ts">
-  import { untrack, type Snippet } from 'svelte';
+  import { onMount, type Snippet } from 'svelte';
+  import { writable } from 'svelte/store';
   import DevicesPage from '../../components/devices/DevicesPage.svelte';
   import RemoteDashboardPage from '../../components/devices/RemoteDashboardPage.svelte';
-  import { initialRemoteDashboardState, type RemoteDashboardState } from '$lib/remoteDashboard';
-  import { isValidDeviceHandle } from '$lib/deviceHandle';
+  import AppShell from '../../components/layout/AppShell.svelte';
+  import AppSidebar from '../../components/layout/AppSidebar.svelte';
+  import TopBar from '../../components/layout/TopBar.svelte';
+  import ChatShortcuts from '../../components/chat/ChatShortcuts.svelte';
+  import * as Sidebar from '$lib/components/ui/sidebar/index.js';
   import DeviceProvider from '../../device/DeviceProvider.svelte';
-  import { DeviceRuntime } from '../../device/runtime';
-  import { createApiAccess } from './apiAccess';
-  import { createPublicDevicesQuery } from './deviceQueries';
+  import { createDeviceConnections, type ConnectedDevice } from './deviceConnections';
   import { loadedRemoteAccess, loadRemoteAccess } from './remoteAccessLoader.svelte';
 
-  let { handle: handleProp, children }: { handle?: string; children: Snippet } = $props();
-  // Route data may be replaced during navigation without changing the device.
-  const handle = $derived(handleProp);
-  let retryGeneration = $state(0);
-  let runtimeHandle = $state<string | null>(null);
-  let device = $state.raw<DeviceRuntime | null>(null);
-  let failedHandle = $state<string | null>(null);
-  let targetFailureMessage = $state<string | null>(null);
-  let targetSignInRequired = $state(false);
+  let { handle, children }: { handle?: string; children: Snippet } = $props();
+  let connections = $state.raw<ReturnType<typeof createDeviceConnections> | null>(null);
+  const emptyDevices = writable<ConnectedDevice[]>([]);
+  const initialLoading = writable(true);
+  const noError = writable<string | null>(null);
+  const signedIn = writable(false);
+  const devices = $derived(connections?.devices ?? emptyDevices);
+  const loading = $derived(connections?.loading ?? initialLoading);
+  const error = $derived(connections?.error ?? noError);
+  const signInRequired = $derived(connections?.signInRequired ?? signedIn);
+  const selected = $derived($devices.find((device) => device.handle === handle));
+  const device = $derived(selected?.state === 'online' ? selected.runtime : null);
   const remote = $derived(loadedRemoteAccess());
-  const devicesQuery = createPublicDevicesQuery(() => !handle);
-  const devices = $derived(devicesQuery.data ?? []);
-  const devicesError = $derived(
-    devicesQuery.error ? cloudFailureMessage(devicesQuery.error, 'list') : null,
-  );
-  const devicesSignInRequired = $derived(cloudErrorStatus(devicesQuery.error) === 401);
-  const signInUrl = $derived(
-    remote?.dashboardSignInUrl(
-      `${window.location.pathname}${window.location.search}${window.location.hash}`,
-    ),
-  );
+  let moduleError = $state<string | null>(null);
+  let disposed = false;
+  let loadingModule = false;
+  const signInUrl = $derived($signInRequired ? remote?.dashboardSignInUrl(
+    `${window.location.pathname}${window.location.search}${window.location.hash}`,
+  ) : undefined);
+  const dashboardState = $derived(selected?.state === 'online' ? 'available'
+    : $signInRequired || selected?.state === 'offline' || moduleError || (!$loading && !selected)
+      ? 'unavailable' : 'connecting');
 
-  const dashboardState = $derived.by((): RemoteDashboardState => {
-    if (!handle) return 'invalid';
-    const initial = initialRemoteDashboardState(handle);
-    if (initial === 'invalid') return initial;
-    if (runtimeHandle === handle) return 'available';
-    if (failedHandle === handle) return 'unavailable';
-    return 'connecting';
-  });
+  async function start(): Promise<void> {
+    if (loadingModule) return;
+    loadingModule = true;
+    moduleError = null;
+    try {
+      const access = await loadRemoteAccess();
+      if (disposed) return;
+      const developmentBridge = import.meta.env.DEV && import.meta.env.MODE === 'development';
+      const developmentHandle = handle;
+      connections = createDeviceConnections(developmentBridge && developmentHandle ? {
+        ...access, listPublicDevices: async () => [{ handle: developmentHandle, name: developmentHandle }],
+      } : access);
+      await connections.refreshDevices();
+    } catch {
+      if (!disposed) moduleError = 'Could not load remote device access.';
+    } finally {
+      loadingModule = false;
+    }
+  }
 
   function retry(): void {
-    if (!handle) {
-      void devicesQuery.refetch();
-      return;
-    }
-    retryGeneration += 1;
+    if (!connections) void start();
+    else if (selected) connections.retry(selected.handle);
+    else void connections.refreshDevices();
   }
 
-  function teardownRuntime(): void {
-    untrack(() => device)?.dispose();
-    device = null;
-    runtimeHandle = null;
-  }
-
-  // Returns null when the error is not a Cloud request error.
-  function cloudErrorStatus(error: unknown): number | undefined | null {
-    return remote && error instanceof remote.CloudRequestError ? error.status : null;
-  }
-
-  function cloudFailureMessage(error: unknown, operation: 'list' | 'target'): string {
-    const status = cloudErrorStatus(error);
-    if (status === 401) {
-      return 'Sign in to Pontia to continue.';
-    }
-    if (status === 403) {
-      return 'Pontia refused this Dashboard request.';
-    }
-    if (status !== null) {
-      return operation === 'list'
-        ? 'Pontia returned an invalid device list.'
-        : 'Pontia could not authorize this device connection.';
-    }
-    return operation === 'list'
-      ? 'Could not reach Pontia to load devices.'
-      : 'Could not establish a secure connection to this device.';
-  }
-
-  $effect.pre(() => {
-    if (runtimeHandle && runtimeHandle !== handle) teardownRuntime();
-  });
-
-  $effect(() => {
-    retryGeneration;
-    const requestedHandle = handle;
-    if (!requestedHandle) return;
-
-    teardownRuntime();
-    failedHandle = null;
-    targetFailureMessage = null;
-    targetSignInRequired = false;
-    if (!isValidDeviceHandle(requestedHandle)) return;
-
-    const developmentBridge = import.meta.env.DEV && import.meta.env.MODE === 'development';
-    const controller = new AbortController();
-    let connection: ReturnType<NonNullable<typeof remote>['createRemoteConnection']> | undefined;
-    void loadRemoteAccess()
-      .then(async (remoteAccess) => {
-        if (controller.signal.aborted) return;
-        connection = remoteAccess.createRemoteConnection(requestedHandle);
-        if (!developmentBridge) await connection.connect(controller.signal);
-        if (controller.signal.aborted || handle !== requestedHandle) return;
-        const id = developmentBridge ? requestedHandle : await connection.uploadStorageScope();
-        if (controller.signal.aborted || handle !== requestedHandle) return;
-        device = new DeviceRuntime(id, createApiAccess(connection));
-        runtimeHandle = requestedHandle;
-        device.lifecycle.startDashboardRuntime();
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted || handle !== requestedHandle) return;
-        failedHandle = requestedHandle;
-        targetFailureMessage = cloudFailureMessage(error, 'target');
-        targetSignInRequired = cloudErrorStatus(error) === 401;
-      });
-
+  onMount(() => {
+    void start();
     return () => {
-      controller.abort();
-      connection?.dispose();
-      teardownRuntime();
+      disposed = true;
+      connections?.dispose();
     };
   });
 </script>
 
-{#if handle}
-  {#if device && runtimeHandle === handle}
-    {#key device}
-      <DeviceProvider {device}>
-        <RemoteDashboardPage {handle} state="available">
-          {#snippet dashboard()}
-            {@render children()}
-          {/snippet}
-        </RemoteDashboardPage>
-      </DeviceProvider>
-    {/key}
-  {:else}
-  <RemoteDashboardPage
-    {handle}
-    state={dashboardState}
-    onRetry={retry}
-    unavailableMessage={targetFailureMessage}
-    reauthorizationUrl={isValidDeviceHandle(handle) ? remote?.dashboardBootstrapUrl(handle) : undefined}
-    signInUrl={targetSignInRequired ? signInUrl : undefined}
-  />
-  {/if}
-{:else}
-  <DevicesPage
-    {devices}
-    loading={devicesQuery.isPending}
-    error={devicesError}
-    onRetry={retry}
-    openAction={remote?.dashboardBootstrapUrl}
-    signInUrl={devicesSignInRequired ? signInUrl : undefined}
-  />
-{/if}
+<svelte:window onfocus={() => connections?.focus()} ononline={() => connections?.focus()} />
+<svelte:document onvisibilitychange={() => {
+  if (document.visibilityState === 'visible') connections?.focus();
+}} />
+
+<AppShell settingsEnabled={!!device}>
+  {#snippet sidebar()}
+    {#if device}
+      {#key device}
+        <DeviceProvider {device}>
+          <ChatShortcuts />
+          <AppSidebar />
+        </DeviceProvider>
+      {/key}
+    {:else}
+      <Sidebar.Root collapsible="icon">
+        <Sidebar.Header><a href="/" class="px-2 py-1 font-semibold">Pontia</a></Sidebar.Header>
+        <Sidebar.Content>
+          <Sidebar.Group>
+            <Sidebar.Menu>
+              <Sidebar.MenuItem><Sidebar.MenuButton>
+                {#snippet child({ props })}<a {...props} href="/">Devices</a>{/snippet}
+              </Sidebar.MenuButton></Sidebar.MenuItem>
+              {#each $devices as target (target.handle)}
+                <Sidebar.MenuItem>
+                  <Sidebar.MenuButton isActive={handle === target.handle}>
+                    {#snippet child({ props })}
+                      <a {...props} href={`/${target.handle}`}>
+                        <span>{target.name}</span>
+                        <span class="ml-auto text-xs">{{ connecting: 'Connecting', online: 'Online', offline: 'Offline', 'sign-in-required': 'Sign in required' }[target.state]}</span>
+                      </a>
+                    {/snippet}
+                  </Sidebar.MenuButton>
+                </Sidebar.MenuItem>
+              {/each}
+            </Sidebar.Menu>
+          </Sidebar.Group>
+        </Sidebar.Content>
+      </Sidebar.Root>
+    {/if}
+  {/snippet}
+  {#snippet topbar()}
+    {#if device}
+      {#key device}<DeviceProvider {device}><TopBar /></DeviceProvider>{/key}
+    {:else}
+      <header class="flex h-8 items-center px-3"><Sidebar.Trigger class="md:hidden" /></header>
+    {/if}
+  {/snippet}
+  {#snippet children()}
+    {#if handle}
+      {#if device}
+        {#key device}<DeviceProvider {device}>{@render children()}</DeviceProvider>{/key}
+      {:else}
+        <RemoteDashboardPage
+          {handle} state={dashboardState} onRetry={retry}
+          unavailableMessage={$error ?? moduleError}
+          {signInUrl}
+        />
+      {/if}
+    {:else}
+      <DevicesPage devices={$devices} loading={$loading && !moduleError}
+        error={$error ?? moduleError} onRetry={() => connections ? void connections.refreshDevices() : void start()}
+        openAction={(target) => `/${target}`} {signInUrl} />
+    {/if}
+  {/snippet}
+</AppShell>

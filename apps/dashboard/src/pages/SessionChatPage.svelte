@@ -6,6 +6,7 @@
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { navigate } from '$lib/navigation'
+  import { dashboardScope } from '$lib/dashboardRoutes'
   import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
@@ -36,6 +37,7 @@
   import { sessionMetadataItems, sessionMetadataSummary, visibleChatInboxMessages } from '../components/chat/sessionMetadata'
   import { isExecutingSessionState, isTerminalSession } from '$lib/sessionState'
   const device = useDeviceRuntime();
+  const deviceScope = dashboardScope();
   const { retryInboxMessage } = device.sessions;
   const { compactSession } = device.api;
   const {
@@ -150,8 +152,10 @@
 
   onDestroy(() => {
     destroyed = true
-    selectSession(null)
-    resetTimelineState()
+    if (dashboardScope() === deviceScope) {
+      selectSession(null)
+      resetTimelineState()
+    }
     unsubscribeDashboardEvents?.()
     closeLiveOutputStream?.()
     bottomIntersectionObserver?.disconnect()
@@ -592,6 +596,7 @@
   }
 
   async function selectSessionFromLocation(): Promise<void> {
+    if (dashboardScope() !== deviceScope) return
     const nextSessionId = requestedSessionIdFromLocation()
     if (nextSessionId === selectedSessionId) return
     closeLiveOutputStream?.()

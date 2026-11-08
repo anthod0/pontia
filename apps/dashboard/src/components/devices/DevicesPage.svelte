@@ -31,7 +31,7 @@
   const validDevices = $derived(devices.filter((device) => isValidDeviceHandle(device.handle)));
 </script>
 
-<main class="min-h-svh bg-surface">
+<div class="bg-surface">
   <div class="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 sm:py-12">
     <header class="mb-8 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
       <div class="space-y-2">
@@ -115,4 +115,4 @@
       </Card.Root>
     {/if}
   </div>
-</main>
+</div>

@@ -8,7 +8,10 @@ import { requestPublicDeviceConnection, type PublicDeviceTarget } from "./remote
 const CONTENT_TYPE = "application/pontia-e2e";
 let initialized: Promise<unknown> | null = null;
 
-export function createRemoteConnection(handle: string) {
+export function createRemoteConnection(
+  handle: string,
+  onConnectionFailure?: (error: unknown) => void,
+) {
   const lifetime = new AbortController();
   let session: Session | null = null;
   let sessionTarget: PublicDeviceTarget | null = null;
@@ -117,9 +120,14 @@ export function createRemoteConnection(handle: string) {
       } finally {
         identity.free();
       }
-    })().finally(() => {
-      if (connectionGeneration === generation) establishing = null;
-    });
+    })()
+      .catch((error: unknown) => {
+        if (!connectionSignal.aborted) onConnectionFailure?.(error);
+        throw error;
+      })
+      .finally(() => {
+        if (connectionGeneration === generation) establishing = null;
+      });
     establishing = { promise, controller, waiters: 0 };
     return waitForConnection(establishing, signal);
   }
@@ -260,6 +268,7 @@ export function createRemoteConnection(handle: string) {
       });
     } catch (error) {
       request.free();
+      if (!signal.aborted && session === active) onConnectionFailure?.(error);
       throw error;
     }
     if ((response.status === 409 || response.status === 401) && !reauthorized) {
@@ -270,7 +279,9 @@ export function createRemoteConnection(handle: string) {
     }
     if (!response.ok) {
       request.free();
-      throw new Error(`E2E transport failed (${response.status})`);
+      const error = new Error(`E2E transport failed (${response.status})`);
+      if (session === active) onConnectionFailure?.(error);
+      throw error;
     }
     return decryptResponse(response, request);
   }

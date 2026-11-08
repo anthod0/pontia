@@ -35,6 +35,8 @@ export function createEvents(device: DeviceRuntime) {
 
   let started = false;
 
+  let onDisconnected: (() => void) | undefined;
+
   let lifecycleListenersAttached = false;
 
   let lifecycleReconnectQueued = false;
@@ -102,13 +104,14 @@ export function createEvents(device: DeviceRuntime) {
     device.connection.sseStatus.set("closed");
   }
 
-  function startEventStream(): void {
+  function startEventStream(disconnected?: () => void): void {
     if (started) return;
     started = true;
+    onDisconnected = disconnected;
     device.connection.reconnectCount.set(0);
     device.connection.lastConnectionError.set(null);
     device.connection.streamedSessionId.set("dashboard");
-    attachLifecycleListeners();
+    if (!onDisconnected) attachLifecycleListeners();
     void connect(generation);
   }
 
@@ -149,6 +152,7 @@ export function createEvents(device: DeviceRuntime) {
         if (isAuthenticationFailure(response.status)) {
           device.access.handleApiAuthenticationFailure();
           stopEventStream();
+          onDisconnected?.();
           return;
         }
         if (after && (response.status === 409 || response.status === 410)) {
@@ -177,6 +181,10 @@ export function createEvents(device: DeviceRuntime) {
 
   function scheduleReconnect(streamGeneration: number): void {
     if (!started || streamGeneration !== generation) return;
+    if (onDisconnected) {
+      onDisconnected();
+      return;
+    }
     device.connection.reconnectCount.update((count) => count + 1);
     const delay = Math.min(1000 + get(device.connection.reconnectCount) * 500, 5000);
     device.connection.sseStatus.set("reconnecting");

@@ -1,171 +1,104 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import PublicDashboardHarness from "../components/PublicDashboardHarness.svelte";
 import PublicDashboardRouteHarness from "../components/PublicDashboardRouteHarness.svelte";
+import { createRemoteAccessFixture } from "./fixtures/remoteConnections";
 
-const mocks = vi.hoisted(() => ({
-  resolveTarget: vi.fn(),
-  startRuntime: vi.fn(),
-  stopRuntime: vi.fn(),
-  clearRuntime: vi.fn(),
+let fixture: ReturnType<typeof createRemoteAccessFixture>;
+vi.mock("../../src/modes/public/remote-access", async () => ({
+  ...(await import("../../src/modes/public/remote-access/remoteAccess")),
+  listPublicDevices: (signal: AbortSignal) => fixture.remote.listPublicDevices(signal),
+  createRemoteConnection: (handle: string, onSignInRequired: () => void) =>
+    fixture.remote.createRemoteConnection(handle, onSignInRequired),
 }));
-
-vi.mock("../../src/modes/public/remote-access", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../src/modes/public/remote-access")>()),
-  createRemoteConnection: (handle: string) => {
-    const controller = new AbortController();
-    return {
-      connect: (signal: AbortSignal) => mocks.resolveTarget(handle, signal),
-      uploadStorageScope: async () => handle,
-      signal: controller.signal,
-      dispose: () => controller.abort(),
-    };
-  },
-}));
-
-vi.mock("../../src/services/dashboardRuntime", async (importOriginal) => {
-  const original = await importOriginal();
-  const mocked = {
-    startDashboardRuntime: mocks.startRuntime,
-    stopDashboardRuntime: mocks.stopRuntime,
-    clearDashboardRuntimeState: mocks.clearRuntime,
-  };
-  return {
-    ...original,
-    ...mocked,
-    createLifecycle: (device) => ({ ...original.createLifecycle(device), ...mocked }),
-  };
-});
-
-const target = (handle: string) => ({
-  handle,
-  deviceId:
-    handle === "office-mac"
-      ? "01234567-89ab-cdef-0123-456789abcdef"
-      : "12345678-9abc-def0-1234-56789abcdef0",
-  edgeApiOrigin: "https://brave-silver-atlas.edge.pontia.dev",
-});
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.resolveTarget.mockImplementation(async (handle: string) => target(handle));
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
+  fixture = createRemoteAccessFixture();
+  window.history.replaceState({}, "", "/office-mac");
 });
 
 test("retries a failed device list request", async () => {
-  const fetchMock = vi
-    .fn()
-    .mockResolvedValueOnce(new Response(null, { status: 503 }))
-    .mockResolvedValueOnce(
-      new Response(JSON.stringify([{ device_handle: "office-mac", name: "Office Mac" }]), {
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-  vi.stubGlobal("fetch", fetchMock);
-
+  vi.mocked(fixture.remote.listPublicDevices).mockRejectedValueOnce(new Error("503"));
   render(PublicDashboardHarness, { props: { handle: "" } });
   await fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
-
-  const openDashboard = await screen.findByRole("link", { name: "Open Dashboard" });
-  expect(openDashboard).toHaveAttribute("href", "https://app.pontia.dev/office-mac");
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  const links = await screen.findAllByRole("link", { name: "Open Dashboard" });
+  expect(links.map((link) => link.getAttribute("href"))).toEqual(["/office-mac", "/travel-laptop"]);
 });
 
-test("starts only after the secure connection completes and tears down before a scope switch", async () => {
+test("cross-device navigation preserves the AppShell and both device connections", async () => {
   const view = render(PublicDashboardHarness, { props: { handle: "office-mac" } });
-
-  expect(mocks.startRuntime).not.toHaveBeenCalled();
-  expect(screen.queryByText("Dashboard content")).not.toBeInTheDocument();
-
-  await waitFor(() => expect(screen.getByText("Dashboard content")).toBeInTheDocument());
-  expect(mocks.startRuntime).toHaveBeenCalledTimes(1);
-
-  let resolveNextTarget: ((value: ReturnType<typeof target>) => void) | undefined;
-  mocks.resolveTarget.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        resolveNextTarget = resolve;
-      }),
-  );
+  await screen.findByText("Dashboard content");
+  await waitFor(() => expect(fixture.streams.size).toBe(2));
+  const shell = document.querySelector('[data-slot="sidebar-wrapper"]');
+  expect(shell).not.toBeNull();
+  const firstSignals = [...fixture.signals.values()].flat();
   await view.rerender({ handle: "travel-laptop" });
-  expect(mocks.startRuntime).toHaveBeenCalledTimes(1);
-  expect(screen.queryByText("Dashboard content")).not.toBeInTheDocument();
-  expect(mocks.stopRuntime).toHaveBeenCalled();
-  expect(mocks.clearRuntime).toHaveBeenCalled();
-
-  resolveNextTarget?.(target("travel-laptop"));
-  await waitFor(() => expect(screen.getByText("Dashboard content")).toBeInTheDocument());
-  expect(mocks.resolveTarget).toHaveBeenLastCalledWith("travel-laptop", expect.any(AbortSignal));
-  expect(mocks.startRuntime).toHaveBeenCalledTimes(2);
+  await screen.findByText("Dashboard content");
+  expect(document.querySelector('[data-slot="sidebar-wrapper"]')).toBe(shell);
+  expect(firstSignals.every((signal) => !signal.aborted)).toBe(true);
+  expect(fixture.connect).toHaveBeenCalledTimes(2);
+  await view.rerender({ handle: "" });
+  await screen.findAllByRole("link", { name: "Open Dashboard" });
+  expect(document.querySelector('[data-slot="sidebar-wrapper"]')).toBe(shell);
+  expect(firstSignals.every((signal) => !signal.aborted)).toBe(true);
 });
 
-test("navigation within the same device preserves the secure connection and mounted dashboard", async () => {
-  const view = render(PublicDashboardRouteHarness, {
-    props: { data: { handle: "office-mac" } },
-  });
+test("navigation within the same device preserves mounted page state", async () => {
+  const view = render(PublicDashboardRouteHarness, { props: { data: { handle: "office-mac" } } });
   const draft = await screen.findByRole("textbox", { name: "Draft" });
   await fireEvent.input(draft, { target: { value: "Unsent message" } });
-  mocks.stopRuntime.mockClear();
-  mocks.clearRuntime.mockClear();
-
   await view.rerender({ data: { handle: "office-mac" } });
-
-  expect(mocks.resolveTarget).toHaveBeenCalledTimes(1);
-  expect(mocks.stopRuntime).not.toHaveBeenCalled();
-  expect(mocks.clearRuntime).not.toHaveBeenCalled();
   expect(screen.getByRole("textbox", { name: "Draft" })).toBe(draft);
   expect(draft).toHaveValue("Unsent message");
+  expect(fixture.connect).toHaveBeenCalledTimes(2);
 });
 
-test("a failed secure connection does not start the dashboard and can be retried", async () => {
-  mocks.resolveTarget.mockRejectedValueOnce(new Error("handshake failed"));
+test("a direct offline target can be retried while another device connects in the background", async () => {
+  fixture.connect.mockRejectedValueOnce(new Error("handshake failed"));
   render(PublicDashboardHarness, { props: { handle: "office-mac" } });
   const retry = await screen.findByRole("button", { name: "Try again" });
-  expect(mocks.startRuntime).not.toHaveBeenCalled();
+  await waitFor(() => expect(fixture.streams.has("travel-laptop")).toBe(true));
   expect(screen.queryByText("Dashboard content")).not.toBeInTheDocument();
   await fireEvent.click(retry);
-  await waitFor(() => expect(screen.getByText("Dashboard content")).toBeInTheDocument());
-  expect(mocks.startRuntime).toHaveBeenCalledTimes(1);
+  await screen.findByText("Dashboard content");
+  expect(fixture.signals.get("travel-laptop")).toHaveLength(1);
 });
 
-test("leaving a pending connection prevents a late result from starting the dashboard", async () => {
-  let finish!: (value: ReturnType<typeof target>) => void;
-  mocks.resolveTarget.mockImplementationOnce(
-    () =>
+test("unmount cancels pending handshakes and ignores late results", async () => {
+  let finish!: () => void;
+  fixture.connect.mockImplementationOnce(
+    (handle) =>
       new Promise((resolve) => {
-        finish = resolve;
+        finish = () => resolve(fixture.target(handle));
       }),
   );
   const view = render(PublicDashboardHarness, { props: { handle: "office-mac" } });
-  await waitFor(() => expect(mocks.resolveTarget).toHaveBeenCalled());
-  const signal = mocks.resolveTarget.mock.calls[0][1] as AbortSignal;
+  await waitFor(() => expect(fixture.connect).toHaveBeenCalledTimes(2));
   view.unmount();
-  expect(signal.aborted).toBe(true);
-  finish(target("office-mac"));
+  finish();
   await Promise.resolve();
-  expect(mocks.startRuntime).not.toHaveBeenCalled();
+  expect([...fixture.signals.values()].flat().every((signal) => signal.aborted)).toBe(true);
+  expect(fixture.streams.has("office-mac")).toBe(false);
 });
 
-test("a device-list request paused offline resumes when the browser comes online", async () => {
-  const { onlineManager } = await import("@tanstack/svelte-query");
-  const fetchMock = vi.fn(
-    async () =>
-      new Response(JSON.stringify([{ device_handle: "office-mac", name: "Office Mac" }]), {
-        headers: { "Content-Type": "application/json" },
-      }),
-  );
-  vi.stubGlobal("fetch", fetchMock);
-  onlineManager.setOnline(false);
-  try {
-    render(PublicDashboardHarness, { props: { handle: "" } });
-    expect(fetchMock).not.toHaveBeenCalled();
-    onlineManager.setOnline(true);
-    await screen.findByRole("link", { name: "Open Dashboard" });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  } finally {
-    onlineManager.setOnline(true);
-  }
+test("focus refresh discovers new devices without reconnecting existing ones", async () => {
+  render(PublicDashboardHarness, { props: { handle: "office-mac" } });
+  await screen.findByText("Dashboard content");
+  fixture.listed.push({ handle: "home-server", name: "Home server" });
+  await fireEvent.focus(window);
+  await waitFor(() => expect(fixture.streams.has("home-server")).toBe(true));
+  expect(fixture.signals.get("office-mac")).toHaveLength(1);
+  expect(fixture.signals.get("travel-laptop")).toHaveLength(1);
+});
+
+test("central login expiry offers sign-in and prevents UI or focus retries", async () => {
+  render(PublicDashboardHarness, { props: { handle: "office-mac" } });
+  await screen.findByText("Dashboard content");
+  fixture.authorizationFailures.get("travel-laptop")!();
+  const signIn = await screen.findByRole("link", { name: "Sign in" });
+  expect(signIn.getAttribute("href")).toContain("https://pontia.dev/login?");
+  expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  await fireEvent.focus(window);
+  expect(fixture.connect).toHaveBeenCalledTimes(2);
+  expect([...fixture.signals.values()].flat().every((signal) => signal.aborted)).toBe(true);
 });
