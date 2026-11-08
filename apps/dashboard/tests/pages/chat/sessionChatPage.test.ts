@@ -2473,6 +2473,74 @@ test("waits for the native user message if the optimistic message disappears bef
   }
 });
 
+test("keeps the sent user message in the chat between turn start and its native history", async () => {
+  const user = userEvent.setup();
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const selected = session({ session_id: "session-2", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-2");
+  mocks.pathParams = { sessionId: "session-2" };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+  mocks.submitInboxMessage.mockResolvedValue(
+    inboxMessage({
+      message_id: "message-sent",
+      session_id: "session-2",
+      input: { summary: "keep me visible" },
+    }),
+  );
+  render(SessionChatPage);
+  await waitFor(() =>
+    expect(
+      document.querySelector('[data-chat-initial-scroll-pending="false"]'),
+    ).toBeInTheDocument(),
+  );
+  await user.type(screen.getByPlaceholderText("Follow up…"), "keep me visible");
+  scrollTo.mockClear();
+  await user.click(screen.getByRole("button", { name: /^send$/i }));
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+
+  for (const listener of mocks.dashboardEventListeners) {
+    listener({
+      kind: "session_event",
+      id: "event-sent-turn-started",
+      occurred_at: "2026-05-14T00:01:00Z",
+      event: {
+        event_id: "event-sent-turn-started",
+        session_id: "session-2",
+        turn_id: "turn-sent",
+        source: "client",
+        type: "turn.started",
+        time: "2026-05-14T00:01:00Z",
+        payload: { metadata: { inbox_message_id: "message-sent" } },
+      },
+    });
+  }
+  await new Promise(requestAnimationFrame);
+  expect(
+    screen.getByText("keep me visible").closest('[data-chat-role="user"]'),
+  ).toBeInTheDocument();
+
+  mocks.timelineState.set(
+    timelineStateValue({
+      sessionId: "session-2",
+      items: timelineItemsFromTurns([
+        turn({ turn_id: "turn-sent", input: { summary: "keep me visible" } }),
+      ]),
+      latestTurnId: "turn-sent",
+      status: "ready",
+    }),
+  );
+  await waitFor(() =>
+    expect(
+      document.querySelector('[data-chat-turn-id="turn-sent"][data-chat-role="user"]'),
+    ).toBeInTheDocument(),
+  );
+  expect(screen.getAllByText("keep me visible")).toHaveLength(1);
+  expect(scrollTo).toHaveBeenCalledTimes(1);
+  scrollTo.mockRestore();
+});
+
 test("does not consume a submit scroll until the unavailable conversation mounts again", async () => {
   const user = userEvent.setup();
   const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});

@@ -45,6 +45,7 @@ function submission(overrides: Partial<OptimisticInboxSubmission> = {}): Optimis
     showInChat: true,
     submittedAt: "2026-05-14T00:00:00Z",
     acceptedMessage: acceptedInboxMessage(),
+    dispatchedTurnId: null,
     ...overrides,
   };
 }
@@ -81,31 +82,60 @@ test("removes an optimistic Inbox submission when its projected Turn appears", (
   expect(optimisticInboxSubmissions("session-1")).toEqual([]);
 });
 
-test("removes a submission when SSE reports that its Inbox message was consumed", () => {
-  seed(submission({ acceptedMessage: null }));
-
-  reconcileInboxSubmissionForDashboardEvent({
+function turnStarted(messageId: string, turnId: string): DashboardStreamEvent {
+  return {
     kind: "session_event",
     id: "stream-1",
     occurred_at: "2026-05-14T00:00:00Z",
     event: {
       event_id: "event-1",
       session_id: "session-1",
-      turn_id: "turn-1",
+      turn_id: turnId,
       source: "runtime",
       type: "turn.started",
       time: "2026-05-14T00:00:00Z",
-      payload: { metadata: { inbox_message_id: "message-1" } },
+      payload: { metadata: { inbox_message_id: messageId } },
     },
-  } satisfies DashboardStreamEvent);
+  };
+}
 
+const nativeUserMessage: SessionChatMessage = {
+  id: "native-user",
+  turnId: "turn-1",
+  role: "user",
+  content: "follow up",
+  status: "sent",
+  createdAt: "2026-05-14T00:00:00Z",
+};
+
+test("keeps a consumed submission in the chat until its native user message loads", () => {
+  seed(submission({ acceptedMessage: null }));
+
+  reconcileInboxSubmissionForDashboardEvent(turnStarted("message-1", "turn-1"));
+
+  expect(inboxSubmissionMessages([], optimisticInboxSubmissions("session-1"))).toMatchObject([
+    { content: "follow up", turnId: "turn-1", status: "pending" },
+  ]);
+  reconcileInboxSubmissions("session-1", [nativeUserMessage]);
   expect(optimisticInboxSubmissions("session-1")).toEqual([]);
 });
 
-test("removes a confirmed submission once the Inbox snapshot is terminal", () => {
+test("keeps a dispatched submission until its native user message loads", () => {
   seed(submission());
 
-  syncInboxSubmissions("session-1", [acceptedInboxMessage({ state: "dispatched" })]);
+  syncInboxSubmissions("session-1", [
+    acceptedInboxMessage({ state: "dispatched", turn_id: "turn-1" }),
+  ]);
+
+  expect(optimisticInboxSubmissions("session-1")).toMatchObject([{ dispatchedTurnId: "turn-1" }]);
+  reconcileInboxSubmissions("session-1", [nativeUserMessage]);
+  expect(optimisticInboxSubmissions("session-1")).toEqual([]);
+});
+
+test("removes a submission whose Inbox message ends without a Turn", () => {
+  seed(submission());
+
+  syncInboxSubmissions("session-1", [acceptedInboxMessage({ state: "cancelled" })]);
 
   expect(optimisticInboxSubmissions("session-1")).toEqual([]);
 });

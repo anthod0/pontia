@@ -34,6 +34,8 @@ export interface OptimisticInboxSubmission {
   showInChat: boolean;
   submittedAt: string;
   acceptedMessage: InboxMessageView | null;
+  /** Turn that consumed this submission; the message stays until that Turn's native user message loads. */
+  dispatchedTurnId: string | null;
 }
 
 interface SubmitInboxVariables {
@@ -57,7 +59,7 @@ export function createInboxQueries(device: DeviceRuntime) {
       (message) => message.state !== "pending" || !chatShownInboxMessageIds.has(message.message_id),
     );
   }
-  const consumedInboxMessageIds = new Set<string>();
+  const consumedInboxMessageIds = new Map<string, string | null>();
 
   const MAX_CONSUMED_INBOX_MESSAGE_IDS = 500;
 
@@ -146,6 +148,7 @@ export function createInboxQueries(device: DeviceRuntime) {
       showInChat,
       submittedAt: new Date().toISOString(),
       acceptedMessage: null,
+      dispatchedTurnId: null,
     };
     setOptimisticInboxSubmissions(submission.sessionId, (submissions) =>
       [...submissions, optimistic].slice(-50),
@@ -158,7 +161,9 @@ export function createInboxQueries(device: DeviceRuntime) {
     localId: string,
     message: InboxMessageView,
   ): void {
-    if (consumedInboxMessageIds.has(message.message_id) || message.branch_target_turn_id) {
+    const consumed = consumedInboxMessageIds.has(message.message_id);
+    const dispatchedTurnId = consumedInboxMessageIds.get(message.message_id) ?? message.turn_id;
+    if (message.branch_target_turn_id || (consumed && !dispatchedTurnId)) {
       failInboxSubmission(sessionId, localId);
       return;
     }
@@ -167,6 +172,7 @@ export function createInboxQueries(device: DeviceRuntime) {
         submission.localId === localId
           ? {
               ...submission,
+              dispatchedTurnId: consumed ? dispatchedTurnId : submission.dispatchedTurnId,
               input: message.input.summary.trim(),
               deliveryPolicy: message.delivery_policy,
               metadata: message.metadata,
@@ -190,21 +196,30 @@ export function createInboxQueries(device: DeviceRuntime) {
     if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return;
     const messageId = (metadata as Record<string, unknown>).inbox_message_id;
     if (typeof messageId === "string") {
-      consumeInboxSubmission(streamEvent.event.session_id, messageId);
+      consumeInboxSubmission(streamEvent.event.session_id, messageId, streamEvent.event.turn_id);
     }
   }
 
-  function consumeInboxSubmission(sessionId: string, messageId: string): void {
-    consumedInboxMessageIds.add(messageId);
+  function consumeInboxSubmission(
+    sessionId: string,
+    messageId: string,
+    turnId: string | null = null,
+  ): void {
+    consumedInboxMessageIds.set(messageId, turnId);
     if (consumedInboxMessageIds.size > MAX_CONSUMED_INBOX_MESSAGE_IDS) {
-      const oldestMessageId = consumedInboxMessageIds.values().next().value;
+      const oldestMessageId = consumedInboxMessageIds.keys().next().value;
       if (oldestMessageId) consumedInboxMessageIds.delete(oldestMessageId);
     }
     setOptimisticInboxSubmissions(sessionId, (submissions) =>
-      submissions.filter(
-        (submission) =>
-          submission.acceptedMessage?.message_id !== messageId && submission.localId !== messageId,
-      ),
+      submissions.flatMap((submission) => {
+        if (
+          submission.acceptedMessage?.message_id !== messageId &&
+          submission.localId !== messageId
+        )
+          return [submission];
+        const dispatchedTurnId = turnId ?? submission.acceptedMessage?.turn_id ?? null;
+        return dispatchedTurnId ? [{ ...submission, dispatchedTurnId }] : [];
+      }),
     );
   }
 
@@ -215,8 +230,13 @@ export function createInboxQueries(device: DeviceRuntime) {
         const messageId = submission.acceptedMessage?.message_id;
         const latest = messageId ? messagesById.get(messageId) : undefined;
         if (!latest) return [submission];
-        if (latest.state !== "pending" && latest.state !== "dispatching") return [];
-        return [{ ...submission, acceptedMessage: latest }];
+        if (latest.state === "pending" || latest.state === "dispatching")
+          return [{ ...submission, acceptedMessage: latest }];
+        const dispatchedTurnId =
+          latest.state === "dispatched" ? (submission.dispatchedTurnId ?? latest.turn_id) : null;
+        return dispatchedTurnId
+          ? [{ ...submission, acceptedMessage: latest, dispatchedTurnId }]
+          : [];
       }),
     );
   }
@@ -253,12 +273,16 @@ export function createInboxQueries(device: DeviceRuntime) {
     const identity = submission.acceptedMessage?.message_id ?? submission.localId;
     return {
       id: `optimistic-inbox:${identity}:user`,
-      turnId: submission.acceptedMessage?.turn_id ?? `optimistic-inbox:${identity}`,
+      turnId: submissionTurnId(submission) ?? `optimistic-inbox:${identity}`,
       role: "user",
       content: submission.input,
       status: "pending",
       createdAt: submission.acceptedMessage?.created_at ?? submission.submittedAt,
     };
+  }
+
+  function submissionTurnId(submission: OptimisticInboxSubmission): string | null {
+    return submission.dispatchedTurnId ?? submission.acceptedMessage?.turn_id ?? null;
   }
 
   function matchedSubmissionIds(
@@ -268,13 +292,11 @@ export function createInboxQueries(device: DeviceRuntime) {
     const matchedIds = new Set<string>();
     const matchedLoadedIndexes = new Set<number>();
     for (const submission of submissions) {
-      const accepted = submission.acceptedMessage;
-      if (!accepted || submission.branchTargetTurnId) continue;
+      const turnId = submissionTurnId(submission);
+      if (!turnId || submission.branchTargetTurnId) continue;
       const matchIndex = loadedMessages.findIndex(
         (message, index) =>
-          !matchedLoadedIndexes.has(index) &&
-          message.role === "user" &&
-          Boolean(accepted.turn_id && message.turnId === accepted.turn_id),
+          !matchedLoadedIndexes.has(index) && message.role === "user" && message.turnId === turnId,
       );
       if (matchIndex < 0) continue;
       matchedLoadedIndexes.add(matchIndex);

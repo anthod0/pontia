@@ -207,6 +207,7 @@ vi.mock("../../../src/stores/sessions", async (importOriginal) => {
             !["busy", "waiting_for_interaction"].includes(currentSession?.state ?? "")),
         submittedAt: new Date().toISOString(),
         acceptedMessage: null,
+        dispatchedTurnId: null,
       };
       queryClient.setQueryData<Record<string, OptimisticInboxSubmission[]>>(
         sessionKeys.optimisticInbox(),
