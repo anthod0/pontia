@@ -604,27 +604,31 @@ async fn run_init() -> Result<bool, String> {
         .interact()
         .map_err(|error| format!("failed to read the remote access selection: {error}"))?;
 
-    if !enable_remote {
+    let result = if !enable_remote {
         println!(
             "Remote access skipped. Run `pontia login` and `pontia remote enable` later to enable it."
         );
         open_dashboard("Local Dashboard", &outcome.local_dashboard_url);
-        return Ok(true);
-    }
-
-    match enable_remote_access(&vars).await {
-        Ok(url) => {
-            open_dashboard("Remote Dashboard", &url);
-            Ok(true)
+        Ok(true)
+    } else {
+        match enable_remote_access(&vars).await {
+            Ok(url) => {
+                open_dashboard("Remote Dashboard", &url);
+                Ok(true)
+            }
+            Err(error) => {
+                println!(
+                    "Remote access setup did not complete. Local initialization is complete; retry with `pontia login` and `pontia remote enable`."
+                );
+                open_dashboard("Local Dashboard", &outcome.local_dashboard_url);
+                Err(error)
+            }
         }
-        Err(error) => {
-            println!(
-                "Remote access setup did not complete. Local initialization is complete; retry with `pontia login` and `pontia remote enable`."
-            );
-            open_dashboard("Local Dashboard", &outcome.local_dashboard_url);
-            Err(error)
-        }
+    };
+    for next_steps in outcome.next_steps {
+        println!("\n{next_steps}");
     }
+    result
 }
 
 async fn enable_remote_access(vars: &HashMap<String, String>) -> Result<String, String> {
@@ -651,7 +655,7 @@ fn remote_dashboard_url(device_handle: &str) -> Result<String, String> {
 }
 
 fn open_dashboard(label: &str, url: &str) {
-    println!("{label}:\n\n{url}\n");
+    println!("{label}:\n\n{}\n", dialoguer::console::style(url).cyan());
     if open_browser(url).is_ok() {
         println!("✓ Dashboard opened. `pontia down` stops the local service.");
     } else {

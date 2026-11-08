@@ -102,6 +102,14 @@ impl PreparedClientIntegration for PreparedSetup {
     fn completion(&self) -> &'static str {
         "Configured Codex autostart and control connection"
     }
+    fn next_steps(&self) -> Option<String> {
+        self.shim.enabled.then(|| {
+            format!(
+                "Open a new terminal or run the following command to use the Codex launcher:\n  {}",
+                self.shim.activation_command()
+            )
+        })
+    }
     fn service_environment_paths(&self) -> Vec<(String, PathBuf)> {
         vec![("CODEX_HOME".into(), self.daemon.home.clone())]
     }

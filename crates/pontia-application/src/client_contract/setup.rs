@@ -51,6 +51,9 @@ pub trait PreparedClientIntegration {
         definitions: &dyn DefinitionStore,
     ) -> Result<(), String>;
     fn completion(&self) -> &'static str;
+    fn next_steps(&self) -> Option<String> {
+        None
+    }
     fn service_environment_paths(&self) -> Vec<(String, PathBuf)> {
         Vec::new()
     }

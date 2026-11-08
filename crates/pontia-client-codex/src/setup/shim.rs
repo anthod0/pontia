@@ -60,13 +60,24 @@ impl ShimSetup {
 
     pub(super) fn summary(&self) -> String {
         if self.enabled {
-            format!(
-                "Codex launcher: {} (new shells; existing aliases/functions may override it; clear command caches with hash -r or rehash)",
-                self.root.join("bin/codex").display()
-            )
+            format!("Codex launcher: {}", self.root.join("bin/codex").display())
         } else {
             "Codex launcher: disabled".into()
         }
+    }
+
+    pub(super) fn activation_command(&self) -> String {
+        let shells = self
+            .shells
+            .as_ref()
+            .expect("installed launcher has shell files");
+        let path = &shells.paths[0];
+        let command = if path.file_name().unwrap() == ".profile" {
+            "."
+        } else {
+            "source"
+        };
+        format!("{command} {}", quote(path.to_str().unwrap()))
     }
 
     pub(super) fn preflight(&self) -> Result<(), String> {

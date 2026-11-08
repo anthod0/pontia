@@ -16,6 +16,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitOutcome {
     pub local_dashboard_url: String,
+    pub next_steps: Vec<String>,
 }
 
 pub trait InitPlatform {
@@ -214,7 +215,7 @@ where
     platform.start_service(&config, config_changed, &environment_paths)?;
     writeln!(output, "✓ Started Pontia service").map_err(io_error)?;
     // Business settings belong to the running service, not the initialization CLI.
-    for (client, _) in installed {
+    for (client, _) in &installed {
         match platform.enable_client(&config, client.client_type(), client.client_key()) {
             Ok(()) => writeln!(output, "✓ Enabled {}", client.client_type()).map_err(io_error)?,
             Err(error) => install_errors.push(format!(
@@ -235,6 +236,10 @@ where
     }
     Ok(Some(InitOutcome {
         local_dashboard_url: local_config::dashboard_url(&config)?,
+        next_steps: installed
+            .iter()
+            .filter_map(|(_, setup)| setup.next_steps())
+            .collect(),
     }))
 }
 
