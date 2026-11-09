@@ -29,11 +29,16 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, broadcast};
 
 fn confirmed_unsubscribes() -> &'static Mutex<HashSet<String>> {
     static SESSIONS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
     SESSIONS.get_or_init(Default::default)
+}
+
+fn observation_changes() -> &'static broadcast::Sender<(PathBuf, String)> {
+    static CHANGES: OnceLock<broadcast::Sender<(PathBuf, String)>> = OnceLock::new();
+    CHANGES.get_or_init(|| broadcast::channel(1024).0)
 }
 
 pub use observer::CodexObserver;
@@ -66,6 +71,7 @@ impl CodexService {
             .bind(cwd.display().to_string())
             .bind(session_id)
             .execute(&self.pool).await?;
+        let _ = observation_changes().send((root, session_id.into()));
         Ok(())
     }
 
@@ -106,6 +112,7 @@ impl CodexService {
                 metadata: json!({}),
             })
             .await?;
+        let _ = observation_changes().send((runtime.root.clone(), session_id.into()));
         Ok(())
     }
 
@@ -127,11 +134,22 @@ impl CodexService {
         let profile = self.profiles().codex_binding(session_id).await?;
         let (thread, turns) = match binding {
             Some(binding) => {
+                if connection
+                    .unloaded_threads
+                    .lock()
+                    .await
+                    .contains_key(&binding.client_session_key)
+                    || self.observation_unloaded(session_id).await?
+                {
+                    return Err(Error::CapabilityUnavailable(
+                        "Codex thread was unloaded; explicitly resume the Session".into(),
+                    ));
+                }
                 if !matches!(
                     runtime.subscription(session_id).await,
                     Some(SubscriptionState::Available | SubscriptionState::AwaitingFirstInput)
                 ) {
-                    self.subscribe(session_id, &runtime, &binding.client_session_key)
+                    self.subscribe(session_id, &runtime, &binding.client_session_key, false)
                         .await?;
                 }
                 let snapshot = connection
@@ -216,6 +234,7 @@ impl CodexService {
                 .set_subscription(session_id, SubscriptionState::Available)
                 .await;
         }
+        let _ = observation_changes().send((runtime.root.clone(), session_id.into()));
         Ok(pontia_application::control::InputReceipt {
             native_turn_id: accepted
                 .get("turnId")
@@ -309,8 +328,16 @@ impl CodexService {
             .lock()
             .await
             .remove(&target.session_id);
-        self.subscribe(&target.session_id, &runtime, &binding.client_session_key)
-            .await
+        self.subscribe(
+            &target.session_id,
+            &runtime,
+            &binding.client_session_key,
+            true,
+        )
+        .await?;
+        sqlx::query("UPDATE sessions SET metadata=json_remove(metadata,'$.codex_observation_unloaded') WHERE session_id=?")
+            .bind(&target.session_id).execute(&self.pool).await?;
+        Ok(())
     }
 
     async fn confirm_unsubscribe(
@@ -337,6 +364,7 @@ impl CodexService {
             .lock()
             .await
             .insert(session.to_string());
+        let _ = observation_changes().send((runtime.root.clone(), session.into()));
         Ok(())
     }
 
@@ -344,8 +372,15 @@ impl CodexService {
         confirmed_unsubscribes().lock().await.contains(session)
     }
 
-    pub(super) async fn clear_confirmed_unsubscribe(session: &str) {
-        confirmed_unsubscribes().lock().await.remove(session);
+    async fn observation_unloaded(&self, session: &str) -> Result<bool> {
+        Ok(sqlx::query_scalar::<_, bool>("SELECT COALESCE(json_extract(metadata,'$.codex_observation_unloaded'),false) FROM sessions WHERE session_id=?")
+            .bind(session).fetch_one(&self.pool).await?)
+    }
+
+    async fn record_unloaded(&self, session: &str) -> Result<()> {
+        sqlx::query("UPDATE sessions SET metadata=json_set(metadata,'$.codex_observation_unloaded',json('true')) WHERE session_id=?")
+            .bind(session).execute(&self.pool).await?;
+        Ok(())
     }
 
     pub(super) async fn subscribe(
@@ -353,19 +388,38 @@ impl CodexService {
         session: &str,
         runtime: &CodexRuntime,
         thread_id: &str,
+        reload: bool,
     ) -> Result<()> {
         runtime
             .set_subscription(session, SubscriptionState::Reconciling)
             .await;
         let connection = runtime.connection().await?;
         let resumed = connection
-            .call(
-                "thread/resume",
+            .resume_thread(
                 self.resume_params(session, thread_id, &connection).await?,
+                reload,
             )
             .await;
         let (result, turns, subscription) = match resumed {
-            Ok(result) => {
+            Ok((result, boundary)) => {
+                // A loaded resume reply supersedes unloads received before that reply.
+                // Unloads after its boundary still invalidate this recovery.
+                if result["thread"]["id"] == thread_id
+                    && result["thread"]["canAcceptDirectInput"] == true
+                    && matches!(
+                        result["thread"]["status"]["type"].as_str(),
+                        Some("idle" | "active" | "systemError")
+                    )
+                {
+                    let _current = runtime.current_guard().await?;
+                    let mut unloaded = connection.unloaded_threads.lock().await;
+                    if unloaded
+                        .get(thread_id)
+                        .is_some_and(|sequence| *sequence <= boundary)
+                    {
+                        unloaded.remove(thread_id);
+                    }
+                }
                 let turns = self
                     .turns(&connection, thread_id)
                     .await?
@@ -399,14 +453,34 @@ impl CodexService {
                 "Codex resumed a different thread".into(),
             ));
         }
+        self.reconcile_turns(session, runtime, &turns).await?;
+        if connection
+            .unloaded_threads
+            .lock()
+            .await
+            .contains_key(thread_id)
+        {
+            runtime.clear_subscription(session).await;
+            return Err(Error::CapabilityUnavailable(
+                "Codex thread was unloaded during recovery".into(),
+            ));
+        }
         self.bind(session, runtime, &result["thread"]).await?;
         if subscription == SubscriptionState::Available {
             self.model_snapshot(session, runtime, &result).await?;
         }
-        self.reconcile_turns(session, runtime, &turns).await?;
         self.ready(session, runtime, &result["thread"]).await?;
+        let unloaded = connection.unloaded_threads.lock().await;
+        if unloaded.contains_key(thread_id) {
+            runtime.clear_subscription(session).await;
+            return Err(Error::CapabilityUnavailable(
+                "Codex thread was unloaded during recovery".into(),
+            ));
+        }
         runtime.set_subscription(session, subscription).await;
+        drop(unloaded);
         self.event_ingest.control_available(session);
+        let _ = observation_changes().send((runtime.root.clone(), session.into()));
         Ok(())
     }
 
@@ -417,7 +491,16 @@ impl CodexService {
     ) -> Result<()> {
         target.validate(&self.pool).await?;
         runtime.current_guard().await?;
-        if runtime.subscription(&target.session_id).await != Some(SubscriptionState::Available) {
+        let binding = self.binding(&target.session_id).await?;
+        if runtime.subscription(&target.session_id).await != Some(SubscriptionState::Available)
+            || runtime
+                .connection()
+                .await?
+                .unloaded_threads
+                .lock()
+                .await
+                .contains_key(&binding.client_session_key)
+        {
             return Err(Error::CapabilityUnavailable(
                 "Codex control awaits thread subscription and snapshot reconciliation".into(),
             ));
@@ -436,7 +519,7 @@ impl CodexService {
         ))
     }
 
-    async fn binding(&self, session: &str) -> Result<pontia_application::AgentBinding> {
+    pub(crate) async fn binding(&self, session: &str) -> Result<pontia_application::AgentBinding> {
         AgentBindingService::new(self.pool.clone())
             .binding_for_session(session)
             .await?

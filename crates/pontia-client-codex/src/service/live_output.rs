@@ -568,7 +568,15 @@ impl CodexLiveOutput {
         session: &str,
         thread: &str,
     ) -> Result<bool> {
-        if runtime.subscription(session).await != Some(SubscriptionState::Available) {
+        if runtime.subscription(session).await != Some(SubscriptionState::Available)
+            || runtime
+                .connection()
+                .await?
+                .unloaded_threads
+                .lock()
+                .await
+                .contains_key(thread)
+        {
             return Ok(false);
         }
         let state: Option<String> =

@@ -6,7 +6,10 @@ use protocol::Connection;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{Arc, OnceLock},
+    sync::{
+        Arc, OnceLock,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 use tokio::sync::Mutex;
 
@@ -31,8 +34,9 @@ pub struct CodexRuntime {
     pub root: PathBuf,
     pub socket_path: PathBuf,
     connection: Arc<Connection>,
-    operations: Mutex<HashMap<String, Arc<Mutex<()>>>>,
-    subscriptions: Mutex<HashMap<String, SubscriptionState>>,
+    operations: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
+    subscriptions: Mutex<HashMap<String, (SubscriptionState, u64)>>,
+    subscription_sequence: AtomicU64,
     pub(crate) profile_service: OnceLock<crate::profiles::CodexProfiles>,
 }
 
@@ -97,7 +101,14 @@ impl CodexRuntime {
         root: PathBuf,
         endpoint: daemon::Endpoint,
     ) -> Result<Arc<Self>> {
-        let connection = Connection::connect(&endpoint.socket).await?;
+        let previous = registry.get(&root);
+        let unloaded = previous
+            .map(|runtime| runtime.connection.unloaded_threads.clone())
+            .unwrap_or_default();
+        let operations = previous
+            .map(|runtime| runtime.operations.clone())
+            .unwrap_or_default();
+        let connection = Connection::connect_observing(&endpoint.socket, unloaded).await?;
         if connection.codex_home.canonicalize().ok().as_ref() != Some(&endpoint.home) {
             connection.close().await;
             return Err(protocol::protocol_error(
@@ -108,8 +119,9 @@ impl CodexRuntime {
             root: root.clone(),
             socket_path: endpoint.socket,
             connection,
-            operations: Mutex::new(HashMap::new()),
+            operations,
             subscriptions: Mutex::new(HashMap::new()),
+            subscription_sequence: AtomicU64::new(1),
             profile_service: OnceLock::new(),
         });
         if let Some(old) = registry.insert(root, runtime.clone()) {
@@ -159,10 +171,13 @@ impl CodexRuntime {
     }
 
     pub(crate) async fn set_subscription(&self, session: &str, state: SubscriptionState) {
-        self.subscriptions
-            .lock()
-            .await
-            .insert(session.into(), state);
+        self.subscriptions.lock().await.insert(
+            session.into(),
+            (
+                state,
+                self.subscription_sequence.fetch_add(1, Ordering::Relaxed),
+            ),
+        );
     }
 
     pub(crate) async fn clear_subscription(&self, session: &str) {
@@ -174,7 +189,19 @@ impl CodexRuntime {
     }
 
     pub(crate) async fn subscription(&self, session: &str) -> Option<SubscriptionState> {
-        self.subscriptions.lock().await.get(session).copied()
+        self.subscriptions
+            .lock()
+            .await
+            .get(session)
+            .map(|(state, _)| *state)
+    }
+
+    pub(crate) async fn subscription_revision(&self, session: &str) -> Option<u64> {
+        self.subscriptions
+            .lock()
+            .await
+            .get(session)
+            .map(|(_, revision)| *revision)
     }
 
     pub async fn shutdown(root: &Path) {

@@ -124,6 +124,17 @@ impl pontia_application::client_contract::ClientInteractions for CodexClient {
             }
             let _current = runtime.current_guard().await?;
             let connection = runtime.connection().await?;
+            let binding = service.binding(session).await?;
+            if connection
+                .unloaded_threads
+                .lock()
+                .await
+                .contains_key(&binding.client_session_key)
+            {
+                return Err(Error::CapabilityUnavailable(
+                    "Codex thread was unloaded".into(),
+                ));
+            }
             crate::service::interactions::resolve(&connection, session, interaction, option).await
         })
     }

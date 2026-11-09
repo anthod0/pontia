@@ -12,6 +12,7 @@ struct Fixture {
     session: String,
     methods: Arc<Mutex<Vec<String>>>,
     unsubscribe_status: Arc<Mutex<String>>,
+    before_thread_response: Arc<Mutex<Vec<Value>>>,
     rpc_errors: Arc<Mutex<HashMap<String, Value>>>,
     inputs: Arc<Mutex<Vec<Value>>>,
     turns: Arc<Mutex<Vec<Value>>>,
@@ -27,6 +28,8 @@ impl Fixture {
         let listener = UnixListener::bind(&socket).unwrap();
         let methods = Arc::new(Mutex::new(Vec::<String>::new()));
         let observed = methods.clone();
+        let before_thread_response = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let server_before_thread_response = before_thread_response.clone();
         let unsubscribe_status = Arc::new(Mutex::new("unsubscribed".to_string()));
         let server_unsubscribe_status = unsubscribe_status.clone();
         let rpc_errors = Arc::new(Mutex::new(HashMap::<String, Value>::new()));
@@ -83,6 +86,11 @@ impl Fixture {
                     }
                     "thread/start" | "thread/resume" => {
                         server_thread_requests.lock().await.push(request.clone());
+                        for notification in server_before_thread_response.lock().await.drain(..) {
+                            wire.send(Message::Text(notification.to_string().into()))
+                                .await
+                                .unwrap();
+                        }
                         json!({"thread":thread,"model":"model-one"})
                     }
                     "thread/read" => json!({"thread":thread}),
@@ -149,6 +157,7 @@ impl Fixture {
             session,
             methods,
             unsubscribe_status,
+            before_thread_response,
             rpc_errors,
             inputs,
             turns,
@@ -569,6 +578,10 @@ async fn exit_and_resume_use_subscription_postconditions_without_archive_calls()
             .state,
         "exited"
     );
+    fixture.before_thread_response.lock().await.push(json!({
+        "method":"thread/status/changed",
+        "params":{"threadId":"thread-one","status":{"type":"notLoaded"}}
+    }));
     fixture
         .app
         .session_commands()
@@ -631,5 +644,115 @@ async fn exit_and_resume_use_subscription_postconditions_without_archive_calls()
             .any(|method| matches!(method.as_str(), "thread/archive" | "thread/unarchive"))
     );
     drop(methods);
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn approval_received_before_binding_is_presented_after_first_input() {
+    let fixture = Fixture::new().await;
+    fixture.before_thread_response.lock().await.push(json!({
+        "id": "early-approval", "method": "item/commandExecution/requestApproval",
+        "params": {"threadId":"thread-one", "command":"echo approved"}
+    }));
+    let runtime = CodexRuntime::existing(fixture.root.path()).await.unwrap();
+    let connection = runtime.connection().await.unwrap();
+    let (shutdown, receiver) = tokio::sync::watch::channel(false);
+    let observer = tokio::spawn(
+        super::CodexObserver::new(&fixture.app, fixture.root.path().into()).run(receiver),
+    );
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while connection.events.receiver_count() == 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    fixture.dispatch_first_input().await;
+    let interactions = fixture.app.interactions();
+    let approval = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let pending = interactions
+                .list(
+                    &fixture.session,
+                    Some(pontia_application::interactions::InteractionState::Pending),
+                    10,
+                    None,
+                )
+                .await
+                .unwrap();
+            if let Some(interaction) = pending.interactions.into_iter().next() {
+                break interaction;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(approval.session_id, fixture.session);
+    fixture
+        .app
+        .session_commands()
+        .terminate_session(&fixture.session)
+        .await
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            if interactions
+                .list(
+                    &fixture.session,
+                    Some(pontia_application::interactions::InteractionState::Expired),
+                    10,
+                    None,
+                )
+                .await
+                .unwrap()
+                .interactions
+                .len()
+                == 1
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    shutdown.send(true).unwrap();
+    observer.await.unwrap();
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn creating_a_session_wakes_an_observer_with_no_active_sessions() {
+    let mut fixture = Fixture::new().await;
+    fixture
+        .app
+        .session_commands()
+        .terminate_session(&fixture.session)
+        .await
+        .unwrap();
+    let (shutdown, receiver) = tokio::sync::watch::channel(false);
+    let alias = fixture.root.path().join("state-alias");
+    std::os::unix::fs::symlink(fixture.root.path(), &alias).unwrap();
+    let observer = tokio::spawn(super::CodexObserver::new(&fixture.app, alias).run(receiver));
+    fixture.session = fixture.app.session_commands().create_session(
+        serde_json::from_value(json!({"client_type":"codex","workspace":fixture.root.path(),"initial_task":{"input":"hello"}})).unwrap()
+    ).await.unwrap().session_id().unwrap().to_owned();
+    let connection = CodexRuntime::existing(fixture.root.path())
+        .await
+        .unwrap()
+        .connection()
+        .await
+        .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while connection.events.receiver_count() == 0 || fixture.inputs.lock().await.is_empty() {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(fixture.inputs.lock().await[0]["input"][0]["text"], "hello");
+    shutdown.send(true).unwrap();
+    observer.await.unwrap();
     fixture.shutdown().await;
 }

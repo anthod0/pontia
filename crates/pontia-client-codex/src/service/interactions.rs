@@ -8,7 +8,6 @@ use serde_json::{Value, json};
 pub(crate) struct NativeInteraction {
     pub session: String,
     pub thread: String,
-    pub turn: Option<String>,
     pub request_id: Value,
     method: String,
     permissions: Value,
@@ -107,6 +106,15 @@ async fn register(
     let Some(session) = session else {
         return Ok(());
     };
+    if super::CodexService::has_confirmed_unsubscribe(&session).await
+        || connection
+            .unloaded_threads
+            .lock()
+            .await
+            .contains_key(&thread)
+    {
+        return Ok(());
+    }
     let turn_id =
         match &native_turn {
             Some(turn) => sqlx::query_scalar::<_, String>(
@@ -161,7 +169,6 @@ async fn register(
         NativeInteraction {
             session,
             thread,
-            turn: native_turn,
             request_id: value["id"].clone(),
             method: value["method"].as_str().unwrap().into(),
             permissions,

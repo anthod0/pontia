@@ -79,7 +79,12 @@ pub fn protocol_error(error: impl std::fmt::Display) -> Error {
 }
 
 enum Outgoing {
-    Message(Message),
+    Request {
+        id: u64,
+        method: String,
+        params: Value,
+        reload: bool,
+    },
     Reply {
         id: Value,
         result: Value,
@@ -88,6 +93,7 @@ enum Outgoing {
 }
 
 pub struct Connection {
+    pub(crate) unloaded_threads: Arc<Mutex<HashMap<String, u64>>>,
     outgoing: mpsc::Sender<Outgoing>,
     pub(crate) interactions:
         Mutex<HashMap<String, crate::service::interactions::NativeInteraction>>,
@@ -105,6 +111,13 @@ pub struct Connection {
 
 impl Connection {
     pub async fn connect(path: &Path) -> Result<Arc<Self>> {
+        Self::connect_observing(path, Arc::default()).await
+    }
+
+    pub(crate) async fn connect_observing(
+        path: &Path,
+        unloaded_threads: Arc<Mutex<HashMap<String, u64>>>,
+    ) -> Result<Arc<Self>> {
         let mut socket = open(path).await?;
         let identity = DaemonIdentity::capture(socket.get_ref())?;
         // Validate the peer's response before exposing a usable control connection.
@@ -174,6 +187,7 @@ impl Connection {
         let server_requests: ServerRequests = Arc::new(Mutex::new(HashMap::new()));
         let interaction_events = Arc::new(Mutex::new(std::collections::VecDeque::new()));
         let connection = Arc::new(Self {
+            unloaded_threads: unloaded_threads.clone(),
             outgoing,
             interactions: Mutex::new(HashMap::new()),
             task: Mutex::new(None),
@@ -193,7 +207,24 @@ impl Connection {
                     message = incoming.recv() => {
                         let Some(message) = message else { break };
                         match message {
-                            Outgoing::Message(message) => { if socket.send(message).await.is_err() { break; } }
+                            Outgoing::Request { id, method, params, reload } => {
+                                // Check at the socket boundary: an unload may have arrived while
+                                // a recovery RPC was queued behind other outgoing requests.
+                                if method == "thread/resume" {
+                                    let thread = params["threadId"].as_str().unwrap_or("");
+                                    let mut unloaded = unloaded_threads.lock().await;
+                                    if reload {
+                                        unloaded.remove(thread);
+                                    } else if unloaded.contains_key(thread) {
+                                        if let Some(reply) = pending.lock().await.remove(&id) {
+                                            let _ = reply.send(Err(Error::CapabilityUnavailable("Codex thread was unloaded".into())));
+                                        }
+                                        continue;
+                                    }
+                                }
+                                let message = Message::Text(json!({"id":id,"method":method,"params":params}).to_string().into());
+                                if socket.send(message).await.is_err() { break; }
+                            }
                             Outgoing::Reply { id, result, written } => {
                                 if server_requests.lock().await.remove(&id.to_string()).is_none() {
                                     let _ = written.send(Err(protocol_error("server request is no longer pending")));
@@ -212,6 +243,12 @@ impl Connection {
                                 let Ok(value) = serde_json::from_str::<Value>(&text) else { break };
                                 if value.get("method").is_some() {
                                     notification_sequence += 1;
+                                    if value["method"] == "thread/status/changed"
+                                        && value["params"]["status"]["type"] == "notLoaded"
+                                        && let Some(thread) = value["params"]["threadId"].as_str()
+                                    {
+                                        unloaded_threads.lock().await.insert(thread.into(), notification_sequence);
+                                    }
                                     if let Some(id) = value.get("id").filter(|id| id.is_string() || id.is_number()) {
                                         server_requests.lock().await.insert(id.to_string(), Notification { value: value.clone(), sequence: notification_sequence });
                                     } else {
@@ -267,16 +304,25 @@ impl Connection {
 
     /// The boundary is captured by the socket reader, before waking the RPC caller.
     pub(crate) async fn call_observed(&self, method: &str, params: Value) -> Result<(Value, u64)> {
+        self.request(method, params, false).await
+    }
+
+    pub(crate) async fn resume_thread(&self, params: Value, reload: bool) -> Result<(Value, u64)> {
+        self.request("thread/resume", params, reload).await
+    }
+
+    async fn request(&self, method: &str, params: Value, reload: bool) -> Result<(Value, u64)> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = oneshot::channel();
         self.pending.lock().await.insert(id, sender);
         let result = async {
             self.outgoing
-                .send(Outgoing::Message(Message::Text(
-                    json!({"id":id,"method":method,"params":params})
-                        .to_string()
-                        .into(),
-                )))
+                .send(Outgoing::Request {
+                    id,
+                    method: method.into(),
+                    params: params.clone(),
+                    reload,
+                })
                 .await
                 .map_err(protocol_error)?;
             tokio::time::timeout(Duration::from_secs(30), receiver)

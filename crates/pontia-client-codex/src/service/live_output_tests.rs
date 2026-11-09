@@ -13,6 +13,7 @@ use tokio::{
 };
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
+mod observation;
 mod reasoning;
 mod tool_calls;
 mod tool_execution;
@@ -25,6 +26,14 @@ enum Command {
 #[derive(Default)]
 struct ServerState {
     turns: Mutex<Vec<Value>>,
+    methods: Mutex<Vec<String>>,
+    rpc_errors: Mutex<std::collections::HashMap<String, Value>>,
+    snapshot_gate: Mutex<
+        Option<(
+            tokio::sync::oneshot::Sender<()>,
+            tokio::sync::oneshot::Receiver<()>,
+        )>,
+    >,
     connections: Mutex<Vec<mpsc::UnboundedSender<Command>>>,
     before_snapshot: Mutex<Vec<Value>>,
 }
@@ -85,6 +94,12 @@ impl Fixture {
                                 let Some(Ok(Message::Text(frame))) = frame else { break };
                                 let request: Value = serde_json::from_str(&frame).unwrap();
                                 let Some(id) = request.get("id") else { continue };
+                                let method = request["method"].as_str().unwrap();
+                                shared.methods.lock().await.push(method.into());
+                                if let Some(error) = shared.rpc_errors.lock().await.get(method).cloned() {
+                                    wire.send(Message::Text(json!({"id":id,"error":error}).to_string().into())).await.unwrap();
+                                    continue;
+                                }
                                 let thread = json!({"id":"thread", "cwd":codex_home,"canAcceptDirectInput":true,"status":{"type":"active"}});
                                 let result = match request["method"].as_str().unwrap() {
                                     "config/read" => json!({"config":{}}),
@@ -95,6 +110,10 @@ impl Fixture {
                                         let result = json!({"data":shared.turns.lock().await.clone(),"nextCursor":null});
                                         for notification in shared.before_snapshot.lock().await.drain(..) {
                                             wire.send(Message::Text(notification.to_string().into())).await.unwrap();
+                                        }
+                                        if let Some((entered, release)) = shared.snapshot_gate.lock().await.take() {
+                                            let _ = entered.send(());
+                                            let _ = release.await;
                                         }
                                         result
                                     }

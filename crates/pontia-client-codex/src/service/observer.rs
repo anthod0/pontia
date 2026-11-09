@@ -1,13 +1,24 @@
 use super::{CodexService, live_output::CodexLiveOutput};
 use crate::runtime::{CodexRuntime, SubscriptionState};
 use pontia_application::AgentBindingService;
-use pontia_core::{Error, Result};
+use pontia_core::{
+    Error, Result,
+    domain::{DomainEvent, EventType},
+};
 use serde_json::Value;
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{broadcast, watch};
 
+struct Observation {
+    threads: HashMap<String, String>,
+    output: CodexLiveOutput,
+    restored: HashMap<String, u64>,
+}
+
 pub struct CodexObserver {
     service: CodexService,
+    changes: broadcast::Receiver<(PathBuf, String)>,
+    session_events: broadcast::Receiver<DomainEvent>,
     root: PathBuf,
     live_output: pontia_application::LiveOutputService,
     interactions: pontia_application::interactions::InteractionService,
@@ -17,6 +28,8 @@ impl CodexObserver {
     pub fn new(state: &pontia_application::AppState, root: PathBuf) -> Self {
         Self {
             service: CodexService::new(state.event_ingest_service()),
+            changes: super::observation_changes().subscribe(),
+            session_events: state.agent_events().subscribe(),
             live_output: state.live_output(),
             interactions: state.interactions(),
             root,
@@ -35,27 +48,50 @@ impl CodexObserver {
         Ok(())
     }
 
-    pub async fn run(self, mut shutdown: watch::Receiver<bool>) {
+    pub async fn run(mut self, mut shutdown: watch::Receiver<bool>) {
+        self.root = match self.root.canonicalize() {
+            Ok(root) => root,
+            Err(error) => {
+                tracing::error!(%error, "Codex observation root is unavailable");
+                return;
+            }
+        };
         loop {
             if *shutdown.borrow() {
                 break;
             }
-            let active: i64 = sqlx::query_scalar(
+            let active = match sqlx::query_scalar::<_, i64>(
                 "SELECT COUNT(*) FROM sessions WHERE client_type='codex' AND state<>'exited'",
             )
             .fetch_one(&self.service.pool)
             .await
-            .unwrap_or(0);
+            {
+                Ok(active) => active,
+                Err(error) => {
+                    tracing::error!(%error, "Codex observation could not read Sessions");
+                    return;
+                }
+            };
             if active == 0 {
                 tokio::select! {
                     _ = shutdown.changed() => break,
-                    _ = tokio::time::sleep(Duration::from_secs(1)) => continue,
+                    change = self.changes.recv() => {
+                        match change {
+                            Ok((root, _)) if root == self.root => {},
+                            Err(broadcast::error::RecvError::Lagged(_)) => {},
+                            _ => continue,
+                        }
+                    }
                 }
+                continue;
             }
             match CodexRuntime::ensure(&self.root).await {
                 Ok(runtime) => {
                     if let Err(error) = self.observe(runtime.clone(), &mut shutdown).await {
-                        tracing::warn!(%error, "Codex observation interrupted; subscriptions will be reconciled after reconnect");
+                        tracing::warn!(%error, "Codex observation interrupted");
+                        if runtime.connection().await.is_ok() {
+                            return;
+                        }
                     }
                     runtime.clear_subscriptions().await;
                 }
@@ -68,8 +104,146 @@ impl CodexObserver {
         }
     }
 
-    async fn observe(
+    async fn observes(&self, runtime: &CodexRuntime, session: &str) -> Result<bool> {
+        Ok(!CodexService::has_confirmed_unsubscribe(session).await
+            && matches!(
+                runtime.subscription(session).await,
+                Some(
+                    SubscriptionState::Available
+                        | SubscriptionState::AwaitingFirstInput
+                        | SubscriptionState::Reconciling
+                )
+            )
+            && sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND state<>'exited')",
+            )
+            .bind(session)
+            .fetch_one(&self.service.pool)
+            .await?)
+    }
+
+    async fn reconcile_all(
         &self,
+        runtime: &CodexRuntime,
+        connection: &Arc<crate::runtime::protocol::Connection>,
+        observation: &mut Observation,
+    ) -> Result<()> {
+        let sessions: Vec<String> = sqlx::query_scalar("SELECT session_id FROM sessions WHERE client_type='codex' AND json_extract(metadata,'$.codex_control_root')=?")
+            .bind(runtime.root.display().to_string()).fetch_all(&self.service.pool).await?;
+        for session in sessions {
+            self.reconcile_session(runtime, connection, &session, true, observation)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn reconcile_session(
+        &self,
+        runtime: &CodexRuntime,
+        connection: &Arc<crate::runtime::protocol::Connection>,
+        session: &str,
+        recover: bool,
+        observation: &mut Observation,
+    ) -> Result<()> {
+        let _operation = runtime.lock_session(session).await;
+        let row: Option<(String, Option<String>)> = sqlx::query_as("SELECT s.state,a.client_session_key FROM sessions s LEFT JOIN agent_bindings a USING(session_id) WHERE s.session_id=? AND s.client_type='codex' AND json_extract(s.metadata,'$.codex_control_root')=?")
+            .bind(session).bind(runtime.root.display().to_string()).fetch_optional(&self.service.pool).await?;
+        let Some((state, thread)) = row else {
+            return Ok(());
+        };
+        if let Some(thread) = &thread {
+            observation.threads.insert(thread.clone(), session.into());
+        }
+        let unloaded = connection
+            .unloaded_threads
+            .lock()
+            .await
+            .contains_key(thread.as_deref().unwrap_or(""));
+        if unloaded {
+            self.service.record_unloaded(session).await?;
+        }
+        if state == "exited"
+            || CodexService::has_confirmed_unsubscribe(session).await
+            || runtime.subscription(session).await == Some(SubscriptionState::ExitPending)
+            || unloaded
+            || self.service.observation_unloaded(session).await?
+        {
+            super::interactions::expire_matching(&self.interactions, connection, |i| {
+                i.session == session
+            })
+            .await?;
+            observation.output.invalidate(session);
+            observation.restored.remove(session);
+            runtime.clear_subscription(session).await;
+            if recover
+                && state != "exited"
+                && let Some(thread) = thread
+            {
+                // Unloading prevents reload, but persisted history can still confirm a
+                // terminal fact lost before the unload notification.
+                let result: Result<()> = async {
+                    if let Some(turns) = self.service.turns(connection, &thread).await? {
+                        self.service
+                            .reconcile_turns(session, runtime, &turns)
+                            .await?;
+                    }
+                    Ok(())
+                }
+                .await;
+                if let Err(error) = result {
+                    tracing::warn!(%session, %error, "Codex unloaded thread history unavailable");
+                }
+            }
+            return Ok(());
+        }
+        let Some(thread) = thread else {
+            self.service.event_ingest.control_available(session);
+            return Ok(());
+        };
+        let result: Result<()> = async {
+            if recover
+                && !matches!(
+                    runtime.subscription(session).await,
+                    Some(SubscriptionState::Available | SubscriptionState::AwaitingFirstInput)
+                )
+            {
+                self.service
+                    .subscribe(session, runtime, &thread, false)
+                    .await?;
+            }
+            if runtime.subscription(session).await == Some(SubscriptionState::Available)
+                && observation.restored.get(session).copied()
+                    != runtime.subscription_revision(session).await
+            {
+                observation
+                    .output
+                    .restore(&self.service, runtime, session, &thread)
+                    .await?;
+                if let Some(revision) = runtime.subscription_revision(session).await {
+                    observation.restored.insert(session.into(), revision);
+                }
+            }
+            super::interactions::reconcile(
+                &self.interactions,
+                &self.service.event_ingest,
+                connection,
+            )
+            .await
+        }
+        .await;
+        if let Err(error) = result {
+            observation.output.invalidate(session);
+            observation.restored.remove(session);
+            if runtime.subscription(session).await == Some(SubscriptionState::Reconciling) {
+                runtime.clear_subscription(session).await;
+            }
+            tracing::warn!(%session, %error, "Codex observation recovery failed");
+        }
+        Ok(())
+    }
+
+    async fn observe(
+        &mut self,
         runtime: Arc<CodexRuntime>,
         shutdown: &mut watch::Receiver<bool>,
     ) -> Result<()> {
@@ -82,7 +256,7 @@ impl CodexObserver {
     }
 
     async fn observe_connection(
-        &self,
+        &mut self,
         runtime: Arc<CodexRuntime>,
         connection: &Arc<crate::runtime::protocol::Connection>,
         shutdown: &mut watch::Receiver<bool>,
@@ -91,52 +265,36 @@ impl CodexObserver {
             .profile_service
             .get_or_init(|| self.service.profiles());
         let mut events = connection.events.subscribe();
-        let mut threads = HashMap::<String, String>::new();
-        let mut output = CodexLiveOutput::new(self.live_output.clone());
-        let mut restored = std::collections::HashSet::new();
-        let mut interval = tokio::time::interval(Duration::from_secs(2));
+        let mut observation = Observation {
+            threads: HashMap::new(),
+            output: CodexLiveOutput::new(self.live_output.clone()),
+            restored: Default::default(),
+        };
+        self.reconcile_all(&runtime, connection, &mut observation)
+            .await?;
         loop {
             tokio::select! {
                 _ = shutdown.changed() => return Ok(()),
-                _ = interval.tick() => {
-                    super::interactions::reconcile(&self.interactions, &self.service.event_ingest, connection).await?;
-                    let unbound: Vec<String> = sqlx::query_scalar("SELECT s.session_id FROM sessions s LEFT JOIN agent_bindings a USING(session_id) WHERE s.client_type='codex' AND s.state<>'exited' AND a.session_id IS NULL")
-                        .fetch_all(&self.service.pool).await?;
-                    for session in unbound {
-                        self.service.event_ingest.control_available(&session);
-                    }
-                    let bindings: Vec<(String,String)> = sqlx::query_as("SELECT a.session_id,a.client_session_key FROM agent_bindings a JOIN sessions s USING(session_id) WHERE a.client_type='codex' AND s.state<>'exited'")
-                        .fetch_all(&self.service.pool).await?;
-                    threads.clear();
-                    for (session, thread) in bindings {
-                        threads.insert(thread.clone(), session.clone());
-                        if CodexService::has_confirmed_unsubscribe(&session).await { continue; }
-                        if runtime.subscription(&session).await == Some(SubscriptionState::ExitPending) { continue; }
-                        if runtime.subscription(&session).await == Some(SubscriptionState::Available) {
-                            if restored.insert(session.clone()) {
-                                let _operation = runtime.lock_session(&session).await;
-                                output.reconcile(&self.service, &runtime, &session, &thread).await;
-                            }
-                            continue;
+                change = self.changes.recv() => {
+                    match change {
+                        Ok((root, session)) if root == runtime.root => {
+                            self.reconcile_session(&runtime, connection, &session, false, &mut observation).await?;
                         }
-                        let _operation = runtime.lock_session(&session).await;
-                        if let Err(error) = self.service.subscribe(&session, &runtime, &thread).await {
-                            runtime.clear_subscription(&session).await;
-                            if !connection.is_connected() { return Err(error); }
-                            tracing::warn!(%session, %error, "Codex thread reconciliation failed");
-                        } else if runtime.subscription(&session).await == Some(SubscriptionState::Available) {
-                            output.reconcile(&self.service, &runtime, &session, &thread).await;
-                            restored.insert(session.clone());
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            self.reconcile_all(&runtime, connection, &mut observation).await?;
                         }
+                        _ => {},
                     }
-                    let exited: Vec<String> = sqlx::query_scalar("SELECT session_id FROM sessions WHERE client_type='codex' AND state='exited'")
-                        .fetch_all(&self.service.pool).await?;
-                    for session in exited {
-                        super::interactions::expire_matching(&self.interactions, connection, |i| i.session == session).await?;
-                        output.invalidate(&session);
-                        restored.remove(&session);
-                        runtime.clear_subscription(&session).await;
-                        CodexService::clear_confirmed_unsubscribe(&session).await;
+                }
+                event = self.session_events.recv() => {
+                    match event {
+                        Ok(event) if event.client_type == "codex" && matches!(event.event_type, EventType::SessionExited | EventType::SessionError) => {
+                            self.reconcile_session(&runtime, connection, &event.session_id, false, &mut observation).await?;
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            self.reconcile_all(&runtime, connection, &mut observation).await?;
+                        }
+                        _ => {},
                     }
                 }
                 event = events.recv() => {
@@ -144,37 +302,61 @@ impl CodexObserver {
                         Ok(event) => event,
                         Err(broadcast::error::RecvError::Lagged(_)) => {
                             super::interactions::reconcile(&self.interactions, &self.service.event_ingest, connection).await?;
-                            for session in threads.values() { output.invalidate(session); }
-                            restored.clear();
-                            runtime.clear_subscriptions().await;
+                            for session in observation.threads.values() { observation.output.invalidate(session); }
+                            observation.restored.clear();
+                            self.reconcile_all(&runtime, connection, &mut observation).await?;
                             continue;
                         }
                         Err(_) => return Err(Error::CapabilityUnavailable("Codex event stream closed".into())),
                     };
-                    super::interactions::observe_native(&self.interactions, &self.service.event_ingest, connection).await?;
                     if event["method"] == "pontia/disconnected" { return Err(Error::CapabilityUnavailable("Codex disconnected".into())); }
-                    super::interactions::expire_matching(&self.interactions, connection, |i| crate::runtime::protocol::invalidates_request(&event.value, &i.request_id, &i.thread, i.turn.as_deref())).await?;
-                    let Some(thread) = event.pointer("/params/threadId").and_then(Value::as_str) else { continue };
-                    let session = match threads.get(thread) {
+                    let result: Result<()> = async {
+                    super::interactions::observe_native(&self.interactions, &self.service.event_ingest, connection).await?;
+                    super::interactions::reconcile(&self.interactions, &self.service.event_ingest, connection).await?;
+                    let Some(thread) = event.pointer("/params/threadId").and_then(Value::as_str) else { return Ok(()) };
+                    let session = match observation.threads.get(thread) {
                         Some(session) => session.clone(),
                         None => match AgentBindingService::new(self.service.pool.clone()).binding_for_client_session("codex", thread).await? {
                             Some(binding) => binding.session_id,
-                            None => continue,
+                            None => return Ok(()),
                         },
                     };
-                    if !matches!(runtime.subscription(&session).await, Some(SubscriptionState::Available | SubscriptionState::AwaitingFirstInput | SubscriptionState::Reconciling)) { continue; }
+                    observation.threads.insert(thread.to_string(), session.clone());
+                    if connection.unloaded_threads.lock().await.contains_key(thread) {
+                        let _operation = runtime.lock_session(&session).await;
+                        // Explicit resume may have completed while this event waited for the lock.
+                        if !connection.unloaded_threads.lock().await.contains_key(thread) { return Ok(()); }
+                        self.service.record_unloaded(&session).await?;
+                        observation.output.invalidate(&session);
+                        observation.restored.remove(&session);
+                        runtime.clear_subscription(&session).await;
+                        if event["method"] == "thread/status/changed" && self.service.session_accepts_control(&session).await?
+                            && let Some(turns) = self.service.turns(connection, thread).await? {
+                            self.service.reconcile_turns(&session, &runtime, &turns).await?;
+                        }
+                        if event["method"] == "turn/completed" && self.service.session_accepts_control(&session).await? {
+                            let _current = runtime.current_guard().await?;
+                            self.service.turn_fact(&session, &event["params"]["turn"], "notification").await?;
+                        }
+                        return Ok(());
+                    }
+                    if !matches!(runtime.subscription(&session).await, Some(SubscriptionState::Available | SubscriptionState::AwaitingFirstInput | SubscriptionState::Reconciling)) { return Ok(()); }
                     match event["method"].as_str() {
                         Some("thread/settings/updated") => {
                             let _current = runtime.current_guard().await?;
                             self.service.model_fact(&session, &event["params"]["threadSettings"]).await?;
                         }
                         Some("turn/started") => {
+                            let _operation = runtime.lock_session(&session).await;
+                            if !self.observes(&runtime, &session).await? { return Ok(()); }
                             if let Some(turns) = self.service.turns(connection, thread).await? {
-                                let _operation = runtime.lock_session(&session).await;
                                 self.service.reconcile_turns(&session, &runtime, &turns).await?;
+                                if connection.unloaded_threads.lock().await.contains_key(thread) { return Ok(()); }
                                 runtime.set_subscription(&session, SubscriptionState::Available).await;
-                                output.reconcile(&self.service, &runtime, &session, thread).await;
-                                restored.insert(session.clone());
+                                observation.output.reconcile(&self.service, &runtime, &session, thread).await;
+                                if let Some(revision) = runtime.subscription_revision(&session).await {
+                                    observation.restored.insert(session.clone(), revision);
+                                }
                             }
                         }
                         Some("item/started" | "item/completed") if event["params"]["item"]["type"] == "contextCompaction" => {
@@ -197,7 +379,7 @@ impl CodexObserver {
                                 let _current = runtime.current_guard().await?;
                                 self.service.turn_fact(&session, &turn, "notification").await?;
                             }
-                            if let Err(error) = output.tool_call(&self.service, &runtime, &session, &event).await {
+                            if let Err(error) = observation.output.tool_call(&self.service, &runtime, &session, &event).await {
                                 tracing::warn!(%session, %error, "Codex live output tool call rejected");
                             }
                         }
@@ -205,17 +387,17 @@ impl CodexObserver {
                             self.service.compaction_error(&runtime, &session, &event["params"]).await?;
                         }
                         Some("item/commandExecution/outputDelta") => {
-                            if let Err(error) = output.tool_output(&self.service, &runtime, &session, &event).await {
+                            if let Err(error) = observation.output.tool_output(&self.service, &runtime, &session, &event).await {
                                 tracing::warn!(%session, %error, "Codex live tool output rejected");
                             }
                         }
                         Some("item/agentMessage/delta") => {
-                            if let Err(error) = output.delta(&self.service, &runtime, &session, &event).await {
+                            if let Err(error) = observation.output.delta(&self.service, &runtime, &session, &event).await {
                                 tracing::warn!(%session, %error, "Codex live output delta rejected");
                             }
                         }
                         Some("item/reasoning/summaryTextDelta") => {
-                            if let Err(error) = output.reasoning(&self.service, &runtime, &session, &event).await {
+                            if let Err(error) = observation.output.reasoning(&self.service, &runtime, &session, &event).await {
                                 tracing::warn!(%session, %error, "Codex live reasoning delta rejected");
                             }
                         }
@@ -224,12 +406,12 @@ impl CodexObserver {
                             let _current = runtime.current_guard().await?;
                             self.service.turn_fact(&session, &event["params"]["turn"], "notification").await?;
                         }
-                        Some("thread/status/changed") if event.pointer("/params/status/type").and_then(Value::as_str) == Some("notLoaded") => {
-                            output.invalidate(&session);
-                            restored.remove(&session);
-                            runtime.clear_subscription(&session).await;
-                        }
                         _ => {}
+                    }
+                    Ok(())
+                    }.await;
+                    if let Err(error) = result {
+                        tracing::warn!(%error, "Codex notification observation failed");
                     }
                 }
             }
