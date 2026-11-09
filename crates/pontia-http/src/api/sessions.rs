@@ -21,7 +21,7 @@ pub async fn session_creation_options(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(
-        json!({ "options": state.clients().creation_options().await? }),
+        json!({ "options": state.clients().creation_options(&state.db()).await? }),
     ))
 }
 

@@ -537,7 +537,7 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
     ({ device, params: [type, key] }) => {
       const client = findAgentClient(device, type, key);
       Object.assign(client, {
-        enabled: true,
+        enabled: false,
         has_record: false,
         config_overrides: {},
         created_at: null,
@@ -546,7 +546,20 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
       return { reset: true };
     },
   ],
-  ["GET", "/session-creation-options", ({ device }) => ({ options: device.data.creationOptions })],
+  [
+    "GET",
+    "/session-creation-options",
+    ({ device }) => ({
+      options: device.data.creationOptions.filter((option) =>
+        device.data.agentClients.some(
+          (client) =>
+            client.enabled &&
+            client.client_type === option.client_type &&
+            (client.client_type !== "acp" || client.client_key === option.metadata.acp_agent_id),
+        ),
+      ),
+    }),
+  ],
 
   [
     "GET",

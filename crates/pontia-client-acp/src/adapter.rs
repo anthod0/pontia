@@ -140,27 +140,17 @@ impl ClientSession for AcpAdapter {
     fn creation_options(&self) -> ClientOperation<'_, Option<Vec<SessionCreationOption>>> {
         Box::pin(async move {
             let mut options = Vec::new();
-            let mut entries = self.config.defaults.clone();
-            entries.extend(self.config.file.clone());
             let records = if let Some(pool) = self.pool.get() {
                 pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(pool.clone()).list().await?
             } else {
                 Vec::new()
             };
-            for row in records.iter().filter(|row| row.client_type == "acp") {
-                entries.entry(row.client_key.clone()).or_insert(json!({}));
-            }
-            for id in entries.keys() {
-                let record = records
-                    .iter()
-                    .find(|row| row.client_type == "acp" && row.client_key == *id);
-                if record.is_some_and(|row| !row.enabled) {
-                    continue;
-                }
-                let overrides = record
-                    .map(|row| row.overrides())
-                    .transpose()?
-                    .unwrap_or_else(|| json!({}));
+            for record in records
+                .iter()
+                .filter(|row| row.client_type == "acp" && row.enabled)
+            {
+                let id = &record.client_key;
+                let overrides = record.overrides()?;
                 let config: AcpAgentConfig =
                     serde_json::from_value(self.config.resolve(id, &overrides)?)?;
                 if config.name.is_none()

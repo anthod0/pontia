@@ -46,7 +46,7 @@
         <ClientIcon option={selectedOption} class="size-4 text-foreground" />
         <span class="min-w-0 truncate">{selectedOption?.name ?? 'Choose an agent'}</span>
       </Select.Trigger>
-      <Select.Content align="start">
+      <Select.Content side="top" align="start">
         {#each creationOptions as option (option.id)}
           <Select.Item value={option.id} label={option.name}>
             <ClientIcon {option} class="size-3.5 text-foreground" />
@@ -64,7 +64,7 @@
         <ClientIcon option={selectedOption} class="size-3.5 text-foreground" />
         <span class="min-w-0 truncate">{selectedOption?.name ?? 'Agent client'}</span>
       </Select.Trigger>
-      <Select.Content align="start">
+      <Select.Content side="top" align="start">
         {#each creationOptions as option (option.id)}
           <Select.Item value={option.id} label={option.name}>
             <ClientIcon {option} class="size-3.5 text-foreground" />

@@ -42,6 +42,81 @@ async fn get(app: &AppState, path: &str) -> Value {
     body["data"].clone()
 }
 
+#[tokio::test]
+async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
+    let root = tempfile::tempdir().unwrap();
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    run_migrations(&pool).await.unwrap();
+    let mut clients = ClientRegistry::default();
+    clients.register(pontia_client_pi::registration(None));
+    clients.register(pontia_client_codex::registration());
+    clients.register(pontia_client_claude::registration());
+    let acp = pontia_client_acp::registration_from_sources(BTreeMap::from([
+        ("file-peer".into(), json!({"command":"file-agent"})),
+        ("unconfigured-peer".into(), json!({"command":null})),
+    ]));
+    let service = acp.service.clone().unwrap();
+    clients.register(acp);
+    let app = AppState::builder(pool, root.path().into())
+        .clients(clients)
+        .external_api_token(Some("integration-token".into()))
+        .build();
+    let task = service.start(app.clone()).await.unwrap().unwrap();
+    let options_path = "/api/v1/session-creation-options";
+    assert_eq!(get(&app, options_path).await["options"], json!([]));
+
+    for (client, key, overrides, metadata) in [
+        ("pi", "default", json!({}), json!({})),
+        ("codex", "default", json!({}), json!({})),
+        ("claude-agent", "default", json!({}), json!({})),
+        ("acp", "grok", json!({}), json!({"acp_agent_id":"grok"})),
+        (
+            "acp",
+            "file-peer",
+            json!({}),
+            json!({"acp_agent_id":"file-peer"}),
+        ),
+        (
+            "acp",
+            "pi",
+            json!({"command":"custom-agent"}),
+            json!({"acp_agent_id":"pi"}),
+        ),
+    ] {
+        let path = format!("/api/v1/agent-clients/{client}/{key}");
+        let (status, body) = call(
+            &app,
+            "PATCH",
+            &path,
+            json!({"enabled":true,"config_overrides":overrides}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let options = get(&app, options_path).await;
+        assert_eq!(options["options"].as_array().unwrap().len(), 1);
+        assert_eq!(options["options"][0]["client_type"], client);
+        assert_eq!(options["options"][0]["metadata"], metadata);
+
+        let (status, body) = call(&app, "PATCH", &path, json!({"enabled":false})).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(get(&app, options_path).await["options"], json!([]));
+
+        let (status, body) = call(&app, "PATCH", &path, json!({"enabled":true})).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(get(&app, options_path).await, options);
+
+        let (status, body) = call(&app, "DELETE", &path, Value::Null).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(get(&app, options_path).await["options"], json!([]));
+    }
+    app.shutdown().notify();
+    tokio::time::timeout(Duration::from_secs(5), task)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+}
+
 async fn wait_turn(app: &AppState, session: &str, turn: &str, expected: &str) {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {

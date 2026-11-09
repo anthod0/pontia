@@ -2,7 +2,12 @@ use crate::client_contract::{
     AgentClientSpec, ClientData, ClientLauncher, ClientService, ClientServicePhase, ClientSession,
     InProcessClient, TimelineBoundaryBackend, TurnTimelineBackend,
 };
-use std::{collections::HashMap, sync::Arc};
+use pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository;
+use sqlx::SqlitePool;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 #[derive(Clone)]
 pub struct ClientRegistration {
@@ -106,16 +111,39 @@ impl ClientRegistry {
 
     pub async fn creation_options(
         &self,
+        pool: &SqlitePool,
     ) -> pontia_core::Result<Vec<crate::client_contract::SessionCreationOption>> {
+        let enabled = SqliteAgentClientRepository::new(pool.clone())
+            .list()
+            .await?
+            .into_iter()
+            .filter(|row| row.enabled)
+            .map(|row| (row.client_type, row.client_key))
+            .collect::<HashSet<_>>();
         let mut options = Vec::new();
         for registration in self.registrations() {
+            let client = registration.spec.client_type;
             if let Some(session) = &registration.session
                 && let Some(client_options) = session.creation_options().await?
             {
-                options.extend(client_options);
+                for option in client_options {
+                    let key = match &registration.configuration {
+                        Some(configuration) => configuration.key(&option.metadata)?,
+                        None => "default".into(),
+                    };
+                    if enabled.contains(&(client.into(), key)) {
+                        options.push(option);
+                    }
+                }
                 continue;
             }
-            let client = registration.spec.client_type;
+            let key = match &registration.configuration {
+                Some(configuration) => configuration.key(&serde_json::json!({}))?,
+                None => "default".into(),
+            };
+            if !enabled.contains(&(client.into(), key)) {
+                continue;
+            }
             let name = registration
                 .configuration
                 .as_ref()

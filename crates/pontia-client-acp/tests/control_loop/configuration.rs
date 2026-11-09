@@ -105,7 +105,7 @@ async fn database_only_peer_can_launch_and_deletion_does_not_rebind_its_live_ses
         .save("acp", "company", Some(true), Some(config.clone()))
         .await
         .unwrap();
-    let options = h.app.clients().creation_options().await.unwrap();
+    let options = h.app.clients().creation_options(&h.app.db()).await.unwrap();
     assert!(
         options
             .iter()
