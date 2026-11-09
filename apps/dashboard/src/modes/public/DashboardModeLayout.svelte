@@ -125,7 +125,7 @@
     {#if device}
       {#key device}<DeviceProvider {device}><TopBar /></DeviceProvider>{/key}
     {:else}
-      <header class="flex h-8 items-center px-3"><Sidebar.Trigger class="md:hidden" /></header>
+      <header class={['flex items-center px-3', handle ? 'h-8' : 'h-12']}><Sidebar.Trigger class="md:hidden" /></header>
     {/if}
   {/snippet}
   {#snippet children()}

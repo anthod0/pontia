@@ -10,6 +10,8 @@
   import * as Select from '$lib/components/ui/select/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
+  import { Badge } from '$lib/components/ui/badge/index.js'
+  import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon'
   import { navigate } from '$lib/navigation'
   import { workspaceTitle } from '../../components/chat/sessionMetadata'
 
@@ -100,16 +102,33 @@
 
 <svelte:window onpopstate={syncQuery} />
 
+{#snippet deviceBadge(name: string)}
+  <Badge variant="secondary" class="h-[18px] shrink-0 px-1.5 font-normal text-muted-foreground">
+    <DesktopIcon aria-hidden="true" />
+    <span>{name}</span>
+  </Badge>
+{/snippet}
+
 {#snippet workspaceSelector(disabled: boolean)}
   <Select.Root type="single" value={selectedKey} onValueChange={selectWorkspace} {disabled}>
     <Select.Trigger aria-label="Workspace" class="h-[34px] min-w-0 max-w-80 bg-background text-[13px]">
-      <span class="truncate">{selected ? `${workspaceTitle(selected.workspace)} · ${selected.name}` : 'Choose a workspace'}</span>
+      {#if selected}
+        <span class="flex min-w-0 flex-1 items-center gap-2.5">
+          <span class="min-w-0 truncate text-left">{workspaceTitle(selected.workspace)}</span>
+          {@render deviceBadge(selected.name)}
+        </span>
+      {:else}
+        <span class="truncate">Choose a workspace</span>
+      {/if}
     </Select.Trigger>
-    <Select.Content class="max-h-80 w-80">
+    <Select.Content align="start" class="max-h-80 w-auto min-w-72 max-w-80">
       {#each choices as choice (choice.key)}
         <Select.Item value={choice.key} label={`${workspaceTitle(choice.workspace)} · ${choice.name}`}>
-          <div class="min-w-0">
-            <span class="block truncate">{workspaceTitle(choice.workspace)} · {choice.name}</span>
+          <div class="min-w-0 flex-1">
+            <span class="flex min-w-0 items-center gap-2.5">
+              <span class="min-w-0 truncate">{workspaceTitle(choice.workspace)}</span>
+              {@render deviceBadge(choice.name)}
+            </span>
             <span class="block truncate font-mono text-xs text-muted-foreground">{choice.workspace.display_path}</span>
           </div>
         </Select.Item>
