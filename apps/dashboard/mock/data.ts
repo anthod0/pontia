@@ -101,6 +101,7 @@ function workspace(path: string, minutesAgo: number): WorkspaceView {
   const name = path.split("/").at(-1) ?? path;
   return {
     workspace_id: `wks_mock_${name}`,
+    availability: { status: "available", root_id: "home", path: path.slice("/home/dev/".length) },
     canonical_path: path,
     display_path: path.replace(/^\/home\/dev/, "~"),
     name,

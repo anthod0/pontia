@@ -1,3 +1,4 @@
+pub(crate) mod availability;
 mod browser;
 mod path_policy;
 mod persistence;

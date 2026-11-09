@@ -702,6 +702,7 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
       const timestamp = now();
       const workspace: WorkspaceView = {
         workspace_id: device.data.nextId("wks"),
+        availability: { status: "available", root_id: device.data.roots[0].root_id, path },
         canonical_path: canonicalPath,
         display_path: canonicalPath.replace(/^\/home\/dev/, "~"),
         name: (body.name as string | null) || canonicalPath.split("/").at(-1) || null,

@@ -46,6 +46,7 @@ function session(overrides: Partial<SessionView> = {}): SessionView {
 
 function workspace(overrides: Partial<WorkspaceView> = {}): WorkspaceView {
   return {
+    availability: { status: "available", root_id: "root-1", path: "pontia" },
     workspace_id: "workspace-1",
     canonical_path: "/home/cheny/projects/pontia",
     display_path: "~/projects/pontia",

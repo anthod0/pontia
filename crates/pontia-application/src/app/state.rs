@@ -227,6 +227,7 @@ impl AppState {
     }
     pub fn queries(&self) -> crate::ExternalQueryService {
         crate::ExternalQueryService::new(self.db())
+            .with_workspace_browser(self.workspace_browser())
             .with_clients(self.clients())
             .with_control(self.client_control())
     }

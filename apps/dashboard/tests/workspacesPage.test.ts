@@ -2,6 +2,7 @@ import { testDevice } from "./deviceFixture";
 import { render, screen, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
+import WorkspaceOnboarding from "../src/components/workspaces/WorkspaceOnboarding.svelte";
 import WorkspacesPage from "../src/pages/WorkspacesPage.svelte";
 const { queryClient } = testDevice;
 import type {
@@ -93,6 +94,7 @@ vi.mock("../src/api/client", async (importOriginal) => {
 });
 
 const workspace = (overrides: Partial<WorkspaceView> = {}): WorkspaceView => ({
+  availability: { status: "available", root_id: "root-1", path: "pontia" },
   workspace_id: "workspace-1",
   name: "pontia",
   canonical_path: "/repo/pontia",
@@ -141,6 +143,7 @@ test("lists active workspaces across roots from the browser sidebar", async () =
       workspace_id: "other",
       name: "Other project",
       canonical_path: "/elsewhere/project",
+      availability: { status: "unavailable", reason: "outside_root" },
     }),
     workspace({ workspace_id: "inactive", name: "Inactive project", state: "deleted" }),
   ]);
@@ -168,13 +171,8 @@ test("hides the Unavailable entry when every active workspace is reachable", asy
   render(WorkspacesPage);
 
   await screen.findByRole("list", { name: "Directories" });
-  await vi.waitFor(() =>
-    expect(mocks.listWorkspaceRootEntries).toHaveBeenCalledWith(
-      "root-1",
-      "pontia",
-      expect.anything(),
-    ),
-  );
+  expect(mocks.listWorkspaceRootEntries).toHaveBeenCalledTimes(1);
+  expect(mocks.listWorkspaceRootEntries).toHaveBeenCalledWith("root-1", "", expect.anything());
   expect(screen.queryByRole("button", { name: /^Unavailable/ })).not.toBeInTheDocument();
 });
 
@@ -255,6 +253,7 @@ test("lists outside-root workspaces under Unavailable in the sidebar and revokes
       name: "outside",
       canonical_path: "/repo/project-other/app",
       display_path: "/repo/project-other/app",
+      availability: { status: "unavailable", reason: "outside_root" },
     }),
   ]);
 
@@ -282,6 +281,7 @@ test("lists workspaces with missing directories under Unavailable", async () => 
       name: "missing-workspace",
       canonical_path: "/repo/project/missing-workspace",
       display_path: "/repo/project/missing-workspace",
+      availability: { status: "unavailable", reason: "missing_directory" },
     }),
   ]);
 
@@ -411,4 +411,58 @@ test("aborts initial settings workspace requests when the page unmounts", async 
 
   await vi.waitFor(() => expect(workspaceOptions?.signal?.aborted).toBe(true));
   await vi.waitFor(() => expect(rootsOptions?.signal?.aborted).toBe(true));
+});
+
+test("onboarding loads only the opened directory when many workspaces are registered", async () => {
+  mocks.workspaces.set(
+    Array.from({ length: 30 }, (_, index) =>
+      workspace({
+        workspace_id: `workspace-${index}`,
+        canonical_path: `/repo/project-${index}`,
+        availability: { status: "available", root_id: "root-1", path: `project-${index}` },
+      }),
+    ),
+  );
+  render(WorkspaceOnboarding, { canContinue: true, onContinue: vi.fn() });
+
+  await screen.findByRole("list", { name: "Directories" });
+  await vi.waitFor(() => expect(mocks.loadWorkspaces).toHaveBeenCalled());
+  expect(mocks.listWorkspaceRootEntries).toHaveBeenCalledTimes(1);
+  expect(mocks.listWorkspaceRootEntries).toHaveBeenCalledWith("root-1", "", expect.anything());
+});
+
+test("refresh updates availability without changing workspace paths or registration", async () => {
+  const user = userEvent.setup();
+  render(WorkspacesPage);
+  await user.click(await screen.findByRole("button", { name: /^Active\b/ }));
+  expect(screen.getByRole("button", { name: "Open workspace pontia" })).toBeEnabled();
+
+  mocks.workspaces.set([
+    workspace({ availability: { status: "unknown", reason: "check_failed" } }),
+  ]);
+  await user.click(screen.getByRole("button", { name: "Refresh" }));
+  await vi.waitFor(() =>
+    expect(screen.getByRole("button", { name: "Open workspace pontia" })).toBeDisabled(),
+  );
+  await user.click(await screen.findByRole("button", { name: /^Unavailable/ }));
+  expect(
+    within(screen.getByRole("list", { name: "Unavailable workspaces" })).getAllByRole("listitem"),
+  ).toHaveLength(1);
+
+  mocks.workspaces.set([workspace()]);
+  await user.click(screen.getByRole("button", { name: "Refresh" }));
+  expect(await screen.findByRole("button", { name: "Open workspace pontia" })).toBeEnabled();
+  expect(screen.queryByRole("button", { name: /^Unavailable/ })).not.toBeInTheDocument();
+  expect(mocks.deleteWorkspace).not.toHaveBeenCalled();
+});
+
+test("a failed directory request does not change workspace availability", async () => {
+  const user = userEvent.setup();
+  mocks.listWorkspaceRootEntries.mockRejectedValueOnce(new Error("Network error"));
+  render(WorkspacesPage);
+  await screen.findByRole("alert");
+
+  await user.click(screen.getByRole("button", { name: /^Active\b/ }));
+  expect(screen.getByRole("button", { name: "Open workspace pontia" })).toBeEnabled();
+  expect(screen.queryByRole("button", { name: /^Unavailable/ })).not.toBeInTheDocument();
 });

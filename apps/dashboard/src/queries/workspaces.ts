@@ -131,10 +131,6 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     return device.queryClient.fetchQuery(workspacesOptions());
   }
 
-  function fetchWorkspaceRootEntries(rootId: string, path = "") {
-    return device.queryClient.fetchQuery(workspaceRootEntriesOptions(rootId, path));
-  }
-
   function fetchWorkspaceFilePickerEntries(
     workspaceId: string,
     query = "",
@@ -228,7 +224,6 @@ export function createWorkspaceQueries(device: DeviceRuntime) {
     createWorkspaceGitStatusesStore,
     createWorkspaceRootEntriesQuery,
     fetchWorkspaces,
-    fetchWorkspaceRootEntries,
     fetchWorkspaceFilePickerEntries,
     invalidateWorkspaceQueries,
     createRegisterWorkspaceMutation,

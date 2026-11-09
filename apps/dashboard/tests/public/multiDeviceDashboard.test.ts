@@ -21,6 +21,7 @@ vi.mock("../../src/modes/public/remote-access", async () => ({
 }));
 
 const workspace = (id: string) => ({
+  availability: { status: "available", root_id: "projects", path: id },
   workspace_id: id,
   name: id,
   canonical_path: `/repo/${id}`,

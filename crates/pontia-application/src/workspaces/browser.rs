@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use nucleo_matcher::{
     Config, Matcher,
@@ -91,6 +94,12 @@ impl WorkspaceBrowserService {
 
         let mut entries = Vec::new();
         let mut warnings = Vec::new();
+        let workspace_paths: HashSet<PathBuf> = SqliteWorkspaceRepository::new(self.pool.clone())
+            .list_workspaces()
+            .await?
+            .into_iter()
+            .map(|workspace| PathBuf::from(workspace.canonical_path))
+            .collect();
         let mut dir_entries = std::fs::read_dir(&requested_path)
             .map_err(Error::Io)?
             .collect::<std::result::Result<Vec<_>, _>>()
@@ -124,9 +133,7 @@ impl WorkspaceBrowserService {
                 .strip_prefix(&root_path)
                 .map_err(|_| Error::Domain("directory escaped workspace root".to_string()))?;
             let path = path_to_api_relative(entry_relative);
-            let is_workspace = SqliteWorkspaceRepository::new(self.pool.clone())
-                .active_workspace_exists_at_path(&canonical.display().to_string())
-                .await?;
+            let is_workspace = workspace_paths.contains(&canonical);
             entries.push(WorkspaceDirectoryEntryView {
                 name,
                 path,
@@ -317,6 +324,7 @@ impl WorkspaceBrowserService {
         )
         .await?;
         ExternalQueryService::new(self.pool.clone())
+            .with_workspace_browser(self.config.clone())
             .get_workspace(&record.workspace_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("workspace {} not found", record.workspace_id)))
@@ -341,6 +349,7 @@ impl WorkspaceBrowserService {
             )));
         }
         ExternalQueryService::new(self.pool.clone())
+            .with_workspace_browser(self.config.clone())
             .get_workspace(workspace_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))
@@ -356,6 +365,7 @@ impl WorkspaceBrowserService {
             )));
         }
         ExternalQueryService::new(self.pool.clone())
+            .with_workspace_browser(self.config.clone())
             .get_workspace(workspace_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))

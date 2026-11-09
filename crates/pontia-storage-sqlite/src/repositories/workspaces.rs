@@ -134,14 +134,4 @@ impl SqliteWorkspaceRepository {
         .await?
         .rows_affected())
     }
-
-    pub async fn active_workspace_exists_at_path(&self, canonical_path: &str) -> Result<bool> {
-        Ok(sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM workspaces WHERE canonical_path = ? AND state != 'deleted'",
-        )
-        .bind(canonical_path)
-        .fetch_one(&self.pool)
-        .await?
-            > 0)
-    }
 }

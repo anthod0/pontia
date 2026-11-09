@@ -15,9 +15,15 @@ pub struct ExternalQueryService {
     clients: crate::clients::ClientRegistry,
     pool: SqlitePool,
     control: Option<crate::ClientControlService>,
+    workspace_browser: pontia_config::WorkspaceBrowserConfig,
 }
 
 impl ExternalQueryService {
+    pub fn with_workspace_browser(mut self, config: pontia_config::WorkspaceBrowserConfig) -> Self {
+        self.workspace_browser = config;
+        self
+    }
+
     pub fn with_control(mut self, control: crate::ClientControlService) -> Self {
         self.control = Some(control);
         self
@@ -33,6 +39,7 @@ impl ExternalQueryService {
             pool,
             control: None,
             clients: Default::default(),
+            workspace_browser: Default::default(),
         }
     }
 }

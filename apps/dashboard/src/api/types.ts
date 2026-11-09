@@ -320,7 +320,16 @@ export interface SessionOverviewView {
   };
 }
 
+export type WorkspaceAvailability =
+  | { status: "available"; root_id: string; path: string }
+  | {
+      status: "unavailable";
+      reason: "outside_root" | "missing_directory" | "not_directory" | "permission_denied";
+    }
+  | { status: "unknown"; reason: "root_unavailable" | "check_failed" };
+
 export interface WorkspaceView {
+  availability: WorkspaceAvailability;
   workspace_id: string;
   canonical_path: string;
   display_path: string;

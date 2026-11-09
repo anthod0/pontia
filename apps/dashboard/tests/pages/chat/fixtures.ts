@@ -429,6 +429,7 @@ export function timelineItemsFromTurns(turns: TurnView[]): TimelineItem[] {
 }
 
 export const workspace = (overrides: Partial<WorkspaceView> = {}): WorkspaceView => ({
+  availability: { status: "available", root_id: "root-1", path: "pontia" },
   workspace_id: "workspace-1",
   canonical_path: "/repo/pontia",
   display_path: "~/repo/pontia",

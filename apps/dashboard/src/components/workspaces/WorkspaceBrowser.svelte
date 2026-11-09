@@ -21,7 +21,7 @@
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Tooltip from '$lib/components/ui/tooltip/index.js'
   import type { Component } from 'svelte'
-  import type { WorkspaceDirectoryEntryView, WorkspaceRootView, WorkspaceView } from '../../api/types'
+  import type { WorkspaceAvailability, WorkspaceDirectoryEntryView, WorkspaceView } from '../../api/types'
   const device = useDeviceRuntime();
   const {
     createDeleteWorkspaceMutation,
@@ -30,7 +30,6 @@
     createWorkspaceRootEntriesQuery,
     createWorkspaceRootsQuery,
     createWorkspacesQuery,
-    fetchWorkspaceRootEntries,
   } = device.workspaceQueries;
 
   interface ToolbarButton {
@@ -46,11 +45,6 @@
   }
 
   type BrowserLocation = { view: 'active' } | { view: 'unavailable' } | { view: 'directory', rootId: string, path: string }
-
-  type WorkspaceAvailabilityProblem = {
-    workspace: WorkspaceView
-    reason: 'outside_root' | 'directory_unavailable'
-  }
 
   let rootId = $state('')
   let browsePath = $state('')
@@ -71,12 +65,9 @@
   let savingRename = $state(false)
   let showHiddenDirectories = $state(false)
   let view = $state<BrowserLocation['view']>('directory')
-  let workspaceAvailabilityProblems = $state<WorkspaceAvailabilityProblem[]>([])
-  let workspaceAvailabilityCheckKey = ''
-  let workspaceAvailabilityCheckGeneration = 0
-
   let workspaces = $derived(workspacesQuery.data ?? [])
   let activeWorkspaces = $derived(workspaces.filter((workspace) => workspace.state === 'active'))
+  let unavailableWorkspaces = $derived(activeWorkspaces.filter((workspace) => workspace.availability.status !== 'available'))
   let workspaceRoots = $derived(rootsQuery.data ?? [])
   let listing = $derived(entriesQuery.data ?? null)
   let selectedRoot = $derived(workspaceRoots.find((root) => root.root_id === rootId) ?? null)
@@ -91,21 +82,12 @@
   let parentPath = $derived(browsePath ? browsePath.split('/').filter(Boolean).slice(0, -1).join('/') : null)
   let browserLoadError = $derived(rootsQuery.error ?? workspacesQuery.error)
   let workspacesLoading = $derived(workspacesQuery.isPending)
-  let availabilityCheckKey = $derived(JSON.stringify({
-    roots: workspaceRoots.map((root) => [root.root_id, root.state, root.canonical_path]),
-    workspaces: activeWorkspaces.map((workspace) => [workspace.workspace_id, workspace.canonical_path]),
-  }))
   let actionsDisabled = $derived(workspacesLoading || registeringPath !== null || deletingWorkspaceId !== null)
   $effect(() => {
     if (!rootId && workspaceRoots.length) rootId = workspaceRoots[0].root_id
   })
   $effect(() => {
-    if (availabilityCheckKey === workspaceAvailabilityCheckKey) return
-    workspaceAvailabilityCheckKey = availabilityCheckKey
-    void refreshWorkspaceAvailability(activeWorkspaces, workspaceRoots)
-  })
-  $effect(() => {
-    if (view === 'unavailable' && !workspaceAvailabilityProblems.length) view = 'active'
+    if (view === 'unavailable' && !unavailableWorkspaces.length) view = 'active'
   })
   $effect(() => {
     if (listing && listing.root_id === rootId && listing.path !== browsePath) browsePath = listing.path
@@ -149,48 +131,24 @@
     navigate({ view: 'directory', rootId, path })
   }
 
-  function normalizeAbsolutePath(path: string): string {
-    const trimmed = path.trim()
-    return trimmed === '/' ? '/' : trimmed.replace(/\/+$/, '')
-  }
-
-  function rootContainingPath(path: string, roots: WorkspaceRootView[]): { root: WorkspaceRootView, relativePath: string } | null {
-    const normalizedPath = normalizeAbsolutePath(path)
-    const matches = roots
-      .filter((root) => root.state === 'available' && root.canonical_path?.trim())
-      .map((root) => ({ root, rootPath: normalizeAbsolutePath(root.canonical_path!) }))
-      .filter(({ rootPath }) => normalizedPath === rootPath || normalizedPath.startsWith(`${rootPath}/`))
-      .sort((left, right) => right.rootPath.length - left.rootPath.length)
-    const match = matches[0]
-    if (!match) return null
-    return { root: match.root, relativePath: normalizedPath === match.rootPath ? '' : normalizedPath.slice(match.rootPath.length + 1) }
-  }
-
   function workspaceLocation(workspace: WorkspaceView): BrowserLocation | null {
-    const match = rootContainingPath(workspace.canonical_path, workspaceRoots)
-    return match ? { view: 'directory', rootId: match.root.root_id, path: match.relativePath } : null
+    const availability = workspace.availability
+    return availability.status === 'available'
+      ? { view: 'directory', rootId: availability.root_id, path: availability.path }
+      : null
   }
 
-  async function refreshWorkspaceAvailability(workspaceViews: WorkspaceView[], roots: WorkspaceRootView[]): Promise<void> {
-    const generation = ++workspaceAvailabilityCheckGeneration
-    const problems: WorkspaceAvailabilityProblem[] = []
-    for (const workspace of workspaceViews) {
-      const match = rootContainingPath(workspace.canonical_path, roots)
-      if (!match) {
-        problems.push({ workspace, reason: 'outside_root' })
-        continue
-      }
-      try {
-        await fetchWorkspaceRootEntries(match.root.root_id, match.relativePath)
-      } catch (_) {
-        problems.push({ workspace, reason: 'directory_unavailable' })
-      }
+  function workspaceAvailabilityLabel(availability: WorkspaceAvailability): string {
+    if (availability.status === 'available') return 'Available'
+    const labels = {
+      outside_root: 'Outside root',
+      missing_directory: 'Missing directory',
+      not_directory: 'Not a directory',
+      permission_denied: 'Permission denied',
+      root_unavailable: 'Cannot check: root unavailable',
+      check_failed: 'Cannot check directory',
     }
-    if (generation === workspaceAvailabilityCheckGeneration) workspaceAvailabilityProblems = problems
-  }
-
-  function workspaceProblemReasonLabel(reason: WorkspaceAvailabilityProblem['reason']): string {
-    return reason === 'outside_root' ? 'Outside root' : 'Missing directory'
+    return labels[availability.reason]
   }
 
   function loadPath(path: string): void {
@@ -328,7 +286,7 @@
     <div class="flex min-h-56 flex-col">
       {@render loadError('Workspace browser unavailable', browserLoadError.message, () => void refreshAll())}
     </div>
-  {:else if rootsQuery.isPending}
+  {:else if workspacesLoading || rootsQuery.isPending}
     <div class="space-y-3 p-4" aria-label="Loading workspace browser">
       <Skeleton class="h-8 w-full" />
       <Skeleton class="h-72 w-full" />
@@ -420,7 +378,7 @@
           <span class="truncate">Active</span>
           <span class="ml-auto pl-2 text-xs font-normal text-muted-foreground">{workspacesLoading ? '…' : activeWorkspaces.length}</span>
         </button>
-        {#if workspaceAvailabilityProblems.length}
+        {#if unavailableWorkspaces.length}
           <button
             type="button"
             class="{sidebarItemClass} md:-mt-2"
@@ -429,7 +387,7 @@
           >
             <WarningCircleIcon class="size-4 shrink-0 text-warning" aria-hidden="true" />
             <span class="truncate">Unavailable</span>
-            <span class="ml-auto pl-2 text-xs font-normal text-muted-foreground">{workspaceAvailabilityProblems.length}</span>
+            <span class="ml-auto pl-2 text-xs font-normal text-muted-foreground">{unavailableWorkspaces.length}</span>
           </button>
         {/if}
         <div class="flex gap-1 md:flex-col">
@@ -467,7 +425,7 @@
                     type="button"
                     class="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left outline-none disabled:cursor-default"
                     aria-label="Open workspace {title}"
-                    title={location ? workspace.canonical_path : `${workspace.canonical_path} is outside configured roots`}
+                    title={location ? workspace.canonical_path : `${workspace.canonical_path}: ${workspaceAvailabilityLabel(workspace.availability)}`}
                     disabled={!location}
                     onclick={() => { if (location) navigate(location) }}
                   >
@@ -489,13 +447,12 @@
           {/if}
         {:else if view === 'unavailable'}
           <ul class="flex-1 overflow-auto p-1" aria-label="Unavailable workspaces">
-            {#each workspaceAvailabilityProblems as problem (problem.workspace.workspace_id)}
-              {@const workspace = problem.workspace}
+            {#each unavailableWorkspaces as workspace (workspace.workspace_id)}
               {@const title = workspace.name ?? workspace.display_path}
               <li class="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted">
                 <WarningCircleIcon class="size-4.5 shrink-0 text-warning" aria-hidden="true" />
                 <div class="flex min-h-8 min-w-0 flex-1 flex-col justify-center">
-                  <span class="truncate">{title} <span class="text-xs text-muted-foreground">· {workspaceProblemReasonLabel(problem.reason)}</span></span>
+                  <span class="truncate">{title} <span class="text-xs text-muted-foreground">· {workspaceAvailabilityLabel(workspace.availability)}</span></span>
                   <span class="truncate text-xs text-muted-foreground" title={workspace.canonical_path}>{workspace.canonical_path}</span>
                 </div>
                 <Button
