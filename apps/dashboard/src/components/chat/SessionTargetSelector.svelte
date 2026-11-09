@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Snippet } from "svelte"
+  import type { Snippet } from 'svelte'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import * as Select from '$lib/components/ui/select/index.js'
   import type { SessionCreationOption, WorkspaceView } from '../../api/types'
@@ -14,7 +14,7 @@
     selectedWorkspace: WorkspaceView | null
     creationOptions: SessionCreationOption[]
     fixedWorkspace?: boolean
-    workspaceSelector?: Snippet<[boolean]>
+    deviceSelector?: Snippet<[boolean]>
     disabled?: boolean
   }
 
@@ -26,7 +26,7 @@
     selectedWorkspace,
     creationOptions,
     fixedWorkspace = false,
-    workspaceSelector,
+    deviceSelector,
     disabled = false,
   }: Props = $props()
 
@@ -58,6 +58,7 @@
   </div>
 {:else}
   <div class="flex min-w-0 items-center gap-2">
+    {@render deviceSelector?.(disabled)}
     <Select.Root type="single" bind:value={creationOptionId} disabled={disabled || !creationOptions.length}>
       <Select.Trigger class="h-[34px] max-w-48 shrink-0 gap-1.5 bg-background px-3 text-[13px] font-medium text-heading hover:bg-muted data-[state=open]:border-primary data-[state=open]:bg-selected" aria-label="Agent client">
         <ClientIcon option={selectedOption} class="size-3.5 text-foreground" />
@@ -72,9 +73,6 @@
         {/each}
       </Select.Content>
     </Select.Root>
-    {#if workspaceSelector}
-      {@render workspaceSelector(disabled)}
-    {:else}
     <Select.Root type="single" bind:value={workspaceId} disabled={disabled || workspacesLoading || !workspaces.length}>
       <Select.Trigger class="h-[34px] max-w-48 shrink-0 gap-1.5 bg-background px-3 text-[13px] font-medium text-heading hover:bg-muted data-[state=open]:border-primary data-[state=open]:bg-selected" aria-label="Workspace" title={selectedWorkspace?.canonical_path}>
         <FolderIcon class="size-3.5 text-muted-foreground" aria-hidden="true" />
@@ -91,6 +89,5 @@
         {/each}
       </Select.Content>
     </Select.Root>
-    {/if}
   </div>
 {/if}

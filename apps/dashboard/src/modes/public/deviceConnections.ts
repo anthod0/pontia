@@ -5,6 +5,12 @@ import type { RemoteAccess } from "./remoteAccessLoader.svelte";
 type PublicDevice = Awaited<ReturnType<RemoteAccess["listPublicDevices"]>>[number];
 
 export type DeviceConnectionState = "connecting" | "online" | "offline" | "sign-in-required";
+export const deviceStateLabel: Record<DeviceConnectionState, string> = {
+  connecting: "Connecting",
+  online: "Online",
+  offline: "Offline",
+  "sign-in-required": "Sign in required",
+};
 export type ConnectedDevice = PublicDevice & {
   state: DeviceConnectionState;
   runtime: DeviceRuntime | null;

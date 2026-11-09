@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Snippet } from "svelte"
+  import type { Snippet } from 'svelte'
   import { useDeviceRuntime } from '../../device/context';
   import type { SessionCreationOption, WorkspaceView } from '../../api/types'
   import MessageComposer from './MessageComposer.svelte'
@@ -20,11 +20,10 @@
     selectedWorkspace: WorkspaceView | null
     creationOptions: SessionCreationOption[]
     fixedWorkspace?: boolean
+    deviceSelector?: Snippet<[boolean]>
     promptDisabled?: boolean
     autofocus?: boolean
     placement?: 'center' | 'bottom'
-    deviceHandle?: string
-    workspaceSelector?: Snippet<[boolean]>
     onStartChat: (message: string) => Promise<boolean>
   }
 
@@ -39,11 +38,10 @@
     selectedWorkspace,
     creationOptions,
     fixedWorkspace = false,
+    deviceSelector,
     promptDisabled = false,
     autofocus = false,
     placement = 'center',
-    workspaceSelector,
-    deviceHandle,
     onStartChat,
   }: Props = $props()
 
@@ -54,8 +52,7 @@
       run: () => {
         prompt = ''
         clearChatDraft()
-        if (workspaceSelector) void navigate('/', { device: deviceHandle, workspace: workspaceId }, { scope: '' })
-        else void navigate('/', { workspace: workspaceId })
+        void navigate('/', { workspace: workspaceId })
       },
     },
     { name: '/rename', description: 'Rename the current session', disabledReason: 'No current session', run: () => {} },
@@ -67,7 +64,7 @@
 
 <div data-testid="new-chat-panel" class:justify-center={placement === 'center'} class:justify-end={placement === 'bottom'} class={`flex min-h-0 shrink-0 flex-col ${placement === 'bottom' ? 'pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-[max(1.25rem,env(safe-area-inset-bottom))]' : ''}`}>
   <div class={`mx-auto w-full space-y-3 ${fixedWorkspace ? 'max-w-4xl' : 'max-w-[760px]'}`}>
-    <SessionTargetSelector bind:workspaceId bind:creationOptionId {workspaces} {workspacesLoading} {selectedWorkspace} {creationOptions} {fixedWorkspace} {workspaceSelector} disabled={creating} />
+    <SessionTargetSelector bind:workspaceId bind:creationOptionId {workspaces} {workspacesLoading} {selectedWorkspace} {creationOptions} {fixedWorkspace} {deviceSelector} disabled={creating} />
     <MessageComposer
       bind:value={prompt}
       draftId={`new:${workspaceId}`}

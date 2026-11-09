@@ -1,5 +1,5 @@
 import { File } from "node:buffer";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import MultiDeviceDashboardHarness from "../components/MultiDeviceDashboardHarness.svelte";
@@ -112,12 +112,6 @@ beforeEach(async () => {
   });
 });
 
-async function chooseWorkspace(name: string) {
-  await userEvent.click(await screen.findByLabelText("Workspace", { exact: true }));
-  await userEvent.click(await screen.findByText(name, { exact: true }));
-  document.body.style.pointerEvents = "";
-}
-
 const sidebar = () => within(document.querySelector<HTMLElement>('[data-sidebar="content"]')!);
 
 async function chooseSidebarDevice(name: string) {
@@ -159,7 +153,7 @@ test("sidebar device switcher scopes the session list, actions, filters, and hig
   document.body.style.pointerEvents = "";
 
   await chooseSidebarDevice("Travel Laptop");
-  expect(location.pathname).toBe("/office-mac/chat/same");
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
   const travelChat = await sidebar().findByRole("button", { name: "travel-laptop chat" });
   expect(travelChat).not.toHaveAttribute("data-active");
   await userEvent.click(travelChat);
@@ -174,43 +168,32 @@ test("sidebar follows the routed device after navigation", async () => {
   window.history.replaceState({}, "", "/office-mac/chat/same");
   const view = render(MultiDeviceDashboardHarness);
   await sidebar().findByRole("button", { name: "office-mac chat" });
-  await chooseSidebarDevice("Travel Laptop");
-  await sidebar().findByRole("button", { name: "travel-laptop chat" });
-  for (const [path, chat] of [
-    ["/travel-laptop/sessions", "travel-laptop chat"],
-    ["/office-mac/sessions", "office-mac chat"],
+  for (const [path, chat, name] of [
+    ["/travel-laptop/sessions", "travel-laptop chat", "Travel Laptop"],
+    ["/office-mac/sessions", "office-mac chat", "Office Mac"],
   ]) {
     window.history.pushState({}, "", path);
     window.dispatchEvent(new PopStateEvent("popstate"));
     await sidebar().findByRole("button", { name: chat });
+    expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent(name);
   }
   view.unmount();
 });
 
-test("root creation uses the selected device options and restores its draft and attachments", async () => {
-  await saveUploadRecord({
-    scope: "office-mac",
-    draft: "new:shared",
-    key: "root-file",
-    uploadId: "file",
-    name: "report.txt",
-    size: 3,
-    sha256: "a".repeat(64),
-  });
+test("root uses the last routed device, with the first listed device as fallback", async () => {
   render(MultiDeviceDashboardHarness);
-  await userEvent.type(await screen.findByRole("textbox"), "Office task");
-  await screen.findByRole("button", { name: "Remove attachment report.txt" });
-  await chooseWorkspace("shared · Travel Laptop");
-  expect(screen.getByRole("textbox")).toHaveTextContent("");
-  expect(
-    screen.queryByRole("button", { name: "Remove attachment report.txt" }),
-  ).not.toBeInTheDocument();
-  await userEvent.type(screen.getByRole("textbox"), "Travel task");
-  await chooseWorkspace("shared · Office Mac");
-  expect(screen.getByRole("textbox")).toHaveTextContent("Office task");
-  await screen.findByRole("button", { name: "Remove attachment report.txt" });
-  await chooseWorkspace("shared · Travel Laptop");
-  expect(screen.getByRole("textbox")).toHaveTextContent("Travel task");
+  expect(await screen.findByRole("button", { name: "Sidebar device" })).toHaveTextContent(
+    "Office Mac",
+  );
+  await sidebar().findByRole("button", { name: "office-mac chat" });
+  cleanup();
+  localStorage.setItem("pontia.lastDeviceHandle", "travel-laptop");
+  render(MultiDeviceDashboardHarness);
+  expect(await screen.findByRole("button", { name: "Sidebar device" })).toHaveTextContent(
+    "Travel Laptop",
+  );
+  await sidebar().findByRole("button", { name: "travel-laptop chat" });
+  await userEvent.type(await screen.findByRole("textbox"), "Travel task");
   await userEvent.click(screen.getByRole("button", { name: "Start session" }));
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/created"));
   const submissions = fixture.request.mock.calls.filter(
@@ -224,12 +207,52 @@ test("root creation uses the selected device options and restores its draft and 
     initial_task: { input: "Travel task" },
     metadata: { device_option: "travel-laptop" },
   });
+});
+
+test("root workspace selector lists only the active device workspaces", async () => {
+  render(MultiDeviceDashboardHarness);
+  await userEvent.click(await screen.findByLabelText("Workspace", { exact: true }));
+  const options = await screen.findAllByRole("option", { hidden: true });
+  expect(options.map((option) => option.textContent)).toEqual([
+    expect.stringContaining("shared"),
+    expect.stringContaining("other"),
+  ]);
+  expect(options.some((option) => option.textContent?.includes("Laptop"))).toBe(false);
+});
+
+test("choosing a sidebar device on the root opens that device", async () => {
+  render(MultiDeviceDashboardHarness);
+  await screen.findByRole("textbox");
+  await chooseSidebarDevice("Travel Laptop");
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
+  await userEvent.click(screen.getByRole("button", { name: /New Chat/ }));
+  await waitFor(() => expect(location.pathname).toBe("/"));
+  expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent("Travel Laptop");
   expect(fixture.connect).toHaveBeenCalledTimes(2);
 });
 
-test("root honors device-qualified workspace query parameters ahead of remembered selection", async () => {
-  localStorage.setItem("pontia.chat.lastDeviceWorkspace", JSON.stringify(["office-mac", "shared"]));
-  window.history.replaceState({}, "", "/?device=travel-laptop&workspace=other");
+test("the root composer device selector switches devices like the sidebar", async () => {
+  render(MultiDeviceDashboardHarness);
+  await screen.findByRole("textbox");
+  const select = screen.getByLabelText("Device", { exact: true });
+  expect(select).toHaveTextContent("Office Mac");
+  await userEvent.click(select);
+  const options = await screen.findAllByRole("option", { hidden: true });
+  await userEvent.click(options.find((option) => option.textContent?.includes("Travel Laptop"))!);
+  document.body.style.pointerEvents = "";
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
+  expect(screen.queryByLabelText("Device", { exact: true })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: /New Chat/ }));
+  await waitFor(() => expect(location.pathname).toBe("/"));
+  expect(await screen.findByLabelText("Device", { exact: true })).toHaveTextContent(
+    "Travel Laptop",
+  );
+  expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent("Travel Laptop");
+});
+
+test("root honors the workspace query parameter for the active device", async () => {
+  localStorage.setItem("pontia.lastDeviceHandle", "travel-laptop");
+  window.history.replaceState({}, "", "/?workspace=other");
   render(MultiDeviceDashboardHarness);
   await userEvent.type(await screen.findByRole("textbox"), "Use query workspace");
   await userEvent.click(await screen.findByRole("button", { name: "Start session" }));
@@ -237,78 +260,24 @@ test("root honors device-qualified workspace query parameters ahead of remembere
   const call = fixture.request.mock.calls.find(
     ([, path, init]) => path.endsWith("/sessions") && init.method === "POST",
   )!;
+  expect(call[0]).toBe("travel-laptop");
   expect(JSON.parse(call[2].body as string).workspace_id).toBe("other");
 });
 
-test("device new chat stays scoped, and New Chat opens the global root without reconnecting", async () => {
-  window.history.replaceState({}, "", "/office-mac");
-  render(MultiDeviceDashboardHarness);
-  await userEvent.click(await screen.findByLabelText("Workspace", { exact: true }));
-  await userEvent.click(await screen.findByText("other", { exact: true }));
-  document.body.style.pointerEvents = "";
-  await userEvent.click(screen.getByRole("button", { name: /New Chat/ }));
-  await waitFor(() => expect(location.pathname).toBe("/"));
-  await chooseWorkspace("shared · Travel Laptop");
-  expect(fixture.connect).toHaveBeenCalledTimes(2);
-});
-
-test("settings selection preserves section and permits an offline target and recovery", async () => {
+test("sidebar device selection keeps the settings section and permits an offline target", async () => {
   window.history.replaceState({}, "", "/office-mac/settings/clients");
   render(MultiDeviceDashboardHarness);
   await screen.findByText("Device page");
+  expect(screen.queryByLabelText("Settings device")).not.toBeInTheDocument();
   fixture.connectionFailures.get("travel-laptop")!(new Error("offline"));
-  await userEvent.click(screen.getByLabelText("Settings device"));
-  await userEvent.click(await screen.findByText("Travel Laptop · Offline", { exact: true }));
+  await chooseSidebarDevice("Travel Laptop");
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop/settings/clients"));
-  expect(screen.getByLabelText("Settings device")).toBeEnabled();
-  document.body.style.pointerEvents = "";
   await userEvent.click(await screen.findByRole("button", { name: "Try again" }));
   await screen.findByText("Device page");
   expect(fixture.signals.get("office-mac")).toHaveLength(1);
 });
 
-test("root settings uses the last device, with the first online device as fallback", async () => {
-  localStorage.setItem("pontia.lastDeviceHandle", "travel-laptop");
-  // Keep the root in its empty state so opening a workspace does not change last use.
-  const request = fixture.request.getMockImplementation()!;
-  fixture.request.mockImplementation((handle, path, init) =>
-    path.endsWith("/workspaces")
-      ? Promise.resolve(response({ workspaces: [] }))
-      : request(handle, path, init),
-  );
-  const view = render(MultiDeviceDashboardHarness);
-  await waitFor(() => expect(fixture.streams.size).toBe(2));
-  await userEvent.click(screen.getByRole("button", { name: "Settings" }));
-  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/settings/common"));
-  view.unmount();
-  localStorage.clear();
-  window.history.replaceState({}, "", "/");
-  render(MultiDeviceDashboardHarness);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Settings" })).toBeEnabled());
-  await userEvent.click(screen.getByRole("button", { name: "Settings" }));
-  await waitFor(() => expect(location.pathname).toBe("/office-mac/settings/common"));
-});
-
-test("without an online or remembered device settings stays disabled and offline devices can retry", async () => {
-  fixture.connect.mockRejectedValue(new Error("offline"));
-  render(MultiDeviceDashboardHarness);
-  await screen.findByRole("button", { name: "Retry Office Mac" });
-  expect(screen.getByRole("button", { name: "Settings" })).toBeDisabled();
-  fixture.connect.mockImplementation(async (handle) => fixture.target(handle));
-  await userEvent.click(screen.getByRole("button", { name: "Retry Office Mac" }));
-  await screen.findByRole("textbox");
-  expect(screen.getByRole("button", { name: "Settings" })).toBeEnabled();
-});
-
-test("session shortcuts on the root use the selected device", async () => {
-  render(MultiDeviceDashboardHarness);
-  await screen.findByRole("textbox");
-  await chooseWorkspace("shared · Travel Laptop");
-  await fireEvent.keyDown(window, { key: "1", code: "Digit1", altKey: true });
-  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/same"));
-});
-
-test("root automatic workspace selection does not replace the last settings device", async () => {
+test("root settings opens the active device", async () => {
   window.history.replaceState({}, "", "/travel-laptop/chat/same");
   render(MultiDeviceDashboardHarness);
   await screen.findByText("Device page");
@@ -316,6 +285,24 @@ test("root automatic workspace selection does not replace the last settings devi
   await screen.findByRole("textbox");
   await userEvent.click(screen.getByRole("button", { name: "Settings" }));
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop/settings/common"));
+});
+
+test("an offline active device on the root can retry", async () => {
+  fixture.connect.mockRejectedValue(new Error("offline"));
+  render(MultiDeviceDashboardHarness);
+  const retry = await screen.findByRole("button", { name: "Try again" });
+  fixture.connect.mockImplementation(async (handle) => fixture.target(handle));
+  await userEvent.click(retry);
+  await screen.findByRole("textbox");
+});
+
+test("session shortcuts on the root use the active device", async () => {
+  localStorage.setItem("pontia.lastDeviceHandle", "travel-laptop");
+  render(MultiDeviceDashboardHarness);
+  await screen.findByRole("textbox");
+  await sidebar().findByRole("button", { name: "travel-laptop chat" });
+  await fireEvent.keyDown(window, { key: "1", code: "Digit1", altKey: true });
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/same"));
 });
 
 test("an attachment still hashing survives device switches and uploads only to its owner", async () => {
@@ -350,11 +337,14 @@ test("an attachment still hashing survives device switches and uploads only to i
     target: { files: [file] },
   });
   await screen.findByRole("button", { name: "Remove attachment pending.txt" });
-  await chooseWorkspace("shared · Travel Laptop");
+  await chooseSidebarDevice("Travel Laptop");
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
+  await screen.findByRole("textbox");
   expect(
     screen.queryByRole("button", { name: "Remove attachment pending.txt" }),
   ).not.toBeInTheDocument();
-  await chooseWorkspace("shared · Office Mac");
+  await chooseSidebarDevice("Office Mac");
+  await waitFor(() => expect(location.pathname).toBe("/office-mac"));
   await screen.findByRole("button", { name: "Remove attachment pending.txt" });
   finishHash(new TextEncoder().encode("abc").buffer);
   await waitFor(() => expect(screen.getByRole("button", { name: "Start session" })).toBeEnabled());
@@ -382,20 +372,4 @@ test("root login expiry offers sign-in and cannot restart device connections", a
   await fireEvent.focus(window);
   expect(fixture.connect).not.toHaveBeenCalled();
   expect(fixture.remote.listPublicDevices).toHaveBeenCalledTimes(1);
-});
-
-test("returning to root restores the remembered device Workspace even with cached lists", async () => {
-  render(MultiDeviceDashboardHarness);
-  await screen.findByRole("textbox");
-  await chooseWorkspace("other · Travel Laptop");
-  await userEvent.click(screen.getByRole("button", { name: "Settings" }));
-  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/settings/common"));
-  await userEvent.click(screen.getByRole("button", { name: /New Chat/ }));
-  await userEvent.type(await screen.findByRole("textbox"), "Remember this workspace");
-  await userEvent.click(screen.getByRole("button", { name: "Start session" }));
-  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/created"));
-  const submission = fixture.request.mock.calls.find(
-    ([, path, init]) => path.endsWith("/sessions") && init.method === "POST",
-  )!;
-  expect(JSON.parse(submission[2].body as string).workspace_id).toBe("other");
 });

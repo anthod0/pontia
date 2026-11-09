@@ -39,7 +39,7 @@
       : null
     const workspaceId = currentSession?.workspace_id?.trim()
     if (newChatHandle) {
-      void navigate('/', { device: newChatHandle, workspace: workspaceId }, { scope: '' })
+      void navigate('/', { workspace: workspaceId }, { scope: '' })
       return
     }
     if (workspaceId) openChat('/', { workspace: workspaceId })

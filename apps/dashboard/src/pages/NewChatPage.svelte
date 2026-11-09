@@ -20,9 +20,9 @@
 
   let mounted = true
   onDestroy(() => { mounted = false })
-  export let createWorkspaceId = ''
-  export let workspaceSelector: Snippet<[boolean]> | undefined = undefined
+  export let deviceSelector: Snippet<[boolean]> | undefined = undefined
   export let routeScope: string | undefined = undefined
+  let createWorkspaceId = ''
   let creationOptionId = defaultClientType
   let creating = false
   let actionError: string | null = null
@@ -89,7 +89,6 @@
   }
 
   function readQueryWorkspaceId(): string | null {
-    if (workspaceSelector) return null
     return new URLSearchParams(window.location.search).get('workspace')
   }
 
@@ -210,8 +209,7 @@
       bind:workspaceId={createWorkspaceId}
       bind:creationOptionId
       {creating}
-      {workspaceSelector}
-      deviceHandle={routeScope?.slice(1)}
+      {deviceSelector}
       {canCreate}
       autofocus={autofocusComposer}
       {workspaces}

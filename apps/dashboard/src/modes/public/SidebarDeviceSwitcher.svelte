@@ -3,8 +3,7 @@
   import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
-  import { deviceStateLabel } from './deviceDirectory'
-  import type { ConnectedDevice } from './deviceConnections'
+  import { deviceStateLabel, type ConnectedDevice } from './deviceConnections'
 
   let { devices, selected, onSelect }: {
     devices: ConnectedDevice[]

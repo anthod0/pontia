@@ -1,5 +1,4 @@
 <script lang="ts">
-  import SettingsDeviceSelector from "$dashboard-mode/SettingsDeviceSelector.svelte"
   import { dashboardPath, dashboardRelativePath } from '$lib/dashboardRoutes'
   import { navigate } from '$lib/navigation'
 
@@ -32,7 +31,6 @@
 <svelte:window onpopstate={() => (pathname = window.location.pathname)} />
 
 <aside class="shrink-0 self-start md:sticky md:top-20 md:w-[190px]">
-  <SettingsDeviceSelector section={currentPath} />
   <a
     class="mb-5 block text-sm font-semibold text-heading"
     href={dashboardPath('/settings/common', pathname)}
