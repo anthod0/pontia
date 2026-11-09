@@ -26,9 +26,7 @@
 </script>
 
 <section class="space-y-6">
-  <h2 class="text-3xl font-semibold tracking-tight">Common settings</h2>
-
-  <div class="flex max-w-2xl flex-wrap items-center justify-between gap-4">
+  <div class="flex flex-wrap items-center justify-between gap-4">
     <div class="flex min-w-0 items-center gap-3">
       {#if profile}
         <Avatar.Root size="lg">

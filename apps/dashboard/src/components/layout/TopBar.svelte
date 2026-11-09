@@ -5,6 +5,8 @@
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
+  import SettingsSectionNav from '../settings/SettingsSectionNav.svelte'
+  import { isSettingsPath, isSettingsSectionActive, settingsSections } from '../settings/sections'
   import { snapshotSessionOverview } from "../../queries/sessionOverview";
   const device = useDeviceRuntime();
   const { sessionDetail, sessionDetailError, updateSessionTitle } = device.sessions;
@@ -41,6 +43,8 @@
     : null)
   const title = $derived(session ? sessionChatTitle(session) : '')
   const chatPath = $derived(isChatPath(currentPath))
+  const settingsPath = $derived(isSettingsPath(currentPath))
+  const settingsTitle = $derived(settingsSections.find((section) => isSettingsSectionActive(section, currentPath))?.label ?? 'Settings')
   const groupClass = $derived(['flex min-w-0 items-center gap-1', chatPath && 'pointer-events-auto h-8 rounded-lg bg-popover px-1 ring-1 ring-foreground/10', chatPath && !title && 'md:hidden'])
 
   function openRenameDialog(): void {
@@ -65,7 +69,15 @@
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
-<header class={['sticky z-10 flex items-center px-3 md:px-4', chatPath ? 'pointer-events-none h-12' : 'h-8 bg-surface']} style="top: var(--visual-viewport-top, 0px)">
+<header class={['sticky z-10 flex items-center', chatPath ? 'pointer-events-none h-12 px-3 md:px-4' : settingsPath ? 'h-12 bg-surface' : 'h-8 bg-surface px-3 md:px-4']} style="top: var(--visual-viewport-top, 0px)">
+  {#if settingsPath}
+    <!-- Phones switch sections here; wider screens list them in the sidebar and show the current one as the title. -->
+    <div class="flex min-w-0 items-center gap-2 px-3 md:hidden">
+      <Sidebar.Trigger />
+      <SettingsSectionNav />
+    </div>
+    <h1 class="hidden px-6 text-base font-semibold text-heading md:block">{settingsTitle}</h1>
+  {:else}
   <div class={groupClass}>
     <Sidebar.Trigger class="md:hidden" />
     {#if title}
@@ -82,6 +94,7 @@
       </h1>
     {/if}
   </div>
+  {/if}
 </header>
 
 <RenameSessionDialog

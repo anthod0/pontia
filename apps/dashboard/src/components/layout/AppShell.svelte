@@ -7,6 +7,7 @@
   import ChatShortcuts from '../chat/ChatShortcuts.svelte'
   import ConnectionNotice from './ConnectionNotice.svelte'
   import SettingsShell from '../settings/SettingsShell.svelte'
+  import { isSettingsPath } from '../settings/sections'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { installVisualViewportCssVars } from '$lib/visualViewport'
 
@@ -24,10 +25,6 @@
 
   function updatePathAfterNavigation(): void {
     setTimeout(updatePath, 0)
-  }
-
-  function isSettingsPath(path: string): boolean {
-    return path === '/settings' || path.startsWith('/settings/')
   }
 
   function isChatPath(path: string): boolean {

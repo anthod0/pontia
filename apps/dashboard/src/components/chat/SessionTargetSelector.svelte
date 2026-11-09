@@ -43,13 +43,13 @@
     <span>, use</span>
     <Select.Root type="single" bind:value={creationOptionId}>
       <Select.Trigger class="h-7 max-w-44 border-0 bg-transparent px-1.5 font-medium text-foreground hover:bg-muted" aria-label="Client">
-        <ClientIcon option={selectedOption} class="size-4 text-foreground" />
+        <ClientIcon clientType={selectedOption?.client_type} acpAgentId={selectedOption?.metadata.acp_agent_id} class="size-4 text-foreground" />
         <span class="min-w-0 truncate">{selectedOption?.name ?? 'Choose an agent'}</span>
       </Select.Trigger>
       <Select.Content side="top" align="start">
         {#each creationOptions as option (option.id)}
           <Select.Item value={option.id} label={option.name}>
-            <ClientIcon {option} class="size-3.5 text-foreground" />
+            <ClientIcon clientType={option.client_type} acpAgentId={option.metadata.acp_agent_id} class="size-3.5 text-foreground" />
             {option.name}
           </Select.Item>
         {/each}
@@ -61,13 +61,13 @@
     {@render deviceSelector?.(disabled)}
     <Select.Root type="single" bind:value={creationOptionId} disabled={disabled || !creationOptions.length}>
       <Select.Trigger class="h-[34px] max-w-48 shrink-0 gap-1.5 bg-background px-3 text-[13px] font-medium text-heading hover:bg-muted data-[state=open]:border-primary data-[state=open]:bg-selected" aria-label="Agent client">
-        <ClientIcon option={selectedOption} class="size-3.5 text-foreground" />
+        <ClientIcon clientType={selectedOption?.client_type} acpAgentId={selectedOption?.metadata.acp_agent_id} class="size-3.5 text-foreground" />
         <span class="min-w-0 truncate">{selectedOption?.name ?? 'Agent client'}</span>
       </Select.Trigger>
       <Select.Content side="top" align="start">
         {#each creationOptions as option (option.id)}
           <Select.Item value={option.id} label={option.name}>
-            <ClientIcon {option} class="size-3.5 text-foreground" />
+            <ClientIcon clientType={option.client_type} acpAgentId={option.metadata.acp_agent_id} class="size-3.5 text-foreground" />
             {option.name}
           </Select.Item>
         {/each}

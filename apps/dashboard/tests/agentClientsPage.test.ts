@@ -68,7 +68,7 @@ test("disable preserves the edited override draft and reset removes the entire s
   await user.clear(editor);
   await user.click(editor);
   await user.paste('{"name":"Unsaved"}');
-  await user.click(screen.getByRole("button", { name: "Disable" }));
+  await user.click(screen.getByRole("switch", { name: "Enabled" }));
   await waitFor(() =>
     expect(api.patchAgentClient).toHaveBeenCalledWith(
       expect.objectContaining({ client_key: "kimi" }),

@@ -49,8 +49,6 @@
 </script>
 
 <section class="space-y-6">
-  <h2 class="text-3xl font-semibold tracking-tight">Common settings</h2>
-
   {#if !$token.trim()}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />

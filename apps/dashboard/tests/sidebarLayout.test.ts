@@ -790,26 +790,68 @@ test("chat new shortcut on a session route preserves the current session workspa
   expect(mocks.navigate).toHaveBeenLastCalledWith("/", { workspace: "workspace-current" });
 });
 
-test("settings shell renders a persistent vertical side switcher around page content", () => {
+test("settings pages show section tabs in the top bar", () => {
   window.history.pushState({}, "", "/dashboard/settings/workspaces");
 
-  render(SettingsShellHost);
+  render(TopBarHost);
 
-  const nav = screen.getByRole("navigation", { name: /settings sections/i });
+  const nav = within(screen.getByRole("banner")).getByRole("navigation", {
+    name: /settings sections/i,
+  });
   expect(within(nav).getByRole("link", { name: /^common$/i })).toHaveAttribute(
     "href",
     "/dashboard/settings/common",
   );
   const activeLink = within(nav).getByRole("link", { name: /^workspaces$/i });
   expect(activeLink).toHaveAttribute("aria-current", "page");
-
-  const content = screen.getByText("Current settings page content");
-  expect(content).toBeInTheDocument();
 });
 
-test("settings shell section switcher uses router navigation instead of a document reload", async () => {
-  window.history.pushState({}, "", "/dashboard/settings/common");
+test("the sidebar lists settings sections instead of sessions on settings pages", async () => {
+  mocks.sessions.set([chatSession("session-recent", "idle", "2026-05-14T04:00:00Z")]);
+  window.history.pushState({}, "", "/dashboard/settings/clients");
+
+  render(AppSidebarHost);
+
+  const nav = screen.getByRole("list", { name: /settings sections/i });
+  expect(within(nav).getByRole("link", { name: "Agent Clients" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  expect(within(nav).getByRole("link", { name: "Workspaces" })).toHaveAttribute(
+    "href",
+    "/dashboard/settings/workspaces",
+  );
+  expect(screen.queryByRole("button", { name: /New Chat/ })).not.toBeInTheDocument();
+  expect(screen.queryByText("Recent Sessions")).not.toBeInTheDocument();
+
+  await fireEvent.click(within(nav).getByRole("link", { name: "Workspaces" }));
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/settings/workspaces");
+
+  await fireEvent.click(screen.getByRole("button", { name: /Back to chat/ }));
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/");
+});
+
+test("the top bar titles the current settings section", () => {
+  window.history.pushState({}, "", "/dashboard/settings/clients");
+
+  render(TopBarHost);
+
+  expect(
+    within(screen.getByRole("banner")).getByRole("heading", { name: "Agent Clients" }),
+  ).toBeInTheDocument();
+});
+
+test("settings shell renders the current settings page content", () => {
+  window.history.pushState({}, "", "/dashboard/settings/workspaces");
+
   render(SettingsShellHost);
+
+  expect(screen.getByText("Current settings page content")).toBeInTheDocument();
+});
+
+test("settings section tabs use router navigation instead of a document reload", async () => {
+  window.history.pushState({}, "", "/dashboard/settings/common");
+  render(TopBarHost);
 
   await fireEvent.click(screen.getByRole("link", { name: /^workspaces$/i }));
 

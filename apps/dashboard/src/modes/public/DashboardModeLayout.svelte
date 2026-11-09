@@ -108,10 +108,12 @@
     <AppSidebar onNewChat={() => void navigate('/', undefined, { scope: '' })}
       settingsDisabled={!activeHandle}
       onSettings={() => { if (activeHandle) void navigate('/settings/common', undefined, { scope: `/${activeHandle}` }) }}>
-      {#snippet groups()}
+      {#snippet deviceSwitcher()}
         {#if $devices.length > 1}
           <SidebarDeviceSwitcher devices={$devices} selected={active} onSelect={selectDevice} />
         {/if}
+      {/snippet}
+      {#snippet groups()}
         {#if active?.state === 'online' && active.runtime}
           {#key active.runtime}
             <DeviceProvider device={active.runtime}><DeviceSessionList handle={active.handle} /></DeviceProvider>

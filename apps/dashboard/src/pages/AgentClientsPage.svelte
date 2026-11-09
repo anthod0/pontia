@@ -1,13 +1,22 @@
 <script lang="ts">
   import { useDeviceRuntime } from '../device/context';
   import { onMount } from 'svelte'
+  import { toast } from 'svelte-sonner'
+  import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon'
+  import ArrowCounterClockwiseIcon from 'phosphor-svelte/lib/ArrowCounterClockwiseIcon'
+  import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import ProhibitIcon from 'phosphor-svelte/lib/ProhibitIcon'
+  import ClientIcon from '../components/chat/ClientIcon.svelte'
   import type { AgentClientView, JsonObject } from '../api/types'
   import { customClientEntries } from '../clients'
+  import { formatDateTime } from '../components/tasks/format'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
+  import { Switch } from '$lib/components/ui/switch/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
-  import * as Card from '$lib/components/ui/card/index.js'
+  import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js'
   const device = useDeviceRuntime();
@@ -17,7 +26,6 @@
   let selected = $state<AgentClientView | null>(null)
   let draft = $state('{}')
   let error = $state('')
-  let notice = $state('')
   let busy = $state(false)
   let loading = $state(true)
   let resetOpen = $state(false)
@@ -29,7 +37,14 @@
     custom = null
     draft = JSON.stringify(client.config_overrides, null, 2)
     error = ''
-    notice = ''
+  }
+
+  function startCustom(entry: (typeof customClientEntries)[number]) {
+    custom = entry
+    selected = null
+    customKey = ''
+    draft = '{}'
+    error = ''
   }
 
   async function refresh() {
@@ -48,7 +63,6 @@
   async function perform(action: () => Promise<void>) {
     busy = true
     error = ''
-    notice = ''
     try { await action() } catch (cause) { error = cause instanceof Error ? cause.message : String(cause) }
     finally { busy = false }
   }
@@ -65,7 +79,7 @@
       const saved = await patchAgentClient(target, { config_overrides: overrides as JsonObject })
       clients = await listAgentClients()
       select(saved)
-      notice = 'Database overrides saved. Effective configuration may still be overridden by the service environment.'
+      toast.success('Database overrides saved', { description: 'Effective configuration may still be overridden by the service environment.' })
     })
   }
 
@@ -74,7 +88,7 @@
       const saved = await patchAgentClient(client, { enabled: !client.enabled })
       clients = clients.map((entry) => entry.id === saved.id ? saved : entry)
       selected = saved
-      notice = 'Admission setting saved. Existing Sessions are unchanged.'
+      toast.success(saved.enabled ? 'Client enabled' : 'Client disabled', { description: 'Existing sessions are unchanged.' })
     })
   }
 
@@ -83,57 +97,103 @@
     return perform(async () => {
       await resetAgentClient(client)
       await refresh()
-      notice = 'Database settings removed. File and default configuration now apply.'
+      toast.success('Inherited settings restored', { description: 'File and default configuration now apply.' })
     })
   }
 </script>
 
-<div class="space-y-6">
-  <h2 class="text-3xl font-semibold tracking-tight">Agent Clients</h2>
-  {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
-  {#if notice}<p role="status" class="text-sm">{notice}</p>{/if}
-  <div class="flex flex-wrap gap-2">
-    <Button variant="outline" disabled={busy || loading} onclick={() => perform(refresh)}>Refresh</Button>
+<section class="space-y-6">
+  <div class="flex flex-wrap justify-end gap-2">
     {#each customClientEntries as entry}
-      <Button variant="outline" disabled={busy} onclick={() => { custom = entry; selected = null; customKey = ''; draft = '{}'; error = ''; notice = '' }}>{entry.label}</Button>
+      <Button disabled={busy} onclick={() => startCustom(entry)}><PlusIcon class="size-4" /> {entry.label}</Button>
     {/each}
+    <Button variant="outline" disabled={busy || loading} onclick={() => perform(refresh)}><ArrowsClockwiseIcon class="size-4" /> Refresh</Button>
   </div>
-  {#if loading}<p role="status">Loading clients…</p>{/if}
-  <div class="grid gap-3 sm:grid-cols-2">
-    {#each clients as client (client.id)}
-      <Button variant={selected?.id === client.id ? 'secondary' : 'outline'} class="h-auto justify-between gap-2 p-4" disabled={busy} onclick={() => select(client)}>
-        <span class="text-left"><span class="block">{client.name}</span><span class="block text-xs text-muted-foreground">{client.short_id}</span></span>
-        <span class="text-xs">{client.enabled ? 'Enabled' : 'Disabled'} · {client.has_record ? 'Database' : 'Inherited'}</span>
-      </Button>
-    {/each}
-  </div>
-  {#if selected || custom}
-    <Card.Root>
-      <Card.Header><Card.Title>{selected?.name ?? 'Custom client'}</Card.Title></Card.Header>
-      <Card.Content class="space-y-5">
-        {#if selected}
-          <p class="break-all text-xs text-muted-foreground">Integration: {selected.client_type} · CLI: {selected.short_id}<br />Unique ID: {selected.id}</p>
-          <div class="flex flex-wrap gap-2">
-            <Button variant="outline" disabled={busy} onclick={() => selected && toggle(selected)}>{selected.enabled ? 'Disable' : 'Enable'}</Button>
-            <Button variant="outline" disabled={busy || !selected.has_record} onclick={() => resetOpen = true}>Restore inheritance</Button>
-          </div>
-        {:else if custom}
-          <div class="space-y-2"><Label for="client-key">{custom.keyLabel}</Label><Input id="client-key" bind:value={customKey} disabled={busy} /><p class="text-xs text-muted-foreground">A stable identifier, not the display name. Configure the display name and launch source in the overrides below.</p></div>
-        {/if}
-        <form class="space-y-3" onsubmit={(event) => { event.preventDefault(); save() }}>
-          <Label for="client-overrides">Database overrides (JSON)</Label>
-          <Textarea id="client-overrides" bind:value={draft} rows={10} class="font-mono text-xs" disabled={busy} />
-          <p class="text-xs text-muted-foreground">Saving replaces the entire database override object. Omit a field to inherit; null explicitly clears it. Environment variables have highest priority.</p>
-          <Button type="submit" disabled={busy}>Save overrides</Button>
-        </form>
-        {#if selected}
-          <div class="space-y-2"><h2 class="text-sm font-medium">Effective configuration</h2><pre class="overflow-auto rounded-md bg-muted p-3 text-xs">{JSON.stringify(selected.effective_config, null, 2)}</pre></div>
-          <p class="text-xs text-muted-foreground">Database record: {selected.has_record ? 'present' : 'absent'} · Updated: {selected.updated_at ?? '—'}</p>
-        {/if}
-      </Card.Content>
-    </Card.Root>
+
+  {#if error}
+    <Alert.Root variant="destructive">
+      <WarningCircleIcon class="size-4" />
+      <Alert.Description>{error}</Alert.Description>
+    </Alert.Root>
   {/if}
-</div>
+
+  {#if loading}
+    <div role="status" aria-label="Loading clients" class="grid gap-4 lg:grid-cols-[11rem_minmax(0,1fr)]"><Skeleton class="h-64 w-full" /><Skeleton class="h-96 w-full" /></div>
+  {:else}
+    <div class="grid items-start gap-4 lg:grid-cols-[11rem_minmax(0,1fr)]">
+      <nav aria-label="Agent clients" class="space-y-0.5">
+        {#each clients as client (client.id)}
+          <button
+            type="button"
+            class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60 {selected?.id === client.id ? 'bg-muted font-medium text-heading' : client.enabled ? 'text-foreground' : 'text-muted-foreground'}"
+            aria-current={selected?.id === client.id ? 'true' : undefined}
+            disabled={busy}
+            onclick={() => select(client)}
+          >
+            <ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-4 {client.enabled ? 'text-foreground' : 'opacity-50'}" />
+            <span class="min-w-0 flex-1 truncate">{client.name}</span>
+            {#if !client.enabled}<ProhibitIcon class="size-3.5 shrink-0 text-muted-foreground" aria-label="Disabled" />{/if}
+          </button>
+        {:else}
+          <p class="px-3 py-2 text-sm text-muted-foreground">No agent clients found.</p>
+        {/each}
+      </nav>
+
+      {#if selected || custom}
+        <div class="min-w-0 space-y-6">
+          {#if selected}
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0 space-y-1">
+                <h3 class="truncate text-lg font-semibold text-heading">{selected.name}</h3>
+                <p class="text-xs text-muted-foreground">
+                  {selected.client_type} / {selected.short_id} · {selected.has_record ? `Database record, updated ${formatDateTime(selected.updated_at)}` : 'Inherited'}
+                </p>
+                <p class="break-all font-mono text-xs text-muted-foreground" title="Unique ID">{selected.id}</p>
+              </div>
+              <div class="flex shrink-0 items-center gap-2 pt-1">
+                <Label for="client-enabled" class="text-sm text-muted-foreground">Enabled</Label>
+                <Switch id="client-enabled" checked={selected.enabled} disabled={busy} onCheckedChange={() => selected && toggle(selected)} />
+              </div>
+            </div>
+          {:else if custom}
+            <div class="space-y-1">
+              <h3 class="text-lg font-semibold text-heading">New custom client</h3>
+              <p class="text-sm text-muted-foreground">Register an agent client that is not shipped with Pontia.</p>
+            </div>
+            <div class="max-w-md space-y-2">
+              <Label for="client-key">{custom.keyLabel}</Label>
+              <Input id="client-key" bind:value={customKey} disabled={busy} class="font-mono" />
+              <p class="text-xs text-muted-foreground">A stable identifier, not the display name. Set the display name and launch command in the overrides below.</p>
+            </div>
+          {/if}
+
+          <div class="grid gap-6 {selected ? 'xl:grid-cols-2' : ''}">
+            <form class="space-y-2" onsubmit={(event) => { event.preventDefault(); save() }}>
+              <Label for="client-overrides">Database overrides (JSON)</Label>
+              <Textarea id="client-overrides" bind:value={draft} rows={12} spellcheck={false} class="min-h-56 font-mono text-xs" disabled={busy} />
+              <p class="text-xs text-muted-foreground">Saving replaces the whole override object. Omit a field to inherit it; set it to null to clear it. Environment variables take priority.</p>
+              <div class="flex flex-wrap items-center gap-2 pt-2">
+                <Button type="submit" disabled={busy}>Save overrides</Button>
+                {#if selected?.has_record}
+                  <Button variant="ghost" disabled={busy} onclick={() => resetOpen = true}><ArrowCounterClockwiseIcon class="size-4" /> Restore inheritance</Button>
+                {/if}
+              </div>
+            </form>
+            {#if selected}
+              <div class="space-y-2">
+                <h4 class="text-sm leading-none font-medium">Effective configuration</h4>
+                <pre class="max-h-[22rem] min-h-56 overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-5">{JSON.stringify(selected.effective_config, null, 2)}</pre>
+                <p class="text-xs text-muted-foreground">Read only. Combines defaults, files, database overrides, and environment.</p>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {:else}
+        <p class="py-2 text-sm text-muted-foreground">Select an agent client to view its configuration.</p>
+      {/if}
+    </div>
+  {/if}
+</section>
 
 <AlertDialog.Root bind:open={resetOpen}>
   <AlertDialog.Content>
