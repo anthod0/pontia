@@ -37,7 +37,7 @@
     <Sidebar.Trigger class="shrink-0 group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:inset-0 group-data-[collapsible=icon]:m-auto group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:group-hover/brand:opacity-100 group-data-[collapsible=icon]:focus-visible:opacity-100" />
   </Sidebar.Header>
   <Sidebar.Separator class="mx-4 data-[orientation=horizontal]:w-auto group-data-[collapsible=icon]:mx-2" />
-  <Sidebar.Content class={groups ? "overflow-y-auto" : "overflow-hidden"}>
+  <Sidebar.Content class="overflow-hidden">
     <Sidebar.Group>
       <Sidebar.GroupContent>
         <Sidebar.Menu>

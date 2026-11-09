@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import PublicDashboardHarness from "../components/PublicDashboardHarness.svelte";
 import PublicDashboardRouteHarness from "../components/PublicDashboardRouteHarness.svelte";
@@ -21,10 +22,11 @@ test("retries a failed device list request", async () => {
   vi.mocked(fixture.remote.listPublicDevices).mockRejectedValueOnce(new Error("503"));
   render(PublicDashboardHarness, { props: { handle: "" } });
   await fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
-  const links = await screen.findAllByRole("link", { name: /^All sessions on/ });
-  expect(links.map((link) => link.getAttribute("href"))).toEqual([
-    "/office-mac/sessions",
-    "/travel-laptop/sessions",
+  await userEvent.click(await screen.findByRole("button", { name: "Sidebar device" }));
+  const devices = await screen.findAllByRole("menuitemradio", { hidden: true });
+  expect(devices.map((device) => device.textContent)).toEqual([
+    expect.stringContaining("Office Mac"),
+    expect.stringContaining("Travel Laptop"),
   ]);
 });
 
@@ -41,7 +43,7 @@ test("cross-device navigation preserves the AppShell and both device connections
   expect(firstSignals.every((signal) => !signal.aborted)).toBe(true);
   expect(fixture.connect).toHaveBeenCalledTimes(2);
   await view.rerender({ handle: "" });
-  await screen.findAllByRole("link", { name: /^All sessions on/ });
+  await screen.findByRole("button", { name: "Sidebar device" });
   expect(document.querySelector('[data-slot="sidebar-wrapper"]')).toBe(shell);
   expect(firstSignals.every((signal) => !signal.aborted)).toBe(true);
 });

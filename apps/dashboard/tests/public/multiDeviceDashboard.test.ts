@@ -118,21 +118,26 @@ async function chooseWorkspace(name: string) {
   document.body.style.pointerEvents = "";
 }
 
-test("sidebar actions, filters, and same-ID highlighting stay with their device across SPA navigation", async () => {
+const sidebar = () => within(document.querySelector<HTMLElement>('[data-sidebar="content"]')!);
+
+async function chooseSidebarDevice(name: string) {
+  await userEvent.click(screen.getByRole("button", { name: "Sidebar device" }));
+  const items = await screen.findAllByRole("menuitemradio", { hidden: true });
+  await userEvent.click(items.find((item) => item.textContent?.includes(name))!);
+  document.body.style.pointerEvents = "";
+}
+
+test("sidebar device switcher scopes the session list, actions, filters, and highlighting", async () => {
   window.history.replaceState({}, "", "/office-mac/chat/same");
   render(MultiDeviceDashboardHarness);
-  const office = await screen.findByRole("region", { name: "Office Mac sessions" });
-  const travel = await screen.findByRole("region", { name: "Travel Laptop sessions" });
-  const officeChat = await within(office).findByRole("button", { name: "office-mac chat" });
-  const travelChat = await within(travel).findByRole("button", { name: "travel-laptop chat" });
+  expect(await screen.findByRole("button", { name: "Sidebar device" })).toHaveTextContent(
+    "Office Mac",
+  );
+  const officeChat = await sidebar().findByRole("button", { name: "office-mac chat" });
   expect(officeChat).toHaveAttribute("data-active", "true");
-  expect(travelChat).not.toHaveAttribute("data-active");
-  await userEvent.click(travelChat);
-  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/same"));
-  expect(travelChat).toHaveAttribute("data-active", "true");
-  expect(officeChat).not.toHaveAttribute("data-active");
+  expect(sidebar().queryByRole("button", { name: "travel-laptop chat" })).not.toBeInTheDocument();
   await userEvent.click(
-    within(office).getByRole("button", { name: "Open session actions for office-mac chat" }),
+    screen.getByRole("button", { name: "Open session actions for office-mac chat" }),
   );
   await userEvent.click(await screen.findByText("Pin", { exact: true }));
   await waitFor(() =>
@@ -145,19 +150,41 @@ test("sidebar actions, filters, and same-ID highlighting stay with their device 
   );
   document.body.style.pointerEvents = "";
   await userEvent.click(
-    within(office).getByRole("button", { name: "Filter recent sessions by workspace" }),
+    screen.getByRole("button", { name: "Filter recent sessions by workspace" }),
   );
   await userEvent.click(await screen.findByText("other", { exact: true }));
   await waitFor(() =>
-    expect(
-      within(office).queryByRole("button", { name: "office-mac chat" }),
-    ).not.toBeInTheDocument(),
+    expect(sidebar().queryByRole("button", { name: "office-mac chat" })).not.toBeInTheDocument(),
   );
-  expect(within(travel).getByRole("button", { name: "travel-laptop chat" })).toBeInTheDocument();
   document.body.style.pointerEvents = "";
-  await userEvent.click(within(office).getByRole("link", { name: "All sessions on Office Mac" }));
-  await waitFor(() => expect(location.pathname).toBe("/office-mac/sessions"));
+
+  await chooseSidebarDevice("Travel Laptop");
+  expect(location.pathname).toBe("/office-mac/chat/same");
+  const travelChat = await sidebar().findByRole("button", { name: "travel-laptop chat" });
+  expect(travelChat).not.toHaveAttribute("data-active");
+  await userEvent.click(travelChat);
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/same"));
+  expect(travelChat).toHaveAttribute("data-active", "true");
+  await userEvent.click(screen.getByRole("button", { name: "Open all sessions" }));
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/sessions"));
   expect(fixture.connect).toHaveBeenCalledTimes(2);
+});
+
+test("sidebar follows the routed device after navigation", async () => {
+  window.history.replaceState({}, "", "/office-mac/chat/same");
+  const view = render(MultiDeviceDashboardHarness);
+  await sidebar().findByRole("button", { name: "office-mac chat" });
+  await chooseSidebarDevice("Travel Laptop");
+  await sidebar().findByRole("button", { name: "travel-laptop chat" });
+  for (const [path, chat] of [
+    ["/travel-laptop/sessions", "travel-laptop chat"],
+    ["/office-mac/sessions", "office-mac chat"],
+  ]) {
+    window.history.pushState({}, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await sidebar().findByRole("button", { name: chat });
+  }
+  view.unmount();
 });
 
 test("root creation uses the selected device options and restores its draft and attachments", async () => {

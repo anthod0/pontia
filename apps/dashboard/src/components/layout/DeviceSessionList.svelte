@@ -224,7 +224,7 @@
   </Sidebar.MenuItem>
 {/snippet}
 
-<div class={cn("no-scrollbar min-h-0 overflow-y-auto group-data-[collapsible=icon]:hidden", handle === undefined ? "flex-1" : "max-h-[55svh]")} onscroll={handleSessionListScroll}>
+<div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden" onscroll={handleSessionListScroll}>
   {#if overviewQuery.error}
     <p role="alert" class="px-4 py-2 text-xs text-destructive">Sidebar refresh failed. {overviewQuery.error.message}</p>
   {/if}
@@ -265,7 +265,6 @@
       </button>
       <span class="flex-1"></span>
       <span class="flex items-center gap-2">
-        {#if handle === undefined}
         <button
           type="button"
           class="rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
@@ -275,7 +274,6 @@
         >
           <ArrowUpRightIcon class="size-4" />
         </button>
-        {/if}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger
             class={cn('rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden', selectedWorkspaceId && 'text-primary')}

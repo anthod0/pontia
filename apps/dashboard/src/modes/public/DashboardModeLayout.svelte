@@ -1,10 +1,11 @@
 <script lang="ts">
-  import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
   import { onMount, type Snippet } from 'svelte';
   import { writable } from 'svelte/store';
   import PublicNewChatPage from './PublicNewChatPage.svelte';
   import DeviceSessionList from '../../components/layout/DeviceSessionList.svelte';
-  import { provideDeviceDirectory, deviceStateLabel } from './deviceDirectory';
+  import SidebarDeviceSwitcher from './SidebarDeviceSwitcher.svelte';
+  import { provideDeviceDirectory } from './deviceDirectory';
+  import { Button } from '$lib/components/ui/button/index.js';
   import { navigate } from '$lib/navigation';
   import RemoteDashboardPage from '../../components/devices/RemoteDashboardPage.svelte';
   import AppShell from '../../components/layout/AppShell.svelte';
@@ -43,6 +44,22 @@
   let lastHandle = $state<string | null>(null);
   const settingsHandle = $derived(handle || ($devices.some(target => target.handle === lastHandle)
     ? lastHandle : $devices.find(target => target.state === 'online')?.handle));
+  // The sidebar follows the routed device; picking another device overrides it until the route changes.
+  let sidebarChoice = $state<string | null>(null);
+  $effect.pre(() => {
+    void handle;
+    sidebarChoice = null;
+  });
+  const sidebarHandle = $derived(
+    (sidebarChoice && $devices.some(target => target.handle === sidebarChoice) ? sidebarChoice : undefined)
+      ?? settingsHandle ?? $devices[0]?.handle);
+  const sidebarDevice = $derived($devices.find(target => target.handle === sidebarHandle));
+
+  function selectSidebarDevice(target: string): void {
+    sidebarChoice = target;
+    rememberDevice(target);
+  }
+
   $effect(() => {
     if (handle && $devices.some(target => target.handle === handle)) {
       rememberDevice(handle);
@@ -97,24 +114,21 @@
       settingsDisabled={!settingsHandle}
       onSettings={() => { if (settingsHandle) void navigate('/settings/common', undefined, { scope: `/${settingsHandle}` }) }}>
       {#snippet groups()}
-        {#each $devices as target (target.handle)}
-          <section class="shrink-0 group-data-[collapsible=icon]:hidden" aria-label={`${target.name} sessions`}>
-            <Sidebar.Group>
-              <Sidebar.GroupLabel class="h-auto min-h-9 gap-2">
-                <button class="min-w-0 flex-1 truncate text-left hover:text-primary" onclick={() => void navigate('/', undefined, { scope: `/${target.handle}` })}>{target.name}</button>
-                <span class="text-[10px]">{deviceStateLabel[target.state]}</span>
-                <a aria-label={`All sessions on ${target.name}`} title="All sessions" href={`/${target.handle}/sessions`} onclick={(event) => {
-                  event.preventDefault(); void navigate('/sessions', undefined, { scope: `/${target.handle}` });
-                }}><ArrowUpRightIcon class="size-4" /></a>
-              </Sidebar.GroupLabel>
-            </Sidebar.Group>
-            {#if target.state === 'online' && target.runtime}
-              {#key target.runtime}
-                <DeviceProvider device={target.runtime}><DeviceSessionList handle={target.handle} /></DeviceProvider>
-              {/key}
-            {/if}
-          </section>
-        {/each}
+        {#if $devices.length}
+          <SidebarDeviceSwitcher devices={$devices} selected={sidebarDevice} onSelect={selectSidebarDevice} />
+        {/if}
+        {#if sidebarDevice?.state === 'online' && sidebarDevice.runtime}
+          {#key sidebarDevice.runtime}
+            <DeviceProvider device={sidebarDevice.runtime}><DeviceSessionList handle={sidebarDevice.handle} /></DeviceProvider>
+          {/key}
+        {:else if sidebarDevice?.state === 'offline'}
+          <div class="flex items-center justify-between gap-2 px-4 py-2 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
+            <span>{sidebarDevice.name} is offline.</span>
+            <Button variant="outline" size="xs" onclick={() => connections?.retry(sidebarDevice.handle)}>Retry</Button>
+          </div>
+        {:else if sidebarDevice?.state === 'connecting'}
+          <p role="status" class="px-4 py-2 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">Connecting…</p>
+        {/if}
       {/snippet}
     </AppSidebar>
     {#if device}
