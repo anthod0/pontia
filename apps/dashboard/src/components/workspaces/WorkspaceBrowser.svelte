@@ -323,7 +323,7 @@
   </Empty.Root>
 {/snippet}
 
-<div class="mx-auto flex max-w-5xl flex-col overflow-hidden rounded-lg border bg-background text-sm">
+<div class="mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-lg border bg-background text-sm">
   {#if browserLoadError}
     <div class="flex min-h-56 flex-col">
       {@render loadError('Workspace browser unavailable', browserLoadError.message, () => void refreshAll())}
