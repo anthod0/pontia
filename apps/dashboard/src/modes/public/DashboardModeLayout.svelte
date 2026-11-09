@@ -16,6 +16,7 @@
   import * as Sidebar from '$lib/components/ui/sidebar/index.js';
   import DeviceProvider from '../../device/DeviceProvider.svelte';
   import { createDeviceConnections, type ConnectedDevice } from './deviceConnections';
+  import { provideDeviceList } from './deviceListContext';
   import { loadedRemoteAccess, loadRemoteAccess } from './remoteAccessLoader.svelte';
 
   let { handle, children }: { handle?: string; children: Snippet } = $props();
@@ -45,6 +46,11 @@
   const dashboardState = $derived(active?.state === 'online' ? 'available'
     : $signInRequired || active?.state === 'offline' || moduleError || (!$loading && !active)
       ? 'unavailable' : 'connecting');
+
+  provideDeviceList({
+    devices: () => $devices,
+    retry: (target) => connections?.retry(target),
+  });
 
   $effect(() => {
     if (handle && $devices.some(target => target.handle === handle)) rememberDevice(handle);

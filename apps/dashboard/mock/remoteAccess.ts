@@ -67,6 +67,10 @@ export function cloudAccountUrl(): string {
   return "https://pontia.dev/settings/account";
 }
 
+export function cloudDevicesUrl(): string {
+  return "https://pontia.dev/settings/devices";
+}
+
 export async function requestPublicDeviceConnection(): Promise<PublicDeviceConnection> {
   throw new CloudRequestError("The mock cloud does not issue device connections.");
 }

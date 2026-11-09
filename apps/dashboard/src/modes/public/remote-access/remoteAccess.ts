@@ -138,6 +138,10 @@ export function cloudAccountUrl(): string {
   return `${CLOUD_ORIGIN}/settings/account`;
 }
 
+export function cloudDevicesUrl(): string {
+  return `${CLOUD_ORIGIN}/settings/devices`;
+}
+
 export type PublicDeviceConnection = {
   userId: string;
   target: PublicDeviceTarget;

@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
   cloudAccountUrl,
+  cloudDevicesUrl,
   dashboardBootstrapUrl,
   getCloudProfile,
   dashboardSignInUrl,
@@ -168,6 +169,7 @@ test("loads the Cloud profile with browser credentials", async () => {
     signal: undefined,
   });
   expect(cloudAccountUrl()).toBe("https://pontia.dev/settings/account");
+  expect(cloudDevicesUrl()).toBe("https://pontia.dev/settings/devices");
 });
 
 test("drops a non-HTTPS avatar and rejects an invalid Cloud profile", async () => {
