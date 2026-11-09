@@ -11,7 +11,6 @@ struct Fixture {
     app: AppState,
     session: String,
     methods: Arc<Mutex<Vec<String>>>,
-    unsubscribe_status: Arc<Mutex<String>>,
     before_thread_response: Arc<Mutex<Vec<Value>>>,
     rpc_errors: Arc<Mutex<HashMap<String, Value>>>,
     inputs: Arc<Mutex<Vec<Value>>>,
@@ -30,8 +29,6 @@ impl Fixture {
         let observed = methods.clone();
         let before_thread_response = Arc::new(Mutex::new(Vec::<Value>::new()));
         let server_before_thread_response = before_thread_response.clone();
-        let unsubscribe_status = Arc::new(Mutex::new("unsubscribed".to_string()));
-        let server_unsubscribe_status = unsubscribe_status.clone();
         let rpc_errors = Arc::new(Mutex::new(HashMap::<String, Value>::new()));
         let server_errors = rpc_errors.clone();
         let inputs = Arc::new(Mutex::new(Vec::new()));
@@ -47,6 +44,7 @@ impl Fixture {
             let (stream, _) = listener.accept().await.unwrap();
             let mut wire = accept_async(stream).await.unwrap();
             let mut materialized = false;
+            let mut unloaded = false;
             while let Some(Ok(Message::Text(frame))) = wire.next().await {
                 let request: Value = serde_json::from_str(&frame).unwrap();
                 let Some(id) = request.get("id").cloned() else {
@@ -75,7 +73,7 @@ impl Fixture {
                     .unwrap();
                     continue;
                 }
-                let thread = json!({"id":"thread-one","cwd":codex_home,"canAcceptDirectInput":true,"status":{"type":"idle"}});
+                let thread = json!({"id":"thread-one","cwd":codex_home,"canAcceptDirectInput":true,"status":{"type":if unloaded { "notLoaded" } else { "idle" }}});
                 let result = match method.as_str() {
                     "config/read" => {
                         assert_eq!(request["params"]["cwd"], json!(codex_home));
@@ -85,6 +83,9 @@ impl Fixture {
                         json!({"userAgent":"codex/test","codexHome":codex_home,"platformFamily":"unix","platformOs":"linux"})
                     }
                     "thread/start" | "thread/resume" => {
+                        unloaded = false;
+                        let mut thread = thread;
+                        thread["status"]["type"] = json!("idle");
                         server_thread_requests.lock().await.push(request.clone());
                         for notification in server_before_thread_response.lock().await.drain(..) {
                             wire.send(Message::Text(notification.to_string().into()))
@@ -106,9 +107,12 @@ impl Fixture {
                         json!({"data":[{"model":"model-one","displayName":"Model One","description":"test","hidden":false}],"nextCursor":null})
                     }
                     "thread/settings/update" => json!({}),
-                    "thread/unsubscribe" => {
-                        json!({"status":server_unsubscribe_status.lock().await.clone()})
+                    "thread/archive" => {
+                        materialized = true;
+                        unloaded = true;
+                        json!({})
                     }
+                    "thread/unarchive" => json!({"thread":thread}),
                     other => panic!("unexpected method {other}"),
                 };
                 wire.send(Message::Text(
@@ -156,7 +160,6 @@ impl Fixture {
             app,
             session,
             methods,
-            unsubscribe_status,
             before_thread_response,
             rpc_errors,
             inputs,
@@ -557,7 +560,7 @@ async fn model_control_does_not_require_a_runtime_identity() {
 }
 
 #[tokio::test]
-async fn exit_and_resume_use_subscription_postconditions_without_archive_calls() {
+async fn exit_unloads_and_resume_preserves_native_identity() {
     let fixture = Fixture::new().await;
     fixture.dispatch_first_input().await;
 
@@ -598,50 +601,25 @@ async fn exit_and_resume_use_subscription_postconditions_without_archive_calls()
         "thread-one"
     );
 
-    *fixture.unsubscribe_status.lock().await = "accepted".into();
-    let error = fixture
-        .app
-        .session_commands()
-        .terminate_session(&fixture.session)
-        .await
-        .unwrap_err();
-    assert!(matches!(error, pontia_core::Error::ControlUnknown(_)));
-    assert_eq!(
-        fixture
-            .app
-            .queries()
-            .get_session(&fixture.session)
-            .await
-            .unwrap()
-            .unwrap()
-            .state,
-        "idle"
-    );
-    assert_eq!(
-        fixture
-            .methods
-            .lock()
-            .await
-            .iter()
-            .filter(|method| method.as_str() == "thread/unsubscribe")
-            .count(),
-        2,
-        "an uncertain unsubscribe must not be replayed automatically"
-    );
-
-    *fixture.unsubscribe_status.lock().await = "notSubscribed".into();
-    fixture
-        .app
-        .session_commands()
-        .terminate_session(&fixture.session)
-        .await
-        .unwrap();
     let methods = fixture.methods.lock().await;
-    assert!(methods.contains(&"thread/resume".into()));
     assert!(
         !methods
             .iter()
-            .any(|method| matches!(method.as_str(), "thread/archive" | "thread/unarchive"))
+            .any(|method| method == "turn/interrupt" || method == "thread/unsubscribe")
+    );
+    assert_eq!(
+        methods
+            .iter()
+            .filter(|method| *method == "thread/archive")
+            .count(),
+        1
+    );
+    assert_eq!(
+        methods
+            .iter()
+            .filter(|method| *method == "thread/unarchive")
+            .count(),
+        1
     );
     drop(methods);
     fixture.shutdown().await;

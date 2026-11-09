@@ -13,6 +13,7 @@ use tokio::{
 };
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
+mod exit;
 mod observation;
 mod reasoning;
 mod tool_calls;
@@ -26,6 +27,15 @@ enum Command {
 #[derive(Default)]
 struct ServerState {
     turns: Mutex<Vec<Value>>,
+    unloaded: std::sync::atomic::AtomicBool,
+    hold_interrupt: std::sync::atomic::AtomicBool,
+    hold_unload: std::sync::atomic::AtomicBool,
+    disconnect_on: Mutex<Option<String>>,
+    after_interrupt: Mutex<Option<Vec<Value>>>,
+    after_interrupt_events: Mutex<Vec<Value>>,
+    before_final_read: Mutex<Vec<Value>>,
+    history_unarchived: std::sync::atomic::AtomicBool,
+    unarchive_thread: Mutex<Option<Value>>,
     methods: Mutex<Vec<String>>,
     rpc_errors: Mutex<std::collections::HashMap<String, Value>>,
     snapshot_gate: Mutex<
@@ -96,16 +106,43 @@ impl Fixture {
                                 let Some(id) = request.get("id") else { continue };
                                 let method = request["method"].as_str().unwrap();
                                 shared.methods.lock().await.push(method.into());
+                                if shared.disconnect_on.lock().await.as_deref() == Some(method) { break; }
+                                if method == "thread/resume" { shared.unloaded.store(false, std::sync::atomic::Ordering::SeqCst); }
                                 if let Some(error) = shared.rpc_errors.lock().await.get(method).cloned() {
                                     wire.send(Message::Text(json!({"id":id,"error":error}).to_string().into())).await.unwrap();
                                     continue;
                                 }
-                                let thread = json!({"id":"thread", "cwd":codex_home,"canAcceptDirectInput":true,"status":{"type":"active"}});
+                                let thread = json!({"id":"thread", "cwd":codex_home,"canAcceptDirectInput":true,"status":{"type":if shared.unloaded.load(std::sync::atomic::Ordering::SeqCst) { "notLoaded" } else { "active" }}});
                                 let result = match request["method"].as_str().unwrap() {
                                     "config/read" => json!({"config":{}}),
                                     "initialize" => json!({"userAgent":"codex/dev","codexHome":codex_home,"platformFamily":"unix","platformOs":std::env::consts::OS}),
-                                    "thread/resume" | "thread/read" => json!({"thread":thread,"model":"test-model"}),
-                                    "thread/unsubscribe" => json!({"status":"unsubscribed"}),
+                                    "thread/resume" | "thread/read" => {
+                                        if method == "thread/read" && shared.history_unarchived.load(std::sync::atomic::Ordering::SeqCst) {
+                                            for event in shared.before_final_read.lock().await.drain(..) {
+                                                wire.send(Message::Text(event.to_string().into())).await.unwrap();
+                                            }
+                                        }
+                                        json!({"thread":thread,"model":"test-model"})
+                                    },
+                                    "turn/interrupt" => {
+                                        shared.before_snapshot.lock().await.extend(shared.after_interrupt_events.lock().await.drain(..));
+                                        if let Some(turns) = shared.after_interrupt.lock().await.take() {
+                                            *shared.turns.lock().await = turns;
+                                        } else if !shared.hold_interrupt.load(std::sync::atomic::Ordering::SeqCst) {
+                                            for turn in shared.turns.lock().await.iter_mut() {
+                                                if turn["id"] == request["params"]["turnId"] { turn["status"] = json!("interrupted"); }
+                                            }
+                                        }
+                                        json!({})
+                                    },
+                                    "thread/archive" => {
+                                        shared.unloaded.store(!shared.hold_unload.load(std::sync::atomic::Ordering::SeqCst), std::sync::atomic::Ordering::SeqCst);
+                                        json!({})
+                                    },
+                                    "thread/unarchive" => {
+                                        shared.history_unarchived.store(true, std::sync::atomic::Ordering::SeqCst);
+                                        json!({"thread":shared.unarchive_thread.lock().await.clone().unwrap_or(thread)})
+                                    },
                                     "thread/turns/list" => {
                                         let result = json!({"data":shared.turns.lock().await.clone(),"nextCursor":null});
                                         for notification in shared.before_snapshot.lock().await.drain(..) {

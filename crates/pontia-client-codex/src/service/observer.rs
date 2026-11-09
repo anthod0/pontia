@@ -105,7 +105,7 @@ impl CodexObserver {
     }
 
     async fn observes(&self, runtime: &CodexRuntime, session: &str) -> Result<bool> {
-        Ok(!CodexService::has_confirmed_unsubscribe(session).await
+        Ok(!CodexService::has_confirmed_exit(session).await
             && matches!(
                 runtime.subscription(session).await,
                 Some(
@@ -160,13 +160,14 @@ impl CodexObserver {
             .await
             .contains_key(thread.as_deref().unwrap_or(""));
         if unloaded {
-            self.service.record_unloaded(session).await?;
+            self.service.suspend_reload(session).await?;
         }
         if state == "exited"
-            || CodexService::has_confirmed_unsubscribe(session).await
+            || CodexService::has_confirmed_exit(session).await
             || runtime.subscription(session).await == Some(SubscriptionState::ExitPending)
             || unloaded
-            || self.service.observation_unloaded(session).await?
+            || (self.service.reload_suspended(session).await?
+                && runtime.subscription(session).await.is_none())
         {
             super::interactions::expire_matching(&self.interactions, connection, |i| {
                 i.session == session
@@ -326,7 +327,7 @@ impl CodexObserver {
                         let _operation = runtime.lock_session(&session).await;
                         // Explicit resume may have completed while this event waited for the lock.
                         if !connection.unloaded_threads.lock().await.contains_key(thread) { return Ok(()); }
-                        self.service.record_unloaded(&session).await?;
+                        self.service.suspend_reload(&session).await?;
                         observation.output.invalidate(&session);
                         observation.restored.remove(&session);
                         runtime.clear_subscription(&session).await;

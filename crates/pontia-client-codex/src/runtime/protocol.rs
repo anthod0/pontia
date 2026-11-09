@@ -17,6 +17,8 @@ use tokio::{
 };
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 
+pub(crate) const CONTROL_TIMEOUT: Duration = Duration::from_secs(30);
+
 pub type Socket = WebSocketStream<UnixStream>;
 enum RpcResponse {
     Success(Value, u64),
@@ -84,6 +86,7 @@ enum Outgoing {
         method: String,
         params: Value,
         reload: bool,
+        activity_revision: Option<u64>,
     },
     Reply {
         id: Value,
@@ -94,6 +97,7 @@ enum Outgoing {
 
 pub struct Connection {
     pub(crate) unloaded_threads: Arc<Mutex<HashMap<String, u64>>>,
+    thread_activity: Arc<Mutex<HashMap<String, u64>>>,
     outgoing: mpsc::Sender<Outgoing>,
     pub(crate) interactions:
         Mutex<HashMap<String, crate::service::interactions::NativeInteraction>>,
@@ -186,8 +190,10 @@ impl Connection {
         let (events, _) = broadcast::channel(4096);
         let server_requests: ServerRequests = Arc::new(Mutex::new(HashMap::new()));
         let interaction_events = Arc::new(Mutex::new(std::collections::VecDeque::new()));
+        let thread_activity = Arc::new(Mutex::new(HashMap::<String, u64>::new()));
         let connection = Arc::new(Self {
             unloaded_threads: unloaded_threads.clone(),
+            thread_activity: thread_activity.clone(),
             outgoing,
             interactions: Mutex::new(HashMap::new()),
             task: Mutex::new(None),
@@ -202,12 +208,22 @@ impl Connection {
         });
         let task = tokio::spawn(async move {
             let mut notification_sequence = 0u64;
+            let mut thread_statuses = HashMap::<String, String>::new();
             loop {
                 tokio::select! {
                     message = incoming.recv() => {
                         let Some(message) = message else { break };
                         match message {
-                            Outgoing::Request { id, method, params, reload } => {
+                            Outgoing::Request { id, method, params, reload, activity_revision } => {
+                                if let Some(expected) = activity_revision {
+                                    let thread = params["threadId"].as_str().unwrap_or("");
+                                    if thread_activity.lock().await.get(thread).copied().unwrap_or(0) != expected {
+                                        if let Some(reply) = pending.lock().await.remove(&id) {
+                                            let _ = reply.send(Err(Error::ControlUnknown("Codex thread activity changed after stop confirmation; archive was not sent".into())));
+                                        }
+                                        continue;
+                                    }
+                                }
                                 // Check at the socket boundary: an unload may have arrived while
                                 // a recovery RPC was queued behind other outgoing requests.
                                 if method == "thread/resume" {
@@ -243,6 +259,27 @@ impl Connection {
                                 let Ok(value) = serde_json::from_str::<Value>(&text) else { break };
                                 if value.get("method").is_some() {
                                     notification_sequence += 1;
+                                    let activity_thread = match value["method"].as_str() {
+                                        Some("turn/started") => value["params"]["threadId"].as_str(),
+                                        Some("thread/started") => value["params"]["thread"]["id"].as_str(),
+                                        Some("thread/status/changed") => {
+                                            let thread = value["params"]["threadId"].as_str();
+                                            let status = value["params"]["status"]["type"].as_str();
+                                            if let (Some(thread), Some(status)) = (thread, status) {
+                                                let previous = thread_statuses.insert(thread.into(), status.into());
+                                                // The interrupted Turn's ordinary active -> idle
+                                                // transition does not start another execution.
+                                                if matches!(status, "active" | "systemError")
+                                                    || (status == "idle" && previous.as_deref() == Some("notLoaded")) {
+                                                    Some(thread)
+                                                } else { None }
+                                            } else { None }
+                                        },
+                                        _ => None,
+                                    };
+                                    if let Some(thread) = activity_thread {
+                                        thread_activity.lock().await.insert(thread.into(), notification_sequence);
+                                    }
                                     if value["method"] == "thread/status/changed"
                                         && value["params"]["status"]["type"] == "notLoaded"
                                         && let Some(thread) = value["params"]["threadId"].as_str()
@@ -304,14 +341,55 @@ impl Connection {
 
     /// The boundary is captured by the socket reader, before waking the RPC caller.
     pub(crate) async fn call_observed(&self, method: &str, params: Value) -> Result<(Value, u64)> {
-        self.request(method, params, false).await
+        self.request(method, params, false, None).await
     }
 
     pub(crate) async fn resume_thread(&self, params: Value, reload: bool) -> Result<(Value, u64)> {
-        self.request("thread/resume", params, reload).await
+        self.request("thread/resume", params, reload, None).await
     }
 
-    async fn request(&self, method: &str, params: Value, reload: bool) -> Result<(Value, u64)> {
+    pub(crate) async fn activity_revision(&self, thread: &str) -> u64 {
+        self.thread_activity
+            .lock()
+            .await
+            .get(thread)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    pub(crate) async fn confirm_activity(
+        &self,
+        thread: &str,
+        expected: u64,
+    ) -> Result<tokio::sync::MutexGuard<'_, HashMap<String, u64>>> {
+        let activity = self.thread_activity.lock().await;
+        if activity.get(thread).copied().unwrap_or(0) != expected {
+            return Err(Error::ControlUnknown(
+                "Codex thread activity changed after unload confirmation; exit is incomplete"
+                    .into(),
+            ));
+        }
+        Ok(activity)
+    }
+
+    pub(crate) async fn archive_thread(&self, thread: &str, activity_revision: u64) -> Result<()> {
+        self.request(
+            "thread/archive",
+            json!({"threadId":thread}),
+            false,
+            Some(activity_revision),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn request(
+        &self,
+        method: &str,
+        params: Value,
+        reload: bool,
+        activity_revision: Option<u64>,
+    ) -> Result<(Value, u64)> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = oneshot::channel();
         self.pending.lock().await.insert(id, sender);
@@ -322,10 +400,11 @@ impl Connection {
                     method: method.into(),
                     params: params.clone(),
                     reload,
+                    activity_revision,
                 })
                 .await
                 .map_err(protocol_error)?;
-            tokio::time::timeout(Duration::from_secs(30), receiver)
+            tokio::time::timeout(CONTROL_TIMEOUT, receiver)
                 .await
                 .map_err(|_| Error::ControlUnknown("Codex RPC timed out".into()))?
                 .map_err(|error| Error::ControlUnknown(error.to_string()))?

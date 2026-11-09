@@ -118,7 +118,7 @@ impl pontia_application::client_contract::ClientInteractions for CodexClient {
             .await?;
             if !live
                 || runtime.subscription(session).await == Some(SubscriptionState::ExitPending)
-                || CodexService::has_confirmed_unsubscribe(session).await
+                || CodexService::has_confirmed_exit(session).await
             {
                 return Err(Error::CapabilityUnavailable("Codex Session exited".into()));
             }
@@ -212,7 +212,7 @@ impl ClientSession for CodexClient {
         events: EventIngestService,
         target: &'a ControlTarget,
     ) -> ClientOperation<'a, ClientExitOutcome> {
-        Box::pin(async move { CodexService::new(events).unsubscribe(target).await })
+        Box::pin(async move { CodexService::new(events).exit(target).await })
     }
     fn resume<'a>(
         &'a self,

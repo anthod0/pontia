@@ -43,6 +43,8 @@ impl Fixture {
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let mut wire = accept_async(stream).await.unwrap();
+            let mut unloaded = false;
+            let mut turn_status = "inProgress";
             loop {
                 tokio::select! {
                     value = incoming.recv() => {
@@ -61,13 +63,15 @@ impl Fixture {
                             continue;
                         }
                         let Some(id) = request.get("id") else { continue };
-                        let thread = json!({"id":"thread","cwd":home,"status":{"type":"active"},"canAcceptDirectInput":true});
+                        let thread = json!({"id":"thread","cwd":home,"status":{"type":if unloaded { "notLoaded" } else { "active" }},"canAcceptDirectInput":true});
                         let result = match request["method"].as_str().unwrap() {
                             "config/read" => json!({"config":{}}),
                             "initialize" => json!({"codexHome":home,"platformFamily":"unix","platformOs":std::env::consts::OS,"userAgent":"codex/test"}),
                             "thread/resume" | "thread/read" => json!({"thread":thread,"model":"test"}),
-                            "thread/unsubscribe" => json!({"status":"unsubscribed"}),
-                            "thread/turns/list" => json!({"data":[{"id":"native-turn","status":"inProgress","items":[{"id":"user","type":"userMessage","content":[{"type":"text","text":"hello"}]}]}],"nextCursor":null}),
+                            "turn/interrupt" => { turn_status = "interrupted"; json!({}) },
+                            "thread/archive" => { unloaded = true; json!({}) },
+                            "thread/unarchive" => json!({"thread":thread}),
+                            "thread/turns/list" => json!({"data":[{"id":"native-turn","status":turn_status,"items":[{"id":"user","type":"userMessage","content":[{"type":"text","text":"hello"}]}]}],"nextCursor":null}),
                             _ => panic!("Unexpected request: {request}"),
                         };
                         wire.send(Message::Text(json!({"id":id,"result":result}).to_string().into())).await.unwrap();

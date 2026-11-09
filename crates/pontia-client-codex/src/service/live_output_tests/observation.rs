@@ -117,7 +117,21 @@ async fn unload_survives_reconnect_until_explicit_exit_and_resume() {
         runtime.subscription(&fixture.session).await,
         Some(SubscriptionState::Available)
     );
-    fixture.wait_snapshot(|_| true).await;
+    let mut resumed_turn =
+        turn(json!([{ "type":"agentMessage", "id":"resumed-item", "text":"resumed output" }]));
+    resumed_turn["id"] = json!("resumed-turn");
+    fixture
+        .server_state
+        .turns
+        .lock()
+        .await
+        .push(resumed_turn.clone());
+    fixture
+        .notify(json!({"method":"turn/started","params":{"threadId":"thread","turn":resumed_turn}}))
+        .await;
+    fixture
+        .wait_snapshot(|snapshot| snapshot.items == vec![text("resumed-item", "resumed output")])
+        .await;
     fixture.shutdown().await;
 }
 
@@ -370,7 +384,7 @@ async fn lag_recovers_completion_before_unload_without_reloading() {
 }
 
 #[tokio::test]
-async fn exit_and_resume_while_notifications_wait_recovers_existing_output() {
+async fn exit_and_resume_while_notifications_wait_observes_new_execution() {
     let fixture = Fixture::new(
         turn(json!([{"type":"agentMessage","id":"item","text":"existing"}])),
         Vec::new(),
@@ -400,8 +414,20 @@ async fn exit_and_resume_while_notifications_wait_recovers_existing_output() {
         .await
         .unwrap();
     drop(associations);
+    let mut resumed_turn =
+        turn(json!([{"type":"agentMessage","id":"new-item","text":"new output"}]));
+    resumed_turn["id"] = json!("resumed-turn");
     fixture
-        .wait_snapshot(|snapshot| snapshot.items == vec![text("item", "existing")])
+        .server_state
+        .turns
+        .lock()
+        .await
+        .push(resumed_turn.clone());
+    fixture
+        .notify(json!({"method":"turn/started","params":{"threadId":"thread","turn":resumed_turn}}))
+        .await;
+    fixture
+        .wait_snapshot(|snapshot| snapshot.items == vec![text("new-item", "new output")])
         .await;
     fixture.shutdown().await;
 }

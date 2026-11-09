@@ -106,7 +106,7 @@ async fn register(
     let Some(session) = session else {
         return Ok(());
     };
-    if super::CodexService::has_confirmed_unsubscribe(&session).await
+    if super::CodexService::has_confirmed_exit(&session).await
         || connection
             .unloaded_threads
             .lock()
