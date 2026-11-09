@@ -61,7 +61,7 @@ cargo run -p pontiad &
 backend_pid=$!
 
 echo "Starting dashboard Vite dev server..."
-bun run --cwd apps/dashboard dev &
+PONTIA_DEV_BACKEND=http://127.0.0.1:8080 bun run --cwd apps/dashboard dev &
 frontend_pid=$!
 
 cat <<'EOF'

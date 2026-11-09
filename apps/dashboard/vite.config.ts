@@ -2,16 +2,15 @@ import adapter from "@sveltejs/adapter-static";
 import tailwindcss from "@tailwindcss/vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
-import { loadEnv, type ProxyOptions } from "vite";
+import { loadEnv } from "vite";
 import { configDefaults, defineConfig } from "vitest/config";
+import { mockApi } from "./mock/vitePlugin.ts";
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const viteEnv = loadEnv(mode, process.cwd(), "");
   const dashboardMode =
     process.env.VITE_DASHBOARD_MODE?.trim() || viteEnv.VITE_DASHBOARD_MODE || "local";
-  const env =
-    dashboardMode === "public" ? { ...viteEnv, ...loadEnv("public", process.cwd(), "") } : viteEnv;
   if (dashboardMode !== "local" && dashboardMode !== "public") {
     throw new Error(
       `VITE_DASHBOARD_MODE must be "local" or "public", received ${JSON.stringify(dashboardMode)}`,
@@ -19,25 +18,12 @@ export default defineConfig(({ mode }) => {
   }
 
   const publicDashboard = dashboardMode === "public";
-  const publicDevBackend = env.PONTIA_PUBLIC_DEV_BACKEND?.trim();
-  const publicDevToken = env.PONTIA_EXTERNAL_API_TOKEN?.trim();
-  const apiProxy: ProxyOptions | undefined = publicDashboard
-    ? publicDevBackend
-      ? {
-          target: publicDevBackend,
-          changeOrigin: true,
-          configure(proxy) {
-            if (!publicDevToken) return;
-            proxy.on("proxyReq", (request) => {
-              request.setHeader("Authorization", `Bearer ${publicDevToken}`);
-            });
-          },
-        }
-      : undefined
-    : { target: "http://127.0.0.1:8080", changeOrigin: true };
+  // `just dev` points the Local Dashboard at a running pontiad; otherwise the mock API serves it.
+  const devBackend = publicDashboard ? undefined : process.env.PONTIA_DEV_BACKEND?.trim();
 
   return {
     plugins: [
+      ...(process.env.VITEST || devBackend ? [] : [mockApi({ publicDashboard })]),
       tailwindcss(),
       sveltekit({
         preprocess: vitePreprocess(),
@@ -55,6 +41,11 @@ export default defineConfig(({ mode }) => {
         paths: {
           base: publicDashboard ? "" : "/dashboard",
         },
+        typescript: {
+          config(config) {
+            config.include.push("../mock/**/*.ts");
+          },
+        },
       }),
     ],
     define: {
@@ -71,7 +62,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       host: true,
-      proxy: apiProxy ? { "/api": apiProxy } : undefined,
+      proxy: devBackend ? { "/api": { target: devBackend, changeOrigin: true } } : undefined,
     },
     preview: {
       proxy: {},

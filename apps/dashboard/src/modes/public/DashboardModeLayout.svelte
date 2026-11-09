@@ -61,11 +61,7 @@
     try {
       const access = await loadRemoteAccess();
       if (disposed) return;
-      const developmentBridge = import.meta.env.DEV && import.meta.env.MODE === 'development';
-      const developmentHandle = handle;
-      connections = createDeviceConnections(developmentBridge && developmentHandle ? {
-        ...access, listPublicDevices: async () => [{ handle: developmentHandle, name: developmentHandle }],
-      } : access);
+      connections = createDeviceConnections(access);
       await connections.refreshDevices();
     } catch {
       if (!disposed) moduleError = 'Could not load remote device access.';

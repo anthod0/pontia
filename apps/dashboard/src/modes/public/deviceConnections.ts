@@ -80,9 +80,8 @@ export function createDeviceConnections(remote: RemoteAccess) {
     entry.connection = connection;
     publish();
     try {
-      const developmentBridge = import.meta.env.DEV && import.meta.env.MODE === "development";
-      if (!developmentBridge) await connection.connect();
-      const id = developmentBridge ? entry.handle : await connection.uploadStorageScope();
+      await connection.connect();
+      const id = await connection.uploadStorageScope();
       if (connection.signal.aborted) return;
       const runtime = new DeviceRuntime(id, createApiAccess(connection));
       entry.runtime = runtime;

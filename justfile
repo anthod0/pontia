@@ -7,9 +7,11 @@ dev:
 dev-backend:
     SQLX_OFFLINE=true PONTIA_EXTERNAL_API_TOKEN=${PONTIA_EXTERNAL_API_TOKEN:-dev-token} cargo run -p pontiad
 
+# Local Dashboard against mock API data; no pontiad required.
 dev-dashboard:
-    bun run --cwd apps/dashboard dev
+    VITE_DASHBOARD_MODE=local bun run --cwd apps/dashboard dev
 
+# Public Dashboard against a mock Pontia cloud and mock devices.
 dev-dashboard-public:
     VITE_DASHBOARD_MODE=public bun run --cwd apps/dashboard dev
 
