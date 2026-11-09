@@ -3,10 +3,7 @@
 </script>
 
 <section class="space-y-6">
-  <div class="space-y-2">
-    <h2 class="text-3xl font-semibold tracking-tight">Common settings</h2>
-    <p class="max-w-3xl text-muted-foreground">Connection settings are managed by Pontia for remote Dashboards.</p>
-  </div>
+  <h2 class="text-3xl font-semibold tracking-tight">Common settings</h2>
 
   <Card.Root>
     <Card.Header>

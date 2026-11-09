@@ -49,12 +49,7 @@
 </script>
 
 <section class="space-y-6">
-  <div class="space-y-2">
-    <h2 class="text-3xl font-semibold tracking-tight">Common settings</h2>
-    <p class="max-w-3xl text-muted-foreground">
-      Configure External API authentication and inspect the dashboard live data connection.
-    </p>
-  </div>
+  <h2 class="text-3xl font-semibold tracking-tight">Common settings</h2>
 
   {#if !$token.trim()}
     <Alert.Root variant="destructive">

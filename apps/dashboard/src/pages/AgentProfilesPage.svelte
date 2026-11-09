@@ -218,10 +218,7 @@
 
 <section class="space-y-6">
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-    <div class="space-y-2">
-      <h2 class="text-3xl font-semibold tracking-tight">Agent Profiles</h2>
-      <p class="max-w-3xl text-muted-foreground">Manage execution profiles, versions, client support, prompts, and policy metadata from the External API.</p>
-    </div>
+    <h2 class="text-3xl font-semibold tracking-tight">Agent Profiles</h2>
     <div class="flex flex-wrap gap-2">
       <Button onclick={startCreate}><PlusIcon class="size-4" /> Create profile</Button>
       <Button variant="outline" onclick={() => void refreshAll()}><ArrowsClockwiseIcon class="size-4" /> Refresh</Button>

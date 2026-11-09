@@ -89,10 +89,7 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-xl font-semibold">Agent Clients</h1>
-    <p class="mt-2 text-sm text-muted-foreground">Manage individual clients. Settings apply to new Sessions, not running instances. Enabled does not mean installed or connected.</p>
-  </div>
+  <h2 class="text-3xl font-semibold tracking-tight">Agent Clients</h2>
   {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
   {#if notice}<p role="status" class="text-sm">{notice}</p>{/if}
   <div class="flex flex-wrap gap-2">
