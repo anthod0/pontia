@@ -1,6 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  cloudAccountUrl,
   dashboardBootstrapUrl,
+  getCloudProfile,
   dashboardSignInUrl,
   listPublicDevices,
   requestPublicDeviceConnection,
@@ -150,4 +152,33 @@ test("disposing one device cancels only that device's requests", () => {
   expect(first.signal.aborted).toBe(true);
   expect(second.signal.aborted).toBe(false);
   second.dispose();
+});
+
+test("loads the Cloud profile with browser credentials", async () => {
+  const fetchMock = vi.fn(async () =>
+    json({ display_name: "Ada", avatar_url: "https://avatars.example/ada.png" }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  await expect(getCloudProfile()).resolves.toEqual({
+    displayName: "Ada",
+    avatarUrl: "https://avatars.example/ada.png",
+  });
+  expect(fetchMock).toHaveBeenCalledWith("https://pontia.dev/api/dashboard/me", {
+    credentials: "include",
+    signal: undefined,
+  });
+  expect(cloudAccountUrl()).toBe("https://pontia.dev/settings/account");
+});
+
+test("drops a non-HTTPS avatar and rejects an invalid Cloud profile", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => json({ display_name: null, avatar_url: "javascript:alert(1)" })),
+  );
+  await expect(getCloudProfile()).resolves.toEqual({ displayName: null, avatarUrl: null });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => json({ display_name: 1, avatar_url: null })),
+  );
+  await expect(getCloudProfile()).rejects.toBeInstanceOf(CloudRequestError);
 });

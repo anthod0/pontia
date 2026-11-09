@@ -13,6 +13,7 @@ import {
   POST as connect,
   OPTIONS as connectOptions,
 } from "../src/routes/api/dashboard/devices/[device_handle]/connect/+server";
+import { GET as profile, OPTIONS as profileOptions } from "../src/routes/api/dashboard/me/+server";
 import { testDatabase } from "./database";
 
 const callListDevices = listDevices as unknown as (event: RequestEvent) => Promise<Response>;
@@ -21,6 +22,8 @@ const callListDevicesOptions = listDevicesOptions as unknown as (
 ) => Promise<Response>;
 const callConnect = connect as unknown as (event: RequestEvent) => Promise<Response>;
 const callConnectOptions = connectOptions as unknown as (event: RequestEvent) => Promise<Response>;
+const callProfile = profile as unknown as (event: RequestEvent) => Promise<Response>;
+const callProfileOptions = profileOptions as unknown as (event: RequestEvent) => Promise<Response>;
 
 const database = testDatabase();
 const dashboardOrigin = "https://app.pontia.dev";
@@ -152,6 +155,40 @@ test("lists only the authenticated user's minimal stateless device records", asy
     { device_handle: "office-mac", name: "Office Mac" },
   ]);
   expectCredentialedCors(response);
+});
+
+test("returns the authenticated user's current profile to the Public Dashboard", async () => {
+  const token = await seedDashboardFixtureAndLogin();
+  await database.db
+    .update(users)
+    .set({ displayName: "Ada", avatarUrl: "https://avatars.example/ada.png" })
+    .where(eq(users.id, ownerId));
+  const response = await callProfile(
+    event("/api/dashboard/me", { origin: dashboardOrigin, token }),
+  );
+  expect(response.status).toBe(200);
+  expect((await response.json()) as unknown).toEqual({
+    display_name: "Ada",
+    avatar_url: "https://avatars.example/ada.png",
+  });
+  expectCredentialedCors(response);
+});
+
+test("profile requires the Public Dashboard origin and a login", async () => {
+  const token = await seedDashboardFixtureAndLogin();
+  const foreign = await callProfile(
+    event("/api/dashboard/me", { origin: "https://attacker.example", token }),
+  );
+  expect(foreign.status).toBe(403);
+  expect(foreign.headers.get("access-control-allow-origin")).toBeNull();
+  const anonymous = await callProfile(event("/api/dashboard/me", { origin: dashboardOrigin }));
+  expect(anonymous.status).toBe(401);
+  expectCredentialedCors(anonymous);
+  const preflight = await callProfileOptions(
+    event("/api/dashboard/me", { method: "OPTIONS", origin: dashboardOrigin }),
+  );
+  expect(preflight.status).toBe(204);
+  expectCredentialedCors(preflight);
 });
 
 test("accepts an issued access JWT without reading its browser session", async () => {

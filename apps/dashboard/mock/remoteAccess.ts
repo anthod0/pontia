@@ -2,13 +2,14 @@
 // resolves the remote-access entry point to this module, so it must keep the same exports.
 import { isValidDeviceHandle } from "../src/lib/deviceHandle.ts";
 import type {
+  CloudProfile,
   PublicDevice,
   PublicDeviceConnection,
   PublicDeviceTarget,
 } from "../src/modes/public/remote-access/index.ts";
 import { mockCloudDevices, mockDeviceHeader } from "./devices.ts";
 
-export type { PublicDevice, PublicDeviceConnection, PublicDeviceTarget };
+export type { CloudProfile, PublicDevice, PublicDeviceConnection, PublicDeviceTarget };
 
 export class CloudRequestError extends Error {
   readonly status?: number;
@@ -54,6 +55,16 @@ export async function listPublicDevices(signal?: AbortSignal): Promise<PublicDev
   if (scenario === "cloud-error") throw new CloudRequestError("Cloud request failed.", 503);
   if (scenario === "no-devices") return [];
   return mockCloudDevices.map(({ handle, name }) => ({ handle, name }));
+}
+
+export async function getCloudProfile(signal?: AbortSignal): Promise<CloudProfile> {
+  await wait(200, signal);
+  if (readScenario() === "signed-out") throw new CloudRequestError("Cloud request failed.", 401);
+  return { displayName: "Ada Lovelace", avatarUrl: null };
+}
+
+export function cloudAccountUrl(): string {
+  return "https://pontia.dev/settings/account";
 }
 
 export async function requestPublicDeviceConnection(): Promise<PublicDeviceConnection> {

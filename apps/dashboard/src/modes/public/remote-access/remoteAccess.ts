@@ -10,6 +10,11 @@ export type PublicDevice = {
   name: string;
 };
 
+export type CloudProfile = {
+  displayName: string | null;
+  avatarUrl: string | null;
+};
+
 export type PublicDeviceTarget = {
   handle: string;
   deviceId: string;
@@ -101,6 +106,36 @@ export async function listPublicDevices(signal?: AbortSignal): Promise<PublicDev
     throw new CloudRequestError("Cloud returned an invalid device list.");
   }
   return devices;
+}
+
+function optionalText(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function parseAvatarUrl(value: string | null): string | null {
+  if (value === null) return null;
+  try {
+    return new URL(value).protocol === "https:" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getCloudProfile(signal?: AbortSignal): Promise<CloudProfile> {
+  const value = await cloudJson(`${CLOUD_ORIGIN}/api/dashboard/me`, signal);
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ["display_name", "avatar_url"]) ||
+    !optionalText(value.display_name) ||
+    !optionalText(value.avatar_url)
+  ) {
+    throw new CloudRequestError("Cloud returned an invalid profile.");
+  }
+  return { displayName: value.display_name, avatarUrl: parseAvatarUrl(value.avatar_url) };
+}
+
+export function cloudAccountUrl(): string {
+  return `${CLOUD_ORIGIN}/settings/account`;
 }
 
 export type PublicDeviceConnection = {
