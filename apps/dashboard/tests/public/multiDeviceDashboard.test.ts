@@ -220,6 +220,17 @@ test("root workspace selector lists only the active device workspaces", async ()
   expect(options.some((option) => option.textContent?.includes("Laptop"))).toBe(false);
 });
 
+test("a single device hides the sidebar and composer device selectors", async () => {
+  vi.mocked(fixture.remote.listPublicDevices).mockResolvedValue([
+    { handle: "office-mac", name: "Office Mac" },
+  ]);
+  render(MultiDeviceDashboardHarness);
+  await screen.findByRole("textbox");
+  expect(await sidebar().findByRole("button", { name: "office-mac chat" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Sidebar device" })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Device", { exact: true })).not.toBeInTheDocument();
+});
+
 test("choosing a sidebar device on the root opens that device", async () => {
   render(MultiDeviceDashboardHarness);
   await screen.findByRole("textbox");

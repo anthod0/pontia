@@ -98,7 +98,9 @@
 }} />
 
 {#snippet deviceSelector(disabled: boolean)}
-  <ComposerDeviceSelect devices={$devices} selected={active} onSelect={selectDevice} {disabled} />
+  {#if $devices.length > 1}
+    <ComposerDeviceSelect devices={$devices} selected={active} onSelect={selectDevice} {disabled} />
+  {/if}
 {/snippet}
 
 <AppShell>
@@ -107,7 +109,7 @@
       settingsDisabled={!activeHandle}
       onSettings={() => { if (activeHandle) void navigate('/settings/common', undefined, { scope: `/${activeHandle}` }) }}>
       {#snippet groups()}
-        {#if $devices.length}
+        {#if $devices.length > 1}
           <SidebarDeviceSwitcher devices={$devices} selected={active} onSelect={selectDevice} />
         {/if}
         {#if active?.state === 'online' && active.runtime}
