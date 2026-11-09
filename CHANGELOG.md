@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-09
+
+### Added
+
+- Added `pontia doctor`, which explains service, configuration, login, and remote-registration checks and suggests repairs.
+- Added the signed-in Cloud account and the account's device list to the public Dashboard's common settings.
+
+### Changed
+
+- `pontia status` now shows the data directory, local service health, signed-in user, remote handle, and selected edge. `pontia remote status` has been removed; use `pontia doctor` instead.
+- The public Dashboard sidebar now has a device switcher above a single session list, and the selected device applies to the whole Dashboard. Device selectors are hidden when only one device is available.
+- Redesigned the workspace browser as a file browser with a toolbar, breadcrumb path, and a sidebar listing active and unavailable workspaces and roots.
+- Redesigned settings navigation: settings sections replace the session list in the main sidebar, and phones switch sections from tabs in the top bar. Agent Clients settings now show a client list next to a detail view with an enabled switch and side-by-side override and effective configuration.
+- Simplified the connecting and device unavailable screens of the public Dashboard.
+- Exiting a Codex session now stops and unloads its thread in the shared Codex daemon.
+
+### Fixed
+
+- Edge updates no longer fail when the restarted service has not yet started the updated executable.
+- Workspace availability is now checked by the backend instead of the Dashboard.
+- The new chat target selector lists only enabled Agent Clients.
+
 ## [0.7.1] - 2026-11-08
 
 ### Added
