@@ -4,6 +4,7 @@
   import DeviceSessionList from '../../components/layout/DeviceSessionList.svelte';
   import SidebarDeviceSwitcher from './SidebarDeviceSwitcher.svelte';
   import ComposerDeviceSelect from './ComposerDeviceSelect.svelte';
+  import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
   import { Button } from '$lib/components/ui/button/index.js';
   import * as Empty from '$lib/components/ui/empty/index.js';
   import { dashboardRelativePath, navigate } from '$lib/navigation';
@@ -165,7 +166,10 @@
         {:else}<Button variant="outline" onclick={retry}>Try again</Button>{/if}
       </div>
     {:else if $loading}
-      <p role="status" class="py-4 text-sm text-muted-foreground">Loading devices…</p>
+      <div class="flex min-h-96 flex-col items-center justify-center gap-3 bg-surface p-4" role="status">
+        <SpinnerGapIcon class="size-6 animate-spin text-primary" aria-hidden="true" />
+        <p class="text-sm text-muted-foreground">Loading devices…</p>
+      </div>
     {:else}
       <Empty.Root class="min-h-[60svh]">
         <Empty.Header>
