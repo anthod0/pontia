@@ -15,7 +15,8 @@
 	import { demoDevices, type DemoSession, type DemoSessionState } from './mockData';
 
 	let deviceHandle = $state(demoDevices[0].handle);
-	let sessionId = $state(demoDevices[0].sessions[0].id);
+	// Open on a session whose conversation fits without scrolling.
+	let sessionId = $state('review-api');
 	let workspaceFilter = $state('');
 	let mobileSidebarOpen = $state(false);
 
