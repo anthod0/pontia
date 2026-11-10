@@ -8,6 +8,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-heading: var(--heading);
+  --color-surface: var(--surface);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--muted);
+  --color-accent-foreground: var(--heading);
+  --color-busy: #d79921;
+  --color-idle: #98971a;
+  --color-interrupted: #b16286;
   --color-popover: var(--background);
   --color-popover-foreground: var(--foreground);
   --color-primary: var(--primary);

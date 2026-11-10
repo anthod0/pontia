@@ -3,8 +3,8 @@
 	import CheckIcon from 'phosphor-svelte/lib/CheckIcon';
 	import CopyIcon from 'phosphor-svelte/lib/CopyIcon';
 	import AnimatedLogo from '$lib/components/AnimatedLogo.svelte';
+	import DashboardDemo from '$lib/components/dashboard-demo/DashboardDemo.svelte';
 
-	const dashboardScreenshot = 'https://files.pontia.dev/cloud/dashboard-1280-79de754face8.webp';
 	// Install command split into tokens so commands can be coloured; the copied text is their concatenation.
 	const installTokens: { text: string; cmd?: boolean }[] = [
 		{ text: 'curl', cmd: true },
@@ -59,15 +59,7 @@
 	</div>
 
 	<figure class="dashboard-preview">
-		<a class="dashboard-image" href={dashboardScreenshot} target="_blank" rel="noreferrer" aria-label="View full-size Dashboard screenshot (opens in a new tab)">
-			<img
-				src={dashboardScreenshot}
-				width="1280"
-				height="960"
-				alt="Pontia Dashboard showing recent sessions, a coding conversation, tool execution, test results, and the message composer."
-				fetchpriority="high"
-			/>
-		</a>
+		<div class="dashboard-frame"><DashboardDemo /></div>
 	</figure>
 
 	<hr class="hero-divider" />
@@ -107,8 +99,7 @@
 	@media (prefers-reduced-motion: reduce) {
 		.hero-mascot { animation: none; }
 	}
-	.dashboard-image { display: block; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); box-shadow: 0 16px 48px -16px rgb(60 56 54 / 16%); }
-	.dashboard-image img { display: block; width: 100%; height: auto; }
+	.dashboard-frame { height: 640px; overflow: hidden; border: 1px solid #d6d3cc; border-radius: 6px; background: var(--surface); box-shadow: 0 16px 48px -16px rgb(60 56 54 / 16%); }
 	.hero-divider { margin: 0; border: 0; border-top: 1px solid var(--border); }
 
 	@media (max-width: 760px) {
@@ -118,6 +109,7 @@
 		h1 { grid-column: 1 / -1; }
 		.hero-mascot { grid-row: 2; width: 100px; margin: 0 8px -46px 0; }
 		.dashboard-preview { margin-bottom: 32px; }
+		.dashboard-frame { height: 560px; }
 	}
 	@media (max-width: 600px) {
 		h1 { font-size: clamp(30px, 9.4vw, 42px); }

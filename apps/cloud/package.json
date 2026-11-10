@@ -24,7 +24,7 @@
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "drizzle-orm": "1.0.0-rc.4",
     "jose": "6.2.12",
-    "phosphor-svelte": "^3.1.0",
+    "phosphor-svelte": "^3.1.1",
     "uuid": "14.0.2"
   },
   "devDependencies": {
