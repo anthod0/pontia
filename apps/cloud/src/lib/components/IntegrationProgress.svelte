@@ -6,9 +6,13 @@
   import XIcon from 'phosphor-svelte/lib/XIcon';
   import MinusIcon from 'phosphor-svelte/lib/MinusIcon';
   import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
+  import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
+  import { reveal } from '$lib/reveal';
 
   // Editorial estimate, updated manually rather than derived from capability counts.
   const developmentProgress = 50;
+  // The bar fills from zero when the section scrolls into view.
+  let shownProgress = $state(0);
 
   // SVG logo sources: https://pi.dev/press-kit; Claude symbol extracted from
   // the inline wordmark at https://claude.com/product/claude-code;
@@ -39,17 +43,18 @@
   ];
 </script>
 
-<section id="progress" class="integrations page-width section-block" aria-labelledby="integrations-title">
-  <div class="section-intro">
-    <div>
-      <h2 id="integrations-title">Your clients.<br />Coming together.</h2>
+<section id="progress" class="integrations page-width section-block" aria-labelledby="integrations-title" {@attach reveal(() => (shownProgress = developmentProgress))}>
+  <div class="section-intro reveal">
+    <div class="section-heading">
+      <h2 id="integrations-title">One Dashboard for every agent.</h2>
+      <p>Five Agent Clients today, with deeper integration landing in each release.</p>
     </div>
     <div class="development-status">
-      <p id="integration-status">Integration progress</p>
-      <Progress value={developmentProgress} aria-labelledby="integration-status" aria-valuetext={`Approximately ${developmentProgress}% (estimate)`} />
+      <p id="integration-status"><span>Integration progress</span><span>~{developmentProgress}%</span></p>
+      <Progress value={shownProgress} aria-labelledby="integration-status" aria-valuetext={`Approximately ${developmentProgress}% (estimate)`} />
     </div>
   </div>
-  <div class="coverage-table">
+  <div class="coverage-table reveal" style="--i: 1">
     <Table.Root>
       <Table.Caption class="sr-only">Pontia client integration coverage. Supported indicates implemented integration, not a guarantee for every client configuration.</Table.Caption>
       <Table.Header>
@@ -59,8 +64,8 @@
         </Table.Row>
       </Table.Header>
       <Table.Body>
-        {#each clients as client}
-          <Table.Row>
+        {#each clients as client, index}
+          <Table.Row class="reveal" style={`--i: ${index + 2}`}>
             <Table.Head scope="row" class="client-cell">
               <span class="client-identity"><img class="client-mark" src={client.logo} alt="" width="32" height="32" loading="lazy" /><span>{client.name}</span></span>
             </Table.Head>
@@ -73,20 +78,22 @@
       </Table.Body>
     </Table.Root>
   </div>
+  <div class="section-footer">
   <ul class="coverage-legend" aria-label="Capability status legend">
     {#each Object.entries(states) as [status, state]}
       {@const Icon = state.icon}
       <li><span class={`coverage-status ${status}`}><Icon size={17} weight="regular" aria-hidden="true" /></span><span>{state.label}</span></li>
     {/each}
   </ul>
-  <div class="section-footer"><p>One workspace. More ways to work.</p><a href="/docs/agent-clients">Explore client integrations <span aria-hidden="true">↗</span></a></div>
+  <a href="/docs/agent-clients">Client integrations<ArrowRightIcon size={12} /></a>
+  </div>
 </section>
 
 <style>
   .integrations { padding-top: 56px; }
   .development-status { width: 200px; flex-shrink: 0; padding-bottom: 4px; }
-  .development-status p { margin-bottom: 12px; color: var(--primary); font: 11px/1.6 var(--font-mono); }
-  .development-status :global([data-slot="progress-indicator"]) { transition: none; }
+  .development-status p { display: flex; justify-content: space-between; margin-bottom: 12px; color: var(--primary); font: 11px/1.6 var(--font-mono); }
+  .development-status :global([data-slot="progress-indicator"]) { transition: transform 1.4s var(--ease-out) 0.3s; }
   .coverage-table { border-top: 1px solid var(--border); }
   .coverage-table :global(table) { min-width: 980px; table-layout: fixed; }
   .coverage-table :global(.client-heading) { width: 190px; padding: 16px 12px 16px 0; }
@@ -96,18 +103,17 @@
   .client-mark { display: block; flex-shrink: 0; width: 32px; height: 32px; object-fit: contain; }
   .coverage-table :global(.coverage-cell) { padding: 22px 10px; text-align: center; }
   .coverage-status { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; color: var(--muted-foreground); }
-  .coverage-legend { display: flex; flex-wrap: wrap; gap: 12px 24px; list-style: none; padding: 20px 0 0; margin: 0; }
+  .coverage-legend { display: flex; flex-wrap: wrap; gap: 12px 24px; list-style: none; padding: 0; margin: 0; }
   .coverage-legend li { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted-foreground); }
   .coverage-status.supported { color: #326b60; }
   .coverage-status.partial { color: #8a651e; }
-  .section-footer { display: flex; justify-content: space-between; gap: 16px; padding-top: 24px; font-size: 12px; }
-  .section-footer p { color: var(--muted-foreground); }
-  .section-footer a { color: var(--primary); }
+  .section-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 20px; font-size: 12px; }
+  .section-footer a { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; color: var(--primary); font-weight: 500; }
   .section-footer a:hover { text-decoration: underline; }
   @media(max-width: 600px) {
     .integrations { padding-top: 24px; }
     .coverage-table :global(.client-heading), .coverage-table :global(.client-cell) { position: sticky; left: 0; background: var(--background); z-index: 1; padding-left: 8px; width: 165px; }
     .client-identity { gap: 10px; font-size: 14px; }
-    .section-footer { flex-direction: column; gap: 10px; }
+    .section-footer { flex-direction: column; align-items: flex-start; gap: 16px; }
   }
 </style>

@@ -43,6 +43,7 @@
   --foreground: #3c3836;
   --muted-foreground: #7c6f64;
   --primary: #458588;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
   font-family: var(--font-sans);
   color: var(--foreground);
   background: var(--background);
@@ -186,20 +187,6 @@ code {
   gap: 9px;
   color: var(--muted-foreground);
 }
-.status-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--primary);
-  flex-shrink: 0;
-}
-.status-dot.ochre {
-  background: #b58a31;
-}
-.status-dot.green {
-  background: #79740e;
-}
 .section-block {
   padding-block: 93px 64px;
 }
@@ -210,78 +197,22 @@ code {
   gap: 48px;
   margin-bottom: 35px;
 }
+.section-heading {
+  max-width: 600px;
+}
 h2 {
   font-size: 36px;
   font-weight: 500;
   line-height: 1.2;
   letter-spacing: -0.035em;
+  text-wrap: balance;
 }
-.section-intro > p {
-  font-size: 14px;
-  line-height: 1.8;
+.section-heading > p {
+  margin-top: 14px;
+  font-size: 15px;
+  line-height: 1.75;
   color: var(--muted-foreground);
-  padding-bottom: 3px;
-}
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  border-block: 1px solid var(--border);
-}
-.feature {
-  padding: 28px 27px 25px;
-}
-.feature:first-child {
-  padding-left: 0;
-}
-.feature:last-child {
-  padding-right: 0;
-}
-.feature + .feature {
-  border-left: 1px solid var(--border);
-}
-.feature-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--primary);
-  margin-bottom: 30px;
-}
-.feature-top.green {
-  color: #79740e;
-}
-.feature-top.ochre {
-  color: #b57614;
-}
-.feature-top > span {
-  font: 10px var(--font-mono);
-  color: #9b9287;
-}
-.feature h3 {
-  font-size: 19px;
-  font-weight: 500;
-  letter-spacing: -0.025em;
-  margin-bottom: 11px;
-}
-.feature > p {
-  font-size: 14px;
-  line-height: 1.8;
-  color: var(--muted-foreground);
-  min-height: 100px;
-}
-.feature-detail {
-  margin-top: 27px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  min-height: 23px;
-  font: 9px var(--font-mono);
-  color: var(--muted-foreground);
-}
-.surface-tag {
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 7px;
-  background: var(--surface);
+  text-wrap: pretty;
 }
 .site-footer {
   display: flex;
@@ -321,12 +252,6 @@ h2 {
   .page-width {
     width: calc(100% - 64px);
   }
-  .feature {
-    padding-inline: 20px;
-  }
-  .feature > p {
-    min-height: 126px;
-  }
 }
 @media (max-width: 760px) {
   .site-header {
@@ -339,28 +264,10 @@ h2 {
     padding-top: 70px;
   }
   .section-intro {
-    align-items: flex-start;
     gap: 24px;
-  }
-  .section-intro > p {
-    max-width: 270px;
-    font-size: 13px;
-  }
-  .section-intro > p br {
-    display: none;
   }
   h2 {
     font-size: 29px;
-  }
-  .feature h3 {
-    font-size: 17px;
-  }
-  .feature > p {
-    font-size: 13px;
-    min-height: 164px;
-  }
-  .feature-detail {
-    font-size: 8px;
   }
   .site-footer {
     flex-wrap: wrap;
@@ -395,49 +302,20 @@ h2 {
     font-size: 8px;
     letter-spacing: 0.07em;
   }
-  .desktop-break {
-    display: none;
-  }
   .section-block {
     padding-block: 54px 36px;
   }
   .section-intro {
     flex-direction: column;
+    align-items: flex-start;
     gap: 18px;
     margin-bottom: 27px;
   }
-  .section-intro > p {
-    max-width: 360px;
+  .section-heading > p {
     font-size: 14px;
   }
   h2 {
-    font-size: 31px;
-  }
-  .feature-grid {
-    grid-template-columns: 1fr;
-  }
-  .feature,
-  .feature:first-child,
-  .feature:last-child {
-    padding: 25px 0;
-  }
-  .feature + .feature {
-    border-left: none;
-    border-top: 1px solid var(--border);
-  }
-  .feature-top {
-    margin-bottom: 17px;
-  }
-  .feature h3 {
-    font-size: 20px;
-  }
-  .feature > p {
-    min-height: 0;
-    font-size: 14px;
-  }
-  .feature-detail {
-    margin-top: 18px;
-    font-size: 9px;
+    font-size: 28px;
   }
   .site-footer {
     padding-block: 23px 28px;
@@ -453,6 +331,19 @@ h2 {
     gap: 10px 18px;
     font-size: 10px;
   }
+}
+/* Scroll reveal, driven by the `reveal` attachment in $lib/reveal. */
+[data-reveal] .reveal {
+  opacity: 0;
+  transform: translateY(24px);
+}
+[data-reveal="visible"] .reveal {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.7s var(--ease-out),
+    transform 0.7s var(--ease-out);
+  transition-delay: calc(var(--i, 0) * 90ms);
 }
 @media (prefers-reduced-motion: reduce) {
   html {

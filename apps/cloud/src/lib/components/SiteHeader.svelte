@@ -1,10 +1,6 @@
-<script lang="ts">
-  let { logo = true }: { logo?: boolean } = $props();
-</script>
-
 <header class="site-header page-width">
   <a class="brand" href="/" aria-label="Pontia home">
-    {#if logo}<img src="/logo.svg" alt="" />{/if}
+    <img src="/logo.svg" alt="" />
     <span>Pontia</span>
   </a>
   <nav aria-label="Primary navigation">
