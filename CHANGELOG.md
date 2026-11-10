@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-11-11
+
+### Added
+
+- Added a social share image to the Cloud homepage.
+
+### Changed
+
+- Redesigned the Cloud homepage around an interactive Dashboard demo, with feature, integration progress, open source, and FAQ sections.
+- Shortened `pontia` command help text.
+
+### Fixed
+
+- The chat page now shows a single conversation skeleton while a session loads.
+- The public Dashboard's device loading screen now matches the connecting screen.
+
 ## [0.7.2] - 2026-11-09
 
 ### Added
