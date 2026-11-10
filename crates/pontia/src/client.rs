@@ -7,12 +7,6 @@ use std::path::PathBuf;
 
 const CLIENT_HELP: &str = "\
 Requires a running service. Output is JSON.
-Select an entry by short ID (pi, codex) or by --id from 'pontia client list'.
-Only enabled entries can start new Sessions.
-
-Examples:
-  pontia client list
-  pontia client enable pi
 
 For Client setup, see https://pontia.dev/docs/agent-clients.md";
 

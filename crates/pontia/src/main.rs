@@ -35,17 +35,9 @@ use pontia::manager::LaunchdManager;
 use pontia::manager::SystemdManager;
 
 const ROOT_HELP: &str = "\
-Quick start:
-  pontia init      Interactive setup (requires a terminal)
-  pontia up        Start the service without prompts
-  pontia status    Show service, account, and remote access
-  pontia doctor    Diagnose configuration and connectivity
-
 Configuration and state live in $PONTIA_HOME (default: ~/.pontia).
-Use 'pontia <command> -h' for details, including nested commands.
 
-For setup without prompts, see https://pontia.dev/docs/initialization.md#non-interactive-initialization
-For more documents, see https://pontia.dev/llms.txt";
+For documentation, see https://pontia.dev/llms.txt";
 
 const INIT_HELP: &str = "\
 Prompts on the terminal. Rerunning keeps the existing API token and Workspace roots.
@@ -87,10 +79,11 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Share one file with the user of the current Session
-    #[command(
-        after_help = "Requires PONTIA_SESSION_ID and a running pontiad. Relative paths use the current directory.\nPrints the file ID on success. The file is read when the user downloads it."
-    )]
-    SendFile { path: PathBuf },
+    #[command(after_help = "The file is read when the user downloads it.")]
+    SendFile {
+        /// File to share
+        path: PathBuf,
+    },
     /// Configure Pontia interactively and start its per-user service
     #[command(after_help = INIT_HELP)]
     Init,
@@ -113,7 +106,7 @@ enum Command {
     /// Show service health, the signed-in user, and remote registration
     #[command(after_help = STATUS_HELP)]
     Status,
-    /// Explain service, configuration, login, and remote access checks
+    /// Check service, configuration, login, and remote access
     Doctor,
     /// Run and interact with Workflows
     Workflow(workflow::WorkflowCommand),

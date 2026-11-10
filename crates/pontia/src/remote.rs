@@ -21,13 +21,10 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const REMOTE_HELP: &str = "\
 Requires 'pontia login'. enable, rotate-key, and disable restart a running service.
 
-Examples:
-  pontia remote edges
+Example:
   pontia remote enable --edge <EDGE_ID> --name \"Workstation\"
-  pontia status
 
-For remote access, see https://pontia.dev/docs/remote-access.md
-For device management, see https://pontia.dev/docs/device-management.md";
+For remote access, see https://pontia.dev/docs/remote-access.md";
 
 const ENABLE_HELP: &str = "\
 Prompts for the edge and name unless both --edge and --name are given.
@@ -46,7 +43,8 @@ pub(crate) struct RemoteCommand {
 
 #[derive(Debug, Subcommand)]
 enum RemoteCommandKind {
-    /// List available edges as JSON
+    /// List available edges
+    #[command(after_help = "Output is JSON.")]
     Edges,
     /// Register this machine as a remote device
     #[command(after_help = ENABLE_HELP)]
@@ -54,9 +52,11 @@ enum RemoteCommandKind {
     /// Edit this machine's Cloud device profile
     #[command(after_help = EDIT_HELP)]
     Edit(EditArgs),
-    /// Replace the device E2E identity key; open browser sessions must reconnect
+    /// Replace the device E2E identity key
+    #[command(after_help = "Open browser sessions must reconnect.")]
     RotateKey,
-    /// Unregister this machine and disable remote access; the login is kept
+    /// Unregister this machine and disable remote access
+    #[command(after_help = "The 'pontia login' credential is kept.")]
     Disable,
 }
 
