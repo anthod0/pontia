@@ -10,6 +10,7 @@
 	import { reveal } from '$lib/reveal';
 
 	const url = 'https://pontia.dev/';
+	const image = 'https://pontia.dev/og.png';
 	const title = 'Pontia — Run coding agents locally, control them anywhere';
 	const description = 'Open-source remote control for coding agents. Run pi, Codex, Claude Code, and more on your own device, then follow and steer them from any browser.';
 
@@ -36,9 +37,14 @@
 	<meta property="og:description" content={description} />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content={url} />
-	<meta name="twitter:card" content="summary" />
+	<meta property="og:image" content={image} />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:image:alt" content={title} />
+	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={description} />
+	<meta name="twitter:image" content={image} />
 	{@html `<script type="application/ld+json">${JSON.stringify(structuredData)}</script>`}
 </svelte:head>
 
