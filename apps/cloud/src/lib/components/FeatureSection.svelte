@@ -76,12 +76,12 @@
 			<div class="visual relay-visual" aria-hidden="true">
 				<div class="relay">
 					<div class="node"><span class="node-name">Browser</span></div>
-					<div class="wire"><span class="packet"></span><span class="packet back"></span></div>
+					<div class="wire to-edge"><span class="packet"></span><span class="packet back"></span></div>
 					<div class="node edge">
 						<span class="node-name"><LockSimpleIcon size={12} weight="bold" />Edge</span>
 						<span class="cipher"><span>9f2a c41e 77b0 e3d9 1a6c 58f2 0bd4 9f2a c41e 77b0 e3d9 1a6c 58f2 0bd4</span></span>
 					</div>
-					<div class="wire"><span class="packet"></span><span class="packet back"></span></div>
+					<div class="wire from-edge"><span class="packet"></span><span class="packet back"></span></div>
 					<div class="node"><span class="node-name">Device</span></div>
 				</div>
 			</div>
@@ -120,8 +120,11 @@
 	.cipher { width: 96px; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent); }
 	.cipher span { display: block; width: max-content; font: 9px var(--font-mono); color: #79740e; animation: scroll-x 6s linear infinite; }
 	.wire { position: relative; flex: 1; height: 1px; margin-inline: 4px; background: repeating-linear-gradient(90deg, var(--primary) 0 4px, transparent 4px 8px); }
-	.packet { position: absolute; top: -3px; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px rgb(69 133 136 / 18%); animation: travel 2.4s cubic-bezier(0.6, 0, 0.4, 1) infinite; }
-	.packet.back { background: #79740e; box-shadow: 0 0 0 3px rgb(121 116 14 / 18%); animation-direction: reverse; animation-delay: -1.2s; }
+	/* Each packet crosses one wire per half cycle, passing through the Edge between them. */
+	.packet { position: absolute; top: -3px; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px rgb(69 133 136 / 18%); opacity: 0; animation: 4.8s cubic-bezier(0.6, 0, 0.4, 1) infinite; }
+	.packet.back { background: #79740e; box-shadow: 0 0 0 3px rgb(121 116 14 / 18%); animation-direction: reverse; }
+	.to-edge .packet, .to-edge .packet.back { animation-name: travel-first-half; }
+	.from-edge .packet, .from-edge .packet.back { animation-name: travel-second-half; }
 
 	/* Terminal: lines appear in sequence once the card is revealed. */
 	.terminal-visual { place-items: center; padding: 20px; }
@@ -156,7 +159,16 @@
 	.marquee img { width: 24px; height: 24px; object-fit: contain; }
 
 
-	@keyframes travel { from { left: 0; } to { left: calc(100% - 7px); } }
+	@keyframes travel-first-half {
+		0% { left: 0; opacity: 0; }
+		4%, 46% { opacity: 1; }
+		50%, 100% { left: calc(100% - 7px); opacity: 0; }
+	}
+	@keyframes travel-second-half {
+		0%, 50% { left: 0; opacity: 0; }
+		54%, 96% { opacity: 1; }
+		100% { left: calc(100% - 7px); opacity: 0; }
+	}
 	@keyframes scroll-x { to { transform: translateX(-50%); } }
 	@keyframes scroll-list { to { transform: translateX(-100%); } }
 	@keyframes blink { 50% { opacity: 0; } }
@@ -170,6 +182,7 @@
 
 	@media (prefers-reduced-motion: reduce) {
 		.packet, .cipher span, .marquee ul, .cursor, .dot.busy, .approval { animation: none; }
+		.packet { opacity: 1; }
 		.packet.back { display: none; }
 		.marquee .duplicate { display: none; }
 		.marquee { justify-content: center; }
