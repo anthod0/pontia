@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-11-11
+
+### Added
+
+- Added editing an earlier prompt in Codex sessions. Saving the edit creates an independent session with the history before that prompt and sends the replacement there; the original session is kept.
+- Codex threads opened through the shared Codex daemon, including from the Pontia Codex launcher, now appear as Pontia sessions.
+- Codex sessions now show context usage and load their history from Codex.
+- Added automatic cleanup of uploaded files, configured in the new `[uploads]` section.
+- Added a blog to the Cloud site.
+
+### Changed
+
+- Uploaded files now appear above the user message, and pending attachments above the composer input. Upload errors are shown as toasts.
+- The chat status bar now shows the agent client icon first and no longer shows the control connection state.
+- Agent profile system prompts are now applied once when a session is created.
+- Expanded the Cloud docs to cover Claude Agent, ACP agents, and recent Dashboard features.
+
+### Fixed
+
+- An idle session's chat no longer loses its visible history.
+- In the public Dashboard, New Chat now opens on the active device.
+- Dashboard components now play their open and close animations.
+
 ## [0.7.3] - 2026-11-11
 
 ### Added
