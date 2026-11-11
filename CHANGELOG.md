@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-11-12
+
+### Added
+
+- Added `pontia setup [CLIENT]` to install or repair the recommended integration for pi, Codex, or Claude Agent without changing Client enablement.
+- The public Dashboard now guides you through connecting your first device.
+- The Cloud site's `llms.txt` now includes blog posts and is linked from the footer.
+- Added blog posts on coding agent phone notifications and remote access, and expanded the DIY setup sections of existing posts.
+
+### Changed
+
+- Signed-out users of the public Dashboard are now redirected to sign-in.
+- Redesigned the Cloud sign-in page.
+- The chat page no longer shows the Agent Profile status label above the timeline; profile errors are still shown.
+
+### Fixed
+
+- Workflow replanner sessions keep their workflow context after a restart or resume.
+
 ## [0.7.4] - 2026-11-11
 
 ### Added
