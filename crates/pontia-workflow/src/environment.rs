@@ -4,11 +4,13 @@ use std::collections::BTreeMap;
 
 pub struct WorkflowSessionEnvironment {
     repository: SqliteWorkflowRepository,
+    pool: sqlx::SqlitePool,
 }
 impl WorkflowSessionEnvironment {
     pub fn new(pool: sqlx::SqlitePool) -> Self {
         Self {
-            repository: SqliteWorkflowRepository::new(pool),
+            repository: SqliteWorkflowRepository::new(pool.clone()),
+            pool,
         }
     }
 }
@@ -18,6 +20,21 @@ impl SessionEnvironment for WorkflowSessionEnvironment {
         session_id: &'a str,
     ) -> ClientOperation<'a, BTreeMap<String, String>> {
         Box::pin(async move {
+            let replanner: Option<(String, String)> = sqlx::query_as(
+                "SELECT json_extract(metadata, '$.workflow_id'),
+                        json_extract(metadata, '$.workflow_patch_id')
+                 FROM sessions WHERE session_id = ?
+                   AND json_extract(metadata, '$.role') = 'workflow_replanner'",
+            )
+            .bind(session_id)
+            .fetch_optional(&self.pool)
+            .await?;
+            if let Some((workflow_id, patch_id)) = replanner {
+                return Ok(BTreeMap::from([
+                    ("PONTIA_WORKFLOW_ID".into(), workflow_id),
+                    ("PONTIA_WORKFLOW_PATCH_ID".into(), patch_id),
+                ]));
+            }
             let workflow_id = self
                 .repository
                 .get_node_by_session(session_id)

@@ -113,6 +113,18 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
             )
         );
     }
+    assert_eq!(
+        pontia_agent_control::sessions::SessionEnvironment::environment(
+            &pontia_workflow::WorkflowSessionEnvironment::new(pool.clone()),
+            "sess_replanner",
+        )
+        .await
+        .unwrap(),
+        std::collections::BTreeMap::from([
+            ("PONTIA_WORKFLOW_ID".into(), "wf_block".into()),
+            ("PONTIA_WORKFLOW_PATCH_ID".into(), patch_id.clone()),
+        ])
+    );
 
     let patch = repository.get_patch(&patch_id).await.unwrap().unwrap();
     assert_eq!(patch.state, "planning");

@@ -75,9 +75,24 @@ impl Adapter {
                 .bind(&target.session_id)
                 .fetch_optional(&events.db())
                 .await?;
-        let environment = workflow
+        let mut environment = workflow
             .map(|id| BTreeMap::from([("PONTIA_WORKFLOW_ID".into(), id)]))
             .unwrap_or_default();
+        let replanner: Option<(String, String)> = sqlx::query_as(
+            "SELECT json_extract(metadata, '$.workflow_id'),
+                    json_extract(metadata, '$.workflow_patch_id')
+             FROM sessions WHERE session_id = ?
+               AND json_extract(metadata, '$.role') = 'workflow_replanner'",
+        )
+        .bind(&target.session_id)
+        .fetch_optional(&events.db())
+        .await?;
+        if let Some((workflow_id, patch_id)) = replanner {
+            environment.extend([
+                ("PONTIA_WORKFLOW_ID".into(), workflow_id),
+                ("PONTIA_WORKFLOW_PATCH_ID".into(), patch_id),
+            ]);
+        }
         peer.start(&events, &script, &environment).await?;
         peers.insert(peer.session.clone(), peer);
         Ok(())

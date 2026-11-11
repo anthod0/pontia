@@ -14,6 +14,62 @@ struct Harness {
 }
 
 #[tokio::test]
+async fn replanner_commands_keep_the_original_workflow_and_patch_after_resume() {
+    let h = Harness::new().await;
+    let mut sessions = Vec::new();
+    for patch in ["patch_original", "patch_later"] {
+        let mut request: CreateSessionRequest = serde_json::from_value(json!({
+            "client_type": "claude-agent", "workspace": h.root.path(),
+            "role": "workflow_replanner",
+            "metadata": {
+                "role": "workflow_replanner", "workflow_id": "wf_replan",
+                "workflow_patch_id": patch,
+                "workflow_replanner_creation_token": patch
+            },
+            "initial_task": {"input": "read-workflow-environment"}
+        }))
+        .unwrap();
+        request.runtime_environment = [
+            ("PONTIA_WORKFLOW_ID".into(), "wf_replan".into()),
+            ("PONTIA_WORKFLOW_PATCH_ID".into(), patch.into()),
+        ]
+        .into();
+        let created = h
+            .app
+            .session_commands()
+            .create_session(request)
+            .await
+            .unwrap();
+        sessions.push((created.session_id().unwrap().to_owned(), patch));
+    }
+    for number in 1..=2 {
+        for (session, patch) in &sessions {
+            h.gate(session, number, "start");
+            h.gate(session, number, "finish");
+            h.wait_states(session, &vec!["completed"; number]).await;
+            let values: Vec<_> = h
+                .wire(session)
+                .into_iter()
+                .filter(|frame| frame["method"] == "workflow_environment")
+                .map(|frame| frame["value"].clone())
+                .collect();
+            assert_eq!(values, vec![json!(["wf_replan", patch]); number]);
+            h.app
+                .session_commands()
+                .terminate_session(session)
+                .await
+                .unwrap();
+        }
+        if number == 1 {
+            for (session, _) in &sessions {
+                h.resume_input(session, "read-workflow-environment").await;
+            }
+        }
+    }
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn commands_use_their_own_session_environment_before_and_after_resume() {
     let h = Harness::new().await;
     let inherited = std::env::var_os("PONTIA_SESSION_ID");

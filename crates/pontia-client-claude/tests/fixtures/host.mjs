@@ -137,6 +137,16 @@ if (process.argv[2] === "history") {
           }),
         });
       }
+      if (active.text === "read-workflow-environment") {
+        record({
+          method: "workflow_environment",
+          value: execFileSync(
+            "sh",
+            ["-c", 'printf "%s\\n%s" "$PONTIA_WORKFLOW_ID" "$PONTIA_WORKFLOW_PATCH_ID"'],
+            { encoding: "utf8" },
+          ).split("\n"),
+        });
+      }
       active.reply = randomUUID();
       history({
         type: "assistant",
