@@ -85,7 +85,7 @@ impl ClientIntegration for Integration {
 
 impl PreparedClientIntegration for Prepared {
     fn summary(&self) -> Vec<String> {
-        vec!["Claude Agent integration: enable".into()]
+        vec!["Claude Agent integration: configure".into()]
     }
     fn preflight(&self, runner: &dyn CommandRunner) -> Result<(), String> {
         if let Some(host) = &self.host {
@@ -96,7 +96,7 @@ impl PreparedClientIntegration for Prepared {
             return self.check_host(&host, runner);
         }
         if runner.run_status("npm", &["--version".into()])? != 0 {
-            return Err("Install Node.js LTS and npm before enabling Claude Agent".into());
+            return Err("Install Node.js LTS and npm before setting up Claude Agent".into());
         }
         Ok(())
     }
@@ -129,7 +129,7 @@ impl PreparedClientIntegration for Prepared {
             ));
         }
         self.check_host(&stage.path().join(HOST_SCRIPT), runner)?;
-        std::fs::rename(stage.path(), parent.join("claude-client")).map_err(|e| e.to_string())?;
+        publish_installation(stage.path(), &parent.join("claude-client"))?;
         Ok(())
     }
     fn completion(&self) -> &'static str {
@@ -150,9 +150,7 @@ impl PreparedClientIntegration for Prepared {
 impl Prepared {
     fn check_host(&self, host: &Path, runner: &dyn CommandRunner) -> Result<(), String> {
         if !host.is_file() {
-            return Err(
-                "Claude Agent client is missing; run pontia init and select claude-agent".into(),
-            );
+            return Err("Claude Agent client is missing; run pontia setup claude-agent".into());
         }
         let code = runner.run_status(
             self.node.to_str().ok_or("Node path is not UTF-8")?,
@@ -166,4 +164,24 @@ impl Prepared {
         }
         Ok(())
     }
+}
+
+fn publish_installation(source: &Path, destination: &Path) -> Result<(), String> {
+    if !destination.exists() {
+        return std::fs::rename(source, destination).map_err(|error| error.to_string());
+    }
+    for entry in std::fs::read_dir(source).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let target = destination.join(entry.file_name());
+        if entry
+            .file_type()
+            .map_err(|error| error.to_string())?
+            .is_dir()
+        {
+            publish_installation(&entry.path(), &target)?;
+        } else {
+            std::fs::rename(entry.path(), target).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
 }

@@ -22,7 +22,7 @@ pub use session::{
     ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails, InProcessClient,
     NativeSessionFork, SessionCreationOption,
 };
-pub use setup::{ClientIntegration, IntegrationOption, PreparedClientIntegration};
+pub use setup::{ClientIntegration, PreparedClientIntegration};
 #[cfg(any(test, feature = "generic-test-client"))]
 mod generic_test;
 pub mod raw_transcripts;

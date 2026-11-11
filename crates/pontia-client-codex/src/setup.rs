@@ -5,9 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pontia_agent_control::client_contract::{
-    ClientIntegration, IntegrationOption, PreparedClientIntegration,
-};
+use pontia_agent_control::client_contract::{ClientIntegration, PreparedClientIntegration};
 use pontia_runtime::local_service::{
     CommandOutput, CommandRunner, DefinitionStore, absolute_utf8_path,
     launchd_executable_search_path, systemd_quote, xml_escape,
@@ -56,20 +54,6 @@ impl ClientIntegration for CodexIntegration {
 }
 
 impl PreparedClientIntegration for PreparedSetup {
-    fn options(&self) -> Vec<IntegrationOption> {
-        vec![IntegrationOption {
-            key: "shim",
-            prompt: "Use the Pontia Codex launcher for TUI commands",
-            enabled: self.shim.enabled,
-        }]
-    }
-    fn set_option(&mut self, key: &str, enabled: bool) -> Result<(), String> {
-        if key != "shim" {
-            return Err(format!("Unknown Codex integration option: {key}"));
-        }
-        self.shim.enabled = enabled;
-        Ok(())
-    }
     fn summary(&self) -> Vec<String> {
         let summary = vec![
             "Codex integration: register autostart".into(),
@@ -100,15 +84,13 @@ impl PreparedClientIntegration for PreparedSetup {
         self.shim.install()
     }
     fn completion(&self) -> &'static str {
-        "Configured Codex autostart and control connection"
+        "Configured Codex autostart, control connection, and launcher"
     }
     fn next_steps(&self) -> Option<String> {
-        self.shim.enabled.then(|| {
-            format!(
-                "Open a new terminal or run the following command to use the Codex launcher:\n  {}",
-                self.shim.activation_command()
-            )
-        })
+        Some(format!(
+            "Open a new terminal or run the following command to use the Codex launcher:\n  {}",
+            self.shim.activation_command()
+        ))
     }
     fn service_environment_paths(&self) -> Vec<(String, PathBuf)> {
         vec![("CODEX_HOME".into(), self.daemon.home.clone())]

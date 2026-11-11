@@ -18,15 +18,17 @@ To update the Claude client separately, exit active Claude Agent Sessions, then 
 
 ```sh
 npm install --prefix "${PONTIA_HOME:-$HOME/.pontia}/clients/claude-client" --omit=dev @pontia/claude-client@latest
-pontia init
+pontia setup claude-agent
 ```
 
-Select `claude-agent` again to verify the updated installation.
+Setup checks the updated installation without changing Client enablement.
 
-If you use a custom native configuration directory, pass its absolute path during initialization:
+To install or check the integration after initializing Pontia, run `pontia setup claude-agent`. It reuses a valid default host or the host selected by `PONTIA_CLAUDE_HOST_PATH`, saves the Node.js and Claude configuration paths for the service, and preserves Client enablement. Use `pontia client enable claude-agent` separately when needed.
+
+If you use a custom native configuration directory, pass its absolute path during setup:
 
 ```sh
-CLAUDE_CONFIG_DIR=/absolute/path/to/claude-config pontia init
+CLAUDE_CONFIG_DIR=/absolute/path/to/claude-config pontia setup claude-agent
 ```
 
 ## Run a task

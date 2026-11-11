@@ -8,3 +8,4 @@ pub mod manager;
 pub mod private_file;
 pub mod runtime_io;
 pub mod send_file;
+pub mod setup;

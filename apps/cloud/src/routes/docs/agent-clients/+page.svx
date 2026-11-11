@@ -9,10 +9,10 @@ An Agent Client connects Pontia to a coding agent's native session, control chan
 
 Pontia includes these Agent Clients:
 
-| Client | Local requirement | Integration installed by `pontia init` |
+| Client | Local requirement | Local integration |
 | --- | --- | --- |
 | [pi](/docs/agent-clients/pi) | `pi` and `tmux` | Pontia's pi plugin |
-| [Codex](/docs/codex) | A Codex CLI with app-server daemon support | Per-user Codex daemon startup |
+| [Codex](/docs/codex) | A Codex CLI with app-server daemon support | Per-user Codex daemon startup, launcher, and shell PATH |
 | [Claude Agent](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) | Node.js LTS, npm, and Claude Code authentication | The `@pontia/claude-client` package from npm |
 | ACP agents | An agent that speaks the Agent Client Protocol over stdio | None; enable the entry after installing the agent |
 
@@ -45,7 +45,7 @@ args = ["--acp"]
 
 Instead of `command` and `args`, an entry can set `registry_id` to launch an agent from the ACP registry. The agent must support loading and closing sessions; Pontia reports a missing capability when the Session starts.
 
-Running `pontia init` again preserves the existing External API token and Workspace Browser roots. It can also install or repair a selected Client integration.
+Run `pontia setup pi`, `pontia setup codex`, or `pontia setup claude-agent` to install or repair a local integration. Omit the Client to select interactively. Setup preserves entry enablement; use `pontia client enable CLIENT` separately to allow new Sessions.
 
 ## Client capabilities differ
 

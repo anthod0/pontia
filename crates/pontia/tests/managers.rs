@@ -518,3 +518,77 @@ fn managers_extract_persisted_home_from_their_rendered_definition() {
         Path::new("/Users/a/Pontia & home")
     );
 }
+
+#[test]
+fn client_setup_replaces_selected_paths_and_retains_other_clients_on_both_platforms() {
+    let runner = FakeRunner::default();
+    let names = vec!["CODEX_HOME", "PONTIA_CLAUDE_HOST_PATH", "CLAUDE_CONFIG_DIR"];
+    let original_paths = vec![
+        ("CODEX_HOME".into(), "/srv/codex".into()),
+        (
+            "PONTIA_CLAUDE_HOST_PATH".into(),
+            "/srv/claude/host.js".into(),
+        ),
+        ("CLAUDE_CONFIG_DIR".into(), "/srv/claude/config".into()),
+    ];
+    let selected_paths = vec![("CODEX_HOME".into(), "/srv/selected-codex".into())];
+    let pairs: Vec<(Box<dyn ServiceManager>, Box<dyn ServiceManager>)> = vec![
+        (
+            Box::new(SystemdManager::with_environment_paths(
+                &runner,
+                names.clone(),
+                &original_paths,
+            )),
+            Box::new(SystemdManager::with_environment_paths(
+                &runner,
+                names.clone(),
+                &selected_paths,
+            )),
+        ),
+        (
+            Box::new(LaunchdManager::with_environment_paths(
+                &runner,
+                501,
+                names.clone(),
+                &original_paths,
+                Vec::new(),
+            )),
+            Box::new(LaunchdManager::with_environment_paths(
+                &runner,
+                501,
+                names,
+                &selected_paths,
+                Vec::new(),
+            )),
+        ),
+    ];
+    for (original, updated) in pairs {
+        let before = original
+            .render_definition(
+                Path::new("/bin/pontiad"),
+                Path::new("/srv/pontia"),
+                "https://pontia.dev",
+                None,
+            )
+            .unwrap();
+        let after = updated
+            .render_definition(
+                Path::new("/bin/pontiad"),
+                Path::new("/srv/pontia"),
+                "https://pontia.dev",
+                Some(&before),
+            )
+            .unwrap();
+        let paths: std::collections::HashMap<_, _> = updated
+            .persisted_client_paths(&after)
+            .unwrap()
+            .into_iter()
+            .collect();
+        assert_eq!(paths["CODEX_HOME"], Path::new("/srv/selected-codex"));
+        assert_eq!(
+            paths["PONTIA_CLAUDE_HOST_PATH"],
+            Path::new("/srv/claude/host.js")
+        );
+        assert_eq!(paths["CLAUDE_CONFIG_DIR"], Path::new("/srv/claude/config"));
+    }
+}

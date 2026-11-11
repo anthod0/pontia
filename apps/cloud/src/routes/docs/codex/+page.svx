@@ -14,15 +14,21 @@ codex app-server daemon version --help
 
 Codex uses its own model credentials, sandbox, and approval policy. Choose a policy appropriate for the work you will run from the Dashboard. When Codex asks to run a command, change files, or use additional permissions, the request appears in the Dashboard with **Allow** and **Deny** choices.
 
-## Interactive setup
+## Setup
 
-Run `pontia init` and select **Codex**. Pontia configures automatic startup, verifies the connection, and saves the Codex home for both services.
+For first-time initialization, run `pontia init` and select **Codex**. To install or repair the integration later, run:
+
+```sh
+pontia setup codex
+```
+
+Both commands configure automatic startup, verify the daemon connection, save the Codex home for both services, and install the launcher. On Linux, they also enable user lingering. `setup` preserves the Client entry's enabled state; use `pontia client enable codex` to enable new Sessions.
 
 <h2 id="codex-launcher">Codex launcher</h2>
 
-`pontia init` also offers the Pontia Codex launcher. When enabled, Pontia installs `$PONTIA_HOME/bin/codex` and adds it to the front of `PATH` in your bash, zsh, or fish startup files. Interactive `codex` commands in new shells then connect to the Pontia-managed daemon, and the threads they start, resume, or fork appear as Pontia Sessions. Other subcommands, such as `codex exec` or `codex login`, run the original executable unchanged.
+Codex setup installs `$PONTIA_HOME/bin/codex` and adds it to the front of `PATH` in your bash, zsh, or fish startup files. Interactive `codex` commands in new shells then connect to the Pontia-managed daemon, and the threads they start, resume, or fork appear as Pontia Sessions. Other subcommands, such as `codex exec` or `codex login`, run the original executable unchanged.
 
-Open a new terminal, or run the command printed at the end of initialization, to start using the launcher. To remove it, run `pontia init` again and decline the launcher option.
+Open a new terminal, or run the activation command printed after setup, to use the launcher. If the launcher or its managed PATH configuration is missing, rerun `pontia setup codex`. Repeated setup preserves unrelated shell configuration and does not duplicate the managed PATH block. The original Codex executable remains available.
 
 ## Edit an earlier prompt
 

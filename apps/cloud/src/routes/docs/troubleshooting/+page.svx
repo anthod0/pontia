@@ -54,7 +54,7 @@ pi --version
 tmux -V
 ```
 
-Run `pontia init` again with pi selected to reinstall the plugin. Inspect:
+Run `pontia setup pi` to reinstall the plugin. Inspect:
 
 ```text
 $PONTIA_HOME/state/pi-hook.log
@@ -64,13 +64,13 @@ Also check a custom `[runtime.pi].tui_command` for an invalid path or wrapper.
 
 ## Codex cannot connect
 
-Confirm that your Codex build supports the app-server daemon, then inspect its per-user service. See [Codex](/docs/codex) for platform commands. Run `pontia init` again if the executable or `CODEX_HOME` changed.
+Confirm that your Codex build supports the app-server daemon, then inspect its per-user service. See [Codex](/docs/codex) for platform commands. Run `pontia setup codex` if the executable or `CODEX_HOME` changed, or if the launcher or its shell PATH configuration is missing.
 
 Command, file-change, and permission approvals appear in the Dashboard. An agent can still appear stuck when Codex waits for another kind of request that the Dashboard does not show. Interrupt the Turn if needed, then adjust the Codex policy or answer the request in the native Codex interface.
 
 ## Claude Agent cannot start
 
-Check that `node --version` and `npm --version` work for the user that runs Pontia, then run `pontia init` and select `claude-agent` to re-run the dependency check. If the Dashboard reports an authentication failure while the SDK retries, fix Claude Code's own login or provider settings for that user. See the [Claude Agent guide](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) to update the client package.
+Check that `node --version` and `npm --version` work for the user that runs Pontia, then run `pontia setup claude-agent` to re-run the dependency check. If the Dashboard reports an authentication failure while the SDK retries, fix Claude Code's own login or provider settings for that user. See the [Claude Agent guide](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) to update the client package.
 
 ## An ACP agent cannot start
 

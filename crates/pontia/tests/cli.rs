@@ -648,3 +648,21 @@ fn workflow_submit_rejects_a_pane_without_pontia_identity() {
             .contains("not running in a Pontia-managed tmux pane")
     );
 }
+
+#[test]
+fn setup_rejects_unknown_clients_and_extra_options_without_writing_configuration() {
+    let root = tempfile::tempdir().unwrap();
+    for args in [
+        vec!["setup", "acp"],
+        vec!["setup", "codex", "--no-launcher"],
+    ] {
+        let output = pontia()
+            .args(args)
+            .env("PONTIA_HOME", root.path())
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(!root.path().join("config.toml").exists());
+    }
+}

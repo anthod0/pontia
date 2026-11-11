@@ -10,7 +10,6 @@ use pontia_config::AppConfig;
 
 use crate::{lifecycle::local_health_addr, local_config};
 use pontia_agent_control::client_contract::ClientIntegration;
-use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,18 +18,7 @@ pub struct InitOutcome {
     pub next_steps: Vec<String>,
 }
 
-pub trait InitPlatform {
-    fn integrations(&self) -> Vec<Arc<dyn ClientIntegration>>;
-    fn command_runner(&self) -> &dyn CommandRunner;
-    fn definition_store(&self) -> &dyn DefinitionStore;
-    fn preflight(&self) -> Result<(), String>;
-    fn fill_random(&self, bytes: &mut [u8]) -> Result<(), String>;
-    fn start_service(
-        &self,
-        config: &AppConfig,
-        config_changed: bool,
-        environment_paths: &[(String, PathBuf)],
-    ) -> Result<(), String>;
+pub trait InitPlatform: crate::setup::SetupPlatform {
     fn enable_client(&self, config: &AppConfig, client: &str, key: &str) -> Result<(), String>;
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String>;
 }
@@ -86,39 +74,17 @@ where
     writeln!(output, "Pontia initialization\n").map_err(io_error)?;
     let integrations = platform.integrations();
     let selected = select_agents(input, output, &integrations)?;
-    let mut prepared = integrations
+    let vars = crate::setup::integration_vars(vars, &user_home, platform)?;
+    let prepared = integrations
         .iter()
         .enumerate()
         .map(|(index, client)| {
             selected
                 .contains(&index)
-                .then(|| client.prepare(vars, &user_home, platform.command_runner()))
+                .then(|| client.prepare(&vars, &user_home, platform.command_runner()))
                 .transpose()
         })
         .collect::<Result<Vec<_>, _>>()?;
-
-    for setup in prepared.iter_mut().flatten() {
-        for option in setup.options() {
-            write!(
-                output,
-                "{} [{}]: ",
-                option.prompt,
-                if option.enabled { "Y/n" } else { "y/N" }
-            )
-            .map_err(io_error)?;
-            let enabled = match read_answer(input, output)?
-                .trim()
-                .to_ascii_lowercase()
-                .as_str()
-            {
-                "" => option.enabled,
-                "y" | "yes" => true,
-                "n" | "no" => false,
-                answer => return Err(format!("expected yes or no, got {answer:?}")),
-            };
-            setup.set_option(option.key, enabled)?;
-        }
-    }
 
     let token = match existing.external_api_token.as_deref() {
         Some(token) => token.to_string(),
@@ -207,7 +173,7 @@ where
     let config_changed = local_config::persist_token(&existing, &token)?;
     writeln!(output, "✓ Wrote {}", config_path.display()).map_err(io_error)?;
 
-    let config = local_config::load(vars)?;
+    let config = local_config::load(&vars)?;
     let environment_paths = installed
         .iter()
         .flat_map(|(_, setup)| setup.service_environment_paths())
@@ -243,7 +209,7 @@ where
     }))
 }
 
-fn line_agent_selection<R: BufRead, W: Write>(
+pub(crate) fn line_agent_selection<R: BufRead, W: Write>(
     input: &mut R,
     output: &mut W,
     clients: &[Arc<dyn ClientIntegration>],
@@ -304,7 +270,7 @@ fn line_agent_selection<R: BufRead, W: Write>(
         .collect())
 }
 
-fn interactive_agent_selection<R: BufRead, W: Write>(
+pub(crate) fn interactive_agent_selection<R: BufRead, W: Write>(
     _input: &mut R,
     output: &mut W,
     clients: &[Arc<dyn ClientIntegration>],
@@ -328,7 +294,7 @@ fn interactive_agent_selection<R: BufRead, W: Write>(
         .map_err(|error| format!("Agent Client selection failed: {error}"))
 }
 
-fn validated_user_home(vars: &HashMap<String, String>) -> Result<PathBuf, String> {
+pub(crate) fn validated_user_home(vars: &HashMap<String, String>) -> Result<PathBuf, String> {
     let path = PathBuf::from(vars.get("HOME").ok_or_else(|| {
         "HOME must be set to install the per-user service and select the default Workspace Browser root"
             .to_string()

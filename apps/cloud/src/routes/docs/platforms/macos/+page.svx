@@ -56,7 +56,7 @@ Inspect it with:
 launchctl print gui/$(id -u)/dev.pontia.codex-daemon
 ```
 
-The LaunchAgent definitions store absolute executable paths and a controlled executable search path. Run `pontia init` again after moving pi, Codex, or their home directories.
+The LaunchAgent definitions store absolute executable paths and a controlled executable search path. Run `pontia setup CLIENT` after moving a Client or its home directory, passing any custom runtime paths.
 
 ## Updates
 

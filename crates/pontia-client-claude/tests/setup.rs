@@ -159,3 +159,37 @@ fn failed_installation_or_dependency_check_leaves_no_partial_client_and_can_retr
         }
     }
 }
+
+#[test]
+fn repairs_a_missing_default_host_in_an_existing_installation_without_removing_other_files() {
+    let root = tempfile::tempdir().unwrap();
+    let runner = Installer {
+        install_code: 0,
+        dependency_code: 0,
+        downloads: AtomicUsize::new(0),
+    };
+    let integration = pontia_client_claude::setup::integration();
+    let setup = integration
+        .prepare(&HashMap::new(), root.path(), &runner)
+        .unwrap();
+    setup.preflight(&runner).unwrap();
+    setup.install(&runner, &NoDefinitions).unwrap();
+    let directory = root.path().join(".pontia/clients/claude-client");
+    let host = directory.join("node_modules/@pontia/claude-client/dist/src/main.js");
+    std::fs::remove_file(&host).unwrap();
+    std::fs::write(directory.join("user-notes"), "keep me").unwrap();
+    let setup = integration
+        .prepare(&HashMap::new(), root.path(), &runner)
+        .unwrap();
+    setup.preflight(&runner).unwrap();
+    setup.install(&runner, &NoDefinitions).unwrap();
+    setup.preflight(&runner).unwrap();
+    assert!(host.is_file());
+    assert_eq!(
+        std::fs::read_to_string(directory.join("user-notes")).unwrap(),
+        "keep me"
+    );
+    assert_eq!(runner.downloads.load(Ordering::SeqCst), 2);
+    setup.install(&runner, &NoDefinitions).unwrap();
+    assert_eq!(runner.downloads.load(Ordering::SeqCst), 2);
+}

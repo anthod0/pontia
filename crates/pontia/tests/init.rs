@@ -1,9 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, fs, io::Cursor, net::SocketAddr, path::Path};
 
 use pontia::init::{InitPlatform, run};
-use pontia_agent_control::client_contract::{
-    ClientIntegration, IntegrationOption, PreparedClientIntegration,
-};
+use pontia_agent_control::client_contract::{ClientIntegration, PreparedClientIntegration};
 use pontia_config::AppConfig;
 use pontia_runtime::local_service::{CommandOutput, CommandRunner, DefinitionStore};
 use std::{path::PathBuf, sync::Arc};
@@ -15,7 +13,6 @@ struct FakeIntegration {
 struct FakeSetup {
     name: &'static str,
     home: PathBuf,
-    option: Option<bool>,
 }
 impl ClientIntegration for FakeIntegration {
     fn client_type(&self) -> &'static str {
@@ -38,29 +35,14 @@ impl ClientIntegration for FakeIntegration {
         }
         Ok(Box::new(FakeSetup {
             name: self.name,
-            home: home.join(".codex"),
-            option: vars
-                .contains_key("TEST_INTEGRATION_OPTION")
-                .then_some(false),
+            home: vars
+                .get("CODEX_HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| home.join(".codex")),
         }))
     }
 }
 impl PreparedClientIntegration for FakeSetup {
-    fn options(&self) -> Vec<IntegrationOption> {
-        self.option
-            .map(|enabled| IntegrationOption {
-                key: "launcher",
-                prompt: "Enable launcher",
-                enabled,
-            })
-            .into_iter()
-            .collect()
-    }
-    fn set_option(&mut self, key: &str, enabled: bool) -> Result<(), String> {
-        assert_eq!(key, "launcher");
-        self.option = Some(enabled);
-        Ok(())
-    }
     fn summary(&self) -> Vec<String> {
         Vec::new()
     }
@@ -72,9 +54,6 @@ impl PreparedClientIntegration for FakeSetup {
         runner: &dyn CommandRunner,
         _definitions: &dyn DefinitionStore,
     ) -> Result<(), String> {
-        if self.option == Some(true) {
-            runner.run("install-launcher", &[])?;
-        }
         let event = match self.name {
             "pi" => "install-pi".to_string(),
             _ => format!("initialize-codex:{}", self.home.display()),
@@ -123,6 +102,7 @@ struct FakePlatform {
     dashboard_ready: bool,
     enable_error: bool,
     enabled: RefCell<Vec<(String, String)>>,
+    persisted_paths: Vec<(String, PathBuf)>,
 }
 
 impl Default for FakePlatform {
@@ -133,11 +113,12 @@ impl Default for FakePlatform {
             dashboard_ready: true,
             enable_error: false,
             enabled: RefCell::new(Vec::new()),
+            persisted_paths: Vec::new(),
         }
     }
 }
 
-impl InitPlatform for FakePlatform {
+impl pontia::setup::SetupPlatform for FakePlatform {
     fn integrations(&self) -> Vec<Arc<dyn ClientIntegration>> {
         vec![
             Arc::new(FakeIntegration {
@@ -183,6 +164,12 @@ impl InitPlatform for FakePlatform {
         Ok(())
     }
 
+    fn persisted_environment_paths(&self, _: &Path) -> Result<Vec<(String, PathBuf)>, String> {
+        Ok(self.persisted_paths.clone())
+    }
+}
+
+impl InitPlatform for FakePlatform {
     fn enable_client(&self, _config: &AppConfig, client: &str, key: &str) -> Result<(), String> {
         assert!(
             self.events
@@ -733,27 +720,131 @@ fn initialization_only_consumes_agent_selection_and_confirmation_input() {
 }
 
 #[test]
-fn integration_options_are_applied_only_after_final_confirmation() {
-    for (answers, installed, launcher) in [
-        ("codex\ny\ny\n", true, true),
-        ("codex\n\ny\n", true, false),
-        ("codex\ny\nn\n", false, false),
-    ] {
+fn selected_integration_requires_only_final_confirmation() {
+    for (answers, installed) in [("codex\ny\n", true), ("codex\nn\n", false)] {
         let root = tempfile::tempdir().unwrap();
-        let user_home = root.path().join("user");
-        fs::create_dir(&user_home).unwrap();
-        let mut vars = vars(&user_home, &root.path().join("pontia"));
-        vars.insert("TEST_INTEGRATION_OPTION".into(), "1".into());
         let platform = FakePlatform::default();
-        let outcome = run(&mut Cursor::new(answers), &mut Vec::new(), &vars, &platform).unwrap();
+        let outcome = run(
+            &mut Cursor::new(answers),
+            &mut Vec::new(),
+            &vars(root.path(), &root.path().join("pontia")),
+            &platform,
+        )
+        .unwrap();
         assert_eq!(outcome.is_some(), installed);
-        assert_eq!(
-            platform
-                .events
-                .borrow()
+        assert_eq!(!platform.enabled.borrow().is_empty(), installed);
+    }
+}
+
+#[test]
+fn setup_applies_only_selected_clients_without_enabling_them_or_consuming_extra_input() {
+    for client in [Some("codex"), None] {
+        let root = tempfile::tempdir().unwrap();
+        let platform = FakePlatform::default();
+        let mut input = Cursor::new("codex\nunused\n");
+        pontia::setup::run(
+            client,
+            &mut input,
+            &mut Vec::new(),
+            &vars(root.path(), &root.path().join("pontia")),
+            &platform,
+        )
+        .unwrap();
+        assert_eq!(input.position(), if client.is_some() { 0 } else { 6 });
+        assert!(platform.enabled.borrow().is_empty());
+        let events = platform.events.borrow();
+        assert!(!events.iter().any(|event| event == "install-pi"));
+        assert!(
+            events
                 .iter()
-                .any(|event| event == "install-launcher"),
-            launcher
+                .any(|event| event.starts_with("initialize-codex:"))
         );
+        assert!(events.iter().any(|event| event.starts_with("start:")));
+    }
+}
+
+#[test]
+fn failed_setup_does_not_configure_service_or_enable_clients() {
+    let root = tempfile::tempdir().unwrap();
+    let platform = FakePlatform {
+        install_error: Some("failed"),
+        ..Default::default()
+    };
+    let pontia_home = root.path().join("pontia");
+    assert!(
+        pontia::setup::run(
+            Some("pi"),
+            &mut Cursor::new(""),
+            &mut Vec::new(),
+            &vars(root.path(), &pontia_home),
+            &platform
+        )
+        .is_err()
+    );
+    assert!(platform.enabled.borrow().is_empty());
+    assert!(
+        !platform
+            .events
+            .borrow()
+            .iter()
+            .any(|event| event.starts_with("start:"))
+    );
+    assert!(!pontia_home.exists());
+}
+
+#[test]
+fn unsupported_setup_client_has_no_side_effects() {
+    let root = tempfile::tempdir().unwrap();
+    let platform = FakePlatform::default();
+    assert!(
+        pontia::setup::run(
+            Some("acp"),
+            &mut Cursor::new(""),
+            &mut Vec::new(),
+            &vars(root.path(), &root.path().join("pontia")),
+            &platform
+        )
+        .is_err()
+    );
+    assert!(platform.events.borrow().is_empty());
+}
+
+#[test]
+fn setup_reuses_persisted_paths_and_preserves_existing_enablement() {
+    for enabled in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let saved_home = root.path().join("saved-codex");
+        let platform = FakePlatform {
+            persisted_paths: vec![("CODEX_HOME".into(), saved_home.clone())],
+            enabled: RefCell::new(if enabled {
+                vec![("codex".into(), "default".into())]
+            } else {
+                Vec::new()
+            }),
+            ..Default::default()
+        };
+        let before = platform.enabled.borrow().clone();
+        let mut vars = vars(root.path(), &root.path().join("pontia"));
+        for expected in [saved_home, root.path().join("chosen-codex")] {
+            pontia::setup::run(
+                Some("codex"),
+                &mut Cursor::new(""),
+                &mut Vec::new(),
+                &vars,
+                &platform,
+            )
+            .unwrap();
+            assert!(
+                platform
+                    .events
+                    .borrow()
+                    .contains(&format!("initialize-codex:{}", expected.display()))
+            );
+            assert_eq!(*platform.enabled.borrow(), before);
+            vars.insert(
+                "CODEX_HOME".into(),
+                root.path().join("chosen-codex").display().to_string(),
+            );
+        }
     }
 }

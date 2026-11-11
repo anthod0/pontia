@@ -21,6 +21,7 @@ use pontia::{
     lifecycle::{Lifecycle, RunState, ServiceManager, UpOptions},
     manager::ProcessCommandRunner,
     runtime_io::{FileDefinitionStore, HttpHealthProbe},
+    setup::{self, SetupPlatform},
 };
 use pontia_agent_control::client_contract::ClientIntegration;
 use pontia_config::AppConfig;
@@ -41,6 +42,7 @@ For documentation, see https://pontia.dev/llms.txt";
 
 const INIT_HELP: &str = "\
 Prompts on the terminal. Rerunning keeps the existing API token and Workspace roots.
+Use 'pontia setup [CLIENT]' to install or repair one integration later.
 
 For setup without prompts, see https://pontia.dev/docs/initialization.md#non-interactive-initialization";
 
@@ -87,6 +89,14 @@ enum Command {
     /// Configure Pontia interactively and start its per-user service
     #[command(after_help = INIT_HELP)]
     Init,
+    /// Install or repair local Agent Client integrations
+    #[command(
+        after_help = "Select clients when omitted. Applies recommended configuration without changing client enablement.\nRun 'pontia init' for first-time initialization."
+    )]
+    Setup {
+        /// Agent Client to configure (pi, codex, claude-agent)
+        client: Option<String>,
+    },
     /// Manage Agent Client settings through the Pontia service
     Client(pontia::client::ClientCommand),
     /// Sign in to the Pontia cloud from a headless terminal
@@ -134,6 +144,11 @@ async fn main() -> ExitCode {
 async fn execute(command: Command) -> Result<bool, String> {
     match command {
         Command::Init => run_init().await,
+        Command::Setup { client } => {
+            let vars = env::vars().collect();
+            setup::run_interactive(client.as_deref(), &vars, &RealInitPlatform)?;
+            Ok(true)
+        }
         Command::SendFile { path } => {
             let config = pontia_clients::config_from_env().map_err(|e| e.to_string())?;
             println!("{}", pontia::send_file::run(path, &config).await?);
@@ -443,7 +458,7 @@ fn start_with_lifecycle<M: ServiceManager>(
 
 struct RealInitPlatform;
 
-impl InitPlatform for RealInitPlatform {
+impl SetupPlatform for RealInitPlatform {
     fn integrations(&self) -> Vec<Arc<dyn ClientIntegration>> {
         pontia_clients::integrations()
     }
@@ -474,6 +489,30 @@ impl InitPlatform for RealInitPlatform {
         start_init_service(config, config_changed, environment_paths)
     }
 
+    fn persisted_environment_paths(&self, home: &Path) -> Result<Vec<(String, PathBuf)>, String> {
+        let runner = ProcessCommandRunner;
+        #[cfg(target_os = "linux")]
+        let manager = SystemdManager::with_environment_paths(
+            &runner,
+            pontia_clients::service_path_variables(),
+            &[],
+        );
+        #[cfg(target_os = "macos")]
+        let manager = launchd_manager(&runner, &[])?;
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            FileDefinitionStore
+                .read(&manager.definition_path(home))?
+                .map(|definition| manager.persisted_client_paths(&definition))
+                .transpose()
+                .map(Option::unwrap_or_default)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        Err("automatic lifecycle management is unavailable".into())
+    }
+}
+
+impl InitPlatform for RealInitPlatform {
     fn enable_client(&self, config: &AppConfig, client: &str, key: &str) -> Result<(), String> {
         let config = config.clone();
         let client = client.to_string();

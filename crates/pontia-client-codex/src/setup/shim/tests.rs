@@ -44,8 +44,7 @@ impl Fixture {
     }
 
     fn enable(&self) -> ShimSetup {
-        let mut setup = ShimSetup::inspect(&self.vars, &self.home).unwrap();
-        setup.enabled = true;
+        let setup = ShimSetup::inspect(&self.vars, &self.home).unwrap();
         setup.install().unwrap();
         setup
     }
@@ -124,12 +123,12 @@ fn routes_tui_entries_preserving_argument_boundaries_and_explicit_choices() {
 }
 
 #[test]
-fn repeated_setup_preserves_shell_content_and_disabling_restores_native_resolution() {
+fn repeated_setup_repairs_missing_launcher_and_path_preserving_shell_content() {
     let fixture = Fixture::new("bash");
     let rc = fixture.home.join(".bashrc");
     let original = "export USER_SETTING=kept\n";
     fs::write(&rc, original).unwrap();
-    let mut setup = fixture.enable();
+    let setup = fixture.enable();
     let once = fs::read_to_string(&rc).unwrap();
     setup.install().unwrap();
     assert_eq!(fs::read_to_string(&rc).unwrap(), once);
@@ -180,25 +179,22 @@ fn repeated_setup_preserves_shell_content_and_disabling_restores_native_resoluti
             PathBuf::from("/bin")
         ]
     );
-    assert!(
-        ShimSetup::inspect(&fixture.vars, &fixture.home)
-            .unwrap()
-            .enabled
-    );
-    setup.enabled = false;
-    setup.install().unwrap();
-    setup.install().unwrap();
-    assert_eq!(fs::read_to_string(&rc).unwrap(), original);
+    fs::remove_file(fixture.root.join("bin/codex")).unwrap();
+    ShimSetup::inspect(&fixture.vars, &fixture.home)
+        .unwrap()
+        .install()
+        .unwrap();
     assert_eq!(
         String::from_utf8(resolve().stdout).unwrap().trim(),
-        fixture.native.join("codex").to_str().unwrap()
+        fixture.root.join("bin/codex").to_str().unwrap()
     );
-    assert!(!fixture.root.join("bin/codex").exists());
-    assert!(
-        !ShimSetup::inspect(&fixture.vars, &fixture.home)
-            .unwrap()
-            .enabled
-    );
+    fs::write(&rc, original).unwrap();
+    ShimSetup::inspect(&fixture.vars, &fixture.home)
+        .unwrap()
+        .install()
+        .unwrap();
+    assert_eq!(fs::read_to_string(&rc).unwrap(), once);
+    assert_eq!(fixture.args(&["--version"]), ["--version"]);
 }
 
 #[test]
@@ -254,16 +250,12 @@ fn native_upgrades_and_an_unavailable_proxy_do_not_change_launch_behavior() {
 }
 
 #[test]
-fn fresh_setup_is_opt_in_and_refuses_to_overwrite_native_installations() {
+fn setup_refuses_to_overwrite_native_installations() {
     let fixture = Fixture::new("bash");
-    let mut setup = ShimSetup::inspect(&fixture.vars, &fixture.home).unwrap();
-    assert!(!setup.enabled);
-    setup.install().unwrap();
-    assert!(!fixture.root.exists());
+    let setup = ShimSetup::inspect(&fixture.vars, &fixture.home).unwrap();
     fs::create_dir_all(fixture.root.join("bin")).unwrap();
     let path = fixture.root.join("bin/codex");
     executable(&path, "#!/bin/sh\nexit 7\n");
-    setup.enabled = true;
     assert!(setup.install().is_err());
     assert_eq!(fs::read_to_string(path).unwrap(), "#!/bin/sh\nexit 7\n");
 }
@@ -284,14 +276,19 @@ fn shell_selection_respects_zdotdir_and_fish_config_location() {
         fixture
             .vars
             .insert(variable.into(), config.display().to_string());
-        let mut setup = fixture.enable();
+        let setup = fixture.enable();
         for file in &files {
             assert!(config.join(file).is_file());
         }
-        setup.enabled = false;
         setup.install().unwrap();
         for file in files {
-            assert_eq!(fs::read_to_string(config.join(file)).unwrap(), "");
+            assert_eq!(
+                fs::read_to_string(config.join(file))
+                    .unwrap()
+                    .matches(BEGIN)
+                    .count(),
+                1
+            );
         }
     }
 }
@@ -310,7 +307,7 @@ fn fish_startup_prioritizes_launcher_after_existing_user_path_configuration() {
         ),
     )
     .unwrap();
-    let mut setup = fixture.enable();
+    let setup = fixture.enable();
     let resolve = || {
         Command::new("fish")
             .args(["--private", "-c", "command -s codex"])
@@ -331,10 +328,9 @@ fn fish_startup_prioritizes_launcher_after_existing_user_path_configuration() {
         String::from_utf8(output.stdout).unwrap().trim(),
         fixture.root.join("bin/codex").to_str().unwrap()
     );
-    setup.enabled = false;
     setup.install().unwrap();
     assert_eq!(
         String::from_utf8(resolve().stdout).unwrap().trim(),
-        fixture.native.join("codex").to_str().unwrap()
+        fixture.root.join("bin/codex").to_str().unwrap()
     );
 }

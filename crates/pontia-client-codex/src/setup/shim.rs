@@ -20,8 +20,7 @@ struct ShellFiles {
 
 pub(super) struct ShimSetup {
     root: PathBuf,
-    shells: Result<ShellFiles, String>,
-    pub enabled: bool,
+    shells: ShellFiles,
 }
 
 pub(super) fn is_shim(path: &Path) -> Result<bool, String> {
@@ -49,28 +48,18 @@ impl ShimSetup {
             .map(PathBuf::from)
             .unwrap_or_else(|| user_home.join(".pontia"));
         absolute_utf8_path(&root, "PONTIA_HOME")?;
-        let launcher = root.join("bin/codex");
-        let enabled = launcher.is_file() && is_shim(&launcher)?;
         Ok(Self {
             root,
-            shells: shell_files(vars, user_home),
-            enabled,
+            shells: shell_files(vars, user_home)?,
         })
     }
 
     pub(super) fn summary(&self) -> String {
-        if self.enabled {
-            format!("Codex launcher: {}", self.root.join("bin/codex").display())
-        } else {
-            "Codex launcher: disabled".into()
-        }
+        format!("Codex launcher: {}", self.root.join("bin/codex").display())
     }
 
     pub(super) fn activation_command(&self) -> String {
-        let shells = self
-            .shells
-            .as_ref()
-            .expect("installed launcher has shell files");
+        let shells = &self.shells;
         let path = &shells.paths[0];
         let command = if path.file_name().unwrap() == ".profile" {
             "."
@@ -82,15 +71,22 @@ impl ShimSetup {
 
     pub(super) fn preflight(&self) -> Result<(), String> {
         let launcher = self.root.join("bin/codex");
-        if self.enabled && launcher.try_exists().map_err(|e| e.to_string())? && !is_shim(&launcher)?
+        if fs::symlink_metadata(&launcher)
+            .map(|_| true)
+            .or_else(|error| {
+                if error.kind() == io::ErrorKind::NotFound {
+                    Ok(false)
+                } else {
+                    Err(error)
+                }
+            })
+            .map_err(|e| e.to_string())?
+            && !is_shim(&launcher)?
         {
             return Err(format!(
                 "Refusing to replace an unmanaged executable: {}",
                 launcher.display()
             ));
-        }
-        if self.enabled {
-            self.shells.as_ref().map_err(Clone::clone)?;
         }
         Ok(())
     }
@@ -107,16 +103,7 @@ impl ShimSetup {
                 edit_shell(&path, None)?;
             }
         }
-        if !self.enabled {
-            if launcher.is_file() && is_shim(&launcher)? {
-                fs::remove_file(&launcher).map_err(|e| e.to_string())?;
-            }
-            if manifest.exists() {
-                fs::remove_file(&manifest).map_err(|e| e.to_string())?;
-            }
-            return Ok(());
-        }
-        let shells = self.shells.as_ref().map_err(Clone::clone)?;
+        let shells = &self.shells;
         let bin = self.root.join("bin");
         fs::create_dir_all(&bin).map_err(|e| e.to_string())?;
         let remote = format!("unix://{}", crate::proxy::socket_path(&self.root).display());
