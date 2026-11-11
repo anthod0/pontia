@@ -1,5 +1,6 @@
 mod adapter;
 pub mod configuration;
+mod history;
 pub mod profiles;
 mod proxy;
 pub mod rollout;

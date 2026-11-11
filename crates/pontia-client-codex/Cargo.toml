@@ -20,6 +20,7 @@ tokio = { version = "1", features = ["rt", "sync", "time", "net", "process", "io
 tokio-tungstenite = "0.30.0"
 tracing = "0.1"
 toml = "0.9"
+zstd = "0.14.3"
 
 [dev-dependencies]
 tempfile = "3"

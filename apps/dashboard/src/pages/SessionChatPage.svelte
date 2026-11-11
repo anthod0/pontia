@@ -100,6 +100,7 @@
   let requestedCompaction: string | null = null
   let unsubscribeDashboardEvents: (() => void) | null = null
   let closeLiveOutputStream: (() => void) | null = null
+  let liveOutputGeneration = 0
   let liveOutputOverlays: LiveOutputOverlays = {}
   let autofocusComposer = false
   let showScrollDownButton = false
@@ -167,7 +168,7 @@
   $: selectedSession = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.session : null
   $: sharedFiles = selectedSessionId ? createSessionFilesStore(selectedSessionId) : null
   $: controlDetails = selectedSession ? clientControlDetails(selectedSession) : null
-  $: liveOutputKey = selectedSession ? `${selectedSession.session_id}:${selectedSession.capabilities.stream_output === true}` : ''
+  $: liveOutputKey = selectedSession ? `${selectedSession.session_id}:${selectedSession.capabilities.stream_output === true}:${$timelineState.status}:${$timelineState.historySource ?? ""}` : ''
   let activeLiveOutputKey = ''
   $: if (!destroyed && liveOutputKey !== activeLiveOutputKey) {
     activeLiveOutputKey = liveOutputKey
@@ -558,22 +559,39 @@
   }
 
   function handleLiveOutputEvent(event: LiveOutputEvent): void {
+    if (get(timelineState).historySource === 'file') return
     liveOutputOverlays = applyLiveOutputEvent(liveOutputOverlays, selectedSessionId, event)
   }
 
   function startSelectedLiveOutput(session: SessionView | null): void {
+    const generation = ++liveOutputGeneration
     closeLiveOutputStream?.()
     closeLiveOutputStream = null
+    const timeline = get(timelineState)
+    if (session?.capabilities.timeline && (timeline.status === 'loading' || timeline.status === 'idle' || timeline.historySource === 'file')) {
+      liveOutputOverlays = {}
+      return
+    }
     if (!session || session.session_id !== selectedSessionId || session.capabilities.stream_output !== true) return
     closeLiveOutputStream = openLiveOutputStream(session.session_id, {
-      onEvent: handleLiveOutputEvent,
+      onEvent: (event) => { if (generation === liveOutputGeneration) handleLiveOutputEvent(event) },
       onDisconnected: () => {
-        liveOutputOverlays = markLiveOutputDisconnected(liveOutputOverlays)
+        if (generation === liveOutputGeneration) liveOutputOverlays = markLiveOutputDisconnected(liveOutputOverlays)
       },
     })
   }
 
   function handleDashboardEvent(streamEvent: DashboardStreamEvent): void {
+    if (streamEvent.kind === 'history_changed' && streamEvent.session_id === selectedSessionId) {
+      ++liveOutputGeneration
+      ++selectedSessionLoadGeneration
+      closeLiveOutputStream?.()
+      closeLiveOutputStream = null
+      liveOutputOverlays = {}
+      resetTimelineState(selectedSessionId)
+      void loadSessionTimeline(selectedSessionId, { mode: 'rebuild', topology: selectedSession?.capabilities.topology === true })
+      return
+    }
     if (streamEvent.kind === 'session_event') {
       if (streamEvent.event.session_id !== selectedSessionId) return
       if (streamEvent.event.type.startsWith('session.compaction_')) {
@@ -694,7 +712,11 @@
     initialChatScrollPending = false
     transcriptResolving = false
     void scrollChatToBottomAfterLayout()
-    void refreshSessionTimeline(sessionId, cached.latestTurnId)
+    if (cached.historySource) {
+      await rebuildTimeline(sessionId, generation, cached.mode === 'tree')
+    } else {
+      void refreshSessionTimeline(sessionId, cached.latestTurnId)
+    }
     await detailPromise
     if (!sessionLoadIsCurrent(sessionId, generation)) return
     const loadedSession = currentSelectedSession()

@@ -1,5 +1,4 @@
 import { get } from "svelte/store";
-import { hasTimelineSnapshot } from "../stores/timeline";
 import type { DeviceRuntime } from "../device/runtime";
 
 export type DashboardSnapshotRefreshReason = "sse_open" | "sse_fallback";
@@ -28,33 +27,17 @@ export function createSnapshotRefresh(device: DeviceRuntime) {
   }
 
   async function refreshSelectedSession(sessionId: string): Promise<void> {
+    device.timeline.resetTimelineState(sessionId);
     const detail = await device.sessions.loadSessionDetail(sessionId, { showLoading: false });
     if (
       get(device.sessions.selectedSessionId) !== sessionId ||
       !detail?.session.capabilities.timeline
     )
       return;
-    const timeline = get(device.timeline.timelineState);
-    const topology = detail.session.capabilities.topology === true;
-    const latestTurnId = detail.turns.reduce<string | null>(
-      (latest, turn) => (latest === null || turn.turn_id > latest ? turn.turn_id : latest),
-      null,
-    );
-    if (
-      hasTimelineSnapshot(timeline, sessionId) &&
-      timeline.mode === (topology ? "tree" : "linear")
-    ) {
-      await device.timeline.refreshSessionTimeline(
-        sessionId,
-        timeline.latestTurnId ?? latestTurnId,
-      );
-    } else {
-      await device.timeline.loadSessionTimeline(sessionId, {
-        mode: "rebuild",
-        latestTurnId,
-        topology,
-      });
-    }
+    await device.timeline.loadSessionTimeline(sessionId, {
+      mode: "rebuild",
+      topology: detail.session.capabilities.topology === true,
+    });
   }
 
   async function refreshDashboardSnapshotNow(): Promise<void> {

@@ -752,12 +752,14 @@ export function createApi(device: DeviceRuntime) {
     sessionId: string,
     options: {
       direction: TurnTimelineDirection;
+      historySource?: import("./types").HistorySource | null;
       turnId?: string | null;
       limit?: number;
       signal?: AbortSignal;
     },
   ): Promise<TurnTimelinePage> {
     const params = new URLSearchParams({ direction: options.direction });
+    if (options.historySource) params.set("history_source", options.historySource);
     if (options.turnId) params.set("turn_id", options.turnId);
     if (options.limit !== undefined) params.set("limit", String(options.limit));
     return boundedReadRequest<TurnTimelinePage>(

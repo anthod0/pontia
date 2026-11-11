@@ -38,6 +38,15 @@ pub struct EventIngestService {
 }
 
 impl EventIngestService {
+    pub fn history_changed(&self, session: &str) {
+        if let Some(output) = &self.effects.live_output {
+            output.discard_session(session);
+        }
+        if let Some(events) = &self.effects.agent_events {
+            events.history_changed(session);
+        }
+    }
+
     pub fn history_control(&self) -> Option<crate::clients::ClientControlService> {
         self.effects.client_control.clone()
     }

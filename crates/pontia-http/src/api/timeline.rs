@@ -37,16 +37,26 @@ pub async fn get_turn_timeline(
             "limit must be an integer from 1 through 100",
         ));
     }
+    let history_source = query
+        .get("history_source")
+        .map(|source| match source.as_str() {
+            "native" => {
+                Ok(pontia_application::client_contract::native_history::HistorySource::Native)
+            }
+            "file" => Ok(pontia_application::client_contract::native_history::HistorySource::File),
+            _ => Err(invalid_timeline_query(
+                "history_source must be native or file",
+            )),
+        })
+        .transpose()?;
     let page = TurnTimelineService::new(state.event_ingest_service())
+        .with_history_source(history_source)
         .page(session_id, direction, query.get("turn_id").cloned(), limit)
         .await
         .map_err(turn_timeline_service_error)?;
-    Ok(ok(json!({
-        "session_id": page.session_id,
-        "direction": page.direction,
-        "items": page.items,
-        "next_turn_id": page.next_turn_id,
-    })))
+    Ok(ok(
+        serde_json::to_value(page).map_err(pontia_core::Error::from)?
+    ))
 }
 
 pub async fn get_turn_tree_history(

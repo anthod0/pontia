@@ -47,6 +47,42 @@ pub fn registration() -> ClientRegistration {
 
 struct CodexData;
 impl ClientData for CodexData {
+    fn native_history(
+        &self,
+        binding: pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
+        control: Option<pontia_application::clients::ClientControlService>,
+    ) -> Option<Arc<dyn pontia_application::client_contract::native_history::NativeHistory>> {
+        Some(Arc::new(crate::history::CodexHistory::new(
+            binding,
+            control.map(|control| control.db()),
+        )))
+    }
+    fn capture_native_boundary(
+        &self,
+        binding: &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
+        kind: pontia_application::client_contract::raw_transcripts::TimelineBoundaryCaptureKind,
+        anchor: Option<String>,
+        _first_turn: bool,
+        _head: Option<&str>,
+    ) -> Option<
+        Result<pontia_application::client_contract::raw_transcripts::CapturedTimelineBoundary>,
+    > {
+        Some(
+            anchor
+                .ok_or_else(|| Error::Domain("Codex boundary requires native Turn identity".into()))
+                .map(|turn| {
+                    pontia_application::client_contract::raw_transcripts::CapturedTimelineBoundary {
+                        kind,
+                        cursor: crate::history::cursor::encode(
+                            &binding.id,
+                            &binding.client_session_key,
+                            &turn,
+                            kind,
+                        ),
+                    }
+                }),
+        )
+    }
     fn normalize_payload(&self, kind: EventType, data: Value) -> Result<Value> {
         if kind.is_turn_event()
             && !data["native_turn_id"]
@@ -67,10 +103,9 @@ impl ClientData for CodexData {
     }
     fn probe_timeline(
         &self,
-        binding: &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
+        _binding: &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
     ) -> Option<Result<()>> {
-        use pontia_application::client_contract::raw_transcripts::AgentBindingResolver;
-        Some(CodexRollout.resolve(binding).map(|_| ()))
+        Some(Ok(()))
     }
     fn timeline(&self) -> TurnTimelineBackend {
         TurnTimelineBackend {

@@ -4,13 +4,14 @@ const DATABASE_NAME = "pontia-device-timelines";
 const DATABASE_VERSION = 1;
 const STORE_NAME = "session-timelines";
 const CACHED_TIMELINE_LIMIT = 30;
-const SNAPSHOT_VERSION = 2;
+const SNAPSHOT_VERSION = 3;
 
 export interface CachedTimelineSnapshot {
   version: typeof SNAPSHOT_VERSION;
   deviceId: string;
   sessionId: string;
   mode: "linear" | "tree";
+  historySource?: "native" | "file" | null;
   groups: TurnTimelineGroup[];
   items: TurnTimelineItem[];
   nextOlderTurnId: string | null;

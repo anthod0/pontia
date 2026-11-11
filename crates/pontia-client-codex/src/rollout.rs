@@ -5,47 +5,34 @@ use pontia_application::client_contract::raw_transcripts::{
     TurnTimelineReadRequest, TurnTimelineReader,
 };
 use pontia_core::{Error, Result};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::{BufRead, BufReader, Read, Seek, SeekFrom},
-    path::Path,
-};
+use std::{collections::HashMap, path::Path};
 
 pub struct CodexRollout;
 
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Cursor {
-    version: u8,
-    binding: String,
-    native_turn: String,
-    offset: u64,
-    thread: Option<String>,
+pub fn identity(path: &Path) -> Result<String> {
+    crate::history::files::header(path)?["payload"]["id"]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| Error::Domain("Codex rollout has no native identity".into()))
 }
 
-pub fn identity(path: &Path) -> Result<String> {
-    let mut reader = BufReader::new(
-        File::open(path)
-            .map_err(|e| Error::CapabilityUnavailable(format!("source_unavailable: {e}")))?,
-    );
-    let mut line = String::new();
-    reader.read_line(&mut line)?;
-    if !line.ends_with('\n') {
-        return Err(pending("Codex rollout header is not persisted yet"));
-    }
-    let record: Value = serde_json::from_str(&line)?;
-    if record["type"] != "session_meta" {
-        return Err(Error::CapabilityUnavailable(
-            "Unsupported Codex rollout format".into(),
-        ));
-    }
-    record["payload"]["id"]
-        .as_str()
-        .map(str::to_string)
-        .ok_or_else(|| Error::Domain("Codex rollout has no native identity".into()))
+fn boundary(
+    source: &ResolvedAgentBinding,
+    value: &str,
+    kind: TimelineBoundaryCaptureKind,
+) -> Result<String> {
+    crate::history::cursor::decode(
+        value,
+        &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest {
+            id: source.id.clone(),
+            session_id: String::new(),
+            client_type: "codex".into(),
+            client_session_key: source.fingerprint.clone().unwrap_or_default(),
+            client_session_file: Some(source.path.clone()),
+        },
+        kind,
+    )
 }
 
 impl AgentBindingResolver for CodexRollout {
@@ -89,63 +76,14 @@ impl TimelineBoundaryCapturer for CodexRollout {
         let turn = request
             .native_entry_anchor
             .ok_or_else(|| Error::Domain("Codex boundary requires native turn id".into()))?;
-        if identity(&request.source.path)?
-            != request.source.fingerprint.as_deref().unwrap_or_default()
-        {
-            return Err(Error::Conflict {
-                code: "timeline_source_identity_mismatch",
-                message: "Codex rollout identity changed before boundary capture".into(),
-            });
-        }
-        let mut reader = BufReader::new(File::open(&request.source.path)?);
-        let mut offset = 0;
-        let mut head = None;
-        let mut terminal = false;
-        let mut line = String::new();
-        while reader.read_line(&mut line)? > 0 {
-            if !line.ends_with('\n') {
-                break;
-            }
-            let record: Value = serde_json::from_str(&line)?;
-            if native_turn(&record).as_deref() == Some(&turn) && head.is_none() {
-                head = Some(offset);
-            }
-            if record["type"] == "event_msg"
-                && native_turn(&record).as_deref() == Some(&turn)
-                && matches!(
-                    record.pointer("/payload/type").and_then(Value::as_str),
-                    Some("task_complete" | "turn_aborted")
-                )
-            {
-                terminal = true;
-            }
-            offset += line.len() as u64;
-            line.clear();
-        }
-        let offset = match request.kind {
-            TimelineBoundaryCaptureKind::Head => match head {
-                Some(offset) => offset,
-                None if request.allow_missing_native_entry_anchor => 0,
-                None => {
-                    return Err(pending("Codex native turn anchor is not persisted yet"));
-                }
-            },
-            TimelineBoundaryCaptureKind::Tail if head.is_some() && terminal => offset,
-            TimelineBoundaryCaptureKind::Tail => {
-                return Err(pending(
-                    "Codex native turn history is not fully persisted yet",
-                ));
-            }
-        };
+        let thread = request
+            .source
+            .fingerprint
+            .as_deref()
+            .ok_or_else(|| Error::Domain("Codex boundary requires thread identity".into()))?;
         Ok(CapturedTimelineBoundary {
             kind: request.kind,
-            cursor: serde_json::to_string(&Cursor {
-                version: 1,
-                binding: request.source.id,
-                native_turn: turn,
-                offset,
-                thread: request.source.fingerprint,
-            })?,
+            cursor: crate::history::cursor::encode(&request.source.id, thread, &turn, request.kind),
         })
     }
     fn capture_source_origin_head(
@@ -153,18 +91,10 @@ impl TimelineBoundaryCapturer for CodexRollout {
         binding: &str,
         anchor: Option<String>,
     ) -> Result<CapturedTimelineBoundary> {
-        let turn =
-            anchor.ok_or_else(|| Error::Domain("Codex boundary requires native turn id".into()))?;
-        Ok(CapturedTimelineBoundary {
-            kind: TimelineBoundaryCaptureKind::Head,
-            cursor: serde_json::to_string(&Cursor {
-                version: 1,
-                binding: binding.into(),
-                native_turn: turn,
-                offset: 0,
-                thread: None,
-            })?,
-        })
+        let _ = (binding, anchor);
+        Err(Error::Domain(
+            "Codex boundary requires bound thread identity".into(),
+        ))
     }
 }
 
@@ -204,34 +134,20 @@ impl TurnTimelineReader for CodexRollout {
             let Some(head) = &turn.head_cursor else {
                 continue;
             };
-            let cursor: Cursor = match serde_json::from_str(head) {
-                Ok(cursor) => cursor,
-                Err(_) if !selected.contains(&turn.turn_id) => continue,
-                Err(error) => return Err(Error::from(error).into()),
-            };
-            if cursor.version != 1
-                || cursor.binding != request.source.id
-                || cursor.thread.as_ref().is_some_and(|id| id != &thread)
-            {
-                continue; // Selected ranges were validated by read_turn_ranges above.
-            }
-            starts.push((cursor.offset, turn.turn_id.clone()));
-            native_turns.insert(cursor.native_turn, turn.turn_id.clone());
+            let native = boundary(&request.source, head, TimelineBoundaryCaptureKind::Head)?;
+            native_turns.insert(native, turn.turn_id.clone());
         }
-        starts.sort_by_key(|(offset, _)| *offset);
-        let mut reader = BufReader::new(File::open(&request.source.path).map_err(Error::from)?);
-        let mut line = String::new();
-        let mut offset = 0;
+        let records = crate::history::files::records(&request.source.path)?;
+        for (offset, record) in &records {
+            if let Some(turn) = native_turn(record).and_then(|id| native_turns.get(&id))
+                && !starts.iter().any(|(_, existing)| existing == turn)
+            {
+                starts.push((*offset, turn.clone()));
+            }
+        }
         let mut current = None;
         let mut awaiting_confirmation = false;
-        while reader.read_line(&mut line).map_err(Error::from)? > 0 {
-            if !line.ends_with('\n') {
-                break;
-            }
-            let record: Value = serde_json::from_str(&line).map_err(Error::from)?;
-            let item_offset = offset;
-            offset += line.len() as u64;
-            line.clear();
+        for (item_offset, record) in records {
             let event = record.pointer("/payload/type").and_then(Value::as_str);
             if record["type"] == "turn_context" || event == Some("task_started") {
                 current = native_turn(&record);
@@ -292,62 +208,39 @@ impl TurnTimelineReader for CodexRollout {
             .into());
         }
         let mut output = Vec::new();
+        let records = crate::history::files::records(&request.source.path)?;
         for range in request.ranges {
             let invalid = |message: &str| TurnTimelineReadError::InvalidRange {
                 turn_id: range.turn_id.clone(),
                 message: message.into(),
             };
-            let head: Cursor = serde_json::from_str(&range.head_cursor)
-                .map_err(|_| invalid("Invalid Codex head cursor"))?;
-            let tail: Option<Cursor> = range
-                .tail_cursor
-                .as_deref()
-                .map(serde_json::from_str)
-                .transpose()
-                .map_err(|_| invalid("Invalid Codex tail cursor"))?;
-            for cursor in std::iter::once(&head).chain(tail.iter()) {
-                if cursor.version != 1
-                    || cursor.binding != request.source.id
-                    || cursor.native_turn != head.native_turn
-                    || cursor.thread.as_ref().is_some_and(|id| id != &thread)
-                {
+            let native = boundary(
+                &request.source,
+                &range.head_cursor,
+                TimelineBoundaryCaptureKind::Head,
+            )
+            .map_err(|_| invalid("Invalid Codex head cursor"))?;
+            if let Some(tail) = &range.tail_cursor {
+                let tail = boundary(&request.source, tail, TimelineBoundaryCaptureKind::Tail)
+                    .map_err(|_| invalid("Invalid Codex tail cursor"))?;
+                if tail != native {
                     return Err(invalid("Codex cursor identity mismatch"));
                 }
             }
-            let mut file = File::open(&request.source.path).map_err(Error::from)?;
-            let len = file.metadata().map_err(Error::from)?.len();
-            let end = tail.as_ref().map(|cursor| cursor.offset).unwrap_or(len);
-            if end < head.offset || end > len {
-                return Err(invalid("Codex rollout was truncated"));
-            }
-            file.seek(SeekFrom::Start(head.offset))
-                .map_err(Error::from)?;
-            let mut reader = BufReader::new(file.take(end - head.offset));
-            let mut line = String::new();
-            let mut offset = head.offset;
             let mut current = None;
-            let mut found_anchor = false;
             let mut calls = HashMap::<String, Value>::new();
-            while reader.read_line(&mut line).map_err(Error::from)? > 0 {
-                if !line.ends_with('\n') {
-                    break;
-                }
-                let record: Value = serde_json::from_str(&line).map_err(Error::from)?;
-                let item_offset = offset;
-                offset += line.len() as u64;
-                line.clear();
+            for (item_offset, record) in &records {
                 if (record["type"] == "turn_context"
                     || record.pointer("/payload/type").and_then(Value::as_str)
                         == Some("task_started"))
-                    && let Some(turn) = native_turn(&record)
+                    && let Some(turn) = native_turn(record)
                 {
                     current = Some(turn);
                 }
-                let item_turn = native_turn(&record).or_else(|| current.clone());
-                if item_turn.as_deref() != Some(&head.native_turn) {
+                let item_turn = native_turn(record).or_else(|| current.clone());
+                if item_turn.as_deref() != Some(&native) {
                     continue;
                 }
-                found_anchor = true;
                 if record["type"] == "compacted"
                     || record.pointer("/payload/type").and_then(Value::as_str)
                         == Some("context_compacted")
@@ -355,7 +248,7 @@ impl TurnTimelineReader for CodexRollout {
                     continue; // Session reader owns checkpoint deduplication and gap ordering.
                 }
                 if record["type"] != "response_item" {
-                    if let Some((kind, payload)) = native_detail(&record) {
+                    if let Some((kind, payload)) = native_detail(record) {
                         output.push(TurnTimelineItem {
                             turn_id: Some(range.turn_id.clone()),
                             item: TimelineItem {
@@ -472,13 +365,6 @@ impl TurnTimelineReader for CodexRollout {
                     },
                 });
             }
-            if !found_anchor {
-                return Err(if tail.is_some() {
-                    invalid("Codex native turn anchor cannot be restored")
-                } else {
-                    pending("Codex native turn anchor is not persisted yet").into()
-                });
-            }
         }
         Ok(output)
     }
@@ -540,13 +426,6 @@ fn render_content(value: &Value) -> String {
                 .join("\n")
         })
         .unwrap_or_else(|| value.to_string())
-}
-
-fn pending(message: &str) -> Error {
-    Error::Conflict {
-        code: "timeline_pending",
-        message: message.into(),
-    }
 }
 
 fn compaction_checkpoint(thread: &str, offset: u64, record: &Value) -> TimelineItem {

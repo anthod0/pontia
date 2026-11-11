@@ -5,10 +5,30 @@ use super::{
 use pontia_core::Result;
 use std::{future::Future, pin::Pin};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HistorySource {
+    Native,
+    File,
+}
+
+pub struct HistorySelection {
+    pub source: HistorySource,
+    pub turn_ids: Vec<String>,
+}
+
 pub type HistoryRead<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// A request-scoped native source. Implementations own source selection and snapshot reuse.
 pub trait NativeHistory: Send + Sync {
+    fn select_timeline(
+        &self,
+        _turns: Vec<super::raw_transcripts::SessionTimelineTurn>,
+        _source: Option<HistorySource>,
+    ) -> HistoryRead<'_, Result<Option<HistorySelection>>> {
+        Box::pin(async { Ok(None) })
+    }
+
     /// Uses the same native ordering and page ownership rules as TurnTimelineReader.
     fn read_session_timeline(
         &self,

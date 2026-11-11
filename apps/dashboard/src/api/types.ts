@@ -498,7 +498,10 @@ export type TurnTimelineDirection = "forward" | "backward";
 
 export type TurnTimelineItem = TimelineItem & { turn_id: string | null };
 
+export type HistorySource = "native" | "file";
+
 export interface TurnTimelinePage {
+  history_source?: HistorySource | null;
   session_id: string;
   direction: TurnTimelineDirection;
   items: TurnTimelineItem[];
@@ -529,6 +532,7 @@ export interface TurnTreeUpdatesPage {
 export type DashboardStreamEvent =
   | { kind: "session_event"; id: string; occurred_at: string; event: EventView }
   | { kind: "task_event"; id: string; occurred_at: string; event: TaskEventView }
+  | { kind: "history_changed"; session_id: string }
   | { kind: "interaction_changed"; session_id: string; interaction_id: string }
   | { kind: "interactions_resync" };
 

@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/svelte-query";
 
-import type { TurnTimelineDirection } from "../api/types";
+import type { HistorySource, TurnTimelineDirection } from "../api/types";
 import type { DeviceRuntime } from "../device/runtime";
 
 export function createTimelineQueries(device: DeviceRuntime) {
@@ -14,7 +14,14 @@ export function createTimelineQueries(device: DeviceRuntime) {
       direction: TurnTimelineDirection,
       turnId: string | null,
       limit: number,
-    ) => [...timelineKeys.requests(), "linear", sessionId, { direction, turnId, limit }] as const,
+      historySource?: HistorySource | null,
+    ) =>
+      [
+        ...timelineKeys.requests(),
+        "linear",
+        sessionId,
+        { direction, turnId, limit, historySource },
+      ] as const,
     treeHistory: (sessionId: string, fromTurnId: string | null, limit: number) =>
       [...timelineKeys.requests(), "tree-history", sessionId, { fromTurnId, limit }] as const,
     treeUpdates: (sessionId: string, fromTurnId: string | null) =>
@@ -26,12 +33,14 @@ export function createTimelineQueries(device: DeviceRuntime) {
     direction: TurnTimelineDirection,
     turnId: string | null,
     limit: number,
+    historySource?: HistorySource | null,
   ) {
     return queryOptions({
-      queryKey: timelineKeys.page(sessionId, direction, turnId, limit),
+      queryKey: timelineKeys.page(sessionId, direction, turnId, limit, historySource),
       queryFn: ({ signal }) =>
         device.api.getTurnTimeline(sessionId, {
           direction,
+          historySource,
           ...(turnId ? { turnId } : {}),
           limit,
           signal,
@@ -73,8 +82,11 @@ export function createTimelineQueries(device: DeviceRuntime) {
     direction: TurnTimelineDirection,
     turnId: string | null,
     limit: number,
+    historySource?: HistorySource | null,
   ) {
-    return device.queryClient.fetchQuery(turnTimelineOptions(sessionId, direction, turnId, limit));
+    return device.queryClient.fetchQuery(
+      turnTimelineOptions(sessionId, direction, turnId, limit, historySource),
+    );
   }
 
   function fetchTurnTreeHistory(sessionId: string, fromTurnId: string | null, limit: number) {

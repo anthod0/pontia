@@ -24,9 +24,42 @@ impl TurnTimelineService {
         }
 
         service.try_recover_history(&session_id).await;
-        let turns = SqliteTurnRepository::new(service.pool.clone())
+        let mut turns = SqliteTurnRepository::new(service.pool.clone())
             .list_turns(&session_id)
             .await?;
+        let mut history_source = None;
+        if let Some(binding) = crate::AgentBindingService::new(service.pool.clone())
+            .binding_for_session(&session_id)
+            .await?
+            && let Some(history) = service.native_history(&binding).await
+            && let Some(selection) = history
+                .select_timeline(
+                    turns
+                        .iter()
+                        .map(
+                            |turn| crate::client_contract::raw_transcripts::SessionTimelineTurn {
+                                turn_id: turn.turn_id.clone(),
+                                head_cursor: turn.head_cursor.clone(),
+                                tail_cursor: turn.tail_cursor.clone(),
+                            },
+                        )
+                        .collect(),
+                    service.history_source,
+                )
+                .await
+                .map_err(super::source::classify_adapter_error)?
+        {
+            history_source = Some(selection.source);
+            let mut by_id: std::collections::HashMap<_, _> = turns
+                .into_iter()
+                .map(|turn| (turn.turn_id.clone(), turn))
+                .collect();
+            turns = selection
+                .turn_ids
+                .into_iter()
+                .filter_map(|id| by_id.remove(&id))
+                .collect();
+        }
         if turns.is_empty() {
             let items = service.read_session_page(&session_id, &turns, &[]).await?;
             return Ok(TurnTimelinePage {
@@ -34,6 +67,7 @@ impl TurnTimelineService {
                 direction,
                 items,
                 next_turn_id: None,
+                history_source,
             });
         }
 
@@ -59,7 +93,9 @@ impl TurnTimelineService {
         };
         let next_turn_id = directional.get(limit).map(|turn| turn.turn_id.clone());
         let mut selected = directional.into_iter().take(limit).collect::<Vec<_>>();
-        selected.sort_by(|left, right| left.turn_id.cmp(&right.turn_id));
+        if direction == TurnTimelineDirection::Backward {
+            selected.reverse();
+        }
         let items = service
             .read_session_page(&session_id, &turns, &selected)
             .await?;
@@ -69,6 +105,7 @@ impl TurnTimelineService {
             direction,
             items,
             next_turn_id,
+            history_source,
         })
     }
 }

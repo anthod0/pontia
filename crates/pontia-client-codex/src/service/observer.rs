@@ -323,6 +323,29 @@ impl CodexObserver {
                         },
                     };
                     observation.threads.insert(thread.to_string(), session.clone());
+                    if event["method"] == "thread/reverted" {
+                        let _operation = runtime.lock_session(&session).await;
+                        let _current = runtime.current_guard().await?;
+                        observation.output.invalidate(&session);
+                        observation.restored.remove(&session);
+                        self.service.event_ingest.history_changed(&session);
+                        // Successful revert has already reloaded the native thread and kept
+                        // its subscriptions. Only retire unloads preceding that confirmation.
+                        let mut unloaded = connection.unloaded_threads.lock().await;
+                        if unloaded.get(thread).is_some_and(|sequence| *sequence > event.sequence)
+                            || runtime.subscription(&session).await == Some(SubscriptionState::ExitPending)
+                            || CodexService::has_confirmed_exit(&session).await
+                            || !self.service.session_accepts_control(&session).await? {
+                            return Ok(());
+                        }
+                        unloaded.remove(thread);
+                        sqlx::query("UPDATE sessions SET metadata=json_remove(metadata,'$.codex_observation_unloaded') WHERE session_id=?")
+                            .bind(&session).execute(&self.service.pool).await?;
+                        runtime.set_subscription(&session, SubscriptionState::Available).await;
+                        drop(unloaded);
+                        self.service.event_ingest.control_available(&session);
+                        return Ok(());
+                    }
                     if connection.unloaded_threads.lock().await.contains_key(thread) {
                         let _operation = runtime.lock_session(&session).await;
                         // Explicit resume may have completed while this event waited for the lock.

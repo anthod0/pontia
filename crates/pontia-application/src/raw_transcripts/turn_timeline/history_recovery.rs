@@ -1,6 +1,6 @@
 use pontia_core::{
     Result,
-    domain::{TimelineBoundary, TurnState, TurnTopology},
+    domain::{TimelineBoundary, TurnTopology},
 };
 use pontia_storage_sqlite::repositories::turns::SqliteTurnRepository;
 
@@ -60,7 +60,7 @@ impl TurnTimelineService {
         if !turns.iter().any(|turn| {
             turn.head_cursor.is_none()
                 || (turn.topology == TurnTopology::Unknown
-                    || (turn.state == TurnState::Abandoned && turn.tail_cursor.is_none()))
+                    || (!turn.state.is_active() && turn.tail_cursor.is_none()))
         }) {
             return Ok(());
         }
@@ -107,9 +107,9 @@ impl TurnTimelineService {
                     .await?;
             }
             if let Some(cursor) = recovered.tail_cursor {
-                if turn.state != TurnState::Abandoned || turn.tail_cursor.is_some() {
+                if turn.state.is_active() || turn.tail_cursor.is_some() {
                     return Err(pontia_core::Error::Domain(
-                        "History recovery requires an unclosed abandoned Turn".into(),
+                        "History recovery requires an unclosed terminal Turn".into(),
                     ));
                 }
                 self.events

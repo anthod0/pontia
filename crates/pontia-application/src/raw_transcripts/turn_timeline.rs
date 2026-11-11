@@ -25,6 +25,8 @@ pub struct TurnTimelinePage {
     pub direction: TurnTimelineDirection,
     pub items: Vec<TurnTimelineItem>,
     pub next_turn_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history_source: Option<crate::client_contract::native_history::HistorySource>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -84,6 +86,7 @@ impl From<Error> for TurnTimelineServiceError {
 
 #[derive(Clone)]
 pub struct TurnTimelineService {
+    history_source: Option<crate::client_contract::native_history::HistorySource>,
     clients: crate::clients::ClientRegistry,
     pub(super) pool: sqlx::SqlitePool,
     events: crate::EventIngestService,
@@ -95,6 +98,14 @@ pub struct TurnTimelineService {
 }
 
 impl TurnTimelineService {
+    pub fn with_history_source(
+        mut self,
+        source: Option<crate::client_contract::native_history::HistorySource>,
+    ) -> Self {
+        self.history_source = source;
+        self
+    }
+
     fn request_scope(&self) -> Self {
         Self {
             history: Default::default(),
@@ -119,6 +130,7 @@ impl TurnTimelineService {
     }
     pub fn new(events: crate::EventIngestService) -> Self {
         Self {
+            history_source: None,
             pool: events.db(),
             clients: events.clients(),
             events,

@@ -893,3 +893,95 @@ test.each([
     expect(get(timelineState).error).toBeNull();
   },
 );
+
+test("history source stays fixed across pages and tail refresh until a complete reload", async () => {
+  mocks.getTurnTimeline
+    .mockResolvedValueOnce(
+      page({
+        history_source: "file",
+        items: [item("turn-2", "two", "file two")],
+        next_turn_id: "turn-1",
+      }),
+    )
+    .mockResolvedValueOnce(
+      page({
+        history_source: "file",
+        items: [item("turn-1", "one", "file one")],
+        next_turn_id: null,
+      }),
+    )
+    .mockResolvedValueOnce(
+      page({
+        history_source: "file",
+        items: [item("turn-2", "two", "file two updated")],
+        next_turn_id: null,
+      }),
+    )
+    .mockResolvedValueOnce(
+      page({
+        history_source: "native",
+        items: [item("turn-3", "three", "native")],
+        next_turn_id: null,
+      }),
+    );
+  await loadSessionTimeline("session-1");
+  await loadSessionTimeline("session-1", { mode: "more" });
+  await refreshSessionTimeline("session-1");
+  expect(mocks.getTurnTimeline.mock.calls.slice(0, 3).map((call) => call[1].historySource)).toEqual(
+    [null, "file", "file"],
+  );
+  await loadSessionTimeline("session-1", { mode: "rebuild" });
+  expect(mocks.getTurnTimeline.mock.lastCall?.[1].historySource).toBeNull();
+  expect(get(timelineState).historySource).toBe("native");
+  expect(get(timelineState).items.map((item) => item.item_id)).toEqual(["three"]);
+});
+
+test("full reload discards delayed pages from history before a revert", async () => {
+  let resolveOld!: (page: TurnTimelinePage) => void;
+  mocks.getTurnTimeline.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+  );
+  const old = loadSessionTimeline("session-1");
+  await vi.waitFor(() => expect(resolveOld).toBeDefined());
+  mocks.getTurnTimeline.mockResolvedValueOnce(
+    page({
+      history_source: "native",
+      items: [item("turn-1", "retained", "retained")],
+      next_turn_id: null,
+    }),
+  );
+  await loadSessionTimeline("session-1", { mode: "rebuild" });
+  resolveOld(
+    page({
+      history_source: "file",
+      items: [item("turn-old", "removed", "removed")],
+      next_turn_id: "older",
+    }),
+  );
+  await old;
+  expect(get(timelineState).items.map((item) => item.item_id)).toEqual(["retained"]);
+  expect(get(timelineState).nextOlderTurnId).toBeNull();
+  expect(get(timelineState).historySource).toBe("native");
+});
+
+test("empty file preview retains its source during refresh and exposes read errors", async () => {
+  mocks.getTurnTimeline.mockResolvedValueOnce(
+    page({ history_source: "file", items: [], next_turn_id: null }),
+  );
+  await loadSessionTimeline("session-1");
+  mocks.getTurnTimeline.mockRejectedValueOnce(
+    new ApiError("Unavailable", "timeline_source_unavailable", 503),
+  );
+  await refreshSessionTimeline("session-1");
+  expect(mocks.getTurnTimeline.mock.lastCall?.[1].historySource).toBe("file");
+  expect(get(timelineState).status).toBe("source_unavailable");
+  expect(get(timelineState).historySource).toBe("file");
+  mocks.getTurnTimeline.mockResolvedValueOnce(
+    page({ history_source: "file", items: [], next_turn_id: null }),
+  );
+  await refreshSessionTimeline("session-1");
+  expect(mocks.getTurnTimeline.mock.lastCall?.[1].historySource).toBe("file");
+});

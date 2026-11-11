@@ -197,6 +197,7 @@ fn dashboard_sse_stream(
 ) -> Sse<impl Stream<Item = std::result::Result<Event, Infallible>>> {
     let (sender, receiver) = mpsc::channel(32);
     let mut interactions = state.interactions().subscribe();
+    let mut history = state.agent_events().subscribe_history();
 
     tokio::spawn(async move {
         let mut shutdown = state.shutdown().subscribe();
@@ -227,6 +228,19 @@ fn dashboard_sse_stream(
                     _ = shutdown.changed() => return,
                 }
             }
+            for _ in 0..32 {
+                match history.try_recv() {
+                    Ok(session_id) => {
+                        let event = Event::default().event("dashboard_event").json_data(serde_json::json!({"kind":"history_changed", "session_id":session_id})).expect("history notification");
+                        tokio::select! {
+                            result = sender.send(Ok(event)) => { if result.is_err() { return; } }
+                            _ = shutdown.changed() => return,
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::TryRecvError::Empty) => break,
+                    Err(_) => return,
+                }
+            }
             let Ok(items) = list_dashboard_stream_items_after(&service, cursor, 100).await else {
                 break;
             };
@@ -236,6 +250,14 @@ fn dashboard_sse_stream(
                     break;
                 }
                 tokio::select! {
+                    change = history.recv() => {
+                        let Ok(session_id) = change else { break; };
+                        let event = Event::default().event("dashboard_event").json_data(serde_json::json!({"kind":"history_changed", "session_id":session_id})).expect("history notification");
+                        tokio::select! {
+                            result = sender.send(Ok(event)) => { if result.is_err() { break; } }
+                            _ = shutdown.changed() => break,
+                        }
+                    }
                     change = interactions.recv() => {
                         if let Some(event) = interaction_stream_event(change) {
                             tokio::select! {

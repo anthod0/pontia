@@ -202,7 +202,7 @@ fn preserves_long_tool_output_unknown_items_and_explicit_turn_metadata() {
 }
 
 #[test]
-fn rejects_truncated_or_replaced_sources_and_ignores_partial_final_record() {
+fn rejects_malformed_sources_and_ignores_partial_final_record() {
     let (_root, source) = fixture(&[
         context("one"),
         item(json!({"type":"message","role":"assistant","content":[{"text":"done"}]})),
@@ -235,7 +235,7 @@ fn rejects_truncated_or_replaced_sources_and_ignores_partial_final_record() {
         .write(true)
         .open(&source.path)
         .unwrap()
-        .set_len(95)
+        .set_len(1)
         .unwrap();
     assert!(
         CodexRollout
@@ -313,32 +313,38 @@ fn reads_native_command_patch_mcp_code_mode_and_tui_answer_records() {
 }
 
 #[test]
-fn refuses_missing_completed_native_turn_instead_of_returning_empty_history() {
+fn captures_native_boundaries_without_waiting_for_file_persistence() {
     let (_root, source) = fixture(&[context("one")]);
-    assert!(
-        CodexRollout
-            .capture_boundary(TimelineBoundaryCaptureRequest {
-                source: source.clone(),
-                kind: TimelineBoundaryCaptureKind::Head,
-                native_entry_anchor: Some("missing".into()),
-                allow_missing_native_entry_anchor: false,
-            })
-            .is_err()
+    let turn = "native:turn:with:colons";
+    let head = CodexRollout
+        .capture_boundary(TimelineBoundaryCaptureRequest {
+            source: source.clone(),
+            kind: TimelineBoundaryCaptureKind::Head,
+            native_entry_anchor: Some(turn.into()),
+            allow_missing_native_entry_anchor: false,
+        })
+        .unwrap()
+        .cursor;
+    assert_eq!(
+        head,
+        "codex-turn-v2:binding:thread-a:native:turn:with:colons:before"
     );
-    assert!(
-        CodexRollout
-            .capture_boundary(TimelineBoundaryCaptureRequest {
-                source,
-                kind: TimelineBoundaryCaptureKind::Tail,
-                native_entry_anchor: Some("missing".into()),
-                allow_missing_native_entry_anchor: true,
-            })
-            .is_err()
-    );
+    let records = CodexRollout
+        .read_turn_ranges(TurnTimelineReadRequest {
+            source,
+            ranges: vec![TurnTimelineRange {
+                turn_id: "removed".into(),
+                is_first_session_turn: false,
+                head_cursor: head,
+                tail_cursor: None,
+            }],
+        })
+        .unwrap();
+    assert!(records.is_empty());
 }
 
 #[test]
-fn completion_capture_waits_for_the_native_terminal_record() {
+fn native_boundary_remains_valid_when_file_content_arrives_later() {
     let (root, source) = fixture(&[]);
     let mut file = std::fs::OpenOptions::new()
         .append(true)
@@ -353,20 +359,14 @@ fn completion_capture_waits_for_the_native_terminal_record() {
             allow_missing_native_entry_anchor: false,
         })
     };
-    assert!(matches!(
-        capture(),
-        Err(pontia_core::Error::Conflict {
-            code: "timeline_pending",
-            ..
-        })
-    ));
+    let tail = capture().unwrap().cursor;
     writeln!(
         file,
         "{}",
         item(json!({"type":"message","role":"assistant","content":[{"text":"late final answer"}]}))
     )
     .unwrap();
-    assert!(capture().is_err());
+    assert_eq!(capture().unwrap().cursor, tail);
     finish(&source, "delayed");
     assert_eq!(
         read(source, "delayed")[0].item.content_preview,

@@ -99,6 +99,11 @@ beforeEach(() => {
           turns: [{ turn_id: "turn-2", state: state === "busy" ? "running" : "completed" }],
         },
         "/sessions/current/inbox/messages": { inbox_messages: [] },
+        "/sessions/current/turns/tree/history": {
+          session_id: "current",
+          groups: [],
+          next_from_turn_id: null,
+        },
         "/sessions/current/events": { events: [] },
       };
       if (!(path in data)) throw new Error(`Unexpected endpoint: ${path}`);
@@ -192,7 +197,6 @@ test("recovers the Session independently of native history failure and uses its 
   expect(get(sessionDetail)?.session.state).toBe("busy");
   expect(history).toHaveBeenCalledWith("current", {
     mode: "rebuild",
-    latestTurnId: "turn-2",
     topology: true,
   });
 });
@@ -227,7 +231,7 @@ test("keeps a recovery requested during an older snapshot in flight", async () =
   expect(requests.filter((path) => path === "/sessions/current")).toHaveLength(2);
 });
 
-test("replays native history from the last loaded turn rather than skipping offline turns", async () => {
+test("reconnect replaces cached history after changes made while offline", async () => {
   online = true;
   supportsTimeline = true;
   timeline.timelineState.update((value) => ({
@@ -237,9 +241,14 @@ test("replays native history from the last loaded turn rather than skipping offl
     status: "ready",
     latestTurnId: "turn-1",
   }));
-  const refresh = vi.spyOn(timeline, "refreshSessionTimeline").mockResolvedValue(true);
-  await refreshDashboardSnapshot({ reason: "sse_open" });
-  expect(refresh).toHaveBeenCalledWith("current", "turn-1");
+  let complete = false;
+  const recovery = refreshDashboardSnapshot({ reason: "sse_open" }).then(() => {
+    complete = true;
+  });
+  await vi.waitFor(() => expect(complete).toBe(true));
+  await recovery;
+  expect(get(timeline.timelineState).latestTurnId).toBeNull();
+  expect(get(timeline.timelineState).status).toBe("empty");
   expect(get(sessionDetail)?.turns[0]?.turn_id).toBe("turn-2");
 });
 

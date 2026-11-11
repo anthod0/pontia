@@ -15,6 +15,7 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 mod context_usage;
 mod exit;
+mod history;
 mod observation;
 mod reasoning;
 mod tool_calls;
@@ -28,6 +29,8 @@ enum Command {
 #[derive(Default)]
 struct ServerState {
     turns: Mutex<Vec<Value>>,
+    history_page_size: std::sync::atomic::AtomicUsize,
+    history_requests: Mutex<Vec<Value>>,
     unloaded: std::sync::atomic::AtomicBool,
     hold_interrupt: std::sync::atomic::AtomicBool,
     hold_unload: std::sync::atomic::AtomicBool,
@@ -145,7 +148,13 @@ impl Fixture {
                                         json!({"thread":shared.unarchive_thread.lock().await.clone().unwrap_or(thread)})
                                     },
                                     "thread/turns/list" => {
-                                        let result = json!({"data":shared.turns.lock().await.clone(),"nextCursor":null});
+                                        shared.history_requests.lock().await.push(request["params"].clone());
+                                        let turns = shared.turns.lock().await.clone();
+                                        let size = shared.history_page_size.load(std::sync::atomic::Ordering::SeqCst);
+                                        let start = request["params"]["cursor"].as_str().map(|cursor| cursor.strip_prefix("opaque/page/").unwrap().parse::<usize>().unwrap()).unwrap_or(0);
+                                        let end = if size == 0 { turns.len() } else { (start + size).min(turns.len()) };
+                                        let next = (end < turns.len()).then(|| format!("opaque/page/{end}"));
+                                        let result = json!({"data":turns[start..end],"nextCursor":next});
                                         for notification in shared.before_snapshot.lock().await.drain(..) {
                                             wire.send(Message::Text(notification.to_string().into())).await.unwrap();
                                         }

@@ -37,6 +37,10 @@ pub struct ClientControlService {
 }
 
 impl ClientControlService {
+    pub fn db(&self) -> SqlitePool {
+        self.pool.clone()
+    }
+
     pub fn new(pool: SqlitePool, pontia_home: PathBuf) -> Self {
         Self {
             pool,

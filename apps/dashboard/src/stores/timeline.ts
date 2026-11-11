@@ -31,6 +31,7 @@ export type TimelineStatus =
 
 export interface TimelineState {
   sessionId: string;
+  historySource?: "native" | "file" | null;
   mode: "linear" | "tree" | null;
   groups: TurnTimelineGroup[];
   items: TurnTimelineItem[];
@@ -46,7 +47,7 @@ export interface TimelineState {
   compactionHistoryError?: string | null;
 }
 
-type LoadMode = "rebuild" | "more";
+type LoadMode = "rebuild" | "more" | "refresh";
 
 export function hasTimelineSnapshot(state: TimelineState, sessionId: string): boolean {
   return (
@@ -183,6 +184,7 @@ export function createTimeline(device: DeviceRuntime) {
     if (
       (current.sessionId && current.sessionId !== sessionId) ||
       !snapshot ||
+      snapshot.historySource != null ||
       (expectedMode !== null && snapshot.mode !== expectedMode)
     )
       return false;
@@ -357,7 +359,9 @@ export function createTimeline(device: DeviceRuntime) {
       state.sessionId !== sessionId
         ? state
         : {
-            ...(pending ? state : emptyState(sessionId)),
+            ...(pending || state.historySource ? state : emptyState(sessionId)),
+            refreshing: false,
+            refreshKind: null,
             loading: false,
             status: errorStatus(error),
             errorCode: error instanceof ApiError ? error.code : "request_failed",
@@ -382,8 +386,7 @@ export function createTimeline(device: DeviceRuntime) {
 
     const mode = options.mode ?? "rebuild";
     if (mode === "rebuild") {
-      cachedRefreshCursorSessions.delete(sessionId);
-      cachedHistoryCursorSessions.delete(sessionId);
+      resetTimelineState(sessionId);
     }
     const current = get(timelineState);
     const sameSession = current.sessionId === sessionId;
@@ -403,7 +406,7 @@ export function createTimeline(device: DeviceRuntime) {
           : (options.latestTurnId ?? scoped.latestTurnId),
         loading: mode === "rebuild",
         refreshing: mode === "more",
-        refreshKind: mode === "more" ? "history" : null,
+        refreshKind: mode === "more" ? "history" : mode === "refresh" ? "tail" : null,
         status: mode === "rebuild" ? "loading" : scoped.status,
         errorCode: null,
         error: null,
@@ -457,6 +460,7 @@ export function createTimeline(device: DeviceRuntime) {
         "backward",
         turnId,
         options.limit ?? DEFAULT_HISTORY_LIMIT,
+        mode !== "rebuild" ? current.historySource : null,
       );
       if (generation !== timelineGeneration) return null;
       timelineState.update((state) => {
@@ -468,10 +472,11 @@ export function createTimeline(device: DeviceRuntime) {
         return {
           ...state,
           groups: [],
+          historySource: page.history_source,
           items,
           nextOlderTurnId: page.next_turn_id,
           latestTurnId:
-            mode === "rebuild" && options.latestTurnId
+            page.history_source == null && mode === "rebuild" && options.latestTurnId
               ? options.latestTurnId
               : (items.findLast((item) => item.turn_id !== null)?.turn_id ?? state.latestTurnId),
           hasMore: page.next_turn_id !== null,
@@ -526,6 +531,7 @@ export function createTimeline(device: DeviceRuntime) {
         "forward",
         turnId,
         FORWARD_LIMIT,
+        get(timelineState).historySource,
       );
       items.push(...page.items);
       turnId = page.next_turn_id;
@@ -760,6 +766,7 @@ export function createTimeline(device: DeviceRuntime) {
       deviceId: device.id,
       sessionId,
       mode: state.mode,
+      historySource: state.historySource,
       groups: state.groups,
       items: state.items,
       nextOlderTurnId: state.nextOlderTurnId,
@@ -782,9 +789,15 @@ export function createTimeline(device: DeviceRuntime) {
       return refreshSessionTreeUpdates(sessionId, current.latestTurnId);
     }
 
-    const forwardAnchorTurnId = turnId ?? current.latestTurnId;
+    const forwardAnchorTurnId = current.historySource
+      ? current.latestTurnId
+      : (turnId ?? current.latestTurnId);
     if (!forwardAnchorTurnId) {
-      return (await loadSessionTimeline(sessionId, { mode: "rebuild" })) !== null;
+      return (
+        (await loadSessionTimeline(sessionId, {
+          mode: current.historySource ? "refresh" : "rebuild",
+        })) !== null
+      );
     }
     return refreshSessionTimelineUpdates(sessionId, forwardAnchorTurnId);
   }
