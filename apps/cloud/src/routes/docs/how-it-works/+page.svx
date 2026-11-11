@@ -43,7 +43,7 @@ Pontia separates agent execution from remote access. Coding agents run on your d
 
 ## The local control plane
 
-The `pontiad` service runs on your device. It coordinates agent sessions, communicates with supported agent clients such as pi and Codex, and serves the local dashboard and API.
+The `pontiad` service runs on your device. It coordinates agent sessions, communicates with supported agent clients such as pi, Codex, Claude Agent, and ACP agents, and serves the local dashboard and API.
 
 The agent client executes commands using the files and tools installed on your device.
 

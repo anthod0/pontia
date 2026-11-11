@@ -66,7 +66,15 @@ Also check a custom `[runtime.pi].tui_command` for an invalid path or wrapper.
 
 Confirm that your Codex build supports the app-server daemon, then inspect its per-user service. See [Codex](/docs/codex) for platform commands. Run `pontia init` again if the executable or `CODEX_HOME` changed.
 
-An agent can also appear stuck when its own sandbox requests an approval that is not available in the Dashboard. Interrupt the Turn if needed, then adjust the Client policy or handle the request through a compatible native interface.
+Command, file-change, and permission approvals appear in the Dashboard. An agent can still appear stuck when Codex waits for another kind of request that the Dashboard does not show. Interrupt the Turn if needed, then adjust the Codex policy or answer the request in the native Codex interface.
+
+## Claude Agent cannot start
+
+Check that `node --version` and `npm --version` work for the user that runs Pontia, then run `pontia init` and select `claude-agent` to re-run the dependency check. If the Dashboard reports an authentication failure while the SDK retries, fix Claude Code's own login or provider settings for that user. See the [Claude Agent guide](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) to update the client package.
+
+## An ACP agent cannot start
+
+Confirm that the entry's `command` runs for the Pontia service user, and inspect its `effective_config` with `pontia client show AGENT_ID`. The agent must support loading and closing sessions; otherwise the Session reports the missing capability.
 
 ## A remote device is offline
 

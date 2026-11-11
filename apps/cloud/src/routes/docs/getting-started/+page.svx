@@ -17,6 +17,8 @@ Install the clients you plan to use before initialization:
 
 - **pi:** install the `pi` CLI and `tmux`.
 - **Codex:** install the `codex` CLI. Automatic Codex startup uses systemd on Linux and a per-user LaunchAgent on macOS.
+- **Claude Agent:** install Node.js LTS with npm and sign in to Claude Code. See the [Claude Agent guide](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md).
+- **ACP agents:** install the agent, such as OpenCode, Kimi CLI, or Grok Build, then enable it after initialization as described in [Agent Clients](/docs/agent-clients#enable-an-acp-agent).
 
 ## Install Pontia
 
@@ -38,7 +40,7 @@ pontia init
 
 The initializer lets you:
 
-1. Select the pi integration, Codex integration, or both.
+1. Select the pi, Codex, and Claude Agent integrations you want.
 2. Generate the local dashboard credential.
 3. Start the Pontia background service.
 4. Sign in to Pontia Cloud and register your device for the Remote Dashboard.

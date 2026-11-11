@@ -25,6 +25,25 @@ See [Initialization](/docs/initialization) for interactive setup and the equival
 
 Stopping `pontiad` stops observation, input reception, and Workflow scheduling. Agent Clients manage the lifecycle of their native conversations separately.
 
+## Agent Clients
+
+| Command | Purpose |
+| --- | --- |
+| `pontia client list` | List every Agent Client entry as JSON, including its ID, short ID, enabled state, and effective configuration |
+| `pontia client show CLIENT` | Show one entry |
+| `pontia client set CLIENT --config JSON_FILE` | Replace the entry's configuration overrides with a JSON object |
+| `pontia client enable CLIENT` | Allow new Sessions to use the entry |
+| `pontia client disable CLIENT` | Stop new Sessions from using the entry; existing Sessions are unchanged |
+| `pontia client reset CLIENT` | Delete the entry's saved settings, which also disables it |
+
+`CLIENT` is a short ID such as `pi`, `codex`, `claude-agent`, or an ACP agent ID. Use `--id ID` with an ID from `pontia client list` when a short ID is ambiguous.
+
+## Agent commands
+
+| Command | Context | Purpose |
+| --- | --- | --- |
+| `pontia send-file PATH` | Inside a Pontia Session | Share one file with the Session's user; it appears in the Dashboard chat |
+
 ## Cloud login and remote access
 
 | Command | Purpose |

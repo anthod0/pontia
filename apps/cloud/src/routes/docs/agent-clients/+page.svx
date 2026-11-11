@@ -7,12 +7,14 @@
 
 An Agent Client connects Pontia to a coding agent's native session, control channel, and conversation history. The agent still runs locally with its own credentials, configuration, tools, and filesystem permissions.
 
-Pontia currently includes two Agent Clients:
+Pontia includes these Agent Clients:
 
 | Client | Local requirement | Integration installed by `pontia init` |
 | --- | --- | --- |
 | [pi](/docs/agent-clients/pi) | `pi` and `tmux` | Pontia's pi plugin |
 | [Codex](/docs/codex) | A Codex CLI with app-server daemon support | Per-user Codex daemon startup |
+| [Claude Agent](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) | Node.js LTS, npm, and Claude Code authentication | The `@pontia/claude-client` package from npm |
+| ACP agents | An agent that speaks the Agent Client Protocol over stdio | None; enable the entry after installing the agent |
 
 ## Choose Clients during initialization
 
@@ -22,7 +24,26 @@ Run:
 pontia init
 ```
 
-The initializer checks your selected Clients before applying the configuration. pi is selected by default; select Codex as well to use both. Enable the Clients you want to use for Sessions.
+The initializer checks your selected Clients before applying the configuration. pi is selected by default; Codex and `claude-agent` are optional. Selected Clients are enabled for new Sessions.
+
+<h2 id="enable-an-acp-agent">Enable an ACP agent</h2>
+
+Pontia provides ACP entries for Grok Build (`grok agent stdio`), Kimi CLI (`kimi acp`), and OpenCode (`opencode acp`). Install the agent, then enable its entry in the Dashboard under **Settings → Agent Clients**, or run:
+
+```sh
+pontia client enable opencode
+```
+
+To add another agent, use **Add custom client** in the same settings page, or define it in `$PONTIA_HOME/config.toml`:
+
+```toml
+[acp.agents.company-agent]
+name = "Company Agent"
+command = "/opt/company-agent/bin/agent"
+args = ["--acp"]
+```
+
+Instead of `command` and `args`, an entry can set `registry_id` to launch an agent from the ACP registry. The agent must support loading and closing sessions; Pontia reports a missing capability when the Session starts.
 
 Running `pontia init` again preserves the existing External API token and Workspace Browser roots. It can also install or repair a selected Client integration.
 
@@ -34,6 +55,6 @@ A Pontia Session is durably associated with one client-native conversation ident
 
 ## Client credentials and permissions
 
-Each Client uses its own credentials, sandbox, and local permissions. Sign in to pi or Codex and verify that it can perform the intended work before starting the integration.
+Each Client uses its own credentials, sandbox, and local permissions. Sign in to each Client and verify that it can perform the intended work before starting the integration.
 
 See [Troubleshooting](/docs/troubleshooting) when a Client is missing, cannot start, or stops reporting output.

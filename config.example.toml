@@ -18,10 +18,10 @@ roots = [
   { root_id = "projects", label = "Projects", path = "/home/me/projects" }
 ]
 
-# Experimental ACP control loop: local stdio peers only. Permission interactions,
-# history, recovery and Dashboard Agent selection are not implemented yet.
-# Create through the Session API with client_type = "acp" and
-# metadata.acp_agent_id = "company-agent". The peer must declare loadSession and close.
+# ACP agents launched over local stdio. Built-in entries cover Grok Build, Kimi CLI and
+# OpenCode; enable one with `pontia client enable <id>` or in Dashboard settings.
+# The peer must declare loadSession and close. Use registry_id instead of
+# command/args to launch an agent from the ACP registry.
 # [acp.agents.company-agent]
 # name = "Company Agent"
 # command = "/opt/company-agent/bin/agent"

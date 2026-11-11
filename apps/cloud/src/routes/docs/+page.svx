@@ -23,7 +23,7 @@ Pontia turns your device into an agent cloud. Coding agents run with the tools a
 
 ## Use Pontia
 
-- [Agent Clients](/docs/agent-clients) — configure pi and Codex and understand their capability differences.
+- [Agent Clients](/docs/agent-clients) — configure pi, Codex, Claude Agent, and ACP agents and understand their capability differences.
 - [Workspaces](/docs/workspaces) — configure project directories and file discovery.
 - [Workflows](/docs/workflows) — run durable, staged agent work with explicit Handoffs and replanning.
 

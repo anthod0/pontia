@@ -38,6 +38,8 @@ roots = [
 | `default_client_type` | Default Client identifier; the current supported value is `pi` |
 | `dashboard.source` | Local Dashboard build directory or remote `.tar.gz`, `.tgz`, or `.zip` archive containing exactly one `index.html` |
 | `runtime.pi.tui_command` | pi executable or command used for launched pi Sessions |
+| `runtime.codex.tui_command` | Codex executable used when opening a Codex Session in the native TUI; defaults to `codex` |
+| `acp.agents.ID` | An ACP agent entry; see [Agent Clients](/docs/agent-clients#enable-an-acp-agent) |
 | `workspace_browser.roots` | Directories the Dashboard may browse to activate Workspaces |
 
 The release default for `dashboard.source` is the Dashboard archive matching the installed Pontia version. Remote Dashboard archives are cached under `$PONTIA_HOME/cache/dashboard`; an existing cache can still be served if refresh fails.

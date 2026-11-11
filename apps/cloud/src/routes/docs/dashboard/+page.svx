@@ -25,7 +25,7 @@ Activate directories within your configured Workspace Browser roots. The first i
 
 1. Open [New chat](https://app.pontia.dev/).
 2. Select an active Workspace.
-3. Select the pi or Codex Agent Client.
+3. Select an enabled Agent Client, such as pi, Codex, Claude Agent, or an ACP agent.
 4. Describe the job and submit the prompt.
 
 Pontia creates a durable Session and starts the selected Agent Client on your device. The Session remains available in Pontia even when you navigate away from the chat.
@@ -37,12 +37,18 @@ The chat page streams the conversation and work steps exposed by the Agent Clien
 - send another message when the agent is idle;
 - queue input while a supported Agent Client is busy;
 - interrupt the current Turn when the Client supports interruption;
+- answer tool and permission requests, such as command approvals, when the Client asks for them;
 - retry or dismiss Inbox messages whose delivery failed;
 - use `/model` to change the model for later Turns when the Client supports model changes;
 - type `@` to find files and directories in the active Workspace;
+- attach files with the **+** button in the composer, up to 1 GiB each;
 - edit an eligible earlier user message to branch from that point in the native conversation history.
 
 The Inbox tracks submitted messages waiting for delivery or queued by an Agent Client.
+
+## Shared files
+
+An agent can share a file from its Session by running `pontia send-file PATH`. The file appears as a card at the end of the Turn, where you can preview or download it. Open **Shared files** in the composer menu to list every file shared in the Session. Pontia reads the file from the device when you download it, so a file that was moved or deleted is no longer available.
 
 ## Chat commands
 
@@ -53,6 +59,7 @@ Type `/` in the composer to see commands available in the current context:
 | `/new` | Start a new Session, keeping the current Workspace when possible |
 | `/rename` | Rename the current Session |
 | `/model` | Choose a model for subsequent Turns, when supported |
+| `/compact` | Summarize older context while the Session is idle, when supported |
 | `/exit` | End Pontia's active control of the current Session |
 
 `/exit` ends Pontia's control of the Session. The Agent Client manages the lifecycle and storage of its native conversation.
@@ -68,6 +75,7 @@ Chat pages provide these shortcuts:
 | `Alt+N` | Open New chat |
 | `Alt+L` | Focus the composer |
 | `Alt+?` | Show the shortcut reference |
+| `Ctrl+B` (`Cmd+B` on macOS) | Toggle the sidebar |
 
 ## Organize Sessions
 

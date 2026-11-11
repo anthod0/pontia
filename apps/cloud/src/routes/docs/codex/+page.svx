@@ -12,11 +12,17 @@ codex app-server daemon start --help
 codex app-server daemon version --help
 ```
 
-Codex uses its own model credentials, sandbox, and approval policy. Choose a policy appropriate for the work you will run from the Dashboard.
+Codex uses its own model credentials, sandbox, and approval policy. Choose a policy appropriate for the work you will run from the Dashboard. When Codex asks to run a command, change files, or use additional permissions, the request appears in the Dashboard with **Allow** and **Deny** choices.
 
 ## Interactive setup
 
 Run `pontia init` and select **Codex**. Pontia configures automatic startup, verifies the connection, and saves the Codex home for both services.
+
+<h2 id="codex-launcher">Codex launcher</h2>
+
+`pontia init` also offers the Pontia Codex launcher. When enabled, Pontia installs `$PONTIA_HOME/bin/codex` and adds it to the front of `PATH` in your bash, zsh, or fish startup files. Interactive `codex` commands in new shells then connect to the Pontia-managed daemon, and the threads they start, resume, or fork appear as Pontia Sessions. Other subcommands, such as `codex exec` or `codex login`, run the original executable unchanged.
+
+Open a new terminal, or run the command printed at the end of initialization, to start using the launcher. To remove it, run `pontia init` again and decline the launcher option.
 
 <h2 id="manual-setup">Manual setup</h2>
 
