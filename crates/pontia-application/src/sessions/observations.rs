@@ -29,6 +29,62 @@ impl NativeSessionService {
         Self { pool, events }
     }
 
+    /// Adopts a native conversation served by a shared backend, without creating a runtime.
+    pub async fn resolve_subscription_session(
+        &self,
+        client: &str,
+        native_key: &str,
+        identity: NativeSessionIdentity,
+        metadata: Value,
+    ) -> Result<String> {
+        let control = self.events.history_control();
+        let _identity = match &control {
+            Some(control) => Some(control.lock_identity().await),
+            None => None,
+        };
+        if let Some(binding) = crate::AgentBindingService::new(self.pool.clone())
+            .binding_for_client_session(client, native_key)
+            .await?
+        {
+            return Ok(binding.session_id);
+        }
+        crate::agent_clients::AgentClientService::new(self.pool.clone(), self.events.clients())
+            .for_creation(client, &metadata)
+            .await?;
+        let workspace = crate::upsert_workspace(&self.pool, &identity.launch_cwd).await?;
+        let session = new_session_id().to_string();
+        self.events
+            .ingest_pontia_event_with_agent_binding(
+                PontiaEvent::new(
+                    &session,
+                    None,
+                    PontiaEventSource::RuntimeManager,
+                    client,
+                    PontiaEventType::SessionCreated,
+                    json!({"workspace":workspace.canonical_path,"metadata":metadata}),
+                ),
+                UpsertAgentBindingRequest {
+                    session_id: session.clone(),
+                    client_type: client.into(),
+                    client_session_key: native_key.into(),
+                    launch_cwd: workspace.canonical_path.clone(),
+                    client_session_file: identity.client_session_file,
+                    metadata: json!({}),
+                },
+            )
+            .await?;
+        pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository::new(
+            self.pool.clone(),
+        )
+        .update_session_workspace(
+            &session,
+            Some(&workspace.canonical_path),
+            Some(&workspace.workspace_id),
+        )
+        .await?;
+        Ok(session)
+    }
+
     pub async fn provision(&self, session: &str, runtime: &RuntimeStartResult) -> Result<()> {
         crate::runtime::NativeRuntimeBindings::new(self.pool.clone())
             .provision(session, runtime)

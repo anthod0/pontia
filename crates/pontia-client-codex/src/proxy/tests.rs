@@ -1,9 +1,6 @@
 use super::*;
 use futures_util::{SinkExt, StreamExt};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    time::{Duration, timeout},
-};
+use tokio::time::{Duration, timeout};
 use tokio_tungstenite::{accept_async, client_async, tungstenite::Message};
 
 type WebSocket = tokio_tungstenite::WebSocketStream<UnixStream>;
@@ -31,8 +28,12 @@ async fn forwards_handshake_unknown_messages_and_interactions_on_independent_con
     let proxy = Proxy::bind(root.path()).await.unwrap();
     let path = proxy.path.clone();
     let (shutdown, stop) = watch::channel(false);
-    let task =
-        tokio::spawn(async move { proxy.run(stop, move || Ok(upstream_path.clone())).await });
+    let (observations, _incoming) = mpsc::channel(128);
+    let task = tokio::spawn(async move {
+        proxy
+            .run(stop, move || Ok(upstream_path.clone()), observations)
+            .await
+    });
     let server = tokio::spawn(async move {
         let mut peers = Vec::new();
         for _ in 0..2 {
@@ -103,30 +104,34 @@ async fn upstream_disconnect_and_unavailability_close_only_the_affected_transpor
     let proxy = Proxy::bind(root.path()).await.unwrap();
     let path = proxy.path.clone();
     let (shutdown, stop) = watch::channel(false);
-    let task =
-        tokio::spawn(async move { proxy.run(stop, move || Ok(upstream_path.clone())).await });
-    let mut client = UnixStream::connect(&path).await.unwrap();
-    let (mut native, _) = upstream.accept().await.unwrap();
-    native.write_all(b"hello").await.unwrap();
-    let mut bytes = [0; 5];
-    client.read_exact(&mut bytes).await.unwrap();
-    assert_eq!(&bytes, b"hello");
+    let (observations, _incoming) = mpsc::channel(128);
+    let task = tokio::spawn(async move {
+        proxy
+            .run(stop, move || Ok(upstream_path.clone()), observations)
+            .await
+    });
+    let mut client = connect(&path).await;
+    let mut native = accept_async(upstream.accept().await.unwrap().0)
+        .await
+        .unwrap();
+    native.send(Message::text("hello")).await.unwrap();
+    assert_eq!(receive(&mut client).await, Message::text("hello"));
     drop(native);
-    assert_eq!(
-        timeout(Duration::from_secs(3), client.read(&mut bytes))
+    assert!(
+        timeout(Duration::from_secs(3), client.next())
             .await
             .unwrap()
-            .unwrap(),
-        0
+            .unwrap()
+            .is_err()
     );
     drop(upstream);
-    let mut client = UnixStream::connect(&path).await.unwrap();
-    assert_eq!(
-        timeout(Duration::from_secs(3), client.read(&mut bytes))
+    let mut client = connect(&path).await;
+    assert!(
+        timeout(Duration::from_secs(3), client.next())
             .await
             .unwrap()
-            .unwrap(),
-        0
+            .unwrap()
+            .is_err()
     );
     shutdown.send(true).unwrap();
     task.await.unwrap().unwrap();
@@ -149,4 +154,56 @@ async fn reclaims_stale_sockets_but_preserves_live_listeners_and_other_files() {
     assert!(Proxy::bind(root.path()).await.is_err());
     drop(proxy);
     assert!(!path.exists());
+}
+
+#[tokio::test]
+async fn only_matching_successful_thread_responses_are_observed() {
+    let root = tempfile::tempdir().unwrap();
+    let upstream_path = root.path().join("native.sock");
+    let upstream = UnixListener::bind(&upstream_path).unwrap();
+    let proxy = Proxy::bind(root.path()).await.unwrap();
+    let path = proxy.path.clone();
+    let (shutdown, stop) = watch::channel(false);
+    let (observations, mut incoming) = mpsc::channel(128);
+    let task = tokio::spawn(async move {
+        proxy
+            .run(stop, move || Ok(upstream_path.clone()), observations)
+            .await
+    });
+    let mut client = connect(&path).await;
+    let mut native = accept_async(upstream.accept().await.unwrap().0)
+        .await
+        .unwrap();
+    for request in [
+        serde_json::json!({"id":1,"method":"thread/start"}),
+        serde_json::json!({"id":"1","method":"thread/resume"}),
+        serde_json::json!({"id":2,"method":"thread/fork"}),
+    ] {
+        client
+            .send(Message::text(request.to_string()))
+            .await
+            .unwrap();
+        receive(&mut native).await;
+    }
+    for response in [
+        serde_json::json!({"id":1,"method":"future/serverRequest"}),
+        serde_json::json!({"id":2,"error":{"code":-32600}}),
+        serde_json::json!({"id":"1","result":{"thread":{"id":"resumed"}}}),
+        serde_json::json!({"id":1,"result":{"thread":{"id":"started"}}}),
+        serde_json::json!({"id":99,"result":{"thread":{"id":"unsolicited"}}}),
+    ] {
+        let message = Message::text(response.to_string());
+        native.send(message.clone()).await.unwrap();
+        assert_eq!(receive(&mut client).await, message);
+    }
+    for expected in ["resumed", "started"] {
+        let observation = incoming.recv().await.unwrap();
+        let ObservedEvent::ThreadOpened { result, .. } = observation.event else {
+            panic!("unexpected event")
+        };
+        assert_eq!(result["thread"]["id"], expected);
+    }
+    assert!(incoming.try_recv().is_err());
+    shutdown.send(true).unwrap();
+    task.await.unwrap().unwrap();
 }

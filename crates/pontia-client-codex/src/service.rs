@@ -17,6 +17,7 @@ mod live_output_tests;
 mod models;
 mod observer;
 pub(crate) mod profile;
+mod proxy_observer;
 #[cfg(test)]
 mod subscription_tests;
 use crate::runtime::{CodexRuntime, SubscriptionState};
@@ -331,16 +332,25 @@ impl CodexService {
         thread_id: &str,
         reload: bool,
     ) -> Result<()> {
+        let connection = runtime.connection().await?;
+        let params = self.resume_params(session, thread_id, &connection).await?;
+        self.subscribe_with_params(session, runtime, thread_id, reload, params)
+            .await
+    }
+
+    async fn subscribe_with_params(
+        &self,
+        session: &str,
+        runtime: &CodexRuntime,
+        thread_id: &str,
+        reload: bool,
+        params: Value,
+    ) -> Result<()> {
         runtime
             .set_subscription(session, SubscriptionState::Reconciling)
             .await;
         let connection = runtime.connection().await?;
-        let resumed = connection
-            .resume_thread(
-                self.resume_params(session, thread_id, &connection).await?,
-                reload,
-            )
-            .await;
+        let resumed = connection.resume_thread(params, reload).await;
         let (result, turns, subscription) = match resumed {
             Ok((result, boundary)) => {
                 // A loaded resume reply supersedes unloads received before that reply.

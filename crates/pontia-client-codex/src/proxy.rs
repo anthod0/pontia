@@ -1,15 +1,41 @@
 use std::{
+    collections::HashMap,
     io,
     os::unix::fs::{FileTypeExt, PermissionsExt},
     path::{Path, PathBuf},
 };
 
+use futures_util::{SinkExt, StreamExt};
 use pontia_core::Result;
+use serde_json::Value;
 use tokio::{
     net::{UnixListener, UnixStream},
-    sync::watch,
+    sync::{mpsc, watch},
     task::JoinSet,
 };
+use tokio_tungstenite::{accept_async, tungstenite::Message};
+
+use crate::runtime::{daemon::DaemonIdentity, protocol};
+
+pub(crate) struct Observation {
+    pub daemon: DaemonIdentity,
+    pub event: ObservedEvent,
+}
+
+pub(crate) enum ObservedEvent {
+    ThreadOpened {
+        operation: ThreadOperation,
+        result: Value,
+    },
+    TurnStarted(String),
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum ThreadOperation {
+    Start,
+    Resume,
+    Fork,
+}
 
 pub(crate) fn socket_path(home: &Path) -> PathBuf {
     home.join("codex-proxy.sock")
@@ -55,6 +81,7 @@ impl Proxy {
         self,
         mut shutdown: watch::Receiver<bool>,
         upstream: impl Fn() -> Result<PathBuf>,
+        observations: mpsc::Sender<Observation>,
     ) -> Result<()> {
         let mut connections = JoinSet::new();
         while !*shutdown.borrow() {
@@ -70,8 +97,9 @@ impl Proxy {
                 accepted = self.listener.accept() => {
                     let (downstream, _) = accepted?;
                     let endpoint = upstream();
+                    let observations = observations.clone();
                     connections.spawn(async move {
-                        relay(downstream, &endpoint?).await
+                        relay(downstream, &endpoint?, observations).await
                     });
                 }
             }
@@ -91,14 +119,63 @@ impl Drop for Proxy {
     }
 }
 
-async fn relay(mut downstream: UnixStream, upstream: &Path) -> Result<()> {
-    let mut upstream = UnixStream::connect(upstream).await?;
-    let (mut downstream_read, mut downstream_write) = downstream.split();
-    let (mut upstream_read, mut upstream_write) = upstream.split();
-    // EOF in either direction ends this transport only, without interpreting execution state.
-    tokio::select! {
-        result = tokio::io::copy(&mut downstream_read, &mut upstream_write) => { result?; }
-        result = tokio::io::copy(&mut upstream_read, &mut downstream_write) => { result?; }
+async fn relay(
+    downstream: UnixStream,
+    upstream: &Path,
+    observations: mpsc::Sender<Observation>,
+) -> Result<()> {
+    let mut downstream = accept_async(downstream)
+        .await
+        .map_err(protocol::protocol_error)?;
+    let mut upstream = protocol::open(upstream).await?;
+    let daemon = DaemonIdentity::capture(upstream.get_ref())?;
+    let mut pending = HashMap::<String, ThreadOperation>::new();
+    loop {
+        tokio::select! {
+            frame = downstream.next() => {
+                let Some(frame) = frame else { break };
+                let frame = frame.map_err(protocol::protocol_error)?;
+                if let Message::Text(text) = &frame
+                    && let Ok(value) = serde_json::from_str::<Value>(text)
+                    && let Some(id) = value.get("id").filter(|id| id.is_string() || id.is_number())
+                {
+                    let operation = match value["method"].as_str() {
+                        Some("thread/start") => Some(ThreadOperation::Start),
+                        Some("thread/resume") => Some(ThreadOperation::Resume),
+                        Some("thread/fork") => Some(ThreadOperation::Fork),
+                        _ => None,
+                    };
+                    if let Some(operation) = operation { pending.insert(id.to_string(), operation); }
+                }
+                let closed = frame.is_close();
+                upstream.send(frame).await.map_err(protocol::protocol_error)?;
+                if closed { break; }
+            }
+            frame = upstream.next() => {
+                let Some(frame) = frame else { break };
+                let frame = frame.map_err(protocol::protocol_error)?;
+                if let Message::Text(text) = &frame
+                    && let Ok(value) = serde_json::from_str::<Value>(text)
+                {
+                    let event = if value.get("method").is_none()
+                        && let Some(id) = value.get("id")
+                        && let Some(operation) = pending.remove(&id.to_string())
+                    {
+                        value.get("result").filter(|_| value.get("error").is_none())
+                            .cloned().map(|result| ObservedEvent::ThreadOpened { operation, result })
+                    } else if value["method"] == "turn/started" {
+                        value["params"]["threadId"].as_str().map(|thread| ObservedEvent::TurnStarted(thread.into()))
+                    } else { None };
+                    if let Some(event) = event {
+                        observations.send(Observation { daemon: daemon.clone(), event }).await
+                            .map_err(|_| protocol::protocol_error("proxy observation stopped"))?;
+                    }
+                }
+                let closed = frame.is_close();
+                downstream.send(frame).await.map_err(protocol::protocol_error)?;
+                if closed { break; }
+            }
+        }
     }
     Ok(())
 }

@@ -21,11 +21,15 @@ impl ClientService for CodexBackgroundService {
             observer.prepare().await?;
             let proxy = crate::proxy::Proxy::bind(state.pontia_home()).await?;
             tokio::spawn(observer.run(state.shutdown().subscribe()));
-            Ok(Some(tokio::spawn(
-                proxy.run(state.shutdown().subscribe(), || {
-                    crate::runtime::daemon::Endpoint::resolve().map(|endpoint| endpoint.socket)
-                }),
-            )))
+            let (observations, incoming) = tokio::sync::mpsc::channel(128);
+            Ok(Some(tokio::spawn(async move {
+                tokio::select! {
+                    result = proxy.run(state.shutdown().subscribe(), || {
+                        crate::runtime::daemon::Endpoint::resolve().map(|endpoint| endpoint.socket)
+                    }, observations) => result,
+                    _ = super::proxy_observer::run(state.clone(), incoming) => Ok(()),
+                }
+            })))
         })
     }
 }

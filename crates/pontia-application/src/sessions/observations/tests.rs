@@ -2,6 +2,50 @@ use super::*;
 use crate::inbox::InboxAssociations;
 use crate::turns::{NativeTurnObservation, NativeTurnService};
 use crate::{AppState, ReportedFact};
+
+#[tokio::test]
+async fn concurrent_subscription_adoption_creates_one_session_without_a_runtime() {
+    let fixture = Fixture::new().await;
+    let adopt = || {
+        fixture.service.resolve_subscription_session(
+            "native-test",
+            "shared-thread",
+            NativeSessionIdentity {
+                launch_cwd: fixture._root.path().display().to_string(),
+                client_session_file: None,
+            },
+            json!({"control_root":"shared-backend"}),
+        )
+    };
+    let (first, second) = tokio::join!(adopt(), adopt());
+    let session = first.unwrap();
+    assert_eq!(second.unwrap(), session);
+    let events = fixture
+        .state
+        .event_ingest_service()
+        .list_events(&session)
+        .await
+        .unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_type, EventType::SessionCreated);
+    assert_eq!(
+        events[0].payload["metadata"]["control_root"],
+        "shared-backend"
+    );
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_runtimes WHERE session_id=?")
+        .bind(&session)
+        .fetch_one(&fixture.state.db())
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    let binding = crate::AgentBindingService::new(fixture.state.db())
+        .binding_for_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(binding.client_session_key, "shared-thread");
+}
+
 struct Fixture {
     state: AppState,
     service: NativeSessionService,
