@@ -178,8 +178,7 @@ impl CodexService {
                     .or(row.1)
                     .ok_or_else(|| Error::StateConflict("Codex launch cwd is missing".into()))?;
                 let config = self.session_config(session_id, &connection, &cwd).await?;
-                let mut params = json!({"cwd":cwd,"historyMode":"legacy","config":config});
-                profile::apply_profile(&mut params, profile.as_ref())?;
+                let params = json!({"cwd":cwd,"historyMode":"legacy","config":config});
                 let response = connection.call("thread/start", params).await?;
                 runtime.current_guard().await?;
                 let thread = response["thread"].clone();

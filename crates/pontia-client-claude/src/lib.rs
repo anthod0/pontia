@@ -2,6 +2,7 @@ mod history;
 mod interactions;
 mod output;
 mod peer;
+mod profiles;
 mod resume;
 pub mod setup;
 mod spec;
@@ -43,7 +44,7 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
         interactions: Some(adapter.clone()),
         events: None,
         service: Some(adapter.clone()),
-        profile: None,
+        profile: Some(Arc::new(profiles::ProfilePolicy)),
         in_process: None,
         session: Some(adapter.clone()),
         prepare_on_input: true,

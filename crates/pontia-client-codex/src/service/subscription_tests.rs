@@ -133,6 +133,8 @@ impl Fixture {
         .await
         .unwrap();
         pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+        sqlx::query("UPDATE execution_profiles SET system_prompt_template='creation-marker' WHERE profile_id='default' AND version='2'")
+            .execute(&pool).await.unwrap();
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )
@@ -234,6 +236,7 @@ async fn start_and_resume_preserve_environment_filters_and_override_session_iden
         let requests = fixture.thread_requests.lock().await;
         assert_eq!(requests.len(), 2);
         let mut expected = expected_filter;
+        expected["developer_instructions"] = json!("creation-marker");
         expected["shell_environment_policy.set"] =
             json!({"PROBE_KEEP":"keep","PONTIA_SESSION_ID":fixture.session});
         for request in requests.iter() {
@@ -732,5 +735,38 @@ async fn creating_a_session_wakes_an_observer_with_no_active_sessions() {
     assert_eq!(fixture.inputs.lock().await[0]["input"][0]["text"], "hello");
     shutdown.send(true).unwrap();
     observer.await.unwrap();
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn profile_survives_first_input_and_resume_without_mutable_profiles() {
+    let fixture = Fixture::new().await;
+    *fixture.configuration.lock().await = json!({"developer_instructions":"native-marker"});
+    sqlx::query("DROP TABLE execution_profiles")
+        .execute(&fixture.app.db())
+        .await
+        .unwrap();
+    fixture.dispatch_first_input().await;
+    fixture
+        .app
+        .session_commands()
+        .terminate_session(&fixture.session)
+        .await
+        .unwrap();
+    fixture
+        .app
+        .session_commands()
+        .resume_session(&fixture.session, fixture.root.path())
+        .await
+        .unwrap();
+    let requests = fixture.thread_requests.lock().await;
+    assert_eq!(requests.len(), 2);
+    for request in requests.iter() {
+        assert_eq!(
+            request["params"]["config"]["developer_instructions"],
+            "native-marker\n\ncreation-marker"
+        );
+    }
+    drop(requests);
     fixture.shutdown().await;
 }

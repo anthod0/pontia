@@ -5,34 +5,20 @@ import { loadProfileSystemPrompt } from "../src/profile.js";
 import { isActiveRegisteredWorkspace } from "../src/workspace.js";
 import { tempDir } from "./temp-dir.js";
 
-test.each(["1", undefined])("loads the session's profile version %s over RPC", async (version) => {
-  const request = vi.fn(async (method: string) =>
-    method === "session.get"
-      ? { session: { execution_profile_id: "reviewer", execution_profile_version: version } }
-      : { agent_profile: { system_prompt_template: "Review carefully" } },
-  );
-  await expect(loadProfileSystemPrompt({ request }, "sess_1")).resolves.toBe("Review carefully");
-  expect(request.mock.calls).toEqual([
-    ["session.get", { session_id: "sess_1" }],
-    ["profile.get", { profile_id: "reviewer", ...(version ? { version } : {}) }],
-  ]);
+test("loads fixed Session instructions without querying mutable profiles", async () => {
+  const request = vi.fn(async () => ({
+    execution_profile_binding: { system_prompt: "creation marker" },
+  }));
+  await expect(loadProfileSystemPrompt({ request }, "sess_1")).resolves.toBe("creation marker");
+  expect(request.mock.calls).toEqual([["session.get", { session_id: "sess_1" }]]);
 });
 
-test("profile loading skips unbound sessions and sessions without a profile", async () => {
-  const request = vi.fn(async () => ({ session: {} }));
+test("does not inject into unbound or legacy sessions", async () => {
+  const request = vi.fn(async () => ({ session: { execution_profile_id: "reviewer" } }));
   await expect(loadProfileSystemPrompt({ request })).resolves.toBeUndefined();
   expect(request).not.toHaveBeenCalled();
   await expect(loadProfileSystemPrompt({ request }, "sess_1")).resolves.toBeUndefined();
   expect(request).toHaveBeenCalledOnce();
-});
-
-test.each([null, "", "   "])("ignores an empty profile prompt %j", async (prompt) => {
-  const request = vi.fn(async (method: string) =>
-    method === "session.get"
-      ? { session: { execution_profile_id: "reviewer" } }
-      : { agent_profile: { system_prompt_template: prompt } },
-  );
-  await expect(loadProfileSystemPrompt({ request }, "sess_1")).resolves.toBeUndefined();
 });
 
 test("requires an active workspace whose canonical path matches cwd", async () => {
@@ -63,4 +49,21 @@ test("propagates RPC failures from profile and workspace queries", async () => {
   };
   await expect(loadProfileSystemPrompt({ request }, "sess_1")).rejects.toThrow("disconnected");
   await expect(isActiveRegisteredWorkspace({ request }, root)).rejects.toThrow("disconnected");
+});
+
+test("legacy sessions retain only their last effective native Profile section", async () => {
+  const request = vi.fn(async (_method: string) => ({ session: {} }));
+  const messages = [
+    { role: "system", sections: { pontia_execution_profile: "original" } },
+    { role: "system", sections: { other: "unrelated" } },
+    { role: "system", sections: { pontia_execution_profile: "fixed" } },
+  ];
+  await expect(loadProfileSystemPrompt({ request }, "legacy", messages)).resolves.toBe("fixed");
+  await expect(
+    loadProfileSystemPrompt({ request }, "legacy", [
+      ...messages,
+      { role: "system", sections: { pontia_execution_profile: null } },
+    ]),
+  ).resolves.toBeUndefined();
+  expect(request.mock.calls.every(([method]) => method === "session.get")).toBe(true);
 });

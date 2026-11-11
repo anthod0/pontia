@@ -353,3 +353,35 @@ test("control loss does not close SDK or release an uncertain execution for anot
   await settle();
   assert.throws(() => host.submit(second, "next"), rejects("execution_unavailable"));
 });
+
+for (const resume of [undefined, native]) {
+  test(`appends fixed instructions while retaining Claude Code preset (resume=${!!resume})`, async (t) => {
+    const fixture = sdk();
+    const host = new Host(
+      {
+        session_id: "pontia-session",
+        cwd: "/unused-fixture-workspace",
+        resume,
+        system_prompt: "creation marker",
+      },
+      () => {},
+      fixture.factory,
+    );
+    t.after(() => host.close());
+    host.submit(first, "task");
+    await fixture.next();
+    assert.deepEqual(fixture.options?.systemPrompt, {
+      type: "preset",
+      preset: "claude_code",
+      append: "creation marker",
+    });
+    assert.deepEqual(fixture.options?.settingSources, ["user", "project", "local"]);
+    assert.equal(fixture.options?.resume, resume);
+    fixture.messages.push(init());
+    fixture.messages.push(assistant());
+    fixture.messages.push(result());
+    await settle();
+    host.submit(second, "follow-up");
+    assert.equal(fixture.calls, 1);
+  });
+}

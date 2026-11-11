@@ -85,6 +85,7 @@ impl CodexService {
             ThreadOperation::Fork,
             &result,
             &fork.receipt["params"],
+            None,
         )
         .await
     }

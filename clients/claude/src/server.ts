@@ -14,6 +14,7 @@ export interface Bootstrap {
   token: string;
   cwd: string;
   resume?: string;
+  system_prompt?: string;
 }
 
 type ObjectValue = Record<string, unknown>;
@@ -36,6 +37,7 @@ export function bootstrap(value: unknown): Bootstrap {
     token: string(data.token),
     cwd: string(data.cwd),
   };
+  if (data.system_prompt !== undefined) result.system_prompt = string(data.system_prompt);
   if (data.resume !== undefined) result.resume = string(data.resume);
   if (!/^[0-9a-f]{64}$/.test(result.token)) throw new ControlError("rejected", "invalid_token");
   return result;

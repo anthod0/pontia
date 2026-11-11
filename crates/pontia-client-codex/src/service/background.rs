@@ -26,7 +26,7 @@ impl ClientService for CodexBackgroundService {
                 tokio::select! {
                     result = proxy.run(state.shutdown().subscribe(), || {
                         crate::runtime::daemon::Endpoint::resolve().map(|endpoint| endpoint.socket)
-                    }, observations) => result,
+                    }, observations, state.clone()) => result,
                     _ = super::proxy_observer::run(state.clone(), incoming) => Ok(()),
                 }
             })))

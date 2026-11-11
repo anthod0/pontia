@@ -54,6 +54,7 @@ if (process.argv[2] === "history") {
   const event = (value) => send({ type: "event", sequence: ++sequence, event: value });
   record({
     method: "spawn",
+    system_prompt: config.system_prompt ?? null,
     resume: config.resume ?? null,
     native,
     socket_path: config.socket_path,

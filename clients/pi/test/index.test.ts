@@ -1488,10 +1488,7 @@ describe("pontia pi extension lifecycle", () => {
   test("does not select an execution profile from tmux marker identity alone", async () => {
     const requestImpl = vi.fn(async (method: string) => {
       if (method === "session.get") {
-        return { session: { execution_profile_id: "reviewer", execution_profile_version: "1" } };
-      }
-      if (method === "profile.get") {
-        return { agent_profile: { system_prompt_template: "Reviewer instructions" } };
+        return { execution_profile_binding: { system_prompt: "Reviewer instructions" } };
       }
       return { session_context: null };
     });
@@ -1509,7 +1506,9 @@ describe("pontia pi extension lifecycle", () => {
       systemPrompt: "Base prompt",
       systemPromptOptions: { sections: {} as Record<string, string> },
     };
-    const result = await handlers.before_agent_start(event, {});
+    const result = await handlers.before_agent_start(event, {
+      sessionManager: { buildSessionProjection: () => ({ messages: [] }) },
+    });
 
     expect(result).toBeUndefined();
     expect(event.systemPromptOptions.sections).toEqual({});
@@ -1529,12 +1528,10 @@ describe("pontia pi extension lifecycle", () => {
           return { workspaces: [{ canonical_path: workspace, state: "active" }] };
         if (method === "session.get") {
           expect(params).toEqual({ session_id: "sess_profile" });
-          return { session: { execution_profile_id: "reviewer", execution_profile_version: "1" } };
+          if (prompt === "error") throw new Error("snapshot unavailable");
+          return { execution_profile_binding: { system_prompt: prompt } };
         }
-        expect(method).toBe("profile.get");
-        expect(params).toEqual({ profile_id: "reviewer", version: "1" });
-        if (prompt === "error") throw new Error("profile unavailable");
-        return { agent_profile: { system_prompt_template: prompt } };
+        throw new Error(`unexpected query: ${method}`);
       });
       const { handlers } = install({
         env: { PONTIA_SESSION_ID: "sess_profile", PONTIA_RUNTIME_INSTANCE_ID: "rt_profile" },
@@ -1562,11 +1559,15 @@ describe("pontia pi extension lifecycle", () => {
         systemPrompt: "Base prompt",
         systemPromptOptions: { sections: {} as Record<string, string> },
       };
-      expect(await handlers.before_agent_start(event, {})).toBeUndefined();
+      expect(
+        await handlers.before_agent_start(event, {
+          sessionManager: { buildSessionProjection: () => ({ messages: [] }) },
+        }),
+      ).toBeUndefined();
       expect(event.systemPromptOptions.sections).toEqual(
         prompt && prompt !== "error" ? { pontia_execution_profile: prompt } : {},
       );
-      expect(request).toHaveBeenCalledWith("profile.get", { profile_id: "reviewer", version: "1" });
+      expect(request).not.toHaveBeenCalledWith("profile.get", expect.anything());
     },
   );
 

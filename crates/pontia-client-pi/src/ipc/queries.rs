@@ -32,7 +32,10 @@ pub(super) async fn dispatch(state: &AppState, request: &RpcRequest) -> Result<V
                 .ok_or_else(|| {
                     Error::NotFound(format!("session {} not found", query.session_id))
                 })?;
-            Ok(json!({"session": session}))
+            let binding = AgentProfileService::new(state.db())
+                .session_binding(&query.session_id)
+                .await?;
+            Ok(json!({"session": session, "execution_profile_binding": binding}))
         }
         "profile.get" => {
             let query: ProfileQuery = serde_json::from_value(request.params.clone())?;

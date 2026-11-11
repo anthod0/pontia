@@ -178,3 +178,61 @@ async fn archives_active_versions_and_reports_affected_rows() {
         .find(|profile| profile.profile_id == "repo-archive");
     assert!(active_latest.is_none());
 }
+
+#[tokio::test]
+async fn builtin_upgrade_preserves_user_profiles_and_existing_versions() {
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    let previous = sqlx::migrate::Migrator {
+        migrations: std::borrow::Cow::Owned(
+            sqlx::migrate!("./migrations")
+                .iter()
+                .filter(|migration| migration.version < 38)
+                .cloned()
+                .collect(),
+        ),
+        ..sqlx::migrate::Migrator::DEFAULT
+    };
+    previous.run(&pool).await.unwrap();
+    let repository = SqliteAgentProfileRepository::new(pool.clone());
+    repository
+        .insert_version(upsert_record("custom", "1", "Custom"))
+        .await
+        .unwrap();
+    let old_default = repository
+        .get_version("default", "1")
+        .await
+        .unwrap()
+        .unwrap();
+    let custom = repository
+        .get_version("custom", "1")
+        .await
+        .unwrap()
+        .unwrap();
+    run_migrations(&pool).await.unwrap();
+    let old_after = repository
+        .get_version("default", "1")
+        .await
+        .unwrap()
+        .unwrap();
+    let custom_after = repository
+        .get_version("custom", "1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        old_after.system_prompt_template,
+        old_default.system_prompt_template
+    );
+    assert_eq!(
+        custom_after.system_prompt_template,
+        custom.system_prompt_template
+    );
+    assert_eq!(custom_after.updated_at, custom.updated_at);
+    let default = repository.get_latest("default").await.unwrap().unwrap();
+    assert_eq!(default.version, "2");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&default.supported_client_types).unwrap(),
+        json!(["pi", "codex", "claude-agent"])
+    );
+    assert!(default.turn_prompt_template.is_none());
+}

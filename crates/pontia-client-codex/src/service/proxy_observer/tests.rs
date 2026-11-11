@@ -15,6 +15,7 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 struct Thread {
     value: Value,
     materialized: bool,
+    developer_instructions: Value,
     turns: Vec<Value>,
     subscribers: Vec<mpsc::UnboundedSender<Value>>,
 }
@@ -99,6 +100,7 @@ impl Fixture {
                                     let value = json!({"id":native,"sessionId":"shared-native-root","forkedFromId":parent,"cwd":home,"ephemeral":params["ephemeral"] == true,"canAcceptDirectInput":true,"status":{"type":"idle"}});
                                     threads.insert(native, Thread {
                                         value: value.clone(), materialized: method == "thread/fork",
+                                        developer_instructions: params["developerInstructions"].clone(),
                                         turns: inherited, subscribers: vec![sender.clone()],
                                     });
                                     json!({"thread":value,"model":"cli-model"})
@@ -109,6 +111,9 @@ impl Fixture {
                                         assert!(params.get("config").is_none(), "proxy attachment must preserve CLI configuration");
                                     }
                                     let thread = threads.get_mut(native).unwrap();
+                                    if let Some(instructions) = params.get("developerInstructions") {
+                                        thread.developer_instructions = instructions.clone();
+                                    }
                                     thread.value["status"]["type"] = json!("idle");
                                     thread.subscribers.push(sender.clone());
                                     json!({"thread":thread.value,"model":"cli-model"})
@@ -157,9 +162,10 @@ impl Fixture {
         tasks.spawn(observer.run(stop.clone()));
         let proxy = Proxy::bind(root.path()).await.unwrap();
         let (observations, incoming) = mpsc::channel(128);
+        let proxy_state = app.clone();
         tasks.spawn(async move {
             proxy
-                .run(stop, move || Ok(socket.clone()), observations)
+                .run(stop, move || Ok(socket.clone()), observations, proxy_state)
                 .await
                 .unwrap();
         });
@@ -718,6 +724,61 @@ async fn delayed_resume_receipt_does_not_reopen_a_thread_unloaded_again() {
     assert_eq!(
         f.threads.lock().await[native].value["status"]["type"],
         "notLoaded"
+    );
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn native_start_pins_profile_and_resume_preserves_it_without_profile_queries() {
+    let f = Fixture::new().await;
+    sqlx::query("UPDATE execution_profiles SET system_prompt_template='native-creation-marker' WHERE profile_id='default' AND version='2'")
+        .execute(&f.app.db()).await.unwrap();
+    let mut cli = f.client().await;
+    let response = rpc(
+        &mut cli,
+        "thread/start",
+        json!({"developerInstructions":"native-user-marker"}),
+    )
+    .await;
+    let native = response["result"]["thread"]["id"].as_str().unwrap();
+    let session = f.session(native, "idle").await;
+    assert_eq!(
+        f.threads.lock().await[native].developer_instructions,
+        "native-user-marker\n\nnative-creation-marker"
+    );
+    let binding = crate::profiles::CodexProfiles::new(f.app.db())
+        .codex_binding(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        binding.system_prompt.as_deref(),
+        Some("native-creation-marker")
+    );
+    assert_eq!(
+        binding.native_developer_instructions.as_deref(),
+        Some("native-user-marker")
+    );
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    f.session(native, "busy").await;
+    f.complete(native).await;
+    f.session(native, "idle").await;
+    sqlx::query("DROP TABLE execution_profiles")
+        .execute(&f.app.db())
+        .await
+        .unwrap();
+    f.threads
+        .lock()
+        .await
+        .get_mut(native)
+        .unwrap()
+        .developer_instructions = Value::Null;
+    let response = rpc(&mut cli, "thread/resume", json!({"threadId":native})).await;
+    assert!(response.get("error").is_none(), "{response}");
+    assert_eq!(f.session(native, "idle").await, session);
+    assert_eq!(
+        f.threads.lock().await[native].developer_instructions,
+        "native-user-marker\n\nnative-creation-marker"
     );
     f.stop().await;
 }

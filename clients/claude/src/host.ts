@@ -30,7 +30,12 @@ export class Host {
   private usedInputs = new Set<string>();
 
   constructor(
-    private readonly options: { session_id: string; cwd: string; resume?: string },
+    private readonly options: {
+      session_id: string;
+      cwd: string;
+      resume?: string;
+      system_prompt?: string;
+    },
     private readonly emit: Emit,
     private readonly createQuery: QueryFactory = query,
   ) {
@@ -72,6 +77,15 @@ export class Host {
       const options: Options = {
         cwd: this.options.cwd,
         ...(this.options.resume ? { resume: this.options.resume } : {}),
+        ...(this.options.system_prompt
+          ? {
+              systemPrompt: {
+                type: "preset" as const,
+                preset: "claude_code" as const,
+                append: this.options.system_prompt,
+              },
+            }
+          : {}),
         includePartialMessages: true,
         permissionMode: "default",
         settingSources: ["user", "project", "local"],

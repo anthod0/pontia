@@ -74,8 +74,11 @@ impl SessionCommandService {
                 request.execution_profile_version.as_deref(),
             )
             .await?;
-        if let Some(profile) = &profile {
-            request.execution_profile_version = Some(profile.version.clone());
+        if let Some(version) = profile
+            .as_ref()
+            .and_then(|profile| profile.version.as_ref())
+        {
+            request.execution_profile_version = Some(version.clone());
         }
 
         let handle = request.handle.as_deref();

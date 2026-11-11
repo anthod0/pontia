@@ -34,13 +34,14 @@ async fn observe(
             operation,
             result,
             params,
+            profile_binding,
         } => {
             let thread = &result["thread"];
             if thread["ephemeral"] == true {
                 return Ok(());
             }
             service
-                .adopt_opened_thread(&runtime, operation, &result, &params)
+                .adopt_opened_thread(&runtime, operation, &result, &params, profile_binding)
                 .await?;
         }
         ObservedEvent::TurnStarted(native) => {

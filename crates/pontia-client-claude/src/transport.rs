@@ -80,6 +80,13 @@ impl Connection {
         let setup = async {
             let mut stdin = child.stdin.take().expect("piped stdin");
             let mut bootstrap = json!({"session_id":peer.session,"runtime_id":peer.runtime,"cwd":peer.cwd,"socket_path":socket,"token":token});
+            if let Some(binding) = pontia_application::AgentProfileService::new(events.db())
+                .session_binding(&peer.session)
+                .await?
+                && let Some(prompt) = binding.get("system_prompt").and_then(Value::as_str)
+            {
+                bootstrap["system_prompt"] = json!(prompt);
+            }
             if let Some(resume) = &peer.resume {
                 bootstrap["resume"] = json!(resume);
             }

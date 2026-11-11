@@ -14,6 +14,9 @@ impl CodexProfiles {
 
 pub(crate) struct CodexProfilePolicy;
 impl ClientProfile for CodexProfilePolicy {
+    fn inject_builtin(&self) -> bool {
+        true
+    }
     fn validate_templates(&self, system: Option<&str>, turn: Option<&str>) -> Result<()> {
         validate_codex_templates(system, turn)
     }
@@ -23,6 +26,7 @@ impl ClientProfile for CodexProfilePolicy {
             profile_id: profile.profile_id.clone(),
             version: profile.version.clone(),
             system_prompt: profile.system_prompt_template.clone(),
+            native_developer_instructions: None,
         })?)
     }
 }
@@ -37,6 +41,8 @@ pub struct CodexProfileBinding {
     pub profile_id: String,
     pub version: String,
     pub system_prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_developer_instructions: Option<String>,
 }
 
 fn validate_codex_templates(system: Option<&str>, turn: Option<&str>) -> Result<()> {
@@ -97,17 +103,14 @@ impl CodexProfiles {
         let (id, version): (Option<String>, Option<String>) = sqlx::query_as(
             "SELECT execution_profile_id,execution_profile_version FROM sessions WHERE session_id=?",
         ).bind(session).fetch_one(&self.pool).await?;
-        let Some(_) = id else {
-            if version.is_some() {
-                return Err(unverified());
-            }
+        let snapshot = pontia_application::AgentProfileService::new(self.pool.clone())
+            .session_binding(session)
+            .await?;
+        if snapshot.is_none() && id.is_none() && version.is_none() {
             return Ok(None);
-        };
-        let snapshot: Option<String> = sqlx::query_scalar(
-            "SELECT json_extract(payload,'$.execution_profile_binding') FROM events WHERE session_id=? AND event_type='session.created'",
-        ).bind(session).fetch_optional(&self.pool).await?.flatten();
+        }
         let snapshot: CodexProfileBinding = snapshot
-            .and_then(|value| serde_json::from_str(&value).ok())
+            .and_then(|value| serde_json::from_value(value).ok())
             .ok_or_else(unverified)?;
         if snapshot.contract_version != 1 {
             return Err(unverified());

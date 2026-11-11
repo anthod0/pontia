@@ -17,6 +17,7 @@ impl CodexService {
         operation: ThreadOperation,
         result: &Value,
         params: &Value,
+        profile_binding: Option<Value>,
     ) -> Result<String> {
         let connection = runtime.connection().await?;
         let thread = &result["thread"];
@@ -41,6 +42,7 @@ impl CodexService {
                     client_session_file: thread["path"].as_str().map(str::to_owned),
                 },
                 json!({"codex_control_root":runtime.root,"codex_launch_cwd":cwd}),
+                profile_binding,
             )
             .await?;
         self.record_fork_lineage(&session, thread, params).await?;

@@ -7,6 +7,11 @@ pub(super) fn validate_request(
     clients: &crate::clients::ClientRegistry,
     request: &UpsertExecutionProfileRequest,
 ) -> Result<()> {
+    if request.metadata.get("builtin") == Some(&Value::Bool(true)) {
+        return Err(Error::Domain(
+            "builtin metadata is managed by Pontia".into(),
+        ));
+    }
     validate_non_empty("profile_id", &request.profile_id)?;
     validate_non_empty("version", &request.version)?;
     validate_non_empty("name", &request.name)?;

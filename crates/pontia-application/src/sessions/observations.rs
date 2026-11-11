@@ -62,6 +62,7 @@ impl NativeSessionService {
         native_key: &str,
         identity: NativeSessionIdentity,
         metadata: Value,
+        profile_binding: Option<Value>,
     ) -> Result<String> {
         let control = self.events.history_control();
         let _identity = match &control {
@@ -87,7 +88,7 @@ impl NativeSessionService {
                     PontiaEventSource::RuntimeManager,
                     client,
                     PontiaEventType::SessionCreated,
-                    json!({"workspace":workspace.canonical_path,"metadata":metadata}),
+                    json!({"workspace":workspace.canonical_path,"metadata":metadata,"execution_profile_binding":profile_binding}),
                 ),
                 UpsertAgentBindingRequest {
                     session_id: session.clone(),

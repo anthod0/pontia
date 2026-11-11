@@ -29,9 +29,10 @@ async fn forwards_handshake_unknown_messages_and_interactions_on_independent_con
     let path = proxy.path.clone();
     let (shutdown, stop) = watch::channel(false);
     let (observations, _incoming) = mpsc::channel(128);
+    let state = test_state(root.path()).await;
     let task = tokio::spawn(async move {
         proxy
-            .run(stop, move || Ok(upstream_path.clone()), observations)
+            .run(stop, move || Ok(upstream_path.clone()), observations, state)
             .await
     });
     let server = tokio::spawn(async move {
@@ -105,9 +106,10 @@ async fn upstream_disconnect_and_unavailability_close_only_the_affected_transpor
     let path = proxy.path.clone();
     let (shutdown, stop) = watch::channel(false);
     let (observations, _incoming) = mpsc::channel(128);
+    let state = test_state(root.path()).await;
     let task = tokio::spawn(async move {
         proxy
-            .run(stop, move || Ok(upstream_path.clone()), observations)
+            .run(stop, move || Ok(upstream_path.clone()), observations, state)
             .await
     });
     let mut client = connect(&path).await;
@@ -165,9 +167,10 @@ async fn only_matching_successful_thread_responses_are_observed() {
     let path = proxy.path.clone();
     let (shutdown, stop) = watch::channel(false);
     let (observations, mut incoming) = mpsc::channel(128);
+    let state = test_state(root.path()).await;
     let task = tokio::spawn(async move {
         proxy
-            .run(stop, move || Ok(upstream_path.clone()), observations)
+            .run(stop, move || Ok(upstream_path.clone()), observations, state)
             .await
     });
     let mut client = connect(&path).await;
@@ -206,4 +209,12 @@ async fn only_matching_successful_thread_responses_are_observed() {
     assert!(incoming.try_recv().is_err());
     shutdown.send(true).unwrap();
     task.await.unwrap().unwrap();
+}
+
+async fn test_state(root: &Path) -> pontia_application::AppState {
+    let pool = pontia_storage_sqlite::connect_sqlite("sqlite::memory:")
+        .await
+        .unwrap();
+    pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+    pontia_application::AppState::builder(pool, root.into()).build()
 }

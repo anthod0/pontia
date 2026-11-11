@@ -4,6 +4,7 @@ mod facts;
 pub mod history;
 pub mod ipc;
 mod lifecycle;
+mod profiles;
 pub mod raw_transcripts;
 pub mod rpc;
 mod service;

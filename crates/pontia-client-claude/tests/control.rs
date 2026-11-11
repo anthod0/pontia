@@ -1101,3 +1101,48 @@ async fn unsupported_result_disables_input_without_inventing_a_terminal_turn() {
     h.wait_states(&session, &["abandoned"]).await;
     h.stop().await;
 }
+
+#[tokio::test]
+async fn default_instructions_are_fixed_before_input_and_survive_resume() {
+    let h = Harness::new().await;
+    sqlx::query("UPDATE execution_profiles SET system_prompt_template='creation-marker' WHERE profile_id='default' AND version='2'")
+        .execute(&h.app.db()).await.unwrap();
+    let request =
+        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path()}))
+            .unwrap();
+    let created = h
+        .app
+        .session_commands()
+        .create_session(request)
+        .await
+        .unwrap();
+    let session = created.session_id().unwrap();
+    sqlx::query("DROP TABLE execution_profiles")
+        .execute(&h.app.db())
+        .await
+        .unwrap();
+    h.submit(session, "first input").await;
+    h.gate(session, 1, "start");
+    h.gate(session, 1, "finish");
+    h.wait_states(session, &["completed"]).await;
+    h.app
+        .session_commands()
+        .terminate_session(session)
+        .await
+        .unwrap();
+    h.resume_input(session, "resumed input").await;
+    h.gate(session, 2, "start");
+    h.gate(session, 2, "finish");
+    h.wait_states(session, &["completed", "completed"]).await;
+    let prompts: Vec<_> = h
+        .wire(session)
+        .into_iter()
+        .filter(|frame| frame["method"] == "spawn")
+        .map(|frame| frame["system_prompt"].clone())
+        .collect();
+    assert_eq!(
+        prompts,
+        vec![json!("creation-marker"), json!("creation-marker")]
+    );
+    h.stop().await;
+}

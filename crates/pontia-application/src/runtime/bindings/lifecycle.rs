@@ -63,6 +63,10 @@ impl RuntimeBindingUpsertService {
         crate::agent_clients::AgentClientService::new(self.pool.clone(), self.clients.clone())
             .for_creation(&request.client_type, &agent_binding_metadata(request))
             .await?;
+        let profile = crate::AgentProfileService::new(self.pool.clone())
+            .with_clients(self.clients.clone())
+            .resolve_for_client(&request.client_type, None, None)
+            .await?;
         let session_id = new_session_id().to_string();
         let ingest = &self.events;
         ingest
@@ -75,6 +79,7 @@ impl RuntimeBindingUpsertService {
                     PontiaEventType::SessionCreated,
                     json!({
                         "workspace": workspace.canonical_path,
+                        "execution_profile_binding": profile.map(|profile| profile.binding),
                         "metadata": {
                             "created_by": "runtime_binding_upsert",
                             "client_session_key": request.client_session_key,

@@ -525,13 +525,14 @@ export function createPontiaPiExtension(
     );
   }
 
-  pi.on("before_agent_start", async (event) => {
+  pi.on("before_agent_start", async (event, ctx) => {
     pendingPrompt = event.messageType === "user" ? event.prompt : undefined;
     if (reportingDisabled || !(await confirmManagedPane())) return;
     try {
       const profilePrompt = await loadProfileSystemPrompt(
         rpcConnection,
         boundSessionContext?.sessionId,
+        ctx.sessionManager.buildSessionProjection().messages,
       );
       if (profilePrompt) {
         event.systemPromptOptions.sections.pontia_execution_profile = profilePrompt;

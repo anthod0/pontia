@@ -41,6 +41,9 @@ impl AgentProfileService {
         &self,
         request: UpsertExecutionProfileRequest,
     ) -> Result<AgentProfileCommandOutcome> {
+        for version in self.list_versions(&request.profile_id, true).await? {
+            ensure_not_builtin(&version)?;
+        }
         validate_request(&self.clients, &request)?;
 
         let result = SqliteAgentProfileRepository::new(self.pool.clone())
