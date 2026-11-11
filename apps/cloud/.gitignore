@@ -8,6 +8,7 @@ node_modules
 /build
 /static/llms.txt
 /static/docs/**/*.md
+/static/blog/*.md
 worker-configuration.d.ts
 
 # OS

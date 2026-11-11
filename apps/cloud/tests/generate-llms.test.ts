@@ -9,6 +9,7 @@ async function withCloud(run: (root: string) => Promise<void>) {
   const testRoot = await mkdtemp(join(resolve(tmpdir()), "pontia-llms-"));
   try {
     await putPage(testRoot, "", "Overview", "Overview summary", "");
+    await mkdir(join(testRoot, "src/routes/blog"), { recursive: true });
     await run(testRoot);
   } finally {
     if (
@@ -29,6 +30,15 @@ async function putPage(root: string, route: string, title: string, summary: stri
   await writeFile(
     path,
     `<svelte:head>\n<title>${title}</title>\n<meta name="description" content="${summary}" />\n</svelte:head>\n\n# ${title}\n\n${body}\n`,
+  );
+}
+
+async function putPost(root: string, slug: string, title: string, published: string, body: string) {
+  const path = join(root, "src/routes/blog", slug, "+page.svx");
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(
+    path,
+    `---\ntitle: "${title}"\ndescription: ${title}: summary\npublished: "${published}"\n---\n\n${body}\n`,
   );
 }
 
@@ -183,6 +193,94 @@ test("exports the actual documentation with intact fenced examples and resolvabl
       )) {
         expect(pages).toContain(link[1]);
       }
+    }
+  });
+});
+
+test("indexes blog posts newest first and links them with the documentation", async () => {
+  await withCloud(async (root) => {
+    await putPage(root, "codex", "Codex", "Codex setup", "Read [the guide](/blog/new-post).");
+    await putPost(root, "old-post", "Old: post", "2026-01-01", "See [Codex](/docs/codex).");
+    await putPost(
+      root,
+      "new-post",
+      "New post",
+      "2026-02-01",
+      "Follow up on [the old post](/blog/old-post), [the blog](/blog), and [docs](/docs).\n\n```yaml\n---\ntitle: kept\n```",
+    );
+
+    await generateLlms(root);
+
+    expect(await output(root, "llms.txt")).toBe(
+      [
+        "# Pontia",
+        "",
+        "> Overview summary",
+        "",
+        "## Documentation",
+        "",
+        "- [Codex](https://pontia.dev/docs/codex.md): Codex setup",
+        "",
+        "## Blog",
+        "",
+        "- [New post](https://pontia.dev/blog/new-post.md): New post: summary",
+        "- [Old: post](https://pontia.dev/blog/old-post.md): Old: post: summary",
+        "",
+      ].join("\n"),
+    );
+    expect(await output(root, "blog/new-post.md")).toBe(
+      "# New post\n\nFollow up on [the old post](https://pontia.dev/blog/old-post.md), [the blog](/blog), and [docs](https://pontia.dev/llms.txt).\n\n```yaml\n---\ntitle: kept\n```\n",
+    );
+    expect(await output(root, "blog/old-post.md")).toBe(
+      "# Old: post\n\nSee [Codex](https://pontia.dev/docs/codex.md).\n",
+    );
+    expect(await output(root, "docs/codex.md")).toContain(
+      "[the guide](https://pontia.dev/blog/new-post.md)",
+    );
+
+    await rm(join(root, "src/routes/blog/old-post"), { recursive: true });
+    await generateLlms(root);
+    expect(await readdir(join(root, "static/blog"))).toEqual(["new-post.md"]);
+  });
+});
+
+test("exports the actual blog posts with intact fenced examples and resolvable links", async () => {
+  await withCloud(async (root) => {
+    for (const section of ["docs", "blog"]) {
+      const source = fileURLToPath(new URL(`../src/routes/${section}/`, import.meta.url));
+      await cp(source, join(root, "src/routes", section), { recursive: true });
+    }
+    await generateLlms(root);
+    const index = await output(root, "llms.txt");
+    const blog = index.slice(index.indexOf("## Blog"));
+    const posts = [...blog.matchAll(/\]\(https:\/\/pontia.dev(\/blog\/[^)]+\.md)\)/g)].map(
+      (match) => match[1],
+    );
+    const blogRoot = fileURLToPath(new URL("../src/routes/blog/", import.meta.url));
+    const sources = (await readdir(blogRoot, { recursive: true })).filter((path) =>
+      path.endsWith(`${sep}+page.svx`),
+    );
+    expect(posts).toHaveLength(sources.length);
+    const linked = [...index.matchAll(/\]\(https:\/\/pontia.dev(\/[^)]+\.md)\)/g)].map(
+      (match) => match[1],
+    );
+    for (const post of posts) {
+      const markdown = await output(root, post);
+      expect(markdown).toStartWith("# ");
+      expect(markdown).not.toStartWith("---");
+      const source = await readFile(
+        join(blogRoot, post.slice("/blog/".length, -3), "+page.svx"),
+        "utf8",
+      );
+      for (const block of source.matchAll(/^```[^\n]*\n[\s\S]*?^```/gm)) {
+        expect(markdown).toContain(block[0]);
+      }
+      for (const link of markdown.matchAll(
+        /\]\(https:\/\/pontia.dev(\/[^)#?]+\.md)(?:[?#][^)]*)?\)/g,
+      )) {
+        expect(linked).toContain(link[1]);
+      }
+      expect(markdown).not.toMatch(/\]\(\/(?:docs|blog)\/[^)]+\)/);
     }
   });
 });

@@ -65,17 +65,29 @@ async function findPages(directory: string): Promise<string[]> {
   return files.sort();
 }
 
-export async function generateLlms(root = cloudRoot): Promise<void> {
+function routeOf(base: string, sourceRoot: string, path: string): string {
+  return `${base}${relative(sourceRoot, dirname(path))
+    .split(sep)
+    .filter(Boolean)
+    .map((part) => `/${part}`)
+    .join("")}`;
+}
+
+function collectAnchors(text: string, anchors: Map<string, string>): string {
+  return text.replace(
+    /<h([1-6])\b[^>]*\bid="([^"]+)"[^>]*>(.*?)<\/h\1>/g,
+    (_, level, id, heading) => {
+      anchors.set(id, headingSlug(heading));
+      return `${"#".repeat(Number(level))} ${heading}`;
+    },
+  );
+}
+
+async function readDocs(root: string) {
   const docsRoot = join(root, "src/routes/docs");
-  const pages = await Promise.all(
+  return Promise.all(
     (await findPages(docsRoot)).map(async (path) => {
-      const source = await readFile(path, "utf8");
-      const code = protectCode(source);
-      const route = `/docs${relative(docsRoot, dirname(path))
-        .split(sep)
-        .filter(Boolean)
-        .map((part) => `/${part}`)
-        .join("")}`;
+      const code = protectCode(await readFile(path, "utf8"));
       const title = code.text.match(/^# (.+)$/m)?.[1];
       const description = code.text.match(
         /<meta\s+name="description"\s+content="([^"]*)"\s*\/?>/,
@@ -83,23 +95,62 @@ export async function generateLlms(root = cloudRoot): Promise<void> {
       if (!title || !description)
         throw new Error(`Missing documentation title or description: ${path}`);
       const anchors = new Map<string, string>();
-      const text = code.text.replace(
-        /<h([1-6])\b[^>]*\bid="([^"]+)"[^>]*>(.*?)<\/h\1>/g,
-        (_, level, id, heading) => {
-          anchors.set(id, headingSlug(heading));
-          return `${"#".repeat(Number(level))} ${heading}`;
-        },
-      );
       return {
-        route,
+        route: routeOf("/docs", docsRoot, path),
         title,
         description: decodeEntities(description),
-        text,
+        text: collectAnchors(code.text, anchors),
         anchors,
         restore: code.restore,
       };
     }),
   );
+}
+
+/** Reads the flat `key: value` frontmatter that blog posts use. */
+function frontmatter(source: string, path: string) {
+  const block = source.match(/^---\n([\s\S]*?)\n---\n/);
+  if (!block) throw new Error(`Missing blog frontmatter: ${path}`);
+  const fields: Record<string, string> = {};
+  for (const line of block[1].split("\n")) {
+    const field = line.match(/^(\w+):\s*(.*)$/);
+    if (!field) continue;
+    const value = field[2].trim();
+    fields[field[1]] = value.startsWith('"') ? JSON.parse(value) : value;
+  }
+  const { title, description, published } = fields;
+  if (!title || !description || !published)
+    throw new Error(`Missing blog title, description, or published date: ${path}`);
+  return { title, description, published, body: source.slice(block[0].length) };
+}
+
+async function readBlog(root: string) {
+  const blogRoot = join(root, "src/routes/blog");
+  const posts = await Promise.all(
+    (await findPages(blogRoot)).map(async (path) => {
+      const post = frontmatter(await readFile(path, "utf8"), path);
+      const code = protectCode(`# ${post.title}\n\n${post.body}`);
+      const anchors = new Map<string, string>();
+      return {
+        route: routeOf("/blog", blogRoot, path),
+        title: post.title,
+        description: post.description,
+        published: post.published,
+        text: collectAnchors(code.text, anchors),
+        anchors,
+        restore: code.restore,
+      };
+    }),
+  );
+  return posts.sort(
+    (a, b) => b.published.localeCompare(a.published) || a.route.localeCompare(b.route),
+  );
+}
+
+export async function generateLlms(root = cloudRoot): Promise<void> {
+  const docs = await readDocs(root);
+  const blog = await readBlog(root);
+  const pages = [...docs, ...blog];
   const byRoute = new Map(pages.map((page) => [page.route, page]));
   const overview = byRoute.get("/docs");
   if (!overview) throw new Error("Missing docs overview: src/routes/docs/+page.svx");
@@ -113,7 +164,7 @@ export async function generateLlms(root = cloudRoot): Promise<void> {
   }
   await mkdir(dirname(indexPath), { recursive: true });
 
-  const entries: string[] = [];
+  const entries = new Map<string, string>();
   for (const page of pages) {
     if (page.route === "/docs") continue;
     const markdown = page.text
@@ -142,19 +193,23 @@ export async function generateLlms(root = cloudRoot): Promise<void> {
     const output = join(root, "static", `${page.route.slice(1)}.md`);
     await mkdir(dirname(output), { recursive: true });
     await writeFile(output, `${page.restore(markdown)}\n`);
-    entries.push(`- [${page.title}](${origin}${page.route}.md): ${page.description}`);
+    entries.set(page.route, `- [${page.title}](${origin}${page.route}.md): ${page.description}`);
   }
   // Only retire files named in our previous index, never unrelated static assets.
   for (const match of previousIndex.matchAll(
-    /\]\(https:\/\/pontia\.dev\/docs\/([a-zA-Z0-9_/-]+)\.md\)/g,
+    /\]\(https:\/\/pontia\.dev\/((?:docs|blog)\/[a-zA-Z0-9_/-]+)\.md\)/g,
   )) {
-    if (!byRoute.has(`/docs/${match[1]}`)) {
-      await rm(join(root, "static/docs", `${match[1]}.md`), { force: true });
+    if (!byRoute.has(`/${match[1]}`)) {
+      await rm(join(root, "static", `${match[1]}.md`), { force: true });
     }
   }
+  const section = (title: string, list: { route: string }[]) =>
+    list.length
+      ? `\n## ${title}\n\n${list.flatMap((page) => entries.get(page.route) ?? []).join("\n")}\n`
+      : "";
   await writeFile(
     indexPath,
-    `# Pontia\n\n> ${overview.description}\n\n## Documentation\n\n${entries.join("\n")}\n`,
+    `# Pontia\n\n> ${overview.description}\n${section("Documentation", docs)}${section("Blog", blog)}`,
   );
 }
 

@@ -13,6 +13,7 @@
   <nav aria-label="Footer navigation">
     <a href={repository}>GitHub<ArrowUpRightIcon size={12} /></a>
     <a href="/docs">Documentation</a>
+    <a href="/llms.txt" target="_blank">llms.txt</a>
     <a href="/blog">Blog</a>
     <a href="/privacy">Privacy</a>
     <a href="/terms">Terms</a>
