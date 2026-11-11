@@ -8,6 +8,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -19,9 +21,9 @@
   --color-popover: var(--card);
   --color-popover-foreground: var(--foreground);
   --color-primary: var(--primary);
-  --color-primary-hover: #5299a0;
-  --color-primary-active: #3c7478;
-  --color-primary-foreground: #fff;
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--muted);
   --color-secondary-foreground: var(--foreground);
   --color-muted: var(--muted);
@@ -29,23 +31,23 @@
   --color-surface: var(--surface);
   --color-accent: var(--muted);
   --color-accent-foreground: var(--heading);
-  --color-destructive: #cc241d;
-  --color-warning: #d79921;
-  --color-success: #98971a;
-  --color-busy: #d79921;
-  --color-idle: #98971a;
-  --color-interrupted: #b16286;
-  --color-error: #cc241d;
-  --color-inactive: #7c6f64;
-  --color-aqua: #689d6a;
-  --color-selected: #eef5f5;
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-busy: var(--warning);
+  --color-idle: var(--success);
+  --color-interrupted: var(--interrupted);
+  --color-error: var(--destructive);
+  --color-inactive: var(--inactive);
+  --color-aqua: var(--aqua);
+  --color-selected: var(--selected);
   --color-border: var(--border);
   --color-input: var(--border);
   --color-ring: var(--primary);
   --color-sidebar: var(--card);
   --color-sidebar-foreground: var(--foreground);
   --color-sidebar-primary: var(--primary);
-  --color-sidebar-primary-foreground: #fff;
+  --color-sidebar-primary-foreground: var(--primary-foreground);
   --color-sidebar-accent: var(--muted);
   --color-sidebar-accent-foreground: var(--heading);
   --color-sidebar-border: var(--border);
@@ -54,6 +56,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --color-overlay: var(--overlay);
 }
 
 :root {
@@ -68,8 +71,48 @@
   --foreground: #3c3836;
   --muted-foreground: #7c6f64;
   --primary: #458588;
+  --primary-hover: #5299a0;
+  --primary-active: #3c7478;
+  --primary-foreground: #fff;
+  --selected: #eef5f5;
+  --destructive: #cc241d;
+  --warning: #d79921;
+  --success: #98971a;
+  --interrupted: #b16286;
+  --inactive: #7c6f64;
+  --aqua: #689d6a;
+  --overlay: rgb(0 0 0 / 10%);
   --scrollbar-thumb: color-mix(in srgb, var(--border) 75%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #282828;
+  --surface: #1d2021;
+  --card: #282828;
+  --muted: #32302f;
+  --border: #3c3836;
+  --heading: #fbf1c7;
+  --foreground: #ebdbb2;
+  --muted-foreground: #a89984;
+  --primary: #83a598;
+  --primary-hover: #93b5a8;
+  --primary-active: #6f9488;
+  --primary-foreground: #1d2021;
+  --selected: #263234;
+  --destructive: #fb4934;
+  --warning: #fabd2f;
+  --success: #b8bb26;
+  --interrupted: #d3869b;
+  --inactive: #928374;
+  --aqua: #8ec07c;
+  --overlay: rgb(0 0 0 / 50%);
+}
+
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark) !important;
 }
 
 @layer base {

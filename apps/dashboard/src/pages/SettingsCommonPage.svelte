@@ -11,6 +11,7 @@
   import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'
   import { token } from '$dashboard-mode/auth'
+  import AppearanceSettings from '../components/settings/AppearanceSettings.svelte'
   const device = useDeviceRuntime();
   const { startEventStream, stopEventStream } = device.events;
   const {
@@ -49,6 +50,8 @@
 </script>
 
 <section class="space-y-6">
+  <AppearanceSettings />
+
   {#if !$token.trim()}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />

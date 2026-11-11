@@ -6,6 +6,7 @@
   import * as Avatar from '$lib/components/ui/avatar/index.js';
   import { Button } from '$lib/components/ui/button/index.js';
   import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+  import AppearanceSettings from '../../components/settings/AppearanceSettings.svelte';
   import { deviceStateLabel } from './deviceConnections';
   import { useDeviceList } from './deviceListContext';
   import { loadRemoteAccess, type RemoteAccess } from './remoteAccessLoader.svelte';
@@ -33,6 +34,8 @@
 </script>
 
 <div class="space-y-10">
+  <AppearanceSettings />
+
   <section class="space-y-4" aria-labelledby="settings-account-title">
     <div class="flex items-center justify-between gap-4">
       <h2 id="settings-account-title" class="text-sm font-semibold text-heading">Account</h2>

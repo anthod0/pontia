@@ -352,7 +352,7 @@
     >
       {#if uploadParts?.files.length && editingMessageId !== chatMessage.id}
         <ul class="flex flex-wrap justify-end gap-2" data-user-message-uploads>
-          {#each uploadParts.files as file}<li class="rounded-md border bg-white px-2 py-1 text-xs" title={file.path}>Uploaded File: {file.name}</li>{/each}
+          {#each uploadParts.files as file}<li class="rounded-md border bg-background px-2 py-1 text-xs" title={file.path}>Uploaded File: {file.name}</li>{/each}
         </ul>
       {/if}
       {#if !uploadParts || uploadParts.text.trim() || editingMessageId === chatMessage.id}

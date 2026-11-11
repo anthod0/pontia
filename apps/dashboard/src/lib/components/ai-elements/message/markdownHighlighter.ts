@@ -25,6 +25,7 @@ import tsx from "shiki/langs/tsx.mjs";
 import typescript from "shiki/langs/typescript.mjs";
 import xml from "shiki/langs/xml.mjs";
 import yaml from "shiki/langs/yaml.mjs";
+import gruvboxDark from "shiki/themes/gruvbox-dark-soft.mjs";
 import gruvboxLight from "shiki/themes/gruvbox-light-soft.mjs";
 
 const highlighter = createHighlighterCoreSync({
@@ -52,7 +53,7 @@ const highlighter = createHighlighterCoreSync({
     xml,
     yaml,
   ] as unknown as LanguageRegistration[],
-  themes: [gruvboxLight] as unknown as ThemeRegistrationAny[],
+  themes: [gruvboxLight, gruvboxDark] as unknown as ThemeRegistrationAny[],
 });
 
 const loadedLanguages = new Set(highlighter.getLoadedLanguages());
@@ -64,7 +65,8 @@ export function highlightMarkdownCode(code: string, language: string): string {
   try {
     return highlighter.codeToHtml(code, {
       lang: normalizedLanguage,
-      theme: "gruvbox-light-soft",
+      // Both themes are emitted inline; app.css switches to the dark colors under `.dark`.
+      themes: { light: "gruvbox-light-soft", dark: "gruvbox-dark-soft" },
     });
   } catch {
     return fallbackCode(code);

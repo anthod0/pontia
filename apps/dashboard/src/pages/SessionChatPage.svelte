@@ -1161,7 +1161,7 @@
                 type="button"
                 variant="outline"
                 size="icon"
-                class="pointer-events-auto bg-white shadow-none"
+                class="pointer-events-auto bg-background shadow-none"
                 aria-label="Scroll to bottom"
                 title="Scroll to bottom"
                 onclick={scrollChatToBottom}
