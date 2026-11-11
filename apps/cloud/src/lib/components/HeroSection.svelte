@@ -69,7 +69,6 @@
 			<div class="window-bar" aria-hidden="true">
 				<span class="lights"><i></i><i></i><i></i></span>
 				<span class="address"><LockSimpleIcon size={11} weight="bold" />app.pontia.dev/studio</span>
-				<span class="island"></span>
 			</div>
 			<div class="dashboard-frame"><DashboardDemo /></div>
 		</div>
@@ -119,7 +118,6 @@
 	.address { display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px; border-radius: 6px; background: var(--background); font: 11px var(--font-mono); color: var(--muted-foreground); }
 	.address :global(svg) { color: #79740e; }
 	.dashboard-frame { height: 640px; overflow: hidden; }
-	.island { display: none; }
 
 	/* Load sequence: copy rises in line by line, then the demo window.
 	   `backwards` fill leaves no transform or filter behind, so text renders crisply afterwards. */
@@ -147,10 +145,8 @@
 		.install-command { padding-left: 12px; }
 		.install-command code { font-size: 11px; }
 		/* On phones the demo renders inside a phone frame instead of a browser window. */
-		.window { width: min(100%, 360px); margin-inline: auto; border: 9px solid #282828; border-radius: 46px; box-shadow: 0 0 0 1px #45433e, 0 40px 80px -40px rgb(40 60 60 / 45%), 0 12px 24px -12px rgb(60 56 54 / 18%); }
-		.window-bar { display: flex; justify-content: center; height: 34px; padding: 0; border-bottom: 0; background: var(--surface); }
-		.lights { display: none; }
-		.island { display: block; width: 84px; height: 22px; border-radius: 999px; background: #282828; }
-		.dashboard-frame { height: min(620px, 150vw); }
+		.window { width: min(82%, 300px); margin-inline: auto; border: 4px solid #282828; border-radius: 34px; box-shadow: 0 0 0 1px #45433e, 0 40px 80px -40px rgb(40 60 60 / 45%), 0 12px 24px -12px rgb(60 56 54 / 18%); }
+		.window-bar { display: none; }
+		.dashboard-frame { height: min(540px, 130vw); }
 	}
 </style>

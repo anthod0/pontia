@@ -183,7 +183,6 @@
 				<button type="button" class="flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-muted" aria-label="Open sidebar" aria-expanded={mobileSidebarOpen} onclick={() => (mobileSidebarOpen = true)}>
 					<SidebarSimpleIcon class="size-4" />
 				</button>
-				<span class="mx-1 min-w-0 truncate px-2 py-0.5 text-sm text-heading">{session.title}</span>
 			</div>
 		</div>
 		{#key session.id}
