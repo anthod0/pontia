@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/svelte";
+import { render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 import ThoughtSummary from "../../src/lib/components/session-chat/ThoughtSummary.svelte";
@@ -124,7 +124,8 @@ test.each(["read", "write", "edit"] as const)(
       ],
       active: false,
     });
-    expect(screen.getByText("first file result")).not.toBeVisible();
+    // bits-ui hides closed collapsible content after an animation frame.
+    await waitFor(() => expect(screen.getByText("first file result")).not.toBeVisible());
     expect(screen.getByText("second file failed")).not.toBeVisible();
     expect(screen.queryByRole("status", { name: "" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^Show .*2 files details$/ }));
@@ -327,7 +328,7 @@ test("streaming updates and activity changes preserve the user disclosure state"
     "aria-expanded",
     "false",
   );
-  expect(screen.getByText("More thinking.")).not.toBeVisible();
+  await waitFor(() => expect(screen.getByText("More thinking.")).not.toBeVisible());
 });
 
 test("native errors and question answers remain inspectable without assistant text", async () => {
