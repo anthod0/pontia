@@ -267,7 +267,12 @@
 {/if}
 
 <PromptInput.Root class={compact ? 'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center' : 'w-full'} onSubmit={submit}>
-  <PromptInput.Body class={compact ? 'col-start-2 row-start-1' : undefined}>
+  {#if uploads}
+    <div class={compact ? 'col-span-3 row-start-1' : 'contents'}>
+      <UploadAttachments bind:this={uploadPicker} draft={uploads} disabled={disabled || busy || sending} />
+    </div>
+  {/if}
+  <PromptInput.Body class={compact ? 'col-start-2 row-start-2' : undefined}>
     <div bind:this={inlineInput} class="relative">
       <ChatCommandInput bind:this={editor} id={inputId} bind:value {commands} onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 text-base sm:text-[13.5px] ${compact ? 'px-0' : 'pl-3 pr-10 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
       {#if fullscreen && !compact}
@@ -278,15 +283,14 @@
     </div>
   </PromptInput.Body>
   <div class={compact ? 'col-span-3' : 'contents'}>
-    {#if uploads}<UploadAttachments bind:this={uploadPicker} draft={uploads} disabled={disabled || busy || sending} />{/if}
     {#if submissionError}<p role="alert" class="px-4 text-xs text-destructive">{submissionError}</p>{/if}
     {#if command?.disabledReason}<p role="status" class="px-4 pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
   </div>
   <PromptInput.Toolbar class={compact ? 'contents' : cn(fullscreen && 'px-1 pb-1', uploads ? 'pt-0' : 'justify-end pt-0')}>
-    <div class={compact ? 'col-start-1 row-start-1 py-1 pl-1' : 'contents'}>
+    <div class={compact ? 'col-start-1 row-start-2 py-1 pl-1' : 'contents'}>
       {@render uploadButton(uploadPicker)}
     </div>
-    <div class={compact ? 'col-start-3 row-start-1 p-1' : 'contents'}>
+    <div class={compact ? 'col-start-3 row-start-2 p-1' : 'contents'}>
       {#if interruptMode && attachments.items.length === 0}
         <Button type="button" size={fullscreen ? 'icon-sm' : 'icon'} disabled={interruptBusy} aria-label="Interrupt agent" title="Interrupt agent" onclick={() => interrupt()}>
           <StopIcon class="size-4" />
@@ -315,11 +319,11 @@
       </Dialog.Header>
 
       <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
+        {#if uploads}<UploadAttachments bind:this={fullscreenUploadPicker} draft={uploads} disabled={disabled || busy || sending} />{/if}
         <PromptInput.Body class="min-h-0 flex-1">
           <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] pr-2" />
         </PromptInput.Body>
         {#if command?.disabledReason}<p role="status" class="pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}
-        {#if uploads}<UploadAttachments bind:this={fullscreenUploadPicker} draft={uploads} disabled={disabled || busy || sending} />{/if}
         <PromptInput.Toolbar class={uploads ? 'shrink-0 pt-0' : 'shrink-0 justify-end pt-0'}>
           {@render uploadButton(fullscreenUploadPicker)}
           {#if interruptMode && attachments.items.length === 0}

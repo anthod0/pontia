@@ -342,6 +342,7 @@
     <AgentBottomStatus state={sessionState} />
   {:else}
     {@const chatMessage = displayItem.message}
+    {@const uploadParts = chatMessage.role === 'user' ? parseUploadMessage(chatMessage.content) : null}
     <Message.Root
       from={chatMessage.role}
       class={`${chatMessage.role === 'user' ? `relative ${editingMessageId === chatMessage.id ? 'w-full' : ''}` : ''} scroll-mt-16`}
@@ -349,6 +350,12 @@
       data-chat-turn-id={chatMessage.turnId}
       data-chat-role={chatMessage.role}
     >
+      {#if uploadParts?.files.length && editingMessageId !== chatMessage.id}
+        <ul class="flex flex-wrap justify-end gap-2" data-user-message-uploads>
+          {#each uploadParts.files as file}<li class="rounded-md border bg-white px-2 py-1 text-xs" title={file.path}>Uploaded File: {file.name}</li>{/each}
+        </ul>
+      {/if}
+      {#if !uploadParts || uploadParts.text.trim() || editingMessageId === chatMessage.id}
       <Message.Content class={`${chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''} ${editingMessageId === chatMessage.id ? 'w-full' : ''}`}>
         {#if displayItem.showAgentStatus && sessionState !== 'busy'}
           <AgentStatus state={sessionState} />
@@ -386,13 +393,7 @@
               </div>
             </div>
           {:else if chatMessage.role === 'user'}
-            {@const parsed = parseUploadMessage(chatMessage.content)}
-            <Message.Response content={parsed.text} markdown={false} />
-            {#if parsed.files.length}
-              <ul class="mt-2 flex flex-wrap gap-2">
-                {#each parsed.files as file}<li class="rounded-md border px-2 py-1 text-xs" title={file.path}>Uploaded File: {file.name}</li>{/each}
-              </ul>
-            {/if}
+            <Message.Response content={uploadParts?.text ?? ''} markdown={false} />
           {:else}
             <Message.Response
               content={chatMessage.content}
@@ -423,6 +424,7 @@
           {/if}
         {/if}
       </Message.Content>
+      {/if}
       {#if chatMessage.role === 'user' && editingMessageId !== chatMessage.id}
         {@const isCopied = copiedMessageId === chatMessage.id}
         <div

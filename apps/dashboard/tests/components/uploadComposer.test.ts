@@ -1,6 +1,8 @@
 import { testDevice } from "../deviceFixture";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, expect, test, vi } from "vitest";
+const toast = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn() }));
+vi.mock("svelte-sonner", () => ({ toast }));
 import MessageComposer from "../../src/components/chat/MessageComposer.svelte";
 import { loadUploadRecords, saveUploadRecord } from "../../src/lib/uploads/records";
 testDevice.access.uploadStorageScope = async () => "composer-test";
@@ -72,4 +74,22 @@ test("blocks sending unfinished attachments until they are removed", async () =>
   await waitFor(() => expect(submit).toBeEnabled());
   await fireEvent.click(submit);
   expect(onSubmit).toHaveBeenCalledWith("Read the report");
+});
+
+test("reports upload failures in a toast instead of beside the file", async () => {
+  const draftId = await seed(true);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new Error("device unreachable");
+    }),
+  );
+  render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
+  await screen.findByRole("img", { name: "Upload failed: report.txt" });
+  expect(screen.queryByText("device unreachable")).not.toBeInTheDocument();
+  await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+  expect(toast.error).toHaveBeenCalledWith(
+    "Upload failed: report.txt",
+    expect.objectContaining({ description: expect.stringContaining("device unreachable") }),
+  );
 });

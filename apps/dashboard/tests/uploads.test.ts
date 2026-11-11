@@ -124,6 +124,11 @@ test("round trips escaped attachments and retains malformed tags as text", () =>
     text: "Read these",
     files,
   });
+  expect(uploadMessage("Read these", files)).toMatch(
+    /^<user_upload [^\n]*<\/user_upload>\nRead these$/,
+  );
+  const trailing = 'Read these\n<user_upload path="/device/file">report.txt</user_upload>';
+  expect(parseUploadMessage(trailing)).toEqual({ text: trailing, files: [] });
   const invalid =
     '<user_upload path="relative">x</user_upload>\n<user_upload path="/x">&unknown;</user_upload>\n<user_upload path="/x"><script>bad</script></user_upload>';
   expect(parseUploadMessage(invalid)).toEqual({ text: invalid, files: [] });

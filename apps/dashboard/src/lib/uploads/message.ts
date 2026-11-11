@@ -13,35 +13,45 @@ function escapeXml(value: string): string {
 }
 export function uploadMessage(text: string, files: UploadedFile[]): string {
   return [
-    text.trim(),
     ...files.map(
       (file) => `<user_upload path="${escapeXml(file.path)}">${escapeXml(file.name)}</user_upload>`,
     ),
+    text.trim(),
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-export function parseUploadMessage(content: string): { text: string; files: UploadedFile[] } {
+function parseUploadTag(line: string): UploadedFile | null {
+  if (!/^\s*<user_upload\s[^]*<\/user_upload>\s*$/.test(line)) return null;
+  const document = new DOMParser().parseFromString(line, "application/xml");
+  if (document.querySelector("parsererror")) return null;
+  const node = document.documentElement;
+  if (
+    node.tagName !== "user_upload" ||
+    node.attributes.length !== 1 ||
+    !node.hasAttribute("path") ||
+    Array.from(node.childNodes).some((child) => child.nodeType !== 3)
+  )
+    return null;
+  const path = node.getAttribute("path") ?? "";
+  const name = node.textContent ?? "";
+  if (!path.startsWith("/") || !name || name === "." || name === ".." || /[/\\\0]/.test(name))
+    return null;
+  return { path, name };
+}
+
+export function parseUploadMessage(content: string): {
+  text: string;
+  files: UploadedFile[];
+} {
   const files: UploadedFile[] = [];
-  const lines = content.split("\n").filter((line) => {
-    if (!/^\s*<user_upload\s[^]*<\/user_upload>\s*$/.test(line)) return true;
-    const document = new DOMParser().parseFromString(line, "application/xml");
-    if (document.querySelector("parsererror")) return true;
-    const node = document.documentElement;
-    if (
-      node.tagName !== "user_upload" ||
-      node.attributes.length !== 1 ||
-      !node.hasAttribute("path") ||
-      Array.from(node.childNodes).some((child) => child.nodeType !== 3)
-    )
-      return true;
-    const path = node.getAttribute("path") ?? "";
-    const name = node.textContent ?? "";
-    if (!path.startsWith("/") || !name || name === "." || name === ".." || /[/\\\0]/.test(name))
-      return true;
-    files.push({ path, name });
-    return false;
-  });
-  return { text: lines.join("\n"), files };
+  const lines = content.split("\n");
+  let index = 0;
+  for (; index < lines.length; index++) {
+    const file = parseUploadTag(lines[index]);
+    if (!file) break;
+    files.push(file);
+  }
+  return { text: lines.slice(index).join("\n"), files };
 }
