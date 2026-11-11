@@ -1,5 +1,6 @@
 import type { ManagedToolUse, SessionView, TimelineItem, TurnView } from "../../api/types";
 import { untitledSessionLabel } from "../sessionTitle";
+import { parseUploadMessage } from "../uploads/message";
 
 export type ChatSessionFilter = "active" | "all";
 export type ChatMessageRole = "user" | "assistant";
@@ -77,7 +78,8 @@ export function userPromptForDisplay(prompt: string): string {
 }
 
 export function titleFromInitialPrompt(prompt: string, maxLength = 60): string | null {
-  const normalized = userPromptForDisplay(prompt)
+  const { text, files } = parseUploadMessage(userPromptForDisplay(prompt));
+  const normalized = (text.trim() || files.map((file) => file.name).join(", "))
     .replace(/^```[\w-]*\s*/i, "")
     .replace(/```$/i, "")
     .split(/\r?\n/)

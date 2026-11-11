@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { uploadMessage } from "../../../src/lib/uploads/message";
 import {
   canSendSessionMessage,
   sessionChatTitle,
@@ -87,6 +88,24 @@ test("generates a compact title from the initial prompt", () => {
   );
   expect(titleFromInitialPrompt("```ts\nconst answer = 42\n```")).toBe("const answer = 42");
   expect(titleFromInitialPrompt("")).toBeNull();
+});
+
+test("generates a title from the user text after uploaded files", () => {
+  const prompt = uploadMessage("  分析这些文件\n补充说明", [
+    { name: "report.txt", path: "/tmp/uploads/report.txt" },
+    { name: "data.csv", path: "/tmp/uploads/data.csv" },
+  ]);
+
+  expect(titleFromInitialPrompt(prompt)).toBe("分析这些文件");
+});
+
+test("uses decoded file names for an upload-only session title", () => {
+  const prompt = uploadMessage("  ", [
+    { name: "report & notes.txt", path: "/tmp/uploads/report & notes.txt" },
+    { name: "data.csv", path: "/tmp/uploads/data.csv" },
+  ]);
+
+  expect(titleFromInitialPrompt(prompt)).toBe("report & notes.txt, data.csv");
 });
 
 test("uses the user request after a Pi skill injection for display and titles", () => {
