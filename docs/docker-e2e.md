@@ -138,4 +138,4 @@ If you have a complete validation script, use this command to manage startup and
 
 This environment validates the complete local application flow on Linux, using real providers for OAuth and model calls. Finish each run within 24 hours.
 
-Pi, Codex, and Claude Agent are available for validation. Claude requires a test login or API configuration; additional ACP Agents are not prepared. Self-hosted edge registration, installation over the public internet, DNS, ACME, systemd, macOS, and edge deletion that requires public DNS cleanup are outside this environment's scope. Report only the clients and user flows actually validated.
+Pi, Codex, and Claude Agent are available for validation. Claude requires a test login or API configuration. Report only the clients and user flows actually validated.

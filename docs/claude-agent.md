@@ -12,7 +12,7 @@ Run:
 pontia init
 ```
 
-Select `claude-agent`. On first setup, initialization downloads `@pontia/claude-client` and its Claude Agent SDK dependencies from npm, then checks them before enabling the integration. This requires internet access and several hundred megabytes of disk space. Subsequent initialization reuses the installed client; updating Pontia does not update it. Pontia does not provide a Claude login screen or save or refresh Claude credentials.
+Select `claude-agent`. On first setup, initialization downloads `@pontia/claude-client` and its Claude Agent SDK dependencies from npm, then checks them before enabling the integration. This requires internet access and several hundred megabytes of disk space. Subsequent initialization reuses the installed client; updating Pontia does not update it.
 
 To update the Claude client separately, exit active Claude Agent Sessions, then run:
 
@@ -33,9 +33,9 @@ CLAUDE_CONFIG_DIR=/absolute/path/to/claude-config pontia init
 
 In Dashboard, choose a Workspace, create a **Claude Agent** Session, and send your first task. Subsequent tasks wait in the Inbox until the current task has a confirmed result.
 
-Tool requests offer **Allow once** and **Deny once**. These choices do not grant permanent permission. Interrupt requests cancellation of the current task; Exit closes the Session's execution. After exiting, you can still browse its history and send another message to resume the same conversation.
+Tool requests offer **Allow once** and **Deny once**. Interrupt requests cancellation of the current task; Exit closes the Session's execution. After exiting, you can still browse its history and send another message to resume the same conversation.
 
-Claude Agent does not attach to the native Claude Code terminal interface. Model switching, manual compaction, branching, and question forms are not available in this integration. Continuing active execution across a Pontia service restart or update is not guaranteed.
+Active execution may not continue across a Pontia service restart or update.
 
 ## Resolve setup and authentication problems
 

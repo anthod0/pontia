@@ -12,6 +12,10 @@ Read `../pontia-docs/AGENTS.local.md` if it exists and treat it as part of this 
 - Do not restrict agent client release versions.
 - When performing a pure file split of Rust code without changing behavior, refer to [Rust Module Refactoring](docs/agents/rust-module-refactoring.md) and [Rust Test Refactoring](docs/agents/rust-test-refactoring.md).
 
+## Documentation
+
+- Undocumented means unsupported. Do not write "X is not supported"; mention a limitation only when it is especially important.
+
 ## End-to-end validation
 
 Run [Docker E2E](docs/docker-e2e.md) after relevant automated tests pass and before delivery when changes require full-chain validation; use frontend tests and browser validation for changes limited to presentation and local UI interactions.
