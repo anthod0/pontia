@@ -1,0 +1,100 @@
+---
+title: Remote control for pi coding agent
+description: Run pi on your own machine and control its sessions from a phone or browser with Pontia, while keeping the native pi TUI.
+published: "2026-11-11"
+---
+
+[pi](https://pi.dev) is a terminal coding agent. Its sessions live in a terminal, which makes it hard to check on a long task from your phone or continue it from another computer. Pontia adds a browser Dashboard to pi without replacing the TUI: both work on the same conversation.
+
+## What you can do
+
+From the Remote Dashboard at [app.pontia.dev](https://app.pontia.dev) you can:
+
+- start a pi session in a project directory on your machine;
+- follow the reply and tool output as they stream;
+- send messages, or queue them while pi is working;
+- interrupt the current turn;
+- edit an earlier message to branch the conversation from that point;
+- change the model with `/model` and compact the context with `/compact`;
+- see estimated context usage;
+- reference files with `@`.
+
+pi keeps running on your machine with its own provider credentials and configuration.
+
+## How it works
+
+Pontia's pi plugin connects pi to `pontiad`, the Pontia service on your machine. When you start a session from the Dashboard, Pontia launches pi inside a tmux pane in the selected project. The plugin reports pi's conversation to Pontia and accepts controls from the Dashboard. Conversation history stays in pi's own session files.
+
+Because pi runs in a real tmux pane, you can attach to it from a terminal and use the TUI at any time. Messages you type in the TUI and messages you send from the Dashboard go to the same conversation.
+
+The browser reaches your machine through an Edge relay over an end-to-end encrypted session. The relay forwards ciphertext and cannot read your prompts or files.
+
+## Set it up
+
+You need Linux or macOS 11 or later, with `pi` and `tmux` installed for your user:
+
+```sh
+pi --version
+tmux -V
+```
+
+Configure your model provider in pi first. If you have not, open `pi` and run `/login` and `/model`.
+
+Install Pontia and run the initializer:
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | sh
+pontia init
+```
+
+pi is selected by default. The initializer installs the plugin with:
+
+```sh
+pi install npm:@pontia/pi-client-plugin
+```
+
+It then starts the Pontia service, signs you in to Pontia Cloud, and registers your machine. On a headless machine, the sign-in prints a URL and a one-time code that you can approve from your phone.
+
+Open [app.pontia.dev](https://app.pontia.dev), select your machine, activate a project directory as a Workspace, and start a session with the pi Agent Client. The [Dashboard guide](/docs/dashboard) covers the details.
+
+## Use the TUI on the same session
+
+Sessions started from the Dashboard run in tmux sessions whose names start with `pontia_`. To open one in your terminal:
+
+```sh
+tmux ls
+tmux attach -t SESSION_NAME
+```
+
+Detach with the usual tmux key binding. The session keeps running and stays available in the Dashboard.
+
+## Use a custom pi command
+
+If you run pi through a wrapper script or from a non-standard path, set the command in `$PONTIA_HOME/config.toml`:
+
+```toml
+[runtime.pi]
+tui_command = "/absolute/path/to/pi"
+```
+
+Then run `pontia up` to apply it.
+
+## Multi-stage tasks
+
+For larger tasks, Pontia [Workflows](/docs/workflows) run a sequence of pi sessions with explicit handoff files between stages. Each stage gets a fresh context, and you can follow every stage's session from the Dashboard.
+
+## Troubleshooting
+
+Start with `pontia doctor`. If a pi session does not report activity, check the hook log:
+
+```text
+$PONTIA_HOME/state/pi-hook.log
+```
+
+Also confirm that the plugin is still installed and that `pontia status` reports a healthy service. See [Troubleshooting](/docs/troubleshooting) for more.
+
+## Next steps
+
+- [pi Agent Client](/docs/agent-clients/pi) reference
+- [Run coding agents on a VPS](/blog/run-coding-agents-on-a-vps) to keep pi running on an always-on server
+- [How Pontia works](/docs/how-it-works)

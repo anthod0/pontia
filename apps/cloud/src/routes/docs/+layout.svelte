@@ -5,6 +5,8 @@
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import * as Popover from '$lib/components/ui/popover';
 	import { tick, type Snippet } from 'svelte';
+	import { addCodeCopyButtons } from '$lib/code-copy';
+	import '$lib/styles/article.css';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -58,35 +60,7 @@
 	afterNavigate(async () => {
 		menuOpen = false;
 		await tick();
-		for (const block of document.querySelectorAll<HTMLElement>('.docs-content pre')) {
-			if (block.dataset.copyable === 'true') continue;
-			const code = block.querySelector('code');
-			if (!code) continue;
-
-			block.dataset.copyable = 'true';
-			const button = document.createElement('button');
-			button.type = 'button';
-			button.className = 'code-copy-button';
-			button.textContent = 'Copy';
-			button.setAttribute('aria-label', 'Copy code');
-			button.addEventListener('click', async () => {
-				try {
-					await navigator.clipboard.writeText(code.textContent ?? '');
-					button.textContent = 'Copied';
-					button.setAttribute('aria-label', 'Copy code again');
-					setTimeout(() => {
-						button.textContent = 'Copy';
-						button.setAttribute('aria-label', 'Copy code');
-					}, 2000);
-				} catch {
-					button.textContent = 'Failed';
-					setTimeout(() => {
-						button.textContent = 'Copy';
-					}, 2000);
-				}
-			});
-			block.appendChild(button);
-		}
+		addCodeCopyButtons(document.querySelector('.docs-content')!);
 	});
 </script>
 
@@ -121,7 +95,7 @@
 			</Popover.Content>
 		</Popover.Root>
 	</div>
-	<main id="docs-content" class="docs-content">{@render children()}</main>
+	<main id="docs-content" class="docs-content article-content">{@render children()}</main>
 </div>
 
 <style>
@@ -134,49 +108,6 @@
 	nav a:hover, nav a[aria-current='page'] { color: var(--primary); }
 	.docs-menu { display: none; }
 	.docs-content { min-width: 0; }
-	.docs-content :global(h1) { margin-bottom: 18px; color: var(--heading); font-size: clamp(36px, 5vw, 52px); font-weight: 500; line-height: 1.1; letter-spacing: -0.045em; }
-	.docs-content :global(h2) { margin: 48px 0 16px; padding-top: 8px; font-size: 25px; letter-spacing: -0.025em; }
-	.docs-content :global(h3) { margin: 30px 0 10px; font-size: 17px; font-weight: 500; }
-	.docs-content :global(p), .docs-content :global(li) { color: var(--muted-foreground); font-size: 15px; line-height: 1.8; }
-	.docs-content :global(p) { margin-block: 14px; }
-	.docs-content :global(ul), .docs-content :global(ol) { margin: 14px 0; padding-left: 24px; }
-	.docs-content :global(li + li) { margin-top: 7px; }
-	.docs-content :global(a) { color: #366e71; text-decoration: underline; text-decoration-color: #9ebbbc; text-underline-offset: 3px; }
-	.docs-content :global(a:hover) { color: var(--primary); text-decoration-color: currentColor; }
-	.docs-content :global(strong) { color: var(--foreground); font-weight: 500; }
-	.docs-content :global(code) { border: 1px solid var(--border); border-radius: 4px; background: var(--muted); padding: 2px 5px; color: var(--foreground); font-size: 0.85em; }
-	.docs-content :global(pre) { position: relative; overflow-x: auto; margin: 20px 0; border: 1px solid #45433e; border-radius: 6px; background: #282828; padding: 18px 82px 18px 20px; }
-	.docs-content :global(pre code) { border: 0; border-radius: 0; background: transparent; padding: 0; color: #ebdbb2; font-size: 13px; line-height: 1.7; white-space: pre; }
-	.docs-content :global(pre code .token) { display: inline; }
-	.docs-content :global(pre code .token.punctuation) { color: #bdae93; }
-	.docs-content :global(pre code .token.key),
-	.docs-content :global(pre code .token.property) { color: #83a598; }
-	.docs-content :global(pre code .token.table),
-	.docs-content :global(pre code .token.class-name) { color: #fabd2f; }
-	.docs-content :global(pre code .token.string) { color: #b8bb26; }
-	.docs-content :global(pre code .token.boolean) { color: #d3869b; }
-	.docs-content :global(pre code .token.number) { color: #fe8019; }
-	.docs-content :global(pre code .token.comment) { color: #a89984; font-style: italic; }
-	.docs-content :global(pre code .token.function) { color: #8ec07c; }
-	.docs-content :global(pre code .token.variable),
-	.docs-content :global(pre code .token.parameter) { color: #d3869b; }
-	.docs-content :global(pre code .token.operator),
-	.docs-content :global(pre code .token.keyword) { color: #fe8019; }
-	.docs-content :global(.code-copy-button) { position: absolute; top: 9px; right: 9px; min-width: 58px; height: 32px; border: 1px solid #5d584e; border-radius: 4px; background: #282828; color: #bdae93; font: 11px var(--font-mono); }
-	.docs-content :global(.code-copy-button:hover) { background: #3c3836; color: #ebdbb2; }
-	.docs-content :global(.code-copy-button:focus-visible) { outline-color: #8ec07c; }
-	.docs-content :global(blockquote) { margin: 24px 0; border-left: 3px solid var(--primary); background: var(--surface); padding: 14px 18px; }
-	.docs-content :global(blockquote p) { margin: 0; }
-	.docs-content :global(.table-scroll) { overflow-x: auto; margin: 24px 0; }
-	.docs-content :global(table) { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.6; }
-	/* Keep identifiers intact; the wrapper scrolls instead of squeezing columns. */
-	.docs-content :global(td code) { white-space: nowrap; }
-	.docs-content :global(td) { min-width: 12em; }
-	.docs-content :global(td:has(> code:only-child)) { min-width: 0; }
-	.docs-content :global(th), .docs-content :global(td) { border-bottom: 1px solid var(--border); padding: 10px 12px; text-align: left; vertical-align: top; }
-	.docs-content :global(th) { color: var(--heading); font-weight: 500; }
-	.docs-content :global(td) { color: var(--muted-foreground); }
-	.docs-content :global(hr) { margin: 40px 0; border: 0; border-top: 1px solid var(--border); }
 
 	@media (max-width: 760px) {
 		.docs-shell { grid-template-columns: 1fr; gap: 28px; padding-block: 24px 64px; }
@@ -186,7 +117,6 @@
 		.docs-menu :global(.docs-menu-toggle) { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--heading); font-size: 14px; font-weight: 500; }
 		.docs-menu :global(.docs-menu-toggle svg) { transition: transform 0.15s; }
 		.docs-menu :global(.docs-menu-toggle[data-state='open'] svg) { transform: rotate(180deg); }
-		.docs-content :global(h2) { margin-top: 40px; }
 		.docs-content :global(:is(h2, h3)) { scroll-margin-top: 72px; }
 	}
 
@@ -199,6 +129,5 @@
 
 	@media (max-width: 600px) {
 		.docs-menu { margin-inline: -20px; padding-inline: 20px; }
-		.docs-content :global(p), .docs-content :global(li) { font-size: 14px; }
 	}
 </style>

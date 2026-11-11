@@ -1,0 +1,94 @@
+<script lang="ts">
+	import { onMount, type Snippet } from 'svelte';
+	import { page } from '$app/state';
+	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
+	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
+	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import { addCodeCopyButtons } from '$lib/code-copy';
+	import { formatDate, type BlogPostMetadata } from '$lib/blog';
+	import '$lib/styles/article.css';
+
+	let { title, description, published, updated, children }: BlogPostMetadata & { children: Snippet } =
+		$props();
+
+	const url = $derived(`https://pontia.dev${page.url.pathname}`);
+	const image = 'https://pontia.dev/og.png';
+	const pontia = { '@type': 'Organization', name: 'Pontia', url: 'https://pontia.dev/' };
+	const structuredData = $derived({
+		'@context': 'https://schema.org',
+		'@type': 'Article',
+		headline: title,
+		description,
+		datePublished: published,
+		dateModified: updated ?? published,
+		image,
+		url,
+		mainEntityOfPage: url,
+		author: pontia,
+		publisher: { ...pontia, logo: { '@type': 'ImageObject', url: 'https://pontia.dev/logo.svg' } }
+	});
+
+	let article: HTMLElement;
+	onMount(() => addCodeCopyButtons(article));
+</script>
+
+<svelte:head>
+	<title>{title} — Pontia</title>
+	<meta name="description" content={description} />
+	<link rel="canonical" href={url} />
+	<meta property="og:site_name" content="Pontia" />
+	<meta property="og:title" content={title} />
+	<meta property="og:description" content={description} />
+	<meta property="og:type" content="article" />
+	<meta property="og:url" content={url} />
+	<meta property="og:image" content={image} />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="article:published_time" content={published} />
+	<meta property="article:modified_time" content={updated ?? published} />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={title} />
+	<meta name="twitter:description" content={description} />
+	<meta name="twitter:image" content={image} />
+	{@html `<script type="application/ld+json">${JSON.stringify(structuredData).replaceAll('<', '\\u003c')}</script>`}
+</svelte:head>
+
+<a class="skip-link" href="#post">Skip to content</a>
+
+<SiteHeader />
+
+<main id="post" class="post page-width">
+	<a class="back" href="/blog"><ArrowLeftIcon size={14} />Blog</a>
+	<article class="article-content" bind:this={article}>
+		<header>
+			<h1>{title}</h1>
+			<p class="dates">
+				<time datetime={published}>{formatDate(published)}</time>
+				{#if updated}
+					<span>· Updated <time datetime={updated}>{formatDate(updated)}</time></span>
+				{/if}
+			</p>
+		</header>
+		{@render children()}
+	</article>
+	<aside class="cta">
+		<p>Pontia is free and open source. Install it on Linux or macOS in a few minutes.</p>
+		<a class="button" href="/docs/getting-started">Get started<ArrowRightIcon size={18} /></a>
+	</aside>
+</main>
+
+<SiteFooter />
+
+<style>
+	.post { max-width: 720px; padding-block: 56px 96px; }
+	.back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 28px; color: var(--muted-foreground); font-size: 13px; }
+	.back:hover { color: var(--primary); }
+	header { margin-bottom: 32px; }
+	.article-content .dates { margin: 0; color: var(--muted-foreground); font: 12px var(--font-mono); }
+	.cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; margin-top: 56px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 24px; }
+	.cta p { max-width: 400px; color: var(--foreground); font-size: 15px; line-height: 1.6; }
+	@media (max-width: 760px) {
+		.post { padding-block: 32px 64px; }
+	}
+</style>

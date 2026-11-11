@@ -1,0 +1,82 @@
+---
+title: Control Codex CLI from your phone or browser
+description: Run Codex CLI on your Linux or macOS machine and follow, steer, and approve its work from any browser with Pontia.
+published: "2026-11-11"
+---
+
+Codex CLI works best on the machine that has your repositories, toolchains, and credentials. That machine is often a desktop at home or a Linux server you reach over SSH. Pontia lets you keep Codex running there and control its sessions from a phone or laptop browser.
+
+This guide covers what you can do from the browser, how the setup works on Linux and macOS, and what stays on your machine.
+
+## What you can do from the browser
+
+Pontia's Remote Dashboard at [app.pontia.dev](https://app.pontia.dev) connects to the Codex sessions on your machine. From a phone or another computer you can:
+
+- start a new Codex session in one of your project directories;
+- follow the conversation, tool calls, and command output as they stream;
+- answer Codex's approval requests for command execution, file changes, and extra permissions;
+- send follow-up messages, or queue them while Codex is busy;
+- interrupt the current turn;
+- switch models with `/model` and compact the context with `/compact`;
+- type `@` to reference files in the project.
+
+Sessions stay in Pontia when you close the browser. You can open the same session later from another device and continue where you left off.
+
+## How it works
+
+Codex CLI includes an app-server daemon that other programs can connect to. Pontia's local service, `pontiad`, connects to that daemon, records each Codex thread as a Pontia session, and serves the Dashboard.
+
+The Remote Dashboard reaches `pontiad` through an Edge relay. The browser and your machine set up an end-to-end encrypted session, and the Edge only forwards ciphertext. Codex itself runs with your local credentials, sandbox, and approval policy. See [How Pontia works](/docs/how-it-works) for the full picture.
+
+## Set it up
+
+You need Linux (x86_64 or ARM64) or macOS 11 or later, and a Codex CLI that is installed and signed in as the user who will run Pontia.
+
+**1. Sign in to Codex.** On a machine without a browser, use device authorization:
+
+```sh
+codex login --device-auth
+```
+
+**2. Install Pontia:**
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | sh
+```
+
+The installer puts `pontia` and `pontiad` in `$HOME/.local/bin`. Make sure that directory is on your `PATH`.
+
+**3. Initialize and select Codex:**
+
+```sh
+pontia init
+```
+
+The initializer configures the Codex daemon to start automatically. On Linux it installs a systemd user service and enables lingering, so the daemon keeps running after you log out. On macOS it installs a per-user LaunchAgent. It then starts Pontia and asks you to sign in to Pontia Cloud. The sign-in prints a URL and a one-time code, so you can approve it from your phone when the machine is headless. Pick an Edge and confirm the device name. Pontia prints the Remote Dashboard URL when setup finishes.
+
+**4. Open the Dashboard on your phone.** Go to [app.pontia.dev](https://app.pontia.dev), select your device, activate a project directory as a Workspace, and start a session with the Codex Agent Client. The [Dashboard guide](/docs/dashboard) walks through this.
+
+If you prefer to run each step yourself, or want an agent to do the setup, follow [non-interactive initialization](/docs/initialization#non-interactive-initialization) and [Codex manual setup](/docs/codex#manual-setup).
+
+## Approvals on the go
+
+When Codex asks for approval to run a command, change files, or use additional permissions, the request appears in the Dashboard with **Allow** and **Deny** buttons. You can answer from your phone instead of walking back to the terminal.
+
+Choose an approval policy that fits work you supervise from a small screen. A stricter policy produces more requests but keeps you in control of each command.
+
+## What stays on your machine
+
+| Data | Where it lives |
+| --- | --- |
+| Project files and command execution | Your machine |
+| Codex credentials and conversation history | Your machine, managed by Codex |
+| Dashboard traffic | Encrypted end to end between your browser and your machine |
+| Account, device registration, and connection authorization | Pontia Cloud |
+
+The Edge relays encrypted traffic and has no access to your prompts or files. You can use an official Edge or [host your own](/docs/self-hosted-edge). [Security](/docs/security) describes the protocol and credentials in detail.
+
+## Next steps
+
+- [Getting started](/docs/getting-started) to install Pontia.
+- [Codex](/docs/codex) for daemon configuration and troubleshooting.
+- [Run coding agents on a VPS](/blog/run-coding-agents-on-a-vps) if you want Codex on an always-on server.

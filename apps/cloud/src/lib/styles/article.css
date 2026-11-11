@@ -1,0 +1,196 @@
+/* Typography for long-form Markdown content in docs and blog posts. */
+.article-content h1 {
+  margin-bottom: 18px;
+  color: var(--heading);
+  font-size: clamp(36px, 5vw, 52px);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.045em;
+}
+.article-content h2 {
+  margin: 48px 0 16px;
+  padding-top: 8px;
+  font-size: 25px;
+  letter-spacing: -0.025em;
+}
+.article-content h3 {
+  margin: 30px 0 10px;
+  font-size: 17px;
+  font-weight: 500;
+}
+.article-content p,
+.article-content li {
+  color: var(--muted-foreground);
+  font-size: 15px;
+  line-height: 1.8;
+}
+.article-content p {
+  margin-block: 14px;
+}
+.article-content ul,
+.article-content ol {
+  margin: 14px 0;
+  padding-left: 24px;
+}
+.article-content li + li {
+  margin-top: 7px;
+}
+.article-content a {
+  color: #366e71;
+  text-decoration: underline;
+  text-decoration-color: #9ebbbc;
+  text-underline-offset: 3px;
+}
+.article-content a:hover {
+  color: var(--primary);
+  text-decoration-color: currentColor;
+}
+.article-content strong {
+  color: var(--foreground);
+  font-weight: 500;
+}
+.article-content code {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--muted);
+  padding: 2px 5px;
+  color: var(--foreground);
+  font-size: 0.85em;
+}
+.article-content pre {
+  position: relative;
+  overflow-x: auto;
+  margin: 20px 0;
+  border: 1px solid #45433e;
+  border-radius: 6px;
+  background: #282828;
+  padding: 18px 82px 18px 20px;
+}
+.article-content pre code {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  color: #ebdbb2;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre;
+}
+.article-content pre code .token {
+  display: inline;
+}
+.article-content pre code .token.punctuation {
+  color: #bdae93;
+}
+.article-content pre code .token.key,
+.article-content pre code .token.property {
+  color: #83a598;
+}
+.article-content pre code .token.table,
+.article-content pre code .token.class-name {
+  color: #fabd2f;
+}
+.article-content pre code .token.string {
+  color: #b8bb26;
+}
+.article-content pre code .token.boolean {
+  color: #d3869b;
+}
+.article-content pre code .token.number {
+  color: #fe8019;
+}
+.article-content pre code .token.comment {
+  color: #a89984;
+  font-style: italic;
+}
+.article-content pre code .token.function {
+  color: #8ec07c;
+}
+.article-content pre code .token.variable,
+.article-content pre code .token.parameter {
+  color: #d3869b;
+}
+.article-content pre code .token.operator,
+.article-content pre code .token.keyword {
+  color: #fe8019;
+}
+.article-content .code-copy-button {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  min-width: 58px;
+  height: 32px;
+  border: 1px solid #5d584e;
+  border-radius: 4px;
+  background: #282828;
+  color: #bdae93;
+  font: 11px var(--font-mono);
+}
+.article-content .code-copy-button:hover {
+  background: #3c3836;
+  color: #ebdbb2;
+}
+.article-content .code-copy-button:focus-visible {
+  outline-color: #8ec07c;
+}
+.article-content blockquote {
+  margin: 24px 0;
+  border-left: 3px solid var(--primary);
+  background: var(--surface);
+  padding: 14px 18px;
+}
+.article-content blockquote p {
+  margin: 0;
+}
+.article-content .table-scroll {
+  overflow-x: auto;
+  margin: 24px 0;
+}
+.article-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.6;
+}
+/* Keep identifiers intact; the wrapper scrolls instead of squeezing columns. */
+.article-content td code {
+  white-space: nowrap;
+}
+.article-content td {
+  min-width: 12em;
+}
+.article-content td:has(> code:only-child) {
+  min-width: 0;
+}
+.article-content th,
+.article-content td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.article-content th {
+  color: var(--heading);
+  font-weight: 500;
+}
+.article-content td {
+  color: var(--muted-foreground);
+}
+.article-content hr {
+  margin: 40px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 760px) {
+  .article-content h2 {
+    margin-top: 40px;
+  }
+}
+
+@media (max-width: 600px) {
+  .article-content p,
+  .article-content li {
+    font-size: 14px;
+  }
+}

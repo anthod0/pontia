@@ -5,6 +5,7 @@
   </a>
   <nav aria-label="Primary navigation">
     <a class="nav-link" href="/docs">Docs</a>
+    <a class="nav-link" href="/blog">Blog</a>
     <a class="nav-link" href="/settings/account">Account</a>
   </nav>
 </header>

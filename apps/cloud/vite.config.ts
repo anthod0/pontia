@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import adapter from "@sveltejs/adapter-cloudflare";
 import { sveltekit } from "@sveltejs/kit/vite";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { mdsvex } from "mdsvex";
 import { generateLlms } from "./scripts/generate-llms";
@@ -21,6 +22,11 @@ export default defineConfig({
       preprocess: [
         mdsvex({
           extensions: [".svx"],
+          // Applies to `.svx` files under a `blog` directory; docs pages have no layout.
+          layout: {
+            blog: fileURLToPath(new URL("./src/lib/components/BlogPost.svelte", import.meta.url)),
+          },
+          layoutPropForwarding: "runes",
           highlight: { alias: { sh: "bash" } },
           rehypePlugins: [rehypeTableScroll],
         }),

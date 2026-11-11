@@ -13,6 +13,7 @@
   <nav aria-label="Footer navigation">
     <a href={repository}>GitHub<ArrowUpRightIcon size={12} /></a>
     <a href="/docs">Documentation</a>
+    <a href="/blog">Blog</a>
     <a href="/privacy">Privacy</a>
     <a href="/terms">Terms</a>
     <a href={`${repository}/blob/main/LICENSE`}>Apache 2.0</a>
