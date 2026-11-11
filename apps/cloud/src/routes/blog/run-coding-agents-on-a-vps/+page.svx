@@ -1,113 +1,118 @@
 ---
-title: Run coding agents on a VPS and control them from your browser
-description: Keep Codex and pi running on a headless Linux server under systemd, and follow and steer their sessions from any browser with Pontia.
+title: "Running Codex and pi on a VPS: a setup checklist for always-on coding agents"
+description: How to set up a Linux VPS for long-running coding agents like Codex and pi and reach them from your phone, covering user accounts, systemd lingering, headless sign-in, session persistence, and remote access without open ports.
 published: "2026-11-11"
 ---
 
-An always-on Linux server is a good home for coding agents. A long task keeps going when your laptop sleeps, the agent works next to the repository and build tools, and you can check in from any device. What you still need is a way to watch and steer the agent without keeping an SSH session open.
+A coding agent on a laptop stops when the lid closes. Move it to an always-on Linux server and a long refactor or test run keeps going overnight, next to the repository and build tools, and you can check on it from any device.
 
-Pontia runs on the server as a systemd user service and serves a Dashboard you open in a browser. This guide sets up a VPS or any headless Linux machine so that Codex or pi sessions survive logouts and you can control them from a phone.
+The server does not have to be a VPS. A home machine or a spare mini PC works the same way. This checklist covers the parts that usually go wrong on a headless host: which account runs the agent, keeping processes alive after logout, signing in without a browser, and reaching sessions from a phone. The examples use Codex CLI and pi.
 
-## What you get
+## The short answer
 
-- Agents run on the server, with its files, tools, and credentials. Nothing executes in Pontia Cloud.
-- The Pontia service starts with your user's systemd manager and restarts on failure.
-- The server needs no open inbound ports. It connects out to an Edge relay, and the browser reaches it through that relay over an end-to-end encrypted session.
-- You start, follow, interrupt, and continue sessions at [app.pontia.dev](https://app.pontia.dev) from a phone or another computer.
+1. Create a dedicated non-root user for the agents and sign in to each agent as that user.
+2. Install [Pontia](https://pontia.dev), the tool we build, and run `pontia init`.
+3. Open [app.pontia.dev](https://app.pontia.dev) on your phone.
 
-## Requirements
+Pontia keeps sessions running after you log out and connects the server to your phone over an end-to-end encrypted relay, with no open inbound port. OpenAI's ChatGPT mobile remote control cannot run on a Linux server directly. It needs the ChatGPT desktop app on a Mac or Windows host that stays awake and reaches the server over SSH.
 
-- x86_64 or ARM64 Linux with GNU userspace.
-- A working systemd user manager for the account that will run the agents.
-- The agents you plan to use: the `codex` CLI, or `pi` and `tmux`.
+The rest of this article explains each step, and how to build the same pieces yourself if you prefer.
 
-Run everything below as the same non-root user. Pontia uses that user's home directory, agent credentials, and systemd user service.
+## 1. Run agents as a dedicated non-root user
 
-## 1. Prepare the user session
-
-On a server, the systemd user manager normally stops when your last SSH session closes, and user services stop with it. Enable lingering so they keep running:
+An agent acts with the permissions of the account that runs it. Codex has an OS-enforced sandbox and an approval policy. pi has neither by default: its [security guide](https://pi.dev/docs/latest/security) states that it acts with its user's permissions and does not ask before each tool call. Either way, the account is your outer boundary.
 
 ```sh
-loginctl enable-linger "$(id -un)"
-systemctl --user is-system-running
+sudo adduser agent
 ```
 
-`is-system-running` should report `running` (or `degraded` if an unrelated unit failed). If it cannot connect to the user manager, log in again over SSH so systemd starts it.
+Add your SSH public key to the new account's `~/.ssh/authorized_keys`. Give the account only the repositories and credentials it needs. Prefer a deploy key or a fine-grained token scoped to specific repositories over your personal SSH key, so a mistaken or prompt-injected command cannot push to everything you own.
 
-Selecting Codex in `pontia init` enables lingering for you. For pi-only setups, run the command above yourself.
+Run the later steps over SSH as this user (`ssh agent@your-server`), not through `su` or `sudo -u`. Those commands do not set up the session environment that `systemctl --user` needs.
 
-## 2. Sign in to your agents
+## 2. Sign in to agents without a browser
 
-Authenticate each agent as this user. Codex supports a device code flow that works over SSH:
+The server has no browser, so use device-code flows where they exist:
 
 ```sh
 codex login --device-auth
 ```
 
-For pi, configure your model provider credentials as described in the [pi quickstart](https://pi.dev/docs/latest/quickstart).
+Codex prints a URL and a code that you open on your phone or laptop. For pi, set your provider's API key as an environment variable, or run `/login` inside `pi`. The [pi quickstart](https://pi.dev/docs/latest/quickstart) lists the providers.
 
-## 3. Install and initialize Pontia
+## 3. Keep services running after logout
+
+On most distributions, systemd stops a user's services when their last session ends. Enable lingering so the user manager keeps running:
+
+```sh
+sudo loginctl enable-linger agent   # from an admin account
+systemctl --user is-system-running  # as agent, over SSH
+```
+
+`is-system-running` should print `running`, or `degraded` if an unrelated unit failed. When you select Codex, `pontia init` enables lingering for you. For a pi-only setup, run the command above yourself.
+
+## 4. Install Pontia
+
+As the agent user:
 
 ```sh
 curl -fsSL https://get.pontia.dev/install.sh | sh
 pontia init
 ```
 
-The installer places `pontia` and `pontiad` in `$HOME/.local/bin`; add it to your `PATH` if needed. In the initializer, select pi, Codex, or both. Pontia then:
+Select pi, Codex, or both. The initializer:
 
-1. installs `~/.config/systemd/user/pontia.service` and starts it;
-2. for Codex, installs and enables `pontia-codex.service`, which starts the Codex app-server daemon;
-3. signs you in to Pontia Cloud and registers the server for remote access.
+- installs Pontia as a systemd user service;
+- for Codex, installs a service that starts the Codex app-server daemon;
+- for pi, installs the Pontia pi plugin;
+- signs you in with Google or GitHub through a URL and one-time code, which you approve from your phone;
+- registers the server with an official relay.
 
-The server has no browser, so the sign-in step prints a verification URL and a one-time code. Open the URL on your phone or laptop, sign in with Google or GitHub, and approve the code. Then choose an Edge and a device name.
+When it finishes, open [app.pontia.dev](https://app.pontia.dev) on your phone and select the server. From there you start, follow, interrupt, and continue Codex or pi sessions, and answer Codex approval requests with **Allow** or **Deny**.
 
-To script the setup, or to have an agent run it step by step, use [non-interactive initialization](/docs/initialization#non-interactive-initialization).
+The server connects out to the relay, and the relay forwards only ciphertext between your browser and the server. You do not open ports, configure a VPN, or put a reverse proxy in front of anything. Advanced users can [run their own relay](/docs/self-hosted-edge).
 
-## 4. Open the Dashboard
+pi sessions started from the Dashboard run in tmux, outside the Pontia service, so restarting or updating Pontia does not stop them. You can still SSH in and attach to one with `tmux attach -t SESSION_NAME`. The names start with `pontia_`.
 
-Go to [app.pontia.dev](https://app.pontia.dev) and select the server. Activate a project directory as a Workspace and start a session. By default the Workspace Browser shows your home directory; see [Workspaces](/docs/workspaces) to limit it to specific roots.
-
-## Operate the service
-
-Use the Pontia CLI for day-to-day management:
+To check and maintain the setup:
 
 ```sh
 pontia status
-pontia doctor
-pontia update
-```
-
-`pontia doctor` checks the service, configuration, login, and remote registration, and suggests repairs. `pontia update` installs the latest signed release and restarts the service. For lower-level diagnosis, the usual systemd tools work:
-
-```sh
-systemctl --user status pontia.service --no-pager --full
+pontia doctor   # checks service, config, login, and remote registration
+pontia update   # installs the latest signed release and restarts the service
 journalctl --user -u pontia.service --no-pager -n 200
 ```
 
-pi sessions run inside tmux, outside the Pontia service, so restarting or updating Pontia does not stop them. To use the native pi TUI on a session the Dashboard started, SSH in and attach to it. Its tmux session name starts with `pontia_`:
+## Build it yourself instead
+
+Without Pontia, you assemble the same pieces from standard tools.
+
+**Session persistence.** An agent started directly in an SSH shell dies with the connection. Run it in tmux:
 
 ```sh
-tmux ls
-tmux attach -t SESSION_NAME
+tmux new -s work
+pi        # or codex
+# detach with Ctrl-b d, reattach later with: tmux attach -t work
 ```
 
-## Long-running work
+**Network access.** Keep agent servers on localhost. OpenAI's [Remote connections guide](https://learn.chatgpt.com/docs/remote-connections) says not to expose Codex app-server transports on a shared or public network and to use a VPN or mesh network instead. A typical setup is a private network such as Tailscale on both the server and the phone, key-only SSH, and [Mosh](https://mosh.org/) so the connection survives network changes.
 
-Agents on a server can work for hours. Two Pontia features help with that:
+**Phone client.** Install an SSH terminal app, add a key, and attach to tmux.
 
-- Sessions are durable. Close the browser and come back later from another device; the conversation and controls are still there.
-- [Workflows](/docs/workflows) split a large task into stages, each run by a separate agent session with explicit handoff files. You follow each stage from the Dashboard, and an agent that hits an unexpected problem can request a revised plan.
+You maintain each of these yourself, and on the phone you operate a full-screen TUI on a small keyboard, with no signal when an agent is waiting for approval.
 
-## Security notes
+## Common problems
 
-The local Dashboard listens on `127.0.0.1:8080` by default. Remote access goes through the encrypted relay, so you do not need to expose that port. If you change `bind_addr` to a public address, you expose a token-authenticated API to that network and must protect it yourself.
+| Symptom | Likely cause |
+| --- | --- |
+| Agent or service stops when you log out | Lingering is not enabled for the user |
+| `systemctl --user` fails with "Failed to connect to bus" | You switched users with `su`. Log in over SSH as that user |
+| Agent works in your shell but not from a service | The service's `PATH` lacks the directory that contains the agent or Node.js |
+| Codex in a service uses different credentials than your shell | The service and your shell use different `CODEX_HOME` values |
+| `Shift+Enter` submits instead of adding a new line in pi | tmux extended keys are off. See pi's [tmux guide](https://pi.dev/docs/latest/tmux) |
 
-Each agent keeps its own sandbox and approval settings. Pontia does not add an operating-system sandbox, so treat the server account as the boundary for what agents can touch. [Security](/docs/security) covers credentials and incident response.
+## Related
 
-If you want the relay on infrastructure you control, [deploy a self-hosted Edge](/docs/self-hosted-edge) on a public Linux server.
-
-## Next steps
-
-- [Linux platform notes](/docs/platforms/linux)
-- [Control Codex CLI from your phone or browser](/blog/control-codex-cli-from-your-phone)
-- [Remote control for pi coding agent](/blog/pi-coding-agent-remote-control)
+- [How to use Codex CLI from your phone](/blog/control-codex-cli-from-your-phone)
+- [How to use pi coding agent from your phone](/blog/pi-coding-agent-remote-control)
+- [Linux platform notes](/docs/platforms/linux) and [Security](/docs/security)

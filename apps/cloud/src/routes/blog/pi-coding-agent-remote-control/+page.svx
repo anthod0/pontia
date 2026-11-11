@@ -1,100 +1,99 @@
 ---
-title: Remote control for pi coding agent
-description: Run pi on your own machine and control its sessions from a phone or browser with Pontia, while keeping the native pi TUI.
+title: "How to use pi coding agent from your phone"
+description: Follow and steer pi coding agent sessions from your phone while keeping the native pi TUI. Compares Pontia with do-it-yourself SSH and tmux, and pi in Termux, plus tmux key setup and safety notes.
 published: "2026-11-11"
 ---
 
-[pi](https://pi.dev) is a terminal coding agent. Its sessions live in a terminal, which makes it hard to check on a long task from your phone or continue it from another computer. Pontia adds a browser Dashboard to pi without replacing the TUI: both work on the same conversation.
+[pi](https://pi.dev) is a minimal terminal coding agent. Its sessions run in a terminal on your machine, so a long task is easy to start and hard to check on once you leave the desk. This article covers the ways to reach a pi session from a phone or another computer.
 
-## What you can do
+Pontia is the tool we build.
 
-From the Remote Dashboard at [app.pontia.dev](https://app.pontia.dev) you can:
+## The short answer
 
-- start a pi session in a project directory on your machine;
-- follow the reply and tool output as they stream;
-- send messages, or queue them while pi is working;
-- interrupt the current turn;
+pi has no official remote or mobile client.
+
+| Your situation | Best fit |
+| --- | --- |
+| You want to follow, steer, and continue pi sessions from a phone browser and keep the TUI | Pontia |
+| You prefer to assemble and maintain the remote access yourself | SSH or Mosh, tmux, and a private network |
+| You want to code on the phone itself, without another machine | pi in Termux on Android |
+
+## Option 1: Pontia
+
+Pontia is a free, open-source remote control for coding agents running on your own machine. You install it once, sign in, and open [app.pontia.dev](https://app.pontia.dev) on your phone. There is no VPN, port forwarding, or terminal app to set up.
+
+Pontia keeps the native pi TUI. When you start a session from the Dashboard, Pontia launches pi in a tmux pane in the chosen project. A pi plugin reports the conversation to the Dashboard and accepts its controls. From a phone you can:
+
+- start a pi session in a project directory and follow replies and tool output as they stream;
+- send messages, queue them while pi works, or interrupt the current turn;
 - edit an earlier message to branch the conversation from that point;
-- change the model with `/model` and compact the context with `/compact`;
-- see estimated context usage;
+- change the model with `/model`, compact with `/compact`, and see estimated context usage;
 - reference files with `@`.
 
-pi keeps running on your machine with its own provider credentials and configuration.
-
-## How it works
-
-Pontia's pi plugin connects pi to `pontiad`, the Pontia service on your machine. When you start a session from the Dashboard, Pontia launches pi inside a tmux pane in the selected project. The plugin reports pi's conversation to Pontia and accepts controls from the Dashboard. Conversation history stays in pi's own session files.
-
-Because pi runs in a real tmux pane, you can attach to it from a terminal and use the TUI at any time. Messages you type in the TUI and messages you send from the Dashboard go to the same conversation.
-
-The browser reaches your machine through an Edge relay over an end-to-end encrypted session. The relay forwards ciphertext and cannot read your prompts or files.
-
-## Set it up
-
-You need Linux or macOS 11 or later, with `pi` and `tmux` installed for your user:
+The session is a real pi process, so you can also attach to it from a terminal at any time. Messages from the TUI and from the Dashboard go to the same conversation, and history stays in pi's own session files:
 
 ```sh
-pi --version
-tmux -V
-```
-
-Configure your model provider in pi first. If you have not, open `pi` and run `/login` and `/model`.
-
-Install Pontia and run the initializer:
-
-```sh
-curl -fsSL https://get.pontia.dev/install.sh | sh
-pontia init
-```
-
-pi is selected by default. The initializer installs the plugin with:
-
-```sh
-pi install npm:@pontia/pi-client-plugin
-```
-
-It then starts the Pontia service, signs you in to Pontia Cloud, and registers your machine. On a headless machine, the sign-in prints a URL and a one-time code that you can approve from your phone.
-
-Open [app.pontia.dev](https://app.pontia.dev), select your machine, activate a project directory as a Workspace, and start a session with the pi Agent Client. The [Dashboard guide](/docs/dashboard) covers the details.
-
-## Use the TUI on the same session
-
-Sessions started from the Dashboard run in tmux sessions whose names start with `pontia_`. To open one in your terminal:
-
-```sh
-tmux ls
+tmux ls                       # Pontia sessions start with pontia_
 tmux attach -t SESSION_NAME
 ```
 
-Detach with the usual tmux key binding. The session keeps running and stays available in the Dashboard.
+pi keeps running on your machine with its own provider credentials and configuration. The browser and your machine set up an end-to-end encrypted session through Pontia's relay, which only forwards ciphertext. Your machine connects out, so it needs no open inbound port.
 
-## Use a custom pi command
+Pontia supports Linux and macOS 11 or later, including headless servers. Beyond single sessions, [Workflows](/docs/workflows) run a large task as a sequence of pi sessions, each with a fresh context and explicit handoff files.
 
-If you run pi through a wrapper script or from a non-standard path, set the command in `$PONTIA_HOME/config.toml`:
+### Setup
 
-```toml
-[runtime.pi]
-tui_command = "/absolute/path/to/pi"
+Install `pi` and `tmux`, and configure your model provider in pi (`/login` and `/model`). Then run:
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | sh
+pontia init   # pi is selected by default
 ```
 
-Then run `pontia up` to apply it.
+`pontia init` installs the pi plugin, starts the Pontia service, signs you in with Google or GitHub, and registers the machine with an official relay. On a headless machine, the sign-in prints a URL and a one-time code that you can approve from your phone. When it finishes, open [app.pontia.dev](https://app.pontia.dev), pick the machine, and start a session.
 
-## Multi-stage tasks
+The [pi Agent Client reference](/docs/agent-clients/pi) covers custom pi commands and diagnostics. Advanced users can [run their own relay](/docs/self-hosted-edge) instead of the official one.
 
-For larger tasks, Pontia [Workflows](/docs/workflows) run a sequence of pi sessions with explicit handoff files between stages. Each stage gets a fresh context, and you can follow every stage's session from the Dashboard.
+## Option 2: Build it yourself with SSH and tmux
 
-## Troubleshooting
+You can also assemble remote access from standard tools: tmux keeps pi running, a private network such as Tailscale makes the machine reachable, and a phone SSH client connects to it.
 
-Start with `pontia doctor`. If a pi session does not report activity, check the hook log:
+```sh
+# on the host
+tmux new -s pi
+pi
 
-```text
-$PONTIA_HOME/state/pi-hook.log
+# from the phone, over SSH or Mosh
+tmux attach -t pi
 ```
 
-Also confirm that the plugin is still installed and that `pontia status` reports a healthy service. See [Troubleshooting](/docs/troubleshooting) for more.
+[Mosh](https://mosh.org/) keeps the connection alive when the phone switches networks, which plain SSH does not.
 
-## Next steps
+You set up and maintain each piece yourself: the private network on both devices, SSH keys on the phone, a terminal app, and tmux. On the phone you then use pi's full-screen TUI and keybindings on a small keyboard, and read long tool output by scrolling through tmux history.
 
-- [pi Agent Client](/docs/agent-clients/pi) reference
-- [Run coding agents on a VPS](/blog/run-coding-agents-on-a-vps) to keep pi running on an always-on server
+## Option 3: Run pi on the phone itself
+
+pi runs on Android through [Termux](https://termux.dev/). You install Node.js and pi with `npm`, then work in a folder on the phone. This suits small edits and scripts. The project files, toolchain, and builds then live on the phone, so it does not give you access to work on your main machine.
+
+## Make pi keys work inside tmux
+
+By default, tmux can report `Shift+Enter`, `Ctrl+Enter`, and `Enter` as the same key, so `Shift+Enter` submits your prompt instead of inserting a new line. This affects you whenever you use the pi TUI inside tmux, including Pontia sessions you attach to. pi's [tmux guide](https://pi.dev/docs/latest/tmux) recommends this `~/.tmux.conf` for tmux 3.5 or newer:
+
+```tmux
+set -g extended-keys on
+set -g extended-keys-format csi-u
+```
+
+For tmux 3.2 through 3.4, use only `set -g extended-keys on`. The setting applies to the tmux server, so restart tmux before testing.
+
+## Remote control does not make pi safer
+
+pi does not stop to ask for approval before each tool call. Its [security guide](https://pi.dev/docs/latest/security) states that pi acts with the permissions of the account that started it, and that watching the transcript does not create a security boundary. That holds for every option here. Watching from a phone lets you interrupt a run that goes wrong, but it cannot stop a single command before it runs.
+
+If you leave pi working unattended, limit what it can reach. Use a dedicated user account, a container or VM, and short-lived credentials scoped to the task. pi's guide to [running in an isolated environment](https://pi.dev/docs/latest/containerization) covers the options.
+
+## Related
+
+- [Run coding agents on a VPS](/blog/run-coding-agents-on-a-vps) to keep pi on an always-on server
+- [How to use Codex CLI from your phone](/blog/control-codex-cli-from-your-phone)
 - [How Pontia works](/docs/how-it-works)

@@ -1,82 +1,97 @@
 ---
-title: Control Codex CLI from your phone or browser
-description: Run Codex CLI on your Linux or macOS machine and follow, steer, and approve its work from any browser with Pontia.
+title: "How to use Codex CLI from your phone"
+description: Follow, steer, and approve Codex CLI sessions from a phone, on Linux or macOS. Compares Pontia, OpenAI's ChatGPT remote control and Codex Cloud, and a do-it-yourself SSH and tmux setup.
 published: "2026-11-11"
 ---
 
-Codex CLI works best on the machine that has your repositories, toolchains, and credentials. That machine is often a desktop at home or a Linux server you reach over SSH. Pontia lets you keep Codex running there and control its sessions from a phone or laptop browser.
+Codex CLI runs on the machine that has your repositories, toolchains, and credentials. Long tasks often stop on an approval prompt while you are away from that terminal. This article compares the ways to reach a running Codex session from a phone and which one fits which setup.
 
-This guide covers what you can do from the browser, how the setup works on Linux and macOS, and what stays on your machine.
+Pontia is the tool we build.
 
-## What you can do from the browser
+## The short answer
 
-Pontia's Remote Dashboard at [app.pontia.dev](https://app.pontia.dev) connects to the Codex sessions on your machine. From a phone or another computer you can:
-
-- start a new Codex session in one of your project directories;
-- follow the conversation, tool calls, and command output as they stream;
-- answer Codex's approval requests for command execution, file changes, and extra permissions;
-- send follow-up messages, or queue them while Codex is busy;
-- interrupt the current turn;
-- switch models with `/model` and compact the context with `/compact`;
-- type `@` to reference files in the project.
-
-Sessions stay in Pontia when you close the browser. You can open the same session later from another device and continue where you left off.
-
-## How it works
-
-Codex CLI includes an app-server daemon that other programs can connect to. Pontia's local service, `pontiad`, connects to that daemon, records each Codex thread as a Pontia session, and serves the Dashboard.
-
-The Remote Dashboard reaches `pontiad` through an Edge relay. The browser and your machine set up an end-to-end encrypted session, and the Edge only forwards ciphertext. Codex itself runs with your local credentials, sandbox, and approval policy. See [How Pontia works](/docs/how-it-works) for the full picture.
-
-## Set it up
-
-You need Linux (x86_64 or ARM64) or macOS 11 or later, and a Codex CLI that is installed and signed in as the user who will run Pontia.
-
-**1. Sign in to Codex.** On a machine without a browser, use device authorization:
-
-```sh
-codex login --device-auth
-```
-
-**2. Install Pontia:**
-
-```sh
-curl -fsSL https://get.pontia.dev/install.sh | sh
-```
-
-The installer puts `pontia` and `pontiad` in `$HOME/.local/bin`. Make sure that directory is on your `PATH`.
-
-**3. Initialize and select Codex:**
-
-```sh
-pontia init
-```
-
-The initializer configures the Codex daemon to start automatically. On Linux it installs a systemd user service and enables lingering, so the daemon keeps running after you log out. On macOS it installs a per-user LaunchAgent. It then starts Pontia and asks you to sign in to Pontia Cloud. The sign-in prints a URL and a one-time code, so you can approve it from your phone when the machine is headless. Pick an Edge and confirm the device name. Pontia prints the Remote Dashboard URL when setup finishes.
-
-**4. Open the Dashboard on your phone.** Go to [app.pontia.dev](https://app.pontia.dev), select your device, activate a project directory as a Workspace, and start a session with the Codex Agent Client. The [Dashboard guide](/docs/dashboard) walks through this.
-
-If you prefer to run each step yourself, or want an agent to do the setup, follow [non-interactive initialization](/docs/initialization#non-interactive-initialization) and [Codex manual setup](/docs/codex#manual-setup).
-
-## Approvals on the go
-
-When Codex asks for approval to run a command, change files, or use additional permissions, the request appears in the Dashboard with **Allow** and **Deny** buttons. You can answer from your phone instead of walking back to the terminal.
-
-Choose an approval policy that fits work you supervise from a small screen. A stricter policy produces more requests but keeps you in control of each command.
-
-## What stays on your machine
-
-| Data | Where it lives |
+| Your situation | Best fit |
 | --- | --- |
-| Project files and command execution | Your machine |
-| Codex credentials and conversation history | Your machine, managed by Codex |
-| Dashboard traffic | Encrypted end to end between your browser and your machine |
-| Account, device registration, and connection authorization | Pontia Cloud |
+| Codex runs on Linux or macOS, including a headless server, and you want a phone UI with approval buttons | Pontia |
+| Codex runs on a Mac or Windows PC with the ChatGPT desktop app | ChatGPT mobile remote control |
+| The task can run from a clean checkout on OpenAI's machines | Codex Cloud |
+| You prefer to assemble and maintain the remote access yourself | SSH or Mosh, tmux, and a private network |
 
-The Edge relays encrypted traffic and has no access to your prompts or files. You can use an official Edge or [host your own](/docs/self-hosted-edge). [Security](/docs/security) describes the protocol and credentials in detail.
+## Option 1: Pontia
 
-## Next steps
+Pontia is a free, open-source remote control for coding agents running on your own machine. You install it once, sign in, and open [app.pontia.dev](https://app.pontia.dev) on your phone. There is no VPN, port forwarding, or terminal app to set up.
 
-- [Getting started](/docs/getting-started) to install Pontia.
-- [Codex](/docs/codex) for daemon configuration and troubleshooting.
-- [Run coding agents on a VPS](/blog/run-coding-agents-on-a-vps) if you want Codex on an always-on server.
+Codex CLI includes an app-server daemon. The ChatGPT desktop app also uses it, to run Codex on SSH hosts. Pontia's local service, `pontiad`, connects to that daemon and shows each Codex thread as a chat. From a phone you can:
+
+- start a Codex session in a project directory;
+- follow messages, tool calls, and command output as they stream;
+- answer approval requests for commands, file changes, and extra permissions with **Allow** or **Deny**;
+- send or queue follow-up messages, interrupt a turn, and switch models with `/model`;
+- reference project files with `@`.
+
+Codex runs on your machine with its own credentials, sandbox, and approval policy. Sessions persist, so you can start a task at your desk and continue it from your phone. The browser and your machine set up an end-to-end encrypted session through Pontia's relay, which only forwards ciphertext. Your machine connects out, so it needs no open inbound port.
+
+Pontia supports Linux (x86_64 and ARM64) and macOS 11 or later, including headless servers.
+
+### Setup
+
+On the machine, as the user who runs Codex:
+
+```sh
+codex login --device-auth   # device code flow, works over SSH
+curl -fsSL https://get.pontia.dev/install.sh | sh
+pontia init                 # select Codex
+```
+
+`pontia init` does the rest:
+
+- it configures the Codex daemon to start automatically, with a systemd user service and lingering on Linux, or a LaunchAgent on macOS;
+- it signs you in with Google or GitHub through a URL and one-time code, which you can approve from your phone;
+- it registers the machine with an official relay.
+
+When it finishes, open [app.pontia.dev](https://app.pontia.dev), pick the machine, and start a session.
+
+The optional Codex launcher also makes threads you start with `codex` in a terminal appear in the Dashboard, so you can continue them from the phone. See [Codex setup](/docs/codex). Advanced users can [run their own relay](/docs/self-hosted-edge) instead of the official one.
+
+## Option 2: ChatGPT mobile remote control
+
+OpenAI's own remote control lets the ChatGPT mobile app start chats on a connected computer, steer active work, approve commands, and review diffs and terminal output. Work runs on the host with its files, credentials, and sandbox settings.
+
+The host must be a Mac or Windows PC running the ChatGPT desktop app. OpenAI's [Remote connections guide](https://learn.chatgpt.com/docs/remote-connections) states that mobile setup starts from that app, and that you can't set it up from the Codex CLI or IDE extension. Workspace admins may need to enable Remote Control. To reach a Linux server this way, the desktop app connects to the server over SSH, so the Mac or Windows host must stay awake as well.
+
+Use this if you already work in the ChatGPT desktop app on Mac or Windows.
+
+## Option 3: Codex Cloud
+
+Codex Cloud runs tasks on OpenAI-managed machines, so they continue while your computer sleeps, and you can start and continue them from the mobile app. A cloud task uses only the files and services in its cloud environment. OpenAI's [environment docs](https://learn.chatgpt.com/docs/environments/modes) note that your local files, running processes, and VPN access are not transferred to it.
+
+Use this for work that can run from a clean checkout. It does not fit tasks that depend on a local database, a private network, hardware, or credentials you keep on your own machine.
+
+## Option 4: Build it yourself with SSH and tmux
+
+You can also assemble remote access from standard tools: tmux keeps Codex running, a private network such as Tailscale makes the machine reachable, and a phone SSH client connects to it.
+
+```sh
+# on the host
+tmux new -s codex
+codex
+
+# from the phone, over SSH or Mosh
+tmux attach -t codex
+```
+
+[Mosh](https://mosh.org/) keeps the connection alive when the phone switches between Wi-Fi and mobile data, which plain SSH does not.
+
+You set up and maintain each piece yourself: the private network on both devices, SSH keys on the phone, a terminal app, and tmux. On the phone you then operate a full-screen TUI on a small keyboard. You scroll back through tmux to see what happened, and nothing tells you when Codex is waiting for approval.
+
+## Pick an approval policy that works on a phone
+
+Whichever option you choose, a phone is a poor place to review a long command. Codex's approval policy decides how often you will be asked. OpenAI's [approvals and security guide](https://learn.chatgpt.com/docs/agent-approvals-security) describes the `Auto` preset, `--sandbox workspace-write --ask-for-approval on-request`. With it, Codex edits files and runs commands inside the workspace without asking, and asks before writing outside it or using the network.
+
+That suits remote supervision. Routine edits proceed, and the requests that reach your phone are the ones worth reading. Running with approvals disabled removes the reason to watch from a phone at all, so keep that for sandboxed or disposable machines.
+
+## Related
+
+- [Run coding agents on a VPS](/blog/run-coding-agents-on-a-vps) for an always-on Linux host
+- [How to use pi coding agent from your phone](/blog/pi-coding-agent-remote-control)
+- [How Pontia works](/docs/how-it-works) and [Security](/docs/security)
