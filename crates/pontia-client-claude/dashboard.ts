@@ -3,8 +3,6 @@ import type { DashboardClient } from "../../apps/dashboard/src/clients/contract"
 export const dashboardClient: DashboardClient = {
   clientType: "claude-agent",
   defaultForCreation: false,
-  workspaceCreation: true,
-  profileSelection: false,
   deliveryPolicy: "after_idle",
   resumeWaitsForIdle: false,
   controlDetails: (session) => {

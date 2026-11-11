@@ -12,12 +12,6 @@ const defaultClient = clients.find((client) => client.defaultForCreation);
 if (!defaultClient) throw new Error("No default Agent Client is registered");
 
 export const defaultClientType = defaultClient.clientType;
-export const workspaceClientTypes = clients
-  .filter((client) => client.workspaceCreation)
-  .map((client) => client.clientType);
-export const profileClientTypes = clients
-  .filter((client) => client.profileSelection)
-  .map((client) => client.clientType);
 
 export function clientSessionLabel(session: SessionView): string {
   return (

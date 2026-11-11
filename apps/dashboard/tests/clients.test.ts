@@ -3,8 +3,6 @@ import {
   clientControlDetails,
   clientDeliveryPolicy,
   defaultClientType,
-  profileClientTypes,
-  workspaceClientTypes,
 } from "../src/clients";
 import type { SessionView } from "../src/api/types";
 
@@ -12,10 +10,8 @@ const session = (client_type: string, extra = {}): SessionView =>
   ({ client_type, ...extra }) as SessionView;
 
 describe("registered dashboard clients", () => {
-  it("preserves the default and the client choices available to each creation flow", () => {
+  it("uses pi as the default client for creation", () => {
     expect(defaultClientType).toBe("pi");
-    expect(workspaceClientTypes).toEqual(["pi", "claude-agent"]);
-    expect(profileClientTypes).toEqual(["pi"]);
   });
   it("uses client-owned input delivery semantics", () => {
     expect(clientDeliveryPolicy(session("codex"))).toBe("steer");

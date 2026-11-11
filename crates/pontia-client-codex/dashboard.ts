@@ -11,8 +11,6 @@ interface CodexControlDetails extends ClientControlDetails {
 export const dashboardClient: DashboardClient = {
   clientType: "codex",
   defaultForCreation: false,
-  workspaceCreation: false,
-  profileSelection: false,
   deliveryPolicy: "steer",
   controlDetails: (session) => (session.codex as CodexControlDetails | undefined) ?? null,
 };
