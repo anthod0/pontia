@@ -369,7 +369,7 @@ test("an attachment still hashing survives device switches and uploads only to i
     ([, path, init]) => path.endsWith("/sessions") && init.method === "POST",
   )!;
   expect(JSON.parse(submission[2].body as string).initial_task.input).toBe(
-    '<user_upload path="/office-mac/pending.txt">pending.txt</user_upload>',
+    '<user_uploads note="Temporary files; copy any you need into the workspace.">\n<user_upload path="/office-mac/pending.txt">pending.txt</user_upload>\n</user_uploads>',
   );
 });
 

@@ -54,7 +54,7 @@ test("sends attachment-only messages and clears recovery only after successful s
   await fireEvent.click(submit);
   await waitFor(() =>
     expect(onSubmit).toHaveBeenCalledWith(
-      '<user_upload path="/device/report.txt">report.txt</user_upload>',
+      '<user_uploads note="Temporary files; copy any you need into the workspace.">\n<user_upload path="/device/report.txt">report.txt</user_upload>\n</user_uploads>',
     ),
   );
   expect(await loadUploadRecords("composer-test", draftId)).toHaveLength(1);

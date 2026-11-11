@@ -11,11 +11,21 @@ function escapeXml(value: string): string {
     .replaceAll("\r", "&#13;")
     .replaceAll("\t", "&#9;");
 }
+const uploadsOpen = '<user_uploads note="Temporary files; copy any you need into the workspace.">';
+const uploadsClose = "</user_uploads>";
+
 export function uploadMessage(text: string, files: UploadedFile[]): string {
   return [
-    ...files.map(
-      (file) => `<user_upload path="${escapeXml(file.path)}">${escapeXml(file.name)}</user_upload>`,
-    ),
+    ...(files.length
+      ? [
+          uploadsOpen,
+          ...files.map(
+            (file) =>
+              `<user_upload path="${escapeXml(file.path)}">${escapeXml(file.name)}</user_upload>`,
+          ),
+          uploadsClose,
+        ]
+      : []),
     text.trim(),
   ]
     .filter(Boolean)
@@ -45,13 +55,13 @@ export function parseUploadMessage(content: string): {
   text: string;
   files: UploadedFile[];
 } {
-  const files: UploadedFile[] = [];
   const lines = content.split("\n");
-  let index = 0;
-  for (; index < lines.length; index++) {
-    const file = parseUploadTag(lines[index]);
-    if (!file) break;
-    files.push(file);
-  }
-  return { text: lines.slice(index).join("\n"), files };
+  const end = lines.indexOf(uploadsClose);
+  if (lines[0] !== uploadsOpen || end < 2) return { text: content, files: [] };
+  const files = lines.slice(1, end).map(parseUploadTag);
+  if (files.some((file) => !file)) return { text: content, files: [] };
+  return {
+    text: lines.slice(end + 1).join("\n"),
+    files: files as UploadedFile[],
+  };
 }

@@ -125,13 +125,19 @@ test("round trips escaped attachments and retains malformed tags as text", () =>
     files,
   });
   expect(uploadMessage("Read these", files)).toMatch(
-    /^<user_upload [^\n]*<\/user_upload>\nRead these$/,
+    /^<user_uploads [^\n]*>\n<user_upload [^\n]*<\/user_upload>\n<\/user_uploads>\nRead these$/,
   );
-  const trailing = 'Read these\n<user_upload path="/device/file">report.txt</user_upload>';
+  const wrapper = uploadMessage("", [{ path: "/device/file", name: "report.txt" }]);
+  const trailing = `Read these\n${wrapper}`;
   expect(parseUploadMessage(trailing)).toEqual({ text: trailing, files: [] });
   const invalid =
     '<user_upload path="relative">x</user_upload>\n<user_upload path="/x">&unknown;</user_upload>\n<user_upload path="/x"><script>bad</script></user_upload>';
-  expect(parseUploadMessage(invalid)).toEqual({ text: invalid, files: [] });
+  for (const tag of invalid.split("\n")) {
+    const text = wrapper.replace(/<user_upload .*<\/user_upload>/, tag);
+    expect(parseUploadMessage(text)).toEqual({ text, files: [] });
+  }
+  const bare = '<user_upload path="/device/file">report.txt</user_upload>';
+  expect(parseUploadMessage(bare)).toEqual({ text: bare, files: [] });
 });
 
 test("removed references stay removed when IndexedDB deletion fails", async () => {
@@ -180,8 +186,10 @@ test("uploads on Local HTTP origins without secure-context crypto APIs", async (
 
 test("recognizes valid quoted XML attributes while keeping extra attributes and nested markup literal", () => {
   expect(
-    parseUploadMessage("<user_upload path = '/device/file'>report.txt</user_upload>").files,
+    parseUploadMessage(
+      `<user_uploads note="Temporary files; copy any you need into the workspace.">\n<user_upload path = '/device/file'>report.txt</user_upload>\n</user_uploads>`,
+    ).files,
   ).toEqual([{ path: "/device/file", name: "report.txt" }]);
-  const text = '<user_upload path="/device/file" onclick="bad">report.txt</user_upload>';
+  const text = `<user_uploads note="Temporary files; copy any you need into the workspace.">\n<user_upload path="/device/file" onclick="bad">report.txt</user_upload>\n</user_uploads>`;
   expect(parseUploadMessage(text)).toEqual({ text, files: [] });
 });
