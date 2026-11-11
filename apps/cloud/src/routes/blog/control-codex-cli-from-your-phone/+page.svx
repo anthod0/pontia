@@ -69,29 +69,125 @@ Use this for work that can run from a clean checkout. It does not fit tasks that
 
 ## Option 4: Build it yourself with SSH and tmux
 
-You can also assemble remote access from standard tools: tmux keeps Codex running, a private network such as Tailscale makes the machine reachable, and a phone SSH client connects to it.
+You can also assemble remote access from standard tools: tmux keeps Codex running, a private network makes the machine reachable, and a phone SSH client connects to it. With a hook and ntfy, the phone is also notified when Codex is waiting.
+
+### 1. Make the machine reachable with Tailscale
+
+Install Tailscale on the host and sign in:
 
 ```sh
-# on the host
-tmux new -s codex
-codex
-
-# from the phone, over SSH or Mosh
-tmux attach -t codex
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4      # note the 100.x.y.z address
 ```
 
-[Mosh](https://mosh.org/) keeps the connection alive when the phone switches between Wi-Fi and mobile data, which plain SSH does not.
+Install the Tailscale app on the phone and sign in with the same account. The host is now reachable from the phone at that address, with no open port on the internet.
 
-You set up and maintain each piece yourself: the private network on both devices, SSH keys on the phone, a terminal app, and tmux. On the phone you then operate a full-screen TUI on a small keyboard. You scroll back through tmux to see what happened, and nothing tells you when Codex is waiting for approval.
+For an always-on host, disable [key expiry](https://tailscale.com/docs/features/access-control/key-expiry) for it in the Tailscale admin console. Keys expire after 180 days by default, and the host then drops off the network.
+
+The phone can run only one VPN at a time, so the Tailscale app turns off any other VPN or proxy app. If you need one of those, [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) covers Cloudflare Tunnel, which doesn't use the phone's VPN slot, and the address and routing conflicts between VPNs.
+
+### 2. Run Codex in tmux, and keep its output scrollable
+
+Codex draws its TUI on the terminal's alternate screen by default. tmux does not keep alternate screen content in its history, so after you reattach, earlier output is gone from tmux scrollback. Turn it off in `~/.codex/config.toml`:
+
+```toml
+[tui]
+alternate_screen = "never"
+```
+
+Then start Codex in a named session:
+
+```sh
+tmux new -s codex
+codex
+# detach with Ctrl-b d
+```
+
+From the phone, connect and reattach:
+
+```sh
+mosh agent@100.x.y.z tmux attach -t codex
+```
+
+Mosh keeps the session alive when the phone switches between Wi-Fi and mobile data, or sleeps. It needs `mosh` installed on the host and a phone client that supports it. Without Mosh, use `ssh -t agent@100.x.y.z tmux attach -t codex` and reconnect after each drop. To scroll, enter tmux copy mode with `Ctrl-b [` and leave it with `q`.
+
+If tmux itself died, for example after a reboot, start a new session and continue the last conversation with `codex resume --last`.
+
+### 3. Get notified when Codex needs approval
+
+Codex's `notify` setting fires only when a turn ends. [Hooks](https://developers.openai.com/codex/hooks) also run when Codex is about to ask for approval. Subscribe to a long random [ntfy](https://ntfy.sh/) topic in the ntfy phone app, then save this as `~/.codex/hooks/ntfy.sh` and make it executable. It needs `jq` and `curl`.
+
+```sh
+#!/bin/sh
+url=https://ntfy.sh/YOUR_TOPIC
+
+event=$(cat)
+field() { printf '%s' "$event" | jq -r "$1"; }
+project=$(field '.cwd | split("/") | last')
+
+case $(field .hook_event_name) in
+  PermissionRequest)
+    title="Codex needs approval: $project"
+    body=$(field '.tool_input.description // .tool_input.command // .tool_name')
+    ;;
+  Stop)
+    title="Codex finished: $project"
+    body=$(field '(.last_assistant_message // "Turn complete")[0:300]')
+    ;;
+  *) exit 0 ;;
+esac
+
+curl -fsS --max-time 5 -o /dev/null -H "Title: $title" -d "$body" "$url" || true
+```
+
+Register it in `~/.codex/config.toml`:
+
+```toml
+[[hooks.PermissionRequest]]
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+```
+
+Open `/hooks` in Codex and trust the new hooks. Codex skips untrusted hooks, and any later edit to the script or the entry needs trusting again. The script prints nothing, so Codex still shows its normal approval prompt. Printing a decision from a `PermissionRequest` hook would approve or deny the request instead. Drop the `Stop` entry if a notification after every turn is too much.
+
+[Phone notifications for Codex and pi](/blog/coding-agent-phone-notifications) explains the hook payload and how to keep commands and paths out of a third-party notification server.
+
+### What you end up with
+
+The notification tells you an approval is waiting. To answer it, you open the SSH app, reattach, and press `y` or `Esc` in Codex's TUI on a phone keyboard. You maintain each piece yourself: Tailscale on both devices, SSH keys on the phone, tmux, and the hook.
 
 ## Pick an approval policy that works on a phone
 
 Whichever option you choose, a phone is a poor place to review a long command. Codex's approval policy decides how often you will be asked. OpenAI's [approvals and security guide](https://learn.chatgpt.com/docs/agent-approvals-security) describes the `Auto` preset, `--sandbox workspace-write --ask-for-approval on-request`. With it, Codex edits files and runs commands inside the workspace without asking, and asks before writing outside it or using the network.
 
+To make it the default instead of passing flags, set it in `~/.codex/config.toml`:
+
+```toml
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+# Directories outside the project that Codex may write without asking,
+# for example a shared build cache.
+writable_roots = ["/home/agent/.cache/pnpm"]
+```
+
+`writable_roots` is optional. Use it for paths that otherwise trigger a request on every build, so the requests that reach your phone stay rare.
+
 That suits remote supervision. Routine edits proceed, and the requests that reach your phone are the ones worth reading. Running with approvals disabled removes the reason to watch from a phone at all, so keep that for sandboxed or disposable machines.
 
 ## Related
 
+- [Get a phone notification when Codex or pi needs you](/blog/coding-agent-phone-notifications)
 - [Run coding agents on a VPS](/blog/run-coding-agents-on-a-vps) for an always-on Linux host
 - [How to use pi coding agent from your phone](/blog/pi-coding-agent-remote-control)
 - [How Pontia works](/docs/how-it-works) and [Security](/docs/security)

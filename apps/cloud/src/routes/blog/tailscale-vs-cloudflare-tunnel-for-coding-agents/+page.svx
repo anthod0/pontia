@@ -1,0 +1,143 @@
+---
+title: "Tailscale vs Cloudflare Tunnel: reaching a coding agent server from your phone"
+description: How to reach Codex or pi on a home server or VPS from a phone without opening ports. Compares Tailscale, Cloudflare Tunnel with cloudflared, and Cloudflare's browser SSH terminal, with setup steps and the pitfalls, including conflicts with other VPNs and proxies.
+published: "2026-11-12"
+---
+
+To check on a coding agent from a phone, you first need a way to reach the machine it runs on. Opening SSH to the internet works, but it invites constant login attempts and depends on a public IP, which a home machine behind carrier NAT may not have. Tailscale and Cloudflare Tunnel avoid both problems: the server connects out, and nothing listens on a public port.
+
+This article compares the two for one job: keeping a Codex or pi session in tmux on a server and attaching to it from a phone. Pontia, the tool we build, is covered briefly at the end.
+
+## The short answer
+
+| | Tailscale | Cloudflare Tunnel + `cloudflared` | Cloudflare browser SSH terminal |
+| --- | --- | --- | --- |
+| What runs on the phone | Tailscale app, which is a VPN | An SSH client that can run `cloudflared` | A browser |
+| Uses the phone's VPN slot | Yes | No | No |
+| Needs a domain on Cloudflare | No | Yes | Yes |
+| Mosh | Works | Does not work (TCP only) | Not applicable |
+| Login | Tailscale identity, SSH keys, or Tailscale SSH | Cloudflare Access, then SSH | Cloudflare Access, then SSH |
+| Free tier | Personal plan, up to 6 users | Zero Trust free plan, up to 50 users | Same as Cloudflare Tunnel |
+
+Choose Tailscale if you don't already need another VPN on your phone. It is the shortest setup, needs no domain, and is the only one of the three that carries Mosh. Choose Cloudflare if your phone must keep a different VPN running, or if you want to reach the server from a browser with nothing installed.
+
+Plan details were checked against the [Tailscale](https://tailscale.com/pricing) and [Cloudflare Access](https://www.cloudflare.com/sase/products/access) pricing pages on November 12, 2026.
+
+## On the server: keep the agent in tmux
+
+All three options give you a shell. The agent must keep running when that shell disconnects, so start it in tmux:
+
+```sh
+tmux new -s codex
+codex            # or: pi
+# detach with Ctrl-b d
+```
+
+If the server logs you out and tmux dies with your session, the cause is usually systemd. [Running Codex and pi on a VPS](/blog/run-coding-agents-on-a-vps) covers lingering and `KillUserProcesses`.
+
+## Option 1: Tailscale
+
+Tailscale puts the server and the phone on a private WireGuard network, called a tailnet, with addresses in `100.64.0.0/10`. Connections are peer-to-peer when NAT allows it and fall back to Tailscale's relays (DERP) when it doesn't.
+
+### Setup
+
+On the server:
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4      # the server's 100.x.y.z address
+```
+
+Install the Tailscale app on the phone and sign in with the same account. Then connect from a phone SSH client to the `100.x.y.z` address or the machine's MagicDNS name.
+
+To use Mosh, install `mosh` on the server and connect with a phone client that supports it. Mosh logs in over SSH, then switches to UDP on a port between 60000 and 61000. Over the tailnet, that UDP traffic needs no firewall changes.
+
+### Close the public SSH port
+
+Once SSH over Tailscale works, you can drop public SSH entirely. Tailscale's [ufw guide](https://tailscale.com/docs/how-to/secure-ubuntu-server-with-ufw) does this on Ubuntu:
+
+```sh
+sudo ufw allow in on tailscale0
+sudo ufw default deny incoming
+sudo ufw delete allow 22/tcp     # only after testing SSH over Tailscale
+sudo ufw enable
+```
+
+Find your VPS provider's web console before you do this. You will need it if Tailscale on the server ever stops working.
+
+### Pitfalls
+
+- **Key expiry disconnects the server.** Device keys expire after 180 days by default, and connections to the device then stop. On a server you have locked to Tailscale-only SSH, that locks you out. [Disable key expiry](https://tailscale.com/docs/features/access-control/key-expiry) for the server in the admin console, or register it with a tag, which disables expiry by default.
+- **Enabling Tailscale SSH can drop your session.** `tailscale set --ssh` makes Tailscale take over port 22 on the Tailscale address, and [Tailscale's docs](https://tailscale.com/docs/features/tailscale-ssh) warn that existing SSH connections to that address hang. Run it from a session over the public IP or the provider console.
+- **Tailscale SSH asks you to sign in again.** The default policy uses check mode, which requires re-authentication in a browser every 12 hours. On a phone, the SSH app prints a URL that you open to continue. Change the rule's `action` to `accept` if you rely on device trust alone.
+- **`autogroup:nonroot` is broad.** If you change a Tailscale SSH rule's destination from `autogroup:self` to a tag, `autogroup:nonroot` lets every allowed source log in as any non-root user. List the agent user explicitly.
+- **Relayed connections are slower.** `tailscale status` shows `relay` or `direct` for each peer. If you see `relay` on a VPS, allowing inbound UDP on port 41641 can make the connection direct.
+
+## Option 2: Cloudflare Tunnel with cloudflared
+
+`cloudflared` on the server opens an outbound connection to Cloudflare and publishes SSH under a hostname on your domain, such as `ssh.example.com`. Cloudflare Access checks your identity before any traffic reaches the server. This method needs a domain whose DNS is on Cloudflare.
+
+### Setup
+
+1. In the Cloudflare dashboard, go to **Networking** > **Tunnels**, create a tunnel, and run the install command it shows on the server.
+2. On the tunnel's **Routes** tab, add a **Published application** with your hostname and the service `ssh://localhost:22`.
+3. Add a self-hosted application in **Zero Trust** > **Access controls** > **Applications** for the same hostname, with an Allow policy for your email address. Without it, anyone who finds the hostname reaches your SSH server's login.
+
+The client side needs `cloudflared`, because Cloudflare carries SSH as TCP inside a WebSocket. In `~/.ssh/config`:
+
+```sshconfig
+Host ssh.example.com
+  ProxyCommand cloudflared access ssh --hostname %h
+```
+
+The first connection opens a browser for the Access login. Cloudflare's [guide](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/use-cases/ssh/ssh-cloudflared-authentication/) covers the details.
+
+On a phone, this requires an SSH client that can run `cloudflared` as a `ProxyCommand`. Termux on Android can, using its `cloudflared` package. Check that your SSH app supports this before choosing this option.
+
+### Pitfalls
+
+- **Mosh does not work.** The published SSH route carries TCP only, and Mosh needs UDP. Use plain SSH and reattach to tmux after each drop.
+- **Cloudflare does not recommend this route for long-lived connections.** Its [protocol reference](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/routing-to-tunnel/protocols/) suggests the Cloudflare One Client (WARP) for those. WARP is a VPN on the phone, which brings back the conflicts below.
+- **A route without an Access application is public.** The tunnel itself does not authenticate anyone.
+
+## Option 3: Cloudflare's browser-rendered SSH terminal
+
+Cloudflare can render the same SSH application as a terminal in the browser, so the phone needs no app at all. After setting up the tunnel and Access application from Option 2, edit the Access application and turn on **Allow access through browser-based RDP, SSH, or VNC sessions** with **SSH** selected.
+
+The [browser rendering docs](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/non-http/browser-rendering/) list constraints that are easy to miss:
+
+- **Your email prefix must match the Unix username.** If you sign in as `jane.doe@example.com`, the server account must be `jane.doe`. A dedicated `agent` user only works with an email address that starts with `agent@`.
+- **Only Allow and Block policies work.** Bypass and Service Auth policies break browser rendering.
+- **The server may need extra key exchange algorithms.** The browser terminal supports `curve25519-sha256` and the ECDH NIST curves. If a hardened `sshd_config` sets `KexAlgorithms` without any of them, the connection fails.
+- **Password login is the default.** To avoid enabling passwords on the server, set up [Access short-lived certificates](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/non-http/short-lived-certificates-legacy/), which add a `TrustedUserCAKeys` entry to `sshd_config`.
+
+## Using these alongside another VPN or proxy
+
+This is where most setups break.
+
+**A phone runs one VPN at a time.** iOS and Android allow one active VPN, as [Tailscale's FAQ](https://tailscale.com/docs/reference/faq/other-vpns) notes. The Tailscale app, the Cloudflare One (WARP) app, a work VPN, a commercial VPN, and proxy apps that use the system VPN interface all compete for that slot. Turning on one turns off the others. If you need another VPN on your phone, use Option 2 or 3, which don't use the VPN slot.
+
+**On iOS, VPN On Demand can switch Tailscale off.** Only one VPN app can have On Demand enabled. Connecting another VPN disables On Demand for Tailscale until you reconnect it by hand.
+
+**The address ranges overlap.** Tailscale uses `100.64.0.0/10`. Cloudflare WARP assigns device addresses from `100.96.0.0/12`, which sits inside that range. Other VPNs that use the carrier-grade NAT range conflict the same way. On a laptop with both running, the two compete for routes to `100.x` addresses.
+
+**Full-tunnel VPNs drop Tailscale traffic.** Many VPNs install firewall rules that block traffic outside their tunnel. Tailscale suggests two workarounds: a split tunnel in the other VPN that excludes `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, or running Tailscale in userspace networking mode. Split tunneling does not help if you use a Tailscale exit node, because the exit node itself takes the default route.
+
+**TUN-mode proxies on a laptop take over routing and DNS.** Clash, mihomo, and similar tools in TUN mode can capture tailnet traffic ([tailscale#18351](https://github.com/tailscale/tailscale/issues/18351)). To narrow down the cause, compare a `100.x` address with a MagicDNS name:
+
+- If neither works, add `100.64.0.0/10` to the proxy's TUN route exclusions, for example `route-exclude-address` in mihomo.
+- If the IP works but the name fails, the proxy is answering DNS. This is common with fake-IP mode. Exclude your tailnet's `ts.net` domain from fake-IP and send its queries to `100.100.100.100`, Tailscale's resolver. Connecting by IP always works in the meantime.
+- Let only one tool own the default route. Don't select a Tailscale exit node while a TUN proxy is active.
+
+## What none of these solve
+
+Each option gives you a shell. You still operate a full-screen TUI on a phone keyboard, scroll back through tmux to find out what happened, and learn that an agent is waiting only when you look. [Phone notifications for Codex and pi](/blog/coding-agent-phone-notifications) fixes the last part with hooks and ntfy.
+
+[Pontia](/docs/how-it-works) takes a different approach. `pontiad` on the server connects out to a relay, and you use Codex and pi sessions as chats in a phone browser, with buttons for Codex approvals. The phone needs no VPN, no app, and no domain, and the relay forwards only end-to-end encrypted traffic. It can run alongside any of the options above, so SSH stays available for everything else.
+
+## Related
+
+- [Running Codex and pi on a VPS](/blog/run-coding-agents-on-a-vps)
+- [How to use Codex CLI from your phone](/blog/control-codex-cli-from-your-phone)
+- [How to use pi coding agent from your phone](/blog/pi-coding-agent-remote-control)

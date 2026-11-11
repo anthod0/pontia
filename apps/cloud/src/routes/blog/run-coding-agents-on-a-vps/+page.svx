@@ -95,11 +95,68 @@ pi        # or codex
 # detach with Ctrl-b d, reattach later with: tmux attach -t work
 ```
 
-**Network access.** Keep agent servers on localhost. OpenAI's [Remote connections guide](https://learn.chatgpt.com/docs/remote-connections) says not to expose Codex app-server transports on a shared or public network and to use a VPN or mesh network instead. A typical setup is a private network such as Tailscale on both the server and the phone, key-only SSH, and [Mosh](https://mosh.org/) so the connection survives network changes.
+A tmux server you start from SSH belongs to your login session. With lingering enabled it normally survives logout, but on systems that set `KillUserProcesses=yes` in `logind.conf` it is killed anyway, and it never comes back after a reboot. To make it survive both, run tmux as a user service. Save this as `~/.config/systemd/user/agent-tmux.service`:
 
-**Phone client.** Install an SSH terminal app, add a key, and attach to tmux.
+```ini
+[Unit]
+Description=tmux server for coding agents
 
-You maintain each of these yourself, and on the phone you operate a full-screen TUI on a small keyboard, with no signal when an agent is waiting for approval.
+[Service]
+Type=forking
+ExecStart=/usr/bin/tmux -L agents new-session -d -s main
+ExecStop=/usr/bin/tmux -L agents kill-server
+
+[Install]
+WantedBy=default.target
+```
+
+Then enable it and attach:
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now agent-tmux
+tmux -L agents attach -t main
+```
+
+`-L agents` gives this server its own socket, so it doesn't mix with tmux sessions you start by hand. After a reboot the session comes back empty, and you resume the conversation with `codex resume --last` or `pi --continue`.
+
+**Network access.** Keep agent servers on localhost. OpenAI's [Remote connections guide](https://learn.chatgpt.com/docs/remote-connections) says not to expose Codex app-server transports on a shared or public network and to use a VPN or mesh network instead.
+
+With Tailscale, install it on the server and the phone, and sign in to the same account on both:
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+```
+
+In the Tailscale admin console, disable key expiry for the server. Device keys expire after 180 days by default, and an expired server drops off the network.
+
+**Close public SSH.** Once SSH over Tailscale works, block inbound traffic from anywhere else. Tailscale's [ufw guide](https://tailscale.com/docs/how-to/secure-ubuntu-server-with-ufw) does this on Ubuntu:
+
+```sh
+sudo ufw allow in on tailscale0
+sudo ufw default deny incoming
+sudo ufw delete allow 22/tcp     # only after testing SSH over Tailscale
+sudo ufw enable
+```
+
+Check that your VPS provider has a web console first. It is the way back in if Tailscale stops working. If you keep public SSH open instead, allow only key login. Put this near the top of `/etc/ssh/sshd_config`, because sshd uses the first value it reads for each setting, including values from `Include`d files:
+
+```sshconfig
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+```
+
+Run `sudo sshd -T | grep -E 'passwordauthentication|permitrootlogin'` to confirm the effective values before you reload sshd.
+
+**Phone client.** Install an SSH app with Mosh support, add a key, and attach to tmux. Mosh keeps the session alive when the phone changes networks or sleeps. It needs `mosh` on the server, and its UDP ports 60000 to 61000 work over Tailscale without firewall changes.
+
+If your phone must also run another VPN, Tailscale cannot run at the same time. [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) covers Cloudflare Tunnel, which works without a VPN on the phone, and the routing conflicts between VPNs and proxies.
+
+**Notifications.** Codex hooks and a pi extension can push a notification when an agent needs you. [Phone notifications for Codex and pi](/blog/coding-agent-phone-notifications) has both scripts.
+
+You maintain each of these yourself, and on the phone you operate a full-screen TUI on a small keyboard.
 
 ## Common problems
 
@@ -110,9 +167,13 @@ You maintain each of these yourself, and on the phone you operate a full-screen 
 | Agent works in your shell but not from a service | The service's `PATH` lacks the directory that contains the agent or Node.js |
 | Codex in a service uses different credentials than your shell | The service and your shell use different `CODEX_HOME` values |
 | `Shift+Enter` submits instead of adding a new line in pi | tmux extended keys are off. See pi's [tmux guide](https://pi.dev/docs/latest/tmux) |
+| tmux sessions die when you log out, even with lingering | `KillUserProcesses=yes` in `/etc/systemd/logind.conf` kills the login session scope. Run tmux as the user service above |
+| SSH over Tailscale stops working months later | The server's Tailscale key expired. Disable key expiry for servers |
 
 ## Related
 
+- [Tailscale vs Cloudflare Tunnel for reaching a coding agent server](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
+- [Get a phone notification when Codex or pi needs you](/blog/coding-agent-phone-notifications)
 - [How to use Codex CLI from your phone](/blog/control-codex-cli-from-your-phone)
 - [How to use pi coding agent from your phone](/blog/pi-coding-agent-remote-control)
 - [Linux platform notes](/docs/platforms/linux) and [Security](/docs/security)

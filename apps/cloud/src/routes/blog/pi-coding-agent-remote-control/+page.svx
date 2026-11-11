@@ -56,20 +56,87 @@ The [pi Agent Client reference](/docs/agent-clients/pi) covers custom pi command
 
 ## Option 2: Build it yourself with SSH and tmux
 
-You can also assemble remote access from standard tools: tmux keeps pi running, a private network such as Tailscale makes the machine reachable, and a phone SSH client connects to it.
+You can also assemble remote access from standard tools: tmux keeps pi running, a private network makes the machine reachable, and a phone SSH client connects to it. A small pi extension can notify the phone when pi is waiting for input.
+
+### 1. Make the machine reachable with Tailscale
+
+Install Tailscale on the host and sign in:
 
 ```sh
-# on the host
-tmux new -s pi
-pi
-
-# from the phone, over SSH or Mosh
-tmux attach -t pi
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4      # note the 100.x.y.z address
 ```
 
-[Mosh](https://mosh.org/) keeps the connection alive when the phone switches networks, which plain SSH does not.
+Install the Tailscale app on the phone and sign in with the same account. For an always-on host, disable [key expiry](https://tailscale.com/docs/features/access-control/key-expiry) in the admin console, because keys expire after 180 days by default.
 
-You set up and maintain each piece yourself: the private network on both devices, SSH keys on the phone, a terminal app, and tmux. On the phone you then use pi's full-screen TUI and keybindings on a small keyboard, and read long tool output by scrolling through tmux history.
+The phone can run only one VPN at a time, so the Tailscale app turns off any other VPN or proxy app. [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) covers Cloudflare Tunnel, which doesn't use the phone's VPN slot, and the routing conflicts between VPNs.
+
+### 2. Run pi in tmux
+
+Add the extended-keys setting from the tmux section below to `~/.tmux.conf` first. Then:
+
+```sh
+tmux new -s pi
+pi
+# detach with Ctrl-b d
+```
+
+From the phone, connect and reattach:
+
+```sh
+mosh agent@100.x.y.z tmux attach -t pi
+```
+
+Mosh keeps the session alive when the phone switches networks or sleeps. It needs `mosh` on the host and a phone client that supports it. Without Mosh, use `ssh -t agent@100.x.y.z tmux attach -t pi`.
+
+If tmux itself died, for example after a reboot, `pi --continue` in the project directory resumes the most recent session.
+
+### 3. Scroll and steer from a phone keyboard
+
+pi runs in fullscreen mode by default. It keeps the editor fixed and scrolls the transcript itself, with `PageUp` and `PageDown`, so pi's output does not end up in tmux scrollback. Phone keyboards rarely have those keys. You have two choices:
+
+- Switch pi to regular mode, which writes to the terminal's normal scrollback. Set `"tuiMode": "regular"` in `~/.pi/agent/settings.json`, or start pi with `--tui-mode regular`. You then scroll with tmux copy mode, `Ctrl-b [`.
+- Stay in fullscreen mode and use a phone SSH app with an extra key row that includes `PageUp` and `PageDown`.
+
+The keys you need most while pi works:
+
+| Action | Key |
+| --- | --- |
+| Stop the current task | `Escape` |
+| Send a message that steers the current task | `Enter` while pi works |
+| Queue a follow-up for after the task | `Alt+Enter` |
+| Pull queued messages back into the editor | `Alt+Up` |
+
+A message sent with `Enter` during a task is delivered after the current response and its tool calls finish. To remap keys, put them in `~/.pi/agent/keybindings.json` and run `/reload`. pi's [keybindings reference](https://pi.dev/docs/latest/keybindings) lists the action names.
+
+### 4. Get notified when pi is waiting
+
+Subscribe to a long random [ntfy](https://ntfy.sh/) topic in the ntfy phone app. Then save this as `~/.pi/agent/extensions/ntfy.ts`. pi loads it automatically, and `/reload` applies changes.
+
+```ts
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { basename } from "node:path";
+
+const url = "https://ntfy.sh/YOUR_TOPIC";
+
+export default function (pi: ExtensionAPI) {
+  pi.on("agent_settled", async (event, ctx) => {
+    if (event.aborted) return; // you pressed Escape, so you are already there
+    await fetch(url, {
+      method: "POST",
+      headers: { Title: `pi: ${basename(ctx.cwd)}` },
+      body: "Waiting for input",
+    }).catch(() => {});
+  });
+}
+```
+
+Use `agent_settled` rather than `agent_end`. pi can retry, compact, or continue with queued messages after `agent_end`, so a notification sent there can arrive while pi is still working. [Phone notifications for Codex and pi](/blog/coding-agent-phone-notifications) covers privacy and self-hosted ntfy.
+
+### What you end up with
+
+You maintain each piece yourself: Tailscale on both devices, SSH keys on the phone, tmux, and the extension. On the phone you use pi's full TUI on a small keyboard.
 
 ## Option 3: Run pi on the phone itself
 
@@ -94,6 +161,7 @@ If you leave pi working unattended, limit what it can reach. Use a dedicated use
 
 ## Related
 
+- [Get a phone notification when Codex or pi needs you](/blog/coding-agent-phone-notifications)
 - [Run coding agents on a VPS](/blog/run-coding-agents-on-a-vps) to keep pi on an always-on server
 - [How to use Codex CLI from your phone](/blog/control-codex-cli-from-your-phone)
 - [How Pontia works](/docs/how-it-works)

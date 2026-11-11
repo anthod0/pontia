@@ -1,0 +1,157 @@
+---
+title: "Get a phone notification when Codex or pi needs you"
+description: Push a notification to your phone when Codex CLI asks for approval or finishes a turn, and when pi is waiting for input. Tested Codex hooks and a pi extension that send through ntfy, with the privacy and trust details that trip people up.
+published: "2026-11-12"
+---
+
+A coding agent left running on a server often spends more time waiting for you than working. Codex stops on an approval prompt, pi finishes and waits for the next message, and you find out only when you next look at the terminal. This article sets up push notifications to your phone for both agents, using Codex hooks, a small pi extension, and [ntfy](https://ntfy.sh/).
+
+The scripts below were tested with Codex CLI 0.167.1 and pi 1.5.2 on Linux. They work the same on macOS.
+
+## Why the built-in notifications don't reach your phone
+
+Codex has two notification features, and neither covers this case:
+
+- **TUI notifications** (`[tui] notifications` in `config.toml`) send a desktop notification or ring the terminal bell. They go to the terminal that is attached to Codex, so a detached tmux session produces nothing you can see.
+- **`notify`** runs a program of your choice, but OpenAI's [advanced configuration guide](https://developers.openai.com/codex/config-advanced) states that it currently fires only for `agent-turn-complete`. It does not tell you that an approval is waiting, which is the event you care about most.
+
+Codex [hooks](https://developers.openai.com/codex/hooks) cover both events. `PermissionRequest` runs when Codex is about to ask for approval, and `Stop` runs when a turn ends. pi has no approvals. Its extension API has an `agent_settled` event that fires once pi has finished all automatic work and is waiting for input.
+
+## Set up ntfy
+
+ntfy delivers HTTP POSTs as push notifications. Install the [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy) or [iOS](https://apps.apple.com/us/app/ntfy/id1625396347) app and subscribe to a topic.
+
+On the public ntfy.sh server there is no sign-up, so [the topic name works as a password](https://docs.ntfy.sh/publish/): anyone who knows it can read and send messages. Generate a long random name:
+
+```sh
+echo "agents-$(openssl rand -hex 12)"
+```
+
+Test it from the server:
+
+```sh
+curl -d "Test from $(hostname)" https://ntfy.sh/YOUR_TOPIC
+```
+
+On Android, turn on **instant delivery** for the topic. Without it, the ntfy docs warn that messages can arrive with a significant delay while the phone is in doze mode.
+
+## Codex: notify on approval requests and finished turns
+
+Save this script as `~/.codex/hooks/ntfy.sh` and make it executable with `chmod +x`. It needs `jq` and `curl`.
+
+```sh
+#!/bin/sh
+# Codex hook: push a phone notification through ntfy.
+url=https://ntfy.sh/YOUR_TOPIC
+
+event=$(cat)
+field() { printf '%s' "$event" | jq -r "$1"; }
+project=$(field '.cwd | split("/") | last')
+
+case $(field .hook_event_name) in
+  PermissionRequest)
+    title="Codex needs approval: $project"
+    body=$(field '.tool_input.description // .tool_input.command // .tool_name')
+    priority=high
+    ;;
+  Stop)
+    title="Codex finished: $project"
+    body=$(field '(.last_assistant_message // "Turn complete")[0:300]')
+    priority=default
+    ;;
+  *) exit 0 ;;
+esac
+
+curl -fsS --max-time 5 -o /dev/null \
+  -H "Title: $title" -H "Priority: $priority" -d "$body" "$url" || true
+```
+
+Register it for both events in `~/.codex/config.toml`:
+
+```toml
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+
+[[hooks.PermissionRequest]]
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+```
+
+Start `codex` and run `/hooks`. Codex skips a new or changed hook until you review and trust it, and it records trust against the hook's hash. **Editing the script or the config entry later means trusting it again**, otherwise notifications stop without an error on your phone.
+
+The JSON that Codex passes on stdin looks like this for an approval request:
+
+```json
+{
+  "hook_event_name": "PermissionRequest",
+  "cwd": "/home/agent/projects/api",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "touch /tmp/created.txt",
+    "description": "Allow creating /tmp/created.txt? The sandbox is read-only."
+  }
+}
+```
+
+`Stop` events carry `last_assistant_message` instead of `tool_input`. Both include `session_id` and `turn_id`.
+
+### Details that matter
+
+- **The hook must stay silent.** A `PermissionRequest` hook can approve or deny the request by printing a decision. The script prints nothing and exits 0, so Codex shows its normal approval prompt. `curl -o /dev/null` keeps the ntfy response out of stdout, and `|| true` keeps a network failure from showing up as a hook error.
+- **Set a short timeout.** Hooks run synchronously and default to a 600-second timeout. If ntfy is unreachable, a long timeout would hold up the approval prompt itself.
+- **You hear only about requests that need you.** `PermissionRequest` does not run for commands the sandbox already allows. With the `workspace-write` sandbox and `on-request` approvals, that means writes outside the workspace and network access, which are the requests worth reading.
+- **`Stop` fires on every turn,** including short replies in an interactive session. If that is too noisy, register only `PermissionRequest`.
+- **Hooks belong to Codex, not to the TUI.** They also run for `codex exec`.
+
+## pi: notify when pi is waiting for input
+
+Save this as `~/.pi/agent/extensions/ntfy.ts`. pi loads extensions from that directory automatically, and `/reload` picks up changes without a restart.
+
+```ts
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { basename } from "node:path";
+
+const url = "https://ntfy.sh/YOUR_TOPIC";
+
+export default function (pi: ExtensionAPI) {
+  pi.on("agent_settled", async (event, ctx) => {
+    if (event.aborted) return; // you pressed Escape, so you are already there
+    await fetch(url, {
+      method: "POST",
+      headers: { Title: `pi: ${basename(ctx.cwd)}` },
+      body: "Waiting for input",
+    }).catch(() => {});
+  });
+}
+```
+
+Use `agent_settled`, not `agent_end`. pi's [extension docs](https://pi.dev/docs/latest/extensions) explain that `agent_end` fires after each low-level run, and pi may then retry, compact and retry, or continue with queued messages. A notification on `agent_end` can arrive while pi is still working.
+
+Because pi does not pause for approval, a notification can only tell you that a run has ended. To stop a command before it runs, see pi's [security guide](https://pi.dev/docs/latest/security).
+
+## Keep secrets out of notifications
+
+Approval descriptions, commands, and the last assistant message can contain file paths, hostnames, or tokens that ended up in a command line. On ntfy.sh they pass through a third-party server and reach anyone who has the topic name.
+
+If that matters for your work, choose one of these:
+
+- send only the project name, by replacing `body` with a fixed string such as `"Waiting"`;
+- [self-host ntfy](https://docs.ntfy.sh/install/) and require [access tokens](https://docs.ntfy.sh/config/#access-control) for publishing and reading.
+
+## When notifications are not enough
+
+A notification tells you that an agent needs you. You still need a way to answer. Over SSH from a phone, you attach to tmux, scroll back to find the prompt, and type into a full-screen TUI. [Reach a coding agent server from your phone](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) covers the networking side of that setup.
+
+[Pontia](/docs/how-it-works), the tool we build, shows Codex approval requests in a phone browser with **Allow** and **Deny** buttons and streams pi sessions as chats.
+
+## Related
+
+- [How to use Codex CLI from your phone](/blog/control-codex-cli-from-your-phone)
+- [How to use pi coding agent from your phone](/blog/pi-coding-agent-remote-control)
+- [Running Codex and pi on a VPS](/blog/run-coding-agents-on-a-vps)
