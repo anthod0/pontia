@@ -1,5 +1,6 @@
 mod e2e_identity;
 mod initialization;
+mod uploads;
 use pontia_application::client_contract::ClientServicePhase;
 use pontia_core::error::Result;
 use pontia_http as http;
@@ -102,6 +103,11 @@ async fn main() -> Result<()> {
         .transpose()?;
     let remote_task = remote.map(|remote| tokio::spawn(remote.run(cleanup_shutdown.subscribe())));
     inbox.resume_pending().await?;
+    let upload_cleanup = tokio::spawn(uploads::run(
+        config.pontia_home.clone(),
+        config.uploads,
+        cleanup_shutdown.subscribe(),
+    ));
     let server_result = http::serve_with_shutdown_timeout(
         listener,
         http_entrypoints.local_http(),
@@ -114,6 +120,7 @@ async fn main() -> Result<()> {
     .await;
 
     cleanup_shutdown.notify();
+    let _ = upload_cleanup.await;
     client_control.close().await;
     let client_result = client_tasks.join().await;
     inbox.stop_scheduling().await;

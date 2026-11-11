@@ -8,7 +8,9 @@ mod environment;
 mod file_config;
 mod loading;
 mod paths;
+mod uploads;
 mod workspace_roots;
+pub use uploads::UploadsConfig;
 
 pub struct RuntimeCommandOverride {
     pub client_type: &'static str,
@@ -31,6 +33,7 @@ pub struct AppConfig {
     pub default_client_type: String,
     pub workspace_browser: WorkspaceBrowserConfig,
     pub file_picker: FilePickerConfig,
+    pub uploads: UploadsConfig,
     pub client_configuration: ClientConfigurationSources,
     pub dashboard: DashboardConfig,
     pub remote: Option<RemoteConfig>,

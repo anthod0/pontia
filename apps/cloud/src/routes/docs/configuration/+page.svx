@@ -73,6 +73,19 @@ ignore_globs = [
 
 Set `follow_symlinks = true` to include accessible symlink targets in searches, including targets outside the visible directory tree.
 
+## Uploaded files
+
+Uploaded files are automatically deleted after their retention period, measured from when the upload started. Keep files needed for longer in your Workspace before they expire.
+
+```toml
+[uploads]
+incomplete_retention_days = 7
+completed_retention_days = 30
+cleanup_interval_hours = 24
+```
+
+These are the defaults. All three values must be positive integers. Cleanup runs in the background at service startup and then at the configured interval, skipping uploads being written. Apply changes by restarting the service with `pontia up`.
+
 ## Environment overrides
 
 The running process accepts these overrides:

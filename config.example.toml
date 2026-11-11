@@ -2,6 +2,13 @@ bind_addr = "127.0.0.1:8080"
 external_api_token = "dev-token"
 run_migrations = true
 
+[uploads]
+# Retention is measured from the start of each upload, including completed files.
+incomplete_retention_days = 7
+completed_retention_days = 30
+# Cleanup runs at service startup and then at this interval. All values must be positive integers.
+cleanup_interval_hours = 24
+
 [dashboard]
 # Local Vite dist directory or a remote .tar.gz/.tgz/.zip archive containing exactly one index.html.
 source = "apps/dashboard/dist"

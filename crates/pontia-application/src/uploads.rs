@@ -10,6 +10,8 @@ use sha2::{Digest, Sha256};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
+mod cleanup;
+
 pub const MAX_UPLOAD_SIZE: u64 = 1 << 30;
 pub const MAX_CHUNK_SIZE: usize = 1 << 20;
 

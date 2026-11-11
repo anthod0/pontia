@@ -15,6 +15,7 @@ pub(super) struct FileConfig {
     pub(super) acp: Option<super::client_configuration::AcpFileConfig>,
     pub(super) workspace_browser: Option<FileWorkspaceBrowserConfig>,
     pub(super) file_picker: Option<FilePickerConfig>,
+    pub(super) uploads: Option<super::UploadsConfig>,
     pub(super) dashboard: Option<DashboardConfig>,
     pub(super) remote: Option<RemoteConfig>,
 }

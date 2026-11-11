@@ -129,6 +129,7 @@ impl AppConfig {
             default_client_type,
             workspace_browser,
             file_picker,
+            uploads: file.and_then(|config| config.uploads).unwrap_or_default(),
             client_configuration,
             dashboard,
             remote: file.and_then(|config| config.remote.clone()),
