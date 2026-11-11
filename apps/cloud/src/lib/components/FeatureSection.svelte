@@ -34,8 +34,8 @@
 				</div>
 			</div>
 			<div class="card-copy">
-				<h3>Bring your own agents.</h3>
-				<p>Keep your accounts, model subscriptions, and configuration. Pontia doesn't host models and has no usage fee.</p>
+				<h3>Bring your own subscriptions.</h3>
+				<p>Pontia doesn't sell models or tokens. Your agents run on the accounts and plans you already pay for.</p>
 				<a class="card-link" href="/docs/agent-clients">Agent Clients<ArrowRightIcon size={12} /></a>
 			</div>
 		</article>
@@ -52,7 +52,7 @@
 			</div>
 			<div class="card-copy">
 				<h3>In your pocket.</h3>
-				<p>Add the Dashboard to your home screen. Approve, follow up, or interrupt a Turn from anywhere.</p>
+				<p>Add the Dashboard to your home screen. Control from anywhere.</p>
 				<a class="card-link" href="/docs/dashboard">Dashboard guide<ArrowRightIcon size={12} /></a>
 			</div>
 		</article>
@@ -68,7 +68,7 @@
 			</div>
 			<div class="card-copy">
 				<h3>Execution stays local.</h3>
-				<p>Agents run with your tools, files, and credentials. Pontia gives you access, not a remote sandbox.</p>
+				<p>Agents run on your own devices, not a remote sandbox. Pontia connects you to them.</p>
 			</div>
 		</article>
 
@@ -120,11 +120,10 @@
 	.cipher { width: 96px; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent); }
 	.cipher span { display: block; width: max-content; font: 9px var(--font-mono); color: #79740e; animation: scroll-x 6s linear infinite; }
 	.wire { position: relative; flex: 1; height: 1px; margin-inline: 4px; background: repeating-linear-gradient(90deg, var(--primary) 0 4px, transparent 4px 8px); }
-	/* Each packet crosses one wire per half cycle, passing through the Edge between them. */
-	.packet { position: absolute; top: -3px; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px rgb(69 133 136 / 18%); opacity: 0; animation: 4.8s cubic-bezier(0.6, 0, 0.4, 1) infinite; }
-	.packet.back { background: #79740e; box-shadow: 0 0 0 3px rgb(121 116 14 / 18%); animation-direction: reverse; }
-	.to-edge .packet, .to-edge .packet.back { animation-name: travel-first-half; }
-	.from-edge .packet, .from-edge .packet.back { animation-name: travel-second-half; }
+	.packet { position: absolute; top: -3px; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px rgb(69 133 136 / 18%); opacity: 0; animation: send 2.4s cubic-bezier(0.6, 0, 0.4, 1) infinite; }
+	.packet.back { background: #79740e; box-shadow: 0 0 0 3px rgb(121 116 14 / 18%); animation-name: reply; }
+	/* The device-side wire runs slightly ahead so the two wires do not move in lockstep. */
+	.from-edge .packet { animation-delay: -0.7s; }
 
 	/* Terminal: lines appear in sequence once the card is revealed. */
 	.terminal-visual { place-items: center; padding: 20px; }
@@ -159,15 +158,16 @@
 	.marquee img { width: 24px; height: 24px; object-fit: contain; }
 
 
-	@keyframes travel-first-half {
+	/* On every wire, one dot leaves each end at once and they cross midway. */
+	@keyframes send {
 		0% { left: 0; opacity: 0; }
-		4%, 46% { opacity: 1; }
-		50%, 100% { left: calc(100% - 7px); opacity: 0; }
+		8%, 80% { opacity: 1; }
+		88%, 100% { left: calc(100% - 7px); opacity: 0; }
 	}
-	@keyframes travel-second-half {
-		0%, 50% { left: 0; opacity: 0; }
-		54%, 96% { opacity: 1; }
-		100% { left: calc(100% - 7px); opacity: 0; }
+	@keyframes reply {
+		0% { left: calc(100% - 7px); opacity: 0; }
+		8%, 80% { opacity: 1; }
+		88%, 100% { left: 0; opacity: 0; }
 	}
 	@keyframes scroll-x { to { transform: translateX(-50%); } }
 	@keyframes scroll-list { to { transform: translateX(-100%); } }

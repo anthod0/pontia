@@ -18,7 +18,7 @@
 		<div class="glow" aria-hidden="true"></div>
 		<div class="copy reveal">
 			<h2 id="open-source-title">Every part of Pontia is open source.</h2>
-			<p class="lede">The daemon, Dashboard, encryption, relay, and Cloud live in one public repository. Audit it, fork it, run it yourself.</p>
+			<p class="lede">The daemon, Dashboard, encryption, relay, and Cloud live in one public repository. See exactly what runs on your device.</p>
 			<div class="actions">
 				<a class="button" href={repository} target="_blank" rel="noreferrer">View on GitHub<ArrowUpRightIcon size={16} /></a>
 				<a class="text-link" href="/docs/security">Security model<ArrowRightIcon size={12} /></a>

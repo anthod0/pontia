@@ -56,8 +56,8 @@
 	<HeroSection />
 
 	<FeatureSection />
-	<IntegrationProgress />
 	<OpenSourceSection />
+	<IntegrationProgress />
 	<HomeFaq />
 
 	<section class="closing page-width" aria-labelledby="closing-title" {@attach reveal()}>

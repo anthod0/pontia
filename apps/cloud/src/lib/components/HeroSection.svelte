@@ -31,9 +31,6 @@
 	<div class="backdrop" aria-hidden="true"></div>
 
 	<div class="hero-copy page-width">
-		<a class="badge enter" href="https://github.com/anthod0/pontia" target="_blank" rel="noreferrer">
-			<span class="badge-dot"></span>Open source · Apache-2.0<ArrowRightIcon size={12} />
-		</a>
 		<h1 id="hero-title">
 			<span class="line enter" style="--d: 1">Your device.</span>
 			<span class="line accent enter" style="--d: 2">Your agent cloud.</span>
@@ -83,11 +80,6 @@
 	.backdrop { position: absolute; z-index: -1; inset: 0 0 auto; height: 900px; pointer-events: none; background: radial-gradient(ellipse 45% 40% at 50% 30%, rgb(69 133 136 / 12%), transparent 70%), radial-gradient(circle at 1px 1px, #dedbd4 1px, transparent 0) 0 0 / 22px 22px; mask-image: radial-gradient(ellipse 70% 65% at 50% 25%, #000 30%, transparent 75%); }
 
 	.hero-copy { display: flex; flex-direction: column; align-items: center; text-align: center; }
-	.badge { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 28px; padding: 5px 12px 5px 10px; border: 1px solid var(--border); border-radius: 999px; background: rgb(255 254 252 / 80%); backdrop-filter: blur(6px); font: 12px/1.5 var(--font-mono); color: var(--muted-foreground); transition: border-color 0.2s, color 0.2s; }
-	.badge:hover { border-color: #c9c5bc; color: var(--heading); }
-	.badge :global(svg) { transition: transform 0.2s var(--ease-out); }
-	.badge:hover :global(svg) { transform: translateX(2px); }
-	.badge-dot { width: 6px; height: 6px; border-radius: 50%; background: #79740e; box-shadow: 0 0 0 3px rgb(121 116 14 / 15%); }
 
 	h1 { display: flex; flex-direction: column; font-size: clamp(44px, 7.4vw, 92px); font-weight: 500; line-height: 1; letter-spacing: -0.055em; }
 	.accent { padding-bottom: 0.08em; background: linear-gradient(100deg, #2f6f72 10%, #458588 45%, #6aa19a 60%, #458588 75%); background-size: 220% 100%; background-clip: text; -webkit-background-clip: text; color: transparent; }
@@ -138,7 +130,6 @@
 	}
 	@media (max-width: 600px) {
 		h1 { font-size: clamp(36px, 11vw, 48px); }
-		.badge { margin-bottom: 22px; font-size: 11px; }
 		.hero-description { font-size: 15px; }
 		.hero-actions { gap: 9px; margin-top: 28px; }
 		.hero-actions :global(.button) { min-height: 43px; padding-inline: 16px; font-size: 13px; gap: 10px; }
