@@ -1,4 +1,4 @@
-use pontia_application::client_contract::ClientEventInterpreter;
+use pontia_agent_control::client_contract::ClientEventInterpreter;
 use pontia_core::{
     Error, Result,
     domain::{DomainEvent, EventType},

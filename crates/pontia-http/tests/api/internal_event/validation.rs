@@ -1,4 +1,4 @@
-use pontia_application::EventIngestService;
+use pontia_agent_control::EventIngestService;
 use serde_json::json;
 
 use super::fixture::{bind_runtime, create_session, test_state};
@@ -22,7 +22,7 @@ async fn reporting_service_rejects_pontia_owned_event_types() {
         .await
         .unwrap_err();
         assert!(
-            matches!(body, pontia_application::EventReportError::InvalidFact(_)),
+            matches!(body, pontia_agent_control::EventReportError::InvalidFact(_)),
             "{body:?}"
         );
         assert!(
@@ -37,7 +37,7 @@ async fn reporting_service_rejects_pontia_owned_event_types() {
 async fn reporting_service_rejection_does_not_broadcast() {
     let state = test_state().await;
     create_session(&state, "sess_rejected_broadcast", "generic").await;
-    let mut subscriber = state.agent_events().subscribe();
+    let mut subscriber = state.control().agent_events().subscribe();
 
     let body = report_fact(
         state.clone(),
@@ -51,7 +51,7 @@ async fn reporting_service_rejection_does_not_broadcast() {
     .unwrap_err();
 
     assert!(
-        matches!(body, pontia_application::EventReportError::InvalidFact(_)),
+        matches!(body, pontia_agent_control::EventReportError::InvalidFact(_)),
         "{body:?}"
     );
     assert!(matches!(
@@ -84,7 +84,7 @@ async fn reporting_service_rejects_supplied_unknown_turn_id_for_started_fact() {
     .unwrap_err();
 
     assert!(
-        matches!(body, pontia_application::EventReportError::InvalidFact(_)),
+        matches!(body, pontia_agent_control::EventReportError::InvalidFact(_)),
         "{body:?}"
     );
 }
@@ -107,7 +107,7 @@ async fn reporting_service_rejects_other_creation_facts_with_unknown_supplied_tu
         .await
         .unwrap_err();
         assert!(
-            matches!(body, pontia_application::EventReportError::InvalidFact(_)),
+            matches!(body, pontia_agent_control::EventReportError::InvalidFact(_)),
             "{body:?}"
         );
     }
@@ -125,7 +125,7 @@ async fn reporting_service_rejects_unknown_sessions_and_missing_followup_turn_id
     assert!(
         matches!(
             failure,
-            pontia_application::EventReportError::InvalidFact(_)
+            pontia_agent_control::EventReportError::InvalidFact(_)
         ),
         "{failure:?}"
     );
@@ -138,7 +138,7 @@ async fn reporting_service_rejects_unknown_sessions_and_missing_followup_turn_id
     .await
     .unwrap_err();
     assert!(
-        matches!(body, pontia_application::EventReportError::InvalidFact(_)),
+        matches!(body, pontia_agent_control::EventReportError::InvalidFact(_)),
         "{body:?}"
     );
 }
@@ -165,7 +165,7 @@ async fn reporting_service_rejects_followups_for_unknown_or_other_session_turns(
     assert!(
         matches!(
             unknown_body,
-            pontia_application::EventReportError::Ingestion(
+            pontia_agent_control::EventReportError::Ingestion(
                 pontia_core::Error::Domain(_) | pontia_core::Error::StateConflict(_)
             )
         ),
@@ -198,7 +198,7 @@ async fn reporting_service_rejects_followups_for_unknown_or_other_session_turns(
     assert!(
         matches!(
             cross_session_body,
-            pontia_application::EventReportError::Ingestion(
+            pontia_agent_control::EventReportError::Ingestion(
                 pontia_core::Error::Domain(_) | pontia_core::Error::StateConflict(_)
             )
         ),
@@ -224,7 +224,7 @@ async fn reporting_service_validates_context_usage_and_truncates_output() {
     assert!(
         matches!(
             failure,
-            pontia_application::EventReportError::InvalidFact(_)
+            pontia_agent_control::EventReportError::InvalidFact(_)
         ),
         "{failure:?}"
     );

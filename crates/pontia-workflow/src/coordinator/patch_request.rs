@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use pontia_application::{CreateSessionRequest, InitialTaskRequest};
+use pontia_agent_control::{CreateSessionRequest, InitialTaskRequest};
 use pontia_storage_sqlite::models::{
     events::WorkflowTerminalEventRow, workflows::WorkflowPatchRow,
 };

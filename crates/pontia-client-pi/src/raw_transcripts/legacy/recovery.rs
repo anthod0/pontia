@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use pontia_application::client_contract::{
+use pontia_agent_control::client_contract::{
     TopologyDiagnostic, TopologyResolution, TopologyResolveRequest, TopologyResolveResult,
     TurnTopologyCandidate, TurnTopologyResolver,
     history::{HistoryRecoveryRequest, RecoveredTurnHistory, TurnHistoryRecoverer},

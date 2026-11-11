@@ -1,4 +1,6 @@
-//! Workflow orchestration over Pontia application services.
+//! Workflow orchestration over Agent Control.
+mod environment;
+pub use environment::WorkflowSessionEnvironment;
 
 mod activation;
 mod control;

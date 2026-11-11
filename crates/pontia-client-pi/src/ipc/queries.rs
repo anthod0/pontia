@@ -1,5 +1,5 @@
 use crate::rpc::RpcRequest;
-use pontia_application::{AgentProfileService, AppState, ExternalQueryService};
+use pontia_agent_control::{AgentControl, AgentProfileService, ControlQueryService};
 use pontia_core::{Error, Result};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -21,11 +21,11 @@ struct ProfileQuery {
 #[serde(deny_unknown_fields)]
 struct WorkspaceQuery {}
 
-pub(super) async fn dispatch(state: &AppState, request: &RpcRequest) -> Result<Value> {
+pub(super) async fn dispatch(state: &AgentControl, request: &RpcRequest) -> Result<Value> {
     match request.method.as_str() {
         "session.get" => {
             let query: SessionQuery = serde_json::from_value(request.params.clone())?;
-            let session = ExternalQueryService::new(state.db())
+            let session = ControlQueryService::new(state.db())
                 .with_clients(state.clients())
                 .get_session(&query.session_id)
                 .await?
@@ -51,7 +51,7 @@ pub(super) async fn dispatch(state: &AppState, request: &RpcRequest) -> Result<V
         }
         "workspaces.list" => {
             let _: WorkspaceQuery = serde_json::from_value(request.params.clone())?;
-            let workspaces = ExternalQueryService::new(state.db())
+            let workspaces = ControlQueryService::new(state.db())
                 .with_clients(state.clients())
                 .list_workspaces()
                 .await?;

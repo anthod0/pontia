@@ -9,7 +9,7 @@ use dialoguer::{MultiSelect, console::Term};
 use pontia_config::AppConfig;
 
 use crate::{lifecycle::local_health_addr, local_config};
-use pontia_application::client_contract::ClientIntegration;
+use pontia_agent_control::client_contract::ClientIntegration;
 use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 use std::sync::Arc;
 

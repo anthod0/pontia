@@ -1,4 +1,4 @@
-use pontia_application::client_contract::raw_transcripts::{
+use pontia_agent_control::client_contract::raw_transcripts::{
     AgentBindingResolveRequest, TimelineBoundaryCaptureKind,
 };
 use pontia_core::{Error, Result};

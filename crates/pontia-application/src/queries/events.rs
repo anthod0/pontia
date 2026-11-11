@@ -1,59 +1,11 @@
+use pontia_agent_control::EventStreamScope;
 use pontia_core::error::{Error, Result};
 use pontia_storage_sqlite::repositories::events::SqliteEventRepository;
 
 use super::ExternalQueryService;
-use crate::views::events::{
-    EventStreamItem, EventStreamScope, EventView, row_to_item, row_to_view,
-};
+use crate::views::events::{EventStreamItem, row_to_item};
 
 impl ExternalQueryService {
-    pub async fn list_session_events(&self, session_id: &str) -> Result<Vec<EventView>> {
-        let repository = SqliteEventRepository::new(self.pool.clone());
-        let rows = repository.list_session_events(session_id).await?;
-
-        rows.into_iter().map(row_to_view).collect()
-    }
-
-    pub async fn list_turn_events(
-        &self,
-        session_id: &str,
-        turn_id: &str,
-    ) -> Result<Vec<EventView>> {
-        let repository = SqliteEventRepository::new(self.pool.clone());
-        let rows = repository.list_turn_events(session_id, turn_id).await?;
-
-        rows.into_iter().map(row_to_view).collect()
-    }
-
-    pub async fn resolve_event_cursor(
-        &self,
-        scope: EventStreamScope<'_>,
-        after_event_id: &str,
-    ) -> Result<i64> {
-        let repository = SqliteEventRepository::new(self.pool.clone());
-        let rowid = match scope {
-            EventStreamScope::Session { session_id } => {
-                repository
-                    .resolve_session_event_cursor(session_id, after_event_id)
-                    .await?
-            }
-            EventStreamScope::Turn {
-                session_id,
-                turn_id,
-            } => {
-                repository
-                    .resolve_turn_event_cursor(session_id, turn_id, after_event_id)
-                    .await?
-            }
-        };
-
-        rowid.ok_or_else(|| {
-            Error::Domain(format!(
-                "event cursor {after_event_id} is not valid for requested stream"
-            ))
-        })
-    }
-
     pub async fn current_session_stream_rowid(&self) -> Result<i64> {
         let repository = SqliteEventRepository::new(self.pool.clone());
         repository.current_session_stream_rowid().await
@@ -115,13 +67,13 @@ impl ExternalQueryService {
             self.pool.clone(),
         );
         for item in &mut items {
-            if item.event.event_type == "session.file_shared" {
-                let id = item.event.payload["file_id"]
+            if item.event.fact.event_type == "session.file_shared" {
+                let id = item.event.fact.payload["file_id"]
                     .as_str()
                     .ok_or_else(|| Error::Domain("File event missing file_id".into()))?;
                 item.event.file = Some(
                     files
-                        .get(&item.event.session_id, id)
+                        .get(&item.event.fact.session_id, id)
                         .await?
                         .ok_or_else(|| Error::NotFound(format!("Shared file {id} not found")))?,
                 );

@@ -3,8 +3,8 @@ use crate::{
     runtime::{CodexRuntime, SubscriptionState},
 };
 use futures_util::{SinkExt, StreamExt};
-use pontia_application::{
-    AgentBindingService, AppState, UpsertAgentBindingRequest,
+use pontia_agent_control::{
+    AgentBindingService, AgentControl, UpsertAgentBindingRequest,
     clients::ClientRegistry,
     interactions::{Interaction, InteractionState},
 };
@@ -20,7 +20,7 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 mod blocking;
 
 struct Fixture {
-    app: AppState,
+    app: AgentControl,
     session: String,
     root: tempfile::TempDir,
     commands: mpsc::UnboundedSender<Value>,
@@ -94,7 +94,7 @@ impl Fixture {
         .unwrap();
         let mut clients = ClientRegistry::default();
         clients.register(crate::registration());
-        let app = AppState::builder(pool, root.path().into())
+        let app = AgentControl::builder(pool, root.path().into())
             .clients(clients)
             .build();
         let session = app
@@ -422,7 +422,7 @@ async fn confirmed_session_exit_rejects_a_response_even_before_observer_cleanup(
         .await;
     assert!(matches!(
         result,
-        Err(pontia_application::interactions::InteractionError::Expired)
+        Err(pontia_agent_control::interactions::InteractionError::Expired)
     ));
     assert!(f.replies.is_empty());
     assert_eq!(

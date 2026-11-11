@@ -3,7 +3,8 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
 };
-use pontia_application::{AppState, clients::ClientRegistry};
+use pontia_agent_control::clients::ClientRegistry;
+use pontia_application::AppState;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -27,10 +28,13 @@ async fn app() -> (Router, tempfile::TempDir) {
             json!({"name":"File peer", "command":"agent", "args":[]}),
         )]),
     ));
-    let state = AppState::builder(db, root.path().into())
-        .clients(clients)
-        .external_api_token(Some("test-token".into()))
-        .build();
+    let state = AppState::builder(
+        pontia_agent_control::AgentControl::builder(db, root.path().into())
+            .clients(clients)
+            .build(),
+    )
+    .external_api_token(Some("test-token".into()))
+    .build();
     (pontia_http::router(state), root)
 }
 
@@ -80,10 +84,13 @@ async fn invalid_effective_values_remain_manageable_after_environment_changes() 
         clients.register(pi);
         clients.register(pontia_client_codex::registration());
         pontia_http::router(
-            AppState::builder(db.clone(), root.path().into())
-                .clients(clients)
-                .external_api_token(Some("test-token".into()))
-                .build(),
+            AppState::builder(
+                pontia_agent_control::AgentControl::builder(db.clone(), root.path().into())
+                    .clients(clients)
+                    .build(),
+            )
+            .external_api_token(Some("test-token".into()))
+            .build(),
         )
     };
     let with_environment = router(json!({"tui_command":"env-pi"}));

@@ -7,10 +7,8 @@ use axum::{
     },
     http::StatusCode,
 };
-use pontia_application::{
-    AppState,
-    interactions::{InteractionError, InteractionState},
-};
+use pontia_agent_control::interactions::{InteractionError, InteractionState};
+use pontia_application::AppState;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -60,6 +58,7 @@ pub async fn list_interactions(
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Query(query) = query.map_err(|e| ApiError::invalid_request(e.to_string()))?;
     let page = app
+        .control()
         .interactions()
         .list(
             &session,
@@ -77,7 +76,7 @@ pub async fn get_interaction(
     Path((session, id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(
-        json!({"interaction": app.interactions().get(&session,&id).await?}),
+        json!({"interaction": app.control().interactions().get(&session,&id).await?}),
     ))
 }
 pub async fn respond_interaction(
@@ -87,6 +86,6 @@ pub async fn respond_interaction(
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(body) = body.map_err(|e| ApiError::invalid_request(e.to_string()))?;
     Ok(ok(
-        json!({"interaction": app.interactions().respond(&app,&session,&id,&body.option_key).await?}),
+        json!({"interaction": app.control().interactions().respond(app.control(),&session,&id,&body.option_key).await?}),
     ))
 }

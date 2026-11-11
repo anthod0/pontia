@@ -194,7 +194,7 @@ fn repeated_resume_preserves_command_and_passes_exact_quoted_session_file() {
     for restart_count in 1..=2 {
         std::fs::write(&tmux_log, "").unwrap();
         let launched = launcher
-            .launch(pontia_application::clients::ClientLaunchRequest {
+            .launch(pontia_agent_control::clients::ClientLaunchRequest {
                 root: root.path(),
                 runtime: launch_request(root.path(), Some(persisted)),
                 restart_count,
@@ -245,7 +245,7 @@ fn resume_rejects_missing_invalid_or_different_native_session_before_launch() {
         if let Some(contents) = contents {
             std::fs::write(&file, contents).unwrap();
         }
-        let result = launcher.launch(pontia_application::clients::ClientLaunchRequest {
+        let result = launcher.launch(pontia_agent_control::clients::ClientLaunchRequest {
             root: root.path(),
             runtime: launch_request(root.path(), Some("must-not-run".into())),
             restart_count: 1,
@@ -274,8 +274,8 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
     let original_path = install_fake_tmux(root.path(), &log);
     let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(async {
-        use pontia_application::{
-            AppState, agent_clients::AgentClientService, clients::ClientRegistry,
+        use pontia_agent_control::{
+            AgentControl, agent_clients::AgentClientService, clients::ClientRegistry,
         };
         use pontia_storage_sqlite::{connect_sqlite, run_migrations};
         use serde_json::json;
@@ -304,7 +304,7 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
             ));
             let mut clients = ClientRegistry::default();
             clients.register(client);
-            let app = AppState::builder(pool.clone(), root.path().into())
+            let app = AgentControl::builder(pool.clone(), root.path().into())
                 .clients(clients.clone())
                 .build();
             let service = AgentClientService::new(pool.clone(), clients);
@@ -456,7 +456,7 @@ fn start_session(
     pontia_client_pi::registration(config.tui_command_for_client_config_key("pi"))
         .launcher
         .unwrap()
-        .launch(pontia_application::clients::ClientLaunchRequest {
+        .launch(pontia_agent_control::clients::ClientLaunchRequest {
             root,
             runtime,
             restart_count: 0,

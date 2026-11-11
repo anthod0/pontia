@@ -1,5 +1,5 @@
-use pontia_application::{
-    AppState, CreateSessionRequest, SubmitInboxMessageRequest,
+use pontia_agent_control::{
+    AgentControl, CreateSessionRequest, SubmitInboxMessageRequest,
     client_contract::ClientServicePhase,
     clients::{ClientRegistry, ClientServiceTasks},
 };
@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 struct Harness {
-    app: AppState,
+    app: AgentControl,
     root: tempfile::TempDir,
     tasks: ClientServiceTasks,
 }
@@ -159,10 +159,10 @@ impl Harness {
         clients.register(pontia_client_claude::registration_with_host(Some(
             format!("{}/tests/fixtures/host.mjs", env!("CARGO_MANIFEST_DIR")).into(),
         )));
-        let app = AppState::builder(pool, root.path().into())
+        let app = AgentControl::builder(pool, root.path().into())
             .clients(clients.clone())
             .build();
-        pontia_application::agent_clients::AgentClientService::new(app.db(), clients.clone())
+        pontia_agent_control::agent_clients::AgentClientService::new(app.db(), clients.clone())
             .save("claude-agent", "default", Some(true), None)
             .await
             .unwrap();
@@ -311,9 +311,11 @@ impl Harness {
     async fn history(
         &self,
         session: &str,
-    ) -> Result<pontia_application::TurnTreeHistoryPage, pontia_application::TurnTimelineServiceError>
-    {
-        pontia_application::TurnTimelineService::new(self.app.event_ingest_service())
+    ) -> Result<
+        pontia_agent_control::TurnTreeHistoryPage,
+        pontia_agent_control::TurnTimelineServiceError,
+    > {
+        pontia_agent_control::TurnTimelineService::new(self.app.event_ingest_service())
             .tree_history(session.into(), None, 50)
             .await
     }
@@ -420,17 +422,17 @@ async fn closing_before_first_turn_reports_unassociated_history_instead_of_empty
         .terminate_session(&session)
         .await
         .unwrap();
-    let result = pontia_application::TurnTimelineService::new(h.app.event_ingest_service())
+    let result = pontia_agent_control::TurnTimelineService::new(h.app.event_ingest_service())
         .page(
             session.clone(),
-            pontia_application::TurnTimelineDirection::Backward,
+            pontia_agent_control::TurnTimelineDirection::Backward,
             None,
             50,
         )
         .await;
     assert!(matches!(
         result,
-        Err(pontia_application::TurnTimelineServiceError::CapabilityUnavailable)
+        Err(pontia_agent_control::TurnTimelineServiceError::CapabilityUnavailable)
     ));
     assert!(h.turns(&session).await.is_empty());
     h.stop().await;
@@ -466,7 +468,7 @@ async fn relative_config_directory_is_bound_to_the_execution_workspace() {
         .terminate_session(&session)
         .await
         .unwrap();
-    let binding = pontia_application::AgentBindingService::new(h.app.db())
+    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
         .binding_for_session(&session)
         .await
         .unwrap()
@@ -507,7 +509,7 @@ async fn closed_history_and_resume_survive_a_control_service_restart() {
     clients.register(pontia_client_claude::registration_with_host(Some(
         format!("{}/tests/fixtures/host.mjs", env!("CARGO_MANIFEST_DIR")).into(),
     )));
-    let app = AppState::builder(h.app.db(), h.root.path().into())
+    let app = AgentControl::builder(h.app.db(), h.root.path().into())
         .clients(clients.clone())
         .build();
     let tasks = clients
@@ -546,7 +548,7 @@ async fn missing_history_is_an_error_and_never_starts_a_replacement_conversation
         .terminate_session(&session)
         .await
         .unwrap();
-    let binding = pontia_application::AgentBindingService::new(h.app.db())
+    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
         .binding_for_session(&session)
         .await
         .unwrap()
@@ -560,7 +562,7 @@ async fn missing_history_is_an_error_and_never_starts_a_replacement_conversation
     .unwrap();
     assert!(matches!(
         h.history(&session).await,
-        Err(pontia_application::TurnTimelineServiceError::SourceUnavailable)
+        Err(pontia_agent_control::TurnTimelineServiceError::SourceUnavailable)
     ));
     let outcome = h.resume_input(&session, "new real input").await;
     assert_eq!(outcome["inbox_message"]["state"], "failed");
@@ -573,7 +575,7 @@ async fn missing_history_is_an_error_and_never_starts_a_replacement_conversation
     );
     assert_eq!(h.turns(&session).await.len(), 1);
     assert_eq!(
-        pontia_application::AgentBindingService::new(h.app.db())
+        pontia_agent_control::AgentBindingService::new(h.app.db())
             .binding_for_session(&session)
             .await
             .unwrap()
@@ -821,7 +823,7 @@ async fn initial_input_binds_identity_once_and_inbox_waits_for_authoritative_end
     h.submit(&session, "second").await;
     h.gate(&session, 1, "start");
     let first = h.wait_states(&session, &["running"]).await;
-    let binding = pontia_application::AgentBindingService::new(h.app.db())
+    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
         .binding_for_session(&session)
         .await
         .unwrap()
@@ -851,7 +853,7 @@ async fn initial_input_binds_identity_once_and_inbox_waits_for_authoritative_end
     h.gate(&session, 2, "finish");
     h.wait_states(&session, &["completed", "completed"]).await;
     assert_eq!(
-        pontia_application::AgentBindingService::new(h.app.db())
+        pontia_agent_control::AgentBindingService::new(h.app.db())
             .binding_for_session(&session)
             .await
             .unwrap()
@@ -1007,10 +1009,10 @@ async fn same_workspace_sessions_keep_identity_input_and_live_output_separate() 
     for (session, turn, text) in [(&a, &ta, "alpha"), (&b, &tb, "beta")] {
         let snapshot = h.app.live_output().snapshot(session, turn).unwrap();
         assert!(
-            matches!(&snapshot.items[..], [pontia_application::LiveOutputItem::AssistantText { text: value, .. }] if value == text)
+            matches!(&snapshot.items[..], [pontia_agent_control::LiveOutputItem::AssistantText { text: value, .. }] if value == text)
         );
     }
-    let bindings = pontia_application::AgentBindingService::new(h.app.db());
+    let bindings = pontia_agent_control::AgentBindingService::new(h.app.db());
     assert_ne!(
         bindings
             .binding_for_session(&a)

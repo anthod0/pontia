@@ -1,5 +1,5 @@
 use clap::{Args, Subcommand};
-use pontia_application::agent_clients::AgentClientDetails;
+use pontia_agent_control::agent_clients::AgentClientDetails;
 use pontia_config::AppConfig;
 use reqwest::Method;
 use serde_json::{Value, json};

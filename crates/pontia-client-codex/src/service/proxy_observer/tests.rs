@@ -2,7 +2,7 @@ use super::*;
 use crate::service::confirmed_exits;
 use crate::{CodexObserver, proxy::Proxy};
 use futures_util::{SinkExt, StreamExt};
-use pontia_application::clients::ClientRegistry;
+use pontia_agent_control::clients::ClientRegistry;
 use serde_json::{Value, json};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
@@ -29,7 +29,7 @@ impl Thread {
 }
 
 struct Fixture {
-    app: AppState,
+    app: AgentControl,
     root: tempfile::TempDir,
     threads: Arc<Mutex<HashMap<String, Thread>>>,
     faults: Arc<Mutex<std::collections::HashSet<String>>>,
@@ -153,7 +153,7 @@ impl Fixture {
         .unwrap();
         let mut clients = ClientRegistry::default();
         clients.register(crate::registration());
-        let app = AppState::builder(pool, root.path().into())
+        let app = AgentControl::builder(pool, root.path().into())
             .clients(clients)
             .build();
         let (shutdown, stop) = watch::channel(false);
@@ -274,7 +274,7 @@ async fn cli_start_and_first_input_join_existing_turn_observation() {
         loop {
             if let Some(snapshot) = f.app.live_output().snapshot(&session, &turn_id)
                 && snapshot.items
-                    == vec![pontia_application::LiveOutputItem::AssistantText {
+                    == vec![pontia_agent_control::LiveOutputItem::AssistantText {
                         item_id: "answer".into(),
                         text: "live from CLI".into(),
                     }]
@@ -349,7 +349,7 @@ async fn dashboard_fork_excludes_the_target_and_preserves_running_source() {
     .fetch_one(&f.app.db())
     .await
     .unwrap();
-    let request = || pontia_application::sessions::ForkSessionRequest {
+    let request = || pontia_agent_control::sessions::ForkSessionRequest {
         operation_id: "edit-middle".into(),
         turn_id: target.clone(),
     };
@@ -390,7 +390,7 @@ async fn dashboard_fork_excludes_the_target_and_preserves_running_source() {
         .submit_message_once(
             "replacement",
             &child,
-            pontia_application::SubmitInboxMessageRequest {
+            pontia_agent_control::SubmitInboxMessageRequest {
                 input: "edited prompt".into(),
                 delivery_policy: "after_idle".into(),
                 branch_target_turn_id: None,
@@ -467,7 +467,7 @@ async fn first_turn_fork_is_empty_and_active_turn_is_rejected() {
         .fetch_one(&f.app.db())
         .await
         .unwrap();
-    let request = || pontia_application::sessions::ForkSessionRequest {
+    let request = || pontia_agent_control::sessions::ForkSessionRequest {
         operation_id: "edit-first".into(),
         turn_id: target.clone(),
     };
@@ -514,7 +514,7 @@ async fn attachment_retry_reuses_the_confirmed_native_fork_after_command_service
         .fetch_one(&f.app.db())
         .await
         .unwrap();
-    let request = || pontia_application::sessions::ForkSessionRequest {
+    let request = || pontia_agent_control::sessions::ForkSessionRequest {
         operation_id: "recover-adoption".into(),
         turn_id: target.clone(),
     };
@@ -543,7 +543,7 @@ async fn attachment_retry_reuses_the_confirmed_native_fork_after_command_service
         .get_mut(&binding.client_session_key)
         .unwrap()
         .value["status"]["type"] = json!("notLoaded");
-    let restarted = AppState::builder(f.app.db(), f.root.path().into())
+    let restarted = AgentControl::builder(f.app.db(), f.root.path().into())
         .clients(f.app.clients())
         .build();
     let recovered = restarted
@@ -580,7 +580,7 @@ async fn native_rejection_and_lost_receipt_do_not_repeat_forks() {
             .fetch_one(&f.app.db())
             .await
             .unwrap();
-        let request = || pontia_application::sessions::ForkSessionRequest {
+        let request = || pontia_agent_control::sessions::ForkSessionRequest {
             operation_id: "failure".into(),
             turn_id: target.clone(),
         };

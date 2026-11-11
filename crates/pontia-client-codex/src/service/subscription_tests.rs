@@ -1,6 +1,6 @@
 use crate::runtime::CodexRuntime;
 use futures_util::{SinkExt, StreamExt};
-use pontia_application::{AppState, CreateSessionRequest, clients::ClientRegistry};
+use pontia_agent_control::{AgentControl, CreateSessionRequest, clients::ClientRegistry};
 use serde_json::{Value, json};
 use std::{collections::HashMap, sync::Arc};
 use tokio::{net::UnixListener, sync::Mutex, task::JoinHandle};
@@ -8,7 +8,7 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 struct Fixture {
     root: tempfile::TempDir,
-    app: AppState,
+    app: AgentControl,
     session: String,
     methods: Arc<Mutex<Vec<String>>>,
     before_thread_response: Arc<Mutex<Vec<Value>>>,
@@ -143,7 +143,7 @@ impl Fixture {
         .unwrap();
         let mut clients = ClientRegistry::default();
         clients.register(crate::registration());
-        let app = AppState::builder(pool, root.path().into())
+        let app = AgentControl::builder(pool, root.path().into())
             .clients(clients)
             .build();
         let created = app
@@ -285,7 +285,7 @@ async fn first_input_restores_launch_data_and_binds_a_thread_without_a_runtime()
             .await
             .unwrap();
     assert_eq!(runtime_count, 0);
-    let binding = pontia_application::AgentBindingService::new(fixture.app.db())
+    let binding = pontia_agent_control::AgentBindingService::new(fixture.app.db())
         .binding_for_session(&fixture.session)
         .await
         .unwrap()
@@ -552,7 +552,7 @@ async fn model_control_does_not_require_a_runtime_identity() {
         .session_commands()
         .set_session_model(
             &fixture.session,
-            pontia_application::sessions::SetSessionModelRequest {
+            pontia_agent_control::sessions::SetSessionModelRequest {
                 model: "model-one".into(),
                 runtime_id: None,
             },
@@ -595,7 +595,7 @@ async fn exit_unloads_and_resume_preserves_native_identity() {
         .await
         .unwrap();
     assert_eq!(
-        pontia_application::AgentBindingService::new(fixture.app.db())
+        pontia_agent_control::AgentBindingService::new(fixture.app.db())
             .binding_for_session(&fixture.session)
             .await
             .unwrap()
@@ -655,7 +655,7 @@ async fn approval_received_before_binding_is_presented_after_first_input() {
             let pending = interactions
                 .list(
                     &fixture.session,
-                    Some(pontia_application::interactions::InteractionState::Pending),
+                    Some(pontia_agent_control::interactions::InteractionState::Pending),
                     10,
                     None,
                 )
@@ -681,7 +681,7 @@ async fn approval_received_before_binding_is_presented_after_first_input() {
             if interactions
                 .list(
                     &fixture.session,
-                    Some(pontia_application::interactions::InteractionState::Expired),
+                    Some(pontia_agent_control::interactions::InteractionState::Expired),
                     10,
                     None,
                 )

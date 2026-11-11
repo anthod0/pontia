@@ -1,6 +1,6 @@
 use super::{CodexService, live_output::CodexLiveOutput};
 use crate::runtime::{CodexRuntime, SubscriptionState};
-use pontia_application::AgentBindingService;
+use pontia_agent_control::AgentBindingService;
 use pontia_core::{
     Error, Result,
     domain::{DomainEvent, EventType},
@@ -20,12 +20,12 @@ pub struct CodexObserver {
     changes: broadcast::Receiver<(PathBuf, String)>,
     session_events: broadcast::Receiver<DomainEvent>,
     root: PathBuf,
-    live_output: pontia_application::LiveOutputService,
-    interactions: pontia_application::interactions::InteractionService,
+    live_output: pontia_agent_control::LiveOutputService,
+    interactions: pontia_agent_control::interactions::InteractionService,
 }
 
 impl CodexObserver {
-    pub fn new(state: &pontia_application::AppState, root: PathBuf) -> Self {
+    pub fn new(state: &pontia_agent_control::AgentControl, root: PathBuf) -> Self {
         Self {
             service: CodexService::new(state.event_ingest_service()),
             changes: super::observation_changes().subscribe(),

@@ -22,7 +22,7 @@ use pontia::{
     manager::ProcessCommandRunner,
     runtime_io::{FileDefinitionStore, HttpHealthProbe},
 };
-use pontia_application::client_contract::ClientIntegration;
+use pontia_agent_control::client_contract::ClientIntegration;
 use pontia_config::AppConfig;
 #[cfg(target_os = "macos")]
 use pontia_runtime::local_service::launchd_executable_search_path;

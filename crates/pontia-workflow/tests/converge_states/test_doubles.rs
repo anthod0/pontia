@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use pontia_application::CreateSessionRequest;
+use pontia_agent_control::CreateSessionRequest;
 use pontia_core::{
     Error as PontiaError,
     domain::{DomainEvent, EventSource, EventType},
@@ -204,7 +204,7 @@ where
     tokio::spawn(async move {
         let _keepalive = shutdown_tx;
         WorkflowCoordinator::with_services(
-            &pontia_application::AppState::builder(pool, pontia_home.clone())
+            &pontia_agent_control::AgentControl::builder(pool, pontia_home.clone())
                 .clients(crate::test_doubles::clients())
                 .build(),
             sessions,
@@ -224,26 +224,26 @@ impl AgentEventSubscriber for TestAgentEvents {
 }
 
 // This fixture uses the persisted client identifier without loading its native adapter.
-pub(super) fn clients() -> pontia_application::clients::ClientRegistry {
-    static SPEC: std::sync::OnceLock<pontia_application::client_contract::AgentClientSpec> =
+pub(super) fn clients() -> pontia_agent_control::clients::ClientRegistry {
+    static SPEC: std::sync::OnceLock<pontia_agent_control::client_contract::AgentClientSpec> =
         std::sync::OnceLock::new();
     let spec = SPEC.get_or_init(|| {
-        let mut spec = pontia_application::client_contract::TEST_SPEC.clone();
+        let mut spec = pontia_agent_control::client_contract::TEST_SPEC.clone();
         spec.client_type = "pi";
-        spec.adapter.dispatch = pontia_application::client_contract::DispatchBehavior::Connected;
-        spec.adapter.terminate = pontia_application::client_contract::TerminateBehavior::Connected;
-        spec.adapter.runtime = pontia_application::client_contract::RuntimeBehavior::Tmux(
-            pontia_application::client_contract::TmuxRuntimeBehavior {
+        spec.adapter.dispatch = pontia_agent_control::client_contract::DispatchBehavior::Connected;
+        spec.adapter.terminate = pontia_agent_control::client_contract::TerminateBehavior::Connected;
+        spec.adapter.runtime = pontia_agent_control::client_contract::RuntimeBehavior::Tmux(
+            pontia_agent_control::client_contract::TmuxRuntimeBehavior {
                 process_names: &[],
                 hook_log: None,
             },
         );
         spec.adapter.turn_lifecycle =
-            pontia_application::client_contract::TurnLifecycleBehavior::ClientManagedForInteractiveTmux;
+            pontia_agent_control::client_contract::TurnLifecycleBehavior::ClientManagedForInteractiveTmux;
         spec
     });
-    let mut clients = pontia_application::clients::ClientRegistry::default();
-    clients.register(pontia_application::clients::ClientRegistration {
+    let mut clients = pontia_agent_control::clients::ClientRegistry::default();
+    clients.register(pontia_agent_control::clients::ClientRegistration {
         configuration: None,
         interactions: None,
         service: None,

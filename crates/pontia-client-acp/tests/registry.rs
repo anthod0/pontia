@@ -289,8 +289,8 @@ async fn compressed_tar_distributions_launch_the_declared_peer() {
 
 #[tokio::test]
 async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_block_inspection() {
-    use pontia_application::{
-        AppState, CreateSessionRequest, client_contract::ClientServicePhase,
+    use pontia_agent_control::{
+        AgentControl, CreateSessionRequest, client_contract::ClientServicePhase,
         clients::ClientRegistry,
     };
     use pontia_client_acp::AcpConfig;
@@ -336,7 +336,7 @@ async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_b
         config.clone(),
         server.registry(),
     ));
-    let app = AppState::builder(pool.clone(), state_root.clone())
+    let app = AgentControl::builder(pool.clone(), state_root.clone())
         .clients(clients.clone())
         .build();
     let tasks = clients
@@ -352,7 +352,7 @@ async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_b
     let session = result.session_id().unwrap().to_string();
     // Removing admission settings must not prevent recovery of this existing Session.
     management.delete("acp", "company-choice").await.unwrap();
-    let binding = pontia_application::AgentBindingService::new(pool.clone())
+    let binding = pontia_agent_control::AgentBindingService::new(pool.clone())
         .binding_for_session(&session)
         .await
         .unwrap()
@@ -371,7 +371,7 @@ async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_b
         config.clone(),
         server.registry(),
     ));
-    let app = AppState::builder(pool.clone(), state_root.clone())
+    let app = AgentControl::builder(pool.clone(), state_root.clone())
         .clients(clients.clone())
         .build();
     let tasks = clients
@@ -397,7 +397,7 @@ async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_b
     .await
     .expect("Registry recovery must work when the state root and workspace differ");
     assert_eq!(
-        pontia_application::AgentBindingService::new(pool.clone())
+        pontia_agent_control::AgentBindingService::new(pool.clone())
             .binding_for_session(&session)
             .await
             .unwrap()
@@ -422,7 +422,9 @@ async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_b
     drop(server);
     let mut clients = ClientRegistry::default();
     clients.register(pontia_client_acp::registration_with_registry(config, cold));
-    let app = AppState::builder(pool, state_root).clients(clients).build();
+    let app = AgentControl::builder(pool, state_root)
+        .clients(clients)
+        .build();
     let detail = app.queries().get_session(&session).await.unwrap().unwrap();
     assert!(!detail.capabilities.accept_task);
     assert!(!detail.capabilities.timeline);

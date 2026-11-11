@@ -1,10 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use agent_client_protocol::{Responder, schema::v1::*};
-use pontia_application::interactions::{
+use pontia_agent_control::interactions::{
     ChoiceInteractionRequest, InteractionIntent, InteractionOption, InteractionService,
 };
-use pontia_application::{EventIngestService, ReportedFact};
+use pontia_agent_control::{EventIngestService, ReportedFact};
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::json;
 use tokio::sync::{Mutex, mpsc, oneshot};

@@ -1,5 +1,5 @@
 mod support;
-use pontia_application::AppState;
+use pontia_agent_control::AgentControl;
 use pontia_client_pi::ipc::{PiIpcListener, serve_connection};
 use pontia_client_pi::rpc::{PROTOCOL_VERSION, PiRpcPeer};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
@@ -7,7 +7,7 @@ use serde_json::json;
 use std::{sync::Arc, time::Duration};
 use tokio::net::UnixStream;
 
-async fn state() -> (AppState, tempfile::TempDir) {
+async fn state() -> (AgentControl, tempfile::TempDir) {
     let root = tempfile::Builder::new().prefix("pr-").tempdir().unwrap();
     let db = connect_sqlite(&format!("sqlite://{}", root.path().join("db").display()))
         .await
@@ -20,7 +20,7 @@ async fn state() -> (AppState, tempfile::TempDir) {
     .await
     .unwrap();
     (
-        AppState::builder(db, root.path().into())
+        AgentControl::builder(db, root.path().into())
             .clients(support::clients())
             .build(),
         root,
@@ -28,7 +28,7 @@ async fn state() -> (AppState, tempfile::TempDir) {
 }
 
 fn client(
-    state: &AppState,
+    state: &AgentControl,
 ) -> (
     Arc<PiRpcPeer>,
     tokio::sync::mpsc::Receiver<pontia_client_pi::rpc::RpcRequest>,
@@ -135,7 +135,7 @@ async fn disabling_pi_blocks_new_native_registration_but_preserves_existing_regi
     let (state, root) = state().await;
     let (pi, _requests) = client(&state);
     let (session, runtime) = register(&pi, root.path()).await;
-    pontia_application::agent_clients::AgentClientService::new(state.db(), state.clients())
+    pontia_agent_control::agent_clients::AgentClientService::new(state.db(), state.clients())
         .save("pi", "default", Some(false), None)
         .await
         .unwrap();
@@ -580,7 +580,7 @@ async fn repeated_started_reports_return_the_first_canonical_identity() {
 
 #[tokio::test]
 async fn rpc_queries_read_workspace_session_and_pinned_or_latest_profiles() {
-    use pontia_application::{AgentProfileService, UpsertExecutionProfileRequest};
+    use pontia_agent_control::{AgentProfileService, UpsertExecutionProfileRequest};
     let (state, root) = state().await;
     let (pi, _requests) = client(&state);
     assert_eq!(
@@ -649,7 +649,7 @@ async fn rpc_queries_read_workspace_session_and_pinned_or_latest_profiles() {
 
 #[tokio::test]
 async fn restarting_a_stable_runtime_rejects_old_connection_facts_and_receipts() {
-    use pontia_application::{PontiaEvent, PontiaEventSource, PontiaEventType};
+    use pontia_agent_control::{PontiaEvent, PontiaEventSource, PontiaEventType};
     let (state, root) = state().await;
     let (old, mut requests) = client(&state);
     let (session, runtime) = register(&old, root.path()).await;

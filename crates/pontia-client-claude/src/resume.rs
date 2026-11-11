@@ -1,5 +1,5 @@
 use crate::{Adapter, Peer, unavailable};
-use pontia_application::{AgentBindingService, EventIngestService, runtime::ControlTarget};
+use pontia_agent_control::{AgentBindingService, EventIngestService, runtime::ControlTarget};
 use pontia_core::{Error, Result};
 use serde_json::Value;
 use std::{

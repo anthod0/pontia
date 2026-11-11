@@ -517,7 +517,7 @@ async fn codex_profile_binding_pins_content_before_first_input_and_rejects_inval
         "awaiting_input"
     );
     assert!(
-        pontia_application::AgentBindingService::new(state.db())
+        pontia_agent_control::AgentBindingService::new(state.db())
             .binding_for_session(session)
             .await
             .unwrap()
@@ -572,7 +572,7 @@ async fn codex_profile_binding_pins_content_before_first_input_and_rejects_inval
 #[tokio::test]
 async fn default_profile_is_fixed_at_creation_and_legacy_sessions_remain_unbound() {
     let app = TestApp::new().await;
-    let service = pontia_application::AgentProfileService::new(app.db.clone());
+    let service = pontia_agent_control::AgentProfileService::new(app.db.clone());
     sqlx::query("UPDATE execution_profiles SET system_prompt_template='original-default' WHERE profile_id='default' AND version='2'")
         .execute(&app.db).await.unwrap();
     let request = json!({"client_type":"codex", "workspace":app.workspace().path()});

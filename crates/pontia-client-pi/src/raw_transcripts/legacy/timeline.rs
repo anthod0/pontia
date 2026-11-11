@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use pontia_core::{Error, Result};
 use serde_json::Value;
 
-use pontia_application::client_contract::raw_transcripts::{
+use pontia_agent_control::client_contract::raw_transcripts::{
     CapturedTimelineBoundary, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
     TimelineBoundaryCapturer, TurnTimelineItem, TurnTimelineReadError, TurnTimelineReadRequest,
     TurnTimelineReader,
@@ -304,7 +304,7 @@ impl TurnTimelineReader for PiTimelineAdapter {
 
     fn read_session_timeline(
         &self,
-        request: pontia_application::client_contract::raw_transcripts::SessionTimelineReadRequest,
+        request: pontia_agent_control::client_contract::raw_transcripts::SessionTimelineReadRequest,
     ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
         self.read_legacy_session(request, "")
     }
@@ -330,7 +330,7 @@ impl TurnTimelineReader for PiTimelineAdapter {
 impl PiTimelineAdapter {
     pub(crate) fn read_legacy_session(
         &self,
-        request: pontia_application::client_contract::raw_transcripts::SessionTimelineReadRequest,
+        request: pontia_agent_control::client_contract::raw_transcripts::SessionTimelineReadRequest,
         native_session: &str,
     ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
         if request.source.client_type != "pi" || request.source.format != "pi-jsonl" {

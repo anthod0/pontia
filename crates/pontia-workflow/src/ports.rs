@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use pontia_application::{
+use pontia_agent_control::{
     AgentEventBroker, CreateSessionRequest, SessionCommandService, TurnCommandService,
 };
 use pontia_core::domain::DomainEvent;

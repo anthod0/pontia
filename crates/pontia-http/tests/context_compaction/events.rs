@@ -1,5 +1,5 @@
 use super::fixture::*;
-use pontia_application::{EventReportError, ReportedFact};
+use pontia_agent_control::{EventReportError, ReportedFact};
 use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use serde_json::{Value, json};
 
@@ -22,7 +22,7 @@ async fn manual_compaction_holds_inbox_until_completion_failure_or_cancellation(
     ] {
         let fixture = Fixture::new(&SPEC, false).await;
         fixture.seed().await;
-        let service = fixture.state.event_ingest_service();
+        let service = fixture.state.control().event_ingest_service();
         service
             .report_fact(fact(
                 EventType::SessionCompactionStarted,
@@ -38,11 +38,12 @@ async fn manual_compaction_holds_inbox_until_completion_failure_or_cancellation(
 
         let submitted = fixture
             .state
+            .control()
             .inbox_commands()
             .submit_message_once(
                 "queued",
                 "session",
-                pontia_application::SubmitInboxMessageRequest {
+                pontia_agent_control::SubmitInboxMessageRequest {
                     input: "hi".into(),
                     delivery_policy: "after_idle".into(),
                     branch_target_turn_id: None,
@@ -77,6 +78,7 @@ async fn manual_compaction_holds_inbox_until_completion_failure_or_cancellation(
             loop {
                 let message = fixture
                     .state
+                    .control()
                     .inbox_commands()
                     .get_message("session", "queued")
                     .await
@@ -91,15 +93,20 @@ async fn manual_compaction_holds_inbox_until_completion_failure_or_cancellation(
         .await
         .unwrap();
         assert_eq!(*fixture.channel.operations.lock().unwrap(), ["hi"]);
-        fixture.state.inbox_commands().stop_scheduling().await;
+        fixture
+            .state
+            .control()
+            .inbox_commands()
+            .stop_scheduling()
+            .await;
     }
 }
 
 #[tokio::test]
 async fn session_scoped_wait_can_be_interrupted_without_creating_a_turn() {
-    static INTERRUPTIBLE: pontia_application::client_contract::AgentClientSpec =
-        pontia_application::client_contract::AgentClientSpec {
-            capabilities: pontia_application::client_contract::AgentClientCapabilities {
+    static INTERRUPTIBLE: pontia_agent_control::client_contract::AgentClientSpec =
+        pontia_agent_control::client_contract::AgentClientSpec {
+            capabilities: pontia_agent_control::client_contract::AgentClientCapabilities {
                 interrupt: true,
                 ..SPEC.capabilities
             },
@@ -107,7 +114,7 @@ async fn session_scoped_wait_can_be_interrupted_without_creating_a_turn() {
         };
     let fixture = Fixture::new(&INTERRUPTIBLE, false).await;
     fixture.seed().await;
-    let service = fixture.state.event_ingest_service();
+    let service = fixture.state.control().event_ingest_service();
     service
         .report_fact(fact(
             EventType::InteractionBlocked,
@@ -118,6 +125,7 @@ async fn session_scoped_wait_can_be_interrupted_without_creating_a_turn() {
     let before = service.list_events("session").await.unwrap().len();
     let outcome = fixture
         .state
+        .control()
         .turn_commands()
         .interrupt_current_turn("session")
         .await
@@ -149,6 +157,7 @@ async fn compaction_facts_are_persisted_broadcast_and_queried_without_advancing_
     fixture.seed().await;
     fixture
         .state
+        .control()
         .event_ingest_service()
         .ingest_reported_event(ReportedEvent::new(
             "started-turn".into(),
@@ -163,6 +172,7 @@ async fn compaction_facts_are_persisted_broadcast_and_queried_without_advancing_
         .unwrap();
     let before = fixture
         .state
+        .control()
         .event_ingest_service()
         .get_session("session")
         .await
@@ -170,12 +180,13 @@ async fn compaction_facts_are_persisted_broadcast_and_queried_without_advancing_
         .unwrap();
     let turn_before = fixture
         .state
+        .control()
         .event_ingest_service()
         .get_turn("turn_a")
         .await
         .unwrap()
         .unwrap();
-    let mut subscriber = fixture.state.agent_events().subscribe();
+    let mut subscriber = fixture.state.control().agent_events().subscribe();
     for (kind, data) in [
         (
             EventType::SessionCompactionStarted,
@@ -192,6 +203,7 @@ async fn compaction_facts_are_persisted_broadcast_and_queried_without_advancing_
     ] {
         let result = fixture
             .state
+            .control()
             .event_ingest_service()
             .report_fact(fact(kind, data))
             .await
@@ -207,6 +219,7 @@ async fn compaction_facts_are_persisted_broadcast_and_queried_without_advancing_
     }
     let after = fixture
         .state
+        .control()
         .event_ingest_service()
         .get_session("session")
         .await
@@ -214,6 +227,7 @@ async fn compaction_facts_are_persisted_broadcast_and_queried_without_advancing_
         .unwrap();
     let turn_after = fixture
         .state
+        .control()
         .event_ingest_service()
         .get_turn("turn_a")
         .await
@@ -256,6 +270,7 @@ async fn completed_metadata_is_null_when_the_client_does_not_provide_it() {
     for trigger in ["manual", "threshold", "overflow", "unknown"] {
         fixture
             .state
+            .control()
             .event_ingest_service()
             .report_fact(fact(
                 EventType::SessionCompactionCompleted,
@@ -266,6 +281,7 @@ async fn completed_metadata_is_null_when_the_client_does_not_provide_it() {
     }
     let events = fixture
         .state
+        .control()
         .queries()
         .list_session_events("session")
         .await
@@ -282,7 +298,7 @@ async fn completed_metadata_is_null_when_the_client_does_not_provide_it() {
 async fn malformed_compaction_facts_and_summary_copies_are_rejected_without_side_effects() {
     let fixture = Fixture::new(&SPEC, true).await;
     fixture.seed().await;
-    let mut subscriber = fixture.state.agent_events().subscribe();
+    let mut subscriber = fixture.state.control().agent_events().subscribe();
     for (kind, data) in [
         (
             EventType::SessionCompactionStarted,
@@ -335,6 +351,7 @@ async fn malformed_compaction_facts_and_summary_copies_are_rejected_without_side
     ] {
         let error = fixture
             .state
+            .control()
             .event_ingest_service()
             .report_fact(fact(kind, data))
             .await
@@ -352,6 +369,7 @@ async fn malformed_compaction_facts_and_summary_copies_are_rejected_without_side
     assert!(matches!(
         fixture
             .state
+            .control()
             .event_ingest_service()
             .report_fact(turn_fact)
             .await,
@@ -360,6 +378,7 @@ async fn malformed_compaction_facts_and_summary_copies_are_rejected_without_side
     assert_eq!(
         fixture
             .state
+            .control()
             .queries()
             .list_session_events("session")
             .await
@@ -385,6 +404,7 @@ async fn runtime_bound_compaction_facts_cannot_be_reported_by_a_stale_instance()
         assert!(
             fixture
                 .state
+                .control()
                 .event_ingest_service()
                 .report_fact(fact(EventType::SessionCompactionStarted, data))
                 .await
@@ -393,6 +413,7 @@ async fn runtime_bound_compaction_facts_cannot_be_reported_by_a_stale_instance()
     }
     fixture
         .state
+        .control()
         .event_ingest_service()
         .report_fact(fact(
             EventType::SessionCompactionStarted,
@@ -403,6 +424,7 @@ async fn runtime_bound_compaction_facts_cannot_be_reported_by_a_stale_instance()
     assert_eq!(
         fixture
             .state
+            .control()
             .queries()
             .list_session_events("session")
             .await

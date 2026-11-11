@@ -1,5 +1,5 @@
 //! Legacy pi-jsonl-v2 file behavior; runtime entry locators are covered separately.
-use pontia_application::client_contract::{
+use pontia_agent_control::client_contract::{
     TopologyResolution,
     history::{HistoryRecoveryRequest, TurnHistoryCandidate},
     raw_transcripts::{

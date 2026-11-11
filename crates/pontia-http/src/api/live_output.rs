@@ -7,7 +7,8 @@ use axum::{
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, wrappers::ReceiverStream};
 
-use pontia_application::{AppState, LiveOutputSnapshot, LiveOutputStreamEvent};
+use pontia_agent_control::{LiveOutputSnapshot, LiveOutputStreamEvent};
+use pontia_application::AppState;
 
 use super::{response::ApiError, session_guard::ensure_session_exists};
 
@@ -15,21 +16,21 @@ pub async fn stream_live_output(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    ensure_session_exists(&state.queries(), &session_id).await?;
+    ensure_session_exists(&state.control().queries(), &session_id).await?;
 
-    let subscription = state.live_output().subscribe_session(&session_id);
+    let subscription = state.control().live_output().subscribe_session(&session_id);
     Ok(live_output_sse_stream(state, session_id, subscription))
 }
 
 fn live_output_sse_stream(
     state: AppState,
     session_id: String,
-    mut subscription: pontia_application::LiveOutputSubscription,
+    mut subscription: pontia_agent_control::LiveOutputSubscription,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let (sender, receiver) = mpsc::channel(32);
 
     tokio::spawn(async move {
-        let mut shutdown = state.shutdown().subscribe();
+        let mut shutdown = state.control().shutdown().subscribe();
         if let Some(snapshot) = subscription.initial_snapshot.take()
             && send_snapshot(&sender, snapshot).await.is_err()
         {
@@ -56,7 +57,7 @@ fn live_output_sse_stream(
                         }
                         Ok(_) => {}
                         Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                            subscription = state.live_output().subscribe_session(&session_id);
+                            subscription = state.control().live_output().subscribe_session(&session_id);
                             if let Some(snapshot) = subscription.initial_snapshot.take()
                                 && send_snapshot(&sender, snapshot).await.is_err()
                             {

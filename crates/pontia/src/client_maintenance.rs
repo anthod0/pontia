@@ -1,4 +1,4 @@
-use pontia_application::{agent_clients::AgentClientDetails, client_contract::ClientIntegration};
+use pontia_agent_control::{agent_clients::AgentClientDetails, client_contract::ClientIntegration};
 use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 use std::{collections::HashMap, path::Path, sync::Arc};
 

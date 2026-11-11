@@ -1,4 +1,4 @@
-use pontia_application::{
+use pontia_agent_control::{
     EventIngestService, ReportedFact,
     interactions::{ChoiceInteractionRequest, InteractionIntent, InteractionOption},
 };

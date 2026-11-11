@@ -21,13 +21,23 @@ pub async fn initialize(config: &AppConfig) -> Result<AppState> {
         run_migrations(&db).await?;
     }
 
-    let state = AppState::builder(db, config.pontia_home.clone())
-        .clients(clients)
-        .external_api_token(config.external_api_token.clone())
-        .workspace_browser(config.workspace_browser.clone())
-        .file_picker(config.file_picker.clone())
-        .build();
-    state.interactions().expire_leftovers().await?;
-    state.inbox_commands().recover_deliveries().await?;
+    let state = AppState::builder(
+        pontia_agent_control::AgentControl::builder(db.clone(), config.pontia_home.clone())
+            .environment(std::sync::Arc::new(
+                pontia_workflow::WorkflowSessionEnvironment::new(db),
+            ))
+            .clients(clients)
+            .build(),
+    )
+    .external_api_token(config.external_api_token.clone())
+    .workspace_browser(config.workspace_browser.clone())
+    .file_picker(config.file_picker.clone())
+    .build();
+    state.control().interactions().expire_leftovers().await?;
+    state
+        .control()
+        .inbox_commands()
+        .recover_deliveries()
+        .await?;
     Ok(state)
 }

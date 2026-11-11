@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use pontia_application::client_contract::ClientConfiguration;
+use pontia_agent_control::client_contract::ClientConfiguration;
 mod launch;
 pub use launch::{AcpAgentConfig, AcpConfig};
 use pontia_config::ConfigurationLayers;

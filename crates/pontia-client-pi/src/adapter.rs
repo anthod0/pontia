@@ -1,9 +1,9 @@
 use crate::launch::PiLauncher;
 use crate::raw_transcripts::{PiAgentBindingResolver, PiTimelineAdapter};
-use pontia_application::client_contract::{
+use pontia_agent_control::client_contract::{
     TimelineBoundaryBackend, TurnTimelineBackend, TurnTopologyBackend,
 };
-use pontia_application::clients::{
+use pontia_agent_control::clients::{
     BranchTargetRequest, ClientData, ClientRegistration, NativeEventEvidence,
 };
 use pontia_core::{
@@ -68,22 +68,22 @@ impl ClientData for PiData {
     }
     fn native_history(
         &self,
-        binding: pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
-        control: Option<pontia_application::clients::ClientControlService>,
-    ) -> Option<Arc<dyn pontia_application::client_contract::native_history::NativeHistory>> {
+        binding: pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
+        control: Option<pontia_agent_control::clients::ClientControlService>,
+    ) -> Option<Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory>> {
         Some(crate::history::PiHistory::new(binding, control))
     }
     fn capture_native_boundary(
         &self,
-        binding: &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
-        kind: pontia_application::client_contract::raw_transcripts::TimelineBoundaryCaptureKind,
+        binding: &pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
+        kind: pontia_agent_control::client_contract::raw_transcripts::TimelineBoundaryCaptureKind,
         anchor: Option<String>,
         first: bool,
         head: Option<&str>,
     ) -> Option<
-        Result<pontia_application::client_contract::raw_transcripts::CapturedTimelineBoundary>,
+        Result<pontia_agent_control::client_contract::raw_transcripts::CapturedTimelineBoundary>,
     > {
-        use pontia_application::client_contract::raw_transcripts::{
+        use pontia_agent_control::client_contract::raw_transcripts::{
             CapturedTimelineBoundary, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
             TimelineBoundaryCapturer,
         };
@@ -93,7 +93,7 @@ impl ClientData for PiData {
             {
                 let head = head.unwrap();
                 crate::raw_transcripts::PiJsonlV2Cursor::decode(head, &binding.id)?;
-                use pontia_application::client_contract::raw_transcripts::AgentBindingResolver;
+                use pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolver;
                 let source = PiAgentBindingResolver::new().resolve(binding)?;
                 return PiTimelineAdapter::new().capture_boundary(TimelineBoundaryCaptureRequest {
                     source,
@@ -155,7 +155,7 @@ impl ClientData for PiData {
     fn history_recovery(
         &self,
     ) -> Option<
-        Box<dyn pontia_application::client_contract::history::TurnHistoryRecoverer + Send + Sync>,
+        Box<dyn pontia_agent_control::client_contract::history::TurnHistoryRecoverer + Send + Sync>,
     > {
         Some(Box::new(PiTimelineAdapter::new()))
     }

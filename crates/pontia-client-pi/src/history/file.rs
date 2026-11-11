@@ -1,7 +1,7 @@
 //! Entry-addressed reads of Pi's persisted append-ordered JSONL tree.
 use super::{MAX_ENTRIES, MAX_SNAPSHOT_BYTES, PiEntryCursor, identity, invalid, unavailable};
 use crate::raw_transcripts::{PiJsonlV2Cursor, mapping::pi_entry_to_items};
-use pontia_application::client_contract::raw_transcripts::{
+use pontia_agent_control::client_contract::raw_transcripts::{
     AgentBindingResolveRequest, SessionTimelineSelection, TurnTimelineItem, TurnTimelineRange,
     TurnTimelineReadError,
 };

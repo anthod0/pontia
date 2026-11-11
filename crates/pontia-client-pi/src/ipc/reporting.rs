@@ -1,5 +1,5 @@
 use super::Attach;
-use pontia_application::{AppState, EventReportError, ReportedFact};
+use pontia_agent_control::{AgentControl, EventReportError, ReportedFact};
 use pontia_core::{Error, Result, domain::EventType};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -24,7 +24,7 @@ struct Event {
 }
 
 async fn validate_identity(
-    state: &AppState,
+    state: &AgentControl,
     identity: &Attach,
     session_id: &str,
     runtime_id: &str,
@@ -41,7 +41,7 @@ async fn validate_identity(
 }
 
 pub(super) async fn report_event(
-    state: &AppState,
+    state: &AgentControl,
     identity: &Attach,
     params: Value,
 ) -> Result<Value> {
@@ -112,7 +112,7 @@ pub(super) async fn report_event(
             }
             let version = queries
                 .resolve_event_cursor(
-                    pontia_application::views::events::EventStreamScope::Session {
+                    pontia_agent_control::views::events::EventStreamScope::Session {
                         session_id: &fact.session_id,
                     },
                     &existing.event_id,

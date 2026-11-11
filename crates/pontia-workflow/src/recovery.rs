@@ -1,5 +1,5 @@
 use crate::{Result, validation::validate_handoff_file_name};
-use pontia_application::{AppState, InboxCommandService, SessionCommandService};
+use pontia_agent_control::{AgentControl, InboxCommandService, SessionCommandService};
 use pontia_storage_sqlite::{
     models::workflows::WorkflowRecoveryRow, repositories::workflows::SqliteWorkflowRepository,
 };
@@ -15,7 +15,7 @@ pub struct WorkflowRecoveryService {
 }
 
 impl WorkflowRecoveryService {
-    pub fn new(app: &AppState) -> Self {
+    pub fn new(app: &AgentControl) -> Self {
         Self {
             repository: SqliteWorkflowRepository::new(app.db()).with_recovery_client_types(
                 app.clients()

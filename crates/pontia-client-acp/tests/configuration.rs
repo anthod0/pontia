@@ -1,4 +1,4 @@
-use pontia_application::client_contract::ClientConfiguration;
+use pontia_agent_control::client_contract::ClientConfiguration;
 use pontia_client_acp::AcpAgentConfig;
 use pontia_client_acp::configuration::AcpConfiguration;
 use serde_json::json;

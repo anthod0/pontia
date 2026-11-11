@@ -1,5 +1,5 @@
 use crate::transport::Connection;
-use pontia_application::{
+use pontia_agent_control::{
     EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
 };
 use pontia_core::{Error, Result, domain::EventType};
@@ -36,7 +36,7 @@ pub(crate) struct Peer {
     pub config_dir: PathBuf,
     pub resume: Option<String>,
     pub state: Mutex<State>,
-    pub interactions: pontia_application::interactions::InteractionService,
+    pub interactions: pontia_agent_control::interactions::InteractionService,
     pub connection: OnceLock<Arc<Connection>>,
 }
 impl Peer {

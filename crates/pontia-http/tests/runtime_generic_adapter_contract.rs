@@ -3,8 +3,8 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
+use pontia_agent_control::client_contract::{AgentClientCapabilities, GenericTestClient};
 use pontia_application::AppState;
-use pontia_application::client_contract::{AgentClientCapabilities, GenericTestClient};
 use pontia_http as http;
 use pontia_storage_sqlite::repositories::workflows::{
     CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
@@ -339,7 +339,7 @@ async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() 
         .await
         .expect("bind interrupted session");
 
-    let outcome = WorkflowControlService::new(&state)
+    let outcome = WorkflowControlService::new(state.control())
         .resume("wf_generic_resume")
         .await
         .expect("resume workflow");

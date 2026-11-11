@@ -4,10 +4,11 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_application::{
-    AppState, EventIngestService, LiveOutputBatch, LiveOutputItem, LiveOutputSnapshotReplacement,
+use pontia_agent_control::{
+    EventIngestService, LiveOutputBatch, LiveOutputItem, LiveOutputSnapshotReplacement,
     LiveOutputUpdate,
 };
+use pontia_application::AppState;
 use pontia_core::{
     domain::{EventSource, EventType, ReportedEvent},
     ids::new_event_id,
@@ -77,14 +78,14 @@ fn producer(
     turn_id: &str,
     stream_id: &str,
     runtime_id: &str,
-) -> pontia_application::LiveOutputProducer {
-    pontia_application::LiveOutputProducer {
-        identity: pontia_application::LiveOutputIdentity {
+) -> pontia_agent_control::LiveOutputProducer {
+    pontia_agent_control::LiveOutputProducer {
+        identity: pontia_agent_control::LiveOutputIdentity {
             session_id: session_id.into(),
             turn_id: turn_id.into(),
             stream_id: stream_id.into(),
         },
-        source: pontia_application::LiveOutputSource::RuntimeBound {
+        source: pontia_agent_control::LiveOutputSource::RuntimeBound {
             runtime_id: runtime_id.into(),
         },
     }
@@ -126,7 +127,7 @@ async fn body_until(body: &mut Body, needle: &str) -> String {
 async fn tool_execution_updates_and_reconnect_snapshot_share_the_session_channel() {
     let state = state_with_running_turn().await;
     let producer = producer("sess_live", "turn_live", "stream_live", "rtinst_live");
-    state.live_output().replace_snapshot(LiveOutputSnapshotReplacement {
+    state.control().live_output().replace_snapshot(LiveOutputSnapshotReplacement {
         producer: producer.clone(), sequence: 1,
         items: serde_json::from_value(json!([{ "kind":"tool_call","item_id":"tool","call_id":"call","tool_name":"bash","arguments":{"command":"test"} }])).unwrap(),
     }).await.unwrap();
@@ -141,6 +142,7 @@ async fn tool_execution_updates_and_reconnect_snapshot_share_the_session_channel
         {"type":"tool_status_updated","call_id":"call","status":{"phase":"ended","outcome":"failed"}}
     ]);
     state
+        .control()
         .live_output()
         .publish_batch(LiveOutputBatch {
             producer,
@@ -197,6 +199,7 @@ async fn external_live_output_stream_authenticates_and_checks_the_session() {
 async fn external_live_output_stream_sends_snapshot_updates_and_closed() {
     let state = state_with_running_turn().await;
     state
+        .control()
         .live_output()
         .replace_snapshot(LiveOutputSnapshotReplacement {
             producer: producer("sess_live", "turn_live", "stream_live", "rtinst_live"),
@@ -222,6 +225,7 @@ async fn external_live_output_stream_sends_snapshot_updates_and_closed() {
 
     seed_running_turn(&state, "sess_other", "turn_other", "rtinst_other").await;
     state
+        .control()
         .live_output()
         .replace_snapshot(LiveOutputSnapshotReplacement {
             producer: producer("sess_other", "turn_other", "stream_other", "rtinst_other"),
@@ -238,6 +242,7 @@ async fn external_live_output_stream_sends_snapshot_updates_and_closed() {
     );
 
     state
+        .control()
         .live_output()
         .publish_batch(LiveOutputBatch {
             producer: producer("sess_live", "turn_live", "stream_live", "rtinst_live"),
@@ -253,7 +258,10 @@ async fn external_live_output_stream_sends_snapshot_updates_and_closed() {
     assert!(updates.contains("event: updates"), "{updates}");
     assert!(updates.contains(r#""first_sequence":2"#), "{updates}");
 
-    state.live_output().discard_turn("sess_live", "turn_live");
+    state
+        .control()
+        .live_output()
+        .discard_turn("sess_live", "turn_live");
     let closed = body_until(&mut body, "\n\n").await;
     assert!(closed.contains("event: closed"), "{closed}");
     assert!(closed.contains(r#""sequence":2"#), "{closed}");

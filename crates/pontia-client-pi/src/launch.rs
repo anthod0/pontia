@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use pontia_application::clients::{ClientLaunchRequest, ClientLauncher};
+use pontia_agent_control::clients::{ClientLaunchRequest, ClientLauncher};
 use pontia_core::{Error, Result};
 
 pub(crate) struct PiLauncher {

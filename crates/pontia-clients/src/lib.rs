@@ -1,4 +1,4 @@
-use pontia_application::{client_contract::ClientIntegration, clients::ClientRegistry};
+use pontia_agent_control::{client_contract::ClientIntegration, clients::ClientRegistry};
 use std::sync::Arc;
 
 pub fn integrations() -> Vec<Arc<dyn ClientIntegration>> {

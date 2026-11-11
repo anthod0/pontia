@@ -7,7 +7,8 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use pontia_application::{AgentProfileService, AppState, UpsertExecutionProfileRequest};
+use pontia_agent_control::{AgentProfileService, UpsertExecutionProfileRequest};
+use pontia_application::AppState;
 
 use super::{
     idempotency::idempotent,
@@ -30,7 +31,7 @@ pub async fn list_agent_profiles(
     State(state): State<AppState>,
     Query(query): Query<AgentProfilesQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
+    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
     let profiles = if query.include_archived {
         service.list_latest_including_archived().await?
     } else {
@@ -43,7 +44,7 @@ pub async fn get_agent_profile(
     State(state): State<AppState>,
     Path(profile_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
+    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
     let profile = service
         .get_latest(&profile_id)
         .await?
@@ -56,7 +57,7 @@ pub async fn create_agent_profile(
     headers: HeaderMap,
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
+    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
     let outcome = idempotent(&state, &headers, "create_agent_profile", || async move {
         Ok(service.create_profile(request).await?.data)
     })
@@ -74,7 +75,7 @@ pub async fn delete_agent_profile(
     headers: HeaderMap,
     Path(profile_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
+    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
     let operation = format!("archive_agent_profile:{profile_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.archive_profile(&profile_id).await?.data)
@@ -88,7 +89,7 @@ pub async fn list_agent_profile_versions(
     Path(profile_id): Path<String>,
     Query(query): Query<AgentProfileVersionsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
+    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
     let versions = service
         .list_versions(&profile_id, query.include_archived)
         .await?;
@@ -106,7 +107,7 @@ pub async fn create_agent_profile_version(
     Path(profile_id): Path<String>,
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
+    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
     let operation = format!("create_agent_profile_version:{profile_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service
@@ -127,7 +128,7 @@ pub async fn get_agent_profile_version(
     State(state): State<AppState>,
     Path((profile_id, version)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
+    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
     let profile = service
         .get_version(&profile_id, &version)
         .await?
@@ -143,7 +144,7 @@ pub async fn update_agent_profile_version(
     Path((profile_id, version)): Path<(String, String)>,
     Json(request): Json<UpsertExecutionProfileRequest>,
 ) -> Result<Response, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
+    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
     let operation = format!("update_agent_profile_version:{profile_id}:{version}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service
@@ -160,7 +161,7 @@ pub async fn delete_agent_profile_version(
     headers: HeaderMap,
     Path((profile_id, version)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
-    let service = AgentProfileService::new(state.db()).with_clients(state.clients());
+    let service = AgentProfileService::new(state.db()).with_clients(state.control().clients());
     let operation = format!("archive_agent_profile_version:{profile_id}:{version}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.archive_version(&profile_id, &version).await?.data)

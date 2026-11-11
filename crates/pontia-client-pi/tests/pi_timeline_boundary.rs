@@ -1,7 +1,7 @@
 //! Legacy pi-jsonl-v2 file behavior; runtime entry locators are covered separately.
 use std::fs;
 
-use pontia_application::client_contract::raw_transcripts::{
+use pontia_agent_control::client_contract::raw_transcripts::{
     ResolvedAgentBinding, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
     TimelineBoundaryCapturer, TurnTimelineRange, TurnTimelineReadRequest, TurnTimelineReader,
 };
@@ -38,7 +38,7 @@ fn cursor(offset: usize, anchor: Option<&str>) -> String {
 
 #[test]
 fn legacy_session_history_keeps_old_messages_and_recovers_offline_compaction_checkpoints() {
-    use pontia_application::client_contract::raw_transcripts::{
+    use pontia_agent_control::client_contract::raw_transcripts::{
         SessionTimelineReadRequest, SessionTimelineSelection, SessionTimelineTurn,
     };
     let contents = concat!(

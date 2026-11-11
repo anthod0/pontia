@@ -1,4 +1,4 @@
-use pontia_application::client_contract::{ClientIntegration, PreparedClientIntegration};
+use pontia_agent_control::client_contract::{ClientIntegration, PreparedClientIntegration};
 use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 use std::{
     collections::HashMap,

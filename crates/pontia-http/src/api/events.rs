@@ -9,7 +9,8 @@ pub(super) use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, wrappers::ReceiverStream};
 
-use pontia_application::{AppState, EventStreamScope};
+use pontia_agent_control::EventStreamScope;
+use pontia_application::AppState;
 
 use super::{response::ApiError, session_guard::ensure_session_exists};
 
@@ -24,8 +25,8 @@ pub async fn stream_session_events(
     Path(session_id): Path<String>,
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    let service = state.queries();
-    ensure_session_exists(&service, &session_id).await?;
+    let service = state.control().queries();
+    ensure_session_exists(&state.control().queries(), &session_id).await?;
     let after_rowid = match query.after.as_deref() {
         Some(after) => {
             service
@@ -55,9 +56,11 @@ pub async fn stream_turn_events(
     Path((session_id, turn_id)): Path<(String, String)>,
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    let service = state.queries();
-    ensure_session_exists(&service, &session_id).await?;
-    service
+    let service = state.control().queries();
+    ensure_session_exists(&state.control().queries(), &session_id).await?;
+    state
+        .control()
+        .queries()
         .get_turn(&session_id, &turn_id)
         .await?
         .ok_or_else(|| ApiError::not_found(format!("turn {turn_id} not found")))?;
@@ -103,7 +106,7 @@ fn event_sse_stream(
     let (sender, receiver) = mpsc::channel(32);
 
     tokio::spawn(async move {
-        let mut shutdown = state.shutdown().subscribe();
+        let mut shutdown = state.control().shutdown().subscribe();
         let service = state.queries();
         let mut cursor = after_rowid;
 
@@ -156,7 +159,7 @@ fn event_sse_stream(
 
             for item in items {
                 cursor = item.rowid;
-                let event_id = item.event.event_id.clone();
+                let event_id = item.event.fact.event_id.clone();
                 let event = Event::default()
                     .id(event_id)
                     .event("domain_event")

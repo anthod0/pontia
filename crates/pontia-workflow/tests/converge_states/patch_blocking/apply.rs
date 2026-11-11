@@ -40,7 +40,7 @@ async fn changed_apply_revises_the_graph_and_queues_one_continuation_without_pla
     .await;
     let exits = RecordingExitRequester::default();
     let coordinator = WorkflowCoordinator::with_services(
-        &pontia_application::AppState::builder(pool.clone(), pontia_home.clone())
+        &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
         PersistingSessionCreator::new(pool.clone()),
@@ -247,7 +247,7 @@ output = "replacement.md"
     )
     .await;
     let second_coordinator = WorkflowCoordinator::with_services(
-        &pontia_application::AppState::builder(pool.clone(), pontia_home.clone())
+        &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
         PersistingSessionCreator::with_identity(
@@ -354,7 +354,7 @@ async fn unchanged_apply_rejects_without_advancing_the_revision() {
     )
     .await;
     WorkflowCoordinator::with_services(
-        &pontia_application::AppState::builder(pool.clone(), pontia_home.clone())
+        &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
         PersistingSessionCreator::new(pool.clone()),

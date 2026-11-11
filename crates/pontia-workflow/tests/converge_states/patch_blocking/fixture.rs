@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use pontia_application::CreateSessionRequest;
+use pontia_agent_control::CreateSessionRequest;
 use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
 use pontia_workflow::SessionCreator;
 use serde_json::{Value, json};

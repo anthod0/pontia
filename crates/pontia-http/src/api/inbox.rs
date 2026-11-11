@@ -6,7 +6,8 @@ use axum::{
 };
 use serde_json::{Value, json};
 
-use pontia_application::{AppState, SubmitInboxMessageRequest};
+use pontia_agent_control::SubmitInboxMessageRequest;
+use pontia_application::AppState;
 
 use super::response::{ApiError, ApiResponse, ok};
 
@@ -16,7 +17,7 @@ pub async fn submit_inbox_message(
     Path(session_id): Path<String>,
     Json(request): Json<SubmitInboxMessageRequest>,
 ) -> Result<Response, ApiError> {
-    let service = state.inbox_commands();
+    let service = state.control().inbox_commands();
     let outcome = match headers.get("Idempotency-Key") {
         Some(key) => {
             let key = key
@@ -48,6 +49,7 @@ pub async fn put_inbox_message(
     Json(request): Json<SubmitInboxMessageRequest>,
 ) -> Result<Response, ApiError> {
     let outcome = state
+        .control()
         .inbox_commands()
         .submit_message_once(&message_id, &session_id, request)
         .await?;
@@ -65,11 +67,17 @@ pub async fn put_inbox_message(
 pub async fn retry_inbox_message(
     State(state): State<AppState>,
     Path((session_id, message_id)): Path<(String, String)>,
-    Json(request): Json<pontia_application::RetryInboxMessageRequest>,
+    Json(request): Json<pontia_agent_control::RetryInboxMessageRequest>,
 ) -> Result<Response, ApiError> {
     let outcome = state
+        .control()
         .inbox_commands()
-        .retry_message(&state.session_commands(), &session_id, &message_id, request)
+        .retry_message(
+            &state.control().session_commands(),
+            &session_id,
+            &message_id,
+            request,
+        )
         .await?;
     Ok((
         if outcome.duplicate {
@@ -86,7 +94,7 @@ pub async fn list_inbox_messages(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.inbox_commands();
+    let service = state.control().inbox_commands();
     let messages = service.list_messages(&session_id).await?;
     Ok(ok(json!({ "inbox_messages": messages })))
 }
@@ -95,7 +103,7 @@ pub async fn get_inbox_message(
     State(state): State<AppState>,
     Path((session_id, message_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.inbox_commands();
+    let service = state.control().inbox_commands();
     let message = service
         .get_message(&session_id, &message_id)
         .await?
@@ -107,7 +115,7 @@ pub async fn cancel_inbox_message(
     State(state): State<AppState>,
     Path((session_id, message_id)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
-    let service = state.inbox_commands();
+    let service = state.control().inbox_commands();
     let outcome = service.cancel_message(&session_id, &message_id).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
@@ -116,7 +124,7 @@ pub async fn dismiss_inbox_message(
     State(state): State<AppState>,
     Path((session_id, message_id)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
-    let service = state.inbox_commands();
+    let service = state.control().inbox_commands();
     let outcome = service.dismiss_message(&session_id, &message_id).await?;
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }

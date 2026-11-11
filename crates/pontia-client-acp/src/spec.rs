@@ -1,4 +1,4 @@
-use pontia_application::client_contract::*;
+use pontia_agent_control::client_contract::*;
 
 pub const ACP_MAX_CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     accept_task: true,

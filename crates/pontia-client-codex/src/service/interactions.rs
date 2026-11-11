@@ -1,5 +1,5 @@
 use crate::runtime::protocol::Connection;
-use pontia_application::interactions::{
+use pontia_agent_control::interactions::{
     ChoiceInteractionRequest, InteractionIntent, InteractionOption, InteractionService,
 };
 use pontia_core::{Error, Result, domain::EventType};
@@ -87,7 +87,7 @@ fn approval(value: &Value) -> Option<Approval> {
 
 async fn register(
     service: &InteractionService,
-    ingest: &pontia_application::EventIngestService,
+    ingest: &pontia_agent_control::EventIngestService,
     connection: &Connection,
     value: &Value,
 ) -> Result<()> {
@@ -182,7 +182,7 @@ async fn register(
 // Delivery expiry (including Turn end/unload) must retain this correlation.
 pub(crate) async fn observe_native(
     service: &InteractionService,
-    ingest: &pontia_application::EventIngestService,
+    ingest: &pontia_agent_control::EventIngestService,
     connection: &Connection,
 ) -> Result<()> {
     loop {
@@ -225,7 +225,7 @@ pub(crate) async fn observe_native(
 
 pub(crate) async fn reconcile(
     service: &InteractionService,
-    ingest: &pontia_application::EventIngestService,
+    ingest: &pontia_agent_control::EventIngestService,
     connection: &Connection,
 ) -> Result<()> {
     // Discover requests received before their Session binding became available.

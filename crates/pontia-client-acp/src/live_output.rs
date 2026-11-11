@@ -1,6 +1,6 @@
 //! ACP presentation conversion. The shared store is the only retained content cache;
 //! prompts retain only bounded result-provenance IDs, never raw tool payloads.
-use pontia_application::{
+use pontia_agent_control::{
     LiveOutputBatch, LiveOutputIdentity, LiveOutputItem, LiveOutputProducer,
     LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshotReplacement, LiveOutputSource,
     LiveOutputUpdate, LiveReasoningBound, LiveToolOutcome, LiveToolPhase, LiveToolResult,

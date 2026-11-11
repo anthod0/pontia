@@ -5,7 +5,7 @@ mod patch_resolution;
 
 use std::{path::PathBuf, time::Duration};
 
-use pontia_application::{
+use pontia_agent_control::{
     AgentEventBroker, InboxCommandService, SessionCommandService, TurnCommandService,
 };
 use pontia_core::domain::EventType;
@@ -71,7 +71,7 @@ where
     S: SessionCreator + Send + Sync + 'static,
 {
     pub fn new(
-        app: &pontia_application::AppState,
+        app: &pontia_agent_control::AgentControl,
         sessions: S,
         agent_events: AgentEventBroker,
         pontia_home: PathBuf,
@@ -96,7 +96,7 @@ where
     B: AgentEventSubscriber + Send + Sync + 'static,
 {
     pub fn with_services(
-        app: &pontia_application::AppState,
+        app: &pontia_agent_control::AgentControl,
         sessions: S,
         exits: X,
         agent_events: B,
@@ -121,7 +121,7 @@ where
     B: AgentEventSubscriber + Send + Sync + 'static,
 {
     pub fn with_services_and_interruptions(
-        app: &pontia_application::AppState,
+        app: &pontia_agent_control::AgentControl,
         sessions: S,
         exits: X,
         interruptions: I,

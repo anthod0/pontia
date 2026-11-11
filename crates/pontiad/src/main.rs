@@ -1,7 +1,7 @@
 mod e2e_identity;
 mod initialization;
 mod uploads;
-use pontia_application::client_contract::ClientServicePhase;
+use pontia_agent_control::client_contract::ClientServicePhase;
 use pontia_core::error::Result;
 use pontia_http as http;
 use std::{
@@ -20,26 +20,28 @@ async fn main() -> Result<()> {
     let bound_addr = listener.local_addr()?;
     let app_state = initialization::initialize(&config).await?;
     let mut client_tasks = app_state
+        .control()
         .clients()
-        .start_services(app_state.clone(), ClientServicePhase::Transport)
+        .start_services(app_state.control().clone(), ClientServicePhase::Transport)
         .await?;
-    let inbox = app_state.inbox_commands();
-    let client_control = app_state.client_control();
-    let runtime_observer = app_state.runtime_observer();
-    tokio::spawn(runtime_observer.run(app_state.shutdown().subscribe()));
+    let inbox = app_state.control().inbox_commands();
+    let client_control = app_state.control().client_control();
+    let runtime_observer = app_state.control().runtime_observer();
+    tokio::spawn(runtime_observer.run(app_state.control().shutdown().subscribe()));
     client_tasks.extend(
         app_state
+            .control()
             .clients()
-            .start_services(app_state.clone(), ClientServicePhase::Observation)
+            .start_services(app_state.control().clone(), ClientServicePhase::Observation)
             .await?,
     );
     let workflow_coordinator = pontia_workflow::WorkflowCoordinator::new(
-        &app_state,
-        app_state.session_commands(),
-        app_state.agent_events(),
+        app_state.control(),
+        app_state.control().session_commands(),
+        app_state.control().agent_events(),
         app_state.pontia_home().to_path_buf(),
     );
-    tokio::spawn(workflow_coordinator.run(app_state.shutdown().subscribe()));
+    tokio::spawn(workflow_coordinator.run(app_state.control().shutdown().subscribe()));
     let dashboard =
         http::dashboard::resolve_dashboard(&config.dashboard, &config.pontia_home).await;
     let state = http::HttpState::new(app_state, dashboard);
@@ -47,7 +49,7 @@ async fn main() -> Result<()> {
     info!(addr = %bound_addr, "starting pontia control plane");
     info!(url = %dashboard_url(bound_addr), "dashboard available");
 
-    let shutdown = state.app().shutdown();
+    let shutdown = state.app().control().shutdown();
     let cleanup_shutdown = shutdown.clone();
     let http_entrypoints = http::HttpEntrypoints::new(state);
     let remote = config

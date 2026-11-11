@@ -1,10 +1,12 @@
 mod support;
-use pontia_application::{AppState, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact};
+use pontia_agent_control::{
+    AgentControl, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
+};
 use pontia_core::domain::EventType;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 
-async fn fixture() -> (AppState, tempfile::TempDir) {
+async fn fixture() -> (AgentControl, tempfile::TempDir) {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite(&format!(
         "sqlite://{}",
@@ -13,7 +15,7 @@ async fn fixture() -> (AppState, tempfile::TempDir) {
     .await
     .unwrap();
     run_migrations(&pool).await.unwrap();
-    let app = AppState::builder(pool, root.path().into())
+    let app = AgentControl::builder(pool, root.path().into())
         .clients(support::clients())
         .build();
     app.event_ingest_service()
@@ -46,13 +48,13 @@ async fn fixture() -> (AppState, tempfile::TempDir) {
     (app, root)
 }
 
-async fn states(app: &AppState) -> (String, String) {
+async fn states(app: &AgentControl) -> (String, String) {
     sqlx::query_as("SELECT s.state,r.state FROM sessions s JOIN session_runtimes r USING(session_id) WHERE runtime_id='runtime'").fetch_one(&app.db()).await.unwrap()
 }
 
 async fn ready(
-    app: &AppState,
-) -> Result<pontia_application::EventIngestResult, pontia_application::EventReportError> {
+    app: &AgentControl,
+) -> Result<pontia_agent_control::EventIngestResult, pontia_agent_control::EventReportError> {
     app.event_ingest_service()
         .report_fact(ReportedFact {
             session_id: "session".into(),
@@ -245,9 +247,10 @@ async fn startup_failure_ends_runtime_and_preserves_reason() {
 #[tokio::test]
 async fn session_query_returns_all_runtimes() {
     let (app, root) = fixture().await;
-    let workspace = pontia_application::upsert_workspace(&app.db(), root.path().to_str().unwrap())
-        .await
-        .unwrap();
+    let workspace =
+        pontia_agent_control::upsert_workspace(&app.db(), root.path().to_str().unwrap())
+            .await
+            .unwrap();
     sqlx::query("UPDATE sessions SET workspace_id=? WHERE session_id='session'")
         .bind(workspace.workspace_id)
         .execute(&app.db())

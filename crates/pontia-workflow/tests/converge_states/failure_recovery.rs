@@ -9,7 +9,7 @@ use pontia_workflow::{WorkflowCoordinator, WorkflowQueryService, WorkflowRecover
 
 async fn fixture() -> (
     tempfile::TempDir,
-    pontia_application::AppState,
+    pontia_agent_control::AgentControl,
     SqliteWorkflowRepository,
 ) {
     let root = tempfile::tempdir().unwrap();
@@ -51,7 +51,7 @@ async fn fixture() -> (
     std::fs::create_dir_all(&handoff).unwrap();
     std::fs::write(handoff.join("root.md"), "valid upstream output").unwrap();
     std::fs::write(handoff.join("child.md"), "partial output").unwrap();
-    let app = pontia_application::AppState::builder(pool, root.path().into())
+    let app = pontia_agent_control::AgentControl::builder(pool, root.path().into())
         .clients(super::test_doubles::clients())
         .build();
     (root, app, repo)
@@ -63,7 +63,7 @@ async fn exit(pool: &sqlx::SqlitePool, id: &str, runtime: &str) {
 }
 
 async fn ready(
-    app: &pontia_application::AppState,
+    app: &pontia_agent_control::AgentControl,
     repo: &SqliteWorkflowRepository,
     row: &WorkflowRecoveryRow,
 ) {
@@ -87,7 +87,7 @@ async fn ready(
 }
 
 fn coordinator(
-    app: &pontia_application::AppState,
+    app: &pontia_agent_control::AgentControl,
 ) -> WorkflowCoordinator<
     SequencedSessionCreator,
     RecordingExitRequester,

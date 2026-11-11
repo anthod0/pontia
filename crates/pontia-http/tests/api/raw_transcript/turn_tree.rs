@@ -414,6 +414,7 @@ async fn pi_hook_context_projects_a_replayable_conversation_tree_without_persist
     // native recovery happens only when a history operation is requested.
     assert_eq!(
         state
+            .control()
             .event_ingest_service()
             .get_turn("turn_pi_linear_malformed")
             .await

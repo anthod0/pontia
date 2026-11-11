@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use pontia_application::{AgentEventBroker, CreateSessionRequest, EventIngestService};
+use pontia_agent_control::{AgentEventBroker, CreateSessionRequest, EventIngestService};
 use pontia_workflow::{
     GracefulExitRequester, SessionCreator, TurnInterruptionRequester, WorkflowCoordinator,
     WorkflowQueryService,
@@ -86,10 +86,10 @@ async fn reported_requester_interruption_starts_one_replanner() {
     assert_eq!(status, StatusCode::OK, "{requested}");
     let patch_id = requested["data"]["patch_id"].as_str().unwrap();
     let coordinator = WorkflowCoordinator::with_services(
-        &app.state,
+        app.state.control(),
         ReplannerCreator(app.db.clone()),
         RuntimeControl::default(),
-        app.state.agent_events(),
+        app.state.control().agent_events(),
         app.pontia_home().path().to_path_buf(),
     );
 
@@ -231,10 +231,10 @@ async fn planning_patch(app: &TestApp, control: RuntimeControl) -> (String, Coor
     let patch_id = requested["data"]["patch_id"].as_str().unwrap().to_string();
     report_requester_fact(app, "turn.interrupted", json!({ "terminal_leaf_id": null })).await;
     let coordinator = WorkflowCoordinator::with_services(
-        &app.state,
+        app.state.control(),
         ReplannerCreator(app.db.clone()),
         control,
-        app.state.agent_events(),
+        app.state.control().agent_events(),
         app.pontia_home().path().to_path_buf(),
     );
     coordinator.reconcile("wf_patch_request").await.unwrap();

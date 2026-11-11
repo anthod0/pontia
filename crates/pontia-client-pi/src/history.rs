@@ -5,7 +5,7 @@ mod recovery;
 pub(crate) mod timeline;
 
 use crate::raw_transcripts::{PiAgentBindingResolver, PiJsonlV2Cursor, PiTimelineAdapter};
-use pontia_application::{
+use pontia_agent_control::{
     client_contract::{
         history::{RecoveredTurnHistory, TurnHistoryCandidate},
         native_history::{HistoryRead, NativeHistory},
@@ -90,14 +90,14 @@ struct Page {
     continuation: Option<String>,
 }
 struct RuntimeSnapshot {
-    connection: pontia_application::clients::NativeHistoryConnection,
+    connection: pontia_agent_control::clients::NativeHistoryConnection,
     entries: Vec<Value>,
     by_id: HashMap<String, usize>,
     leaf: Option<String>,
 }
 impl RuntimeSnapshot {
     async fn load(
-        connection: pontia_application::clients::NativeHistoryConnection,
+        connection: pontia_agent_control::clients::NativeHistoryConnection,
         native: &str,
     ) -> Result<Self> {
         let mut params = json!({"page_size":128});

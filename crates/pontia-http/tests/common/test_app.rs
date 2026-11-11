@@ -155,12 +155,18 @@ impl TestAppBuilder {
                 .await
                 .expect("enable fixture client");
         }
-        let mut builder = AppState::builder(db, pontia_home)
-            .clients(crate::common::clients::clients())
-            .external_api_token(
-                self.external_api_token
-                    .unwrap_or_else(|| Some("test-token".to_string())),
-            );
+        let mut builder = AppState::builder(
+            pontia_agent_control::AgentControl::builder(db.clone(), pontia_home)
+                .environment(std::sync::Arc::new(
+                    pontia_workflow::WorkflowSessionEnvironment::new(db),
+                ))
+                .clients(crate::common::clients::clients())
+                .build(),
+        )
+        .external_api_token(
+            self.external_api_token
+                .unwrap_or_else(|| Some("test-token".to_string())),
+        );
         if let Some(workspace_browser) = self.workspace_browser {
             builder = builder.workspace_browser(workspace_browser);
         }

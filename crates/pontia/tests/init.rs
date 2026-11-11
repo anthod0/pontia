@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, fs, io::Cursor, net::SocketAddr, path::Path};
 
 use pontia::init::{InitPlatform, run};
-use pontia_application::client_contract::{
+use pontia_agent_control::client_contract::{
     ClientIntegration, IntegrationOption, PreparedClientIntegration,
 };
 use pontia_config::AppConfig;

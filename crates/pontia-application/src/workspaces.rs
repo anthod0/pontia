@@ -1,14 +1,11 @@
-pub(crate) mod availability;
 mod browser;
 mod path_policy;
-mod persistence;
 mod types;
 
 pub use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig, WorkspaceRootConfig};
 
 pub use browser::WorkspaceBrowserService;
-pub use persistence::{get_workspace_record, upsert_workspace};
 pub use types::{
     FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest, RenameWorkspaceRequest,
-    WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceRecord, WorkspaceRootView,
+    WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceRootView,
 };

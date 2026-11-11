@@ -1,3 +1,4 @@
+use pontia_agent_control::get_workspace_record;
 use pontia_core::error::{Error, Result};
 use pontia_storage_sqlite::repositories::git_status::{
     GitStatusUpsertRecord, SqliteGitStatusRepository,
@@ -12,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{ExternalQueryService, WorkspaceGitStatusView, get_workspace_record};
+use crate::{ExternalQueryService, WorkspaceGitStatusView};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct ParsedGitStatus {

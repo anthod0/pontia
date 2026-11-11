@@ -176,6 +176,7 @@ async fn observe_missing_generic_runtime_projects_session_error() {
     scope.reset_runtime_registry();
 
     state
+        .control()
         .runtime_observer()
         .observe_session(&session_id)
         .await
@@ -214,6 +215,7 @@ async fn observe_missing_generic_runtime_does_not_fail_a_terminal_branch_leaf() 
     scope.reset_runtime_registry();
 
     state
+        .control()
         .runtime_observer()
         .observe_session(&session_id)
         .await
@@ -249,6 +251,7 @@ async fn observe_missing_generic_runtime_abandons_active_turn_without_forging_ag
     scope.reset_runtime_registry();
 
     state
+        .control()
         .runtime_observer()
         .observe_session(&session_id)
         .await

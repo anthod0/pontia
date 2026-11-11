@@ -3,8 +3,8 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use pontia_application::{
-    AppState, EventIngestService,
+use pontia_agent_control::{
+    EventIngestService,
     client_contract::{ClientInteractions, ClientOperation, test_registration},
     clients::ClientRegistry,
     interactions::{
@@ -12,6 +12,7 @@ use pontia_application::{
         InteractionState,
     },
 };
+use pontia_application::AppState;
 use serde_json::{Value, json};
 use std::sync::{
     Arc,
@@ -72,11 +73,15 @@ impl Fixture {
         registration.interactions = Some(resolver.clone());
         let mut clients = ClientRegistry::default();
         clients.register(registration);
-        let app = AppState::builder(pool, root.path().into())
-            .external_api_token(Some("interaction-test".into()))
-            .clients(clients)
-            .build();
+        let app = AppState::builder(
+            pontia_agent_control::AgentControl::builder(pool, root.path().into())
+                .clients(clients)
+                .build(),
+        )
+        .external_api_token(Some("interaction-test".into()))
+        .build();
         let session = app
+            .control()
             .session_commands()
             .create_session(serde_json::from_value(json!({"client_type":"generic"})).unwrap())
             .await
@@ -93,6 +98,7 @@ impl Fixture {
     }
     async fn register(&self) -> Interaction {
         self.app
+            .control()
             .interactions()
             .register(ChoiceInteractionRequest {
                 session_id: self.session.clone(),
@@ -205,6 +211,7 @@ async fn transient_notifications_are_delivered_before_a_durable_backlog_is_drain
     let f = Fixture::new().await;
     for _ in 0..120 {
         f.app
+            .control()
             .session_commands()
             .create_session(serde_json::from_value(json!({"client_type":"generic"})).unwrap())
             .await
@@ -322,8 +329,14 @@ async fn process_restart_expires_live_records_and_preserves_history() {
     let resolved = f.register().await;
     f.resolver.release.add_permits(1);
     f.app
+        .control()
         .interactions()
-        .respond(&f.app, &f.session, &resolved.interaction_id, "proceed-once")
+        .respond(
+            f.app.control(),
+            &f.session,
+            &resolved.interaction_id,
+            "proceed-once",
+        )
         .await
         .unwrap();
     let pool = pontia_storage_sqlite::connect_sqlite(&format!(
@@ -332,13 +345,21 @@ async fn process_restart_expires_live_records_and_preserves_history() {
     ))
     .await
     .unwrap();
-    let restarted = AppState::builder(pool, f.root.path().into())
-        .external_api_token(Some("interaction-test".into()))
-        .build();
-    restarted.interactions().expire_leftovers().await.unwrap();
+    let restarted = AppState::builder(
+        pontia_agent_control::AgentControl::builder(pool, f.root.path().into()).build(),
+    )
+    .external_api_token(Some("interaction-test".into()))
+    .build();
+    restarted
+        .control()
+        .interactions()
+        .expire_leftovers()
+        .await
+        .unwrap();
     for i in [pending, resolving] {
         assert_eq!(
             restarted
+                .control()
                 .interactions()
                 .get(&f.session, &i.interaction_id)
                 .await
@@ -357,6 +378,7 @@ async fn process_restart_expires_live_records_and_preserves_history() {
         assert_eq!(body["error"]["code"], "interaction_expired");
     }
     let history = restarted
+        .control()
         .interactions()
         .get(&f.session, &resolved.interaction_id)
         .await
@@ -369,9 +391,11 @@ async fn process_restart_expires_live_records_and_preserves_history() {
 async fn lost_native_association_expires_without_recording_a_choice() {
     let f = Fixture::new().await;
     let interaction = f.register().await;
-    let disconnected = AppState::builder(f.app.db(), f.root.path().into())
-        .external_api_token(Some("interaction-test".into()))
-        .build();
+    let disconnected = AppState::builder(
+        pontia_agent_control::AgentControl::builder(f.app.db(), f.root.path().into()).build(),
+    )
+    .external_api_token(Some("interaction-test".into()))
+    .build();
     let path = format!("{}/response", f.path(&interaction.interaction_id));
     let (status, body) = request(
         disconnected.clone(),
@@ -383,6 +407,7 @@ async fn lost_native_association_expires_without_recording_a_choice() {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["error"]["code"], "interaction_expired");
     let record = disconnected
+        .control()
         .interactions()
         .get(&f.session, &interaction.interaction_id)
         .await
@@ -419,6 +444,7 @@ async fn transient_interaction_sse_does_not_replace_the_durable_cursor() {
     assert!(frame.contains(&i.interaction_id));
     assert!(!frame.lines().any(|line| line.starts_with("id:")));
     f.app
+        .control()
         .session_commands()
         .create_session(serde_json::from_value(json!({"client_type":"generic"})).unwrap())
         .await
@@ -453,6 +479,7 @@ async fn completion_storage_failure_releases_the_claim_without_replaying_native_
     assert_eq!(body["error"]["code"], "internal_error");
     assert_eq!(
         f.app
+            .control()
             .interactions()
             .get(&f.session, &interaction.interaction_id)
             .await

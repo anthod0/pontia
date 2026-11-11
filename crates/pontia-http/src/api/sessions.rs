@@ -7,10 +7,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use pontia_application::{
-    AppState, CreateSessionRequest, SessionOverviewRequest, SessionOverviewView,
-    UpdateSessionRequest,
-};
+use pontia_agent_control::{CreateSessionRequest, UpdateSessionRequest};
+use pontia_application::{AppState, SessionOverviewRequest, SessionOverviewView};
 
 use super::{
     idempotency::idempotent,
@@ -21,7 +19,7 @@ pub async fn session_creation_options(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     Ok(ok(
-        json!({ "options": state.clients().creation_options(&state.db()).await? }),
+        json!({ "options": state.control().clients().creation_options(&state.db()).await? }),
     ))
 }
 
@@ -30,7 +28,7 @@ pub async fn create_session(
     headers: HeaderMap,
     Json(request): Json<CreateSessionRequest>,
 ) -> Result<Response, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     let outcome = idempotent(&state, &headers, "create_session", || async move {
         Ok(service.create_session(request).await?.data)
     })
@@ -72,7 +70,7 @@ pub async fn update_session(
     Path(session_id): Path<String>,
     Json(request): Json<UpdateSessionRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     let data = service.update_session(&session_id, request).await?;
     Ok(ok(data))
 }
@@ -81,7 +79,7 @@ pub async fn pin_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     let data = service.pin_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -90,7 +88,7 @@ pub async fn unpin_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     let data = service.unpin_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -99,7 +97,7 @@ pub async fn archive_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     let data = service.archive_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -108,7 +106,7 @@ pub async fn unarchive_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     let data = service.unarchive_session(&session_id).await?;
     Ok(ok(data))
 }
@@ -117,7 +115,7 @@ pub async fn get_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.queries();
+    let service = state.control().queries();
     let session = service
         .get_session(&session_id)
         .await?
@@ -137,7 +135,7 @@ pub async fn compact_session(
     Path(session_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     let operation = format!("compact_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         // A lost receipt may follow a successful native send. Cache that uncertainty
@@ -163,7 +161,7 @@ pub async fn interrupt_session(
     headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let service = state.turn_commands();
+    let service = state.control().turn_commands();
     let operation = format!("interrupt_current:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.interrupt_current_turn(&session_id).await?.data)
@@ -176,7 +174,11 @@ pub async fn start_session_tui(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let outcome = state.session_commands().start_tui(&session_id).await?;
+    let outcome = state
+        .control()
+        .session_commands()
+        .start_tui(&session_id)
+        .await?;
     Ok(ok(outcome.data))
 }
 
@@ -184,7 +186,11 @@ pub async fn stop_session_tui(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let outcome = state.session_commands().stop_tui(&session_id).await?;
+    let outcome = state
+        .control()
+        .session_commands()
+        .stop_tui(&session_id)
+        .await?;
     Ok(ok(outcome.data))
 }
 
@@ -193,7 +199,7 @@ pub async fn exit_session(
     headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     let operation = format!("exit_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
         Ok(service.terminate_session(&session_id).await?.data)
@@ -207,7 +213,7 @@ pub async fn restart_session(
     headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("restart_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -225,7 +231,7 @@ pub async fn resume_session(
     headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<Response, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     let pontia_home = state.pontia_home().to_path_buf();
     let operation = format!("resume_session:{session_id}");
     let outcome = idempotent(&state, &headers, operation, || async move {
@@ -242,7 +248,7 @@ pub async fn list_session_models(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     Ok(ok(serde_json::to_value(
         service.list_session_models(&session_id).await?,
     )
@@ -252,9 +258,9 @@ pub async fn list_session_models(
 pub async fn set_session_model(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
-    Json(request): Json<pontia_application::sessions::SetSessionModelRequest>,
+    Json(request): Json<pontia_agent_control::sessions::SetSessionModelRequest>,
 ) -> Result<Response, ApiError> {
-    let service = state.session_commands();
+    let service = state.control().session_commands();
     service.set_session_model(&session_id, request).await?;
     Ok((StatusCode::ACCEPTED, ok(json!({"accepted":true}))).into_response())
 }
@@ -262,9 +268,10 @@ pub async fn set_session_model(
 pub async fn fork_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
-    Json(request): Json<pontia_application::sessions::ForkSessionRequest>,
+    Json(request): Json<pontia_agent_control::sessions::ForkSessionRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let result = state
+        .control()
         .session_commands()
         .fork_session(&session_id, request)
         .await?;

@@ -23,7 +23,7 @@ mod proxy_observer;
 #[cfg(test)]
 mod subscription_tests;
 use crate::runtime::{CodexRuntime, SubscriptionState};
-use pontia_application::{AgentBindingService, UpsertAgentBindingRequest};
+use pontia_agent_control::{AgentBindingService, UpsertAgentBindingRequest};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
@@ -49,11 +49,11 @@ pub use observer::CodexObserver;
 #[derive(Clone)]
 pub struct CodexService {
     pub(super) pool: SqlitePool,
-    pub(super) event_ingest: pontia_application::EventIngestService,
+    pub(super) event_ingest: pontia_agent_control::EventIngestService,
 }
 
 impl CodexService {
-    pub fn new(event_ingest: pontia_application::EventIngestService) -> Self {
+    pub fn new(event_ingest: pontia_agent_control::EventIngestService) -> Self {
         Self {
             pool: event_ingest.db(),
             event_ingest,
@@ -121,11 +121,11 @@ impl CodexService {
 
     pub(crate) async fn submit(
         &self,
-        target: &pontia_application::runtime::ControlTarget,
+        target: &pontia_agent_control::runtime::ControlTarget,
         input: &str,
         message_id: Option<&str>,
-        intent: &pontia_application::turns::InputIntent,
-    ) -> Result<pontia_application::control::InputReceipt> {
+        intent: &pontia_agent_control::turns::InputIntent,
+    ) -> Result<pontia_agent_control::control::InputReceipt> {
         let session_id = &target.session_id;
         let runtime = self.runtime(session_id).await?;
         let _operation = runtime.lock_session(session_id).await;
@@ -206,8 +206,8 @@ impl CodexService {
             params["clientUserMessageId"] = json!(message_id);
         }
         let method = match intent {
-            pontia_application::turns::InputIntent::Start if active.is_none() => "turn/start",
-            pontia_application::turns::InputIntent::Steer { turn_id } => {
+            pontia_agent_control::turns::InputIntent::Start if active.is_none() => "turn/start",
+            pontia_agent_control::turns::InputIntent::Steer { turn_id } => {
                 let native: Option<String> = sqlx::query_scalar("SELECT client_turn_id FROM native_turn_bindings WHERE session_id=? AND turn_id=?")
                     .bind(session_id).bind(turn_id).fetch_optional(&self.pool).await?;
                 if native.is_none()
@@ -237,7 +237,7 @@ impl CodexService {
                 .await;
         }
         let _ = observation_changes().send((runtime.root.clone(), session_id.into()));
-        Ok(pontia_application::control::InputReceipt {
+        Ok(pontia_agent_control::control::InputReceipt {
             native_turn_id: accepted
                 .get("turnId")
                 .or_else(|| accepted.pointer("/turn/id"))
@@ -249,7 +249,7 @@ impl CodexService {
 
     pub(crate) async fn interrupt(
         &self,
-        target: &pontia_application::runtime::ControlTarget,
+        target: &pontia_agent_control::runtime::ControlTarget,
         turn_id: Option<&str>,
     ) -> Result<()> {
         let runtime = self.runtime(&target.session_id).await?;
@@ -292,7 +292,7 @@ impl CodexService {
 
     pub(crate) async fn resume(
         &self,
-        target: &pontia_application::runtime::ControlTarget,
+        target: &pontia_agent_control::runtime::ControlTarget,
     ) -> Result<()> {
         let runtime = self.runtime(&target.session_id).await?;
         let _operation = runtime.lock_session(&target.session_id).await;
@@ -438,7 +438,7 @@ impl CodexService {
 
     pub(super) async fn confirm_control_connection(
         &self,
-        target: &pontia_application::runtime::ControlTarget,
+        target: &pontia_agent_control::runtime::ControlTarget,
         runtime: &CodexRuntime,
     ) -> Result<()> {
         target.validate(&self.pool).await?;
@@ -471,7 +471,10 @@ impl CodexService {
         ))
     }
 
-    pub(crate) async fn binding(&self, session: &str) -> Result<pontia_application::AgentBinding> {
+    pub(crate) async fn binding(
+        &self,
+        session: &str,
+    ) -> Result<pontia_agent_control::AgentBinding> {
         AgentBindingService::new(self.pool.clone())
             .binding_for_session(session)
             .await?

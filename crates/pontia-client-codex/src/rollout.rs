@@ -1,4 +1,4 @@
-use pontia_application::client_contract::raw_transcripts::{
+use pontia_agent_control::client_contract::raw_transcripts::{
     AgentBindingResolveRequest, AgentBindingResolver, CapturedTimelineBoundary,
     ResolvedAgentBinding, TimelineBoundaryCaptureKind, TimelineBoundaryCaptureRequest,
     TimelineBoundaryCapturer, TimelineItem, TurnTimelineItem, TurnTimelineReadError,
@@ -24,7 +24,7 @@ fn boundary(
 ) -> Result<String> {
     crate::history::cursor::decode(
         value,
-        &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest {
+        &pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest {
             id: source.id.clone(),
             session_id: String::new(),
             client_type: "codex".into(),
@@ -104,9 +104,9 @@ impl TurnTimelineReader for CodexRollout {
     }
     fn read_session_timeline(
         &self,
-        request: pontia_application::client_contract::raw_transcripts::SessionTimelineReadRequest,
+        request: pontia_agent_control::client_contract::raw_transcripts::SessionTimelineReadRequest,
     ) -> std::result::Result<Vec<TurnTimelineItem>, TurnTimelineReadError> {
-        use pontia_application::client_contract::raw_transcripts::TurnTimelineRange;
+        use pontia_agent_control::client_contract::raw_transcripts::TurnTimelineRange;
         let selected: std::collections::HashSet<_> =
             request.selection.selected_turn_ids.iter().collect();
         let ranges = request

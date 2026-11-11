@@ -28,7 +28,7 @@ pub struct WorkflowQueryService {
 }
 
 impl WorkflowQueryService {
-    pub fn with_clients(mut self, clients: pontia_application::clients::ClientRegistry) -> Self {
+    pub fn with_clients(mut self, clients: pontia_agent_control::clients::ClientRegistry) -> Self {
         self.workflows = self.workflows.with_recovery_client_types(
             clients
                 .registrations()

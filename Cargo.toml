@@ -11,6 +11,7 @@ members = [
     "crates/pontia-config",
     "crates/pontia-runtime",
     "crates/pontia-application",
+    "crates/pontia-agent-control",
     "crates/pontia-client-pi",
     "crates/pontia-client-codex",
     "crates/pontia-client-acp",
@@ -30,6 +31,7 @@ license = "Apache-2.0"
 repository = "https://github.com/anthod0/pontia"
 
 [workspace.dependencies]
+pontia-agent-control = { path = "crates/pontia-agent-control" }
 pontia-clients = { path = "crates/pontia-clients" }
 pontia-client-pi = { path = "crates/pontia-client-pi" }
 pontia-client-codex = { path = "crates/pontia-client-codex" }

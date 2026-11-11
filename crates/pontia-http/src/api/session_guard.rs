@@ -1,9 +1,9 @@
-use pontia_application::ExternalQueryService;
+use pontia_agent_control::ControlQueryService;
 
 use super::response::ApiError;
 
 pub(super) async fn ensure_session_exists(
-    service: &ExternalQueryService,
+    service: &ControlQueryService,
     session_id: &str,
 ) -> Result<(), ApiError> {
     service

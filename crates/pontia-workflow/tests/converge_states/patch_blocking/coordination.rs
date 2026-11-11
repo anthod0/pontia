@@ -55,7 +55,7 @@ async fn crash_gap_recovers_the_session_with_the_persisted_creation_token() {
 
     let creator = PersistingSessionCreator::new(pool.clone());
     let coordinator_one = WorkflowCoordinator::with_services(
-        &pontia_application::AppState::builder(pool.clone(), pontia_home.clone())
+        &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
         creator.clone(),
@@ -64,7 +64,7 @@ async fn crash_gap_recovers_the_session_with_the_persisted_creation_token() {
         pontia_home.clone(),
     );
     let coordinator_two = WorkflowCoordinator::with_services(
-        &pontia_application::AppState::builder(pool.clone(), pontia_home.clone())
+        &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
         creator.clone(),

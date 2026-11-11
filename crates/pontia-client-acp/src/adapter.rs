@@ -11,8 +11,9 @@ use crate::{AcpAgentConfig, AcpConfig};
 use agent_client_protocol::schema::v1::{
     CancelNotification, ContentBlock, PromptRequest, TextContent,
 };
-use pontia_application::{
-    AgentBindingService, AppState, EventIngestService, PontiaEventType, UpsertAgentBindingRequest,
+use pontia_agent_control::{
+    AgentBindingService, AgentControl, EventIngestService, PontiaEventType,
+    UpsertAgentBindingRequest,
     client_contract::{
         AgentClientCapabilities, ClientConfiguration, ClientExitOutcome, ClientInteractions,
         ClientOperation, ClientService, ClientServicePhase, ClientSession, ClientSessionDetails,
@@ -102,7 +103,7 @@ pub(crate) struct AcpAdapter {
     recovery: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>>,
     pub(crate) peers: Peers,
     stopped: Arc<AtomicBool>,
-    interactions: Arc<OnceLock<pontia_application::interactions::InteractionService>>,
+    interactions: Arc<OnceLock<pontia_agent_control::interactions::InteractionService>>,
 }
 
 fn unavailable() -> Error {
@@ -214,7 +215,7 @@ impl ClientSession for AcpAdapter {
                     Error::Domain("metadata.acp_agent_id must be a nonempty string".into())
                 })?;
             let configuration = if configuration.is_null() {
-                pontia_application::agent_clients::AgentClientService::new(
+                pontia_agent_control::agent_clients::AgentClientService::new(
                     pool.clone(),
                     events.clients(),
                 )
@@ -650,7 +651,7 @@ impl ClientService for AcpAdapter {
     }
     fn start<'a>(
         &'a self,
-        state: AppState,
+        state: AgentControl,
     ) -> ClientOperation<'a, Option<tokio::task::JoinHandle<Result<()>>>> {
         Box::pin(async move {
             let root = std::path::absolute(state.pontia_home())?;

@@ -149,7 +149,10 @@ async fn registration_request(state: AppState, method: &str, params: Value) -> (
         net::UnixStream,
     };
     let (server, client) = UnixStream::pair().unwrap();
-    let task = tokio::spawn(pontia_client_pi::ipc::serve_connection(state, server));
+    let task = tokio::spawn(pontia_client_pi::ipc::serve_connection(
+        state.control().clone(),
+        server,
+    ));
     let mut client = BufReader::new(client);
     client
         .get_mut()

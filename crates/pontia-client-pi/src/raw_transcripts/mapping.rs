@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use super::tool_use::PiToolUseParser;
-use pontia_application::client_contract::raw_transcripts::{
+use pontia_agent_control::client_contract::raw_transcripts::{
     ManagedToolUse, TimelineItem, ToolUseParser,
 };
 

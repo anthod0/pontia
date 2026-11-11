@@ -1,7 +1,7 @@
 use crate::{CodexObserver, runtime::CodexRuntime};
 use futures_util::{SinkExt, StreamExt};
-use pontia_application::{
-    AgentBindingService, AppState, CreateSessionRequest, UpsertAgentBindingRequest,
+use pontia_agent_control::{
+    AgentBindingService, AgentControl, CreateSessionRequest, UpsertAgentBindingRequest,
     clients::ClientRegistry,
 };
 use serde_json::{Value, json};
@@ -24,7 +24,7 @@ struct Server {
 }
 struct Fixture {
     root: tempfile::TempDir,
-    app: AppState,
+    app: AgentControl,
     sessions: Vec<String>,
     shared: Arc<Server>,
     server: JoinHandle<()>,
@@ -114,7 +114,7 @@ impl Fixture {
         .unwrap();
         let mut clients = ClientRegistry::default();
         clients.register(crate::registration());
-        let app = AppState::builder(pool, root.path().into())
+        let app = AgentControl::builder(pool, root.path().into())
             .clients(clients)
             .build();
         let mut sessions = Vec::new();
@@ -196,7 +196,11 @@ impl Fixture {
             .send(Some(value))
             .unwrap();
     }
-    async fn facts(&self, index: usize, count: usize) -> Vec<pontia_application::views::EventView> {
+    async fn facts(
+        &self,
+        index: usize,
+        count: usize,
+    ) -> Vec<pontia_agent_control::views::EventView> {
         tokio::time::timeout(Duration::from_secs(8), async {
             loop {
                 let facts: Vec<_> = self

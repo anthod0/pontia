@@ -1,12 +1,12 @@
 use super::*;
-use pontia_application::agent_clients::AgentClientService;
+use pontia_agent_control::agent_clients::AgentClientService;
 
 #[tokio::test]
 async fn new_sessions_use_latest_overrides_while_existing_peers_remain_controllable() {
     let h = Harness::new(&[("ACP_UNIQUE_ID", "1")]).await;
     let management = AgentClientService::new(h.app.db(), h.app.clients());
     let first = h.create("first").await.unwrap();
-    let binding = pontia_application::AgentBindingService::new(h.app.db())
+    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
         .binding_for_session(&first)
         .await
         .unwrap()
@@ -62,7 +62,7 @@ async fn new_sessions_use_latest_overrides_while_existing_peers_remain_controlla
     h.release("update-1");
     h.release("release-1");
     h.wait_turn(&first, &turn.turn_id, "completed").await;
-    let after = pontia_application::AgentBindingService::new(h.app.db())
+    let after = pontia_agent_control::AgentBindingService::new(h.app.db())
         .binding_for_session(&first)
         .await
         .unwrap()
@@ -112,7 +112,7 @@ async fn database_only_peer_can_launch_and_deletion_does_not_rebind_its_live_ses
             .any(|option| option.metadata["acp_agent_id"] == "company")
     );
     let session = h.create("company").await.unwrap();
-    let binding = pontia_application::AgentBindingService::new(h.app.db())
+    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
         .binding_for_session(&session)
         .await
         .unwrap()
@@ -153,7 +153,7 @@ async fn database_only_peer_can_launch_and_deletion_does_not_rebind_its_live_ses
             .accept_task
     );
     assert_eq!(
-        pontia_application::AgentBindingService::new(h.app.db())
+        pontia_agent_control::AgentBindingService::new(h.app.db())
             .binding_for_session(&session)
             .await
             .unwrap()

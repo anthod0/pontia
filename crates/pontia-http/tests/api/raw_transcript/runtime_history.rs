@@ -37,6 +37,7 @@ pub(super) async fn attach(
     let (daemon, _) = PiRpcPeer::new(left);
     let (peer, mut requests) = PiRpcPeer::new(right);
     state
+        .control()
         .client_control()
         .attach("pi", session, &runtime, native, daemon.clone())
         .await
@@ -102,6 +103,7 @@ async fn http_timeline_and_tree_use_runtime_history_when_the_bound_file_does_not
     )
     .await;
     let turn = state
+        .control()
         .event_ingest_service()
         .get_turn("turn_rpc")
         .await
@@ -206,6 +208,7 @@ async fn terminal_capture_preserves_an_existing_legacy_turn_then_new_turns_use_e
     )
     .await;
     let old = state
+        .control()
         .event_ingest_service()
         .get_turn("turn_old")
         .await
@@ -234,6 +237,7 @@ async fn terminal_capture_preserves_an_existing_legacy_turn_then_new_turns_use_e
     )
     .await;
     let new = state
+        .control()
         .event_ingest_service()
         .get_turn("turn_new")
         .await

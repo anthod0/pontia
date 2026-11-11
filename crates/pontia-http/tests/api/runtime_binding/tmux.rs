@@ -102,14 +102,14 @@ async fn session_exit_clears_matching_pontia_markers_from_the_bound_tmux_pane() 
         tmux_display(&test_socket, &pane_id, "#{@pontia_runtime_id}"),
         ""
     );
-    let events = state.event_ingest_service();
+    let events = state.control().event_ingest_service();
     events
-        .ingest_pontia_event(pontia_application::PontiaEvent::new(
+        .ingest_pontia_event(pontia_agent_control::PontiaEvent::new(
             session_id,
             None,
-            pontia_application::PontiaEventSource::ExternalApi,
+            pontia_agent_control::PontiaEventSource::ExternalApi,
             "pi",
-            pontia_application::PontiaEventType::SessionResuming,
+            pontia_agent_control::PontiaEventType::SessionResuming,
             json!({"runtime_id":runtime_id}),
         ))
         .await
@@ -117,7 +117,7 @@ async fn session_exit_clears_matching_pontia_markers_from_the_bound_tmux_pane() 
     pontia_runtime::GenericRuntimeManager
         .mark_tmux_pane_for_session(&socket_path, &pane_id, session_id, runtime_id)
         .unwrap();
-    let native_key = pontia_application::AgentBindingService::new(state.db())
+    let native_key = pontia_agent_control::AgentBindingService::new(state.db())
         .binding_for_session(session_id)
         .await
         .unwrap()

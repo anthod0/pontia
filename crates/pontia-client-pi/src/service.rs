@@ -1,6 +1,6 @@
 use crate::ipc::PiIpcListener;
-use pontia_application::{
-    AppState,
+use pontia_agent_control::{
+    AgentControl,
     client_contract::{ClientOperation, ClientService, ClientServicePhase},
 };
 use tokio::task::JoinHandle;
@@ -14,7 +14,7 @@ impl ClientService for PiService {
 
     fn start<'a>(
         &'a self,
-        state: AppState,
+        state: AgentControl,
     ) -> ClientOperation<'a, Option<JoinHandle<pontia_core::Result<()>>>> {
         Box::pin(async move {
             let listener = PiIpcListener::bind(state.pontia_home()).await?;

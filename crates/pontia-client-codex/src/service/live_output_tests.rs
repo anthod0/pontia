@@ -1,7 +1,7 @@
 use crate::{CodexObserver, runtime::CodexRuntime};
 use futures_util::{SinkExt, StreamExt};
-use pontia_application::{
-    AgentBindingService, AppState, CreateSessionRequest, LiveOutputItem, LiveOutputSnapshot,
+use pontia_agent_control::{
+    AgentBindingService, AgentControl, CreateSessionRequest, LiveOutputItem, LiveOutputSnapshot,
     LiveOutputStreamEvent, UpsertAgentBindingRequest, clients::ClientRegistry,
 };
 use serde_json::{Value, json};
@@ -53,7 +53,7 @@ struct ServerState {
 }
 
 struct Fixture {
-    app: AppState,
+    app: AgentControl,
     session: String,
     root: tempfile::TempDir,
     socket: PathBuf,
@@ -188,7 +188,7 @@ impl Fixture {
         .unwrap();
         let mut clients = ClientRegistry::default();
         clients.register(crate::registration());
-        let app = AppState::builder(pool, root.path().into())
+        let app = AgentControl::builder(pool, root.path().into())
             .clients(clients)
             .build();
         let session = app

@@ -1,4 +1,4 @@
-use pontia_application::{
+use pontia_agent_control::{
     AgentBindingService, ExecutionProfileView, client_contract::ClientProfile,
 };
 use sqlx::SqlitePool;
@@ -103,7 +103,7 @@ impl CodexProfiles {
         let (id, version): (Option<String>, Option<String>) = sqlx::query_as(
             "SELECT execution_profile_id,execution_profile_version FROM sessions WHERE session_id=?",
         ).bind(session).fetch_one(&self.pool).await?;
-        let snapshot = pontia_application::AgentProfileService::new(self.pool.clone())
+        let snapshot = pontia_agent_control::AgentProfileService::new(self.pool.clone())
             .session_binding(session)
             .await?;
         if snapshot.is_none() && id.is_none() && version.is_none() {

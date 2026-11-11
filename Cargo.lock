@@ -2625,7 +2625,7 @@ dependencies = [
  "hkdf",
  "hmac",
  "hostname",
- "pontia-application",
+ "pontia-agent-control",
  "pontia-clients",
  "pontia-config",
  "pontia-e2e",
@@ -2646,16 +2646,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "pontia-agent-control"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "pontia-agent-control",
+ "pontia-config",
+ "pontia-core",
+ "pontia-runtime",
+ "pontia-storage-sqlite",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "pontia-application"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "ignore",
  "nucleo-matcher",
- "pontia-application",
+ "pontia-agent-control",
  "pontia-config",
  "pontia-core",
- "pontia-runtime",
  "pontia-storage-sqlite",
  "rustix",
  "serde",
@@ -2677,7 +2697,7 @@ dependencies = [
  "agent-client-protocol",
  "bzip2",
  "flate2",
- "pontia-application",
+ "pontia-agent-control",
  "pontia-config",
  "pontia-core",
  "pontia-runtime",
@@ -2699,7 +2719,7 @@ dependencies = [
 name = "pontia-client-claude"
 version = "0.0.0"
 dependencies = [
- "pontia-application",
+ "pontia-agent-control",
  "pontia-core",
  "pontia-runtime",
  "pontia-storage-sqlite",
@@ -2717,7 +2737,7 @@ version = "0.0.0"
 dependencies = [
  "futures-util",
  "libc",
- "pontia-application",
+ "pontia-agent-control",
  "pontia-config",
  "pontia-core",
  "pontia-runtime",
@@ -2739,7 +2759,7 @@ dependencies = [
 name = "pontia-client-pi"
 version = "0.0.0"
 dependencies = [
- "pontia-application",
+ "pontia-agent-control",
  "pontia-config",
  "pontia-core",
  "pontia-runtime",
@@ -2756,7 +2776,7 @@ dependencies = [
 name = "pontia-clients"
 version = "0.0.0"
 dependencies = [
- "pontia-application",
+ "pontia-agent-control",
  "pontia-client-acp",
  "pontia-client-claude",
  "pontia-client-codex",
@@ -2858,6 +2878,7 @@ dependencies = [
  "ed25519-dalek 2.2.0",
  "flate2",
  "http-body-util",
+ "pontia-agent-control",
  "pontia-application",
  "pontia-client-acp",
  "pontia-client-claude",
@@ -2963,7 +2984,7 @@ version = "0.0.0"
 name = "pontia-workflow"
 version = "0.0.0"
 dependencies = [
- "pontia-application",
+ "pontia-agent-control",
  "pontia-core",
  "pontia-storage-sqlite",
  "serde",
@@ -2985,6 +3006,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "ed25519-dalek 2.2.0",
+ "pontia-agent-control",
  "pontia-application",
  "pontia-clients",
  "pontia-config",

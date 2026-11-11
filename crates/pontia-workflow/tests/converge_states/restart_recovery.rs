@@ -41,7 +41,7 @@ async fn startup_recovers_a_running_workflow_from_persisted_session_exit() {
 
     let (shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
     let coordinator = WorkflowCoordinator::with_services(
-        &pontia_application::AppState::builder(pool.clone(), temp.path().join("pontia-home"))
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
             .clients(crate::test_doubles::clients())
             .build(),
         SequencedSessionCreator::new([]),
@@ -110,7 +110,7 @@ async fn repeated_reconciliation_activates_a_downstream_node_once() {
 
     let sessions = SequencedSessionCreator::new([Some("session_child")]);
     let coordinator = WorkflowCoordinator::with_services(
-        &pontia_application::AppState::builder(pool.clone(), temp.path().join("pontia-home"))
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
             .clients(crate::test_doubles::clients())
             .build(),
         sessions.clone(),
@@ -182,7 +182,7 @@ async fn restart_recovery_does_not_treat_a_pause_interruption_as_failure() {
         .expect("resume workflow");
 
     let coordinator = WorkflowCoordinator::with_services(
-        &pontia_application::AppState::builder(pool.clone(), temp.path().join("pontia-home"))
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
             .clients(crate::test_doubles::clients())
             .build(),
         SequencedSessionCreator::new([]),
@@ -231,7 +231,7 @@ async fn periodic_reconciliation_recovers_a_missed_realtime_notification() {
 
     let (shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
     let coordinator = WorkflowCoordinator::with_services(
-        &pontia_application::AppState::builder(pool.clone(), temp.path().join("pontia-home"))
+        &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
             .clients(crate::test_doubles::clients())
             .build(),
         SequencedSessionCreator::new([]),

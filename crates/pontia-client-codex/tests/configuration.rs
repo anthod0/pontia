@@ -1,4 +1,6 @@
-use pontia_application::{AppState, agent_clients::AgentClientService, clients::ClientRegistry};
+use pontia_agent_control::{
+    AgentControl, agent_clients::AgentClientService, clients::ClientRegistry,
+};
 use pontia_client_codex::configuration::CodexConfiguration;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
@@ -17,7 +19,7 @@ async fn new_sessions_capture_tui_configuration_without_reconfiguring_existing_s
     )));
     let mut clients = ClientRegistry::default();
     clients.register(client);
-    let app = AppState::builder(pool.clone(), root.path().into())
+    let app = AgentControl::builder(pool.clone(), root.path().into())
         .clients(clients.clone())
         .build();
     let service = AgentClientService::new(pool.clone(), clients);

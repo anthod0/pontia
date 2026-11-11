@@ -3,7 +3,7 @@ use crate::runtime::{
     CodexRuntime, SubscriptionState,
     protocol::{CONTROL_TIMEOUT, Connection, Notification},
 };
-use pontia_application::{AgentBindingService, client_contract::ClientExitOutcome};
+use pontia_agent_control::{AgentBindingService, client_contract::ClientExitOutcome};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
@@ -11,7 +11,7 @@ use tokio::sync::broadcast;
 impl CodexService {
     pub(crate) async fn exit(
         &self,
-        target: &pontia_application::runtime::ControlTarget,
+        target: &pontia_agent_control::runtime::ControlTarget,
     ) -> Result<ClientExitOutcome> {
         let session = &target.session_id;
         let runtime = self.runtime(session).await?;

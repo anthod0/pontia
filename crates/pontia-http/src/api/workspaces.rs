@@ -29,7 +29,10 @@ pub struct FilePickerQuery {
 pub async fn list_workspaces(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.queries();
+    let service = state
+        .control()
+        .queries()
+        .with_workspace_browser(state.workspace_browser());
     let workspaces = service.list_workspaces().await?;
     Ok(ok(json!({ "workspaces": workspaces })))
 }
@@ -38,7 +41,10 @@ pub async fn get_workspace(
     State(state): State<AppState>,
     Path(workspace_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.queries();
+    let service = state
+        .control()
+        .queries()
+        .with_workspace_browser(state.workspace_browser());
     let workspace = service
         .get_workspace(&workspace_id)
         .await?

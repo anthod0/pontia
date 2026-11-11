@@ -1,4 +1,4 @@
-use pontia_application::client_contract::ClientConfiguration;
+use pontia_agent_control::client_contract::ClientConfiguration;
 use pontia_config::{ClientConfigDefaults, ConfigurationLayers, RuntimeCommandOverride};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};

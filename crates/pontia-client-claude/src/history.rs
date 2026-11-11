@@ -1,5 +1,5 @@
 use crate::{Adapter, unavailable};
-use pontia_application::{
+use pontia_agent_control::{
     AgentBindingService,
     client_contract::{
         history::{RecoveredTurnHistory, TurnHistoryCandidate},
@@ -111,7 +111,7 @@ impl ClientData for Adapter {
     fn native_history(
         &self,
         binding: AgentBindingResolveRequest,
-        _: Option<pontia_application::clients::ClientControlService>,
+        _: Option<pontia_agent_control::clients::ClientControlService>,
     ) -> Option<Arc<dyn NativeHistory>> {
         Some(Arc::new(History {
             adapter: self.clone(),

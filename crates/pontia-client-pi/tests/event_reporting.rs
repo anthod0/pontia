@@ -3,8 +3,8 @@ mod history;
 mod support;
 use std::time::Duration;
 
-use pontia_application::{
-    AgentBindingService, AppState, EventIngestResult, EventReportError, LiveOutputIdentity,
+use pontia_agent_control::{
+    AgentBindingService, AgentControl, EventIngestResult, EventReportError, LiveOutputIdentity,
     LiveOutputItem, LiveOutputProducer, LiveOutputSnapshotReplacement, PontiaEvent,
     PontiaEventSource, PontiaEventType, ReportedFact, UpsertAgentBindingRequest,
 };
@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use tokio::sync::broadcast::error::TryRecvError;
 
 struct Fixture {
-    state: AppState,
+    state: AgentControl,
     root: tempfile::TempDir,
 }
 
@@ -32,7 +32,7 @@ impl Fixture {
         .await
         .unwrap();
         run_migrations(&pool).await.unwrap();
-        let state = AppState::builder(pool, root.path().into())
+        let state = AgentControl::builder(pool, root.path().into())
             .clients(support::clients())
             .build();
         let fixture = Self { state, root };
@@ -123,7 +123,7 @@ impl Fixture {
                         turn_id: turn.into(),
                         stream_id: "stream".into(),
                     },
-                    source: pontia_application::LiveOutputSource::RuntimeBound {
+                    source: pontia_agent_control::LiveOutputSource::RuntimeBound {
                         runtime_id: "runtime".into(),
                     },
                 },
@@ -599,7 +599,7 @@ async fn failed_transaction_is_not_a_permanent_rejection_or_a_committed_event() 
         .unwrap();
     assert_eq!(events.len(), 1);
     assert!(
-        pontia_application::ExternalQueryService::new(fixture.state.db())
+        pontia_agent_control::ControlQueryService::new(fixture.state.db())
             .list_turns("session")
             .await
             .unwrap()

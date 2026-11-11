@@ -10,9 +10,9 @@ use tokio::{
     net::UnixStream,
 };
 
-use pontia_application::{AppState, EventIngestService};
+use pontia_agent_control::{AgentControl, EventIngestService};
 
-async fn setup() -> (SqlitePool, tempfile::TempDir, AppState) {
+async fn setup() -> (SqlitePool, tempfile::TempDir, AgentControl) {
     let root = tempfile::Builder::new().prefix("pd-").tempdir().unwrap();
     let pool = connect_sqlite(&format!(
         "sqlite://{}",
@@ -33,7 +33,7 @@ async fn setup() -> (SqlitePool, tempfile::TempDir, AppState) {
         .await
         .unwrap();
     sqlx::query("INSERT INTO agent_bindings (id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding_pi','sess_pi','pi','/unused','native_pi','{}')").execute(&pool).await.unwrap();
-    let state = AppState::builder(pool.clone(), root.path().into())
+    let state = AgentControl::builder(pool.clone(), root.path().into())
         .clients(support::clients())
         .build();
     (pool, root, state)

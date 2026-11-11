@@ -1,3 +1,4 @@
+use pontia_agent_control::workspaces::{get_workspace_record, upsert_canonical_workspace};
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
@@ -16,12 +17,10 @@ use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 use super::{
     FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest, RenameWorkspaceRequest,
     WorkspaceDirectoryEntryView, WorkspaceDirectoryListingView, WorkspaceRootView,
-    path_policy::{
-        canonical_root, path_to_api_relative, resolve_relative_path, should_skip_directory,
-    },
-    persistence::{get_workspace_record, upsert_canonical_workspace},
+    path_policy::{canonical_root, resolve_relative_path, should_skip_directory},
 };
-use crate::{ExternalQueryService, WorkspaceView};
+use pontia_agent_control::workspaces::availability::path_to_api_relative;
+use pontia_agent_control::{ControlQueryService, WorkspaceView};
 
 #[derive(Clone)]
 pub struct WorkspaceBrowserService {
@@ -323,7 +322,7 @@ impl WorkspaceBrowserService {
             request.name.as_deref(),
         )
         .await?;
-        ExternalQueryService::new(self.pool.clone())
+        ControlQueryService::new(self.pool.clone())
             .with_workspace_browser(self.config.clone())
             .get_workspace(&record.workspace_id)
             .await?
@@ -348,7 +347,7 @@ impl WorkspaceBrowserService {
                 "workspace {workspace_id} not found"
             )));
         }
-        ExternalQueryService::new(self.pool.clone())
+        ControlQueryService::new(self.pool.clone())
             .with_workspace_browser(self.config.clone())
             .get_workspace(workspace_id)
             .await?
@@ -364,7 +363,7 @@ impl WorkspaceBrowserService {
                 "workspace {workspace_id} not found"
             )));
         }
-        ExternalQueryService::new(self.pool.clone())
+        ControlQueryService::new(self.pool.clone())
             .with_workspace_browser(self.config.clone())
             .get_workspace(workspace_id)
             .await?

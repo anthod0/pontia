@@ -1,86 +1,45 @@
-use std::path::PathBuf;
-
+use super::AppState;
+use pontia_agent_control::AgentControl;
 use pontia_config::{FilePickerConfig, WorkspaceBrowserConfig};
-use sqlx::SqlitePool;
-
-use super::{AppState, ShutdownSignal};
-use crate::{
-    AgentEventBroker, GitRefreshCoordinator, IdempotencyCoordinator, live_output::LiveOutputStore,
-};
-
 pub struct AppStateBuilder {
-    pub(super) clients: crate::clients::ClientRegistry,
-    pub(super) db: SqlitePool,
-    pub(super) pontia_home: PathBuf,
+    pub(super) control: AgentControl,
     pub(super) external_api_token: Option<String>,
     pub(super) workspace_browser: WorkspaceBrowserConfig,
     pub(super) file_picker: FilePickerConfig,
-    pub(super) shutdown: ShutdownSignal,
-    pub(super) agent_events: AgentEventBroker,
-    pub(super) live_output: LiveOutputStore,
-    pub(super) git_refresh: GitRefreshCoordinator,
-    pub(super) idempotency: IdempotencyCoordinator,
-    pub(super) client_control: crate::ClientControlService,
+    pub(super) git_refresh: crate::GitRefreshCoordinator,
+    pub(super) idempotency: crate::IdempotencyCoordinator,
 }
-
 impl AppStateBuilder {
-    pub(super) fn new(db: SqlitePool, pontia_home: PathBuf) -> Self {
+    pub(super) fn new(control: AgentControl) -> Self {
         Self {
-            clients: Default::default(),
-            client_control: crate::ClientControlService::new(db.clone(), pontia_home.clone()),
-            db,
-            pontia_home,
+            control,
             external_api_token: None,
-            workspace_browser: WorkspaceBrowserConfig::default(),
-            file_picker: FilePickerConfig::default(),
-            shutdown: ShutdownSignal::default(),
-            agent_events: AgentEventBroker::default(),
-            live_output: LiveOutputStore::default(),
-            git_refresh: GitRefreshCoordinator::default(),
-            idempotency: IdempotencyCoordinator::default(),
+            workspace_browser: Default::default(),
+            file_picker: Default::default(),
+            git_refresh: Default::default(),
+            idempotency: Default::default(),
         }
     }
-
-    pub fn external_api_token(mut self, external_api_token: Option<String>) -> Self {
-        self.external_api_token = external_api_token;
+    pub fn external_api_token(mut self, token: Option<String>) -> Self {
+        self.external_api_token = token;
         self
     }
-
-    pub fn workspace_browser(mut self, workspace_browser: WorkspaceBrowserConfig) -> Self {
-        self.workspace_browser = workspace_browser;
+    pub fn workspace_browser(mut self, config: WorkspaceBrowserConfig) -> Self {
+        self.workspace_browser = config;
         self
     }
-
-    pub fn file_picker(mut self, file_picker: FilePickerConfig) -> Self {
-        self.file_picker = file_picker;
+    pub fn file_picker(mut self, config: FilePickerConfig) -> Self {
+        self.file_picker = config;
         self
     }
-
-    pub fn shutdown(mut self, shutdown: ShutdownSignal) -> Self {
-        self.shutdown = shutdown;
+    pub fn git_refresh(mut self, coordinator: crate::GitRefreshCoordinator) -> Self {
+        self.git_refresh = coordinator;
         self
     }
-
-    pub fn agent_events(mut self, agent_events: AgentEventBroker) -> Self {
-        self.agent_events = agent_events;
+    pub fn idempotency(mut self, coordinator: crate::IdempotencyCoordinator) -> Self {
+        self.idempotency = coordinator;
         self
     }
-
-    pub fn git_refresh(mut self, git_refresh: GitRefreshCoordinator) -> Self {
-        self.git_refresh = git_refresh;
-        self
-    }
-
-    pub fn idempotency(mut self, idempotency: IdempotencyCoordinator) -> Self {
-        self.idempotency = idempotency;
-        self
-    }
-
-    pub fn clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
-        self.clients = clients;
-        self
-    }
-
     pub fn build(self) -> AppState {
         AppState::from_builder(self)
     }

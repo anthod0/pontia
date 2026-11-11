@@ -1,5 +1,6 @@
 use crate::common::test_app::TestApp;
-use pontia_application::{AppState, EventIngestService};
+use pontia_agent_control::EventIngestService;
+use pontia_application::AppState;
 use pontia_core::{
     domain::{EventSource, EventType, ReportedEvent},
     ids::new_event_id,

@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use pontia_application::CreateSessionRequest;
+use pontia_agent_control::CreateSessionRequest;
 use pontia_core::domain::{DomainEvent, EventSource, EventType};
 use pontia_storage_sqlite::{
     connect_sqlite,
@@ -201,7 +201,7 @@ fn spawn_coordinator(
     tokio::spawn(async move {
         let _keepalive = shutdown_tx;
         WorkflowCoordinator::with_services(
-            &pontia_application::AppState::builder(pool, pontia_home.clone()).build(),
+            &pontia_agent_control::AgentControl::builder(pool, pontia_home.clone()).build(),
             sessions,
             exits,
             events,

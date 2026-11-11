@@ -3,12 +3,12 @@ use crate::{
     proxy::{Observation, ObservedEvent},
     runtime::{CodexRuntime, SubscriptionState},
 };
-use pontia_application::{AgentBindingService, AppState};
+use pontia_agent_control::{AgentBindingService, AgentControl};
 use pontia_core::{Error, Result};
 
 use tokio::sync::mpsc;
 
-pub(super) async fn run(state: AppState, mut observations: mpsc::Receiver<Observation>) {
+pub(super) async fn run(state: AgentControl, mut observations: mpsc::Receiver<Observation>) {
     let service = CodexService::new(state.event_ingest_service());
     while let Some(observation) = observations.recv().await {
         if let Err(error) = observe(&service, state.pontia_home(), observation).await {

@@ -1,5 +1,5 @@
-use pontia_application::{
-    ExternalQueryService, InboxCommandService, SubmitInboxMessageRequest, TurnCommandService,
+use pontia_agent_control::{
+    ControlQueryService, InboxCommandService, SubmitInboxMessageRequest, TurnCommandService,
 };
 use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
 use serde::Serialize;
@@ -18,14 +18,14 @@ pub struct WorkflowControlOutcome {
 
 #[derive(Clone)]
 pub struct WorkflowControlService {
-    queries: ExternalQueryService,
+    queries: ControlQueryService,
     turns: TurnCommandService,
     inbox: std::sync::Arc<InboxCommandService>,
     workflows: SqliteWorkflowRepository,
 }
 
 impl WorkflowControlService {
-    pub fn new(app: &pontia_application::AppState) -> Self {
+    pub fn new(app: &pontia_agent_control::AgentControl) -> Self {
         Self {
             workflows: SqliteWorkflowRepository::new(app.db()),
             queries: app.queries(),

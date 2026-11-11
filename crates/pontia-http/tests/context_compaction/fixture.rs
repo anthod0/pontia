@@ -3,14 +3,15 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use pontia_application::{
-    AppState, ClientControlChannel, ClientControlOperation,
+use pontia_agent_control::{
+    ClientControlChannel, ClientControlOperation,
     client_contract::{
         AgentClientCapabilities, AgentClientSpec, DispatchBehavior, RuntimeBindingBehavior,
         TEST_SPEC, test_registration,
     },
     clients::ClientRegistry,
 };
+use pontia_application::AppState;
 use pontia_core::{
     Error,
     domain::{EventSource, EventType, ReportedEvent},
@@ -31,7 +32,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         timeline: true,
         ..TEST_SPEC.capabilities
     },
-    adapter: pontia_application::client_contract::AgentClientAdapter {
+    adapter: pontia_agent_control::client_contract::AgentClientAdapter {
         dispatch: DispatchBehavior::Connected,
         runtime_binding: RuntimeBindingBehavior::SharedBackend,
         ..TEST_SPEC.adapter
@@ -49,7 +50,7 @@ pub const UNSUPPORTED: AgentClientSpec = AgentClientSpec {
     ..SPEC
 };
 pub const RUNTIME_BOUND: AgentClientSpec = AgentClientSpec {
-    adapter: pontia_application::client_contract::AgentClientAdapter {
+    adapter: pontia_agent_control::client_contract::AgentClientAdapter {
         runtime_binding: RuntimeBindingBehavior::Named {
             runtime_kind: "test",
         },
@@ -89,7 +90,7 @@ impl ClientControlChannel for Channel {
     }
     fn list_models(
         &self,
-    ) -> ClientControlOperation<'_, Vec<pontia_application::sessions::SessionModel>> {
+    ) -> ClientControlOperation<'_, Vec<pontia_agent_control::sessions::SessionModel>> {
         Box::pin(async { Ok(vec![]) })
     }
     fn set_model<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
@@ -137,10 +138,13 @@ impl Fixture {
         registration.data = Some(Arc::new(super::history::History { rpc: rpc_history }));
         let mut clients = ClientRegistry::default();
         clients.register(registration);
-        let state = AppState::builder(db, root.path().into())
-            .clients(clients)
-            .external_api_token(Some("test-token".into()))
-            .build();
+        let state = AppState::builder(
+            pontia_agent_control::AgentControl::builder(db, root.path().into())
+                .clients(clients)
+                .build(),
+        )
+        .external_api_token(Some("test-token".into()))
+        .build();
         Self {
             state,
             channel: Arc::default(),
@@ -153,6 +157,7 @@ impl Fixture {
             ("ready", EventType::SessionReady),
         ] {
             self.state
+                .control()
                 .event_ingest_service()
                 .ingest_reported_event(ReportedEvent::new(
                     id.into(),
@@ -169,6 +174,7 @@ impl Fixture {
         sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('session','runtime','tui','running','2026-10-13T00:00:00Z')").execute(&self.state.db()).await.unwrap();
         sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding','session','compaction-test',?,'native','{}')").bind(self.root.path().to_str().unwrap()).execute(&self.state.db()).await.unwrap();
         self.state
+            .control()
             .client_control()
             .attach(
                 SPEC.client_type,

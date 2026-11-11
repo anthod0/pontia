@@ -1,5 +1,5 @@
 use crate::common::test_app::{EnvGuard, TestApp};
-use pontia_application::EventIngestService;
+use pontia_agent_control::EventIngestService;
 use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use serde_json::json;
 use sqlx::query_scalar;

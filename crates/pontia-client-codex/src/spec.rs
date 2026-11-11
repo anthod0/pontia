@@ -1,4 +1,4 @@
-use pontia_application::client_contract::{
+use pontia_agent_control::client_contract::{
     AgentClientAdapter, AgentClientCapabilities, AgentClientSpec, ClientSessionIdentityBehavior,
     ContextUsageCapability, DispatchBehavior, RuntimeBehavior, RuntimeBindingBehavior,
     TerminateBehavior, TurnLifecycleBehavior,
@@ -28,18 +28,18 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     default_for_creation: false,
     capabilities: CAPABILITIES,
     adapter: AgentClientAdapter {
-        lifecycle: pontia_application::client_contract::SessionLifecycleBehavior {
+        lifecycle: pontia_agent_control::client_contract::SessionLifecycleBehavior {
             execution_lifetime: pontia_core::domain::SessionExecutionLifetime::Subscription,
             independent_interface: true,
             process_observation: Some(
-                pontia_application::client_contract::ProcessObservationBehavior {
+                pontia_agent_control::client_contract::ProcessObservationBehavior {
                     role: "interface",
                     observe_starting: true,
-                    exit_event: pontia_application::PontiaEventType::RuntimeExited,
+                    exit_event: pontia_agent_control::PontiaEventType::RuntimeExited,
                     exit_reason: "interface_process_fingerprint_missing",
                 },
             ),
-            ..pontia_application::client_contract::SessionLifecycleBehavior::DEFAULT
+            ..pontia_agent_control::client_contract::SessionLifecycleBehavior::DEFAULT
         },
         native_turn_identity: true,
         native_turn_metadata_key: Some("codex_turn_id"),

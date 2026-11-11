@@ -1,19 +1,12 @@
 use serde::Serialize;
-use serde_json::Value;
 
 use pontia_core::error::Result;
 use pontia_storage_sqlite::models::events::{EventRow, EventStreamRow};
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct EventView {
-    pub event_id: String,
-    pub session_id: String,
-    pub turn_id: Option<String>,
-    pub source: String,
-    #[serde(rename = "type")]
-    pub event_type: String,
-    pub time: String,
-    pub payload: Value,
+    #[serde(flatten)]
+    pub fact: pontia_agent_control::EventView,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<crate::session_files::SharedFile>,
 }
@@ -24,32 +17,8 @@ pub struct EventStreamItem {
     pub event: EventView,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventStreamScope<'a> {
-    Session {
-        session_id: &'a str,
-    },
-    Turn {
-        session_id: &'a str,
-        turn_id: &'a str,
-    },
-}
-
-pub(crate) fn row_to_view(row: EventRow) -> Result<EventView> {
-    Ok(EventView {
-        event_id: row.event_id,
-        session_id: row.session_id,
-        turn_id: row.turn_id,
-        source: row.source,
-        event_type: row.event_type,
-        time: row.occurred_at,
-        payload: serde_json::from_str(&row.payload)?,
-        file: None,
-    })
-}
-
 fn stream_row_to_view(row: EventStreamRow) -> Result<EventView> {
-    row_to_view(EventRow {
+    let fact = pontia_agent_control::EventView::try_from(EventRow {
         event_id: row.event_id,
         session_id: row.session_id,
         turn_id: row.turn_id,
@@ -57,7 +26,8 @@ fn stream_row_to_view(row: EventStreamRow) -> Result<EventView> {
         event_type: row.event_type,
         occurred_at: row.occurred_at,
         payload: row.payload,
-    })
+    })?;
+    Ok(EventView { fact, file: None })
 }
 
 pub(crate) fn row_to_item(row: EventStreamRow) -> Result<EventStreamItem> {

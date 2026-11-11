@@ -1,5 +1,5 @@
 use super::*;
-use pontia_application::interactions::InteractionState;
+use pontia_agent_control::interactions::InteractionState;
 
 impl Harness {
     pub(super) async fn wait_session_state(&self, session: &str, expected: &str) {

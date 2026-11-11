@@ -4,7 +4,8 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_application::{AppState, EventIngestService};
+use pontia_agent_control::EventIngestService;
+use pontia_application::AppState;
 use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use pontia_http as http;
 use serde_json::{Value, json};

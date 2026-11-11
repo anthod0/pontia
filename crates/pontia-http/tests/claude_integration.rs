@@ -3,7 +3,8 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use pontia_application::{AppState, client_contract::ClientServicePhase, clients::ClientRegistry};
+use pontia_agent_control::{client_contract::ClientServicePhase, clients::ClientRegistry};
+use pontia_application::AppState;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -84,7 +85,7 @@ async fn wait_interactions(app: &AppState, session: &str, states: &[&str]) -> Ve
 struct Harness {
     app: AppState,
     root: tempfile::TempDir,
-    tasks: pontia_application::clients::ClientServiceTasks,
+    tasks: pontia_agent_control::clients::ClientServiceTasks,
 }
 impl Harness {
     async fn new() -> Self {
@@ -99,16 +100,19 @@ impl Harness {
             )
             .into(),
         )));
-        let app = AppState::builder(pool, root.path().into())
-            .clients(clients.clone())
-            .external_api_token(Some("fixture-token".into()))
-            .build();
-        pontia_application::agent_clients::AgentClientService::new(app.db(), clients.clone())
+        let app = AppState::builder(
+            pontia_agent_control::AgentControl::builder(pool, root.path().into())
+                .clients(clients.clone())
+                .build(),
+        )
+        .external_api_token(Some("fixture-token".into()))
+        .build();
+        pontia_agent_control::agent_clients::AgentClientService::new(app.db(), clients.clone())
             .save("claude-agent", "default", Some(true), None)
             .await
             .unwrap();
         let tasks = clients
-            .start_services(app.clone(), ClientServicePhase::Transport)
+            .start_services(app.control().clone(), ClientServicePhase::Transport)
             .await
             .unwrap();
         Self { app, root, tasks }
@@ -146,7 +150,7 @@ impl Harness {
             .collect()
     }
     async fn stop(self) {
-        self.app.shutdown().notify();
+        self.app.control().shutdown().notify();
         tokio::time::timeout(Duration::from_secs(5), self.tasks.join())
             .await
             .unwrap()
@@ -421,7 +425,7 @@ async fn claude_http_creation_inbox_live_output_interrupt_and_exit_share_applica
     assert_eq!(status, StatusCode::OK, "{result}");
     assert_eq!(result["data"]["session"]["state"], "exited");
     wait_turn(&app, session, "abandoned").await;
-    app.shutdown().notify();
+    app.control().shutdown().notify();
     tokio::time::timeout(Duration::from_secs(5), tasks.join())
         .await
         .unwrap()

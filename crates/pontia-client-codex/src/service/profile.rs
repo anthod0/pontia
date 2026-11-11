@@ -25,7 +25,7 @@ impl CodexService {
 }
 
 pub(crate) async fn prepare_proxy_request(
-    state: &pontia_application::AppState,
+    state: &pontia_agent_control::AgentControl,
     operation: crate::proxy::ThreadOperation,
     params: &mut Value,
 ) -> Result<Option<Value>> {
@@ -35,7 +35,7 @@ pub(crate) async fn prepare_proxy_request(
     }
     let mut profile = match operation {
         ThreadOperation::Start => {
-            let resolved = pontia_application::AgentProfileService::new(state.db())
+            let resolved = pontia_agent_control::AgentProfileService::new(state.db())
                 .with_clients(state.clients())
                 .resolve_for_client("codex", None, None)
                 .await?;

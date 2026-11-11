@@ -2,7 +2,7 @@
 use pontia_client_pi::raw_transcripts::PiAgentBindingResolver;
 use std::fs;
 
-use pontia_application::client_contract::raw_transcripts::{
+use pontia_agent_control::client_contract::raw_transcripts::{
     AgentBindingResolveRequest, AgentBindingResolver,
 };
 use tempfile::tempdir;

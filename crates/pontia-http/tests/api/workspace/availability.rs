@@ -126,9 +126,10 @@ async fn uses_deepest_root_and_does_not_match_path_prefix_siblings() {
         workspace["availability"],
         json!({"status": "available", "root_id": "nested", "path": ""})
     );
-    let outside = pontia_application::upsert_workspace(&state.db(), &sibling.display().to_string())
-        .await
-        .unwrap();
+    let outside =
+        pontia_agent_control::upsert_workspace(&state.db(), &sibling.display().to_string())
+            .await
+            .unwrap();
     assert_eq!(
         listed_workspace(&state, &outside.workspace_id).await["availability"],
         json!({"status": "unavailable", "reason": "outside_root"})

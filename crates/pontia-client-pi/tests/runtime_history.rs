@@ -1,6 +1,6 @@
 mod support;
-use pontia_application::{
-    AgentBindingService, AppState, PontiaEvent, PontiaEventSource, PontiaEventType,
+use pontia_agent_control::{
+    AgentBindingService, AgentControl, PontiaEvent, PontiaEventSource, PontiaEventType,
     UpsertAgentBindingRequest,
     client_contract::{
         history::TurnHistoryCandidate,
@@ -25,7 +25,7 @@ use std::sync::{
 use tokio::{net::UnixStream, sync::mpsc};
 
 struct Fixture {
-    state: AppState,
+    state: AgentControl,
     binding: AgentBindingResolveRequest,
     _root: tempfile::TempDir,
 }
@@ -34,7 +34,7 @@ impl Fixture {
         let root = tempfile::tempdir().unwrap();
         let db = connect_sqlite("sqlite::memory:").await.unwrap();
         run_migrations(&db).await.unwrap();
-        let state = AppState::builder(db, root.path().into())
+        let state = AgentControl::builder(db, root.path().into())
             .clients(support::clients())
             .build();
         state
@@ -79,7 +79,7 @@ impl Fixture {
             })
             .await
             .unwrap();
-        state.event_ingest_service().report_fact(pontia_application::ReportedFact { session_id: "session".into(), turn_id: None, report_key: None, fact_type: pontia_core::domain::EventType::SessionReady, data: json!({"runtime_id":"runtime", "client_session_key":"native", "client_cwd":root.path(), "client_session_file":root.path().join("does-not-exist.jsonl")}) }).await.unwrap();
+        state.event_ingest_service().report_fact(pontia_agent_control::ReportedFact { session_id: "session".into(), turn_id: None, report_key: None, fact_type: pontia_core::domain::EventType::SessionReady, data: json!({"runtime_id":"runtime", "client_session_key":"native", "client_cwd":root.path(), "client_session_file":root.path().join("does-not-exist.jsonl")}) }).await.unwrap();
         Self {
             binding: AgentBindingResolveRequest {
                 id: binding.id,
@@ -120,7 +120,7 @@ impl Fixture {
     }
     fn history(
         &self,
-    ) -> Arc<dyn pontia_application::client_contract::native_history::NativeHistory> {
+    ) -> Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory> {
         self.state
             .clients()
             .data("pi")
@@ -175,7 +175,7 @@ fn checkpoint(id: &str, parent: Option<&str>) -> Value {
 
 #[tokio::test]
 async fn image_metadata_matches_native_history_order_and_turn_attribution() {
-    use pontia_application::client_contract::raw_transcripts::{
+    use pontia_agent_control::client_contract::raw_transcripts::{
         SessionTimelineSelection, SessionTimelineTurn,
     };
     let mut f = Fixture::new().await;
@@ -243,7 +243,7 @@ async fn image_metadata_matches_native_history_order_and_turn_attribution() {
 
 #[tokio::test]
 async fn tool_calls_and_results_expose_the_same_native_call_id() {
-    use pontia_application::client_contract::raw_transcripts::{
+    use pontia_agent_control::client_contract::raw_transcripts::{
         SessionTimelineSelection, SessionTimelineTurn,
     };
     let f = Fixture::new().await;
@@ -314,7 +314,7 @@ async fn tool_calls_and_results_expose_the_same_native_call_id() {
 
 #[tokio::test]
 async fn session_checkpoints_keep_native_order_and_turn_or_gap_page_ownership() {
-    use pontia_application::client_contract::raw_transcripts::{
+    use pontia_agent_control::client_contract::raw_transcripts::{
         SessionTimelineSelection, SessionTimelineTurn,
     };
     let f = Fixture::new().await;
@@ -414,7 +414,7 @@ async fn session_checkpoints_keep_native_order_and_turn_or_gap_page_ownership() 
 
 #[tokio::test]
 async fn checkpoints_without_pontia_turns_come_only_from_the_native_branch() {
-    use pontia_application::client_contract::raw_transcripts::SessionTimelineSelection;
+    use pontia_agent_control::client_contract::raw_transcripts::SessionTimelineSelection;
     let f = Fixture::new().await;
     let (_, daemon) = f.serve(vec![
         entry("u", None, "user"),
@@ -729,7 +729,7 @@ async fn recovery_uses_native_anchors_without_creating_lifecycle_facts() {
     assert_eq!(recovered[0].head_cursor, Some(f.cursor(None)));
     assert_eq!(recovered[0].tail_cursor, Some(f.cursor(Some("a"))));
     assert!(
-        matches!(recovered[1].topology.resolution,pontia_application::client_contract::TopologyResolution::Linked{ref parent_turn_id} if parent_turn_id=="first")
+        matches!(recovered[1].topology.resolution,pontia_agent_control::client_contract::TopologyResolution::Linked{ref parent_turn_id} if parent_turn_id=="first")
     );
     assert_eq!(count.load(Ordering::SeqCst), 2);
     daemon.close();
@@ -790,7 +790,7 @@ async fn mixed_turns_keep_legacy_byte_ranges_and_only_new_turns_require_rpc() {
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     daemon.close();
-    use pontia_application::client_contract::raw_transcripts::{
+    use pontia_agent_control::client_contract::raw_transcripts::{
         SessionTimelineSelection, SessionTimelineTurn,
     };
     let selection = |selected: &str| SessionTimelineSelection {
@@ -1175,7 +1175,7 @@ async fn offline_handle_switches_to_runtime_when_a_connection_becomes_available(
 
 #[tokio::test]
 async fn offline_session_pages_keep_multiple_gap_checkpoints_and_ignore_unselected_open_turns() {
-    use pontia_application::client_contract::raw_transcripts::{
+    use pontia_agent_control::client_contract::raw_transcripts::{
         SessionTimelineSelection, SessionTimelineTurn,
     };
     let mut f = Fixture::new().await;
@@ -1268,7 +1268,7 @@ async fn offline_session_pages_keep_multiple_gap_checkpoints_and_ignore_unselect
 
 #[tokio::test]
 async fn offline_session_without_turns_only_returns_checkpoints_on_the_persisted_branch() {
-    use pontia_application::client_contract::raw_transcripts::SessionTimelineSelection;
+    use pontia_agent_control::client_contract::raw_transcripts::SessionTimelineSelection;
     let mut f = Fixture::new().await;
     f.write_native("native", vec![entry("u", None, "user"), checkpoint("offbranch", Some("u")), checkpoint("first", Some("u")),
         json!({"id":"summary", "parentId":"first", "type":"message", "timestamp":"2026-10-11T00:00:00Z", "message":{"role":"compactionSummary", "summary":"native summary"}}),
@@ -1295,7 +1295,7 @@ async fn offline_session_without_turns_only_returns_checkpoints_on_the_persisted
 
 #[tokio::test]
 async fn offline_page_ignores_invalid_unselected_chains_before_assigning_ownership() {
-    use pontia_application::client_contract::raw_transcripts::{
+    use pontia_agent_control::client_contract::raw_transcripts::{
         SessionTimelineSelection, SessionTimelineTurn,
     };
     let mut f = Fixture::new().await;
@@ -1338,7 +1338,7 @@ async fn offline_page_ignores_invalid_unselected_chains_before_assigning_ownersh
 
 #[tokio::test]
 async fn offline_page_keeps_unselected_head_boundaries_when_their_tails_are_invalid() {
-    use pontia_application::client_contract::raw_transcripts::{
+    use pontia_agent_control::client_contract::raw_transcripts::{
         SessionTimelineSelection, SessionTimelineTurn,
     };
     let mut f = Fixture::new().await;
@@ -1405,7 +1405,7 @@ async fn offline_history_does_not_return_partial_results_from_an_incomplete_file
 
 #[tokio::test]
 async fn offline_empty_first_turn_is_empty_but_explicit_missing_anchors_are_rejected() {
-    use pontia_application::client_contract::raw_transcripts::{
+    use pontia_agent_control::client_contract::raw_transcripts::{
         SessionTimelineSelection, SessionTimelineTurn,
     };
     let mut f = Fixture::new().await;

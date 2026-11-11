@@ -1,7 +1,7 @@
 //! Legacy pi-jsonl-v2 file behavior; runtime entry locators are covered separately.
 use std::fs;
 
-use pontia_application::client_contract::raw_transcripts::ResolvedAgentBinding;
+use pontia_agent_control::client_contract::raw_transcripts::ResolvedAgentBinding;
 use pontia_client_pi::raw_transcripts::{
     PiJsonlV2Cursor, PiTimelineAdapter, PiTurnUserEntryResolveError, PiTurnUserEntryResolveRequest,
     PiTurnUserEntryResolver, TimelineBoundaryRelation,

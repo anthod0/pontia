@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, time::Duration};
 
-use pontia_application::{
-    AppState, CreateSessionRequest, SubmitInboxMessageRequest,
+use pontia_agent_control::{
+    AgentControl, CreateSessionRequest, SubmitInboxMessageRequest,
     client_contract::ClientServicePhase,
     clients::{ClientRegistry, ClientServiceTasks},
 };
@@ -24,7 +24,7 @@ mod permission_blocking;
 mod session_environment;
 
 struct Harness {
-    app: AppState,
+    app: AgentControl,
     tasks: Option<ClientServiceTasks>,
     root: tempfile::TempDir,
     config: AcpConfig,
@@ -68,11 +68,11 @@ impl Harness {
         .await
         .unwrap();
         run_migrations(&db).await.unwrap();
-        let app = AppState::builder(db, root.path().into())
+        let app = AgentControl::builder(db, root.path().into())
             .clients(clients.clone())
             .build();
         let management =
-            pontia_application::agent_clients::AgentClientService::new(app.db(), app.clients());
+            pontia_agent_control::agent_clients::AgentClientService::new(app.db(), app.clients());
         for key in ["first", "second"] {
             management.save("acp", key, Some(true), None).await.unwrap();
         }
@@ -167,7 +167,7 @@ impl Harness {
         &self,
         session: &str,
         count: usize,
-    ) -> Vec<pontia_application::interactions::Interaction> {
+    ) -> Vec<pontia_agent_control::interactions::Interaction> {
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 let interactions = self
@@ -191,7 +191,7 @@ impl Harness {
         &self,
         session: &str,
         id: &str,
-        expected: pontia_application::interactions::InteractionState,
+        expected: pontia_agent_control::interactions::InteractionState,
     ) {
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
@@ -221,7 +221,7 @@ impl Harness {
             .unwrap();
         let mut clients = ClientRegistry::default();
         clients.register(pontia_client_acp::registration(self.config.clone()));
-        self.app = AppState::builder(self.app.db(), self.root.path().into())
+        self.app = AgentControl::builder(self.app.db(), self.root.path().into())
             .clients(clients.clone())
             .build();
         self.tasks = Some(
@@ -269,13 +269,13 @@ impl Harness {
         &self,
         session: &str,
     ) -> std::result::Result<
-        pontia_application::TurnTimelinePage,
-        pontia_application::TurnTimelineServiceError,
+        pontia_agent_control::TurnTimelinePage,
+        pontia_agent_control::TurnTimelineServiceError,
     > {
-        pontia_application::TurnTimelineService::new(self.app.event_ingest_service())
+        pontia_agent_control::TurnTimelineService::new(self.app.event_ingest_service())
             .page(
                 session.into(),
-                pontia_application::TurnTimelineDirection::Forward,
+                pontia_agent_control::TurnTimelineDirection::Forward,
                 None,
                 50,
             )
@@ -670,7 +670,7 @@ async fn creation_immediately_initializes_peer_and_persists_one_identity_and_run
             .unwrap()
             .contains("argument with spaces; not a shell")
     );
-    let binding = pontia_application::AgentBindingService::new(h.app.db())
+    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
         .binding_for_session(&session)
         .await
         .unwrap()
@@ -726,7 +726,7 @@ async fn missing_minimum_capabilities_rejects_before_new_and_cleans_peer() {
             .await
             .unwrap();
         assert!(
-            pontia_application::AgentBindingService::new(h.app.db())
+            pontia_agent_control::AgentBindingService::new(h.app.db())
                 .binding_for_session(&session)
                 .await
                 .unwrap()
@@ -802,7 +802,7 @@ async fn input_is_async_streams_without_persisting_output_and_uses_standard_stop
             .snapshot(&session, &turn.turn_id)
             .unwrap();
         assert!(
-            matches!(&snapshot.items[0], pontia_application::LiveOutputItem::AssistantText { text, .. } if text == "streamed answer")
+            matches!(&snapshot.items[0], pontia_agent_control::LiveOutputItem::AssistantText { text, .. } if text == "streamed answer")
         );
         h.release(&format!("release-{index}"));
         h.wait_turn(&session, &turn.turn_id, expected).await;
@@ -864,7 +864,7 @@ async fn cancel_keeps_prompt_active_and_inbox_queued_until_final_response() {
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             let snapshot = h.app.live_output().snapshot(&session, &turn.turn_id);
-            if snapshot.is_some_and(|snapshot| matches!(&snapshot.items[0], pontia_application::LiveOutputItem::AssistantText { text, .. } if text.ends_with(" after cancel"))) { break; }
+            if snapshot.is_some_and(|snapshot| matches!(&snapshot.items[0], pontia_agent_control::LiveOutputItem::AssistantText { text, .. } if text.ends_with(" after cancel"))) { break; }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
     }).await.unwrap();
@@ -1038,7 +1038,9 @@ async fn agent_namespaces_isolate_equal_native_ids_and_duplicate_binding_is_reje
 
 #[tokio::test]
 async fn permission_choices_preserve_all_scopes_and_native_ids_without_blocking_prompt_messages() {
-    use pontia_application::interactions::{InteractionError, InteractionIntent, InteractionState};
+    use pontia_agent_control::interactions::{
+        InteractionError, InteractionIntent, InteractionState,
+    };
     let h = Harness::new(&[("ACP_PERMISSION", "1")]).await;
     let session = h.create("first").await.unwrap();
     for (ordinal, selected) in [
@@ -1169,7 +1171,7 @@ async fn permission_choices_preserve_all_scopes_and_native_ids_without_blocking_
 
 #[tokio::test]
 async fn prompt_cancel_replies_cancelled_to_every_pending_request_without_finishing_turn() {
-    use pontia_application::interactions::{InteractionError, InteractionState};
+    use pontia_agent_control::interactions::{InteractionError, InteractionState};
     let h = Harness::new(&[("ACP_PERMISSION", "1")]).await;
     let session = h.create("first").await.unwrap();
     let turn = h
@@ -1235,7 +1237,7 @@ async fn prompt_cancel_replies_cancelled_to_every_pending_request_without_finish
 
 #[tokio::test]
 async fn native_request_cancellation_expires_only_its_own_interaction() {
-    use pontia_application::interactions::{InteractionError, InteractionState};
+    use pontia_agent_control::interactions::{InteractionError, InteractionState};
     let h = Harness::new(&[("ACP_PERMISSION", "1"), ("ACP_NATIVE_CANCEL", "1")]).await;
     let session = h.create("first").await.unwrap();
     let turn = h
@@ -1300,7 +1302,7 @@ async fn native_request_cancellation_expires_only_its_own_interaction() {
 
 #[tokio::test]
 async fn disconnect_and_close_expire_pending_permissions_without_replaying_on_another_peer() {
-    use pontia_application::interactions::{InteractionError, InteractionState};
+    use pontia_agent_control::interactions::{InteractionError, InteractionState};
     for close in [false, true] {
         let h = Harness::new(&[("ACP_PERMISSION", "1"), ("ACP_DROP_PROMPT", "1")]).await;
         let session = h.create("first").await.unwrap();
@@ -1355,7 +1357,7 @@ async fn disconnect_and_close_expire_pending_permissions_without_replaying_on_an
 
 #[tokio::test]
 async fn permission_response_flush_does_not_block_incoming_updates_under_pipe_backpressure() {
-    use pontia_application::interactions::InteractionState;
+    use pontia_agent_control::interactions::InteractionState;
     let h = Harness::new(&[("ACP_PERMISSION", "1"), ("ACP_REPLY_BACKPRESSURE", "1")]).await;
     let session = h.create("first").await.unwrap();
     let turn = h
@@ -1488,7 +1490,7 @@ async fn service_restart_loads_the_bound_agent_identity_and_preserves_runtime_an
         .await
         .unwrap()
         .unwrap();
-    let binding = pontia_application::AgentBindingService::new(h.app.db())
+    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
         .binding_for_session(&session)
         .await
         .unwrap()
@@ -1509,7 +1511,7 @@ async fn service_restart_loads_the_bound_agent_identity_and_preserves_runtime_an
         .await
         .unwrap()
         .unwrap();
-    let restored = pontia_application::AgentBindingService::new(h.app.db())
+    let restored = pontia_agent_control::AgentBindingService::new(h.app.db())
         .binding_for_session(&session)
         .await
         .unwrap()
@@ -1540,7 +1542,7 @@ async fn service_restart_loads_the_bound_agent_identity_and_preserves_runtime_an
 
 #[tokio::test]
 async fn lost_prompt_reconnect_expires_permissions_without_replay_or_terminal_facts() {
-    use pontia_application::interactions::InteractionState;
+    use pontia_agent_control::interactions::InteractionState;
     let h = Harness::new(&[("ACP_PERMISSION", "1"), ("ACP_DROP_PROMPT", "1")]).await;
     let session = h.create("first").await.unwrap();
     let turn = h
@@ -1589,7 +1591,7 @@ async fn lost_prompt_reconnect_expires_permissions_without_replay_or_terminal_fa
 
 #[tokio::test]
 async fn backpressured_prompt_writes_do_not_report_a_live_history_source_as_unavailable() {
-    use pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest;
+    use pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest;
     let h = Harness::new(&[("ACP_PAUSE_INPUT_AFTER_LOAD", "1")]).await;
     let session = h.create("first").await.unwrap();
     assert!(
@@ -1602,7 +1604,7 @@ async fn backpressured_prompt_writes_do_not_report_a_live_history_source_as_unav
             .capabilities
             .timeline
     );
-    let binding = pontia_application::AgentBindingService::new(h.app.db())
+    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
         .binding_for_session(&session)
         .await
         .unwrap()
@@ -1829,10 +1831,10 @@ async fn cancelling_a_history_reader_does_not_strand_replay_or_misclassify_late_
     let app = h.app.clone();
     let read_session = session.clone();
     let read = tokio::spawn(async move {
-        pontia_application::TurnTimelineService::new(app.event_ingest_service())
+        pontia_agent_control::TurnTimelineService::new(app.event_ingest_service())
             .page(
                 read_session,
-                pontia_application::TurnTimelineDirection::Forward,
+                pontia_agent_control::TurnTimelineDirection::Forward,
                 None,
                 50,
             )
@@ -1918,7 +1920,7 @@ async fn recovery_rejects_missing_native_session_or_downgraded_capabilities_with
     for marker in ["load-fail", "no-load"] {
         let mut h = Harness::new(&[]).await;
         let session = h.create("first").await.unwrap();
-        let binding = pontia_application::AgentBindingService::new(h.app.db())
+        let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
             .binding_for_session(&session)
             .await
             .unwrap()
@@ -1944,7 +1946,7 @@ async fn recovery_rejects_missing_native_session_or_downgraded_capabilities_with
         assert!(!failed.capabilities.timeline);
         assert!(failed.timeline_unavailable_reason.is_some());
         assert_eq!(failed.runtimes.len(), 1);
-        let after = pontia_application::AgentBindingService::new(h.app.db())
+        let after = pontia_agent_control::AgentBindingService::new(h.app.db())
             .binding_for_session(&session)
             .await
             .unwrap()

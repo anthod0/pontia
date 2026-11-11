@@ -1,7 +1,7 @@
 //! Pi branch ordering, Turn attribution, and page ownership of native checkpoints.
 use super::{PiEntryCursor, invalid};
 use crate::raw_transcripts::{PiJsonlV2Cursor, mapping::pi_entry_to_items};
-use pontia_application::client_contract::raw_transcripts::{
+use pontia_agent_control::client_contract::raw_transcripts::{
     SessionTimelineSelection, TurnTimelineItem, TurnTimelineReadError,
 };
 use serde_json::Value;

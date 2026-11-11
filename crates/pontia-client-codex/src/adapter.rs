@@ -3,10 +3,10 @@ use crate::{
     rollout::CodexRollout,
     runtime::{CodexRuntime, SubscriptionState},
 };
-use pontia_application::client_contract::{
+use pontia_agent_control::client_contract::{
     TimelineBoundaryBackend, TurnTimelineBackend, TurnTopologyBackend,
 };
-use pontia_application::{
+use pontia_agent_control::{
     EventIngestService,
     clients::{
         BranchTargetRequest, ClientData, ClientExitOutcome, ClientOperation, ClientRegistration,
@@ -49,9 +49,9 @@ struct CodexData;
 impl ClientData for CodexData {
     fn native_history(
         &self,
-        binding: pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
-        control: Option<pontia_application::clients::ClientControlService>,
-    ) -> Option<Arc<dyn pontia_application::client_contract::native_history::NativeHistory>> {
+        binding: pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
+        control: Option<pontia_agent_control::clients::ClientControlService>,
+    ) -> Option<Arc<dyn pontia_agent_control::client_contract::native_history::NativeHistory>> {
         Some(Arc::new(crate::history::CodexHistory::new(
             binding,
             control.map(|control| control.db()),
@@ -59,19 +59,19 @@ impl ClientData for CodexData {
     }
     fn capture_native_boundary(
         &self,
-        binding: &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
-        kind: pontia_application::client_contract::raw_transcripts::TimelineBoundaryCaptureKind,
+        binding: &pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
+        kind: pontia_agent_control::client_contract::raw_transcripts::TimelineBoundaryCaptureKind,
         anchor: Option<String>,
         _first_turn: bool,
         _head: Option<&str>,
     ) -> Option<
-        Result<pontia_application::client_contract::raw_transcripts::CapturedTimelineBoundary>,
+        Result<pontia_agent_control::client_contract::raw_transcripts::CapturedTimelineBoundary>,
     > {
         Some(
             anchor
                 .ok_or_else(|| Error::Domain("Codex boundary requires native Turn identity".into()))
                 .map(|turn| {
-                    pontia_application::client_contract::raw_transcripts::CapturedTimelineBoundary {
+                    pontia_agent_control::client_contract::raw_transcripts::CapturedTimelineBoundary {
                         kind,
                         cursor: crate::history::cursor::encode(
                             &binding.id,
@@ -103,7 +103,7 @@ impl ClientData for CodexData {
     }
     fn probe_timeline(
         &self,
-        _binding: &pontia_application::client_contract::raw_transcripts::AgentBindingResolveRequest,
+        _binding: &pontia_agent_control::client_contract::raw_transcripts::AgentBindingResolveRequest,
     ) -> Option<Result<()>> {
         Some(Ok(()))
     }
@@ -130,7 +130,7 @@ impl ClientData for CodexData {
 }
 
 struct CodexClient;
-impl pontia_application::client_contract::ClientInteractions for CodexClient {
+impl pontia_agent_control::client_contract::ClientInteractions for CodexClient {
     fn resolve<'a>(
         &'a self,
         events: EventIngestService,
@@ -181,14 +181,14 @@ impl ClientSession for CodexClient {
         events: EventIngestService,
         session: &'a str,
         turn: &'a str,
-    ) -> ClientOperation<'a, pontia_application::client_contract::NativeSessionFork> {
+    ) -> ClientOperation<'a, pontia_agent_control::client_contract::NativeSessionFork> {
         Box::pin(async move { CodexService::new(events).fork_session(session, turn).await })
     }
     fn adopt_fork<'a>(
         &'a self,
         events: EventIngestService,
         session: &'a str,
-        fork: &'a pontia_application::client_contract::NativeSessionFork,
+        fork: &'a pontia_agent_control::client_contract::NativeSessionFork,
     ) -> ClientOperation<'a, String> {
         Box::pin(async move { CodexService::new(events).adopt_fork(session, fork).await })
     }
@@ -296,7 +296,7 @@ impl ClientSession for CodexClient {
             let Some(runtime) = CodexRuntime::existing(Path::new(&root)).await else {
                 return Ok(false);
             };
-            let bound = pontia_application::AgentBindingService::new(pool)
+            let bound = pontia_agent_control::AgentBindingService::new(pool)
                 .binding_for_session(session)
                 .await?
                 .is_some();
@@ -324,7 +324,7 @@ impl ClientSession for CodexClient {
             };
             Ok(runtime.connection().await.is_ok()
                 && runtime.subscription(session).await == Some(SubscriptionState::Available)
-                && pontia_application::AgentBindingService::new(pool)
+                && pontia_agent_control::AgentBindingService::new(pool)
                     .binding_for_session(session)
                     .await?
                     .is_some())
@@ -339,7 +339,7 @@ impl ClientSession for CodexClient {
     ) -> ClientOperation<'a, RuntimeStartResult> {
         Box::pin(async move {
             let service = CodexService::new(events);
-            let binding = pontia_application::AgentBindingService::new(service.pool.clone())
+            let binding = pontia_agent_control::AgentBindingService::new(service.pool.clone())
                 .binding_for_session(session)
                 .await?
                 .ok_or_else(|| {
@@ -437,7 +437,7 @@ impl ClientSession for CodexClient {
         session: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async move {
-            let binding = pontia_application::AgentBindingService::new(pool.clone())
+            let binding = pontia_agent_control::AgentBindingService::new(pool.clone())
                 .binding_for_session(session)
                 .await?;
             let root: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?")

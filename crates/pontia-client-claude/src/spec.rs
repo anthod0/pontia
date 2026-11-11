@@ -1,4 +1,4 @@
-use pontia_application::client_contract::*;
+use pontia_agent_control::client_contract::*;
 
 pub const SPEC: AgentClientSpec = AgentClientSpec {
     client_type: "claude-agent",

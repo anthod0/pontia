@@ -11,7 +11,7 @@ use tokio::{net::UnixStream, sync::mpsc};
 
 fn rpc_client(state: &AppState) -> (Arc<PiRpcPeer>, mpsc::Receiver<RpcRequest>) {
     let (server, client) = UnixStream::pair().unwrap();
-    tokio::spawn(serve_connection(state.clone(), server));
+    tokio::spawn(serve_connection(state.control().clone(), server));
     PiRpcPeer::new(client)
 }
 
@@ -403,7 +403,13 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
     assert!(stale_source.is_err());
     pi.close();
     tokio::time::timeout(std::time::Duration::from_secs(1), async {
-        while state.client_control().available(session_id).await.unwrap() {
+        while state
+            .control()
+            .client_control()
+            .available(session_id)
+            .await
+            .unwrap()
+        {
             tokio::task::yield_now().await;
         }
     })
@@ -415,7 +421,12 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         .execute(&state.db())
         .await
         .unwrap();
-    state.inbox_commands().recover_deliveries().await.unwrap();
+    state
+        .control()
+        .inbox_commands()
+        .recover_deliveries()
+        .await
+        .unwrap();
     sqlx::query(
         "INSERT INTO events (event_id, session_id, source, client_type, event_type, occurred_at, payload) VALUES ('evt_branch_resolve_ready', ?, 'agent_client', 'pi', 'session.ready', '2026-07-24T00:00:00Z', ?)",
     )
@@ -440,6 +451,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         "pending"
     );
     let unknown = state
+        .control()
         .inbox_commands()
         .get_message(session_id, "msg_branch_root")
         .await

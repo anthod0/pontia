@@ -1,6 +1,6 @@
 use super::{CodexService, string};
 use crate::runtime::CodexRuntime;
-use pontia_application::turns::{NativeTurnObservation, NativeTurnService};
+use pontia_agent_control::turns::{NativeTurnObservation, NativeTurnService};
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 use std::collections::HashSet;

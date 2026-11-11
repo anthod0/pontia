@@ -1,4 +1,4 @@
-use pontia_application::{
+use pontia_agent_control::{
     LiveOutputItem, LiveOutputUpdate, LiveToolOutcome, LiveToolPhase, LiveToolResult,
     LiveToolStatus,
 };

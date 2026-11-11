@@ -4,7 +4,7 @@ mod queries;
 mod reporting;
 
 use crate::rpc::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
-use pontia_application::{AgentBindingService, AppState, RuntimeBindingUpsertRequest};
+use pontia_agent_control::{AgentBindingService, AgentControl, RuntimeBindingUpsertRequest};
 use pontia_core::{Error, Result};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -84,7 +84,7 @@ impl PiIpcListener {
         })
     }
 
-    pub async fn run(self, state: AppState, mut shutdown: watch::Receiver<bool>) -> Result<()> {
+    pub async fn run(self, state: AgentControl, mut shutdown: watch::Receiver<bool>) -> Result<()> {
         let mut connections = JoinSet::new();
         loop {
             if *shutdown.borrow() {
@@ -124,7 +124,7 @@ impl Drop for ClosePeer {
     }
 }
 
-pub async fn serve_connection(state: AppState, stream: UnixStream) {
+pub async fn serve_connection(state: AgentControl, stream: UnixStream) {
     let process_id = stream
         .peer_cred()
         .ok()
@@ -256,14 +256,14 @@ struct ContextQuery {
 }
 
 async fn dispatch(
-    state: &AppState,
+    state: &AgentControl,
     channel: &Arc<PiChannel>,
     request: &RpcRequest,
     registered: &mut Option<Attach>,
 ) -> Result<Value> {
     let _identity_guard = state.client_control().lock_identity().await;
     if let Some(identity) = registered.as_ref() {
-        let current: Arc<dyn pontia_application::ClientControlChannel> = channel.clone();
+        let current: Arc<dyn pontia_agent_control::ClientControlChannel> = channel.clone();
         state
             .client_control()
             .validate_connection(&identity.session_id, &identity.runtime_id, &current)
@@ -285,7 +285,7 @@ async fn dispatch(
         let identity = registered.as_ref().ok_or_else(|| {
             Error::StateConflict("Pi branch resolution requires registration".into())
         })?;
-        let query: pontia_application::ResolveBranchReplayRequest =
+        let query: pontia_agent_control::ResolveBranchReplayRequest =
             serde_json::from_value(request.params.clone())?;
         if query.session_id != identity.session_id
             || query.runtime_id != identity.runtime_id
@@ -297,13 +297,13 @@ async fn dispatch(
         }
         // Reverse history calls must not hold the fact/connection identity gate.
         drop(_identity_guard);
-        let replay = pontia_application::BranchReplayService::new(state.db())
+        let replay = pontia_agent_control::BranchReplayService::new(state.db())
             .with_clients(state.clients())
             .with_history_control(state.client_control().clone())
             .resolve_command(query)
             .await?;
         let _guard = state.client_control().lock_identity().await;
-        let current: Arc<dyn pontia_application::ClientControlChannel> = channel.clone();
+        let current: Arc<dyn pontia_agent_control::ClientControlChannel> = channel.clone();
         state
             .client_control()
             .validate_connection(&identity.session_id, &identity.runtime_id, &current)
@@ -410,17 +410,17 @@ impl Drop for ReplyGuard<'_> {
     }
 }
 
-impl pontia_application::ClientControlChannel for PiChannel {
+impl pontia_agent_control::ClientControlChannel for PiChannel {
     fn compact<'a>(
         &'a self,
         operation_id: &'a str,
-    ) -> pontia_application::ClientControlOperation<'a> {
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
         self.peer.compact(operation_id)
     }
     fn native_history(
         &self,
         params: Value,
-    ) -> pontia_application::ClientControlOperation<'_, Value> {
+    ) -> pontia_agent_control::ClientControlOperation<'_, Value> {
         self.peer.native_history(params)
     }
     fn process_id(&self) -> Option<u32> {
@@ -437,44 +437,44 @@ impl pontia_application::ClientControlChannel for PiChannel {
     }
     fn list_models(
         &self,
-    ) -> pontia_application::ClientControlOperation<
+    ) -> pontia_agent_control::ClientControlOperation<
         '_,
-        Vec<pontia_application::sessions::SessionModel>,
+        Vec<pontia_agent_control::sessions::SessionModel>,
     > {
         self.peer.list_models()
     }
-    fn set_model<'a>(&'a self, model: &'a str) -> pontia_application::ClientControlOperation<'a> {
+    fn set_model<'a>(&'a self, model: &'a str) -> pontia_agent_control::ClientControlOperation<'a> {
         self.peer.set_model(model)
     }
-    fn interrupt(&self) -> pontia_application::ClientControlOperation<'_> {
+    fn interrupt(&self) -> pontia_agent_control::ClientControlOperation<'_> {
         self.peer.interrupt()
     }
-    fn shutdown(&self) -> pontia_application::ClientControlOperation<'_> {
+    fn shutdown(&self) -> pontia_agent_control::ClientControlOperation<'_> {
         self.peer.shutdown()
     }
-    fn ping(&self) -> pontia_application::ClientControlOperation<'_> {
+    fn ping(&self) -> pontia_agent_control::ClientControlOperation<'_> {
         self.peer.ping()
     }
     fn replay<'a>(
         &'a self,
         inbox_message_id: &'a str,
-    ) -> pontia_application::ClientControlOperation<'a> {
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
         self.peer.replay(inbox_message_id)
     }
     fn submit<'a>(
         &'a self,
         input: &'a str,
         inbox_message_id: Option<&'a str>,
-    ) -> pontia_application::ClientControlOperation<'a> {
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
         self.peer.submit(input, inbox_message_id)
     }
 }
 
-impl pontia_application::ClientControlChannel for PiRpcPeer {
+impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
     fn compact<'a>(
         &'a self,
         operation_id: &'a str,
-    ) -> pontia_application::ClientControlOperation<'a> {
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
         Box::pin(async move {
             if self
                 .call("compact", json!({"operation_id": operation_id}))
@@ -491,7 +491,7 @@ impl pontia_application::ClientControlChannel for PiRpcPeer {
     fn native_history(
         &self,
         params: Value,
-    ) -> pontia_application::ClientControlOperation<'_, Value> {
+    ) -> pontia_agent_control::ClientControlOperation<'_, Value> {
         Box::pin(async move { self.call("history.read", params).await })
     }
     fn available(&self) -> bool {
@@ -503,7 +503,7 @@ impl pontia_application::ClientControlChannel for PiRpcPeer {
     fn replay<'a>(
         &'a self,
         inbox_message_id: &'a str,
-    ) -> pontia_application::ClientControlOperation<'a> {
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
         Box::pin(async move {
             if self
                 .call(
@@ -522,15 +522,15 @@ impl pontia_application::ClientControlChannel for PiRpcPeer {
     }
     fn list_models(
         &self,
-    ) -> pontia_application::ClientControlOperation<
+    ) -> pontia_agent_control::ClientControlOperation<
         '_,
-        Vec<pontia_application::sessions::SessionModel>,
+        Vec<pontia_agent_control::sessions::SessionModel>,
     > {
         Box::pin(async {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
             struct Catalog {
-                models: Vec<pontia_application::sessions::SessionModel>,
+                models: Vec<pontia_agent_control::sessions::SessionModel>,
             }
             let response = self.call("models.list", json!({})).await?;
             let catalog: Catalog = serde_json::from_value(response).map_err(|error| {
@@ -547,7 +547,7 @@ impl pontia_application::ClientControlChannel for PiRpcPeer {
             Ok(catalog.models)
         })
     }
-    fn set_model<'a>(&'a self, model: &'a str) -> pontia_application::ClientControlOperation<'a> {
+    fn set_model<'a>(&'a self, model: &'a str) -> pontia_agent_control::ClientControlOperation<'a> {
         Box::pin(async move {
             if self.call("model.set", json!({"model":model})).await? != json!({"accepted":true}) {
                 return Err(Error::ControlUnknown(
@@ -557,7 +557,7 @@ impl pontia_application::ClientControlChannel for PiRpcPeer {
             Ok(())
         })
     }
-    fn interrupt(&self) -> pontia_application::ClientControlOperation<'_> {
+    fn interrupt(&self) -> pontia_agent_control::ClientControlOperation<'_> {
         Box::pin(async {
             if self.call("interrupt", json!({})).await? != json!({"accepted":true}) {
                 return Err(Error::ControlUnknown(
@@ -567,7 +567,7 @@ impl pontia_application::ClientControlChannel for PiRpcPeer {
             Ok(())
         })
     }
-    fn shutdown(&self) -> pontia_application::ClientControlOperation<'_> {
+    fn shutdown(&self) -> pontia_agent_control::ClientControlOperation<'_> {
         Box::pin(async {
             if self.call("shutdown", json!({})).await? != json!({"accepted":true}) {
                 return Err(Error::ControlUnknown(
@@ -577,7 +577,7 @@ impl pontia_application::ClientControlChannel for PiRpcPeer {
             Ok(())
         })
     }
-    fn ping(&self) -> pontia_application::ClientControlOperation<'_> {
+    fn ping(&self) -> pontia_agent_control::ClientControlOperation<'_> {
         Box::pin(async {
             if self.call("ping", json!({})).await? != json!({"pong":true}) {
                 return Err(Error::ControlUnknown("Invalid Pi ping response".into()));
@@ -589,7 +589,7 @@ impl pontia_application::ClientControlChannel for PiRpcPeer {
         &'a self,
         input: &'a str,
         inbox_message_id: Option<&'a str>,
-    ) -> pontia_application::ClientControlOperation<'a> {
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
         Box::pin(async move {
             if self
                 .call(

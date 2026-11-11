@@ -1,4 +1,4 @@
-use pontia_application::client_contract::{
+use pontia_agent_control::client_contract::{
     AgentClientAdapter, AgentClientCapabilities, AgentClientSpec, ClientSessionIdentityBehavior,
     ContextUsageCapability, DispatchBehavior, HookLogBehavior, RuntimeBehavior,
     RuntimeBindingBehavior, TerminateBehavior, TmuxRuntimeBehavior, TurnLifecycleBehavior,
@@ -28,19 +28,19 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     default_for_creation: true,
     capabilities: CAPABILITIES,
     adapter: AgentClientAdapter {
-        lifecycle: pontia_application::client_contract::SessionLifecycleBehavior {
+        lifecycle: pontia_agent_control::client_contract::SessionLifecycleBehavior {
             coupled_runtime: true,
             confirmed_exit_recovery: true,
             restart_requires_exit: true,
             process_observation: Some(
-                pontia_application::client_contract::ProcessObservationBehavior {
+                pontia_agent_control::client_contract::ProcessObservationBehavior {
                     role: "tui",
                     observe_starting: false,
-                    exit_event: pontia_application::PontiaEventType::SessionExited,
+                    exit_event: pontia_agent_control::PontiaEventType::SessionExited,
                     exit_reason: "agent_process_fingerprint_missing",
                 },
             ),
-            ..pontia_application::client_contract::SessionLifecycleBehavior::DEFAULT
+            ..pontia_agent_control::client_contract::SessionLifecycleBehavior::DEFAULT
         },
         native_turn_identity: false,
         native_turn_metadata_key: None,

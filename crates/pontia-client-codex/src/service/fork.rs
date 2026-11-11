@@ -1,6 +1,6 @@
 use super::{CodexService, string};
 use crate::proxy::ThreadOperation;
-use pontia_application::{
+use pontia_agent_control::{
     AgentBindingService, client_contract::NativeSessionFork, sessions::NativeSessionService,
 };
 use pontia_core::{Error, Result};

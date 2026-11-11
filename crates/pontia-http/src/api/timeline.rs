@@ -6,9 +6,8 @@ use axum::{
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
-use pontia_application::{
-    AppState, TurnTimelineDirection, TurnTimelineService, TurnTimelineServiceError,
-};
+use pontia_agent_control::{TurnTimelineDirection, TurnTimelineService, TurnTimelineServiceError};
+use pontia_application::AppState;
 
 use super::response::{ApiError, ApiResponse, ok};
 
@@ -41,15 +40,17 @@ pub async fn get_turn_timeline(
         .get("history_source")
         .map(|source| match source.as_str() {
             "native" => {
-                Ok(pontia_application::client_contract::native_history::HistorySource::Native)
+                Ok(pontia_agent_control::client_contract::native_history::HistorySource::Native)
             }
-            "file" => Ok(pontia_application::client_contract::native_history::HistorySource::File),
+            "file" => {
+                Ok(pontia_agent_control::client_contract::native_history::HistorySource::File)
+            }
             _ => Err(invalid_timeline_query(
                 "history_source must be native or file",
             )),
         })
         .transpose()?;
-    let page = TurnTimelineService::new(state.event_ingest_service())
+    let page = TurnTimelineService::new(state.control().event_ingest_service())
         .with_history_source(history_source)
         .page(session_id, direction, query.get("turn_id").cloned(), limit)
         .await
@@ -75,7 +76,7 @@ pub async fn get_turn_tree_history(
             "limit must be an integer from 1 through 100",
         ));
     }
-    let page = TurnTimelineService::new(state.event_ingest_service())
+    let page = TurnTimelineService::new(state.control().event_ingest_service())
         .tree_history(session_id, query.get("from_turn_id").cloned(), limit)
         .await
         .map_err(turn_timeline_service_error)?;
@@ -87,7 +88,7 @@ pub async fn get_turn_tree_updates(
     Path(session_id): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let page = TurnTimelineService::new(state.event_ingest_service())
+    let page = TurnTimelineService::new(state.control().event_ingest_service())
         .tree_updates(session_id, query.get("from_turn_id").cloned())
         .await
         .map_err(turn_timeline_service_error)?;

@@ -14,9 +14,11 @@ async fn history_changes_use_the_dashboard_stream_without_persisting_execution_f
         .await
         .unwrap();
     pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
-    let app = AppState::builder(pool, root.path().into())
-        .external_api_token(Some("test".into()))
-        .build();
+    let app = AppState::builder(
+        pontia_agent_control::AgentControl::builder(pool, root.path().into()).build(),
+    )
+    .external_api_token(Some("test".into()))
+    .build();
     let response = pontia_http::router(app.clone())
         .oneshot(
             Request::builder()
@@ -29,7 +31,9 @@ async fn history_changes_use_the_dashboard_stream_without_persisting_execution_f
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let mut body = response.into_body();
-    app.event_ingest_service().history_changed("session");
+    app.control()
+        .event_ingest_service()
+        .history_changed("session");
     let frame = tokio::time::timeout(std::time::Duration::from_secs(3), body.frame())
         .await
         .unwrap()

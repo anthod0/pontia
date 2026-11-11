@@ -1,5 +1,5 @@
 mod support;
-use pontia_application::{AppState, LiveOutputItem};
+use pontia_agent_control::{AgentControl, LiveOutputItem};
 use pontia_client_pi::ipc::serve_connection;
 use pontia_client_pi::rpc::{PROTOCOL_VERSION, PiRpcPeer};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::net::UnixStream;
 
 struct Session {
-    state: AppState,
+    state: AgentControl,
     peer: Arc<PiRpcPeer>,
     session: String,
     runtime: String,
@@ -32,7 +32,7 @@ impl Session {
         .save("pi", "default", Some(true), None)
         .await
         .unwrap();
-        let state = AppState::builder(db, root.path().into())
+        let state = AgentControl::builder(db, root.path().into())
             .clients(support::clients())
             .build();
         let peer = connect(&state);
@@ -118,7 +118,7 @@ impl Drop for Session {
     }
 }
 
-fn connect(state: &AppState) -> Arc<PiRpcPeer> {
+fn connect(state: &AgentControl) -> Arc<PiRpcPeer> {
     let (server, client) = UnixStream::pair().unwrap();
     tokio::spawn(serve_connection(state.clone(), server));
     PiRpcPeer::new(client).0

@@ -11,9 +11,8 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_application::{
-    AgentBindingService, AppState, EventIngestService, UpsertAgentBindingRequest,
-};
+use pontia_agent_control::{AgentBindingService, EventIngestService, UpsertAgentBindingRequest};
+use pontia_application::AppState;
 use pontia_client_pi::raw_transcripts::{PiJsonlV2Cursor, TimelineBoundaryRelation};
 use pontia_core::domain::{
     EventSource, EventType, ProjectionState, ReportedEvent, TimelineBoundary,

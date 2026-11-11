@@ -1,5 +1,5 @@
 use super::*;
-use pontia_application::{ContextUsageCapability, ContextUsageView};
+use pontia_agent_control::{ContextUsageCapability, ContextUsageView};
 
 fn usage(used: Value, max: Value) -> Value {
     json!({"method":"thread/tokenUsage/updated","params":{

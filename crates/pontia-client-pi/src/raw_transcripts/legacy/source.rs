@@ -5,7 +5,7 @@ use std::{
 
 use pontia_core::{Error, Result};
 
-use pontia_application::client_contract::raw_transcripts::ResolvedAgentBinding;
+use pontia_agent_control::client_contract::raw_transcripts::ResolvedAgentBinding;
 
 pub(crate) fn source_len(source: &ResolvedAgentBinding) -> Result<usize> {
     let len = fs::metadata(&source.path)

@@ -1,6 +1,7 @@
 //! Seed client facts through the shared application service in HTTP scenarios.
 use axum::http::StatusCode;
-use pontia_application::{AppState, EventIngestResult, EventReportError, ReportedFact};
+use pontia_agent_control::{EventIngestResult, EventReportError, ReportedFact};
+use pontia_application::AppState;
 use pontia_core::domain::EventType;
 use serde_json::{Value, json};
 use std::str::FromStr;
@@ -16,7 +17,11 @@ pub(crate) async fn report_fact_result(
         fact_type: EventType::from_str(body["type"].as_str().unwrap()).unwrap(),
         data: body["data"].clone(),
     };
-    state.event_ingest_service().report_fact(fact).await
+    state
+        .control()
+        .event_ingest_service()
+        .report_fact(fact)
+        .await
 }
 
 pub(crate) async fn report_fact(state: AppState, body: Value) -> (StatusCode, Value) {

@@ -1,5 +1,6 @@
-use pontia_application::{
-    AppState, CreateSessionRequest, client_contract::ClientServicePhase, clients::ClientRegistry,
+use pontia_agent_control::{
+    AgentControl, CreateSessionRequest, client_contract::ClientServicePhase,
+    clients::ClientRegistry,
 };
 use pontia_runtime::local_service::{
     CommandOutput, CommandRunner, DefinitionStore, ProcessCommandRunner,
@@ -99,10 +100,10 @@ async fn npm_install_reports_authentication_retries_without_fabricating_turns() 
     run_migrations(&pool).await.unwrap();
     let mut clients = ClientRegistry::default();
     clients.register(pontia_client_claude::registration_with_host(None));
-    let app = AppState::builder(pool, pontia)
+    let app = AgentControl::builder(pool, pontia)
         .clients(clients.clone())
         .build();
-    pontia_application::agent_clients::AgentClientService::new(app.db(), clients.clone())
+    pontia_agent_control::agent_clients::AgentClientService::new(app.db(), clients.clone())
         .save("claude-agent", "default", Some(true), None)
         .await
         .unwrap();

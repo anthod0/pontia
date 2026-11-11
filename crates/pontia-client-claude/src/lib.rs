@@ -9,8 +9,8 @@ mod spec;
 mod transport;
 
 use peer::{Input, Peer};
-use pontia_application::{
-    AppState, EventIngestService, client_contract::*, clients::ClientRegistration,
+use pontia_agent_control::{
+    AgentControl, EventIngestService, client_contract::*, clients::ClientRegistration,
     control::InputReceipt, runtime::ControlTarget, sessions::SessionModel, turns::InputIntent,
 };
 use pontia_core::{Error, Result};
@@ -79,7 +79,7 @@ impl ClientConfiguration for Configuration {
 #[derive(Clone)]
 struct Adapter {
     host: Option<PathBuf>,
-    interactions: Arc<OnceLock<pontia_application::interactions::InteractionService>>,
+    interactions: Arc<OnceLock<pontia_agent_control::interactions::InteractionService>>,
     peers: Arc<Mutex<HashMap<String, Arc<Peer>>>>,
     stopped: Arc<AtomicBool>,
     context: Arc<OnceLock<(SqlitePool, PathBuf)>>,
@@ -393,7 +393,7 @@ impl ClientService for Adapter {
     }
     fn start<'a>(
         &'a self,
-        app: AppState,
+        app: AgentControl,
     ) -> ClientOperation<'a, Option<tokio::task::JoinHandle<Result<()>>>> {
         let adapter = self.clone();
         Box::pin(async move {

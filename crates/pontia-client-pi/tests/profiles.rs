@@ -1,4 +1,4 @@
-use pontia_application::{AgentProfileService, clients::ClientRegistry};
+use pontia_agent_control::{AgentProfileService, clients::ClientRegistry};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
 

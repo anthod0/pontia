@@ -1,5 +1,5 @@
-use pontia_application::{
-    AppState, LiveOutputBatch, LiveOutputClose, LiveOutputIdentity, LiveOutputItem,
+use pontia_agent_control::{
+    AgentControl, LiveOutputBatch, LiveOutputClose, LiveOutputIdentity, LiveOutputItem,
     LiveOutputProducer, LiveOutputPublishOutcome, LiveOutputSnapshotReplacement, LiveOutputUpdate,
 };
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,11 @@ struct LiveOutputResponse {
     accepted_sequence: u64,
 }
 
-pub(super) async fn publish(state: &AppState, identity: &Attach, params: Value) -> Result<Value> {
+pub(super) async fn publish(
+    state: &AgentControl,
+    identity: &Attach,
+    params: Value,
+) -> Result<Value> {
     let request: LiveOutputRequest = serde_json::from_value(params)?;
     let (session_id, runtime_id) = match &request {
         LiveOutputRequest::Append {
@@ -133,7 +137,7 @@ fn producer(
             turn_id,
             stream_id,
         },
-        source: pontia_application::LiveOutputSource::RuntimeBound { runtime_id },
+        source: pontia_agent_control::LiveOutputSource::RuntimeBound { runtime_id },
     }
 }
 

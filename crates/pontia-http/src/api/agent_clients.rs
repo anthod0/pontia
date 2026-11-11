@@ -2,7 +2,8 @@ use axum::{
     Json,
     extract::{Path, State, rejection::JsonRejection},
 };
-use pontia_application::{AppState, agent_clients::AgentClientService};
+use pontia_agent_control::agent_clients::AgentClientService;
+use pontia_application::AppState;
 use serde_json::{Value, json};
 
 use super::response::{ApiError, ApiResponse, ok};
@@ -10,7 +11,7 @@ use super::response::{ApiError, ApiResponse, ok};
 pub async fn list_agent_clients(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = AgentClientService::new(state.db(), state.clients());
+    let service = AgentClientService::new(state.db(), state.control().clients());
     Ok(ok(json!({"agent_clients": service.list().await?})))
 }
 
@@ -18,7 +19,7 @@ pub async fn get_agent_client(
     State(state): State<AppState>,
     Path((client, key)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = AgentClientService::new(state.db(), state.clients());
+    let service = AgentClientService::new(state.db(), state.control().clients());
     Ok(ok(
         json!({"agent_client": service.get(&client, &key).await?}),
     ))
@@ -49,13 +50,14 @@ pub async fn patch_agent_client(
         .transpose()?;
     let overrides = object.get("config_overrides").cloned();
     if !state
+        .control()
         .clients()
         .get(&client)
         .is_some_and(|entry| entry.configuration.is_some())
     {
         return Err(ApiError::invalid_request("Unknown client integration"));
     }
-    let service = AgentClientService::new(state.db(), state.clients());
+    let service = AgentClientService::new(state.db(), state.control().clients());
     service.save(&client, &key, enabled, overrides).await?;
     Ok(ok(
         json!({"agent_client": service.get(&client, &key).await?}),
@@ -66,7 +68,7 @@ pub async fn delete_agent_client(
     State(state): State<AppState>,
     Path((client, key)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = AgentClientService::new(state.db(), state.clients());
+    let service = AgentClientService::new(state.db(), state.control().clients());
     service.delete(&client, &key).await?;
     Ok(ok(json!({"deleted": true})))
 }

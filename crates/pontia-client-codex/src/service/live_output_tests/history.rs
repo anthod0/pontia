@@ -1,14 +1,14 @@
 use super::*;
 use crate::CodexService;
-use pontia_application::client_contract::native_history::HistorySource;
-use pontia_application::{TurnTimelineDirection, TurnTimelineService};
+use pontia_agent_control::client_contract::native_history::HistorySource;
+use pontia_agent_control::{TurnTimelineDirection, TurnTimelineService};
 
 async fn page(
     f: &Fixture,
     source: Option<HistorySource>,
     anchor: Option<String>,
     limit: usize,
-) -> pontia_application::TurnTimelinePage {
+) -> pontia_agent_control::TurnTimelinePage {
     TurnTimelineService::new(f.app.event_ingest_service())
         .with_history_source(source)
         .page(

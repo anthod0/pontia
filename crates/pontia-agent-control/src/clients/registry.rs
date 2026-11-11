@@ -1,0 +1,207 @@
+use crate::client_contract::{
+    AgentClientSpec, ClientData, ClientLauncher, ClientService, ClientServicePhase, ClientSession,
+    InProcessClient, TimelineBoundaryBackend, TurnTimelineBackend,
+};
+use pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository;
+use sqlx::SqlitePool;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
+
+#[derive(Clone)]
+pub struct ClientRegistration {
+    pub configuration: Option<Arc<dyn crate::client_contract::ClientConfiguration>>,
+    pub interactions: Option<Arc<dyn crate::client_contract::ClientInteractions>>,
+    pub events: Option<Arc<dyn crate::client_contract::ClientEventInterpreter>>,
+    pub service: Option<Arc<dyn ClientService>>,
+    pub profile: Option<Arc<dyn crate::client_contract::ClientProfile>>,
+    pub in_process: Option<Arc<dyn InProcessClient>>,
+    pub session: Option<Arc<dyn ClientSession>>,
+    pub prepare_on_input: bool,
+    pub steer: bool,
+    pub spec: &'static AgentClientSpec,
+    pub data: Option<Arc<dyn ClientData>>,
+    pub launcher: Option<Arc<dyn ClientLauncher>>,
+}
+
+pub struct ClientServiceTasks {
+    tasks: Vec<tokio::task::JoinHandle<pontia_core::Result<()>>>,
+}
+
+impl ClientServiceTasks {
+    pub fn extend(&mut self, other: Self) {
+        self.tasks.extend(other.tasks);
+    }
+
+    pub async fn join(self) -> pontia_core::Result<()> {
+        let mut failure = None;
+        for task in self.tasks {
+            let result = task
+                .await
+                .map_err(|error| pontia_core::Error::Domain(error.to_string()))
+                .and_then(|result| result);
+            if let Err(error) = result
+                && failure.is_none()
+            {
+                failure = Some(error);
+            }
+        }
+        failure.map_or(Ok(()), Err)
+    }
+
+    async fn abort(self) {
+        for task in &self.tasks {
+            task.abort();
+        }
+        for task in self.tasks {
+            let _ = task.await;
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct ClientRegistry {
+    entries: Arc<HashMap<&'static str, ClientRegistration>>,
+    registration_order: Arc<Vec<&'static str>>,
+}
+
+impl Default for ClientRegistry {
+    fn default() -> Self {
+        Self {
+            entries: Arc::new(HashMap::new()),
+            registration_order: Arc::new(Vec::new()),
+        }
+    }
+}
+
+impl ClientRegistry {
+    pub fn register(&mut self, client: ClientRegistration) {
+        if !self.entries.contains_key(client.spec.client_type) {
+            Arc::make_mut(&mut self.registration_order).push(client.spec.client_type);
+        }
+        Arc::make_mut(&mut self.entries).insert(client.spec.client_type, client);
+    }
+
+    pub async fn start_services(
+        &self,
+        state: crate::AgentControl,
+        phase: ClientServicePhase,
+    ) -> pontia_core::Result<ClientServiceTasks> {
+        let mut tasks = ClientServiceTasks { tasks: Vec::new() };
+        for client in self.registration_order.iter() {
+            let Some(service) = self.entries[client]
+                .service
+                .as_ref()
+                .filter(|service| service.phase() == phase)
+            else {
+                continue;
+            };
+            match service.start(state.clone()).await {
+                Ok(Some(task)) => tasks.tasks.push(task),
+                Ok(None) => {}
+                Err(error) => {
+                    tasks.abort().await;
+                    return Err(error);
+                }
+            }
+        }
+        Ok(tasks)
+    }
+
+    pub async fn creation_options(
+        &self,
+        pool: &SqlitePool,
+    ) -> pontia_core::Result<Vec<crate::client_contract::SessionCreationOption>> {
+        let enabled = SqliteAgentClientRepository::new(pool.clone())
+            .list()
+            .await?
+            .into_iter()
+            .filter(|row| row.enabled)
+            .map(|row| (row.client_type, row.client_key))
+            .collect::<HashSet<_>>();
+        let mut options = Vec::new();
+        for registration in self.registrations() {
+            let client = registration.spec.client_type;
+            if let Some(session) = &registration.session
+                && let Some(client_options) = session.creation_options().await?
+            {
+                for option in client_options {
+                    let key = match &registration.configuration {
+                        Some(configuration) => configuration.key(&option.metadata)?,
+                        None => "default".into(),
+                    };
+                    if enabled.contains(&(client.into(), key)) {
+                        options.push(option);
+                    }
+                }
+                continue;
+            }
+            let key = match &registration.configuration {
+                Some(configuration) => configuration.key(&serde_json::json!({}))?,
+                None => "default".into(),
+            };
+            if !enabled.contains(&(client.into(), key)) {
+                continue;
+            }
+            let name = registration
+                .configuration
+                .as_ref()
+                .and_then(|configuration| {
+                    let key = configuration.keys().into_iter().next()?;
+                    let effective = configuration.merged(&key, &serde_json::json!({}));
+                    Some(configuration.presentation(&key, &effective).0)
+                })
+                .unwrap_or_else(|| client.into());
+            options.push(crate::client_contract::SessionCreationOption {
+                id: client.into(),
+                name,
+                client_type: client.into(),
+                metadata: serde_json::json!({}),
+            });
+        }
+        Ok(options)
+    }
+
+    pub fn default_client_type(&self) -> pontia_core::Result<&'static str> {
+        self.registrations()
+            .find(|client| client.spec.default_for_creation)
+            .map(|client| client.spec.client_type)
+            .ok_or_else(|| {
+                pontia_core::Error::CapabilityUnavailable(
+                    "No default Agent Client is registered".into(),
+                )
+            })
+    }
+
+    pub fn registrations(&self) -> impl Iterator<Item = &ClientRegistration> {
+        self.registration_order
+            .iter()
+            .map(|client| &self.entries[client])
+    }
+
+    pub fn get(&self, client: &str) -> Option<&ClientRegistration> {
+        self.entries.get(client)
+    }
+
+    pub fn spec(&self, client: &str) -> Option<&'static AgentClientSpec> {
+        self.get(client).map(|entry| entry.spec)
+    }
+
+    pub fn control_runtime_role(&self, client: &str) -> Option<&'static str> {
+        self.spec(client)
+            .and_then(|spec| spec.adapter.control_runtime_role)
+    }
+
+    pub fn data(&self, client: &str) -> Option<&Arc<dyn ClientData>> {
+        self.get(client).and_then(|entry| entry.data.as_ref())
+    }
+
+    pub fn timeline(&self, client: &str) -> Option<TurnTimelineBackend> {
+        self.data(client).map(|data| data.timeline())
+    }
+
+    pub fn boundaries(&self, client: &str) -> Option<TimelineBoundaryBackend> {
+        self.data(client).map(|data| data.boundaries())
+    }
+}

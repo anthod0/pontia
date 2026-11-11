@@ -1,5 +1,5 @@
 use super::*;
-use pontia_application::TurnTimelineService;
+use pontia_agent_control::TurnTimelineService;
 use pontia_core::domain::{ProjectionState, TurnState};
 use std::io::Write;
 
@@ -156,7 +156,7 @@ async fn crash_recovery_preserves_facts_and_supports_updates_refresh_pagination_
         TurnTimelineService::new(service.clone())
             .tree_history("session".into(), None, 20)
             .await,
-        Err(pontia_application::TurnTimelineServiceError::SourceUnavailable)
+        Err(pontia_agent_control::TurnTimelineServiceError::SourceUnavailable)
     ));
     fixture.history_resume().await;
     fixture.attach_history(path.clone()).await;

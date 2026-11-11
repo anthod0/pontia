@@ -4,9 +4,8 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_application::{
-    AppState, EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType,
-};
+use pontia_agent_control::{EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType};
+use pontia_application::AppState;
 use pontia_http as http;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -630,10 +629,13 @@ async fn persistent_submission_survives_response_loss_and_database_reopen() {
     .save("generic", "default", Some(true), None)
     .await
     .unwrap();
-    let state = AppState::builder(pool, root.path().into())
-        .clients(crate::common::clients::clients())
-        .external_api_token(Some(TOKEN.into()))
-        .build();
+    let state = AppState::builder(
+        pontia_agent_control::AgentControl::builder(pool, root.path().into())
+            .clients(crate::common::clients::clients())
+            .build(),
+    )
+    .external_api_token(Some(TOKEN.into()))
+    .build();
     let session = create_session(state.clone()).await;
     let uri = format!("/api/v1/sessions/{session}/inbox/messages");
     let first = post_json(
@@ -644,15 +646,18 @@ async fn persistent_submission_survives_response_loss_and_database_reopen() {
     )
     .await;
     assert_eq!(first.0, StatusCode::CREATED);
-    state.inbox_commands().stop_scheduling().await;
+    state.control().inbox_commands().stop_scheduling().await;
     state.db().close().await;
     let reopened = pontia_storage_sqlite::connect_sqlite(&database_url)
         .await
         .unwrap();
-    let restarted = AppState::builder(reopened, root.path().into())
-        .clients(crate::common::clients::clients())
-        .external_api_token(Some(TOKEN.into()))
-        .build();
+    let restarted = AppState::builder(
+        pontia_agent_control::AgentControl::builder(reopened, root.path().into())
+            .clients(crate::common::clients::clients())
+            .build(),
+    )
+    .external_api_token(Some(TOKEN.into()))
+    .build();
     let recovered = post_json(
         restarted.clone(),
         &uri,
@@ -714,6 +719,7 @@ async fn persistent_submission_survives_response_loss_and_database_reopen() {
     );
     assert_eq!(
         restarted
+            .control()
             .inbox_commands()
             .list_messages(&session)
             .await
@@ -721,7 +727,7 @@ async fn persistent_submission_survives_response_loss_and_database_reopen() {
             .len(),
         2
     );
-    restarted.inbox_commands().stop_scheduling().await;
+    restarted.control().inbox_commands().stop_scheduling().await;
 }
 
 #[tokio::test]
@@ -763,6 +769,7 @@ async fn retry_restores_exited_session_once_and_links_original_failure() {
     assert_eq!(count, 1);
     assert_eq!(
         state
+            .control()
             .inbox_commands()
             .get_message(&session, "failed")
             .await
@@ -772,5 +779,5 @@ async fn retry_restores_exited_session_once_and_links_original_failure() {
             .as_deref(),
         Some("retry")
     );
-    state.inbox_commands().stop_scheduling().await;
+    state.control().inbox_commands().stop_scheduling().await;
 }

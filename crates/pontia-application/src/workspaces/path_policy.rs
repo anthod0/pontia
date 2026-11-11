@@ -51,16 +51,6 @@ pub(super) fn resolve_relative_path(root: &Path, relative_path: &str) -> Result<
     Ok(canonical)
 }
 
-pub(super) fn path_to_api_relative(path: &Path) -> String {
-    path.components()
-        .filter_map(|component| match component {
-            std::path::Component::Normal(value) => Some(value.to_string_lossy().to_string()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
 pub(super) fn should_skip_directory(name: &str) -> bool {
     matches!(name, ".git" | "node_modules" | "target")
 }

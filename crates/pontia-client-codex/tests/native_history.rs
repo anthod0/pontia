@@ -1,4 +1,4 @@
-use pontia_application::client_contract::{
+use pontia_agent_control::client_contract::{
     native_history::{HistorySource, NativeHistory},
     raw_transcripts::{AgentBindingResolveRequest, SessionTimelineSelection, SessionTimelineTurn},
 };

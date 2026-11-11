@@ -1,5 +1,5 @@
 use pontia::client_maintenance::maintain_enabled;
-use pontia_application::agent_clients::AgentClientDetails;
+use pontia_agent_control::agent_clients::AgentClientDetails;
 use pontia_runtime::local_service::{CommandOutput, CommandRunner, DefinitionStore};
 use std::{cell::RefCell, collections::HashMap, path::Path};
 

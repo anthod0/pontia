@@ -1,4 +1,4 @@
-use pontia_application::{ExecutionProfileView, client_contract::ClientProfile};
+use pontia_agent_control::{ExecutionProfileView, client_contract::ClientProfile};
 use pontia_core::Result;
 use serde_json::{Value, json};
 

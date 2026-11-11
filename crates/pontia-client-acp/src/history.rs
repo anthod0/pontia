@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use pontia_application::{
+use pontia_agent_control::{
     client_contract::{
         ClientData, NativeEventEvidence, TimelineBoundaryBackend, TurnTimelineBackend,
         TurnTopologyBackend,
@@ -139,7 +139,7 @@ impl ClientData for AcpAdapter {
     fn native_history(
         &self,
         binding: AgentBindingResolveRequest,
-        _control: Option<pontia_application::clients::ClientControlService>,
+        _control: Option<pontia_agent_control::clients::ClientControlService>,
     ) -> Option<Arc<dyn NativeHistory>> {
         Some(Arc::new(AcpHistory {
             peers: self.peers.clone(),

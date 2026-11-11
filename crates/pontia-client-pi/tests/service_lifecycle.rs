@@ -1,4 +1,6 @@
-use pontia_application::{AppState, client_contract::ClientServicePhase, clients::ClientRegistry};
+use pontia_agent_control::{
+    AgentControl, client_contract::ClientServicePhase, clients::ClientRegistry,
+};
 use pontia_core::Error;
 
 #[tokio::test]
@@ -7,7 +9,7 @@ async fn registered_service_owns_the_listener_until_shutdown() {
     let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
     let mut clients = ClientRegistry::default();
     clients.register(pontia_client_pi::registration(None));
-    let state = AppState::builder(pool, root.path().to_path_buf())
+    let state = AgentControl::builder(pool, root.path().to_path_buf())
         .clients(clients.clone())
         .build();
 

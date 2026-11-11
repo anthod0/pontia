@@ -3,7 +3,7 @@ pub(crate) mod files;
 mod items;
 
 use crate::{rollout::CodexRollout, runtime::CodexRuntime};
-use pontia_application::client_contract::{
+use pontia_agent_control::client_contract::{
     history::{RecoveredTurnHistory, TurnHistoryCandidate},
     native_history::{HistoryRead, HistorySelection, HistorySource, NativeHistory},
     raw_transcripts::{
@@ -25,7 +25,7 @@ use tokio::sync::OnceCell;
 enum Snapshot {
     Native(Vec<Value>),
     File(
-        pontia_application::client_contract::raw_transcripts::ResolvedAgentBinding,
+        pontia_agent_control::client_contract::raw_transcripts::ResolvedAgentBinding,
         Vec<String>,
     ),
 }
@@ -232,7 +232,7 @@ impl NativeHistory for CodexHistory {
         turns: Vec<TurnHistoryCandidate>,
     ) -> HistoryRead<'_, Result<Vec<RecoveredTurnHistory>>> {
         Box::pin(async move {
-            use pontia_application::client_contract::{
+            use pontia_agent_control::client_contract::{
                 TopologyDiagnostic, TopologyResolution, TopologyResolveResult,
             };
             use pontia_core::domain::TurnState;

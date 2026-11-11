@@ -1,6 +1,6 @@
 use super::fixture::*;
-use pontia_application::ClientControlChannel;
-use pontia_application::{
+use pontia_agent_control::ClientControlChannel;
+use pontia_agent_control::{
     ClientControlService,
     client_contract::{
         BranchTargetRequest, ClientData, NativeEventEvidence, TimelineBoundaryBackend,
@@ -209,6 +209,7 @@ async fn session_timeline_preserves_native_order_and_nullable_turn_identity_from
         assert_eq!(
             fixture
                 .state
+                .control()
                 .queries()
                 .list_session_events("session")
                 .await
@@ -270,9 +271,9 @@ async fn native_checkpoints_can_be_read_without_any_pontia_turns_or_writable_cha
 #[tokio::test]
 async fn compaction_history_does_not_follow_the_event_capability_and_unsupported_history_keeps_existing_behavior()
  {
-    const NO_EVENTS: pontia_application::client_contract::AgentClientSpec =
-        pontia_application::client_contract::AgentClientSpec {
-            capabilities: pontia_application::client_contract::AgentClientCapabilities {
+    const NO_EVENTS: pontia_agent_control::client_contract::AgentClientSpec =
+        pontia_agent_control::client_contract::AgentClientSpec {
+            capabilities: pontia_agent_control::client_contract::AgentClientCapabilities {
                 compaction_events: false,
                 ..SPEC.capabilities
             },

@@ -3,7 +3,8 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use pontia_application::{AppState, client_contract::ClientServicePhase, clients::ClientRegistry};
+use pontia_agent_control::{client_contract::ClientServicePhase, clients::ClientRegistry};
+use pontia_application::AppState;
 use pontia_client_acp::registration;
 use pontia_client_acp::{AcpAgentConfig, AcpConfig};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
@@ -57,11 +58,14 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
     ]));
     let service = acp.service.clone().unwrap();
     clients.register(acp);
-    let app = AppState::builder(pool, root.path().into())
-        .clients(clients)
-        .external_api_token(Some("integration-token".into()))
-        .build();
-    let task = service.start(app.clone()).await.unwrap().unwrap();
+    let app = AppState::builder(
+        pontia_agent_control::AgentControl::builder(pool, root.path().into())
+            .clients(clients)
+            .build(),
+    )
+    .external_api_token(Some("integration-token".into()))
+    .build();
+    let task = service.start(app.control().clone()).await.unwrap().unwrap();
     let options_path = "/api/v1/session-creation-options";
     assert_eq!(get(&app, options_path).await["options"], json!([]));
 
@@ -109,7 +113,7 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(get(&app, options_path).await["options"], json!([]));
     }
-    app.shutdown().notify();
+    app.control().shutdown().notify();
     tokio::time::timeout(Duration::from_secs(5), task)
         .await
         .unwrap()
@@ -208,12 +212,15 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
     .save("acp", "test", Some(true), None)
     .await
     .unwrap();
-    let app = AppState::builder(pool, root.path().into())
-        .clients(clients.clone())
-        .external_api_token(Some("integration-token".into()))
-        .build();
+    let app = AppState::builder(
+        pontia_agent_control::AgentControl::builder(pool, root.path().into())
+            .clients(clients.clone())
+            .build(),
+    )
+    .external_api_token(Some("integration-token".into()))
+    .build();
     let tasks = clients
-        .start_services(app.clone(), ClientServicePhase::Transport)
+        .start_services(app.control().clone(), ClientServicePhase::Transport)
         .await
         .unwrap();
     let (status, created) = call(
@@ -272,7 +279,7 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
     std::fs::write(root.path().join("release-1"), "").unwrap();
     assert_eq!(live_event(&mut stream).await["type"], "closed");
     wait_turn(&app, session, turn, "completed").await;
-    app.shutdown().notify();
+    app.control().shutdown().notify();
     tokio::time::timeout(Duration::from_secs(5), tasks.join())
         .await
         .unwrap()
@@ -309,12 +316,15 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     .save("acp", "company-id", Some(true), None)
     .await
     .unwrap();
-    let app = AppState::builder(pool.clone(), root.path().into())
-        .clients(clients.clone())
-        .external_api_token(Some("integration-token".into()))
-        .build();
+    let app = AppState::builder(
+        pontia_agent_control::AgentControl::builder(pool.clone(), root.path().into())
+            .clients(clients.clone())
+            .build(),
+    )
+    .external_api_token(Some("integration-token".into()))
+    .build();
     let tasks = clients
-        .start_services(app.clone(), ClientServicePhase::Transport)
+        .start_services(app.control().clone(), ClientServicePhase::Transport)
         .await
         .unwrap();
     let options = get(&app, "/api/v1/session-creation-options").await;
@@ -377,7 +387,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
             .unwrap(),
         1
     );
-    app.shutdown().notify();
+    app.control().shutdown().notify();
     tokio::time::timeout(Duration::from_secs(5), tasks.join())
         .await
         .unwrap()

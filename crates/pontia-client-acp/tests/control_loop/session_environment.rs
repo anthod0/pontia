@@ -60,7 +60,7 @@ async fn commands_use_their_own_session_environment_with_a_shared_agent_and_work
         .collect();
     assert_eq!(readings.len(), 2);
     for session in [&a, &b] {
-        let binding = pontia_application::AgentBindingService::new(h.app.db())
+        let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
             .binding_for_session(session)
             .await
             .unwrap()

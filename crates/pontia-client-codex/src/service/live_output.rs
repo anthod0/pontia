@@ -1,6 +1,6 @@
 use super::{CodexService, string};
 use crate::runtime::{CodexRuntime, SubscriptionState, protocol::Notification};
-use pontia_application::{
+use pontia_agent_control::{
     AgentBindingService, LiveOutputBatch, LiveOutputIdentity, LiveOutputItem, LiveOutputProducer,
     LiveOutputPublishOutcome, LiveOutputService, LiveOutputSnapshotReplacement, LiveOutputSource,
     LiveOutputUpdate, LiveReasoningBound,
@@ -238,7 +238,7 @@ impl CodexLiveOutput {
                                 recovered_items.get_mut(index)
                             {
                                 *output =
-                                    Some(pontia_application::LiveToolOutput { text, truncated });
+                                    Some(pontia_agent_control::LiveToolOutput { text, truncated });
                             }
                         }
                     }

@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pontia_application::client_contract::{
+use pontia_agent_control::client_contract::{
     ClientIntegration, IntegrationOption, PreparedClientIntegration,
 };
 use pontia_runtime::local_service::{

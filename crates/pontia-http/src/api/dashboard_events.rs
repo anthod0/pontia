@@ -54,7 +54,7 @@ fn parse_dashboard_stream_cursor(cursor: &str) -> AppResult<i64> {
 
 fn interaction_stream_event(
     change: Result<
-        pontia_application::interactions::InteractionChanged,
+        pontia_agent_control::interactions::InteractionChanged,
         tokio::sync::broadcast::error::RecvError,
     >,
 ) -> Option<Event> {
@@ -79,11 +79,11 @@ fn dashboard_sse_stream(
     stream_once: bool,
 ) -> Sse<impl Stream<Item = std::result::Result<Event, Infallible>>> {
     let (sender, receiver) = mpsc::channel(32);
-    let mut interactions = state.interactions().subscribe();
-    let mut history = state.agent_events().subscribe_history();
+    let mut interactions = state.control().interactions().subscribe();
+    let mut history = state.control().agent_events().subscribe_history();
 
     tokio::spawn(async move {
-        let mut shutdown = state.shutdown().subscribe();
+        let mut shutdown = state.control().shutdown().subscribe();
         let service = state.queries();
         let mut cursor = after_cursor;
 
@@ -162,8 +162,8 @@ fn dashboard_sse_stream(
                     .id(format!("session:{cursor}"))
                     .event("dashboard_event")
                     .json_data(DashboardStreamEvent::SessionEvent {
-                        id: item.event.event_id.clone(),
-                        occurred_at: item.event.time.clone(),
+                        id: item.event.fact.event_id.clone(),
+                        occurred_at: item.event.fact.time.clone(),
                         event: item.event,
                     });
                 let Ok(event) = event else {

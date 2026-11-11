@@ -37,6 +37,7 @@ async fn accepted_compaction_replays_the_same_operation_without_completing_it() 
         assert_eq!(first, replay);
         let current = fixture
             .state
+            .control()
             .queries()
             .get_session("session")
             .await
@@ -51,6 +52,7 @@ async fn accepted_compaction_replays_the_same_operation_without_completing_it() 
     assert_eq!(fixture.channel.operations.lock().unwrap().len(), 2);
     let events = fixture
         .state
+        .control()
         .queries()
         .list_session_events("session")
         .await
@@ -101,6 +103,7 @@ async fn compaction_preserves_auth_not_found_capability_and_state_errors() {
         fixture.set_state(state).await;
         let error = fixture
             .state
+            .control()
             .session_commands()
             .compact_session("session")
             .await
@@ -157,6 +160,7 @@ async fn client_rejection_unknown_and_unsupported_keep_their_api_semantics() {
     assert_eq!(
         fixture
             .state
+            .control()
             .queries()
             .list_session_events("session")
             .await
@@ -181,6 +185,7 @@ async fn replacement_during_compaction_returns_unknown_and_does_not_send_to_repl
     let replacement = std::sync::Arc::new(Channel::default());
     fixture
         .state
+        .control()
         .client_control()
         .attach(
             SPEC.client_type,
@@ -205,6 +210,7 @@ async fn observation_and_history_capabilities_survive_a_missing_writable_target(
     fixture.seed().await;
     let capabilities = fixture
         .state
+        .control()
         .queries()
         .get_session("session")
         .await
@@ -221,6 +227,7 @@ async fn observation_and_history_capabilities_survive_a_missing_writable_target(
     fixture.channel.closed.store(true, Ordering::SeqCst);
     let capabilities = fixture
         .state
+        .control()
         .queries()
         .get_session("session")
         .await
@@ -236,6 +243,7 @@ async fn observation_and_history_capabilities_survive_a_missing_writable_target(
         .unwrap();
     let capabilities = fixture
         .state
+        .control()
         .queries()
         .get_session("session")
         .await
@@ -266,6 +274,7 @@ async fn a_lost_compaction_receipt_is_replayed_as_unknown_without_a_second_nativ
     assert_eq!(
         fixture
             .state
+            .control()
             .queries()
             .list_session_events("session")
             .await
@@ -277,10 +286,8 @@ async fn a_lost_compaction_receipt_is_replayed_as_unknown_without_a_second_nativ
 
 #[tokio::test]
 async fn dynamically_advertised_compaction_can_execute_against_a_default_false_static_spec() {
-    use pontia_application::{
-        AppState,
-        client_contract::{AgentInput, InProcessClient, test_registration},
-    };
+    use pontia_agent_control::client_contract::{AgentInput, InProcessClient, test_registration};
+    use pontia_application::AppState;
     struct AdvertisedClient;
     impl InProcessClient for AdvertisedClient {
         fn capabilities(&self) -> AgentClientCapabilities {
@@ -301,13 +308,17 @@ async fn dynamically_advertised_compaction_can_execute_against_a_default_false_s
     let mut registration = test_registration();
     registration.spec = &UNSUPPORTED;
     registration.in_process = Some(std::sync::Arc::new(AdvertisedClient));
-    let mut clients = fixture.state.clients();
+    let mut clients = fixture.state.control().clients();
     clients.register(registration);
-    let state = AppState::builder(fixture.state.db(), fixture.root.path().into())
-        .clients(clients)
-        .external_api_token(Some("test-token".into()))
-        .build();
+    let state = AppState::builder(
+        pontia_agent_control::AgentControl::builder(fixture.state.db(), fixture.root.path().into())
+            .clients(clients)
+            .build(),
+    )
+    .external_api_token(Some("test-token".into()))
+    .build();
     state
+        .control()
         .client_control()
         .attach(
             SPEC.client_type,
@@ -320,6 +331,7 @@ async fn dynamically_advertised_compaction_can_execute_against_a_default_false_s
         .unwrap();
     assert!(
         state
+            .control()
             .queries()
             .get_session("session")
             .await

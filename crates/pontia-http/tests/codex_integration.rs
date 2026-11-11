@@ -28,7 +28,7 @@ async fn request(app: &TestApp, request: Request<Body>) -> (StatusCode, Value) {
 #[tokio::test]
 async fn codex_sessions_are_created_without_a_runtime() {
     let app = TestApp::new().await;
-    assert!(app.state.clients().spec("codex").is_some());
+    assert!(app.state.control().clients().spec("codex").is_some());
     let (status, body) = request(
         &app,
         Request::post("/api/v1/sessions")

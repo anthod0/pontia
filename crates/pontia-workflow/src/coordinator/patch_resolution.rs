@@ -1,4 +1,4 @@
-use pontia_application::SubmitInboxMessageRequest;
+use pontia_agent_control::SubmitInboxMessageRequest;
 use pontia_storage_sqlite::{
     models::workflows::WorkflowPatchRow, repositories::workflows::ImplicitBlockWorkflowPatchRecord,
 };

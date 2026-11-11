@@ -3,7 +3,7 @@ use crate::{
     proxy::ThreadOperation,
     runtime::{CodexRuntime, SubscriptionState},
 };
-use pontia_application::{
+use pontia_agent_control::{
     PontiaEvent, PontiaEventSource, PontiaEventType,
     sessions::{NativeSessionIdentity, NativeSessionService},
 };

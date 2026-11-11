@@ -1,0 +1,133 @@
+mod agent_bindings;
+mod observations;
+pub use agent_bindings::{
+    AgentBinding, AgentBindingService, AgentBindingSessionContext, UpsertAgentBindingRequest,
+};
+pub(crate) use agent_bindings::{
+    register_agent_binding_for_ready_event_in_tx, upsert_agent_binding_in_tx,
+};
+pub use observations::{NativeSessionIdentity, NativeSessionObservation, NativeSessionService};
+use std::{collections::BTreeMap, path::PathBuf};
+
+use serde::Deserialize;
+use serde_json::Value;
+use sqlx::SqlitePool;
+
+mod commands;
+mod environment;
+pub use environment::SessionEnvironment;
+mod compaction;
+mod fork;
+pub use fork::{ForkSessionOutcome, ForkSessionRequest};
+mod models;
+pub use compaction::CompactionAccepted;
+pub use models::{SessionModel, SessionModels, SetSessionModelRequest};
+mod lifecycle;
+mod runtime_binding;
+mod tui;
+
+mod persistence;
+mod validation;
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct CreateSessionRequest {
+    #[serde(default, deserialize_with = "deserialize_client_type")]
+    pub client_type: String,
+    pub title: Option<String>,
+    pub workspace: Option<String>,
+    pub workspace_id: Option<String>,
+    pub handle: Option<String>,
+    pub role: Option<String>,
+    pub description: Option<String>,
+    pub execution_profile_id: Option<String>,
+    pub execution_profile_version: Option<String>,
+    #[serde(default)]
+    pub metadata: Value,
+    pub initial_task: Option<InitialTaskRequest>,
+    #[serde(skip)]
+    pub runtime_environment: BTreeMap<String, String>,
+}
+
+fn deserialize_client_type<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<String, D::Error> {
+    let client = String::deserialize(deserializer)?;
+    if client.is_empty() {
+        return Err(serde::de::Error::custom("client_type cannot be empty"));
+    }
+    Ok(client)
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct UpdateSessionRequest {
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct InitialTaskRequest {
+    pub input: String,
+    #[serde(default)]
+    pub metadata: Value,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateSessionOutcome {
+    pub data: Value,
+    pub duplicate: bool,
+}
+
+impl CreateSessionOutcome {
+    pub fn session_id(&self) -> Option<&str> {
+        self.data.get("session")?.get("session_id")?.as_str()
+    }
+}
+
+#[derive(Clone)]
+pub struct SessionCommandService {
+    pool: SqlitePool,
+    environment: Option<std::sync::Arc<dyn SessionEnvironment>>,
+    event_ingest: crate::EventIngestService,
+    queries: crate::ControlQueryService,
+    clients: crate::clients::ClientExecutionService,
+    turns: crate::TurnCommandService,
+    inbox: std::sync::Arc<crate::InboxCommandService>,
+    pontia_home: PathBuf,
+    control: crate::ClientControlService,
+    fork_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
+    tui_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
+}
+
+impl SessionCommandService {
+    pub(crate) fn with_environment(
+        mut self,
+        environment: std::sync::Arc<dyn SessionEnvironment>,
+    ) -> Self {
+        self.environment = Some(environment);
+        self
+    }
+
+    pub(crate) fn new(
+        pool: SqlitePool,
+        event_ingest: crate::EventIngestService,
+        queries: crate::ControlQueryService,
+        clients: crate::clients::ClientExecutionService,
+        turns: crate::TurnCommandService,
+        inbox: std::sync::Arc<crate::InboxCommandService>,
+        pontia_home: PathBuf,
+    ) -> Self {
+        let control = clients.control_service();
+        Self {
+            environment: None,
+            control,
+            fork_gate: std::sync::Arc::default(),
+            tui_gate: std::sync::Arc::default(),
+            pool,
+            event_ingest,
+            queries,
+            clients,
+            turns,
+            inbox,
+            pontia_home,
+        }
+    }
+}

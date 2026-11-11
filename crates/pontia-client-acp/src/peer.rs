@@ -10,7 +10,7 @@ use agent_client_protocol::{
     Agent, ByteStreams, ConnectionTo, JsonRpcRequest,
     schema::{ProtocolVersion, v1::*},
 };
-use pontia_application::{
+use pontia_agent_control::{
     EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
 };
 use pontia_core::{Error, Result, domain::EventType};
@@ -79,7 +79,7 @@ pub(crate) struct Peer {
     pub connection: ConnectionTo<Agent>,
     pub state: Arc<Mutex<SessionState>>,
     pub receipts: Arc<Receipts>,
-    pub interactions: pontia_application::interactions::InteractionService,
+    pub interactions: pontia_agent_control::interactions::InteractionService,
     pub permission_events: crate::interactions::PermissionEvents,
     pub runtime: String,
     pub stop: watch::Sender<bool>,
@@ -187,7 +187,7 @@ fn fingerprint(pid: Option<u32>) -> Option<String> {
 impl Peer {
     pub async fn spawn(
         events: EventIngestService,
-        interactions: pontia_application::interactions::InteractionService,
+        interactions: pontia_agent_control::interactions::InteractionService,
         session: &str,
         runtime: &str,
         cwd: &Path,

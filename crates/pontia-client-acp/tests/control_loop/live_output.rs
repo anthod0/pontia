@@ -1,5 +1,5 @@
 use super::*;
-use pontia_application::LiveOutputStreamEvent;
+use pontia_agent_control::LiveOutputStreamEvent;
 
 fn text(text: &str) -> Value {
     json!([{"type":"content","content":{"type":"text","text":text}}])
@@ -134,7 +134,7 @@ async fn interleaved_tools_and_text_survive_partial_call_snapshots_and_reconnect
     while let Ok(Ok(event)) = tokio::time::timeout(Duration::from_millis(20), stream.recv()).await {
         if let LiveOutputStreamEvent::Updates { updates, .. } = event {
             for update in updates {
-                if let pontia_application::LiveOutputUpdate::ToolCall { call_id, .. } = update {
+                if let pontia_agent_control::LiveOutputUpdate::ToolCall { call_id, .. } = update {
                     calls.push(call_id);
                 }
             }

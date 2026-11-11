@@ -6,7 +6,8 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use pontia_application::{AppState, EventIngestService};
+use pontia_agent_control::EventIngestService;
+use pontia_application::AppState;
 use pontia_core::domain::{EventSource, EventType, ReportedEvent};
 use pontia_http as http;
 use serde_json::{Value, json};
@@ -118,13 +119,13 @@ async fn stream_get(
 
 #[tokio::test]
 async fn interaction_facts_reach_queries_subscribers_and_cursor_replay() {
-    use pontia_application::ReportedFact;
+    use pontia_agent_control::ReportedFact;
     let state = test_state("blocking").await;
     seed_session_events(&state).await;
     sqlx::query("INSERT INTO session_runtimes(session_id,runtime_id,role,state,created_at) VALUES ('sess_stream_1','blocking-runtime','tui','running','2026-01-01T00:00:00Z')")
         .execute(&state.db()).await.unwrap();
-    let service = state.event_ingest_service();
-    let mut subscriber = state.agent_events().subscribe();
+    let service = state.control().event_ingest_service();
+    let mut subscriber = state.control().agent_events().subscribe();
     let fact = ReportedFact {
         session_id: "sess_stream_1".into(),
         turn_id: None,
@@ -198,10 +199,10 @@ async fn interaction_facts_reach_queries_subscribers_and_cursor_replay() {
 
 #[tokio::test]
 async fn interaction_reporting_rejects_invalid_ids_and_foreign_turns_without_committing() {
-    use pontia_application::{EventReportError, ReportedFact};
+    use pontia_agent_control::{EventReportError, ReportedFact};
     let state = test_state("blocking-invalid").await;
     seed_session_events(&state).await;
-    let service = state.event_ingest_service();
+    let service = state.control().event_ingest_service();
     let before = service.list_events("sess_stream_1").await.unwrap().len();
     for data in [
         json!({}),
@@ -575,7 +576,7 @@ async fn graceful_shutdown_closes_event_stream_without_waiting_for_timeout() {
         .expect("bind listener");
     let addr = listener.local_addr().expect("local addr");
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-    let shutdown = state.shutdown();
+    let shutdown = state.control().shutdown();
 
     let server = tokio::spawn(http::serve_with_shutdown_timeout(
         listener,

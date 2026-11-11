@@ -1,5 +1,5 @@
 use crate::runtime::{CodexRuntime, protocol::Notification};
-use pontia_application::{AppState, CreateSessionRequest, clients::ClientRegistry};
+use pontia_agent_control::{AgentControl, CreateSessionRequest, clients::ClientRegistry};
 use serde_json::{Value, json};
 use std::{
     io::{BufRead, BufReader},
@@ -174,7 +174,7 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
         .unwrap();
         let mut clients = ClientRegistry::default();
         clients.register(crate::registration());
-        let app = AppState::builder(pool, root.path().into())
+        let app = AgentControl::builder(pool, root.path().into())
             .clients(clients)
             .build();
         let mut sessions = Vec::new();
@@ -202,7 +202,7 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
                 .await
                 .unwrap();
             command_result(&mut events, &session, filtered).await;
-            let binding = pontia_application::AgentBindingService::new(app.db())
+            let binding = pontia_agent_control::AgentBindingService::new(app.db())
                 .binding_for_session(&session)
                 .await
                 .unwrap()
