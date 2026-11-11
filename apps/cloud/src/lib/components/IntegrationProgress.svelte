@@ -10,7 +10,7 @@
   import { reveal } from '$lib/reveal';
 
   // Editorial estimate, updated manually rather than derived from capability counts.
-  const developmentProgress = 50;
+  const developmentProgress = 70;
   // The bar fills from zero when the section scrolls into view.
   let shownProgress = $state(0);
 
@@ -36,7 +36,7 @@
   type Coverage = keyof typeof states;
   const clients: { name: string; logo: string; coverage: Coverage[] }[] = [
     { name: 'Pi', logo: '/client-logos/pi.svg', coverage: ['supported', 'supported', 'notApplicable', 'supported', 'supported', 'supported'] },
-    { name: 'Codex', logo: '/client-logos/codex.svg', coverage: ['supported', 'partial', 'supported', 'supported', 'partial', 'supported'] },
+    { name: 'Codex', logo: '/client-logos/codex.svg', coverage: ['supported', 'supported', 'supported', 'supported', 'supported', 'supported'] },
     { name: 'Claude Code', logo: '/client-logos/claude-code.svg', coverage: ['supported', 'planning', 'supported', 'planning', 'planning', 'planning'] },
     { name: 'Grok Build', logo: '/client-logos/grok-build.svg', coverage: ['supported', 'planning', 'supported', 'planning', 'planning', 'planning'] },
     { name: 'OpenCode', logo: '/client-logos/opencode.svg', coverage: ['supported', 'planning', 'supported', 'planning', 'planning', 'planning'] },
