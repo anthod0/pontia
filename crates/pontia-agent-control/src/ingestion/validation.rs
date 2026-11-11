@@ -69,6 +69,21 @@ impl InternalEventValidationService {
             super::compaction::validate(event)?;
         }
 
+        if event.event_type == EventType::SessionTitleUpdated
+            && matches!(
+                event.source,
+                EventSource::AgentClient | EventSource::AgentAdapter
+            )
+            && !matches!(
+                event.payload.get("title"),
+                Some(Value::String(_) | Value::Null)
+            )
+        {
+            return Err(Error::Domain(
+                "payload.title must be a string or null".into(),
+            ));
+        }
+
         if event.event_type == EventType::SessionModelUpdated
             && !event
                 .payload

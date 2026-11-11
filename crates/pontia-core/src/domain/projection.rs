@@ -8,6 +8,7 @@ use crate::error::Error;
 
 mod interaction;
 mod session;
+mod title;
 mod turn;
 
 pub const MAX_TURN_INPUT_SUMMARY_CHARS: usize = 200;
@@ -56,6 +57,7 @@ pub struct ProjectionState {
     sessions: HashMap<String, SessionProjection>,
     turns: HashMap<String, TurnProjection>,
     session_runtimes: HashMap<String, String>,
+    session_titles: HashMap<String, title::SessionTitle>,
     interaction_blocks: HashMap<String, HashMap<String, interaction::InteractionBlock>>,
     interaction_terminal_facts: HashMap<String, time::OffsetDateTime>,
     interaction_terminal_turns: HashSet<String>,
@@ -74,6 +76,7 @@ impl ProjectionState {
                 .collect(),
             turns: turns.into_iter().map(|t| (t.turn_id.clone(), t)).collect(),
             session_runtimes: HashMap::new(),
+            session_titles: HashMap::new(),
             interaction_blocks: HashMap::new(),
             interaction_terminal_facts: HashMap::new(),
             interaction_terminal_turns: HashSet::new(),

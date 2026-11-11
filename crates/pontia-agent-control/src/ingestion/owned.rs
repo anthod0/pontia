@@ -151,7 +151,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pontia_and_agent_client_ownership_intersect_only_at_session_exited() {
+    fn pontia_and_agent_client_ownership_intersect_at_exit_and_title_updates() {
         let intersection = PontiaEventType::ALL
             .iter()
             .copied()
@@ -159,6 +159,9 @@ mod tests {
             .filter(|event_type| event_type.is_client_reportable())
             .collect::<Vec<_>>();
 
-        assert_eq!(intersection, vec![EventType::SessionExited]);
+        assert_eq!(
+            intersection,
+            vec![EventType::SessionExited, EventType::SessionTitleUpdated]
+        );
     }
 }

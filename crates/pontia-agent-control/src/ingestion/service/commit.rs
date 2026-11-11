@@ -7,7 +7,10 @@ use crate::ingestion::projection_rows::{event_from_row, session_from_row, turn_f
 use crate::{EventIngestResult, UpsertAgentBindingRequest, clients::ClientRegistry};
 use pontia_core::{
     Error, Result,
-    domain::{DomainEvent, EventType, MAX_TURN_INPUT_SUMMARY_CHARS, ProjectionState, SessionState},
+    domain::{
+        DomainEvent, EventSource, EventType, MAX_TURN_INPUT_SUMMARY_CHARS, ProjectionState,
+        SessionState,
+    },
 };
 use pontia_storage_sqlite::repositories::{
     events::SqliteEventRepository, sessions::SqliteSessionRepository, turns::SqliteTurnRepository,
@@ -257,6 +260,32 @@ impl EventCommitter {
         );
         let mut projection = ProjectionState::with_existing(sessions, turns)
             .with_execution_lifetime(lifecycle.execution_lifetime);
+        if event.event_type == EventType::SessionTitleUpdated {
+            let history = SqliteEventRepository::title_history_in_tx(&mut tx, &event.session_id)
+                .await?
+                .into_iter()
+                .map(event_from_row)
+                .collect::<Result<Vec<_>>>()?;
+            if matches!(
+                event.source,
+                EventSource::AgentClient | EventSource::AgentAdapter
+            ) {
+                let previous = history.iter().rev().find(|previous| {
+                    previous.event_type == EventType::SessionTitleUpdated
+                        && matches!(
+                            previous.source,
+                            EventSource::AgentClient | EventSource::AgentAdapter
+                        )
+                });
+                if let Some(previous) = previous
+                    && previous.payload["title"] == event.payload["title"]
+                {
+                    return duplicate_without_effects(&mut tx, event, previous.event_id.clone())
+                        .await;
+                }
+            }
+            projection.restore_title_history(&history);
+        }
         let interaction_history =
             SqliteEventRepository::interaction_history_in_tx(&mut tx, &event.session_id)
                 .await?

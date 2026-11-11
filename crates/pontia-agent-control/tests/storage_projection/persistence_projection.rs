@@ -262,3 +262,57 @@ async fn replay_preserves_turn_identity_and_state_without_ordinals() {
     assert_eq!(replay.turn("turn_1").unwrap().session_id, "sess_1");
     assert_eq!(replay.turn("turn_2").unwrap().session_id, "sess_1");
 }
+
+#[tokio::test]
+async fn client_titles_respect_manual_names_and_match_history_replay() {
+    for (initial, input_title) in [
+        (None, false),
+        (Some("Named at creation"), false),
+        (Some("Input summary"), true),
+    ] {
+        let service = service().await;
+        let mut created = event("created", EventType::SessionCreated, "s", None);
+        created.payload = json!({"title":initial, "metadata":{"title_source": if input_title { Some("input") } else { None }}});
+        service.ingest_reported_event(created).await.unwrap();
+        for (index, (source, title, expected)) in [
+            (
+                EventSource::AgentClient,
+                Some("Native A"),
+                if input_title {
+                    Some("Native A")
+                } else {
+                    initial.or(Some("Native A"))
+                },
+            ),
+            (EventSource::ExternalApi, Some("Manual"), Some("Manual")),
+            (EventSource::AgentClient, Some("Native B"), Some("Manual")),
+            (EventSource::ExternalApi, None, Some("Native B")),
+            (EventSource::AgentClient, Some("Native A"), Some("Native A")),
+            (
+                EventSource::AgentClient,
+                None,
+                if input_title { initial } else { None },
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut update = event(
+                &format!("title-{index}"),
+                EventType::SessionTitleUpdated,
+                "s",
+                None,
+            );
+            update.source = source;
+            update.payload = json!({"title":title});
+            service.ingest_reported_event(update).await.unwrap();
+            let actual = service.get_session("s").await.unwrap().unwrap();
+            assert_eq!(actual.title.as_deref(), expected);
+            let mut replay = ProjectionState::default();
+            for fact in service.list_events("s").await.unwrap() {
+                replay.apply(&fact).unwrap();
+            }
+            assert_eq!(actual, replay.session("s").unwrap().clone());
+        }
+    }
+}

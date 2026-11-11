@@ -241,7 +241,7 @@ test("creates a session with initial prompt, workspace, and client then opens it
         input: "Implement the dashboard chat flow",
         metadata: { source: "dashboard_chat" },
       },
-      metadata: { source: "dashboard_chat" },
+      metadata: { source: "dashboard_chat", title_source: "input" },
     }),
   );
   expect(mocks.navigate).toHaveBeenCalledWith("/chat/session-new");

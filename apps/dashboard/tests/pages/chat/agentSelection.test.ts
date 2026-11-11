@@ -24,7 +24,7 @@ test("submits the selected configured agent's opaque metadata through ordinary S
     expect(mocks.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
         client_type: "acp",
-        metadata: { ...metadata, source: "dashboard_chat" },
+        metadata: { ...metadata, source: "dashboard_chat", title_source: "input" },
         initial_task: { input: "Review the changes", metadata: { source: "dashboard_chat" } },
       }),
     ),

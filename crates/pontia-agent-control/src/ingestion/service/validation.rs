@@ -72,6 +72,7 @@ pub(super) async fn ensure_runtime_fence_in_tx(
                     | EventType::SessionResuming
                     | EventType::SessionError
                     | EventType::SessionModelUpdated
+                    | EventType::SessionTitleUpdated
                     | EventType::SessionCompactionStarted
                     | EventType::SessionCompactionCompleted
                     | EventType::SessionCompactionFailed
@@ -155,6 +156,7 @@ pub(super) async fn ensure_confirmed_event_matches_session_boundary(
                     | EventType::InteractionUnblocked
                     | EventType::SessionReady
                     | EventType::SessionModelUpdated
+                    | EventType::SessionTitleUpdated
                     | EventType::SessionCompactionStarted
                     | EventType::SessionCompactionCompleted
                     | EventType::SessionCompactionFailed
@@ -248,6 +250,7 @@ fn runtime_id_required_for_event(event_type: EventType) -> bool {
             | EventType::SessionReady
             | EventType::SessionResuming
             | EventType::SessionModelUpdated
+            | EventType::SessionTitleUpdated
             | EventType::SessionCompactionStarted
             | EventType::SessionCompactionCompleted
             | EventType::SessionCompactionFailed

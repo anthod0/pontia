@@ -161,7 +161,7 @@
         workspace_id: workspaceId,
         title: titleFromInitialPrompt(initialPrompt),
         initial_task: { input: initialPrompt, metadata: { source: 'dashboard_chat' } },
-        metadata: { ...selectedCreationOption.metadata, source: 'dashboard_chat' },
+        metadata: { ...selectedCreationOption.metadata, source: 'dashboard_chat', title_source: 'input' },
       })
       if (!mounted) return true
       rememberCreateWorkspaceSelection(workspaceId)

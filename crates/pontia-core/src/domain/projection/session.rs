@@ -39,11 +39,6 @@ impl ProjectionState {
             session.state = state;
         }
         if event.event_type == EventType::SessionCreated {
-            session.title = event
-                .payload
-                .get("title")
-                .and_then(Value::as_str)
-                .map(ToString::to_string);
             session.handle = event
                 .payload
                 .get("handle")
@@ -73,14 +68,13 @@ impl ProjectionState {
                 session.metadata = metadata.clone();
             }
         }
-        if event.event_type == EventType::SessionTitleUpdated {
-            session.title = event
-                .payload
-                .get("title")
-                .and_then(Value::as_str)
-                .map(ToString::to_string);
-        }
         session.state_version += 1;
+        if matches!(
+            event.event_type,
+            EventType::SessionCreated | EventType::SessionTitleUpdated
+        ) {
+            self.apply_title(event);
+        }
         Ok(())
     }
 

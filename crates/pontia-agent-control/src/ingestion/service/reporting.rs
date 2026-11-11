@@ -121,6 +121,16 @@ impl EventIngestService {
         if reported_event.event_type == EventType::SessionContextUsageUpdated {
             validate_context_usage_payload(&reported_event.payload)?;
         }
+        if reported_event.event_type == EventType::SessionTitleUpdated
+            && let Some(title) = reported_event.payload["title"].as_str()
+        {
+            let title = title.trim();
+            reported_event.payload["title"] = if title.is_empty() {
+                Value::Null
+            } else {
+                json!(title)
+            };
+        }
         if reported_event.event_type.is_compaction_event() {
             crate::ingestion::compaction::normalize(
                 reported_event.event_type,

@@ -191,6 +191,7 @@ impl EventType {
                 | Self::InteractionUnblocked
                 | Self::SessionReady
                 | Self::SessionExited
+                | Self::SessionTitleUpdated
                 | Self::SessionCompactionStarted
                 | Self::SessionCompactionCompleted
                 | Self::SessionCompactionFailed
