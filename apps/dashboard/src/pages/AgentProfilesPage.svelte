@@ -20,7 +20,7 @@
   import * as Table from '$lib/components/ui/table/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
   import type { AgentProfileView } from '../api/types'
-  import { formatDateTime } from '../components/tasks/format'
+  import { formatDateTime } from '../lib/format'
   import {
     buildAgentProfileInput,
     createAgentProfileDraft,

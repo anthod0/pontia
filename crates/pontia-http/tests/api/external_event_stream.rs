@@ -54,23 +54,6 @@ async fn ingest(state: &AppState, event: ReportedEvent) {
         .expect("ingest event");
 }
 
-async fn seed_task_event(state: &AppState) {
-    sqlx::query(
-        r#"INSERT INTO tasks (task_id, state, input, routing_state, metadata)
-           VALUES ('task_stream_1', 'running', 'stream task', 'ready', '{}')"#,
-    )
-    .execute(&state.db())
-    .await
-    .expect("insert task");
-    sqlx::query(
-        r#"INSERT INTO task_events (event_id, task_id, event_type, payload)
-           VALUES ('task_evt_stream_1', 'task_stream_1', 'task.updated', '{"source":"test"}')"#,
-    )
-    .execute(&state.db())
-    .await
-    .expect("insert task event");
-}
-
 async fn seed_session_events(state: &AppState) {
     ingest(
         state,
@@ -321,7 +304,6 @@ async fn dashboard_event_stream_rejects_missing_or_wrong_bearer_token() {
 async fn dashboard_event_stream_without_cursor_starts_at_current_tail() {
     let state = test_state("dashboard_tail").await;
     seed_session_events(&state).await;
-    seed_task_event(&state).await;
 
     let (status, content_type, body) =
         stream_get(state, "/api/v1/dashboard/events/stream", Some(TOKEN)).await;
@@ -330,7 +312,6 @@ async fn dashboard_event_stream_without_cursor_starts_at_current_tail() {
     assert!(content_type.starts_with("text/event-stream"));
     assert!(!body.contains(r#""event_id":"evt_stream_1""#));
     assert!(!body.contains(r#""event_id":"evt_stream_2""#));
-    assert!(!body.contains(r#""event_id":"task_evt_stream_1""#));
 }
 
 #[tokio::test]
@@ -340,7 +321,7 @@ async fn dashboard_event_stream_emits_session_events_after_explicit_zero_cursor(
 
     let (status, content_type, body) = stream_get(
         state,
-        "/api/v1/dashboard/events/stream?after=session:0;task:0",
+        "/api/v1/dashboard/events/stream?after=session:0",
         Some(TOKEN),
     )
     .await;
@@ -355,33 +336,13 @@ async fn dashboard_event_stream_emits_session_events_after_explicit_zero_cursor(
 }
 
 #[tokio::test]
-async fn dashboard_event_stream_emits_task_events_after_explicit_zero_cursor() {
-    let state = test_state("dashboard_task").await;
-    seed_task_event(&state).await;
-
-    let (status, _, body) = stream_get(
-        state,
-        "/api/v1/dashboard/events/stream?after=session:0;task:0",
-        Some(TOKEN),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("event: dashboard_event"));
-    assert!(body.contains(r#""kind":"task_event""#));
-    assert!(body.contains(r#""event_id":"task_evt_stream_1""#));
-    assert!(body.contains(r#""event_type":"task.updated""#));
-}
-
-#[tokio::test]
 async fn dashboard_event_stream_after_cursor_does_not_repeat_read_events() {
     let state = test_state("dashboard_after").await;
     seed_session_events(&state).await;
-    seed_task_event(&state).await;
 
     let (status, _, first_body) = stream_get(
         state.clone(),
-        "/api/v1/dashboard/events/stream?after=session:0;task:0",
+        "/api/v1/dashboard/events/stream?after=session:0",
         Some(TOKEN),
     )
     .await;
@@ -402,7 +363,91 @@ async fn dashboard_event_stream_after_cursor_does_not_repeat_read_events() {
     assert_eq!(status, StatusCode::OK);
     assert!(!second_body.contains("evt_stream_1"));
     assert!(!second_body.contains("evt_stream_2"));
-    assert!(!second_body.contains("task_evt_stream_1"));
+}
+
+#[tokio::test]
+async fn dashboard_event_stream_replays_batches_and_resumes_in_persistence_order() {
+    let state = test_state("dashboard_batches").await;
+    for index in 0..105 {
+        let mut reported = event(
+            &format!("evt_batch_{index}"),
+            EventType::SessionCreated,
+            &format!("sess_batch_{index}"),
+            None,
+            json!({}),
+        );
+        reported.occurred_at =
+            time::OffsetDateTime::UNIX_EPOCH + time::Duration::seconds(1 - index % 2);
+        ingest(&state, reported).await;
+    }
+    let (status, _, body) = stream_get(
+        state.clone(),
+        "/api/v1/dashboard/events/stream?after=session:0",
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let ids: Vec<String> = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .map(|data| {
+            serde_json::from_str::<Value>(data).unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(
+        ids,
+        (0..105)
+            .map(|index| format!("evt_batch_{index}"))
+            .collect::<Vec<_>>()
+    );
+
+    let cursor = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("id: "))
+        .nth(49)
+        .unwrap();
+    let (status, _, resumed) = stream_get(
+        state,
+        &format!("/api/v1/dashboard/events/stream?after={cursor}"),
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let resumed_ids: Vec<String> = resumed
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .map(|data| {
+            serde_json::from_str::<Value>(data).unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(resumed_ids, ids[50..]);
+}
+
+#[tokio::test]
+async fn dashboard_event_stream_rejects_invalid_cursors() {
+    let state = test_state("dashboard_invalid_cursor").await;
+    for cursor in [
+        "invalid",
+        "session:",
+        "session:no",
+        "session:-1",
+        "session:1;session:2",
+    ] {
+        let (status, _, body) = stream_get(
+            state.clone(),
+            &format!("/api/v1/dashboard/events/stream?after={cursor}"),
+            Some(TOKEN),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(body.contains("invalid_request"));
+    }
 }
 
 #[tokio::test]

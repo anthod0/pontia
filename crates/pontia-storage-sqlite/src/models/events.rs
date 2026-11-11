@@ -32,16 +32,6 @@ pub struct EventStreamRow {
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct TaskEventStreamRow {
-    pub rowid: i64,
-    pub event_id: String,
-    pub task_id: String,
-    pub event_type: String,
-    pub payload: String,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct DomainEventRow {
     pub event_id: String,
     pub session_id: String,

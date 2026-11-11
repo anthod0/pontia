@@ -217,18 +217,10 @@ fn external_api_router(state: HttpState) -> Router {
             "/api/v1/workspace-roots/{root_id}/entries",
             get(api::list_workspace_root_entries),
         )
-        .route("/api/v1/tasks", get(api::list_tasks).post(api::create_task))
         .route(
             "/api/v1/dashboard/events/stream",
             get(api::stream_dashboard_events),
         )
-        .route("/api/v1/tasks/{task_id}", get(api::get_task))
-        .route("/api/v1/tasks/{task_id}/events", get(api::list_task_events))
-        .route(
-            "/api/v1/tasks/{task_id}/interrupt",
-            post(api::interrupt_task),
-        )
-        .route("/api/v1/tasks/{task_id}/cancel", post(api::cancel_task))
         .route(
             "/api/v1/session-creation-options",
             get(api::session_creation_options),

@@ -96,7 +96,7 @@ vi.mock("../src/queries/workflows", async (importOriginal) => {
 });
 
 beforeEach(() => {
-  window.history.pushState({}, "", "/dashboard/tasks");
+  window.history.pushState({}, "", "/dashboard/sessions");
   localStorage.clear();
   token.set("");
   vi.clearAllMocks();
@@ -131,13 +131,13 @@ test("blocks dashboard routes behind a token prompt when no token is saved", asy
 });
 
 test("stores a token from the URL and removes only that query parameter", async () => {
-  window.history.pushState({}, "", "/dashboard/tasks?token=url-token&phase=review#activity");
+  window.history.pushState({}, "", "/dashboard/sessions?token=url-token&phase=review#activity");
 
   render(AppLayoutHost);
 
   await waitFor(() => expect(localStorage.getItem("pontia.externalApiToken")).toBe("url-token"));
   expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe(
-    "/dashboard/tasks?phase=review#activity",
+    "/dashboard/sessions?phase=review#activity",
   );
   expect(
     screen.queryByRole("heading", { name: /enter external api token/i }),
@@ -172,7 +172,7 @@ test("uses the URL credential for initial route requests even when storage has a
 test("removes an empty URL token without replacing a saved token", async () => {
   localStorage.setItem("pontia.externalApiToken", "saved-token");
   token.set("saved-token");
-  window.history.pushState({}, "", "/dashboard/tasks?token=&phase=review");
+  window.history.pushState({}, "", "/dashboard/sessions?token=&phase=review");
 
   render(AppLayoutHost);
 

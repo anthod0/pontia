@@ -3,8 +3,7 @@ use pontia_storage_sqlite::repositories::events::SqliteEventRepository;
 
 use super::ExternalQueryService;
 use crate::views::events::{
-    EventStreamItem, EventStreamScope, EventView, TaskEventStreamItem, row_to_item,
-    row_to_task_item, row_to_view,
+    EventStreamItem, EventStreamScope, EventView, row_to_item, row_to_view,
 };
 
 impl ExternalQueryService {
@@ -60,11 +59,6 @@ impl ExternalQueryService {
         repository.current_session_stream_rowid().await
     }
 
-    pub async fn current_task_stream_rowid(&self) -> Result<i64> {
-        let repository = SqliteEventRepository::new(self.pool.clone());
-        repository.current_task_stream_rowid().await
-    }
-
     pub async fn list_session_stream_items_after(
         &self,
         after_rowid: i64,
@@ -81,19 +75,6 @@ impl ExternalQueryService {
                 .collect::<Result<Vec<_>>>()?,
         )
         .await
-    }
-
-    pub async fn list_task_event_stream_items_after(
-        &self,
-        after_rowid: i64,
-        limit: i64,
-    ) -> Result<Vec<TaskEventStreamItem>> {
-        let repository = SqliteEventRepository::new(self.pool.clone());
-        let rows = repository
-            .list_task_stream_rows_after(after_rowid, limit)
-            .await?;
-
-        rows.into_iter().map(row_to_task_item).collect()
     }
 
     pub async fn list_event_stream_items_after(

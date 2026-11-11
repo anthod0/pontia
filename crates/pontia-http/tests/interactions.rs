@@ -211,7 +211,7 @@ async fn transient_notifications_are_delivered_before_a_durable_backlog_is_drain
             .unwrap();
     }
     let request = Request::builder()
-        .uri("/api/v1/dashboard/events/stream?after=session:0;task:0")
+        .uri("/api/v1/dashboard/events/stream?after=session:0")
         .header("authorization", "Bearer interaction-test")
         .body(Body::empty())
         .unwrap();

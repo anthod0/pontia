@@ -60,7 +60,7 @@ async fn declaration_and_event_are_atomic_and_streams_enrich_replayed_events() {
         json!({"file_id": second["file_id"]})
     );
     for path in [
-        "/api/v1/dashboard/events/stream?after=session:0;task:0",
+        "/api/v1/dashboard/events/stream?after=session:0",
         "/api/v1/sessions/s/events/stream",
     ] {
         let response = pontia_http::router(app.state.clone())

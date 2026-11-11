@@ -5,7 +5,7 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import type { SessionView } from '../../../api/types'
-  import { formatDateTime } from '../../../components/tasks/format'
+  import { formatDateTime } from '../../format'
   import { isTerminalChatSession, sessionChatTitle, type ChatSessionFilter } from '../../session-chat/sessionChat'
 
   interface Props {

@@ -250,7 +250,7 @@ test("staggered concurrent session rejections share one replacement handshake", 
     .mockImplementation(async () => new Response("ciphertext"));
   vi.stubGlobal("fetch", fetchMock);
   await remote.connect();
-  const requests = [remote.e2eFetch("/api/v1/workspaces"), remote.e2eFetch("/api/v1/tasks")];
+  const requests = [remote.e2eFetch("/api/v1/workspaces"), remote.e2eFetch("/api/v1/sessions/overview")];
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(8));
   rejectSecond(new Response(null, { status: 409 }));
   await Promise.resolve();
@@ -485,7 +485,7 @@ test("delayed admission rejections share a replacement without replaying either 
   await remote.connect();
   const requests = Promise.allSettled([
     remote.e2eFetch("/api/v1/workspaces"),
-    remote.e2eFetch("/api/v1/tasks"),
+    remote.e2eFetch("/api/v1/sessions/overview"),
   ]);
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(8));
   rejectSecond(new Response(null, { status: 401 }));

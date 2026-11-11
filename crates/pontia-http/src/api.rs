@@ -16,7 +16,6 @@ mod live_output;
 mod response;
 mod session_guard;
 mod sessions;
-mod tasks;
 mod timeline;
 mod turns;
 mod workflows;
@@ -44,7 +43,6 @@ pub use sessions::{
     session_creation_options, session_overview, set_session_model, start_session_tui,
     stop_session_tui, unarchive_session, unpin_session, update_session,
 };
-pub use tasks::{cancel_task, create_task, get_task, interrupt_task, list_task_events, list_tasks};
 pub use timeline::{get_turn_timeline, get_turn_tree_history, get_turn_tree_updates};
 pub use turns::{get_turn, interrupt_turn, list_session_events, list_turn_events, list_turns};
 pub use workflows::{

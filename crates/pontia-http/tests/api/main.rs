@@ -17,8 +17,6 @@ mod session_inbox;
 mod session_overview;
 mod session_workspace_linking;
 mod support;
-mod task_creation;
-mod task_lifecycle;
 mod test_app_support;
 mod turn_submit;
 mod workflow_authentication;

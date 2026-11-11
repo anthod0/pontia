@@ -5,7 +5,6 @@ pub mod git_status;
 pub mod inbox;
 pub mod session_files;
 pub mod sessions;
-pub mod tasks;
 pub mod turns;
 pub mod workflows;
 pub mod workspaces;

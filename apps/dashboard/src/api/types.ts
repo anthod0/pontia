@@ -405,14 +405,6 @@ export interface RenameWorkspaceInput {
   name?: string | null;
 }
 
-export interface TaskEventView {
-  event_id: string;
-  task_id: string;
-  event_type: string;
-  payload: JsonObject;
-  created_at: string;
-}
-
 export interface TurnView {
   turn_id: string;
   session_id: string;
@@ -531,7 +523,6 @@ export interface TurnTreeUpdatesPage {
 
 export type DashboardStreamEvent =
   | { kind: "session_event"; id: string; occurred_at: string; event: EventView }
-  | { kind: "task_event"; id: string; occurred_at: string; event: TaskEventView }
   | { kind: "history_changed"; session_id: string }
   | { kind: "interaction_changed"; session_id: string; interaction_id: string }
   | { kind: "interactions_resync" };

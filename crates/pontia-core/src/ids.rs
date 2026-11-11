@@ -47,10 +47,6 @@ pub fn new_workspace_id() -> ExternalId {
     prefixed_id("wks")
 }
 
-pub fn new_task_id() -> ExternalId {
-    prefixed_id("task")
-}
-
 pub fn new_message_id() -> ExternalId {
     prefixed_id("msg")
 }

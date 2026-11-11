@@ -69,15 +69,17 @@ test("clears the saved token when the SSE endpoint is unauthorized", async () =>
 test("reconnects the dashboard event stream with the saved cursor", async () => {
   vi.useFakeTimers();
   const firstEvent: DashboardStreamEvent = {
-    kind: "task_event",
+    kind: "session_event",
     id: "row-1",
     occurred_at: "2026-05-14T00:00:00Z",
     event: {
       event_id: "evt-1",
-      task_id: "task-new",
-      event_type: "task.updated",
+      session_id: "sess-new",
+      turn_id: null,
+      source: "agent_adapter",
+      type: "session.created",
       payload: { source: "test" },
-      created_at: "2026-05-14T00:00:00Z",
+      time: "2026-05-14T00:00:00Z",
     },
   };
   const secondEvent = {
@@ -119,7 +121,7 @@ test("visible recovery aborts the old stream and reconnects with the saved curso
   const signals: AbortSignal[] = [];
   const fetchMock = createAbortableStreamFetch(signals);
   vi.stubGlobal("fetch", fetchMock);
-  dashboardStreamCursor.set("session:4;task:9");
+  dashboardStreamCursor.set("session:4");
   token.set("secret-token");
 
   startEventStream();
@@ -131,9 +133,9 @@ test("visible recovery aborts the old stream and reconnects with the saved curso
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   expect(signals[0].aborted).toBe(true);
   expect(String(fetchMock.mock.calls[1][0])).toBe(
-    "/api/v1/dashboard/events/stream?after=session%3A4%3Btask%3A9",
+    "/api/v1/dashboard/events/stream?after=session%3A4",
   );
-  expect(get(dashboardStreamCursor)).toBe("session:4;task:9");
+  expect(get(dashboardStreamCursor)).toBe("session:4");
 });
 
 test("an aborted stale stream cannot schedule another reconnect", async () => {
@@ -223,7 +225,7 @@ test.each([
 ])(
   "retains the cursor without a snapshot fallback after %s",
   async (_name, fetchImplementation) => {
-    dashboardStreamCursor.set("session:4;task:9");
+    dashboardStreamCursor.set("session:4");
     vi.stubGlobal("fetch", vi.fn(fetchImplementation));
     token.set("secret-token");
 
@@ -231,22 +233,24 @@ test.each([
 
     await vi.waitFor(() => expect(get(lastConnectionError)).not.toBeNull());
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(get(dashboardStreamCursor)).toBe("session:4;task:9");
+    expect(get(dashboardStreamCursor)).toBe("session:4");
     expect(refreshDashboardSnapshotMock).not.toHaveBeenCalled();
   },
 );
 
-test("notifies dashboard event subscribers when an SSE task event arrives", async () => {
+test("notifies dashboard event subscribers when an SSE session event arrives", async () => {
   const event: DashboardStreamEvent = {
-    kind: "task_event",
+    kind: "session_event",
     id: "row-1",
     occurred_at: "2026-05-14T00:00:00Z",
     event: {
       event_id: "evt-1",
-      task_id: "task-new",
-      event_type: "task.updated",
+      session_id: "sess-new",
+      turn_id: null,
+      source: "agent_adapter",
+      type: "session.created",
       payload: { source: "test" },
-      created_at: "2026-05-14T00:00:00Z",
+      time: "2026-05-14T00:00:00Z",
     },
   };
   const body = new ReadableStream<Uint8Array>({

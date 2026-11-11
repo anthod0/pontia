@@ -59,7 +59,6 @@ struct CommandServices {
     sessions: crate::SessionCommandService,
     turns: crate::TurnCommandService,
     inbox: Arc<crate::InboxCommandService>,
-    tasks: crate::TaskCommandService,
 }
 
 impl AppState {
@@ -119,7 +118,6 @@ impl AppState {
             inbox.clone(),
             builder.pontia_home.clone(),
         );
-        let tasks = crate::TaskCommandService::new(builder.db.clone(), turns.clone());
         Self {
             external_api_token: builder.external_api_token,
             inner: Arc::new(AppStateInner {
@@ -127,7 +125,6 @@ impl AppState {
                     sessions,
                     turns,
                     inbox,
-                    tasks,
                 },
                 persistence: PersistenceState {
                     db: builder.db.clone(),
@@ -221,9 +218,6 @@ impl AppState {
     }
     pub fn inbox_commands(&self) -> Arc<crate::InboxCommandService> {
         self.inner.commands.inbox.clone()
-    }
-    pub fn task_commands(&self) -> crate::TaskCommandService {
-        self.inner.commands.tasks.clone()
     }
     pub fn queries(&self) -> crate::ExternalQueryService {
         crate::ExternalQueryService::new(self.db())

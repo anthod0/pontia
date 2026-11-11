@@ -1,9 +1,6 @@
 use crate::{
     common::generic_client::GenericClientTestScope,
-    support::{
-        http::{get_json, post_json},
-        task_state::test_state,
-    },
+    support::http::{get_json, post_json},
 };
 use axum::http::StatusCode;
 use serde_json::json;
@@ -11,7 +8,10 @@ use serde_json::json;
 #[tokio::test]
 async fn create_session_upserts_canonical_workspace_and_links_session() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let state = crate::common::test_app::TestApp::builder()
+        .external_api_token(Some(crate::support::http::TOKEN.to_string()))
+        .build_state()
+        .await;
     let workspace = tempfile::tempdir().expect("workspace");
     let canonical = std::fs::canonicalize(workspace.path()).expect("canonical");
 

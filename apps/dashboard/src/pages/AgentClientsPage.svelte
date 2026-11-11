@@ -10,7 +10,7 @@
   import ClientIcon from '../components/chat/ClientIcon.svelte'
   import type { AgentClientView, JsonObject } from '../api/types'
   import { customClientEntries } from '../clients'
-  import { formatDateTime } from '../components/tasks/format'
+  import { formatDateTime } from '../lib/format'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
   import { Label } from '$lib/components/ui/label/index.js'

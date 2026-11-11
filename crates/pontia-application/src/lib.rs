@@ -23,7 +23,6 @@ pub mod queries;
 mod raw_transcripts;
 pub mod runtime;
 pub mod sessions;
-pub mod tasks;
 pub mod turns;
 pub mod uploads;
 pub mod views;
@@ -69,13 +68,11 @@ pub use sessions::{
     CreateSessionOutcome, CreateSessionRequest, InitialTaskRequest, SessionCommandService,
     UpdateSessionRequest,
 };
-pub use tasks::{CreateTaskOutcome, TaskCommandService};
 pub use turns::TurnCommandService;
 pub use views::{
     ContextUsageCapability, ContextUsageView, EventStreamItem, EventStreamScope, EventView,
     InboxInputView, InboxMessageView, SessionCapabilities, SessionLineageView, SessionView,
-    TaskEventStreamItem, TaskEventView, TaskView, TurnInputView, TurnOutputView, TurnView,
-    WorkspaceGitStatusView, WorkspaceView,
+    TurnInputView, TurnOutputView, TurnView, WorkspaceGitStatusView, WorkspaceView,
 };
 pub use workspaces::{
     FilePickerFileView, FilePickerResultView, RegisterWorkspaceRequest, RenameWorkspaceRequest,

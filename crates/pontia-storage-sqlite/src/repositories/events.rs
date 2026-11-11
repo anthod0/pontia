@@ -1,9 +1,7 @@
 use pontia_core::Result;
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
-use crate::models::events::{
-    DomainEventRow, EventRow, EventStreamRow, TaskEventStreamRow, WorkflowTerminalEventRow,
-};
+use crate::models::events::{DomainEventRow, EventRow, EventStreamRow, WorkflowTerminalEventRow};
 
 // Follow-up Turn facts identify a canonical Turn, not a Runtime. Correlate them
 // only through its preceding client-confirmed start; never through today's
@@ -276,15 +274,6 @@ impl SqliteEventRepository {
         )
     }
 
-    pub async fn current_task_stream_rowid(&self) -> Result<i64> {
-        Ok(
-            sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(rowid) FROM task_events")
-                .fetch_one(&self.pool)
-                .await?
-                .unwrap_or(0),
-        )
-    }
-
     pub async fn list_session_stream_rows_after(
         &self,
         after_rowid: i64,
@@ -293,21 +282,6 @@ impl SqliteEventRepository {
         Ok(sqlx::query_as::<_, EventStreamRow>(
             r#"SELECT rowid, event_id, session_id, turn_id, source, event_type, occurred_at, payload
                FROM events WHERE rowid > ? ORDER BY rowid LIMIT ?"#,
-        )
-        .bind(after_rowid)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await?)
-    }
-
-    pub async fn list_task_stream_rows_after(
-        &self,
-        after_rowid: i64,
-        limit: i64,
-    ) -> Result<Vec<TaskEventStreamRow>> {
-        Ok(sqlx::query_as::<_, TaskEventStreamRow>(
-            r#"SELECT rowid, event_id, task_id, event_type, payload, created_at
-               FROM task_events WHERE rowid > ? ORDER BY rowid LIMIT ?"#,
         )
         .bind(after_rowid)
         .bind(limit)

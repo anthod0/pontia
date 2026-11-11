@@ -2,9 +2,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use pontia_core::error::Result;
-use pontia_storage_sqlite::models::events::{EventRow, EventStreamRow, TaskEventStreamRow};
-
-use super::tasks::{TaskEventView, stream_event_row_to_view};
+use pontia_storage_sqlite::models::events::{EventRow, EventStreamRow};
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct EventView {
@@ -37,12 +35,6 @@ pub enum EventStreamScope<'a> {
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct TaskEventStreamItem {
-    pub rowid: i64,
-    pub event: TaskEventView,
-}
-
 pub(crate) fn row_to_view(row: EventRow) -> Result<EventView> {
     Ok(EventView {
         event_id: row.event_id,
@@ -72,10 +64,4 @@ pub(crate) fn row_to_item(row: EventStreamRow) -> Result<EventStreamItem> {
     let rowid = row.rowid;
     let event = stream_row_to_view(row)?;
     Ok(EventStreamItem { rowid, event })
-}
-
-pub(crate) fn row_to_task_item(row: TaskEventStreamRow) -> Result<TaskEventStreamItem> {
-    let rowid = row.rowid;
-    let event = stream_event_row_to_view(row)?;
-    Ok(TaskEventStreamItem { rowid, event })
 }
