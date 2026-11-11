@@ -258,6 +258,10 @@ fn external_api_router(state: HttpState) -> Router {
             "/api/v1/sessions/{session_id}/model",
             axum::routing::patch(api::set_session_model),
         )
+        .route(
+            "/api/v1/sessions/{session_id}/fork",
+            post(api::fork_session),
+        )
         .route("/api/v1/sessions/{session_id}/pin", post(api::pin_session))
         .route(
             "/api/v1/sessions/{session_id}/unpin",

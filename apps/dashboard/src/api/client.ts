@@ -2,6 +2,7 @@ import { ApiError } from "./errors";
 
 import type {
   Interaction,
+  ForkSessionOutcome,
   AgentClientView,
   JsonObject,
   AgentProfileView,
@@ -658,6 +659,19 @@ export function createApi(device: DeviceRuntime) {
     ).inbox_messages;
   }
 
+  async function forkSession(
+    sessionId: string,
+    turnId: string,
+    operationId: string,
+  ): Promise<ForkSessionOutcome> {
+    return request(`/sessions/${encodeURIComponent(sessionId)}/fork`, {
+      method: "POST",
+      body: { turn_id: turnId, operation_id: operationId },
+      mutating: true,
+      idempotency: false,
+    });
+  }
+
   async function submitInboxMessage(
     sessionId: string,
     input: SubmitInboxMessageInput,
@@ -864,6 +878,7 @@ export function createApi(device: DeviceRuntime) {
     listTurns,
     listInboxMessages,
     submitInboxMessage,
+    forkSession,
     getInboxMessage,
     retryInboxMessage,
     cancelInboxMessage,

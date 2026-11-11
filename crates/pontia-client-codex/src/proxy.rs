@@ -26,6 +26,7 @@ pub(crate) enum ObservedEvent {
     ThreadOpened {
         operation: ThreadOperation,
         result: Value,
+        params: Value,
     },
     TurnStarted(String),
 }
@@ -129,7 +130,7 @@ async fn relay(
         .map_err(protocol::protocol_error)?;
     let mut upstream = protocol::open(upstream).await?;
     let daemon = DaemonIdentity::capture(upstream.get_ref())?;
-    let mut pending = HashMap::<String, ThreadOperation>::new();
+    let mut pending = HashMap::<String, (ThreadOperation, Value)>::new();
     loop {
         tokio::select! {
             frame = downstream.next() => {
@@ -145,7 +146,7 @@ async fn relay(
                         Some("thread/fork") => Some(ThreadOperation::Fork),
                         _ => None,
                     };
-                    if let Some(operation) = operation { pending.insert(id.to_string(), operation); }
+                    if let Some(operation) = operation { pending.insert(id.to_string(), (operation, value["params"].clone())); }
                 }
                 let closed = frame.is_close();
                 upstream.send(frame).await.map_err(protocol::protocol_error)?;
@@ -159,10 +160,10 @@ async fn relay(
                 {
                     let event = if value.get("method").is_none()
                         && let Some(id) = value.get("id")
-                        && let Some(operation) = pending.remove(&id.to_string())
+                        && let Some((operation, params)) = pending.remove(&id.to_string())
                     {
                         value.get("result").filter(|_| value.get("error").is_none())
-                            .cloned().map(|result| ObservedEvent::ThreadOpened { operation, result })
+                            .cloned().map(|result| ObservedEvent::ThreadOpened { operation, result, params })
                     } else if value["method"] == "turn/started" {
                         value["params"]["threadId"].as_str().map(|thread| ObservedEvent::TurnStarted(thread.into()))
                     } else { None };

@@ -141,6 +141,23 @@ impl pontia_application::client_contract::ClientInteractions for CodexClient {
 }
 
 impl ClientSession for CodexClient {
+    fn fork_session<'a>(
+        &'a self,
+        events: EventIngestService,
+        session: &'a str,
+        turn: &'a str,
+    ) -> ClientOperation<'a, pontia_application::client_contract::NativeSessionFork> {
+        Box::pin(async move { CodexService::new(events).fork_session(session, turn).await })
+    }
+    fn adopt_fork<'a>(
+        &'a self,
+        events: EventIngestService,
+        session: &'a str,
+        fork: &'a pontia_application::client_contract::NativeSessionFork,
+    ) -> ClientOperation<'a, String> {
+        Box::pin(async move { CodexService::new(events).adopt_fork(session, fork).await })
+    }
+
     fn provision_configured<'a>(
         &'a self,
         events: EventIngestService,

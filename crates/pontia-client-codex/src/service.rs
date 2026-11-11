@@ -1,4 +1,6 @@
+mod adoption;
 mod background;
+mod fork;
 pub(crate) use background::CodexBackgroundService;
 mod compaction;
 #[cfg(test)]

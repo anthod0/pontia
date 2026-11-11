@@ -191,6 +191,7 @@ export interface SessionCapabilities {
   timeline?: boolean;
   topology?: boolean;
   branch_control?: boolean;
+  fork_session?: boolean;
   list_models?: boolean;
   set_model?: boolean;
   manual_compaction: boolean;
@@ -596,4 +597,10 @@ export interface SessionModels {
   models: SessionModel[];
   current_model: string | null;
   runtime_id: string | null;
+}
+
+export interface ForkSessionOutcome {
+  stage: "fork_unconfirmed" | "fork_failed" | "session_pending" | "session_created";
+  session_id: string | null;
+  error: string | null;
 }

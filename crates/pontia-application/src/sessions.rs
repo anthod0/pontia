@@ -15,6 +15,8 @@ use sqlx::SqlitePool;
 
 mod commands;
 mod compaction;
+mod fork;
+pub use fork::{ForkSessionOutcome, ForkSessionRequest};
 mod models;
 pub use compaction::CompactionAccepted;
 pub use models::{SessionModel, SessionModels, SetSessionModelRequest};
@@ -88,6 +90,7 @@ pub struct SessionCommandService {
     inbox: std::sync::Arc<crate::InboxCommandService>,
     pontia_home: PathBuf,
     control: crate::ClientControlService,
+    fork_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
     tui_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
 
@@ -104,6 +107,7 @@ impl SessionCommandService {
         let control = clients.control_service();
         Self {
             control,
+            fork_gate: std::sync::Arc::default(),
             tui_gate: std::sync::Arc::default(),
             pool,
             event_ingest,

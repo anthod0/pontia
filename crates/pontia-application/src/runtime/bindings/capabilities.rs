@@ -7,6 +7,7 @@ pub(crate) fn writable_capabilities(
     capabilities.accept_task = writable;
     capabilities.interrupt = writable;
     capabilities.manual_compaction = capabilities.manual_compaction && writable;
+    capabilities.fork_session = capabilities.fork_session && writable;
     capabilities.branch_control = capabilities.branch_control && writable;
     capabilities
 }

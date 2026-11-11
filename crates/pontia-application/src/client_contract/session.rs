@@ -24,6 +24,12 @@ pub struct SessionCreationOption {
     pub metadata: Value,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct NativeSessionFork {
+    pub client_session_key: String,
+    pub receipt: Value,
+}
+
 /// Session operations for clients whose execution lifetime is independent of a local pane.
 pub trait ClientSession: Send + Sync {
     fn creation_options(&self) -> ClientOperation<'_, Option<Vec<SessionCreationOption>>> {
@@ -80,6 +86,30 @@ pub trait ClientSession: Send + Sync {
         target: &'a ControlTarget,
         model: &'a str,
     ) -> ClientOperation<'a, ()>;
+    fn fork_session<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _session: &'a str,
+        _turn: &'a str,
+    ) -> ClientOperation<'a, NativeSessionFork> {
+        Box::pin(async {
+            Err(pontia_core::Error::CapabilityUnavailable(
+                "Session fork is unavailable".into(),
+            ))
+        })
+    }
+    fn adopt_fork<'a>(
+        &'a self,
+        _events: EventIngestService,
+        _session: &'a str,
+        _fork: &'a NativeSessionFork,
+    ) -> ClientOperation<'a, String> {
+        Box::pin(async {
+            Err(pontia_core::Error::CapabilityUnavailable(
+                "Session fork is unavailable".into(),
+            ))
+        })
+    }
     fn compact<'a>(
         &'a self,
         _events: EventIngestService,

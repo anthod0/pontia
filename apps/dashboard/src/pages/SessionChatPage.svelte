@@ -15,6 +15,7 @@
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import AgentStatus from '$lib/components/session-chat/AgentStatus.svelte'
   import ChatRuler from '$lib/components/session-chat/ChatRuler.svelte'
+  import type { HistoryFork } from '../stores/historyForks'
   import { SubmissionUnconfirmedError } from '../stores/inboxRecovery'
   import type { DashboardStreamEvent, EventView, InboxMessageView, SessionView, TurnView } from '../api/types'
   import { compactionDisabledReason, compactionStatus } from '$lib/session-chat/compaction'
@@ -38,6 +39,7 @@
   import { isExecutingSessionState, isTerminalSession } from '$lib/sessionState'
   const device = useDeviceRuntime();
   const deviceScope = dashboardScope();
+  const { pending: pendingHistoryForks } = device.historyForks;
   const { retryInboxMessage } = device.sessions;
   const { compactSession } = device.api;
   const {
@@ -239,10 +241,10 @@
     session: SessionView | null,
     chatMessages: typeof messages,
   ): Record<string, string> {
-    if (!session?.capabilities.branch_control) return {}
+    if (!session?.capabilities.branch_control && !session?.capabilities.fork_session) return {}
     const canEditInCurrentState = ['idle', 'interrupted', 'exited'].includes(session.state)
       || (isExecutingSessionState(session.state) && session.capabilities.interrupt === true)
-    if (!canEditInCurrentState) return {}
+    if (!session.capabilities.fork_session && !canEditInCurrentState) return {}
     const turns = $sessionDetail?.session.session_id === session.session_id
       ? new Map($sessionDetail.turns.map((turn) => [turn.turn_id, turn]))
       : new Map()
@@ -254,6 +256,7 @@
       seenTurnIds.add(message.turnId)
       const projectedTurn = turns.get(message.turnId)
       if (!projectedTurn || !eligibleTurnStates.has(projectedTurn.state)) return []
+      if (session.capabilities.fork_session && (projectedTurn.state === 'abandoned' || !projectedTurn.metadata.native_turn_id)) return []
       if (!projectedTurn.input?.summary?.trim() || !message.content.trim()) return []
       return [[message.id, message.content]]
     }))
@@ -382,6 +385,19 @@
     branchActionError = null
     try {
       const session = currentSelectedSession()
+      if (session?.capabilities.fork_session) {
+        const existing = $pendingHistoryForks.find((operation) => operation.sourceSessionId === sessionId && operation.turnId === projectedTurn.turn_id)
+        if (existing) {
+          branchActionError = 'Recover the existing fork below before starting another edit.'
+          return false
+        }
+        const operation = await device.historyForks.start(sessionId, projectedTurn.turn_id, input)
+        if (operation.sessionId && ['session_created', 'input_unconfirmed', 'input_submitted'].includes(operation.stage)) {
+          await navigate(`/chat/${operation.sessionId}`, undefined, { scope: deviceScope })
+          return true
+        }
+        return false
+      }
       if (session && isExecutingSessionState(session.state)) {
         if (session.capabilities.interrupt !== true) {
           throw new Error('This Session cannot interrupt the active Turn before editing history.')
@@ -399,6 +415,21 @@
     } catch (error) {
       branchActionError = error instanceof Error ? error.message : String(error)
       return error instanceof SubmissionUnconfirmedError
+    } finally {
+      branchActionSubmitting = false
+    }
+  }
+
+  async function recoverHistoryFork(operation: HistoryFork): Promise<void> {
+    if (branchActionSubmitting) return
+    branchActionSubmitting = true
+    try {
+      const result = await device.historyForks.resume(operation)
+      if (result.sessionId && ['session_created', 'input_unconfirmed', 'input_submitted'].includes(result.stage)) {
+        await navigate(`/chat/${result.sessionId}`, undefined, { scope: deviceScope })
+      }
+    } catch (error) {
+      branchActionError = error instanceof Error ? error.message : String(error)
     } finally {
       branchActionSubmitting = false
     }
@@ -1074,6 +1105,23 @@
           </div>
         </div>
         <SessionInteractions sessionId={selectedSessionId} />
+        {#each $pendingHistoryForks.filter((operation) => operation.sourceSessionId === selectedSessionId || operation.sessionId === selectedSessionId) as operation (operation.operationId)}
+          <Alert.Root variant="destructive" class="mx-4 my-2">
+            <WarningCircleIcon class="size-4" />
+            <Alert.Title>{operation.stage === 'fork_failed' ? 'Fork failed' : operation.stage === 'session_pending' ? 'Fork created; Session attachment pending' : operation.stage === 'input_unconfirmed' ? 'New Session created; input submission unconfirmed' : 'Fork result unconfirmed'}</Alert.Title>
+            <Alert.Description>
+              {operation.error ?? 'Check this operation to recover its confirmed progress.'}
+              <div class="mt-2 flex gap-2">
+                {#if operation.stage === 'fork_failed'}
+                  <Button variant="outline" size="sm" onclick={() => device.historyForks.forget(operation.operationId)}>Dismiss</Button>
+                {:else}
+                  <Button variant="outline" size="sm" disabled={branchActionSubmitting} onclick={() => recoverHistoryFork(operation)}>Check / recover edit</Button>
+                {/if}
+              </div>
+            </Alert.Description>
+          </Alert.Root>
+        {/each}
+
         {#if branchActionError}
           <Alert.Root variant="destructive" role="alert" class="mx-4 mb-4">
             <WarningCircleIcon class="size-4" />

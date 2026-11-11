@@ -24,6 +24,14 @@ Run `pontia init` and select **Codex**. Pontia configures automatic startup, ver
 
 Open a new terminal, or run the command printed at the end of initialization, to start using the launcher. To remove it, run `pontia init` again and decline the launcher option.
 
+## Edit an earlier prompt
+
+In either Dashboard, use **Edit message** on the starting prompt of a finished Turn. Saving creates an independent Session with the history before that prompt, then sends your replacement and opens the new Session. Editing the first prompt starts with an empty history. The original Session remains available and any work already running there continues.
+
+If the new Session is created but the replacement cannot be submitted, use **Check / recover edit** to submit it to that same Session. Keep the saved operation when its result is unconfirmed so recovery does not create another fork.
+
+A fork changes conversation history only; it does not roll back workspace files.
+
 <h2 id="manual-setup">Manual setup</h2>
 
 For non-interactive initialization, create or update the service definition for your platform below. Use absolute paths for the executable and Codex home. Find your executable with `command -v codex`; if it needs Node, include Node's directory in the service's `PATH`.

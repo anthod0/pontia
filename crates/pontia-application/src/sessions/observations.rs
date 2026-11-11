@@ -29,6 +29,32 @@ impl NativeSessionService {
         Self { pool, events }
     }
 
+    pub async fn record_fork(
+        &self,
+        child: &str,
+        parent: &str,
+        turn: Option<&str>,
+        native_boundary: Option<&str>,
+        metadata: Value,
+    ) -> Result<()> {
+        if child == parent {
+            return Err(Error::StateConflict(
+                "A fork must have an independent Session identity".into(),
+            ));
+        }
+        sqlx::query(
+            "INSERT INTO session_lineage (child_session_id,parent_session_id,relation_type,forked_from_turn_id,forked_from_client_node_id,parent_client_session_key,child_client_session_key,metadata)
+             SELECT ?,?,'fork',?,?,p.client_session_key,c.client_session_key,? FROM agent_bindings p JOIN agent_bindings c ON c.session_id=? WHERE p.session_id=?
+             ON CONFLICT(child_session_id) DO UPDATE SET
+             forked_from_turn_id=COALESCE(excluded.forked_from_turn_id,session_lineage.forked_from_turn_id),
+             forked_from_client_node_id=COALESCE(excluded.forked_from_client_node_id,session_lineage.forked_from_client_node_id),
+             metadata=CASE WHEN excluded.forked_from_client_node_id IS NOT NULL THEN excluded.metadata ELSE session_lineage.metadata END",
+        ).bind(child).bind(parent).bind(turn).bind(native_boundary)
+            .bind(serde_json::to_string(&metadata)?).bind(child).bind(parent)
+            .execute(&self.pool).await?;
+        Ok(())
+    }
+
     /// Adopts a native conversation served by a shared backend, without creating a runtime.
     pub async fn resolve_subscription_session(
         &self,

@@ -5,6 +5,7 @@ import { createUploads } from "../api/uploads";
 import { createFileApi } from "../api/sessionFiles";
 import { createConnection } from "../stores/connection";
 import { createChatDraft } from "../stores/chatDraft";
+import { createHistoryForks } from "../stores/historyForks";
 import { createInboxRecovery } from "../stores/inboxRecovery";
 import { createSessions } from "../stores/sessions";
 import { createWorkflows } from "../stores/workflows";
@@ -60,6 +61,11 @@ export class DeviceRuntime {
   private _chatDraft?: ReturnType<typeof createChatDraft>;
   get chatDraft(): ReturnType<typeof createChatDraft> {
     return (this._chatDraft ??= createChatDraft(this));
+  }
+
+  private _historyForks?: ReturnType<typeof createHistoryForks>;
+  get historyForks(): ReturnType<typeof createHistoryForks> {
+    return (this._historyForks ??= createHistoryForks(this));
   }
 
   private _inboxRecovery?: ReturnType<typeof createInboxRecovery>;

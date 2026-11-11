@@ -1,8 +1,9 @@
 use super::*;
+use crate::service::confirmed_exits;
 use crate::{CodexObserver, proxy::Proxy};
 use futures_util::{SinkExt, StreamExt};
 use pontia_application::clients::ClientRegistry;
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
     net::UnixListener,
@@ -30,6 +31,7 @@ struct Fixture {
     app: AppState,
     root: tempfile::TempDir,
     threads: Arc<Mutex<HashMap<String, Thread>>>,
+    faults: Arc<Mutex<std::collections::HashSet<String>>>,
     tasks: JoinSet<()>,
     shutdown: watch::Sender<bool>,
 }
@@ -41,6 +43,8 @@ impl Fixture {
         let listener = UnixListener::bind(&socket).unwrap();
         let threads = Arc::new(Mutex::new(HashMap::<String, Thread>::new()));
         let shared = threads.clone();
+        let faults = Arc::new(Mutex::new(std::collections::HashSet::<String>::new()));
+        let shared_faults = faults.clone();
         let home = root.path().canonicalize().unwrap();
         let mut tasks = JoinSet::new();
         tasks.spawn(async move {
@@ -48,6 +52,7 @@ impl Fixture {
             loop {
                 let (stream, _) = listener.accept().await.unwrap();
                 let threads = shared.clone();
+                let faults = shared_faults.clone();
                 let home = home.clone();
                 peers.spawn(async move {
                     let mut wire = accept_async(stream).await.unwrap();
@@ -70,7 +75,7 @@ impl Fixture {
                         let params = &request["params"];
                         let native = params["threadId"].as_str().unwrap_or("");
                         let mut threads = threads.lock().await;
-                        let response = if params["reject"] == true {
+                        let response = if params["reject"] == true || faults.lock().await.contains(method) {
                             json!({"id":id,"error":{"code":-32600,"message":"rejected"}})
                         } else if method == "thread/read" && !threads[native].materialized {
                             json!({"id":id,"error":{"code":-32603,"message":"failed to read thread: rollout is empty"}})
@@ -86,11 +91,15 @@ impl Fixture {
                                 }
                                 "config/read" => json!({"config":{}}),
                                 "thread/start" | "thread/fork" => {
+                                    let inherited = threads.get(native).map(|parent| {
+                                        parent.turns.iter().take_while(|turn| params["beforeTurnId"].is_null() || turn["id"] != params["beforeTurnId"]).cloned().collect::<Vec<_>>()
+                                    }).unwrap_or_default();
+                                    let parent = params["threadId"].clone();
                                     let native = format!("thread-{}", threads.len());
-                                    let value = json!({"id":native,"cwd":home,"ephemeral":params["ephemeral"] == true,"canAcceptDirectInput":true,"status":{"type":"idle"}});
+                                    let value = json!({"id":native,"sessionId":"shared-native-root","forkedFromId":parent,"cwd":home,"ephemeral":params["ephemeral"] == true,"canAcceptDirectInput":true,"status":{"type":"idle"}});
                                     threads.insert(native, Thread {
                                         value: value.clone(), materialized: method == "thread/fork",
-                                        turns: vec![], subscribers: vec![sender.clone()],
+                                        turns: inherited, subscribers: vec![sender.clone()],
                                     });
                                     json!({"thread":value,"model":"cli-model"})
                                 }
@@ -108,7 +117,7 @@ impl Fixture {
                                 "turn/start" => {
                                     let thread = threads.get_mut(native).unwrap();
                                     thread.materialized = true;
-                                    let turn = json!({"id":format!("turn-{}", thread.turns.len()),"status":"inProgress","items":[{"id":"input","type":"userMessage","content":[{"type":"text","text":"from CLI"}]}]});
+                                    let turn = json!({"id":format!("turn-{}", thread.turns.len()),"status":"inProgress","items":[{"id":"input","type":"userMessage","content":[{"type":"text","text":params.pointer("/input/0/text").and_then(Value::as_str).unwrap_or("from CLI")}]}]});
                                     thread.turns.push(turn.clone());
                                     thread.notify(json!({"method":"turn/started","params":{"threadId":native,"turn":turn}}));
                                     json!({"turn":turn})
@@ -118,6 +127,7 @@ impl Fixture {
                             json!({"id":id,"result":result})
                         };
                         drop(threads);
+                        if method == "thread/fork" && faults.lock().await.remove("drop_fork_response") { break; }
                         if wire.send(Message::text(response.to_string())).await.is_err() { break; }
                     }
                 });
@@ -158,6 +168,7 @@ impl Fixture {
             app,
             root,
             threads,
+            faults,
             tasks,
             shutdown,
         }
@@ -308,6 +319,290 @@ async fn fork_creates_a_distinct_session_and_concurrent_resume_reuses_identity()
         .unwrap();
     assert_eq!(count, 2);
     f.stop().await;
+}
+
+#[tokio::test]
+async fn dashboard_fork_excludes_the_target_and_preserves_running_source() {
+    let f = Fixture::new().await;
+    let mut cli = f.client().await;
+    let response = rpc(&mut cli, "thread/start", json!({})).await;
+    let native = response["result"]["thread"]["id"].as_str().unwrap();
+    let source = f.session(native, "idle").await;
+    for _ in 0..2 {
+        rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+        f.session(native, "busy").await;
+        f.complete(native).await;
+        f.session(native, "idle").await;
+    }
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    f.session(native, "busy").await;
+    let target: String = sqlx::query_scalar(
+        "SELECT turn_id FROM native_turn_bindings WHERE session_id=? AND client_turn_id='turn-1'",
+    )
+    .bind(&source)
+    .fetch_one(&f.app.db())
+    .await
+    .unwrap();
+    let request = || pontia_application::sessions::ForkSessionRequest {
+        operation_id: "edit-middle".into(),
+        turn_id: target.clone(),
+    };
+    let result = f
+        .app
+        .session_commands()
+        .fork_session(&source, request())
+        .await
+        .unwrap();
+    let child = result.session_id.unwrap();
+    let repeated = f
+        .app
+        .session_commands()
+        .fork_session(&source, request())
+        .await
+        .unwrap();
+    assert_eq!(repeated.session_id.as_deref(), Some(child.as_str()));
+    assert_eq!(f.session(native, "busy").await, source);
+    let binding = AgentBindingService::new(f.app.db())
+        .binding_for_session(&child)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(child, source);
+    assert_eq!(
+        f.threads.lock().await[&binding.client_session_key]
+            .turns
+            .iter()
+            .map(|turn| turn["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["turn-0"]
+    );
+    let lineage: (String, String, String) = sqlx::query_as("SELECT parent_session_id,forked_from_turn_id,json_extract(metadata,'$.boundary') FROM session_lineage WHERE child_session_id=?")
+        .bind(&child).fetch_one(&f.app.db()).await.unwrap();
+    assert_eq!(lineage, (source.clone(), target, "before".into()));
+    f.app
+        .inbox_commands()
+        .submit_message_once(
+            "replacement",
+            &child,
+            pontia_application::SubmitInboxMessageRequest {
+                input: "edited prompt".into(),
+                delivery_policy: "after_idle".into(),
+                branch_target_turn_id: None,
+                metadata: json!({}),
+            },
+        )
+        .await
+        .unwrap();
+    f.app.inbox_commands().drain_inbox(&child).await.unwrap();
+    f.session(&binding.client_session_key, "busy").await;
+    f.complete(&binding.client_session_key).await;
+    f.session(&binding.client_session_key, "idle").await;
+    let inputs: Vec<String> =
+        sqlx::query_scalar("SELECT input_summary FROM turns WHERE session_id=? ORDER BY turn_id")
+            .bind(&child)
+            .fetch_all(&f.app.db())
+            .await
+            .unwrap();
+    assert_eq!(inputs, ["from CLI", "edited prompt"]);
+    assert_eq!(f.threads.lock().await.len(), 2);
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn cli_fork_inherits_history_and_resume_keeps_its_boundary() {
+    let f = Fixture::new().await;
+    let mut cli = f.client().await;
+    let response = rpc(&mut cli, "thread/start", json!({})).await;
+    let native = response["result"]["thread"]["id"].as_str().unwrap();
+    let source = f.session(native, "idle").await;
+    for _ in 0..2 {
+        rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+        f.session(native, "busy").await;
+        f.complete(native).await;
+        f.session(native, "idle").await;
+    }
+    let fork = rpc(
+        &mut cli,
+        "thread/fork",
+        json!({"threadId":native,"beforeTurnId":"turn-1"}),
+    )
+    .await;
+    let native_child = fork["result"]["thread"]["id"].as_str().unwrap();
+    let child = f.session(native_child, "idle").await;
+    rpc(&mut cli, "thread/resume", json!({"threadId":native_child})).await;
+    rpc(&mut cli, "turn/start", json!({"threadId":native_child})).await;
+    f.session(native_child, "busy").await;
+    let lineage: (String, String) = sqlx::query_as("SELECT parent_session_id,forked_from_client_node_id FROM session_lineage WHERE child_session_id=?")
+        .bind(&child).fetch_one(&f.app.db()).await.unwrap();
+    assert_eq!(lineage, (source, "turn-1".into()));
+    let turns: Vec<(String, String)> = sqlx::query_as("SELECT b.client_turn_id,t.state FROM native_turn_bindings b JOIN turns t ON b.turn_id=t.turn_id WHERE b.session_id=? ORDER BY t.turn_id")
+        .bind(&child).fetch_all(&f.app.db()).await.unwrap();
+    assert_eq!(
+        turns,
+        [
+            ("turn-0".into(), "completed".into()),
+            ("turn-1".into(), "running".into())
+        ]
+    );
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn first_turn_fork_is_empty_and_active_turn_is_rejected() {
+    let f = Fixture::new().await;
+    let mut cli = f.client().await;
+    let response = rpc(&mut cli, "thread/start", json!({})).await;
+    let native = response["result"]["thread"]["id"].as_str().unwrap();
+    let source = f.session(native, "idle").await;
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    f.session(native, "busy").await;
+    let target: String = sqlx::query_scalar("SELECT turn_id FROM turns WHERE session_id=?")
+        .bind(&source)
+        .fetch_one(&f.app.db())
+        .await
+        .unwrap();
+    let request = || pontia_application::sessions::ForkSessionRequest {
+        operation_id: "edit-first".into(),
+        turn_id: target.clone(),
+    };
+    assert!(
+        f.app
+            .session_commands()
+            .fork_session(&source, request())
+            .await
+            .is_err()
+    );
+    assert_eq!(f.threads.lock().await.len(), 1);
+    f.complete(native).await;
+    f.session(native, "idle").await;
+    let result = f
+        .app
+        .session_commands()
+        .fork_session(&source, request())
+        .await
+        .unwrap();
+    let child = result.session_id.unwrap();
+    let turns: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM turns WHERE session_id=?")
+        .bind(&child)
+        .fetch_one(&f.app.db())
+        .await
+        .unwrap();
+    assert_eq!(turns, 0);
+    assert_eq!(f.threads.lock().await.len(), 2);
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn attachment_retry_reuses_the_confirmed_native_fork_after_command_service_recreation() {
+    let f = Fixture::new().await;
+    let mut cli = f.client().await;
+    let response = rpc(&mut cli, "thread/start", json!({})).await;
+    let native = response["result"]["thread"]["id"].as_str().unwrap();
+    let source = f.session(native, "idle").await;
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    f.session(native, "busy").await;
+    f.complete(native).await;
+    f.session(native, "idle").await;
+    let target: String = sqlx::query_scalar("SELECT turn_id FROM turns WHERE session_id=?")
+        .bind(&source)
+        .fetch_one(&f.app.db())
+        .await
+        .unwrap();
+    let request = || pontia_application::sessions::ForkSessionRequest {
+        operation_id: "recover-adoption".into(),
+        turn_id: target.clone(),
+    };
+    f.faults.lock().await.insert("thread/resume".into());
+    let partial = f
+        .app
+        .session_commands()
+        .fork_session(&source, request())
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&partial).unwrap()["stage"],
+        "session_pending"
+    );
+    assert!(partial.session_id.is_some());
+    assert_eq!(f.threads.lock().await.len(), 2);
+    f.faults.lock().await.clear();
+    let binding = AgentBindingService::new(f.app.db())
+        .binding_for_session(partial.session_id.as_deref().unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+    f.threads
+        .lock()
+        .await
+        .get_mut(&binding.client_session_key)
+        .unwrap()
+        .value["status"]["type"] = json!("notLoaded");
+    let restarted = AppState::builder(f.app.db(), f.root.path().into())
+        .clients(f.app.clients())
+        .build();
+    let recovered = restarted
+        .session_commands()
+        .fork_session(&source, request())
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&recovered).unwrap()["stage"],
+        "session_created"
+    );
+    assert_eq!(recovered.session_id, partial.session_id);
+    assert_eq!(f.threads.lock().await.len(), 2);
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn native_rejection_and_lost_receipt_do_not_repeat_forks() {
+    for (fault, stage, count) in [
+        ("thread/fork", "fork_failed", 1),
+        ("drop_fork_response", "fork_unconfirmed", 2),
+    ] {
+        let f = Fixture::new().await;
+        let mut cli = f.client().await;
+        let response = rpc(&mut cli, "thread/start", json!({})).await;
+        let native = response["result"]["thread"]["id"].as_str().unwrap();
+        let source = f.session(native, "idle").await;
+        rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+        f.session(native, "busy").await;
+        f.complete(native).await;
+        f.session(native, "idle").await;
+        let target: String = sqlx::query_scalar("SELECT turn_id FROM turns WHERE session_id=?")
+            .bind(&source)
+            .fetch_one(&f.app.db())
+            .await
+            .unwrap();
+        let request = || pontia_application::sessions::ForkSessionRequest {
+            operation_id: "failure".into(),
+            turn_id: target.clone(),
+        };
+        f.faults.lock().await.insert(fault.into());
+        let result = f
+            .app
+            .session_commands()
+            .fork_session(&source, request())
+            .await
+            .unwrap();
+        assert_eq!(serde_json::to_value(&result).unwrap()["stage"], stage);
+        assert!(result.session_id.is_none());
+        f.faults.lock().await.clear();
+        let repeated = f
+            .app
+            .session_commands()
+            .fork_session(&source, request())
+            .await
+            .unwrap();
+        assert_eq!(serde_json::to_value(&repeated).unwrap()["stage"], stage);
+        assert_eq!(f.threads.lock().await.len(), count);
+        let sessions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+            .fetch_one(&f.app.db())
+            .await
+            .unwrap();
+        assert_eq!(sessions, 1);
+        f.stop().await;
+    }
 }
 
 #[tokio::test]

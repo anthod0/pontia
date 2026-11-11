@@ -258,3 +258,17 @@ pub async fn set_session_model(
     service.set_session_model(&session_id, request).await?;
     Ok((StatusCode::ACCEPTED, ok(json!({"accepted":true}))).into_response())
 }
+
+pub async fn fork_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    Json(request): Json<pontia_application::sessions::ForkSessionRequest>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let result = state
+        .session_commands()
+        .fork_session(&session_id, request)
+        .await?;
+    Ok(ok(
+        serde_json::to_value(result).map_err(pontia_core::Error::from)?
+    ))
+}

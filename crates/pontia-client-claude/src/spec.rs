@@ -13,6 +13,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         timeline: true,
         topology: false,
         branch_control: false,
+        fork_session: false,
         list_models: false,
         set_model: false,
         manual_compaction: false,

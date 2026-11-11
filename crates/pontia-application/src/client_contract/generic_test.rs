@@ -25,6 +25,7 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     timeline: false,
     topology: false,
     branch_control: false,
+    fork_session: false,
     list_models: false,
     set_model: false,
     manual_compaction: false,

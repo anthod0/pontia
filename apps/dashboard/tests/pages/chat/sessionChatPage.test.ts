@@ -485,6 +485,67 @@ test("offers branch actions only on the primary user message represented by a pr
   expect(document.querySelector('time[datetime="2026-05-14T00:00:02Z"]')).toBeInTheDocument();
 });
 
+test("forks a completed prompt while the original Turn keeps running", async () => {
+  const completed = turn({
+    turn_id: "completed",
+    state: "completed",
+    input: { summary: "Original prompt" },
+    metadata: { native_turn_id: "native-completed" },
+  });
+  const active = turn({
+    turn_id: "active",
+    state: "running",
+    input: { summary: "Running prompt" },
+    metadata: { native_turn_id: "native-active" },
+  });
+  prepareBranchChat([completed, active], {
+    state: "busy",
+    capabilities: { accept_task: true, timeline: true, fork_session: true, interrupt: false },
+  });
+  mocks.loadSessionTimeline.mockImplementation(async (sessionId: string) => {
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId,
+        items: timelineItemsFromTurns([completed, active]),
+      }),
+    );
+    return null;
+  });
+  const fork = vi
+    .spyOn(api, "forkSession")
+    .mockResolvedValue({ stage: "session_created", session_id: "fork-child", error: null });
+  const submit = vi
+    .spyOn(api, "submitInboxMessage")
+    .mockResolvedValue(inboxMessage({ session_id: "fork-child" }));
+  render(SessionChatPage);
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Edit message: Original prompt" }),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Edit message: Running prompt" }),
+  ).not.toBeInTheDocument();
+  const editor = screen.getByRole("textbox", { name: "Edit historical message" });
+  await userEvent.clear(editor);
+  await userEvent.type(editor, "Replacement prompt");
+  await fireEvent.keyDown(editor, { key: "Enter" });
+  await waitFor(() =>
+    expect(submit).toHaveBeenCalledWith(
+      "fork-child",
+      {
+        input: "Replacement prompt",
+        delivery_policy: "after_idle",
+        metadata: { source: "dashboard_history_fork" },
+      },
+      expect.any(String),
+    ),
+  );
+  expect(fork).toHaveBeenCalledWith("session-branch", "completed", expect.any(String));
+  expect(mocks.interruptSession).not.toHaveBeenCalled();
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  fork.mockRestore();
+  submit.mockRestore();
+});
+
 test("edits completed history while busy and interrupts only when the edit is saved", async () => {
   const user = userEvent.setup();
   const completedTurn = turn({
