@@ -19,7 +19,7 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     manual_compaction: true,
     compaction_events: true,
     compaction_history: true,
-    context_usage: ContextUsageCapability::Unsupported,
+    context_usage: ContextUsageCapability::Estimated,
 };
 
 pub const SPEC: AgentClientSpec = AgentClientSpec {

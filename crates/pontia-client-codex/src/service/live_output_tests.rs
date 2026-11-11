@@ -13,6 +13,7 @@ use tokio::{
 };
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
+mod context_usage;
 mod exit;
 mod observation;
 mod reasoning;

@@ -11,6 +11,30 @@ pub(super) struct ObservedTurn {
 }
 
 impl CodexService {
+    pub(super) async fn context_usage_fact(&self, session: &str, usage: &Value) -> Result<()> {
+        let (Some(used), Some(max)) = (
+            usage["last"]["totalTokens"].as_u64(),
+            usage["modelContextWindow"].as_u64().filter(|max| *max > 0),
+        ) else {
+            return Ok(());
+        };
+        self.event_ingest
+            .report_client_fact(
+                session,
+                None,
+                EventType::SessionContextUsageUpdated,
+                json!({"context_usage": {
+                    "used_tokens": used,
+                    "max_tokens": max,
+                    "remaining_tokens": max.saturating_sub(used),
+                    "usage_ratio": (used as f64 / max as f64).min(1.0),
+                    "confidence": "estimated"
+                }}),
+            )
+            .await?;
+        Ok(())
+    }
+
     pub(super) async fn ready(
         &self,
         session: &str,

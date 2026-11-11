@@ -343,6 +343,12 @@ impl CodexObserver {
                     }
                     if !matches!(runtime.subscription(&session).await, Some(SubscriptionState::Available | SubscriptionState::AwaitingFirstInput | SubscriptionState::Reconciling)) { return Ok(()); }
                     match event["method"].as_str() {
+                        Some("thread/tokenUsage/updated") => {
+                            let _operation = runtime.lock_session(&session).await;
+                            if !self.observes(&runtime, &session).await? { return Ok(()); }
+                            let _current = runtime.current_guard().await?;
+                            self.service.context_usage_fact(&session, &event["params"]["tokenUsage"]).await?;
+                        }
                         Some("thread/settings/updated") => {
                             let _current = runtime.current_guard().await?;
                             self.service.model_fact(&session, &event["params"]["threadSettings"]).await?;

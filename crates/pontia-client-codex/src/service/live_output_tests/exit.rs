@@ -23,7 +23,7 @@ impl Fixture {
         .unwrap();
     }
 
-    async fn session_state(&self) -> String {
+    pub(super) async fn session_state(&self) -> String {
         self.app
             .queries()
             .get_session(&self.session)
@@ -33,7 +33,7 @@ impl Fixture {
             .state
     }
 
-    async fn turn_state(&self) -> String {
+    pub(super) async fn turn_state(&self) -> String {
         sqlx::query_scalar("SELECT state FROM turns WHERE turn_id=?")
             .bind(self.turn_id().await)
             .fetch_one(&self.app.db())
@@ -49,7 +49,7 @@ impl Fixture {
             .insert(method.into(), json!({"code":-32600,"message":"rejected"}));
     }
 
-    async fn complete_native(&self, status: &str) {
+    pub(super) async fn complete_native(&self, status: &str) {
         let turn = {
             let mut turns = self.server_state.turns.lock().await;
             turns[0]["status"] = json!(status);
