@@ -6,7 +6,6 @@
   import ComposerDeviceSelect from './ComposerDeviceSelect.svelte';
   import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
   import { Button } from '$lib/components/ui/button/index.js';
-  import * as Empty from '$lib/components/ui/empty/index.js';
   import { dashboardRelativePath, navigate } from '$lib/navigation';
   import RemoteDashboardPage from '../../components/devices/RemoteDashboardPage.svelte';
   import AppShell from '../../components/layout/AppShell.svelte';
@@ -19,6 +18,8 @@
   import { createDeviceConnections, type ConnectedDevice } from './deviceConnections';
   import { provideDeviceList } from './deviceListContext';
   import { loadedRemoteAccess, loadRemoteAccess } from './remoteAccessLoader.svelte';
+  import DeviceOnboarding from './DeviceOnboarding.svelte';
+  import { redirectToSignIn } from './signInRedirect';
 
   let { handle, children }: { handle?: string; children: Snippet } = $props();
   let connections = $state.raw<ReturnType<typeof createDeviceConnections> | null>(null);
@@ -53,6 +54,11 @@
     retry: (target) => connections?.retry(target),
   });
 
+  // A signed-out browser goes straight to Pontia sign-in, which returns to this page.
+  $effect(() => {
+    if (signInUrl) redirectToSignIn(signInUrl);
+  });
+
   $effect(() => {
     if (handle && $devices.some(target => target.handle === handle)) rememberDevice(handle);
   });
@@ -81,6 +87,13 @@
     } finally {
       loadingModule = false;
     }
+  }
+
+  let checkingDevices = $state(false);
+
+  async function checkDevices(): Promise<void> {
+    checkingDevices = true;
+    try { await connections?.refreshDevices(); } finally { checkingDevices = false; }
   }
 
   function retry(): void {
@@ -153,31 +166,29 @@
           {#if handle}{@render children()}{:else}<NewChatPage routeScope={`/${activeHandle}`} {deviceSelector} />{/if}
         </DeviceProvider>
       {/key}
+    {:else if signInUrl}
+      <div class="flex min-h-96 flex-col items-center justify-center gap-3 bg-surface p-4" role="status">
+        <SpinnerGapIcon class="size-6 animate-spin text-primary" aria-hidden="true" />
+        <p class="text-sm text-muted-foreground">Redirecting to sign in…</p>
+        <Button size="sm" variant="outline" href={signInUrl}>Sign in</Button>
+      </div>
     {:else if activeHandle}
       <RemoteDashboardPage
         handle={activeHandle} state={dashboardState} onRetry={retry}
         unavailableMessage={$error ?? moduleError}
-        {signInUrl}
       />
     {:else if $error ?? moduleError}
       <div role="alert" class="flex items-center gap-3 py-4 text-sm">
         <span>{$error ?? moduleError}</span>
-        {#if signInUrl}<Button href={signInUrl}>Sign in</Button>
-        {:else}<Button variant="outline" onclick={retry}>Try again</Button>{/if}
+        <Button variant="outline" onclick={retry}>Try again</Button>
       </div>
-    {:else if $loading}
+    {:else if $loading && !checkingDevices}
       <div class="flex min-h-96 flex-col items-center justify-center gap-3 bg-surface p-4" role="status">
         <SpinnerGapIcon class="size-6 animate-spin text-primary" aria-hidden="true" />
         <p class="text-sm text-muted-foreground">Loading devices…</p>
       </div>
     {:else}
-      <Empty.Root class="min-h-[60svh]">
-        <Empty.Header>
-          <Empty.Title>No devices available</Empty.Title>
-          <Empty.Description>Connect a device to Pontia to start a session.</Empty.Description>
-        </Empty.Header>
-        <Empty.Content><Button href="https://pontia.dev">Manage devices</Button></Empty.Content>
-      </Empty.Root>
+      <DeviceOnboarding checking={checkingDevices} onCheck={checkDevices} />
     {/if}
   {/snippet}
 </AppShell>

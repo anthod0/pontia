@@ -13,6 +13,8 @@ import {
 let fixture: ReturnType<typeof createRemoteAccessFixture>;
 const goto = vi.hoisted(() => vi.fn(async (url: string) => window.history.pushState({}, "", url)));
 vi.mock("$app/navigation", () => ({ goto }));
+const redirectToSignIn = vi.hoisted(() => vi.fn());
+vi.mock("../../src/modes/public/signInRedirect", () => ({ redirectToSignIn }));
 vi.mock("../../src/modes/public/remote-access", async () => ({
   ...(await import("../../src/modes/public/remote-access/remoteAccess")),
   listPublicDevices: (signal: AbortSignal) => fixture.remote.listPublicDevices(signal),
@@ -47,6 +49,7 @@ const session = (handle: string, id = "same") => ({
 const response = (data: unknown) => new Response(JSON.stringify({ data }));
 
 beforeEach(async () => {
+  redirectToSignIn.mockClear();
   for (const handle of ["office-mac", "travel-laptop"]) {
     for (const record of await loadUploadRecords(handle, "new:shared"))
       await removeUploadRecord(record);
@@ -370,15 +373,37 @@ test("an attachment still hashing survives device switches and uploads only to i
   );
 });
 
-test("root login expiry offers sign-in and cannot restart device connections", async () => {
+test("root login expiry redirects to sign-in and cannot restart device connections", async () => {
   vi.mocked(fixture.remote.listPublicDevices).mockRejectedValueOnce(
     new fixture.remote.CloudRequestError("unauthorized", 401),
   );
   render(MultiDeviceDashboardHarness);
-  const signIn = await screen.findByRole("link", { name: "Sign in" });
-  expect(signIn.getAttribute("href")).toContain("https://pontia.dev/login?");
+  await waitFor(() => expect(redirectToSignIn).toHaveBeenCalledTimes(1));
+  expect(redirectToSignIn.mock.calls[0][0]).toContain("https://pontia.dev/login?return_to=");
+  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    "href",
+    redirectToSignIn.mock.calls[0][0],
+  );
   expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   await fireEvent.focus(window);
   expect(fixture.connect).not.toHaveBeenCalled();
   expect(fixture.remote.listPublicDevices).toHaveBeenCalledTimes(1);
+});
+
+test("an account without devices shows setup steps and finds a newly registered device", async () => {
+  fixture.listed.splice(0);
+  render(MultiDeviceDashboardHarness);
+  expect(await screen.findByRole("heading", { name: "Connect your first device" })).toBeVisible();
+  expect(screen.getByText(/pontia" init/)).toBeVisible();
+  expect(redirectToSignIn).not.toHaveBeenCalled();
+  fixture.listed.push({ handle: "office-mac", name: "Office Mac" });
+  await fireEvent.click(screen.getByRole("button", { name: "Check for devices" }));
+  await waitFor(() =>
+    expect(fixture.connect).toHaveBeenCalledWith("office-mac", expect.anything()),
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("heading", { name: "Connect your first device" }),
+    ).not.toBeInTheDocument(),
+  );
 });

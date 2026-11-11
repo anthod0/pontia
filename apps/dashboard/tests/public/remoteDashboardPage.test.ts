@@ -63,22 +63,6 @@ test("exposes retry and reauthorization actions without inventing credential han
   );
 });
 
-test("offers sign-in instead of retry when a device target requires authentication", () => {
-  const signInUrl = `https://pontia.dev/login?return_to=${encodeURIComponent(`https://app.pontia.dev/${handle}`)}`;
-  render(RemoteDashboardPage, {
-    props: {
-      handle,
-      state: "unavailable",
-      unavailableMessage: "Sign in to Pontia to continue.",
-      signInUrl,
-      onRetry: vi.fn(),
-    },
-  });
-
-  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", signInUrl);
-  expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
-});
-
 test("does not read or persist a local token on a public page", () => {
   localStorage.setItem("pontia.externalApiToken", "local-mode-value");
   const getItem = vi.spyOn(Storage.prototype, "getItem");

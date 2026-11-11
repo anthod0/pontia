@@ -6,6 +6,8 @@ import PublicDashboardRouteHarness from "../components/PublicDashboardRouteHarne
 import { createRemoteAccessFixture } from "./fixtures/remoteConnections";
 
 let fixture: ReturnType<typeof createRemoteAccessFixture>;
+const redirectToSignIn = vi.hoisted(() => vi.fn());
+vi.mock("../../src/modes/public/signInRedirect", () => ({ redirectToSignIn }));
 vi.mock("../../src/modes/public/remote-access", async () => ({
   ...(await import("../../src/modes/public/remote-access/remoteAccess")),
   listPublicDevices: (signal: AbortSignal) => fixture.remote.listPublicDevices(signal),
@@ -14,6 +16,7 @@ vi.mock("../../src/modes/public/remote-access", async () => ({
 }));
 
 beforeEach(() => {
+  redirectToSignIn.mockClear();
   fixture = createRemoteAccessFixture();
   window.history.replaceState({}, "", "/office-mac");
 });
@@ -96,12 +99,16 @@ test("focus refresh discovers new devices without reconnecting existing ones", a
   expect(fixture.signals.get("travel-laptop")).toHaveLength(1);
 });
 
-test("central login expiry offers sign-in and prevents UI or focus retries", async () => {
+test("central login expiry redirects to sign-in and prevents UI or focus retries", async () => {
   render(PublicDashboardHarness, { props: { handle: "office-mac" } });
   await screen.findByText("Dashboard content");
   fixture.authorizationFailures.get("travel-laptop")!();
-  const signIn = await screen.findByRole("link", { name: "Sign in" });
-  expect(signIn.getAttribute("href")).toContain("https://pontia.dev/login?");
+  await waitFor(() => expect(redirectToSignIn).toHaveBeenCalledTimes(1));
+  expect(redirectToSignIn.mock.calls[0][0]).toContain("https://pontia.dev/login?return_to=");
+  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    "href",
+    redirectToSignIn.mock.calls[0][0],
+  );
   expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   await fireEvent.focus(window);
   expect(fixture.connect).toHaveBeenCalledTimes(2);

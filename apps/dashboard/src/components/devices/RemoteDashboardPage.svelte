@@ -18,7 +18,6 @@
     onRetry?: () => void;
     unavailableMessage?: string | null;
     reauthorizationUrl?: string;
-    signInUrl?: string;
   };
 
   let {
@@ -28,7 +27,6 @@
     onRetry,
     unavailableMessage,
     reauthorizationUrl,
-    signInUrl,
   }: Props = $props();
 
   const effectiveState = $derived(
@@ -58,9 +56,7 @@
         {/if}
       </p>
     </div>
-    {#if signInUrl}
-      <Button size="sm" href={signInUrl}>Sign in</Button>
-    {:else if onRetry}
+    {#if onRetry}
       <Button size="sm" variant="outline" onclick={onRetry}>Try again</Button>
     {/if}
   </div>
