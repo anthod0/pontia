@@ -1,3 +1,4 @@
+import { QueryObserver } from "@tanstack/svelte-query";
 import { get, type Subscriber, type Unsubscriber, type Updater, type Writable } from "svelte/store";
 
 import { ApiError } from "../api/errors";
@@ -100,6 +101,14 @@ export function createTimeline(device: DeviceRuntime) {
   let activeTimelineSessionId = "";
 
   const timelineSubscribers = new Set<Subscriber<TimelineState>>();
+  let snapshotObserver: QueryObserver<TimelineState> | null = null;
+
+  function snapshotOptions() {
+    return {
+      queryKey: device.timelineQueries.timelineKeys.snapshot(activeTimelineSessionId),
+      enabled: false,
+    };
+  }
 
   function isTimelineRequestForSession(queryKey: readonly unknown[], sessionId: string): boolean {
     return (
@@ -150,24 +159,30 @@ export function createTimeline(device: DeviceRuntime) {
 
   const timelineState: Writable<TimelineState> = {
     subscribe(run: Subscriber<TimelineState>): Unsubscriber {
+      if (!snapshotObserver) {
+        snapshotObserver = new QueryObserver<TimelineState>(device.queryClient, snapshotOptions());
+        snapshotObserver.subscribe(notifyTimelineSubscribers);
+      }
       timelineSubscribers.add(run);
       run(currentTimelineState());
-      return () => timelineSubscribers.delete(run);
+      return () => {
+        timelineSubscribers.delete(run);
+        if (!timelineSubscribers.size) {
+          snapshotObserver?.destroy();
+          snapshotObserver = null;
+        }
+      };
     },
     set(state: TimelineState): void {
       activeTimelineSessionId = state.sessionId;
+      snapshotObserver?.setOptions(snapshotOptions());
       device.queryClient.setQueryData(
         device.timelineQueries.timelineKeys.snapshot(state.sessionId),
         storedTimelineState(state),
       );
     },
     update(update: Updater<TimelineState>): void {
-      const state = update(currentTimelineState());
-      activeTimelineSessionId = state.sessionId;
-      device.queryClient.setQueryData(
-        device.timelineQueries.timelineKeys.snapshot(state.sessionId),
-        storedTimelineState(state),
-      );
+      timelineState.set(update(currentTimelineState()));
     },
   };
 

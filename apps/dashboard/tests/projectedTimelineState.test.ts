@@ -270,6 +270,77 @@ test("tree history follows backend groups and paginates without a duplicate boun
   });
 });
 
+test.each([false, true])(
+  "visible history survives idle cache collection (topology: %s)",
+  async (topology) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    mocks.getTurnTimeline.mockResolvedValue(page({ next_turn_id: null }));
+    mocks.getTurnTreeHistory.mockResolvedValue(
+      historyPage({ groups: [group("turn-2", "newer")], next_from_turn_id: null }),
+    );
+    const received = vi.fn();
+    const unsubscribe = timelineState.subscribe(received);
+    try {
+      await loadSessionTimeline("sess-1", { topology });
+      const loaded = get(timelineState);
+      expect(loaded.items).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
+
+      expect(received.mock.lastCall?.[0]).toMatchObject({
+        sessionId: "sess-1",
+        status: "ready",
+        items: loaded.items,
+      });
+      expect(get(timelineState).items).toEqual(loaded.items);
+    } finally {
+      unsubscribe();
+      vi.useRealTimers();
+    }
+  },
+);
+
+test("history subscription follows the selected session and releases unused snapshots", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  mocks.getTurnTimeline.mockResolvedValue(page({ next_turn_id: null }));
+  const unsubscribeFirst = timelineState.subscribe(() => {});
+  const received = vi.fn();
+  const unsubscribeSecond = timelineState.subscribe(received);
+  const snapshotKey = testDevice.timelineQueries.timelineKeys.snapshot;
+  try {
+    await loadSessionTimeline("sess-1");
+    unsubscribeFirst();
+    await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
+    expect(get(timelineState).items).toHaveLength(1);
+
+    resetTimelineState("sess-2");
+    mocks.getTurnTimeline.mockResolvedValue(
+      page({
+        session_id: "sess-2",
+        items: [item("turn-3", "item-3", "other session")],
+        next_turn_id: null,
+      }),
+    );
+    await loadSessionTimeline("sess-2");
+    await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
+
+    expect(received.mock.lastCall?.[0]).toMatchObject({
+      sessionId: "sess-2",
+      status: "ready",
+      items: [expect.objectContaining({ item_id: "item-3" })],
+    });
+    expect(queryClient.getQueryData(snapshotKey("sess-1"))).toBeUndefined();
+
+    unsubscribeSecond();
+    await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
+    expect(queryClient.getQueryData(snapshotKey("sess-2"))).toBeUndefined();
+  } finally {
+    unsubscribeFirst();
+    unsubscribeSecond();
+    vi.useRealTimers();
+  }
+});
+
 test("recovered ancestry reopens pagination while retaining readable history", async () => {
   mocks.getTurnTreeHistory.mockResolvedValueOnce(
     historyPage({
