@@ -11,7 +11,7 @@ pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     interrupt: true,
     stream_output: true,
     heartbeat: false,
-    timeline: false,
+    timeline: true,
     topology: false,
     branch_control: false,
     fork_session: true,
