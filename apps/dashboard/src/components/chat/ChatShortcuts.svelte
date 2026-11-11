@@ -38,10 +38,6 @@
           .find((session) => session.session_id === currentSessionId)
       : null
     const workspaceId = currentSession?.workspace_id?.trim()
-    if (newChatHandle) {
-      void navigate('/', { workspace: workspaceId }, { scope: '' })
-      return
-    }
     if (workspaceId) openChat('/', { workspace: workspaceId })
     else openChat('/')
   }

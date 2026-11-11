@@ -237,8 +237,10 @@ test("choosing a sidebar device on the root opens that device", async () => {
   await screen.findByRole("textbox");
   await chooseSidebarDevice("Travel Laptop");
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
+  window.history.pushState({}, "", "/travel-laptop/chat/same");
+  window.dispatchEvent(new PopStateEvent("popstate"));
   await userEvent.click(screen.getByRole("button", { name: /New Chat/ }));
-  await waitFor(() => expect(location.pathname).toBe("/"));
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
   expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent("Travel Laptop");
   expect(fixture.connect).toHaveBeenCalledTimes(2);
 });
@@ -254,11 +256,6 @@ test("the root composer device selector switches devices like the sidebar", asyn
   document.body.style.pointerEvents = "";
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
   expect(screen.queryByLabelText("Device", { exact: true })).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: /New Chat/ }));
-  await waitFor(() => expect(location.pathname).toBe("/"));
-  expect(await screen.findByLabelText("Device", { exact: true })).toHaveTextContent(
-    "Travel Laptop",
-  );
   expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent("Travel Laptop");
 });
 

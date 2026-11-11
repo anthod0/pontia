@@ -112,7 +112,7 @@
 
 <AppShell>
   {#snippet sidebar()}
-    <AppSidebar onNewChat={() => void navigate('/', undefined, { scope: '' })}
+    <AppSidebar onNewChat={() => void navigate('/', undefined, { scope: activeHandle ? `/${activeHandle}` : '' })}
       settingsDisabled={!activeHandle}
       onSettings={() => { if (activeHandle) void navigate('/settings/common', undefined, { scope: `/${activeHandle}` }) }}>
       {#snippet deviceSwitcher()}
