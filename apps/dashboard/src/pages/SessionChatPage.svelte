@@ -1005,16 +1005,13 @@
 {/snippet}
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
-  {#if selectedSession && controlDetails && (selectedSession.capabilities.accept_task || controlDetails.unavailableReason) && (controlDetails.unavailableReason || controlDetails.profile || !sessionSupportsTimeline(selectedSession))}
+  {#if selectedSession && controlDetails && (selectedSession.capabilities.accept_task || controlDetails.unavailableReason) && (controlDetails.unavailableReason || controlDetails.profile?.error || !sessionSupportsTimeline(selectedSession))}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
       {#if controlDetails.unavailableReason}
         <span class="text-destructive" role="alert">{controlDetails.unavailableReason}</span>
       {/if}
-      {#if controlDetails.profile}
-        <span>Profile: {controlDetails.profile.profile_id}{controlDetails.profile.version ? `@${controlDetails.profile.version}` : ''} ({controlDetails.profile.status.replaceAll('_', ' ')})</span>
-        {#if controlDetails.profile.error}
-          <span class="text-destructive" role="alert">{controlDetails.profile.error}</span>
-        {/if}
+      {#if controlDetails.profile?.error}
+        <span class="text-destructive" role="alert">{controlDetails.profile.error}</span>
       {/if}
       {#if !sessionSupportsTimeline(selectedSession)}<span>Native history is currently unavailable.</span>{/if}
     </div>
