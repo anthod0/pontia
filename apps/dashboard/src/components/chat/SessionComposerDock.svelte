@@ -114,7 +114,7 @@
         </DropdownMenu.Item>
       {/snippet}
       {#snippet header()}
-        <SessionMetadata {gitStatus} {metadataItems} {metadataSummary} />
+        <SessionMetadata {session} {gitStatus} {metadataItems} {metadataSummary} />
       {/snippet}
     </MessageComposer>
     {#if canSendSessionMessage(session, 'x') === false}

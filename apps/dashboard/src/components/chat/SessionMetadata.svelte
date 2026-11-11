@@ -4,25 +4,27 @@
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import GaugeIcon from 'phosphor-svelte/lib/GaugeIcon'
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
-  import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon'
   import CpuIcon from 'phosphor-svelte/lib/CpuIcon'
   import * as Popover from '$lib/components/ui/popover/index.js'
-  import type { WorkspaceGitStatusView } from '../../api/types'
+  import type { SessionView, WorkspaceGitStatusView } from '../../api/types'
+  import ClientIcon from './ClientIcon.svelte'
   import GitStatusInline from './GitStatusInline.svelte'
   import type { SessionMetadataItem } from './sessionMetadata'
 
   interface Props {
+    session: SessionView
     gitStatus?: WorkspaceGitStatusView
     metadataItems: SessionMetadataItem[]
     metadataSummary: string
   }
 
-  let { gitStatus, metadataItems, metadataSummary }: Props = $props()
+  let { session, gitStatus, metadataItems, metadataSummary }: Props = $props()
+  const acpAgentId = $derived((session.acp as { agent_id?: string } | undefined)?.agent_id)
   let sessionDetailsOpen = $state(false)
   const fields = [
+    { key: 'client', icon: null },
     { key: 'workspace', icon: FolderIcon },
     { key: 'git', icon: GitBranchIcon },
-    { key: 'client', icon: TerminalWindowIcon },
     { key: 'model', icon: CpuIcon },
     { key: 'context', icon: GaugeIcon },
     { key: 'profile', icon: RobotIcon },
@@ -41,7 +43,11 @@
         {#each visibleFields as field, index (field.key)}
           {#if index > 0}<span class="mx-1.5 inline-block h-2.5 border-l align-middle" aria-hidden="true"></span>{/if}
           <span class="inline-flex items-center gap-1 align-middle text-muted-foreground" title={field.item.title}>
-            <field.icon class="size-[13px] shrink-0" aria-hidden="true" />
+            {#if field.key === 'client'}
+              <ClientIcon clientType={session.client_type} {acpAgentId} class="size-[13px]" />
+            {:else if field.icon && field.key !== 'model' && field.key !== 'context'}
+              <field.icon class="size-[13px] shrink-0" aria-hidden="true" />
+            {/if}
             {#if field.key === 'git' && gitStatus}<GitStatusInline {gitStatus} />{:else}<span>{field.item.value}</span>{/if}
           </span>
         {/each}
@@ -52,7 +58,12 @@
         {#each visibleFields as field (field.key)}
           <div class="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2">
             <dt class="flex items-start justify-center text-muted-foreground">
-              <field.icon class="size-4" aria-label={field.item.label} />
+              {#if field.key === 'client'}
+                <ClientIcon clientType={session.client_type} {acpAgentId} class="size-4" />
+                <span class="sr-only">{field.item.label}</span>
+              {:else if field.icon}
+                <field.icon class="size-4" aria-label={field.item.label} />
+              {/if}
             </dt>
             <dd class="min-w-0 break-words font-mono text-xs" title={field.item.title} aria-label={`${field.item.label}: ${field.item.title}`}>
               {#if field.key === 'git' && gitStatus}

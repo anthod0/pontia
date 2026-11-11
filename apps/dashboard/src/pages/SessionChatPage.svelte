@@ -952,9 +952,8 @@
 {/snippet}
 
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
-  {#if selectedSession && controlDetails && (selectedSession.capabilities.accept_task || controlDetails.unavailableReason)}
+  {#if selectedSession && controlDetails && (selectedSession.capabilities.accept_task || controlDetails.unavailableReason) && (controlDetails.unavailableReason || controlDetails.profile || !sessionSupportsTimeline(selectedSession))}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-      <span>Control: {controlDetails.connection.replaceAll('_', ' ')}</span>
       {#if controlDetails.unavailableReason}
         <span class="text-destructive" role="alert">{controlDetails.unavailableReason}</span>
       {/if}
