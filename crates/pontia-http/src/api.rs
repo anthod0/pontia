@@ -18,6 +18,8 @@ mod session_guard;
 mod sessions;
 mod timeline;
 mod turns;
+mod update;
+pub use update::update_blockers;
 mod workflows;
 mod workspaces;
 

@@ -19,6 +19,10 @@ Run as the same user that owns the per-user service:
 pontia update
 ```
 
+If the running service reports active tasks, pending interactions, or pending or unconfirmed inputs, the update stops and lists the affected Sessions. Finish or resolve those activities, then run `pontia update` again. If the activity check fails, the update also stops without replacing binaries or restarting the service.
+
+Avoid starting new tasks while updating. This check does not pause input or scheduling, so activity that starts after the check can still be interrupted by the restart.
+
 The updater:
 
 1. resolves the running installation directory;

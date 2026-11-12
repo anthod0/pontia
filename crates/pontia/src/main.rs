@@ -59,7 +59,10 @@ Run after editing $PONTIA_HOME/config.toml. The printed Dashboard URL contains t
 For configuration options, see https://pontia.dev/docs/configuration.md";
 
 const UPDATE_HELP: &str = "\
-Restarts a running service. To install a specific release, see https://pontia.dev/docs/updating.md";
+Restarts a running service. Refuses installation when the service reports active tasks,
+pending interactions or inputs, or when the execution check fails.
+Avoid starting new tasks during the update; this check does not pause execution.
+To install a specific release, see https://pontia.dev/docs/updating.md";
 
 const DOWN_HELP: &str = "Configuration and state are kept; run 'pontia up' to start again.";
 
@@ -247,13 +250,16 @@ async fn run_update() -> Result<bool, String> {
         if config.is_none() {
             update.ensure_no_unmanaged_daemon()?;
         }
-        update.install(|| {
-            if let Some(config) = &config {
-                eprintln!("Restarting Pontia and waiting for it to become healthy...");
-                Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe).restart(config)?;
-            }
-            Ok(())
-        })?;
+        update
+            .install(config.as_ref(), || {
+                if let Some(config) = &config {
+                    eprintln!("Restarting Pontia and waiting for it to become healthy...");
+                    Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe)
+                        .restart(config)?;
+                }
+                Ok(())
+            })
+            .await?;
         maintain_updated_clients(config.as_ref(), &manager).await?;
         Ok(true)
     }
@@ -270,13 +276,16 @@ async fn run_update() -> Result<bool, String> {
         if config.is_none() {
             update.ensure_no_unmanaged_daemon()?;
         }
-        update.install(|| {
-            if let Some(config) = &config {
-                eprintln!("Restarting Pontia and waiting for it to become healthy...");
-                Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe).restart(config)?;
-            }
-            Ok(())
-        })?;
+        update
+            .install(config.as_ref(), || {
+                if let Some(config) = &config {
+                    eprintln!("Restarting Pontia and waiting for it to become healthy...");
+                    Lifecycle::new(&manager, &FileDefinitionStore, &HttpHealthProbe)
+                        .restart(config)?;
+                }
+                Ok(())
+            })
+            .await?;
         maintain_updated_clients(config.as_ref(), &manager).await?;
         Ok(true)
     }

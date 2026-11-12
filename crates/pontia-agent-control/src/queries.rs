@@ -7,6 +7,8 @@ pub(crate) use control::SessionControlState;
 mod events;
 mod sessions;
 mod turns;
+mod update;
+pub use update::UpdateBlocker;
 mod workspaces;
 use sqlx::SqlitePool;
 #[derive(Clone)]
