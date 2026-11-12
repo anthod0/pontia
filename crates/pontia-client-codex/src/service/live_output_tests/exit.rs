@@ -201,6 +201,7 @@ async fn missing_terminal_result_times_out_without_unloading_or_losing_observati
 #[tokio::test]
 async fn archive_receipt_waits_for_actual_unload_before_restoring_history() {
     let f = Fixture::new(turn(json!([])), vec![]).await;
+    f.server_state.methods.lock().await.clear();
     f.server_state.hold_unload.store(true, Ordering::SeqCst);
     let commands = f.app.session_commands();
     let session = f.session.clone();

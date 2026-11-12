@@ -11,6 +11,17 @@ pub(super) struct ObservedTurn {
 }
 
 impl CodexService {
+    pub(super) async fn title_fact(&self, session: &str, title: &Value) -> Result<()> {
+        self.event_ingest
+            .report_client_fact(
+                session,
+                None,
+                EventType::SessionTitleUpdated,
+                json!({"title":title}),
+            )
+            .await
+    }
+
     pub(super) async fn context_usage_fact(&self, session: &str, usage: &Value) -> Result<()> {
         let (Some(used), Some(max)) = (
             usage["last"]["totalTokens"].as_u64(),
@@ -55,6 +66,9 @@ impl CodexService {
         if !self.session_accepts_control(session).await? {
             self.event_ingest.report_client_fact(session, None, EventType::SessionReady,
                 json!({"client_session_key":thread["id"],"launch_cwd":thread["cwd"],"client_session_file":thread["path"]})).await?;
+        }
+        if let Some(title) = thread.get("name") {
+            self.title_fact(session, title).await?;
         }
         Ok(())
     }

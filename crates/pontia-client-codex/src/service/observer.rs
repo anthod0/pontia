@@ -13,6 +13,7 @@ struct Observation {
     threads: HashMap<String, String>,
     output: CodexLiveOutput,
     restored: HashMap<String, u64>,
+    title_boundaries: HashMap<String, u64>,
 }
 
 pub struct CodexObserver {
@@ -213,9 +214,25 @@ impl CodexObserver {
                     .await?;
             }
             if runtime.subscription(session).await == Some(SubscriptionState::Available)
-                && observation.restored.get(session).copied()
-                    != runtime.subscription_revision(session).await
+                && (recover
+                    || observation.restored.get(session).copied()
+                        != runtime.subscription_revision(session).await)
             {
+                if recover {
+                    let (snapshot, boundary) = connection
+                        .call_observed(
+                            "thread/read",
+                            serde_json::json!({"threadId":thread,"includeTurns":false}),
+                        )
+                        .await?;
+                    let _current = runtime.current_guard().await?;
+                    if let Some(title) = snapshot["thread"].get("name") {
+                        self.service.title_fact(session, title).await?;
+                        observation
+                            .title_boundaries
+                            .insert(session.into(), boundary);
+                    }
+                }
                 observation
                     .output
                     .restore(&self.service, runtime, session, &thread)
@@ -270,6 +287,7 @@ impl CodexObserver {
             threads: HashMap::new(),
             output: CodexLiveOutput::new(self.live_output.clone()),
             restored: Default::default(),
+            title_boundaries: Default::default(),
         };
         self.reconcile_all(&runtime, connection, &mut observation)
             .await?;
@@ -366,6 +384,15 @@ impl CodexObserver {
                     }
                     if !matches!(runtime.subscription(&session).await, Some(SubscriptionState::Available | SubscriptionState::AwaitingFirstInput | SubscriptionState::Reconciling)) { return Ok(()); }
                     match event["method"].as_str() {
+                        Some("thread/name/updated") => {
+                            let _operation = runtime.lock_session(&session).await;
+                            if !self.observes(&runtime, &session).await?
+                                || observation.title_boundaries.get(&session).is_some_and(|boundary| event.sequence <= *boundary) {
+                                return Ok(());
+                            }
+                            let _current = runtime.current_guard().await?;
+                            self.service.title_fact(&session, &event["params"]["threadName"]).await?;
+                        }
                         Some("thread/tokenUsage/updated") => {
                             let _operation = runtime.lock_session(&session).await;
                             if !self.observes(&runtime, &session).await? { return Ok(()); }

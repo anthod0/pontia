@@ -17,6 +17,8 @@ struct Fixture {
     turns: Arc<Mutex<Vec<Value>>>,
     configuration: Arc<Mutex<Value>>,
     thread_requests: Arc<Mutex<Vec<Value>>>,
+    thread_name: Arc<Mutex<Value>>,
+    notifications: tokio::sync::mpsc::UnboundedSender<Value>,
     server: JoinHandle<()>,
 }
 
@@ -40,12 +42,25 @@ impl Fixture {
         let server_configuration = configuration.clone();
         let thread_requests = Arc::new(Mutex::new(Vec::new()));
         let server_thread_requests = thread_requests.clone();
+        let thread_name = Arc::new(Mutex::new(Value::Null));
+        let server_thread_name = thread_name.clone();
+        let (notifications, mut notification_rx) = tokio::sync::mpsc::unbounded_channel::<Value>();
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let mut wire = accept_async(stream).await.unwrap();
             let mut materialized = false;
             let mut unloaded = false;
-            while let Some(Ok(Message::Text(frame))) = wire.next().await {
+            loop {
+                let frame = tokio::select! {
+                    frame = wire.next() => match frame {
+                        Some(Ok(Message::Text(frame))) => frame,
+                        _ => break,
+                    },
+                    Some(notification) = notification_rx.recv() => {
+                        wire.send(Message::Text(notification.to_string().into())).await.unwrap();
+                        continue;
+                    }
+                };
                 let request: Value = serde_json::from_str(&frame).unwrap();
                 let Some(id) = request.get("id").cloned() else {
                     continue;
@@ -73,7 +88,7 @@ impl Fixture {
                     .unwrap();
                     continue;
                 }
-                let thread = json!({"id":"thread-one","cwd":codex_home,"canAcceptDirectInput":true,"status":{"type":if unloaded { "notLoaded" } else { "idle" }}});
+                let thread = json!({"id":"thread-one","name":server_thread_name.lock().await.clone(),"cwd":codex_home,"canAcceptDirectInput":true,"status":{"type":if unloaded { "notLoaded" } else { "idle" }}});
                 let result = match method.as_str() {
                     "config/read" => {
                         assert_eq!(request["params"]["cwd"], json!(codex_home));
@@ -168,6 +183,8 @@ impl Fixture {
             turns,
             configuration,
             thread_requests,
+            thread_name,
+            notifications,
             server,
         }
     }
@@ -768,5 +785,202 @@ async fn profile_survives_first_input_and_resume_without_mutable_profiles() {
         );
     }
     drop(requests);
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn native_title_notifications_update_sessions_without_overriding_manual_names() {
+    use pontia_core::domain::EventType;
+    let fixture = Fixture::new().await;
+    fixture.dispatch_first_input().await;
+    let mut events = fixture.app.agent_events().subscribe();
+    let (shutdown, receiver) = tokio::sync::watch::channel(false);
+    let observer = tokio::spawn(
+        super::CodexObserver::new(&fixture.app, fixture.root.path().into()).run(receiver),
+    );
+    // Wait for the observer's initial snapshot before sending a live notification.
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            if fixture
+                .methods
+                .lock()
+                .await
+                .iter()
+                .any(|method| method == "thread/read")
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    for (name, expected) in [("Native A", "Native A"), ("Native B", "Manual")] {
+        *fixture.thread_name.lock().await = json!(name);
+        fixture
+            .notifications
+            .send(json!({
+                "method":"thread/name/updated",
+                "params":{"threadId":"thread-one","threadName":name}
+            }))
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            loop {
+                let event = events.recv().await.unwrap();
+                if event.event_type == EventType::SessionTitleUpdated
+                    && event.payload["title"] == name
+                {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        let session = fixture
+            .app
+            .queries()
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(session.title.as_deref(), Some(expected));
+        fixture
+            .app
+            .session_commands()
+            .update_session(
+                &fixture.session,
+                serde_json::from_value(json!({"title":"Manual"})).unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+    fixture
+        .app
+        .session_commands()
+        .update_session(
+            &fixture.session,
+            serde_json::from_value(json!({"title":null})).unwrap(),
+        )
+        .await
+        .unwrap();
+    let session = fixture
+        .app
+        .queries()
+        .get_session(&fixture.session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(session.title.as_deref(), Some("Native B"));
+    assert_eq!(session.state, "idle");
+    shutdown.send(true).unwrap();
+    observer.await.unwrap();
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn native_title_snapshots_recover_changes_and_deduplicate_repeated_names() {
+    use pontia_core::domain::EventType;
+    let fixture = Fixture::new().await;
+    *fixture.thread_name.lock().await = json!("Existing title");
+    fixture.dispatch_first_input().await;
+    assert_eq!(
+        fixture
+            .app
+            .queries()
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap()
+            .title
+            .as_deref(),
+        Some("Existing title")
+    );
+    for name in ["Renamed offline", "Renamed offline", "Existing title"] {
+        fixture
+            .app
+            .session_commands()
+            .terminate_session(&fixture.session)
+            .await
+            .unwrap();
+        *fixture.thread_name.lock().await = json!(name);
+        fixture
+            .app
+            .session_commands()
+            .resume_session(&fixture.session, fixture.root.path())
+            .await
+            .unwrap();
+        assert_eq!(
+            fixture
+                .app
+                .queries()
+                .get_session(&fixture.session)
+                .await
+                .unwrap()
+                .unwrap()
+                .title
+                .as_deref(),
+            Some(name)
+        );
+    }
+    let titles = fixture
+        .app
+        .event_ingest_service()
+        .list_events(&fixture.session)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|event| event.event_type == EventType::SessionTitleUpdated)
+        .map(|event| event.payload["title"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        titles,
+        vec![
+            json!("Existing title"),
+            json!("Renamed offline"),
+            json!("Existing title")
+        ]
+    );
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn malformed_client_title_reports_do_not_clear_a_session_name() {
+    let fixture = Fixture::new().await;
+    fixture
+        .app
+        .session_commands()
+        .update_session(
+            &fixture.session,
+            serde_json::from_value(json!({"title":"Manual"})).unwrap(),
+        )
+        .await
+        .unwrap();
+    for payload in [json!({}), json!({"title":42}), json!({"title":{}})] {
+        assert!(
+            fixture
+                .app
+                .event_ingest_service()
+                .report_client_fact(
+                    &fixture.session,
+                    None,
+                    pontia_core::domain::EventType::SessionTitleUpdated,
+                    payload,
+                )
+                .await
+                .is_err()
+        );
+    }
+    assert_eq!(
+        fixture
+            .app
+            .queries()
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap()
+            .title
+            .as_deref(),
+        Some("Manual")
+    );
     fixture.shutdown().await;
 }
