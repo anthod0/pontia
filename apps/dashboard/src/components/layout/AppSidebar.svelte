@@ -87,7 +87,7 @@
             <Sidebar.MenuItem>
               <Sidebar.MenuButton
                 isActive={currentPath === '/'}
-                class="mb-2 h-10 justify-center bg-primary text-[13px] font-semibold text-primary-foreground hover:bg-primary-hover hover:text-primary-foreground active:bg-primary-active data-[active=true]:bg-primary data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary-hover group-data-[collapsible=icon]:mb-0 group-data-[collapsible=icon]:bg-transparent! group-data-[collapsible=icon]:text-sidebar-foreground! group-data-[collapsible=icon]:hover:bg-sidebar-accent! group-data-[collapsible=icon]:hover:text-sidebar-accent-foreground!"
+                class="mb-2 h-10 justify-center bg-primary-solid text-[13px] font-semibold text-primary-foreground hover:bg-primary-solid-hover hover:text-primary-foreground active:bg-primary-solid-active data-[active=true]:bg-primary-solid data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary-solid-hover group-data-[collapsible=icon]:mb-0 group-data-[collapsible=icon]:bg-transparent! group-data-[collapsible=icon]:text-sidebar-foreground! group-data-[collapsible=icon]:hover:bg-sidebar-accent! group-data-[collapsible=icon]:hover:text-sidebar-accent-foreground!"
                 tooltipContent="New Chat"
                 onclick={onNewChat}
               >
