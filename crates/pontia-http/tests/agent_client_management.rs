@@ -367,8 +367,6 @@ async fn invalid_patches_are_atomic_and_unknown_queries_are_not_found() {
         json!({"enabled":null}),
         json!({"config_overrides":null}),
         json!({"config_overrides":[]}),
-        json!({"enabled":false,"config_overrides":{"tui_command":null}}),
-        json!({"enabled":false,"config_overrides":{"tui_command":42}}),
         json!({"unknown":true}),
     ] {
         assert_eq!(

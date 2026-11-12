@@ -1,7 +1,5 @@
 use std::{collections::HashMap, ffi::OsStr};
 
-#[cfg(target_os = "macos")]
-use sysinfo::Signal;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, System, UpdateKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,7 +19,6 @@ pub(crate) struct ProcessInfo {
 }
 
 pub(crate) struct ProcessTable {
-    _system: System,
     processes: HashMap<u32, ProcessInfo>,
     query_complete: bool,
 }
@@ -61,7 +58,6 @@ impl ProcessTable {
         // details fails on macOS. Only a complete snapshot can prove absence.
         let query_complete = !processes.is_empty() && refreshed_processes == processes.len();
         Self {
-            _system: system,
             processes,
             query_complete,
         }
@@ -98,38 +94,11 @@ impl ProcessTable {
             ProcessIdentityObservation::Alive
         }
     }
-
-    #[cfg(target_os = "macos")]
-    pub(crate) fn terminate(&self, identity: ProcessIdentity) -> TerminateResult {
-        match self.observe(identity) {
-            ProcessIdentityObservation::Alive => {}
-            ProcessIdentityObservation::Exited => return TerminateResult::Exited,
-            ProcessIdentityObservation::Unknown => return TerminateResult::Unknown,
-        }
-        let Some(process) = self._system.process(Pid::from_u32(identity.pid)) else {
-            return TerminateResult::Unknown;
-        };
-        // sysinfo sends by PID on macOS. The process can exit and its PID can be
-        // reused after the identity check above but before the signal reaches the
-        // kernel; unlike Linux pidfd, this API cannot close that race.
-        match process.kill_with(Signal::Term) {
-            Some(true) => TerminateResult::Signalled,
-            Some(false) | None => TerminateResult::Unknown,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProcessIdentityObservation {
     Alive,
-    Exited,
-    Unknown,
-}
-
-#[cfg(target_os = "macos")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TerminateResult {
-    Signalled,
     Exited,
     Unknown,
 }

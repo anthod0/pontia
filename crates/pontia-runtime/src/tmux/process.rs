@@ -3,11 +3,8 @@ use std::{
     process::{Command, Stdio},
 };
 
-use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-#[cfg(target_os = "macos")]
-use crate::process::TerminateResult;
 use crate::process::{
     ProcessIdentity, ProcessIdentityObservation, ProcessInfo, ProcessTable,
     system_boot_time_seconds,
@@ -67,93 +64,6 @@ pub enum ProcessObservation {
     Unknown,
 }
 
-#[cfg(target_os = "linux")]
-pub(crate) fn terminate_fingerprinted_process(
-    fingerprint: &TmuxProcessFingerprint,
-) -> Result<ProcessObservation> {
-    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-
-    match observe_fingerprint(fingerprint) {
-        ProcessObservation::Alive => {}
-        ProcessObservation::Exited => return Ok(ProcessObservation::Exited),
-        ProcessObservation::Unknown => {
-            return Err(Error::ControlUnknown(
-                "TUI process ownership could not be verified".into(),
-            ));
-        }
-    }
-
-    let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, fingerprint.agent_pid, 0) };
-    if fd < 0 {
-        return match observe_fingerprint(fingerprint) {
-            ProcessObservation::Exited => Ok(ProcessObservation::Exited),
-            _ => Err(std::io::Error::last_os_error().into()),
-        };
-    }
-    let fd = unsafe { OwnedFd::from_raw_fd(fd as i32) };
-    match observe_process_identity(fingerprint.agent_pid, fingerprint.agent_start_time_seconds) {
-        ProcessObservation::Alive => {}
-        ProcessObservation::Exited => return Ok(ProcessObservation::Exited),
-        ProcessObservation::Unknown => {
-            return Err(Error::ControlUnknown(
-                "TUI process ownership could not be verified".into(),
-            ));
-        }
-    }
-    if unsafe {
-        libc::syscall(
-            libc::SYS_pidfd_send_signal,
-            fd.as_raw_fd(),
-            libc::SIGTERM,
-            std::ptr::null::<libc::siginfo_t>(),
-            0,
-        )
-    } < 0
-    {
-        let error = std::io::Error::last_os_error();
-        return match observe_fingerprint(fingerprint) {
-            ProcessObservation::Exited => Ok(ProcessObservation::Exited),
-            _ => Err(error.into()),
-        };
-    }
-    Ok(ProcessObservation::Alive)
-}
-
-#[cfg(target_os = "macos")]
-pub(crate) fn terminate_fingerprinted_process(
-    fingerprint: &TmuxProcessFingerprint,
-) -> Result<ProcessObservation> {
-    match observe_fingerprint(fingerprint) {
-        ProcessObservation::Alive => {}
-        ProcessObservation::Exited => return Ok(ProcessObservation::Exited),
-        ProcessObservation::Unknown => {
-            return Err(Error::ControlUnknown(
-                "TUI process ownership could not be verified".into(),
-            ));
-        }
-    }
-    let identity = ProcessIdentity {
-        pid: fingerprint.agent_pid,
-        start_time_seconds: fingerprint.agent_start_time_seconds,
-    };
-    match ProcessTable::refresh_all().terminate(identity) {
-        TerminateResult::Signalled => Ok(ProcessObservation::Alive),
-        TerminateResult::Exited => Ok(ProcessObservation::Exited),
-        TerminateResult::Unknown => Err(Error::ControlUnknown(
-            "TUI process identity changed or SIGTERM could not be delivered".into(),
-        )),
-    }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-pub(crate) fn terminate_fingerprinted_process(
-    _fingerprint: &TmuxProcessFingerprint,
-) -> Result<ProcessObservation> {
-    Err(Error::CapabilityUnavailable(
-        "verified TUI termination requires Linux or macOS".into(),
-    ))
-}
-
 pub(crate) fn observe_fingerprint(fingerprint: &TmuxProcessFingerprint) -> ProcessObservation {
     let Some(boot_time) = system_boot_time_seconds() else {
         return ProcessObservation::Unknown;
@@ -192,15 +102,6 @@ pub(crate) fn observe_fingerprint(fingerprint: &TmuxProcessFingerprint) -> Proce
     } else {
         ProcessObservation::Unknown
     }
-}
-
-#[cfg(target_os = "linux")]
-fn observe_process_identity(pid: u32, expected_start_time_seconds: u64) -> ProcessObservation {
-    observe_identity(
-        &ProcessTable::refresh_all(),
-        pid,
-        expected_start_time_seconds,
-    )
 }
 
 fn observe_identity(

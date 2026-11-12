@@ -26,7 +26,7 @@ use pontia_agent_control::{
     turns::InputIntent,
 };
 use pontia_core::{Error, Result};
-use pontia_runtime::{RuntimeStartRequest, RuntimeStartResult};
+use pontia_runtime::RuntimeStartRequest;
 use serde_json::json;
 use sqlx::SqlitePool;
 use tokio::sync::Mutex;
@@ -617,15 +617,6 @@ impl ClientSession for AcpAdapter {
         _target: &'a ControlTarget,
         _model: &'a str,
     ) -> ClientOperation<'a, ()> {
-        Box::pin(async { Err(unsupported()) })
-    }
-    fn open_interface<'a>(
-        &'a self,
-        _events: EventIngestService,
-        _root: &'a Path,
-        _session: &'a str,
-        _runtime: &'a str,
-    ) -> ClientOperation<'a, RuntimeStartResult> {
         Box::pin(async { Err(unsupported()) })
     }
 }

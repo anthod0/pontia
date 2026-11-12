@@ -24,7 +24,6 @@ pub use compaction::CompactionAccepted;
 pub use models::{SessionModel, SessionModels, SetSessionModelRequest};
 mod lifecycle;
 mod runtime_binding;
-mod tui;
 
 mod persistence;
 mod validation;
@@ -94,7 +93,6 @@ pub struct SessionCommandService {
     pontia_home: PathBuf,
     control: crate::ClientControlService,
     fork_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
-    tui_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
 
 impl SessionCommandService {
@@ -120,7 +118,6 @@ impl SessionCommandService {
             environment: None,
             control,
             fork_gate: std::sync::Arc::default(),
-            tui_gate: std::sync::Arc::default(),
             pool,
             event_ingest,
             queries,

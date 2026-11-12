@@ -97,15 +97,6 @@ impl ClientSession for Client {
     ) -> ClientOperation<'a, ()> {
         panic!("unexpected model change")
     }
-    fn open_interface<'a>(
-        &'a self,
-        _: EventIngestService,
-        _: &'a Path,
-        _: &'a str,
-        _: &'a str,
-    ) -> ClientOperation<'a, pontia_runtime::RuntimeStartResult> {
-        panic!("unexpected interface launch")
-    }
 }
 
 #[tokio::test]

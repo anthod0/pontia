@@ -8,7 +8,7 @@ pub struct CodexConfiguration(pub ConfigurationLayers);
 impl CodexConfiguration {
     pub fn new(file: Value) -> Self {
         Self(ConfigurationLayers {
-            defaults: json!({"tui_command":"codex"}),
+            defaults: json!({}),
             file,
             environment: json!({}),
         })
@@ -34,16 +34,6 @@ impl ClientConfiguration for CodexConfiguration {
                 "Codex requires the default client key".into(),
             ));
         }
-        let value = self.merged(key, overrides);
-        command(&value)?;
-        Ok(value)
+        Ok(self.merged(key, overrides))
     }
-}
-
-pub(crate) fn command(value: &Value) -> Result<String> {
-    let config: pontia_config::RuntimeClientConfig = serde_json::from_value(value.clone())?;
-    config
-        .tui_command
-        .filter(|command| !command.trim().is_empty())
-        .ok_or_else(|| Error::Domain("Codex tui_command must be nonempty".into()))
 }

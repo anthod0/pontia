@@ -62,25 +62,6 @@ impl SqliteSessionRuntimeRepository {
         )
     }
 
-    pub async fn interface_runtime(
-        &self,
-        session_id: &str,
-    ) -> Result<Option<SessionRuntimeRecord>> {
-        let runtimes: Vec<SessionRuntimeRecord> = sqlx::query_as(
-            "SELECT * FROM session_runtimes WHERE session_id = ? AND role = 'interface'",
-        )
-        .bind(session_id)
-        .fetch_all(&self.pool)
-        .await?;
-        match runtimes.len() {
-            0 => Ok(None),
-            1 => Ok(runtimes.into_iter().next()),
-            _ => Err(Error::StateConflict(
-                "Session has multiple managed interface runtimes".into(),
-            )),
-        }
-    }
-
     /// Writes exactly one stable runtime; ownership and creation time cannot change.
     pub async fn upsert_binding_in_tx(
         tx: &mut Transaction<'_, Sqlite>,

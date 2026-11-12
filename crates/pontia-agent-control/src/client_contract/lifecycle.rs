@@ -21,7 +21,6 @@ pub struct SessionLifecycleBehavior {
     pub coupled_runtime: bool,
     pub confirmed_exit_recovery: bool,
     pub restart_requires_exit: bool,
-    pub independent_interface: bool,
     pub process_observation: Option<ProcessObservationBehavior>,
 }
 
@@ -31,7 +30,6 @@ impl SessionLifecycleBehavior {
         coupled_runtime: false,
         confirmed_exit_recovery: false,
         restart_requires_exit: false,
-        independent_interface: false,
         process_observation: None,
     };
 }

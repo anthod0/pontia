@@ -1,6 +1,6 @@
 use super::CodexService;
 use crate::runtime::protocol::Connection;
-use pontia_core::{Error, Result};
+use pontia_core::Result;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -79,17 +79,4 @@ impl CodexService {
         }
         Ok(config)
     }
-}
-
-pub(crate) fn tui_config_args(config: &Value) -> Result<String> {
-    let mut args = String::new();
-    for (key, value) in config.as_object().expect("Session config is an object") {
-        let value = toml::Value::try_from(value)
-            .map_err(|error| Error::Domain(format!("Invalid Codex environment config: {error}")))?;
-        let argument = format!("{key}={value}");
-        args.push_str(" -c '");
-        args.push_str(&argument.replace('\'', "'\\''"));
-        args.push('\'');
-    }
-    Ok(args)
 }

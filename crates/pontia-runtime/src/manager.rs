@@ -196,12 +196,6 @@ impl GenericRuntimeManager {
         tmux::observe_fingerprint(fingerprint)
     }
 
-    pub fn terminate_tmux_process(
-        &self,
-        fingerprint: &crate::TmuxProcessFingerprint,
-    ) -> Result<crate::ProcessObservation> {
-        tmux::terminate_fingerprinted_process(fingerprint)
-    }
     pub fn is_alive(&self, runtime_handle: &str) -> bool {
         if let Some(alive) = in_process::is_alive(runtime_handle) {
             return alive;

@@ -14,7 +14,7 @@ use pontia_agent_control::{
     control::InputReceipt, runtime::ControlTarget, sessions::SessionModel, turns::InputIntent,
 };
 use pontia_core::{Error, Result};
-use pontia_runtime::{RuntimeStartRequest, RuntimeStartResult};
+use pontia_runtime::RuntimeStartRequest;
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use std::{
@@ -358,15 +358,6 @@ impl ClientSession for Adapter {
         _: &'a ControlTarget,
         _: &'a str,
     ) -> ClientOperation<'a, ()> {
-        Box::pin(async { Err(unsupported()) })
-    }
-    fn open_interface<'a>(
-        &'a self,
-        _: EventIngestService,
-        _: &'a Path,
-        _: &'a str,
-        _: &'a str,
-    ) -> ClientOperation<'a, RuntimeStartResult> {
         Box::pin(async { Err(unsupported()) })
     }
 }

@@ -21,10 +21,10 @@ use pontia_core::{
     Error, Result,
     domain::{DomainEvent, EventType},
 };
-use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
+use pontia_runtime::RuntimeStartRequest;
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
-use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
+use std::{path::Path, sync::Arc};
 
 pub fn registration() -> ClientRegistration {
     ClientRegistration {
@@ -193,20 +193,6 @@ impl ClientSession for CodexClient {
         Box::pin(async move { CodexService::new(events).adopt_fork(session, fork).await })
     }
 
-    fn provision_configured<'a>(
-        &'a self,
-        events: EventIngestService,
-        root: &'a Path,
-        request: RuntimeStartRequest,
-        configuration: Value,
-    ) -> ClientOperation<'a, ()> {
-        Box::pin(async move {
-            let command = crate::configuration::command(&configuration)?;
-            sqlx::query("UPDATE sessions SET metadata=json_set(CASE WHEN json_type(metadata)='object' THEN metadata ELSE '{}' END,'$.codex_tui_command',?) WHERE session_id=?")
-                .bind(command).bind(&request.session_id).execute(&events.db()).await?;
-            self.provision(events, root, request).await
-        })
-    }
     fn provision<'a>(
         &'a self,
         events: EventIngestService,
@@ -328,107 +314,6 @@ impl ClientSession for CodexClient {
                     .binding_for_session(session)
                     .await?
                     .is_some())
-        })
-    }
-    fn open_interface<'a>(
-        &'a self,
-        events: EventIngestService,
-        root: &'a Path,
-        session: &'a str,
-        runtime_id: &'a str,
-    ) -> ClientOperation<'a, RuntimeStartResult> {
-        Box::pin(async move {
-            let service = CodexService::new(events);
-            let binding = pontia_agent_control::AgentBindingService::new(service.pool.clone())
-                .binding_for_session(session)
-                .await?
-                .ok_or_else(|| {
-                    Error::StateConflict(
-                        "Send the first message before opening the Codex TUI".into(),
-                    )
-                })?;
-            let codex_runtime = service.runtime(session).await?;
-            let endpoint = format!("unix://{}", codex_runtime.socket_path.display());
-            let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
-            let command: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_tui_command') FROM sessions WHERE session_id=?")
-                .bind(session).fetch_one(&service.pool).await?;
-            let command = command.as_deref().unwrap_or("codex");
-            let connection = codex_runtime.connection().await?;
-            let config = service
-                .session_config(session, &connection, &binding.launch_cwd)
-                .await?;
-            let config_args = crate::service::environment::tui_config_args(&config)?;
-            let start_command = format!(
-                "exec {command} resume --remote {} {}{config_args}",
-                quote(&endpoint),
-                quote(&binding.client_session_key)
-            );
-            let mut environment = BTreeMap::new();
-            environment.insert(
-                "CODEX_HOME".into(),
-                codex_runtime.codex_home().display().to_string(),
-            );
-            let result = GenericRuntimeManager.start_tmux(
-                root,
-                RuntimeStartRequest {
-                    session_id: session.into(),
-                    runtime_id: Some(runtime_id.into()),
-                    client_type: "codex".into(),
-                    workspace: Some(binding.launch_cwd),
-                    workspace_name: None,
-                    handle: None,
-                    role: Some("interface".into()),
-                    start_command: Some(start_command),
-                    environment,
-                },
-                1,
-                None,
-                &crate::SPEC.launch_options(),
-            )?;
-            let Some(socket) = result.tmux_socket_path() else {
-                let _ = GenericRuntimeManager.terminate_session(&result.runtime_handle);
-                return Err(Error::Domain(
-                    "Codex TUI launch returned no tmux socket".into(),
-                ));
-            };
-            let Some(pane) = result.tmux_pane_id() else {
-                let _ = GenericRuntimeManager.terminate_session(&result.runtime_handle);
-                return Err(Error::Domain(
-                    "Codex TUI launch returned no tmux pane".into(),
-                ));
-            };
-            let fingerprint = match tokio::time::timeout(Duration::from_secs(5), async {
-                loop {
-                    if let Some(fingerprint) = GenericRuntimeManager
-                        .capture_tmux_process_fingerprint(socket, pane, &["codex"])
-                    {
-                        break Ok(fingerprint);
-                    }
-                    if !GenericRuntimeManager.is_tmux_pane_alive(socket, pane) {
-                        break Err(Error::StateConflict(
-                            "Codex TUI exited during startup".into(),
-                        ));
-                    }
-                    tokio::time::sleep(Duration::from_millis(25)).await;
-                }
-            })
-            .await
-            {
-                Ok(Ok(fingerprint)) => fingerprint,
-                Ok(Err(error)) => {
-                    let _ = GenericRuntimeManager.terminate_session(&result.runtime_handle);
-                    return Err(error);
-                }
-                Err(_) => {
-                    let _ = GenericRuntimeManager.terminate_session(&result.runtime_handle);
-                    return Err(Error::ControlUnknown(
-                        "Codex TUI process was not observable".into(),
-                    ));
-                }
-            };
-            let mut result = result;
-            result.metadata["tmux_process_fingerprint"] = serde_json::to_value(fingerprint)?;
-            Ok(result)
         })
     }
     fn details<'a>(

@@ -30,15 +30,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     adapter: AgentClientAdapter {
         lifecycle: pontia_agent_control::client_contract::SessionLifecycleBehavior {
             execution_lifetime: pontia_core::domain::SessionExecutionLifetime::Subscription,
-            independent_interface: true,
-            process_observation: Some(
-                pontia_agent_control::client_contract::ProcessObservationBehavior {
-                    role: "interface",
-                    observe_starting: true,
-                    exit_event: pontia_agent_control::PontiaEventType::RuntimeExited,
-                    exit_reason: "interface_process_fingerprint_missing",
-                },
-            ),
             ..pontia_agent_control::client_contract::SessionLifecycleBehavior::DEFAULT
         },
         native_turn_identity: true,

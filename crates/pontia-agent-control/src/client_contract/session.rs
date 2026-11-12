@@ -137,13 +137,6 @@ pub trait ClientSession: Send + Sync {
     ) -> ClientOperation<'a, bool> {
         self.available(pool, session)
     }
-    fn open_interface<'a>(
-        &'a self,
-        events: EventIngestService,
-        root: &'a Path,
-        session: &'a str,
-        runtime_id: &'a str,
-    ) -> ClientOperation<'a, pontia_runtime::RuntimeStartResult>;
     fn details<'a>(
         &'a self,
         pool: SqlitePool,
