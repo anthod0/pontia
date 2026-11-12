@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-11-12
+
+### Added
+
+- Added installing Pontia with `npx @pontia/cli init`. `npx @pontia/cli update` runs `pontia update`.
+- Added a dark theme to the Dashboard, selectable as System, Light, or Dark in the new Appearance settings.
+- Added dark mode to the Cloud site, with a theme selector in the header.
+- Codex sessions now use the thread name set in Codex as their title.
+- Added blog posts comparing remote-control options for coding agents and on self-hosted relay encryption.
+
+### Changed
+
+- Session titles now prefer a manual rename, then a title from the client, then the first prompt.
+- Messages with uploaded files now tell the agent the files are temporary and should be copied into the workspace if needed.
+- The documented macOS minimum is now 13.5.
+
+### Removed
+
+- Removed opening Codex sessions in a Pontia-managed Codex TUI, along with the `runtime.codex.tui_command` setting.
+
+### Fixed
+
+- Codex sessions opened through the shared Codex daemon now stop being managed when the Codex client unsubscribes or disconnects.
+- Session titles generated from a first prompt with uploaded files now use the prompt text instead of the upload markup.
+- Improved Dashboard dark mode contrast for buttons and text.
+- The device approval button on the Cloud site is now on the right.
+
 ## [0.7.5] - 2026-11-12
 
 ### Added
