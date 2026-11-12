@@ -7,15 +7,17 @@
 
 Initialize your device, connect it to Pontia Cloud, and open the Remote Dashboard to start working with your agents. Choose the interactive wizard for guided setup, or use separate commands when an agent or script needs to perform each step explicitly.
 
-First [install Pontia and the Agent Clients you want to use](/docs/getting-started). Run setup as the operating-system user who will run those clients. Local service management requires Linux with a running systemd user service manager, or macOS 13.5 or later.
+Check the [installation requirements](/docs/getting-started#requirements) and install the Agent Clients you want to use. Run setup as the operating-system user who will run those clients. Local service management requires Linux with a running systemd user service manager, or macOS 13.5 or later.
 
 ## Interactive initialization
 
-Run this command in a terminal:
+With Node.js and npm installed, run:
 
 ```sh
-pontia init
+npx @pontia/cli init
 ```
+
+This installs Pontia if needed and starts the wizard. If Pontia is already on your `PATH`, you can also run `pontia init` directly.
 
 The wizard lets you:
 
@@ -52,7 +54,7 @@ Client authentication and Cloud login may require user authorization. Complete t
 
 Choose the Clients to enable (pi, Codex, Claude Agent, or a combination), the device display name, and the project directories to browse. Run every step as the same operating-system user. Enable ACP agents as described in [Agent Clients](/docs/agent-clients#enable-an-acp-agent).
 
-1. Install `pontia` and `pontiad` using [Getting started](/docs/getting-started). For missing Client tools, follow the official [pi quickstart](https://pi.dev/docs/latest/quickstart), [tmux installation guide](https://github.com/tmux/tmux/wiki/Installing), or [Codex CLI installation](https://learn.chatgpt.com/docs/codex/cli). Install only the selected Clients and their prerequisites; reuse working installations.
+1. Install `pontia` and `pontiad` with `npx @pontia/cli install` and add `$HOME/.local/bin` to your `PATH`, or use the [shell installer](/docs/getting-started#install-with-the-shell-script) without running the interactive initializer. For missing Client tools, follow the official [pi quickstart](https://pi.dev/docs/latest/quickstart), [tmux installation guide](https://github.com/tmux/tmux/wiki/Installing), or [Codex CLI installation](https://learn.chatgpt.com/docs/codex/cli). Install only the selected Clients and their prerequisites; reuse working installations.
 2. Select one absolute `PONTIA_HOME` for all commands. Preserve an existing installation's configuration and credentials. The default is `~/.pontia`.
 3. For Codex, select its existing authenticated home: the configured `CODEX_HOME`, or `~/.codex` by default. Use this same directory for Codex authentication, its daemon, and Pontia.
 

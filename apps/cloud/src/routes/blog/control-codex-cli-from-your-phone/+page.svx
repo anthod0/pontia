@@ -35,12 +35,11 @@ Pontia supports Linux (x86_64 and ARM64) and macOS 13.5 or later, including head
 
 ### Setup
 
-On the machine, as the user who runs Codex:
+With Node.js and npm installed, run these commands on the machine as the user who runs Codex:
 
 ```sh
 codex login --device-auth   # device code flow, works over SSH
-curl -fsSL https://get.pontia.dev/install.sh | sh
-pontia init                 # select Codex
+npx @pontia/cli init       # select Codex
 ```
 
 `pontia init` does the rest:

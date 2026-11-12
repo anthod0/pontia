@@ -11,7 +11,7 @@ The server does not have to be a VPS. A home machine or a spare mini PC works th
 ## The short answer
 
 1. Create a dedicated non-root user for the agents and sign in to each agent as that user.
-2. Install [Pontia](https://pontia.dev), the tool we build, and run `pontia init`.
+2. Install and initialize [Pontia](https://pontia.dev), the tool we build, with `npx @pontia/cli init`.
 3. Open [app.pontia.dev](https://app.pontia.dev) on your phone.
 
 Pontia keeps sessions running after you log out and connects the server to your phone over an end-to-end encrypted relay, with no open inbound port. OpenAI's ChatGPT mobile remote control cannot run on a Linux server directly. It needs the ChatGPT desktop app on a Mac or Windows host that stays awake and reaches the server over SSH.
@@ -53,11 +53,10 @@ systemctl --user is-system-running  # as agent, over SSH
 
 ## 4. Install Pontia
 
-As the agent user:
+With Node.js and npm installed, run as the agent user:
 
 ```sh
-curl -fsSL https://get.pontia.dev/install.sh | sh
-pontia init
+npx @pontia/cli init
 ```
 
 Select pi, Codex, or both. The initializer:

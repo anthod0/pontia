@@ -7,41 +7,38 @@
 
 Install Pontia, connect your device to Pontia Cloud, and start using your coding agents from the Remote Dashboard.
 
-## Requirements
+<h2 id="requirements">Requirements</h2>
 
 - Linux with systemd, or macOS 13.5 or later.
-- `curl` and `openssl`. See [Linux](/docs/platforms/linux) or [macOS](/docs/platforms/macos) for details.
+- Node.js with npm for the recommended `npx` command. Without Node.js, use the [shell installer](#install-with-the-shell-script).
 - At least one coding agent: pi, Codex, Claude Code, or an ACP agent. See [Agent Clients](/docs/agent-clients) for what each one needs.
 
-## Install Pontia
+## Install and initialize Pontia
 
-Run the signed release installer:
-
-```sh
-curl -fsSL https://get.pontia.dev/install.sh | sh
-```
-
-The installer places `pontia` and `pontiad` in `$HOME/.local/bin` by default. Make sure that directory is included in your `PATH`.
-
-### Install with npm
-
-If you have Node.js with npm, you can install from the npm registry instead. This works with npm mirrors and private registries, and does not require `curl` or `openssl`:
+Run the recommended setup command:
 
 ```sh
 npx @pontia/cli init
 ```
 
-This places `pontia` and `pontiad` in the same location as the release installer, then starts `pontia init`. If both binaries are already installed, it keeps them and only runs `pontia init`. Set `PONTIA_INSTALL_DIR` to install to a different directory.
+This installs Pontia and opens the interactive initializer. If Pontia is already installed, it reuses the installation. You do not need to run `pontia init` again.
 
-To install without starting the initializer, run `npx @pontia/cli install`.
+The default installation directory is `$HOME/.local/bin`. Add it to your shell `PATH` to run `pontia` commands directly. Set `PONTIA_INSTALL_DIR` to use a different directory.
 
-## Initialize your device
+The npm installation works with npm mirrors and private registries and does not require `curl` or `openssl`. To install without opening the initializer, run `npx @pontia/cli install`.
 
-Run the interactive initializer:
+<h3 id="install-with-the-shell-script">Install with the shell script</h3>
+
+If you prefer to install without Node.js, use the signed release installer. It requires `curl` and `openssl`; see [Linux](/docs/platforms/linux) or [macOS](/docs/platforms/macos) for the full requirements.
 
 ```sh
-pontia init
+curl -fsSL https://get.pontia.dev/install.sh | sh
+"$HOME/.local/bin/pontia" init
 ```
+
+These commands use the default installation directory. If you set `PONTIA_INSTALL_DIR`, run `pontia init` from that directory instead.
+
+## Complete initialization
 
 The initializer lets you:
 
@@ -71,8 +68,6 @@ Update `pontia` and `pontiad` to the latest signed stable release on Linux or ma
 ```sh
 pontia update
 ```
-
-If you installed with npm, `npx @pontia/cli update` runs the same command. Updates always come from the signed release, not from npm.
 
 If the managed service is running, Pontia restarts it and waits for it to become healthy. If replacement or restart fails, Pontia restores the previous binaries and attempts to recover the service.
 

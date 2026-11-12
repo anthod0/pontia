@@ -43,11 +43,10 @@ Pontia supports Linux and macOS 13.5 or later, including headless servers. Beyon
 
 ### Setup
 
-Install `pi` and `tmux`, and configure your model provider in pi (`/login` and `/model`). Then run:
+Install `pi` and `tmux`, and configure your model provider in pi (`/login` and `/model`). With Node.js and npm installed, run:
 
 ```sh
-curl -fsSL https://get.pontia.dev/install.sh | sh
-pontia init   # pi is selected by default
+npx @pontia/cli init   # pi is selected by default
 ```
 
 `pontia init` installs the pi plugin, starts the Pontia service, signs you in with Google or GitHub, and registers the machine with an official relay. On a headless machine, the sign-in prints a URL and a one-time code that you can approve from your phone. When it finishes, open [app.pontia.dev](https://app.pontia.dev), pick the machine, and start a session.

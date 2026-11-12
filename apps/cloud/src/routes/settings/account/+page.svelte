@@ -7,7 +7,7 @@
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
   const message = $derived(authError(data.error) ?? form?.error);
-  const installCommand = 'curl -fsSL https://get.pontia.dev/install.sh | sh && "$HOME/.local/bin/pontia" init';
+  const installCommand = 'npx @pontia/cli init';
   let copyStatus = $state<"idle" | "copied" | "error">("idle");
 
   async function copyCommand() {
@@ -36,7 +36,7 @@
 {#if !data.hasDevices}
   <section class="getting-started" aria-labelledby="getting-started-heading">
     <h2 id="getting-started-heading">Connect your first device</h2>
-    <p>Run this command on your Linux or macOS device to install and set up Pontia. When prompted, enable remote access and authorize with this account.</p>
+    <p>With Node.js and npm installed, run this command on your Linux or macOS device to install and set up Pontia. When prompted, enable remote access and authorize with this account.</p>
     <div class="install-command">
       <code>{installCommand}</code>
       <Button

@@ -86,11 +86,10 @@ Two defaults are worth checking. New threads start in **Full access**, which run
 
 Pontia runs Codex and pi on your own Linux or macOS machine and shows each session as a chat at [app.pontia.dev](https://app.pontia.dev). The Dashboard installs as an app from the browser on a phone or desktop.
 
-Setup is one installer and one command, run as the user who runs the agents:
+With Node.js and npm installed, run this command as the user who runs the agents:
 
 ```sh
-curl -fsSL https://get.pontia.dev/install.sh | sh
-pontia init
+npx @pontia/cli init
 ```
 
 `pontia init` signs you in through a URL and a one-time code, which works over SSH, registers the machine with an official Edge, and sets up the agents' background services, including systemd lingering on Linux. There is no domain, tunnel, VPN, or port forwarding to configure.

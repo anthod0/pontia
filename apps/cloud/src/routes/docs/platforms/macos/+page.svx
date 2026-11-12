@@ -9,7 +9,9 @@ Pontia supports macOS 13.5 and later on Intel and Apple Silicon. The local contr
 
 ## Install requirements
 
-The release installer requires `curl`, `grep`, `install`, `mktemp`, `mv`, `openssl`, `rm`, `sed`, `shasum`, `tar`, `tr`, `uname`, and `wc`.
+For the recommended `npx @pontia/cli init` setup, install Node.js with npm. See [Getting started](/docs/getting-started).
+
+The alternative shell installer requires `curl`, `grep`, `install`, `mktemp`, `mv`, `openssl`, `rm`, `sed`, `shasum`, `tar`, `tr`, `uname`, and `wc`.
 
 The system `openssl` may not provide the required Ed25519 command. The installer automatically checks Homebrew's standard `openssl@3` paths:
 
@@ -20,7 +22,7 @@ The system `openssl` may not provide the required Ed25519 command. The installer
 
 You can point the installer at another compatible executable with `PONTIA_OPENSSL`.
 
-The default binary directory is `$HOME/.local/bin`. Add it to your shell `PATH` before running `pontia init`.
+The default binary directory is `$HOME/.local/bin`. Add it to your shell `PATH` to run `pontia` commands directly.
 
 ## LaunchAgents
 

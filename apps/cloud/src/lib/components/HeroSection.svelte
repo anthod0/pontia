@@ -7,12 +7,8 @@
 
 	// Install command split into tokens so commands can be coloured; the copied text is their concatenation.
 	const installTokens: { text: string; cmd?: boolean }[] = [
-		{ text: 'curl', cmd: true },
-		{ text: ' -fsSL https://get.pontia.dev/install.sh | ' },
-		{ text: 'sh', cmd: true },
-		{ text: ' && ' },
-		{ text: '"$HOME/.local/bin/pontia"', cmd: true },
-		{ text: ' init' }
+		{ text: 'npx', cmd: true },
+		{ text: ' @pontia/cli init' }
 	];
 	const installCommand = installTokens.map((token) => token.text).join('');
 	let copyStatus = $state<'idle' | 'copied' | 'error'>('idle');
@@ -55,7 +51,7 @@
 				</button>
 			</div>
 			<p class="install-meta">
-				<span class="copy-feedback" aria-live="polite">{copyStatus === 'copied' ? 'Copied to clipboard.' : copyStatus === 'error' ? 'Could not copy. Select the command to copy it.' : 'Linux and macOS'}</span>
+				<span class="copy-feedback" aria-live="polite">{copyStatus === 'copied' ? 'Copied to clipboard.' : copyStatus === 'error' ? 'Could not copy. Select the command to copy it.' : 'Linux and macOS · Node.js + npm'}</span>
 				<a href="/docs/getting-started">Setup guide<ArrowRightIcon size={12} /></a>
 			</p>
 		</div>
