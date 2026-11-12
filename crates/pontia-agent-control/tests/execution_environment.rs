@@ -30,7 +30,7 @@ impl ClientLauncher for Launcher {
     }
 }
 #[tokio::test]
-async fn creation_restart_and_recovered_resume_keep_caller_launch_context() {
+async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events() {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
@@ -48,6 +48,10 @@ async fn creation_restart_and_recovered_resume_keep_caller_launch_context() {
     let environment = BTreeMap::from([
         ("CALLER_CONTEXT".to_string(), "context-1".to_string()),
         ("CALLER_EXTENSION".to_string(), "extension-2".to_string()),
+        (
+            "API_KEY".to_string(),
+            "fixture-secret-must-not-leak".to_string(),
+        ),
     ]);
     let build = || {
         AgentControl::builder(pool.clone(), root.path().into())
@@ -55,6 +59,7 @@ async fn creation_restart_and_recovered_resume_keep_caller_launch_context() {
             .build()
     };
     let control = build();
+    let mut notices = control.agent_events().subscribe();
     let mut request: CreateSessionRequest = serde_json::from_value(json!({
         "client_type": "generic", "workspace": root.path()
     }))
@@ -66,6 +71,15 @@ async fn creation_restart_and_recovered_resume_keep_caller_launch_context() {
         .await
         .unwrap();
     let session = outcome.session_id().unwrap();
+    let created = notices.try_recv().unwrap();
+    assert_eq!(created.event_type, PontiaEventType::SessionCreated.into());
+    assert!(created.payload.get("runtime_environment").is_none());
+    assert!(
+        !created
+            .payload
+            .to_string()
+            .contains("fixture-secret-must-not-leak")
+    );
     control
         .session_commands()
         .restart_session(session, root.path())
@@ -89,12 +103,33 @@ async fn creation_restart_and_recovered_resume_keep_caller_launch_context() {
         .resume_session(session, root.path())
         .await
         .unwrap();
-    let launches = launcher.0.lock().unwrap();
-    assert_eq!(launches.len(), 3);
-    for launch in launches.iter() {
-        assert_eq!(launch.session_id, session);
-        assert_eq!(launch.environment, environment);
-        assert_eq!(launch.workspace.as_deref(), root.path().to_str());
+    {
+        let launches = launcher.0.lock().unwrap();
+        assert_eq!(launches.len(), 3);
+        for launch in launches.iter() {
+            assert_eq!(launch.session_id, session);
+            assert_eq!(launch.environment, environment);
+            assert_eq!(launch.workspace.as_deref(), root.path().to_str());
+        }
+    }
+    let events = recovered
+        .event_ingest_service()
+        .list_events(session)
+        .await
+        .unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.event_id == created.event_id)
+    );
+    for event in events {
+        assert!(event.payload.get("runtime_environment").is_none());
+        assert!(
+            !event
+                .payload
+                .to_string()
+                .contains("fixture-secret-must-not-leak")
+        );
     }
 }
 

@@ -45,6 +45,15 @@ impl EventCommitter {
         enforce_runtime_fence: bool,
         expected_session_state: Option<SessionState>,
     ) -> Result<CommitOutcome> {
+        // Launch settings belong to the Session, not its durable or broadcast events.
+        let runtime_environment = if event.event_type == EventType::SessionCreated {
+            event
+                .payload
+                .as_object_mut()
+                .and_then(|payload| payload.remove("runtime_environment"))
+        } else {
+            None
+        };
         // Bound durable input at the shared ingestion boundary, including
         // Pontia-owned and in-process events that do not pass through HTTP.
         if event.event_type.is_turn_event() {
@@ -302,7 +311,7 @@ impl EventCommitter {
             sqlx::query("UPDATE sessions SET application_id=?, application_ref=?, runtime_environment=? WHERE session_id=?")
                 .bind(event.payload.pointer("/ownership/application_id").and_then(serde_json::Value::as_str))
                 .bind(event.payload.pointer("/ownership/reference").and_then(serde_json::Value::as_str))
-                .bind(event.payload.get("runtime_environment").cloned().unwrap_or_else(|| serde_json::json!({})).to_string())
+                .bind(runtime_environment.unwrap_or_else(|| serde_json::json!({})).to_string())
                 .bind(&event.session_id).execute(&mut *tx).await?;
         }
 
