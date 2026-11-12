@@ -28,6 +28,7 @@ pub(crate) async fn prepare_proxy_request(
     state: &pontia_agent_control::AgentControl,
     operation: crate::proxy::ThreadOperation,
     params: &mut Value,
+    config: &Value,
 ) -> Result<Option<Value>> {
     use crate::proxy::ThreadOperation;
     if params["ephemeral"] == true || operation == ThreadOperation::Fork {
@@ -58,20 +59,12 @@ pub(crate) async fn prepare_proxy_request(
     let Some(profile) = &mut profile else {
         return Ok(None);
     };
-    let runtime = crate::runtime::CodexRuntime::ensure(state.pontia_home()).await?;
-    let connection = runtime.connection().await?;
-    let config = connection
-        .call(
-            "config/read",
-            json!({"cwd":params["cwd"],"includeLayers":false}),
-        )
-        .await?;
     let existing = profile
         .native_developer_instructions
         .as_deref()
         .or_else(|| params["developerInstructions"].as_str())
         .or_else(|| params["config"]["developer_instructions"].as_str())
-        .or_else(|| config["config"]["developer_instructions"].as_str());
+        .or_else(|| config["developer_instructions"].as_str());
     let existing = existing.map(str::to_owned);
     if operation == ThreadOperation::Start {
         profile.native_developer_instructions = existing.clone();

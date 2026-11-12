@@ -16,6 +16,7 @@ async fn concurrent_subscription_adoption_creates_one_session_without_a_runtime(
             },
             json!({"control_root":"shared-backend"}),
             None,
+            None,
         )
     };
     let (first, second) = tokio::join!(adopt(), adopt());

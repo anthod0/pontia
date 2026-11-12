@@ -1,4 +1,5 @@
 use crate::runtime::{CodexRuntime, protocol::Notification};
+use futures_util::{SinkExt, StreamExt};
 use pontia_agent_control::{AgentControl, CreateSessionRequest, clients::ClientRegistry};
 use serde_json::{Value, json};
 use std::{
@@ -8,6 +9,218 @@ use std::{
     time::Duration,
 };
 use tokio::sync::broadcast;
+use tokio_tungstenite::tungstenite::Message;
+
+async fn proxy_call(
+    wire: &mut crate::runtime::protocol::Socket,
+    method: &str,
+    params: Value,
+) -> Value {
+    wire.send(Message::text(
+        json!({"id":1,"method":method,"params":params}).to_string(),
+    ))
+    .await
+    .unwrap();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let Message::Text(text) = wire.next().await.unwrap().unwrap() else {
+                continue;
+            };
+            let value: Value = serde_json::from_str(&text).unwrap();
+            if value["id"] == 1 && value.get("method").is_none() {
+                assert!(value.get("error").is_none(), "{value}");
+                return value["result"].clone();
+            }
+        }
+    })
+    .await
+    .unwrap()
+}
+
+async fn proxy_probe(
+    wire: &mut crate::runtime::protocol::Socket,
+    native: &str,
+    session: Option<&str>,
+) {
+    // Read the entire stream, including notifications preceding the turn/start reply.
+    wire.send(Message::text(json!({"id":1,"method":"turn/start","params":{"threadId":native,"input":[{"type":"text","text":"Read the environment."}]}}).to_string())).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        let mut command = None;
+        loop {
+            let Message::Text(text) = wire.next().await.unwrap().unwrap() else { continue };
+            let event: Value = serde_json::from_str(&text).unwrap();
+            assert!(event.get("error").is_none(), "{event}");
+            if event["method"] == "item/completed" && event["params"]["item"]["type"] == "commandExecution" {
+                let item = &event["params"]["item"];
+                assert_eq!(item["exitCode"], 0, "{item}");
+                command = Some(serde_json::from_str::<Value>(item["aggregatedOutput"].as_str().unwrap().trim()).unwrap_or_else(|error| panic!("{error}: {item}")));
+            }
+            if event["method"] == "turn/completed" {
+                assert_eq!(event["params"]["turn"]["status"], "completed", "{event}");
+                assert_eq!(command.unwrap(), json!({"PONTIA_SESSION_ID":session,"PROBE_KEEP":"request","PROBE_NATIVE":"native","PROBE_DROP":null}));
+                break;
+            }
+        }
+    }).await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires installed codex and python3; uses an isolated local model provider"]
+async fn real_codex_proxy_tools_have_identity_before_first_input_and_after_resume_and_fork() {
+    for policy in [
+        "include_only = [\"PATH\", \"HOME\", \"PROBE_KEEP\", \"PROBE_NATIVE\"]",
+        "filters = { PATH = \"include\", HOME = \"include\", PROBE_KEEP = \"include\", PROBE_NATIVE = \"include\", PROBE_DROP = \"exclude\" }",
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let mut provider = Process(
+            Command::new("python3")
+                .arg(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/tests/fixtures/environment_provider.py"
+                ))
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap(),
+        );
+        let mut port = String::new();
+        BufReader::new(provider.0.stdout.take().unwrap())
+            .read_line(&mut port)
+            .unwrap();
+        std::fs::write(
+            root.path().join("config.toml"),
+            format!(
+                r#"
+model_provider = "probe"
+model = "probe-model"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+[model_providers.probe]
+name = "Local environment fixture"
+base_url = "http://127.0.0.1:{}/v1"
+wire_api = "responses"
+requires_openai_auth = false
+[projects.{}]
+trust_level = "trusted"
+[shell_environment_policy]
+set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
+{policy}
+"#,
+                port.trim(),
+                toml::Value::String(root.path().display().to_string())
+            ),
+        )
+        .unwrap();
+        let server = daemon(root.path()).await;
+        let pool = pontia_storage_sqlite::connect_sqlite("sqlite::memory:")
+            .await
+            .unwrap();
+        pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+        pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+            pool.clone(),
+        )
+        .save("codex", "default", Some(true), None)
+        .await
+        .unwrap();
+        let mut clients = ClientRegistry::default();
+        clients.register(crate::registration());
+        let app = AgentControl::builder(pool, root.path().into())
+            .clients(clients)
+            .build();
+        let proxy = crate::proxy::Proxy::bind(root.path()).await.unwrap();
+        let (shutdown, stop) = tokio::sync::watch::channel(false);
+        let (observations, incoming) = tokio::sync::mpsc::channel(128);
+        let state = app.clone();
+        let socket = root.path().join("app-server.sock");
+        let proxy_task = tokio::spawn(async move {
+            proxy
+                .run(stop, move || Ok(socket.clone()), observations, state)
+                .await
+                .unwrap()
+        });
+        let observer = tokio::spawn(super::proxy_observer::run(app.clone(), incoming));
+        let mut cli = crate::runtime::protocol::open(&crate::proxy::socket_path(root.path()))
+            .await
+            .unwrap();
+        proxy_call(&mut cli, "initialize", json!({"clientInfo":{"name":"environment-test","version":"1"},"capabilities":{"experimentalApi":true}})).await;
+        let config = json!({"shell_environment_policy.set":{"PROBE_KEEP":"request","PONTIA_SESSION_ID":"wrong-request"}});
+        let started = proxy_call(
+            &mut cli,
+            "thread/start",
+            json!({"cwd":root.path(),"historyMode":"legacy","config":config}),
+        )
+        .await;
+        let native = started["thread"]["id"].as_str().unwrap();
+        let session = pontia_agent_control::AgentBindingService::new(app.db())
+            .binding_for_client_session("codex", native)
+            .await
+            .unwrap()
+            .unwrap()
+            .session_id;
+        proxy_probe(&mut cli, native, Some(&session)).await;
+        proxy_call(
+            &mut cli,
+            "thread/resume",
+            json!({"threadId":native,"config":config}),
+        )
+        .await;
+        proxy_probe(&mut cli, native, Some(&session)).await;
+        let fork = proxy_call(
+            &mut cli,
+            "thread/fork",
+            json!({"threadId":native,"config":config}),
+        )
+        .await;
+        let child = fork["thread"]["id"].as_str().unwrap();
+        let child_session = pontia_agent_control::AgentBindingService::new(app.db())
+            .binding_for_client_session("codex", child)
+            .await
+            .unwrap()
+            .unwrap()
+            .session_id;
+        assert_ne!(session, child_session);
+        proxy_probe(&mut cli, child, Some(&child_session)).await;
+        proxy_probe(&mut cli, native, Some(&session)).await;
+        let mut external = crate::runtime::protocol::open(&root.path().join("app-server.sock"))
+            .await
+            .unwrap();
+        proxy_call(&mut external, "initialize", json!({"clientInfo":{"name":"external-test","version":"1"},"capabilities":{"experimentalApi":true}})).await;
+        let external_thread = proxy_call(
+            &mut external,
+            "thread/start",
+            json!({"cwd":root.path(),"historyMode":"legacy","config":config}),
+        )
+        .await;
+        let external_native = external_thread["thread"]["id"].as_str().unwrap();
+        proxy_probe(&mut external, external_native, None).await;
+        // Codex applies config overrides on cold resume; a live rejoin retains its settings.
+        proxy_call(
+            &mut external,
+            "thread/unsubscribe",
+            json!({"threadId":external_native}),
+        )
+        .await;
+        proxy_call(
+            &mut cli,
+            "thread/resume",
+            json!({"threadId":external_native,"config":config}),
+        )
+        .await;
+        let adopted = pontia_agent_control::AgentBindingService::new(app.db())
+            .binding_for_client_session("codex", external_native)
+            .await
+            .unwrap()
+            .unwrap()
+            .session_id;
+        proxy_probe(&mut cli, external_native, Some(&adopted)).await;
+        shutdown.send(true).unwrap();
+        proxy_task.await.unwrap();
+        observer.abort();
+        let _ = observer.await;
+        app.inbox_commands().stop_scheduling().await;
+        CodexRuntime::shutdown(root.path()).await;
+        drop(server);
+    }
+}
 
 struct Process(Child);
 

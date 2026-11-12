@@ -36,13 +36,21 @@ async fn observe(
             result,
             params,
             profile_binding,
+            reservation,
         } => {
             let thread = &result["thread"];
             if thread["ephemeral"] == true {
                 return Ok(());
             }
             let (session, _operation) = service
-                .adopt_opened_thread(&runtime, operation, &result, &params, profile_binding)
+                .adopt_opened_thread(
+                    &runtime,
+                    operation,
+                    &result,
+                    &params,
+                    profile_binding,
+                    reservation,
+                )
                 .await?;
             service
                 .register_proxy_runtime(&session, &runtime_id)

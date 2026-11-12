@@ -160,14 +160,14 @@ impl CodexRuntime {
     }
 
     pub async fn lock_session(&self, session: &str) -> tokio::sync::OwnedMutexGuard<()> {
-        self.operations
+        let operation = self
+            .operations
             .lock()
             .await
             .entry(session.to_string())
             .or_default()
-            .clone()
-            .lock_owned()
-            .await
+            .clone();
+        operation.lock_owned().await
     }
 
     pub(crate) async fn set_subscription(&self, session: &str, state: SubscriptionState) {

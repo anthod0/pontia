@@ -63,6 +63,7 @@ impl NativeSessionService {
         identity: NativeSessionIdentity,
         metadata: Value,
         profile_binding: Option<Value>,
+        reserved_session: Option<&str>,
     ) -> Result<String> {
         let control = self.events.history_control();
         let _identity = match &control {
@@ -79,7 +80,9 @@ impl NativeSessionService {
             .for_creation(client, &metadata)
             .await?;
         let workspace = crate::upsert_workspace(&self.pool, &identity.launch_cwd).await?;
-        let session = new_session_id().to_string();
+        let session = reserved_session
+            .map(str::to_owned)
+            .unwrap_or_else(|| new_session_id().to_string());
         self.events
             .ingest_pontia_event_with_agent_binding(
                 PontiaEvent::new(

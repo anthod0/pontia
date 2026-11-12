@@ -178,9 +178,9 @@ async fn only_matching_successful_thread_responses_are_observed() {
         .await
         .unwrap();
     for request in [
-        serde_json::json!({"id":1,"method":"thread/start"}),
-        serde_json::json!({"id":"1","method":"thread/resume"}),
-        serde_json::json!({"id":2,"method":"thread/fork"}),
+        serde_json::json!({"id":1,"method":"thread/start","params":{"ephemeral":true}}),
+        serde_json::json!({"id":"1","method":"thread/resume","params":{"ephemeral":true}}),
+        serde_json::json!({"id":2,"method":"thread/fork","params":{"ephemeral":true}}),
     ] {
         client
             .send(Message::text(request.to_string()))
@@ -241,7 +241,7 @@ async fn unsubscribe_requires_a_matching_success_and_only_cli_close_ends_associa
             .unwrap();
         client
             .send(Message::text(
-                r#"{"id":1,"method":"thread/resume","params":{"threadId":"a"}}"#,
+                r#"{"id":1,"method":"thread/resume","params":{"threadId":"a","ephemeral":true}}"#,
             ))
             .await
             .unwrap();

@@ -1,3 +1,5 @@
+pub(crate) mod open;
+
 use std::{
     collections::HashMap,
     io,
@@ -29,6 +31,7 @@ pub(crate) enum ObservedEvent {
         result: Value,
         params: Value,
         profile_binding: Option<Value>,
+        reservation: Option<open::Reservation>,
     },
     ThreadUnsubscribed {
         thread: String,
@@ -39,7 +42,7 @@ pub(crate) enum ObservedEvent {
 }
 
 enum PendingRequest {
-    Open(ThreadOperation, Value, Option<Value>),
+    Open(ThreadOperation, Value, Option<open::Prepared>),
     Unsubscribe(String),
 }
 
@@ -154,11 +157,27 @@ async fn relay(
     let daemon = DaemonIdentity::capture(upstream.get_ref())?;
     let mut pending = HashMap::<String, PendingRequest>::new();
     let mut runtimes = HashMap::<String, String>::new();
+    enum PreparedFrame {
+        Request(Message, String, PendingRequest),
+        Response(Message),
+    }
+    let mut preparation = JoinSet::<Result<PreparedFrame>>::new();
     let cli_closed = loop {
         tokio::select! {
+            completed = preparation.join_next(), if !preparation.is_empty() => {
+                match completed.unwrap().map_err(protocol::protocol_error)?? {
+                    PreparedFrame::Request(frame, id, request) => {
+                        pending.insert(id, request);
+                        upstream.send(frame).await.map_err(protocol::protocol_error)?;
+                    }
+                    PreparedFrame::Response(frame) => {
+                        downstream.send(frame).await.map_err(protocol::protocol_error)?;
+                    }
+                }
+            }
             frame = downstream.next() => {
                 let Some(frame) = frame else { break true };
-                let mut frame = frame.map_err(protocol::protocol_error)?;
+                let frame = frame.map_err(protocol::protocol_error)?;
                 if let Message::Text(text) = &frame
                     && let Ok(mut value) = serde_json::from_str::<Value>(text)
                     && let Some(id) = value.get("id").filter(|id| id.is_string() || id.is_number()).cloned()
@@ -170,9 +189,13 @@ async fn relay(
                         _ => None,
                     };
                     if let Some(operation) = operation {
-                        let profile_binding = crate::service::profile::prepare_proxy_request(&state, operation, &mut value["params"]).await?;
-                        pending.insert(id.to_string(), PendingRequest::Open(operation, value["params"].clone(), profile_binding));
-                        frame = Message::text(value.to_string());
+                        let state = state.clone();
+                        preparation.spawn(async move {
+                            let prepared = open::prepare(&state, operation, &mut value["params"]).await?;
+                            let pending = PendingRequest::Open(operation, value["params"].clone(), prepared);
+                            Ok(PreparedFrame::Request(Message::text(value.to_string()), id.to_string(), pending))
+                        });
+                        continue;
                     } else if value["method"] == "thread/unsubscribe"
                         && let Some(thread) = value["params"]["threadId"].as_str() {
                         pending.insert(id.to_string(), PendingRequest::Unsubscribe(thread.into()));
@@ -193,11 +216,25 @@ async fn relay(
                         && let Some(request) = pending.remove(&id.to_string())
                     {
                         match (request, value.get("result").filter(|_| value.get("error").is_none())) {
-                            (PendingRequest::Open(operation, params, profile_binding), Some(result)) => {
-                                result["thread"]["id"].as_str().map(|thread| {
+                            (PendingRequest::Open(operation, params, prepared), Some(result)) => {
+                                if let Some(thread) = result["thread"]["id"].as_str() {
                                     let runtime_id = runtimes.entry(thread.into()).or_insert_with(|| pontia_core::ids::new_runtime_id().to_string()).clone();
-                                    ObservedEvent::ThreadOpened { runtime_id, operation, result: result.clone(), params, profile_binding }
-                                })
+                                    let (bound, ready) = tokio::sync::oneshot::channel();
+                                    let reservation = prepared.as_ref().map(|prepared| open::Reservation { session: prepared.session.clone(), bound });
+                                    let event = ObservedEvent::ThreadOpened { runtime_id, operation, result: result.clone(), params,
+                                        profile_binding: prepared.as_ref().and_then(|prepared| prepared.profile_binding.clone()), reservation };
+                                    observations.send(Observation { daemon: daemon.clone(), event }).await
+                                        .map_err(|_| protocol::protocol_error("proxy observation stopped"))?;
+                                    preparation.spawn(async move {
+                                        if let Some(prepared) = prepared
+                                            && !prepared.bound {
+                                            ready.await.map_err(|_| protocol::protocol_error("Codex proxy Session binding failed"))?;
+                                        }
+                                        Ok(PreparedFrame::Response(frame))
+                                    });
+                                    continue;
+                                }
+                                None
                             }
                             (PendingRequest::Unsubscribe(thread), Some(result)) if unsubscribe_confirmed(result) => {
                                 runtimes.get(&thread).map(|runtime_id| ObservedEvent::ThreadUnsubscribed { thread, runtime_id: runtime_id.clone() })

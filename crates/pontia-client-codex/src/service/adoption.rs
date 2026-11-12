@@ -18,6 +18,7 @@ impl CodexService {
         result: &Value,
         params: &Value,
         profile_binding: Option<Value>,
+        reservation: Option<crate::proxy::open::Reservation>,
     ) -> Result<(String, tokio::sync::OwnedMutexGuard<()>)> {
         let connection = runtime.connection().await?;
         let thread = &result["thread"];
@@ -43,8 +44,19 @@ impl CodexService {
                 },
                 json!({"codex_control_root":runtime.root,"codex_launch_cwd":cwd}),
                 profile_binding,
+                reservation
+                    .as_ref()
+                    .map(|reservation| reservation.session.as_str()),
             )
             .await?;
+        if let Some(reservation) = reservation {
+            if reservation.session != session {
+                return Err(Error::StateConflict(
+                    "Codex Session identity changed during proxy preparation".into(),
+                ));
+            }
+            let _ = reservation.bound.send(());
+        }
         self.record_fork_lineage(&session, thread, params).await?;
         let _operation = runtime.lock_session(&session).await;
         if self.root(&session).await? != runtime.root {

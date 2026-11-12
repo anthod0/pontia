@@ -1,3 +1,4 @@
+mod environment;
 mod lifecycle;
 
 use super::*;
@@ -18,6 +19,7 @@ struct Thread {
     value: Value,
     materialized: bool,
     developer_instructions: Value,
+    config: Value,
     turns: Vec<Value>,
     subscribers: Vec<mpsc::UnboundedSender<Value>>,
 }
@@ -38,6 +40,8 @@ struct Fixture {
     calls: Arc<Mutex<Vec<(bool, String, String)>>>,
     tasks: JoinSet<()>,
     shutdown: watch::Sender<bool>,
+    configuration: Arc<Mutex<Value>>,
+    config_gate: Arc<tokio::sync::Semaphore>,
 }
 
 impl Fixture {
@@ -56,6 +60,10 @@ impl Fixture {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let shared_calls = calls.clone();
         let home = root.path().canonicalize().unwrap();
+        let configuration = Arc::new(Mutex::new(json!({})));
+        let native_configuration = configuration.clone();
+        let config_gate = Arc::new(tokio::sync::Semaphore::new(1));
+        let native_config_gate = config_gate.clone();
         let mut tasks = JoinSet::new();
         tasks.spawn(async move {
             let mut peers = JoinSet::new();
@@ -65,6 +73,8 @@ impl Fixture {
                 let faults = shared_faults.clone();
                 let home = home.clone();
                 let calls = shared_calls.clone();
+                let configuration = native_configuration.clone();
+                let config_gate = native_config_gate.clone();
                 peers.spawn(async move {
                     let mut wire = accept_async(stream).await.unwrap();
                     let (sender, mut events) = mpsc::unbounded_channel::<Value>();
@@ -86,6 +96,9 @@ impl Fixture {
                         let params = &request["params"];
                         let native = params["threadId"].as_str().unwrap_or("");
                         calls.lock().await.push((pontia, method.into(), native.into()));
+                        let _config_permit = if method == "config/read" {
+                            Some(config_gate.acquire().await.unwrap())
+                        } else { None };
                         let mut threads = threads.lock().await;
                         let response = if params["reject"] == true || faults.lock().await.contains(method) {
                             json!({"id":id,"error":{"code":-32600,"message":"rejected"}})
@@ -101,7 +114,7 @@ impl Fixture {
                                     pontia = params["clientInfo"]["name"] == "pontia";
                                     json!({"userAgent":"codex/test","codexHome":home,"platformFamily":"unix","platformOs":std::env::consts::OS})
                                 }
-                                "config/read" => json!({"config":{}}),
+                                "config/read" => json!({"config":configuration.lock().await.clone()}),
                                 "thread/start" | "thread/fork" => {
                                     let inherited = threads.get(native).map(|parent| {
                                         parent.turns.iter().take_while(|turn| params["beforeTurnId"].is_null() || turn["id"] != params["beforeTurnId"]).cloned().collect::<Vec<_>>()
@@ -112,6 +125,7 @@ impl Fixture {
                                     threads.insert(native, Thread {
                                         value: value.clone(), materialized: method == "thread/fork",
                                         developer_instructions: params["developerInstructions"].clone(),
+                                        config: params["config"].clone(),
                                         turns: inherited, subscribers: vec![sender.clone()],
                                     });
                                     json!({"thread":value,"model":"cli-model"})
@@ -122,6 +136,7 @@ impl Fixture {
                                         assert!(params.get("config").is_none(), "proxy attachment must preserve CLI configuration");
                                     }
                                     let thread = threads.get_mut(native).unwrap();
+                                    if let Some(config) = params.get("config") { thread.config = config.clone(); }
                                     if let Some(instructions) = params.get("developerInstructions") {
                                         thread.developer_instructions = instructions.clone();
                                     }
@@ -208,6 +223,8 @@ impl Fixture {
             calls,
             tasks,
             shutdown,
+            configuration,
+            config_gate,
         }
     }
 
