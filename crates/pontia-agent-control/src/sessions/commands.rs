@@ -25,36 +25,28 @@ impl SessionCommandService {
     pub fn default_client_type(&self) -> Result<&'static str> {
         self.clients.registry().default_client_type()
     }
-    /// Finds a Session created with a durable metadata token.
-    ///
-    /// This closes cross-service crash gaps without giving callers control over
-    /// Session identity or introducing domain-specific Session creation paths.
-    pub async fn find_session_by_creation_token(
-        &self,
-        metadata_key: &str,
-        token: &str,
-    ) -> Result<Option<String>> {
-        let json_path = format!("$.{metadata_key}");
-        let sessions = sqlx::query_scalar::<_, String>(
-            "SELECT session_id FROM sessions WHERE json_extract(metadata, ?) = ? ORDER BY created_at LIMIT 2",
-        )
-        .bind(json_path)
-        .bind(token)
-        .fetch_all(&self.pool)
-        .await?;
-        match sessions.as_slice() {
-            [] => Ok(None),
-            [session_id] => Ok(Some(session_id.clone())),
-            _ => Err(Error::StateConflict(format!(
-                "multiple Sessions use creation token {token}"
-            ))),
-        }
-    }
-
     pub async fn create_session(
         &self,
         mut request: CreateSessionRequest,
     ) -> Result<CreateSessionOutcome> {
+        let _creation_guard = if request.ownership.is_some() {
+            Some(self.creation_gate.lock().await)
+        } else {
+            None
+        };
+        if let Some(ownership) = &request.ownership {
+            if ownership.application_id.is_empty() || ownership.reference.is_empty() {
+                return Err(Error::Domain(
+                    "Session ownership requires an application and reference".into(),
+                ));
+            }
+            if let Some(session_id) = self.queries.find_session_by_ownership(ownership).await? {
+                return Ok(CreateSessionOutcome {
+                    data: json!({"session":self.queries.get_session(&session_id).await?}),
+                    duplicate: true,
+                });
+            }
+        }
         if request.client_type.is_empty() {
             request.client_type = self.clients.registry().default_client_type()?.to_string();
         }
@@ -149,6 +141,8 @@ impl SessionCommandService {
                     "execution_profile_version": request.execution_profile_version,
                     "execution_profile_binding": profile.as_ref().map(|profile| &profile.binding),
                     "metadata": request.metadata,
+                    "ownership": request.ownership,
+                    "runtime_environment": request.runtime_environment,
                 }),
             ))
             .await?;

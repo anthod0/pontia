@@ -38,7 +38,7 @@ pub async fn list_workflows(
     Query(query): Query<ListWorkflowsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let limit = parse_limit(query.limit.as_deref())?;
-    let workflows = WorkflowQueryService::new(state.db())
+    let workflows = WorkflowQueryService::new(state.db(), state.control().queries())
         .with_clients(state.control().clients())
         .list_workflows(limit)
         .await
@@ -50,7 +50,7 @@ pub async fn get_workflow(
     State(state): State<AppState>,
     Path(workflow_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let workflow = WorkflowQueryService::new(state.db())
+    let workflow = WorkflowQueryService::new(state.db(), state.control().queries())
         .with_clients(state.control().clients())
         .get_workflow_snapshot(&workflow_id, state.pontia_home())
         .await
@@ -63,7 +63,7 @@ pub async fn get_workflow_revision(
     State(state): State<AppState>,
     Path((workflow_id, revision)): Path<(String, i64)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let revision = WorkflowQueryService::new(state.db())
+    let revision = WorkflowQueryService::new(state.db(), state.control().queries())
         .with_clients(state.control().clients())
         .get_workflow_revision(&workflow_id, revision)
         .await
@@ -76,7 +76,7 @@ pub async fn list_workflow_patches(
     State(state): State<AppState>,
     Path(workflow_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let patches = WorkflowQueryService::new(state.db())
+    let patches = WorkflowQueryService::new(state.db(), state.control().queries())
         .with_clients(state.control().clients())
         .list_workflow_patches(&workflow_id)
         .await
@@ -89,7 +89,7 @@ pub async fn get_workflow_timeline(
     State(state): State<AppState>,
     Path(workflow_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let timeline = WorkflowQueryService::new(state.db())
+    let timeline = WorkflowQueryService::new(state.db(), state.control().queries())
         .with_clients(state.control().clients())
         .get_workflow_timeline(&workflow_id)
         .await
@@ -103,7 +103,7 @@ pub async fn get_workflow_document(
     Path(workflow_id): Path<String>,
     Query(query): Query<WorkflowDocumentQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let document = WorkflowQueryService::new(state.db())
+    let document = WorkflowQueryService::new(state.db(), state.control().queries())
         .with_clients(state.control().clients())
         .read_workflow_document(&workflow_id, &query.r#ref, state.pontia_home())
         .await
@@ -138,11 +138,11 @@ pub async fn retry_workflow(
     Path(workflow_id): Path<String>,
     Json(request): Json<RetryWorkflowRequest>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let recovery = pontia_workflow::WorkflowRecoveryService::new(state.control())
+    let recovery = pontia_workflow::WorkflowRecoveryService::new(state.db(), state.control())
         .retry(&workflow_id, &request.failure_event_id)
         .await
         .map_err(map_workflow_error)?;
-    let workflow = WorkflowQueryService::new(state.db())
+    let workflow = WorkflowQueryService::new(state.db(), state.control().queries())
         .with_clients(state.control().clients())
         .get_workflow(&workflow_id)
         .await
@@ -161,21 +161,22 @@ async fn control_workflow(
     let action_state = state.clone();
     let action_workflow_id = workflow_id.clone();
     let outcome = idempotent(&state, &headers, operation, || async move {
-        let control = WorkflowControlService::new(action_state.control());
+        let control = WorkflowControlService::new(action_state.db(), action_state.control());
         let control_outcome = if pause {
             control.pause(&action_workflow_id).await
         } else {
             control.resume(&action_workflow_id).await
         }
         .map_err(workflow_core_error)?;
-        let workflow = WorkflowQueryService::new(action_state.db())
-            .with_clients(action_state.control().clients())
-            .get_workflow(&action_workflow_id)
-            .await
-            .map_err(workflow_core_error)?
-            .ok_or_else(|| {
-                CoreError::NotFound(format!("workflow {action_workflow_id} not found"))
-            })?;
+        let workflow =
+            WorkflowQueryService::new(action_state.db(), action_state.control().queries())
+                .with_clients(action_state.control().clients())
+                .get_workflow(&action_workflow_id)
+                .await
+                .map_err(workflow_core_error)?
+                .ok_or_else(|| {
+                    CoreError::NotFound(format!("workflow {action_workflow_id} not found"))
+                })?;
         Ok(json!({ "workflow": workflow, "control": control_outcome }))
     })
     .await?;
@@ -186,7 +187,7 @@ pub async fn get_workflow_context(
     State(state): State<AppState>,
     Path(workflow_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let context = WorkflowQueryService::new(state.db())
+    let context = WorkflowQueryService::new(state.db(), state.control().queries())
         .with_clients(state.control().clients())
         .get_workflow_context(&workflow_id, state.pontia_home())
         .await

@@ -1,8 +1,7 @@
 use pontia_agent_control::{
     AgentControl, CreateSessionRequest, PontiaEvent, PontiaEventSource, PontiaEventType,
-    client_contract::{ClientLaunchRequest, ClientLauncher, ClientOperation, test_registration},
+    client_contract::{ClientLaunchRequest, ClientLauncher, test_registration},
     clients::ClientRegistry,
-    sessions::SessionEnvironment,
 };
 use pontia_core::Result;
 use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
@@ -30,13 +29,6 @@ impl ClientLauncher for Launcher {
         )
     }
 }
-struct Environment(BTreeMap<String, String>);
-impl SessionEnvironment for Environment {
-    fn environment<'a>(&'a self, _: &'a str) -> ClientOperation<'a, BTreeMap<String, String>> {
-        Box::pin(async { Ok(self.0.clone()) })
-    }
-}
-
 #[tokio::test]
 async fn creation_restart_and_recovered_resume_keep_caller_launch_context() {
     let root = tempfile::tempdir().unwrap();
@@ -60,7 +52,6 @@ async fn creation_restart_and_recovered_resume_keep_caller_launch_context() {
     let build = || {
         AgentControl::builder(pool.clone(), root.path().into())
             .clients(clients.clone())
-            .environment(Arc::new(Environment(environment.clone())))
             .build()
     };
     let control = build();
@@ -105,4 +96,60 @@ async fn creation_restart_and_recovered_resume_keep_caller_launch_context() {
         assert_eq!(launch.environment, environment);
         assert_eq!(launch.workspace.as_deref(), root.path().to_str());
     }
+}
+
+#[tokio::test]
+async fn owned_creation_is_idempotent_and_keeps_the_original_environment() {
+    let root = tempfile::tempdir().unwrap();
+    let pool = connect_sqlite(&format!(
+        "sqlite://{}",
+        root.path().join("owned.db").display()
+    ))
+    .await
+    .unwrap();
+    run_migrations(&pool).await.unwrap();
+    pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+        pool.clone(),
+    )
+    .save("generic", "default", Some(true), None)
+    .await
+    .unwrap();
+    let launcher = Arc::new(Launcher::default());
+    let mut client = test_registration();
+    client.launcher = Some(launcher.clone());
+    let mut clients = ClientRegistry::default();
+    clients.register(client);
+    let app = AgentControl::builder(pool, root.path().into())
+        .clients(clients)
+        .build();
+    let ownership = pontia_agent_control::SessionOwnership {
+        application_id: "example".into(),
+        reference: "task:one".into(),
+    };
+    let mut request: CreateSessionRequest =
+        serde_json::from_value(json!({"client_type":"generic","workspace":root.path()})).unwrap();
+    request.ownership = Some(ownership.clone());
+    request.runtime_environment = BTreeMap::from([("TASK_ID".into(), "one".into())]);
+    let service = app.session_commands();
+    let (first, second) = tokio::join!(
+        service.create_session(request.clone()),
+        service.create_session(request)
+    );
+    let first = first.unwrap();
+    let second = second.unwrap();
+    assert_eq!(first.session_id(), second.session_id());
+    assert_ne!(first.duplicate, second.duplicate);
+    assert_eq!(launcher.0.lock().unwrap().len(), 1);
+    assert_eq!(
+        app.queries()
+            .find_session_by_ownership(&ownership)
+            .await
+            .unwrap()
+            .as_deref(),
+        first.session_id()
+    );
+    assert_eq!(
+        app.queries().list_owned_sessions("example").await.unwrap(),
+        vec![first.session_id().unwrap()]
+    );
 }

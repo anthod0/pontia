@@ -204,6 +204,7 @@ where
     tokio::spawn(async move {
         let _keepalive = shutdown_tx;
         WorkflowCoordinator::with_services(
+            pool.clone(),
             &pontia_agent_control::AgentControl::builder(pool, pontia_home.clone())
                 .clients(crate::test_doubles::clients())
                 .build(),

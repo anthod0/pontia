@@ -1,4 +1,4 @@
-use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
+use pontia_workflow::repository::SqliteWorkflowRepository;
 use pontia_workflow::{RequestWorkflowPatch, WorkflowCoordinator, WorkflowPatchService};
 use serde_json::json;
 
@@ -13,22 +13,29 @@ use super::fixture::{
 };
 
 #[tokio::test]
-async fn crash_gap_recovers_the_session_with_the_persisted_creation_token() {
+async fn crash_gap_recovers_the_session_with_the_persisted_ownership() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).unwrap();
     let pool = test_pool(&temp.path().join("patch-replanner-recovery.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_requester(&pool, &repository, &pontia_home, "wf_recover", false).await;
     write_problem_report(&pontia_home, "wf_recover", "Recover planning");
-    let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .request_patch(RequestWorkflowPatch {
-            session_id: "sess_requester".into(),
-            runtime_id: "runtime_requester".into(),
-        })
-        .await
-        .unwrap()
-        .patch_id;
+    let patch_id = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .request_patch(RequestWorkflowPatch {
+        session_id: "sess_requester".into(),
+        runtime_id: "runtime_requester".into(),
+    })
+    .await
+    .unwrap()
+    .patch_id;
     insert_fact(
         &pool,
         "evt_recover_interrupted",
@@ -38,23 +45,20 @@ async fn crash_gap_recovers_the_session_with_the_persisted_creation_token() {
         "runtime_requester",
     )
     .await;
-    let token = repository
-        .get_patch(&patch_id)
-        .await
-        .unwrap()
-        .unwrap()
-        .replanner_creation_token;
     seed_replanner_session(
         &pool,
         "sess_recovered_replanner",
         "turn_recovered_replanner",
         "runtime_recovered_replanner",
-        &json!({ "workflow_replanner_creation_token": token }),
+        &json!({}),
     )
     .await;
 
+    sqlx::query("UPDATE sessions SET application_id='workflow',application_ref=? WHERE session_id='sess_recovered_replanner'")
+        .bind(format!("patch:{patch_id}")).execute(&pool).await.unwrap();
     let creator = PersistingSessionCreator::new(pool.clone());
     let coordinator_one = WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
@@ -64,6 +68,7 @@ async fn crash_gap_recovers_the_session_with_the_persisted_creation_token() {
         pontia_home.clone(),
     );
     let coordinator_two = WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
@@ -104,7 +109,10 @@ async fn simultaneous_patch_requests_accept_exactly_one_active_patch() {
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).unwrap();
     let pool = test_pool(&temp.path().join("concurrent-patch-request.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_requester(
         &pool,
         &repository,
@@ -114,8 +122,16 @@ async fn simultaneous_patch_requests_accept_exactly_one_active_patch() {
     )
     .await;
     write_problem_report(&pontia_home, "wf_concurrent_patch", "concurrent request");
-    let first = WorkflowPatchService::new(pool.clone(), pontia_home.clone());
-    let second = WorkflowPatchService::new(pool.clone(), pontia_home);
+    let first = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    );
+    let second = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home,
+    );
     let (first, second) = tokio::join!(
         first.request_patch(RequestWorkflowPatch {
             session_id: "sess_requester".into(),

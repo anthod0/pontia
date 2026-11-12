@@ -2,9 +2,8 @@ use super::{
     fixture::{seed_linear_workflow, test_pool},
     test_doubles::{RecordingExitRequester, SequencedSessionCreator, TestAgentEvents},
 };
-use pontia_storage_sqlite::{
-    models::workflows::WorkflowRecoveryRow, repositories::workflows::SqliteWorkflowRepository,
-};
+use pontia_workflow::models::WorkflowRecoveryRow;
+use pontia_workflow::repository::SqliteWorkflowRepository;
 use pontia_workflow::{WorkflowCoordinator, WorkflowQueryService, WorkflowRecoveryService};
 
 async fn fixture() -> (
@@ -14,7 +13,11 @@ async fn fixture() -> (
 ) {
     let root = tempfile::tempdir().unwrap();
     let pool = test_pool(&root.path().join("recovery.db")).await;
-    let repo = SqliteWorkflowRepository::new(pool.clone()).with_recovery_client_types(["pi"]);
+    let repo = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    )
+    .with_recovery_client_types(["pi"]);
     seed_linear_workflow(&repo, "wf_retry", "[]", true).await;
     repo.start_workflow("wf_retry", "started").await.unwrap();
     for (id, state) in [("upstream", "exited"), ("failed", "exited")] {
@@ -95,6 +98,7 @@ fn coordinator(
     TestAgentEvents,
 > {
     WorkflowCoordinator::with_services(
+        app.db(),
         app,
         SequencedSessionCreator::new([]),
         RecordingExitRequester::default(),
@@ -106,7 +110,7 @@ fn coordinator(
 #[tokio::test]
 async fn concurrent_retry_preserves_one_attempt_and_completed_work() {
     let (root, app, repo) = fixture().await;
-    let service = WorkflowRecoveryService::new(&app);
+    let service = WorkflowRecoveryService::new(app.db(), &app);
     let (a, b) = tokio::join!(
         service.retry("wf_retry", "failure"),
         service.retry("wf_retry", "failure")
@@ -136,7 +140,7 @@ async fn concurrent_retry_preserves_one_attempt_and_completed_work() {
 #[tokio::test]
 async fn preparation_failure_archives_only_unsubmitted_output_and_does_not_loop() {
     let (root, app, repo) = fixture().await;
-    let row = WorkflowRecoveryService::new(&app)
+    let row = WorkflowRecoveryService::new(app.db(), &app)
         .retry("wf_retry", "failure")
         .await
         .unwrap();
@@ -227,11 +231,14 @@ async fn recovered_execution_ignores_old_exit_and_rejects_old_submission_then_co
         repo.get_workflow("wf_retry").await.unwrap().unwrap().state,
         "completed"
     );
-    let timeline = WorkflowQueryService::new(app.db())
-        .get_workflow_timeline("wf_retry")
-        .await
-        .unwrap()
-        .unwrap();
+    let timeline = WorkflowQueryService::new(
+        app.db(),
+        pontia_agent_control::ControlQueryService::new(app.db()),
+    )
+    .get_workflow_timeline("wf_retry")
+    .await
+    .unwrap()
+    .unwrap();
     assert!(timeline.entries.iter().any(|e| e.event_id == "failure"));
     assert!(
         timeline

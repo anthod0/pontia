@@ -1,3 +1,6 @@
+use pontia_workflow::repository::{
+    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
+};
 use std::{
     future::Future,
     path::Path,
@@ -8,10 +11,7 @@ use pontia_agent_control::CreateSessionRequest;
 use pontia_core::domain::{DomainEvent, EventSource, EventType};
 use pontia_storage_sqlite::{
     connect_sqlite,
-    repositories::{
-        session_runtimes::{SessionRuntimeRecord, SqliteSessionRuntimeRepository},
-        workflows::{CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository},
-    },
+    repositories::session_runtimes::{SessionRuntimeRecord, SqliteSessionRuntimeRepository},
     run_migrations,
 };
 use pontia_workflow::{
@@ -201,6 +201,7 @@ fn spawn_coordinator(
     tokio::spawn(async move {
         let _keepalive = shutdown_tx;
         WorkflowCoordinator::with_services(
+            pool.clone(),
             &pontia_agent_control::AgentControl::builder(pool, pontia_home.clone()).build(),
             sessions,
             exits,
@@ -320,7 +321,10 @@ async fn submission_accepts_the_output_file_and_waits_for_confirmed_session_exit
 {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("submit.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_running_single_node(&repository, "wf_submit", "node_submit").await;
     let sessions = BoundSessionCreator {
         pool: pool.clone(),
@@ -337,8 +341,13 @@ async fn submission_accepts_the_output_file_and_waits_for_confirmed_session_exit
         events.clone(),
         pontia_home.clone(),
     );
-    let scheduler =
-        WorkflowScheduler::with_services(pool, sessions, exits.clone(), pontia_home.clone());
+    let scheduler = WorkflowScheduler::with_services(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        sessions,
+        exits.clone(),
+        pontia_home.clone(),
+    );
     scheduler.start("wf_submit").await.expect("start workflow");
     write_output(&pontia_home, "wf_submit", "Complete UTF-8 handoff: 完成\n");
 
@@ -526,7 +535,10 @@ async fn submission_accepts_the_output_file_and_waits_for_confirmed_session_exit
 async fn shared_backend_submission_does_not_require_a_runtime_identity() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("shared-backend.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_running_single_node(&repository, "wf_submit", "node_submit").await;
     let sessions = BoundSessionCreator {
         pool: pool.clone(),
@@ -534,7 +546,8 @@ async fn shared_backend_submission_does_not_require_a_runtime_identity() {
         runtime_id: "unused-runtime".to_string(),
     };
     let scheduler = WorkflowScheduler::with_services(
-        pool,
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
         sessions,
         SharedBackendExitRequester,
         temp.path().join("pontia-home"),
@@ -563,7 +576,10 @@ async fn shared_backend_submission_does_not_require_a_runtime_identity() {
 async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownership() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("reject.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_running_single_node(&repository, "wf_submit", "node_submit").await;
     let sessions = BoundSessionCreator {
         pool: pool.clone(),
@@ -572,7 +588,8 @@ async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownershi
     };
     let exits = RecordingExitRequester::default();
     let scheduler = WorkflowScheduler::with_services(
-        pool,
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
         sessions,
         exits.clone(),
         temp.path().join("pontia-home"),
@@ -638,7 +655,10 @@ async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownershi
 async fn submission_rejects_a_node_whose_workflow_is_not_running() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("not-running.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_running_single_node(&repository, "wf_submit", "node_submit").await;
     let sessions = BoundSessionCreator {
         pool: pool.clone(),
@@ -647,6 +667,7 @@ async fn submission_rejects_a_node_whose_workflow_is_not_running() {
     };
     sessions
         .create_session(CreateSessionRequest {
+            ownership: None,
             client_type: "pi".to_string(),
             title: None,
             workspace: None,
@@ -668,7 +689,8 @@ async fn submission_rejects_a_node_whose_workflow_is_not_running() {
         .expect("bind node session");
     let exits = RecordingExitRequester::default();
     let scheduler = WorkflowScheduler::with_services(
-        pool,
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
         sessions,
         exits.clone(),
         temp.path().join("pontia-home"),

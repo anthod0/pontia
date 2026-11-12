@@ -4,10 +4,7 @@ mod overview;
 mod patches;
 mod timeline;
 
-use pontia_storage_sqlite::repositories::{
-    sessions::SqliteSessionRepository, turns::SqliteTurnRepository,
-    workflows::SqliteWorkflowRepository,
-};
+use crate::repository::SqliteWorkflowRepository;
 use sqlx::SqlitePool;
 
 pub use context::{
@@ -20,11 +17,10 @@ pub use overview::{
 pub use patches::{WorkflowActivePatchView, WorkflowPatchHistoryView};
 pub use timeline::{WorkflowTimelineEntryView, WorkflowTimelineView};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct WorkflowQueryService {
     workflows: SqliteWorkflowRepository,
-    sessions: SqliteSessionRepository,
-    turns: SqliteTurnRepository,
+    queries: pontia_agent_control::ControlQueryService,
 }
 
 impl WorkflowQueryService {
@@ -37,11 +33,10 @@ impl WorkflowQueryService {
         );
         self
     }
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: SqlitePool, queries: pontia_agent_control::ControlQueryService) -> Self {
         Self {
-            workflows: SqliteWorkflowRepository::new(pool.clone()),
-            sessions: SqliteSessionRepository::new(pool.clone()),
-            turns: SqliteTurnRepository::new(pool),
+            workflows: SqliteWorkflowRepository::new(pool, queries.clone()),
+            queries,
         }
     }
 }

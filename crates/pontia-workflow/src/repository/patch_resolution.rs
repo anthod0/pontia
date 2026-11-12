@@ -1,6 +1,6 @@
 use pontia_core::{Error, Result};
 
-use crate::models::workflows::WorkflowPatchRow;
+use crate::models::WorkflowPatchRow;
 
 use super::{
     ApplyWorkflowPatchRecord, BlockWorkflowPatchRecord, ImplicitBlockWorkflowPatchRecord,
@@ -9,19 +9,17 @@ use super::{
 
 impl SqliteWorkflowRepository {
     pub async fn apply_patch(&self, request: ApplyWorkflowPatchRecord) -> Result<WorkflowPatchRow> {
-        let mut tx = self.pool.begin().await?;
-        crate::repositories::turns::SqliteTurnRepository::serialize_session_turn_writes_in_tx(
-            &mut tx,
-            &request.session_id,
-        )
-        .await?;
+        self.verify_active_turn(&request.session_id, &request.runtime_id)
+            .await?;
+        self.synchronize().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let context = sqlx::query_as::<_, (String, String, String, i64, i64)>(
             r#"SELECT p.patch_id, p.workflow_id, t.turn_id, p.base_revision, w.current_revision
                FROM workflow_patches AS p
                JOIN workflows AS w ON w.active_patch_id = p.patch_id
-               JOIN sessions AS s ON s.session_id = p.replanner_session_id
-               JOIN turns AS t ON t.turn_id = s.current_turn_id AND t.session_id = s.session_id
-               JOIN session_runtimes AS r ON r.session_id = s.session_id
+               JOIN workflow_session_snapshots AS s ON s.session_id = p.replanner_session_id
+               JOIN workflow_turn_snapshots AS t ON t.turn_id = s.current_turn_id AND t.session_id = s.session_id
+               JOIN workflow_runtime_snapshots AS r ON r.session_id = s.session_id
                WHERE p.state = 'planning' AND w.state = 'replanning'
                  AND w.active_replanner_session_id = ?
                  AND p.replanner_session_id = ? AND p.replanner_runtime_id = ?
@@ -207,19 +205,17 @@ impl SqliteWorkflowRepository {
     }
 
     pub async fn block_patch(&self, request: BlockWorkflowPatchRecord) -> Result<WorkflowPatchRow> {
-        let mut tx = self.pool.begin().await?;
-        crate::repositories::turns::SqliteTurnRepository::serialize_session_turn_writes_in_tx(
-            &mut tx,
-            &request.session_id,
-        )
-        .await?;
+        self.verify_active_turn(&request.session_id, &request.runtime_id)
+            .await?;
+        self.synchronize().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let context = sqlx::query_as::<_, (String, String, String, String)>(
             r#"SELECT p.patch_id, p.workflow_id, t.turn_id, r.runtime_id
                FROM workflow_patches AS p
                JOIN workflows AS w ON w.active_patch_id = p.patch_id
-               JOIN sessions AS s ON s.session_id = p.replanner_session_id
-               JOIN turns AS t ON t.turn_id = s.current_turn_id AND t.session_id = s.session_id
-               JOIN session_runtimes AS r ON r.session_id = s.session_id
+               JOIN workflow_session_snapshots AS s ON s.session_id = p.replanner_session_id
+               JOIN workflow_turn_snapshots AS t ON t.turn_id = s.current_turn_id AND t.session_id = s.session_id
+               JOIN workflow_runtime_snapshots AS r ON r.session_id = s.session_id
                WHERE p.state = 'planning' AND w.state = 'replanning'
                  AND w.active_replanner_session_id = ?
                  AND p.replanner_session_id = ?
@@ -313,7 +309,7 @@ impl SqliteWorkflowRepository {
         &self,
         request: ImplicitBlockWorkflowPatchRecord,
     ) -> Result<bool> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let context = sqlx::query_as::<_, (String, i64, String, Option<String>)>(
             r#"SELECT p.workflow_id, p.base_revision, p.state, p.replanner_session_id
                FROM workflow_patches AS p

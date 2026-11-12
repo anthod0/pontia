@@ -1,6 +1,6 @@
 use pontia_core::Result;
 
-use crate::models::workflows::{WorkflowAgentEventRow, WorkflowEventRow};
+use crate::models::{WorkflowAgentEventRow, WorkflowEventRow};
 
 use super::SqliteWorkflowRepository;
 
@@ -10,10 +10,11 @@ impl SqliteWorkflowRepository {
         workflow_id: &str,
         event_id: &str,
     ) -> Result<bool> {
+        self.synchronize().await?;
         Ok(sqlx::query_scalar::<_, i64>(
             r#"SELECT EXISTS (
                    SELECT 1
-                   FROM events AS agent_event
+                   FROM workflow_agent_events AS agent_event
                    JOIN workflow_events AS resumed
                      ON resumed.workflow_id = ?
                     AND resumed.event_type = 'workflow.resumed'
@@ -48,7 +49,7 @@ impl SqliteWorkflowRepository {
         event_type: &str,
         payload: &str,
     ) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let sequence: i64 = sqlx::query_scalar(
             "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_events WHERE workflow_id = ?",
         )
@@ -85,10 +86,11 @@ impl SqliteWorkflowRepository {
         &self,
         workflow_id: &str,
     ) -> Result<Vec<WorkflowAgentEventRow>> {
+        self.synchronize().await?;
         Ok(sqlx::query_as::<_, WorkflowAgentEventRow>(
-            r#"SELECT e.rowid, e.event_id, e.session_id, e.turn_id, e.source, e.event_type,
+            r#"SELECT e.position AS rowid, e.event_id, e.session_id, e.turn_id, e.source, e.event_type,
                       e.occurred_at, e.payload, e.created_at
-               FROM events AS e
+               FROM workflow_agent_events AS e
                WHERE EXISTS (
                    SELECT 1 FROM workflow_nodes AS n
                    WHERE n.workflow_id = ? AND n.session_id = e.session_id
@@ -98,7 +100,7 @@ impl SqliteWorkflowRepository {
                      AND (p.requesting_session_id = e.session_id
                           OR p.replanner_session_id = e.session_id)
                )
-               ORDER BY e.rowid"#,
+               ORDER BY e.position"#,
         )
         .bind(workflow_id)
         .bind(workflow_id)

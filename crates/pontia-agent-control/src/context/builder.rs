@@ -6,7 +6,6 @@ use super::{AgentControl, ShutdownSignal};
 use crate::{AgentEventBroker, live_output::LiveOutputStore};
 
 pub struct AgentControlBuilder {
-    pub(super) environment: Option<std::sync::Arc<dyn crate::sessions::SessionEnvironment>>,
     pub(super) clients: crate::clients::ClientRegistry,
     pub(super) db: SqlitePool,
     pub(super) pontia_home: PathBuf,
@@ -19,7 +18,6 @@ pub struct AgentControlBuilder {
 impl AgentControlBuilder {
     pub(super) fn new(db: SqlitePool, pontia_home: PathBuf) -> Self {
         Self {
-            environment: None,
             clients: Default::default(),
             client_control: crate::ClientControlService::new(db.clone(), pontia_home.clone()),
             db,
@@ -42,14 +40,6 @@ impl AgentControlBuilder {
 
     pub fn clients(mut self, clients: crate::clients::ClientRegistry) -> Self {
         self.clients = clients;
-        self
-    }
-
-    pub fn environment(
-        mut self,
-        environment: std::sync::Arc<dyn crate::sessions::SessionEnvironment>,
-    ) -> Self {
-        self.environment = Some(environment);
         self
     }
 

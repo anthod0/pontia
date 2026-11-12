@@ -1,7 +1,5 @@
+use crate::{models::WorkflowPatchRow, repository::ImplicitBlockWorkflowPatchRecord};
 use pontia_agent_control::SubmitInboxMessageRequest;
-use pontia_storage_sqlite::{
-    models::workflows::WorkflowPatchRow, repositories::workflows::ImplicitBlockWorkflowPatchRecord,
-};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -150,7 +148,7 @@ where
             return Ok(());
         };
         let Some(event) = self
-            .persisted_events
+            .repository
             .latest_workflow_terminal_event(session_id, Some(runtime_id), Some(turn_id))
             .await?
         else {

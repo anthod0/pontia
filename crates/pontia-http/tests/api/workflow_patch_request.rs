@@ -1,3 +1,6 @@
+use pontia_workflow::repository::{
+    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
+};
 mod interruption;
 
 use std::fs;
@@ -8,9 +11,8 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_http as http;
-use pontia_storage_sqlite::repositories::{
-    session_runtimes::{SessionRuntimeRecord, SqliteSessionRuntimeRepository},
-    workflows::{CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository},
+use pontia_storage_sqlite::repositories::session_runtimes::{
+    SessionRuntimeRecord, SqliteSessionRuntimeRepository,
 };
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -18,7 +20,10 @@ use tower::ServiceExt;
 use crate::common::test_app::TestApp;
 
 async fn seed_requester(app: &TestApp) {
-    let workflows = SqliteWorkflowRepository::new(app.db.clone());
+    let workflows = SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    );
     workflows
         .create_workflow(CreateWorkflowRecord {
             workflow_id: "wf_patch_request".into(),
@@ -269,17 +274,23 @@ async fn request_is_durable_before_the_coordinator_interrupts() {
     let patch_id = body["data"]["patch_id"].as_str().expect("Patch ID");
     assert!(patch_id.starts_with("patch_"));
     assert_eq!(body["data"]["state"], "requested");
-    let workflow = SqliteWorkflowRepository::new(app.db.clone())
-        .get_workflow("wf_patch_request")
-        .await
-        .expect("load Workflow")
-        .expect("Workflow");
+    let workflow = SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    )
+    .get_workflow("wf_patch_request")
+    .await
+    .expect("load Workflow")
+    .expect("Workflow");
     assert_eq!(workflow.state, "replanning");
-    let patch = SqliteWorkflowRepository::new(app.db.clone())
-        .get_patch(patch_id)
-        .await
-        .expect("load Patch")
-        .expect("Patch");
+    let patch = SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    )
+    .get_patch(patch_id)
+    .await
+    .expect("load Patch")
+    .expect("Patch");
     assert_eq!(patch.requesting_turn_id, "turn_patch_request");
     assert_eq!(patch.requesting_runtime_id, "runtime_patch_request");
     assert!(patch.interruption_attempted_at.is_none());
@@ -293,10 +304,13 @@ async fn request_is_durable_before_the_coordinator_interrupts() {
         .expect("request document"),
         "The remaining plan must change. 完成\n"
     );
-    let events = SqliteWorkflowRepository::new(app.db.clone())
-        .list_events("wf_patch_request")
-        .await
-        .expect("events");
+    let events = SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    )
+    .list_events("wf_patch_request")
+    .await
+    .expect("events");
     assert_eq!(
         events.last().expect("Patch event").event_type,
         "workflow.patch_requested"
@@ -335,12 +349,15 @@ async fn active_replanner_can_reject_an_unchanged_definition_over_api() {
     assert_eq!(body["data"]["outcome"], "rejected");
     assert_eq!(body["data"]["revision"], 1);
     assert_eq!(
-        SqliteWorkflowRepository::new(app.db.clone())
-            .get_workflow("wf_patch_request")
-            .await
-            .unwrap()
-            .unwrap()
-            .state,
+        SqliteWorkflowRepository::new(
+            app.db.clone(),
+            pontia_agent_control::ControlQueryService::new(app.db.clone())
+        )
+        .get_workflow("wf_patch_request")
+        .await
+        .unwrap()
+        .unwrap()
+        .state,
         "running"
     );
     assert_eq!(
@@ -361,13 +378,16 @@ async fn active_replanner_can_block_without_supplying_target_identifiers() {
     let (stale_status, _) = block_patch(&app, "stale_runtime", "stale").await;
     assert_eq!(stale_status, StatusCode::CONFLICT);
     assert!(
-        SqliteWorkflowRepository::new(app.db.clone())
-            .get_patch(patch_id)
-            .await
-            .unwrap()
-            .unwrap()
-            .reason_document_ref
-            .is_none()
+        SqliteWorkflowRepository::new(
+            app.db.clone(),
+            pontia_agent_control::ControlQueryService::new(app.db.clone())
+        )
+        .get_patch(patch_id)
+        .await
+        .unwrap()
+        .unwrap()
+        .reason_document_ref
+        .is_none()
     );
     let (status, body) = block_patch(&app, "runtime_patch_replanner", "Cannot continue").await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -375,7 +395,10 @@ async fn active_replanner_can_block_without_supplying_target_identifiers() {
     assert_eq!(body["error"], Value::Null);
     assert_eq!(body["data"]["patch_id"], patch_id);
     assert_eq!(body["data"]["state"], "blocked");
-    let repository = SqliteWorkflowRepository::new(app.db.clone());
+    let repository = SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    );
     let blocked = repository.get_patch(patch_id).await.unwrap().unwrap();
     assert_eq!(
         fs::read_to_string(
@@ -412,12 +435,15 @@ async fn stale_runtime_and_concurrent_request_leave_no_partial_patch() {
     let (status, _) = request_patch(&app, "stale_runtime").await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(
-        SqliteWorkflowRepository::new(app.db.clone())
-            .get_workflow("wf_patch_request")
-            .await
-            .expect("load Workflow")
-            .expect("Workflow")
-            .state,
+        SqliteWorkflowRepository::new(
+            app.db.clone(),
+            pontia_agent_control::ControlQueryService::new(app.db.clone())
+        )
+        .get_workflow("wf_patch_request")
+        .await
+        .expect("load Workflow")
+        .expect("Workflow")
+        .state,
         "running"
     );
 

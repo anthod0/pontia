@@ -40,25 +40,16 @@ CREATE TABLE events (
 );
 
 CREATE TABLE sessions (
-  session_id TEXT PRIMARY KEY NOT NULL,
-  client_type TEXT NOT NULL,
-  workspace_ref TEXT,
-  state TEXT NOT NULL,
-  current_turn_id TEXT,
-  state_version INTEGER NOT NULL DEFAULT 0,
-  metadata TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  workspace_id TEXT REFERENCES workspaces (workspace_id),
-  handle TEXT,
-  role TEXT,
-  description TEXT,
-  execution_profile_id TEXT,
-  execution_profile_version TEXT,
-  title TEXT,
-  pinned_at TEXT,
-  archived_at TEXT
-);
+    session_id TEXT PRIMARY KEY NOT NULL,
+    client_type TEXT NOT NULL,
+    workspace_ref TEXT,
+    state TEXT NOT NULL,
+    current_turn_id TEXT,
+    state_version INTEGER NOT NULL DEFAULT 0,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+, workspace_id TEXT REFERENCES workspaces(workspace_id), handle TEXT, role TEXT, description TEXT, execution_profile_id TEXT, execution_profile_version TEXT, title TEXT, pinned_at TEXT, archived_at TEXT, application_id TEXT, application_ref TEXT, runtime_environment TEXT NOT NULL DEFAULT '{}');
 
 CREATE TABLE turns (
   turn_id TEXT PRIMARY KEY NOT NULL,
@@ -222,20 +213,17 @@ CREATE TABLE session_lineage (
 );
 
 CREATE TABLE workflows (
-  workflow_id TEXT PRIMARY KEY NOT NULL,
-  title TEXT NOT NULL,
-  cwd TEXT NOT NULL,
-  state TEXT NOT NULL,
-  failure_message TEXT,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  started_at TEXT,
-  completed_at TEXT,
-  activating_node_id TEXT REFERENCES workflow_nodes (node_id),
-  current_revision INTEGER NOT NULL DEFAULT 1 CHECK (current_revision >= 1),
-  active_patch_id TEXT REFERENCES workflow_patches (patch_id),
-  active_replanner_session_id TEXT REFERENCES sessions (session_id)
-);
+    workflow_id TEXT PRIMARY KEY NOT NULL,
+    title TEXT NOT NULL,
+    cwd TEXT NOT NULL,
+    state TEXT NOT NULL,
+    failure_message TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    started_at TEXT,
+    completed_at TEXT
+, activating_node_id TEXT REFERENCES workflow_nodes(node_id), current_revision INTEGER NOT NULL DEFAULT 1
+    CHECK (current_revision >= 1), active_patch_id TEXT REFERENCES workflow_patches(patch_id), active_replanner_session_id TEXT);
 
 CREATE TABLE workflow_nodes (
   node_id TEXT PRIMARY KEY NOT NULL,
@@ -275,47 +263,34 @@ CREATE TABLE workflow_events (
 );
 
 CREATE TABLE workflow_patches (
-  patch_id TEXT PRIMARY KEY NOT NULL,
-  workflow_id TEXT NOT NULL REFERENCES workflows (workflow_id),
-  requesting_node_id TEXT NOT NULL REFERENCES workflow_nodes (node_id),
-  requesting_session_id TEXT NOT NULL REFERENCES sessions (session_id),
-  requesting_turn_id TEXT NOT NULL REFERENCES turns (turn_id),
-  requesting_runtime_id TEXT NOT NULL,
-  replanner_creation_token TEXT NOT NULL UNIQUE,
-  replanner_session_id TEXT REFERENCES sessions (session_id),
-  replanner_turn_id TEXT REFERENCES turns (turn_id),
-  replanner_runtime_id TEXT,
-  base_revision INTEGER NOT NULL CHECK (base_revision >= 1),
-  result_revision INTEGER CHECK (
-    result_revision IS NULL
-    OR result_revision >= base_revision
-  ),
-  state TEXT NOT NULL CHECK (
-    state IN (
-      'requested',
-      'planning',
-      'applied',
-      'rejected',
-      'blocked'
-    )
-  ),
-  request_document_ref TEXT NOT NULL,
-  request_size_bytes INTEGER NOT NULL CHECK (request_size_bytes >= 0),
-  decision_document_ref TEXT,
-  reason_document_ref TEXT,
-  blocked_draft_ref TEXT,
-  interruption_attempted_at TEXT,
-  interruption_requested_at TEXT,
-  replanning_unlocked_at TEXT,
-  continuation_message_id TEXT,
-  continuation_queued_at TEXT,
-  requested_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  planning_at TEXT,
-  resolved_at TEXT,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  replanner_exit_requested_at TEXT
-);
+    patch_id TEXT PRIMARY KEY NOT NULL,
+    workflow_id TEXT NOT NULL REFERENCES workflows(workflow_id),
+    requesting_node_id TEXT NOT NULL REFERENCES workflow_nodes(node_id),
+    requesting_session_id TEXT NOT NULL,
+    requesting_turn_id TEXT NOT NULL,
+    requesting_runtime_id TEXT NOT NULL,
+    replanner_session_id TEXT,
+    replanner_turn_id TEXT,
+    replanner_runtime_id TEXT,
+    base_revision INTEGER NOT NULL CHECK (base_revision >= 1),
+    result_revision INTEGER CHECK (result_revision IS NULL OR result_revision >= base_revision),
+    state TEXT NOT NULL CHECK (state IN ('requested', 'planning', 'applied', 'rejected', 'blocked')),
+    request_document_ref TEXT NOT NULL,
+    request_size_bytes INTEGER NOT NULL CHECK (request_size_bytes >= 0),
+    decision_document_ref TEXT,
+    reason_document_ref TEXT,
+    blocked_draft_ref TEXT,
+    interruption_attempted_at TEXT,
+    interruption_requested_at TEXT,
+    replanning_unlocked_at TEXT,
+    continuation_message_id TEXT,
+    continuation_queued_at TEXT,
+    requested_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    planning_at TEXT,
+    resolved_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+, replanner_exit_requested_at TEXT);
 
 CREATE TABLE native_turn_bindings (
   session_id TEXT NOT NULL REFERENCES sessions (session_id) ON DELETE CASCADE,
@@ -325,26 +300,18 @@ CREATE TABLE native_turn_bindings (
 );
 
 CREATE TABLE workflow_recoveries (
-  recovery_id TEXT PRIMARY KEY NOT NULL,
-  workflow_id TEXT NOT NULL REFERENCES workflows (workflow_id),
-  failure_event_id TEXT NOT NULL UNIQUE REFERENCES workflow_events (event_id),
-  exit_event_id TEXT NOT NULL REFERENCES events (event_id),
-  node_id TEXT NOT NULL REFERENCES workflow_nodes (node_id),
-  session_id TEXT NOT NULL REFERENCES sessions (session_id),
-  message_id TEXT NOT NULL UNIQUE,
-  state TEXT NOT NULL CHECK (
-    state IN (
-      'requested',
-      'preparing',
-      'dispatching',
-      'completed',
-      'failed'
-    )
-  ),
-  runtime_id TEXT,
-  failure_message TEXT,
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    recovery_id TEXT PRIMARY KEY NOT NULL,
+    workflow_id TEXT NOT NULL REFERENCES workflows(workflow_id),
+    failure_event_id TEXT NOT NULL UNIQUE REFERENCES workflow_events(event_id),
+    exit_event_id TEXT NOT NULL,
+    node_id TEXT NOT NULL REFERENCES workflow_nodes(node_id),
+    session_id TEXT NOT NULL,
+    message_id TEXT NOT NULL UNIQUE,
+    state TEXT NOT NULL CHECK (state IN ('requested', 'preparing', 'dispatching', 'completed', 'failed')),
+    runtime_id TEXT,
+    failure_message TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE TABLE interactions (
@@ -477,11 +444,6 @@ WHERE
 
 CREATE INDEX idx_workflow_patches_workflow_requested ON workflow_patches (workflow_id, requested_at, patch_id);
 
-CREATE UNIQUE INDEX idx_sessions_workflow_replanner_creation_token ON sessions (
-  json_extract(metadata, '$.workflow_replanner_creation_token')
-)
-WHERE
-  json_extract(metadata, '$.workflow_replanner_creation_token') IS NOT NULL;
 
 CREATE UNIQUE INDEX idx_inbox_messages_retry_of ON inbox_messages (retry_of_message_id)
 WHERE
@@ -511,4 +473,132 @@ WHERE
 CREATE UNIQUE INDEX idx_events_report_key ON events (session_id, event_type, report_key)
 WHERE
   report_key IS NOT NULL;
+CREATE TABLE domain_event_positions (
+    position INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE
+);
+
+CREATE TRIGGER events_assign_position AFTER INSERT ON events BEGIN
+    INSERT INTO domain_event_positions(event_id) VALUES (NEW.event_id);
+END;
+
+CREATE UNIQUE INDEX idx_sessions_application ON sessions(application_id, application_ref);
+
+CREATE TABLE workflow_agent_events (
+    position INTEGER PRIMARY KEY,
+    event_id TEXT NOT NULL UNIQUE,
+    session_id TEXT NOT NULL,
+    turn_id TEXT,
+    source TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_workflow_agent_events_session ON workflow_agent_events(session_id,position);
+
+CREATE TABLE workflow_event_cursor (
+    id INTEGER PRIMARY KEY CHECK (id=1),
+    position INTEGER NOT NULL
+);
+
+CREATE TABLE workflow_session_snapshots (
+    session_id TEXT PRIMARY KEY NOT NULL,
+    client_type TEXT NOT NULL,
+    state TEXT NOT NULL,
+    current_turn_id TEXT,
+    position INTEGER NOT NULL,
+    has_agent_binding INTEGER NOT NULL
+, revision INTEGER NOT NULL DEFAULT 0);
+
+CREATE TABLE workflow_turn_snapshots (
+    turn_id TEXT PRIMARY KEY NOT NULL,
+    session_id TEXT NOT NULL,
+    state TEXT NOT NULL
+);
+
+CREATE INDEX idx_workflow_turn_snapshots_session ON workflow_turn_snapshots(session_id);
+
+CREATE TABLE workflow_runtime_snapshots (
+    runtime_id TEXT PRIMARY KEY NOT NULL,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    state TEXT NOT NULL
+);
+
+CREATE INDEX idx_workflow_runtime_snapshots_session ON workflow_runtime_snapshots(session_id);
+
+CREATE TABLE workflow_inbox_snapshots (
+    message_id TEXT PRIMARY KEY NOT NULL,
+    session_id TEXT NOT NULL,
+    state TEXT NOT NULL,
+    turn_id TEXT
+);
+
+CREATE INDEX idx_workflow_inbox_snapshots_session ON workflow_inbox_snapshots(session_id);
+CREATE TABLE control_state_revision (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    revision INTEGER NOT NULL
+);
+
+CREATE TRIGGER sessions_revision_insert AFTER INSERT ON sessions BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER sessions_revision_update AFTER UPDATE ON sessions BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER sessions_revision_delete AFTER DELETE ON sessions BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER turns_revision_insert AFTER INSERT ON turns BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER turns_revision_update AFTER UPDATE ON turns BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER turns_revision_delete AFTER DELETE ON turns BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER session_runtimes_revision_insert AFTER INSERT ON session_runtimes BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER session_runtimes_revision_update AFTER UPDATE ON session_runtimes BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER session_runtimes_revision_delete AFTER DELETE ON session_runtimes BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER agent_bindings_revision_insert AFTER INSERT ON agent_bindings BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER agent_bindings_revision_update AFTER UPDATE ON agent_bindings BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER agent_bindings_revision_delete AFTER DELETE ON agent_bindings BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER inbox_messages_revision_insert AFTER INSERT ON inbox_messages BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER inbox_messages_revision_update AFTER UPDATE ON inbox_messages BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
+
+CREATE TRIGGER inbox_messages_revision_delete AFTER DELETE ON inbox_messages BEGIN
+    UPDATE control_state_revision SET revision = revision + 1 WHERE id = 1;
+END;
 ```

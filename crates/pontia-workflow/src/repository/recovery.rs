@@ -1,5 +1,5 @@
 use super::SqliteWorkflowRepository;
-use crate::models::workflows::WorkflowRecoveryRow;
+use crate::models::WorkflowRecoveryRow;
 use pontia_core::{Error, Result};
 use serde_json::json;
 use sqlx::{Sqlite, Transaction};
@@ -19,15 +19,14 @@ JOIN workflow_events f ON f.workflow_id=w.workflow_id AND f.event_type='workflow
     AND f.sequence=(SELECT MAX(sequence) FROM workflow_events WHERE workflow_id=w.workflow_id AND event_type='workflow.failed')
 JOIN workflow_nodes n ON n.workflow_id=w.workflow_id AND n.submitted_at IS NULL AND n.session_id IS NOT NULL
     AND n.introduced_revision<=w.current_revision AND (n.retired_revision IS NULL OR n.retired_revision>w.current_revision)
-JOIN sessions s ON s.session_id=n.session_id
-JOIN agent_bindings b ON b.session_id=s.session_id AND b.client_type=s.client_type
+JOIN workflow_session_snapshots s ON s.session_id=n.session_id
 LEFT JOIN workflow_recoveries previous ON previous.recovery_id=json_extract(f.payload,'$.recovery_id')
-JOIN events e ON e.session_id=s.session_id AND e.event_type='session.exited'
+JOIN workflow_agent_events e ON e.session_id=s.session_id AND e.event_type='session.exited'
     AND e.source IN ('agent_client','runtime_manager')
     AND e.event_id=COALESCE(json_extract(f.payload,'$.cause_event_id'),previous.exit_event_id,
-        (SELECT event_id FROM events WHERE session_id=s.session_id AND event_type='session.exited'
+        (SELECT event_id FROM workflow_agent_events WHERE session_id=s.session_id AND event_type='session.exited'
          AND source IN ('agent_client','runtime_manager') AND created_at<=f.created_at ORDER BY rowid DESC LIMIT 1))
-WHERE w.workflow_id=? AND s.client_type IN (SELECT value FROM json_each(?))
+WHERE s.has_agent_binding=1 AND w.workflow_id=? AND s.client_type IN (SELECT value FROM json_each(?))
     AND w.state='failed' AND w.activating_node_id IS NULL
     AND (s.state='exited' OR (s.state='idle' AND previous.state='failed'))
     AND (json_extract(f.payload,'$.cause_event_id')=e.event_id
@@ -40,13 +39,20 @@ WHERE w.workflow_id=? AND s.client_type IN (SELECT value FROM json_each(?))
         AND child.introduced_revision<=w.current_revision AND (child.retired_revision IS NULL OR child.retired_revision>w.current_revision))
     AND NOT EXISTS (SELECT 1 FROM workflow_recoveries WHERE workflow_id=w.workflow_id AND state IN ('requested','preparing','dispatching'))
     AND NOT EXISTS (SELECT 1 FROM workflow_patches WHERE workflow_id=w.workflow_id AND state IN ('requested','planning'))
-    AND NOT EXISTS (SELECT 1 FROM inbox_messages i WHERE i.session_id=s.session_id AND
+    AND NOT EXISTS (SELECT 1 FROM workflow_inbox_snapshots i WHERE i.session_id=s.session_id AND
         (i.state IN ('pending','resuming','dispatching','unknown') OR (i.state='dispatched' AND i.turn_id IS NULL)))
 "#;
 
 impl SqliteWorkflowRepository {
     pub async fn recovery_runtime_available(&self, id: &str) -> Result<bool> {
-        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workflow_recoveries a JOIN sessions s ON s.session_id=a.session_id JOIN session_runtimes r ON r.session_id=s.session_id WHERE a.recovery_id=? AND s.state IN ('idle','busy','waiting_for_interaction','interrupted') AND r.state IN ('starting','running') AND r.role='tui' AND r.runtime_id=a.runtime_id)")
+        let session_id: String =
+            sqlx::query_scalar("SELECT session_id FROM workflow_recoveries WHERE recovery_id=?")
+                .bind(id)
+                .fetch_one(&self.pool)
+                .await?;
+        self.refresh_session(&session_id).await?;
+        self.synchronize().await?;
+        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workflow_recoveries a JOIN workflow_session_snapshots s ON s.session_id=a.session_id JOIN workflow_runtime_snapshots r ON r.session_id=s.session_id WHERE a.recovery_id=? AND s.state IN ('idle','busy','waiting_for_interaction','interrupted') AND r.state IN ('starting','running') AND r.role='tui' AND r.runtime_id=a.runtime_id)")
             .bind(id).fetch_one(&self.pool).await?)
     }
 
@@ -54,6 +60,8 @@ impl SqliteWorkflowRepository {
         &self,
         workflow_id: &str,
     ) -> Result<Option<WorkflowRecoveryCandidate>> {
+        self.refresh_workflow_sessions(workflow_id).await?;
+        self.synchronize().await?;
         Ok(sqlx::query_as(CANDIDATE)
             .bind(workflow_id)
             .bind(serde_json::to_string(&self.recovery_client_types)?)
@@ -76,6 +84,8 @@ impl SqliteWorkflowRepository {
         failure_event_id: &str,
         recovery_id: &str,
     ) -> Result<WorkflowRecoveryRow> {
+        self.refresh_workflow_sessions(workflow_id).await?;
+        self.synchronize().await?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         if let Some(existing) = sqlx::query_as::<_, WorkflowRecoveryRow>(
             "SELECT * FROM workflow_recoveries WHERE workflow_id=? AND failure_event_id=?",
@@ -116,8 +126,15 @@ impl SqliteWorkflowRepository {
     }
 
     pub async fn start_recovery_delivery(&self, id: &str) -> Result<()> {
+        let session_id: String =
+            sqlx::query_scalar("SELECT session_id FROM workflow_recoveries WHERE recovery_id=?")
+                .bind(id)
+                .fetch_one(&self.pool)
+                .await?;
+        self.refresh_session(&session_id).await?;
+        self.synchronize().await?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let result=sqlx::query("UPDATE workflow_recoveries SET state='dispatching',runtime_id=(SELECT runtime_id FROM session_runtimes WHERE session_id=workflow_recoveries.session_id AND state = 'running' AND role='tui'),updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE recovery_id=? AND state='preparing' AND EXISTS (SELECT 1 FROM sessions s JOIN session_runtimes r ON r.session_id=s.session_id WHERE s.session_id=workflow_recoveries.session_id AND s.state='idle' AND r.state IN ('starting','running') AND r.role='tui' AND r.runtime_id IS NOT NULL) AND EXISTS (SELECT 1 FROM inbox_messages WHERE message_id=workflow_recoveries.message_id AND state='resuming')")
+        let result=sqlx::query("UPDATE workflow_recoveries SET state='dispatching',runtime_id=(SELECT runtime_id FROM workflow_runtime_snapshots WHERE session_id=workflow_recoveries.session_id AND state = 'running' AND role='tui'),updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE recovery_id=? AND state='preparing' AND EXISTS (SELECT 1 FROM workflow_session_snapshots s JOIN workflow_runtime_snapshots r ON r.session_id=s.session_id WHERE s.session_id=workflow_recoveries.session_id AND s.state='idle' AND r.state IN ('starting','running') AND r.role='tui' AND r.runtime_id IS NOT NULL) AND EXISTS (SELECT 1 FROM workflow_inbox_snapshots WHERE message_id=workflow_recoveries.message_id AND state='resuming')")
             .bind(id).execute(&mut *tx).await?;
         if result.rows_affected() != 1 {
             return Err(Error::StateConflict(

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use pontia_storage_sqlite::models::workflows::WorkflowNodeRow;
+use crate::models::WorkflowNodeRow;
 use serde::Serialize;
 
 use super::WorkflowQueryService;
@@ -51,7 +51,7 @@ impl WorkflowQueryService {
         for node in nodes {
             let turn_ids = match node.session_id.as_deref() {
                 Some(session_id) => self
-                    .turns
+                    .queries
                     .list_turns(session_id)
                     .await?
                     .into_iter()

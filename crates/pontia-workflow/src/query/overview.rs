@@ -1,5 +1,5 @@
+use crate::models::{WorkflowNodeRow, WorkflowRow};
 use pontia_core::time::utc_now;
-use pontia_storage_sqlite::models::workflows::{WorkflowNodeRow, WorkflowRow};
 use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -51,7 +51,7 @@ pub struct WorkflowDetailView {
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkflowRecoveryView {
     #[serde(flatten)]
-    pub recovery: pontia_storage_sqlite::models::workflows::WorkflowRecoveryRow,
+    pub recovery: crate::models::WorkflowRecoveryRow,
     pub original_failure_message: Option<String>,
 }
 
@@ -152,7 +152,7 @@ impl WorkflowQueryService {
         let mut views = Vec::with_capacity(nodes.len());
         for (index, node) in nodes.iter().enumerate() {
             let session = match node.session_id.as_deref() {
-                Some(session_id) => self.sessions.get_session(session_id).await?,
+                Some(session_id) => self.queries.session_snapshot(session_id).await?,
                 None => None,
             };
             let session_state = session.as_ref().map(|session| session.state.clone());

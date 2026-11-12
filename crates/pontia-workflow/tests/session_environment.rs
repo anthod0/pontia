@@ -61,9 +61,6 @@ async fn replanner_restart_and_recovered_resume_keep_the_original_patch_context(
     let build = || {
         AgentControl::builder(pool.clone(), root.path().into())
             .clients(clients.clone())
-            .environment(Arc::new(pontia_workflow::WorkflowSessionEnvironment::new(
-                pool.clone(),
-            )))
             .build()
     };
     let control = build();

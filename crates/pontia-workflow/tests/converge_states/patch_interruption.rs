@@ -1,12 +1,12 @@
+use pontia_workflow::repository::SqliteWorkflowRepository;
 use std::{
     fs,
     future::Future,
     sync::{Arc, Mutex},
 };
 
-use pontia_storage_sqlite::repositories::{
-    session_runtimes::{SessionRuntimeRecord, SqliteSessionRuntimeRepository},
-    workflows::SqliteWorkflowRepository,
+use pontia_storage_sqlite::repositories::session_runtimes::{
+    SessionRuntimeRecord, SqliteSessionRuntimeRepository,
 };
 use pontia_workflow::{
     RequestWorkflowPatch, TurnInterruptionRequester, WorkflowCoordinator, WorkflowPatchService,
@@ -45,7 +45,10 @@ async fn only_the_exact_client_confirmed_interruption_unlocks_replanning() {
     let pontia_home = temp.path().join("pontia-home");
     fs::create_dir(&pontia_home).expect("Pontia home");
     let pool = test_pool(&temp.path().join("patch-interruption.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_linear_workflow(&repository, "wf_patch_interrupt", "[]", false).await;
     repository
         .start_workflow("wf_patch_interrupt", "evt_started")
@@ -93,15 +96,20 @@ async fn only_the_exact_client_confirmed_interruption_unlocks_replanning() {
     let node_dir = workflow_dir.join("nodes/wf_patch_interrupt_root");
     fs::create_dir_all(&node_dir).expect("Node directory");
     fs::write(node_dir.join("problem-report.md"), "Need a corrected plan").expect("problem report");
-    let outcome = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .request_patch(RequestWorkflowPatch {
-            session_id: "sess_patch_interrupt".into(),
-            runtime_id: "runtime_patch_interrupt".into(),
-        })
-        .await
-        .expect("request Patch");
+    let outcome = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .request_patch(RequestWorkflowPatch {
+        session_id: "sess_patch_interrupt".into(),
+        runtime_id: "runtime_patch_interrupt".into(),
+    })
+    .await
+    .expect("request Patch");
     let interruptions = RecordingInterrupter::default();
     let coordinator = WorkflowCoordinator::with_services_and_interruptions(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),

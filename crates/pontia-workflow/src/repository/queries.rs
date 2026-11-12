@@ -1,6 +1,6 @@
 use pontia_core::{Error, Result};
 
-use crate::models::workflows::{WorkflowNodeRow, WorkflowRow};
+use crate::models::{WorkflowNodeRow, WorkflowRow};
 
 use super::SqliteWorkflowRepository;
 

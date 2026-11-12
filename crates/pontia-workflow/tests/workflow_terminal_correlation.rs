@@ -22,6 +22,8 @@ async fn fact(
     event_type: &str,
     payload: Value,
 ) {
+    sqlx::query("INSERT OR IGNORE INTO sessions(session_id,client_type,state,application_id,application_ref) VALUES (?,'pi','busy','workflow',?)")
+        .bind(session).bind(session).execute(pool).await.unwrap();
     let mut tx = pool.begin().await.unwrap();
     SqliteEventRepository::insert_event_in_tx(
         &mut tx,
@@ -48,7 +50,10 @@ async fn fact(
 async fn turn_terminal_runtime_comes_from_its_first_confirmed_start_not_terminal_payload() {
     let root = tempfile::tempdir().unwrap();
     let pool = test_pool(root.path()).await;
-    let events = SqliteEventRepository::new(pool.clone());
+    let events = pontia_workflow::repository::SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     for (id, session, turn, source, runtime) in [
         ("other_session", "other", "turn", "agent_adapter", "wrong"),
         (
@@ -103,7 +108,10 @@ async fn turn_terminal_runtime_comes_from_its_first_confirmed_start_not_terminal
             .unwrap()
             .is_none()
     );
-    let stored = events.list_turn_events("session", "turn").await.unwrap();
+    let stored = SqliteEventRepository::new(pool.clone())
+        .list_turn_events("session", "turn")
+        .await
+        .unwrap();
     assert_eq!(
         serde_json::from_str::<Value>(&stored.last().unwrap().payload).unwrap(),
         json!({ "runtime_id": "replacement" }),
@@ -115,7 +123,10 @@ async fn turn_terminal_runtime_comes_from_its_first_confirmed_start_not_terminal
 async fn unstarted_turn_and_later_start_do_not_supply_fenced_terminal_evidence() {
     let root = tempfile::tempdir().unwrap();
     let pool = test_pool(root.path()).await;
-    let events = SqliteEventRepository::new(pool.clone());
+    let events = pontia_workflow::repository::SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     fact(
         &pool,
         "terminal",
@@ -162,7 +173,10 @@ async fn unstarted_turn_and_later_start_do_not_supply_fenced_terminal_evidence()
 async fn runtime_and_turn_fences_are_applied_before_selecting_terminal_evidence() {
     let root = tempfile::tempdir().unwrap();
     let pool = test_pool(root.path()).await;
-    let events = SqliteEventRepository::new(pool.clone());
+    let events = pontia_workflow::repository::SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     fact(
         &pool,
         "old_exit",
@@ -237,7 +251,10 @@ async fn runtime_and_turn_fences_are_applied_before_selecting_terminal_evidence(
 async fn reused_runtime_does_not_correlate_historical_exit_or_previous_turn_to_new_start() {
     let root = tempfile::tempdir().unwrap();
     let pool = test_pool(root.path()).await;
-    let events = SqliteEventRepository::new(pool.clone());
+    let events = pontia_workflow::repository::SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     fact(
         &pool,
         "start",

@@ -1,3 +1,6 @@
+use pontia_workflow::repository::{
+    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
+};
 use std::{
     future::Future,
     path::Path,
@@ -6,13 +9,7 @@ use std::{
 
 use pontia_agent_control::CreateSessionRequest;
 use pontia_core::domain::{DomainEvent, EventSource, EventType};
-use pontia_storage_sqlite::{
-    connect_sqlite,
-    repositories::workflows::{
-        CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
-    },
-    run_migrations,
-};
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use pontia_workflow::{
     AgentEventSubscriber, GracefulExitRequester, SessionCreator, SubmitWorkflowNodeRequest,
     TurnInterruptionRequester, WorkflowCoordinator, WorkflowScheduler,
@@ -178,6 +175,7 @@ fn spawn_coordinator(
     tokio::spawn(async move {
         let _keepalive = shutdown_tx;
         WorkflowCoordinator::with_services(
+            pool.clone(),
             &pontia_agent_control::AgentControl::builder(pool, pontia_home.clone()).build(),
             sessions,
             exits,
@@ -258,7 +256,10 @@ async fn wait_for_completed(repository: &SqliteWorkflowRepository, workflow_id: 
 async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("chain.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     repository
         .create_workflow(CreateWorkflowRecord {
             workflow_id: "wf_chain".to_string(),
@@ -331,7 +332,8 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
         pontia_home.clone(),
     );
     let scheduler = WorkflowScheduler::with_services(
-        pool,
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
         sessions.clone(),
         exits.clone(),
         pontia_home.clone(),
@@ -535,7 +537,10 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
 async fn paused_coordinator_ignores_expected_interrupt_and_defers_downstream_dispatch() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("paused.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     repository
         .create_workflow(CreateWorkflowRecord {
             workflow_id: "wf_paused".to_string(),
@@ -581,7 +586,13 @@ async fn paused_coordinator_ignores_expected_interrupt_and_defers_downstream_dis
         events.clone(),
         pontia_home.clone(),
     );
-    let scheduler = WorkflowScheduler::with_services(pool, sessions, exits, pontia_home.clone());
+    let scheduler = WorkflowScheduler::with_services(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        sessions,
+        exits,
+        pontia_home.clone(),
+    );
     scheduler.start("wf_paused").await.expect("start workflow");
     write_output(&pontia_home, "wf_paused", "root.md", "Root output");
     scheduler
@@ -642,7 +653,10 @@ async fn paused_coordinator_ignores_expected_interrupt_and_defers_downstream_dis
 async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("lagged.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     repository
         .create_workflow(CreateWorkflowRecord {
             workflow_id: "wf_lagged".to_string(),
@@ -679,8 +693,13 @@ async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
         events.clone(),
         pontia_home.clone(),
     );
-    let scheduler =
-        WorkflowScheduler::with_services(pool.clone(), sessions, exits, pontia_home.clone());
+    let scheduler = WorkflowScheduler::with_services(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        sessions,
+        exits,
+        pontia_home.clone(),
+    );
     scheduler.start("wf_lagged").await.expect("start workflow");
     write_output(&pontia_home, "wf_lagged", "result.md", "Done.");
     scheduler

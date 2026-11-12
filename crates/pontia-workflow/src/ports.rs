@@ -9,10 +9,9 @@ use crate::{Error, Result};
 
 pub trait SessionCreator {
     fn default_client_type(&self) -> Result<String>;
-    fn find_session_by_creation_token(
+    fn find_session_by_ownership(
         &self,
-        _metadata_key: &str,
-        _token: &str,
+        _ownership: &pontia_agent_control::SessionOwnership,
     ) -> impl Future<Output = Result<Option<String>>> + Send {
         async { Ok(None) }
     }
@@ -27,15 +26,11 @@ impl SessionCreator for SessionCommandService {
     fn default_client_type(&self) -> Result<String> {
         Ok(SessionCommandService::default_client_type(self)?.to_string())
     }
-    async fn find_session_by_creation_token(
+    async fn find_session_by_ownership(
         &self,
-        metadata_key: &str,
-        token: &str,
+        ownership: &pontia_agent_control::SessionOwnership,
     ) -> Result<Option<String>> {
-        Ok(
-            SessionCommandService::find_session_by_creation_token(self, metadata_key, token)
-                .await?,
-        )
+        Ok(self.queries().find_session_by_ownership(ownership).await?)
     }
 
     async fn create_session(&self, request: CreateSessionRequest) -> Result<String> {

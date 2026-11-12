@@ -82,6 +82,7 @@ pub async fn run_workflow(
     let workflow_id = request.workflow_id.clone();
     let scheduler = WorkflowScheduler::new(
         state.db(),
+        state.control().queries(),
         state.control().session_commands(),
         state.pontia_home().to_path_buf(),
     );
@@ -127,13 +128,17 @@ pub async fn request_workflow_patch(
     request: Result<Json<WorkflowPatchRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let outcome = WorkflowPatchService::new(state.db(), state.pontia_home().to_path_buf())
-        .request_patch(RequestWorkflowPatch {
-            session_id: request.session_id,
-            runtime_id: request.runtime_id,
-        })
-        .await
-        .map_err(map_command_error)?;
+    let outcome = WorkflowPatchService::new(
+        state.db(),
+        state.control().queries(),
+        state.pontia_home().to_path_buf(),
+    )
+    .request_patch(RequestWorkflowPatch {
+        session_id: request.session_id,
+        runtime_id: request.runtime_id,
+    })
+    .await
+    .map_err(map_command_error)?;
     Ok(ok(json!({
         "patch_id": outcome.patch_id,
         "state": "requested",
@@ -145,13 +150,17 @@ pub async fn apply_workflow_patch(
     request: Result<Json<WorkflowPatchApplyRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let outcome = WorkflowPatchService::new(state.db(), state.pontia_home().to_path_buf())
-        .apply_patch(ApplyWorkflowPatch {
-            session_id: request.session_id,
-            runtime_id: request.runtime_id,
-        })
-        .await
-        .map_err(map_command_error)?;
+    let outcome = WorkflowPatchService::new(
+        state.db(),
+        state.control().queries(),
+        state.pontia_home().to_path_buf(),
+    )
+    .apply_patch(ApplyWorkflowPatch {
+        session_id: request.session_id,
+        runtime_id: request.runtime_id,
+    })
+    .await
+    .map_err(map_command_error)?;
     Ok(ok(json!({
         "patch_id": outcome.patch_id,
         "workflow_id": outcome.workflow_id,
@@ -165,13 +174,17 @@ pub async fn block_workflow_patch(
     request: Result<Json<WorkflowPatchBlockRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
-    let outcome = WorkflowPatchService::new(state.db(), state.pontia_home().to_path_buf())
-        .block_patch(BlockWorkflowPatch {
-            session_id: request.session_id,
-            runtime_id: request.runtime_id,
-        })
-        .await
-        .map_err(map_command_error)?;
+    let outcome = WorkflowPatchService::new(
+        state.db(),
+        state.control().queries(),
+        state.pontia_home().to_path_buf(),
+    )
+    .block_patch(BlockWorkflowPatch {
+        session_id: request.session_id,
+        runtime_id: request.runtime_id,
+    })
+    .await
+    .map_err(map_command_error)?;
     Ok(ok(json!({
         "patch_id": outcome.patch_id,
         "workflow_id": outcome.workflow_id,
@@ -186,6 +199,7 @@ pub async fn submit_workflow_output(
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
     let scheduler = WorkflowScheduler::new(
         state.db(),
+        state.control().queries(),
         state.control().session_commands(),
         state.pontia_home().to_path_buf(),
     );

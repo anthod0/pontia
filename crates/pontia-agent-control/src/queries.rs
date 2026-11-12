@@ -1,3 +1,7 @@
+mod domain_events;
+mod snapshots;
+pub use domain_events::{DomainEventPage, DomainEventReader, DomainEventRecord};
+pub use snapshots::{RuntimeSnapshot, SessionOwnership, SessionSnapshot, TurnSnapshot};
 mod control;
 pub(crate) use control::SessionControlState;
 mod events;
@@ -13,6 +17,10 @@ pub struct ControlQueryService {
     control: Option<crate::ClientControlService>,
 }
 impl ControlQueryService {
+    pub fn domain_events(&self) -> DomainEventReader {
+        DomainEventReader::new(self.pool.clone())
+    }
+
     pub fn with_workspace_browser(mut self, config: pontia_config::WorkspaceBrowserConfig) -> Self {
         self.workspace_browser = config;
         self

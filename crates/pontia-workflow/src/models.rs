@@ -58,7 +58,7 @@ pub struct WorkflowPatchRow {
     pub requesting_session_id: String,
     pub requesting_turn_id: String,
     pub requesting_runtime_id: String,
-    pub replanner_creation_token: String,
+
     pub replanner_session_id: Option<String>,
     pub replanner_turn_id: Option<String>,
     pub replanner_runtime_id: Option<String>,
@@ -102,4 +102,14 @@ pub struct WorkflowAgentEventRow {
     pub occurred_at: String,
     pub payload: String,
     pub created_at: String,
+}
+
+/// Persisted lifecycle evidence with its historical Runtime correlation.
+/// Turn Runtime identity comes from the confirmed start, not the terminal payload.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct WorkflowTerminalEventRow {
+    pub event_id: String,
+    pub turn_id: Option<String>,
+    pub event_type: String,
+    pub runtime_id: Option<String>,
 }

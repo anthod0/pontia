@@ -14,8 +14,6 @@ use serde_json::Value;
 use sqlx::SqlitePool;
 
 mod commands;
-mod environment;
-pub use environment::SessionEnvironment;
 mod compaction;
 mod fork;
 pub use fork::{ForkSessionOutcome, ForkSessionRequest};
@@ -45,6 +43,8 @@ pub struct CreateSessionRequest {
     pub initial_task: Option<InitialTaskRequest>,
     #[serde(skip)]
     pub runtime_environment: BTreeMap<String, String>,
+    #[serde(skip)]
+    pub ownership: Option<crate::SessionOwnership>,
 }
 
 fn deserialize_client_type<'de, D: serde::Deserializer<'de>>(
@@ -84,7 +84,6 @@ impl CreateSessionOutcome {
 #[derive(Clone)]
 pub struct SessionCommandService {
     pool: SqlitePool,
-    environment: Option<std::sync::Arc<dyn SessionEnvironment>>,
     event_ingest: crate::EventIngestService,
     queries: crate::ControlQueryService,
     clients: crate::clients::ClientExecutionService,
@@ -92,16 +91,13 @@ pub struct SessionCommandService {
     inbox: std::sync::Arc<crate::InboxCommandService>,
     pontia_home: PathBuf,
     control: crate::ClientControlService,
+    creation_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
     fork_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
 
 impl SessionCommandService {
-    pub(crate) fn with_environment(
-        mut self,
-        environment: std::sync::Arc<dyn SessionEnvironment>,
-    ) -> Self {
-        self.environment = Some(environment);
-        self
+    pub fn queries(&self) -> crate::ControlQueryService {
+        self.queries.clone()
     }
 
     pub(crate) fn new(
@@ -115,8 +111,8 @@ impl SessionCommandService {
     ) -> Self {
         let control = clients.control_service();
         Self {
-            environment: None,
             control,
+            creation_gate: std::sync::Arc::default(),
             fork_gate: std::sync::Arc::default(),
             pool,
             event_ingest,

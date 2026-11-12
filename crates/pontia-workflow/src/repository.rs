@@ -1,4 +1,7 @@
+use pontia_agent_control::ControlQueryService;
 use sqlx::SqlitePool;
+mod projection;
+mod terminal;
 
 mod definition;
 mod events;
@@ -34,9 +37,10 @@ pub struct CreateWorkflowNodeRecord {
     pub execution_profile_version: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SqliteWorkflowRepository {
     pool: SqlitePool,
+    queries: ControlQueryService,
     recovery_client_types: Vec<String>,
 }
 
@@ -47,7 +51,6 @@ pub struct RequestWorkflowPatchRecord {
     pub runtime_id: String,
     pub request_document_ref: String,
     pub request_size_bytes: i64,
-    pub replanner_creation_token: String,
     pub event_id: String,
 }
 
@@ -97,9 +100,10 @@ pub struct ImplicitBlockWorkflowPatchRecord {
 }
 
 impl SqliteWorkflowRepository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: SqlitePool, queries: ControlQueryService) -> Self {
         Self {
             pool,
+            queries,
             recovery_client_types: Vec::new(),
         }
     }

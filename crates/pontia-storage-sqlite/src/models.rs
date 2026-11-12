@@ -6,5 +6,4 @@ pub mod inbox;
 pub mod session_files;
 pub mod sessions;
 pub mod turns;
-pub mod workflows;
 pub mod workspaces;

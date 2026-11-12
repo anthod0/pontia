@@ -6,10 +6,10 @@ use http_body_util::BodyExt;
 use pontia_agent_control::client_contract::{AgentClientCapabilities, GenericTestClient};
 use pontia_application::AppState;
 use pontia_http as http;
-use pontia_storage_sqlite::repositories::workflows::{
+use pontia_workflow::WorkflowControlService;
+use pontia_workflow::repository::{
     CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
 };
-use pontia_workflow::WorkflowControlService;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
@@ -310,7 +310,10 @@ async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() 
         assert_eq!(status, StatusCode::OK, "{body}");
     }
 
-    let repository = SqliteWorkflowRepository::new(state.db());
+    let repository = SqliteWorkflowRepository::new(
+        state.db(),
+        pontia_agent_control::ControlQueryService::new(state.db()),
+    );
     repository
         .create_definition(
             CreateWorkflowRecord {
@@ -339,7 +342,7 @@ async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() 
         .await
         .expect("bind interrupted session");
 
-    let outcome = WorkflowControlService::new(state.control())
+    let outcome = WorkflowControlService::new(state.db(), state.control())
         .resume("wf_generic_resume")
         .await
         .expect("resume workflow");

@@ -100,7 +100,7 @@ impl AgentControl {
             scheduler.clone(),
         ));
         scheduler.connect(&inbox);
-        let mut sessions = crate::SessionCommandService::new(
+        let sessions = crate::SessionCommandService::new(
             builder.db.clone(),
             ingest.clone(),
             queries,
@@ -109,9 +109,6 @@ impl AgentControl {
             inbox.clone(),
             builder.pontia_home.clone(),
         );
-        if let Some(environment) = builder.environment {
-            sessions = sessions.with_environment(environment);
-        }
         Self {
             inner: Arc::new(AgentControlInner {
                 commands: CommandServices {

@@ -1,6 +1,6 @@
 use pontia_core::Result;
 
-use crate::models::workflows::WorkflowPatchRow;
+use crate::models::WorkflowPatchRow;
 
 use super::SqliteWorkflowRepository;
 
@@ -8,7 +8,7 @@ impl SqliteWorkflowRepository {
     pub async fn list_patches(&self, workflow_id: &str) -> Result<Vec<WorkflowPatchRow>> {
         Ok(sqlx::query_as::<_, WorkflowPatchRow>(
             r#"SELECT patch_id, workflow_id, requesting_node_id, requesting_session_id,
-                      requesting_turn_id, requesting_runtime_id, replanner_creation_token,
+                      requesting_turn_id, requesting_runtime_id,
                       replanner_session_id, replanner_turn_id, replanner_runtime_id,
                       base_revision, result_revision, state, request_document_ref,
                       request_size_bytes, decision_document_ref, reason_document_ref,
@@ -27,7 +27,7 @@ impl SqliteWorkflowRepository {
     pub async fn get_patch(&self, patch_id: &str) -> Result<Option<WorkflowPatchRow>> {
         Ok(sqlx::query_as::<_, WorkflowPatchRow>(
             r#"SELECT patch_id, workflow_id, requesting_node_id, requesting_session_id,
-                      requesting_turn_id, requesting_runtime_id, replanner_creation_token,
+                      requesting_turn_id, requesting_runtime_id,
                       replanner_session_id, replanner_turn_id, replanner_runtime_id,
                       base_revision, result_revision, state, request_document_ref,
                       request_size_bytes, decision_document_ref, reason_document_ref,
@@ -46,12 +46,14 @@ impl SqliteWorkflowRepository {
         session_id: &str,
         runtime_id: &str,
     ) -> Result<Option<WorkflowPatchRow>> {
+        self.refresh_session(session_id).await?;
+        self.synchronize().await?;
         let patch_id: Option<String> = sqlx::query_scalar(
             r#"SELECT p.patch_id FROM workflow_patches AS p
                JOIN workflows AS w ON w.active_patch_id = p.patch_id
-               JOIN sessions AS s ON s.session_id = p.replanner_session_id
-               JOIN turns AS t ON t.turn_id = s.current_turn_id AND t.session_id = s.session_id
-               JOIN session_runtimes AS r ON r.session_id = s.session_id
+               JOIN workflow_session_snapshots AS s ON s.session_id = p.replanner_session_id
+               JOIN workflow_turn_snapshots AS t ON t.turn_id = s.current_turn_id AND t.session_id = s.session_id
+               JOIN workflow_runtime_snapshots AS r ON r.session_id = s.session_id
                WHERE p.replanner_session_id = ? AND p.replanner_runtime_id = ?
                  AND p.state = 'planning' AND w.state = 'replanning'
                  AND w.active_replanner_session_id = p.replanner_session_id
@@ -73,7 +75,7 @@ impl SqliteWorkflowRepository {
         Ok(sqlx::query_as::<_, WorkflowPatchRow>(
             r#"SELECT p.patch_id, p.workflow_id, p.requesting_node_id, p.requesting_session_id,
                       p.requesting_turn_id, p.requesting_runtime_id,
-                      p.replanner_creation_token, p.replanner_session_id, p.replanner_turn_id,
+                      p.replanner_session_id, p.replanner_turn_id,
                       p.replanner_runtime_id, p.base_revision, p.result_revision,
                       p.state, p.request_document_ref, p.request_size_bytes,
                       p.decision_document_ref, p.reason_document_ref, p.blocked_draft_ref,

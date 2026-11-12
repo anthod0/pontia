@@ -288,6 +288,7 @@ impl EventCommitter {
 
         project_runtime_in_tx(&mut tx, &event).await?;
         insert_event_in_tx(&mut tx, &event).await?;
+
         if let Some(runtime_event) = &runtime_event {
             project_runtime_in_tx(&mut tx, runtime_event).await?;
             insert_event_in_tx(&mut tx, runtime_event).await?;
@@ -297,6 +298,13 @@ impl EventCommitter {
             SqliteEventRepository::session_event_count_in_tx(&mut tx, &event.session_id).await?;
 
         persist_projections_in_tx(&mut tx, &projection, state_version).await?;
+        if event.event_type == EventType::SessionCreated {
+            sqlx::query("UPDATE sessions SET application_id=?, application_ref=?, runtime_environment=? WHERE session_id=?")
+                .bind(event.payload.pointer("/ownership/application_id").and_then(serde_json::Value::as_str))
+                .bind(event.payload.pointer("/ownership/reference").and_then(serde_json::Value::as_str))
+                .bind(event.payload.get("runtime_environment").cloned().unwrap_or_else(|| serde_json::json!({})).to_string())
+                .bind(&event.session_id).execute(&mut *tx).await?;
+        }
 
         if let Some(binding) = initial_agent_binding {
             crate::sessions::upsert_agent_binding_in_tx(&mut tx, binding).await?;

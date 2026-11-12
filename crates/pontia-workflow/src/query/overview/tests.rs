@@ -1,4 +1,4 @@
-use pontia_storage_sqlite::models::workflows::{WorkflowNodeRow, WorkflowRow};
+use crate::models::{WorkflowNodeRow, WorkflowRow};
 
 use super::{WorkflowAgentStatus, derive_status};
 

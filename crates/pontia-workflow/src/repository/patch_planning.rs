@@ -1,6 +1,7 @@
 use pontia_core::{Error, Result};
 
-use crate::{models::workflows::WorkflowPatchRow, repositories::events::WORKFLOW_TERMINAL_EVENTS};
+use super::terminal::WORKFLOW_TERMINAL_EVENTS;
+use crate::models::WorkflowPatchRow;
 
 use super::{RequestWorkflowPatchRecord, SqliteWorkflowRepository};
 
@@ -9,19 +10,17 @@ impl SqliteWorkflowRepository {
         &self,
         request: RequestWorkflowPatchRecord,
     ) -> Result<WorkflowPatchRow> {
-        let mut tx = self.pool.begin().await?;
-        crate::repositories::turns::SqliteTurnRepository::serialize_session_turn_writes_in_tx(
-            &mut tx,
-            &request.session_id,
-        )
-        .await?;
+        self.verify_active_turn(&request.session_id, &request.runtime_id)
+            .await?;
+        self.synchronize().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
 
         let context = sqlx::query_as::<_, (String, String, String, i64)>(
             r#"SELECT n.workflow_id, n.node_id, t.turn_id, w.current_revision
                FROM workflow_nodes AS n
                JOIN workflows AS w ON w.workflow_id = n.workflow_id
-               JOIN session_runtimes AS r ON r.session_id = n.session_id
-               JOIN turns AS t ON t.session_id = n.session_id
+               JOIN workflow_runtime_snapshots AS r ON r.session_id = n.session_id
+               JOIN workflow_turn_snapshots AS t ON t.session_id = n.session_id
                WHERE n.session_id = ?
                  AND n.submitted_at IS NULL
                  AND n.introduced_revision <= w.current_revision
@@ -58,9 +57,9 @@ impl SqliteWorkflowRepository {
         sqlx::query(
             r#"INSERT INTO workflow_patches
                (patch_id, workflow_id, requesting_node_id, requesting_session_id,
-                requesting_turn_id, requesting_runtime_id, replanner_creation_token,
+                requesting_turn_id, requesting_runtime_id,
                 base_revision, state, request_document_ref, request_size_bytes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?)"#,
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?)"#,
         )
         .bind(&request.patch_id)
         .bind(workflow_id)
@@ -68,7 +67,6 @@ impl SqliteWorkflowRepository {
         .bind(&request.session_id)
         .bind(turn_id)
         .bind(&request.runtime_id)
-        .bind(&request.replanner_creation_token)
         .bind(base_revision)
         .bind(&request.request_document_ref)
         .bind(request.request_size_bytes)
@@ -128,6 +126,7 @@ impl SqliteWorkflowRepository {
     }
 
     pub async fn patch_requester_interrupted(&self, patch_id: &str) -> Result<bool> {
+        self.synchronize().await?;
         let result = sqlx::query(&format!(
             r#"{WORKFLOW_TERMINAL_EVENTS}
                UPDATE workflow_patches
@@ -165,9 +164,11 @@ impl SqliteWorkflowRepository {
         session_id: &str,
         event_id: &str,
     ) -> Result<bool> {
-        let mut tx = self.pool.begin().await?;
+        self.refresh_session(session_id).await?;
+        self.synchronize().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let runtime_id: Option<String> = sqlx::query_scalar(
-            r#"SELECT runtime_id FROM session_runtimes
+            r#"SELECT runtime_id FROM workflow_runtime_snapshots
                WHERE session_id = ? AND state = 'running' AND role = 'tui'
                  AND runtime_id IS NOT NULL"#,
         )

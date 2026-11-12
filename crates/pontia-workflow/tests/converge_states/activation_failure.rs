@@ -1,5 +1,5 @@
 use pontia_core::domain::EventType;
-use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
+use pontia_workflow::repository::SqliteWorkflowRepository;
 use pontia_workflow::{SubmitWorkflowNodeRequest, WorkflowScheduler};
 
 use crate::{
@@ -33,7 +33,10 @@ async fn activation_errors_fail_with_clear_messages() {
     ] {
         let temp = tempfile::tempdir().expect("tempdir");
         let pool = test_pool(&temp.path().join(format!("{workflow_id}.db"))).await;
-        let repository = SqliteWorkflowRepository::new(pool.clone());
+        let repository = SqliteWorkflowRepository::new(
+            pool.clone(),
+            pontia_agent_control::ControlQueryService::new(pool.clone()),
+        );
         let inputs = if input_setup == "none" {
             "[]"
         } else {
@@ -51,7 +54,8 @@ async fn activation_errors_fail_with_clear_messages() {
                 .expect("write non-UTF-8 input");
         }
         let scheduler = WorkflowScheduler::with_services(
-            pool,
+            pool.clone(),
+            pontia_agent_control::ControlQueryService::new(pool.clone()),
             SequencedSessionCreator::new(outcomes),
             RecordingExitRequester::default(),
             temp.path().join("pontia-home"),
@@ -76,7 +80,10 @@ async fn activation_errors_fail_with_clear_messages() {
 async fn downstream_session_creation_failure_stops_the_workflow() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("downstream-failure.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_linear_workflow(&repository, "wf_downstream_failure", "[]", true).await;
     let sessions = SequencedSessionCreator::new([Some("session_root"), None]);
     let exits = RecordingExitRequester::default();
@@ -90,7 +97,8 @@ async fn downstream_session_creation_failure_stops_the_workflow() {
         pontia_home.clone(),
     );
     let scheduler = WorkflowScheduler::with_services(
-        pool,
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
         sessions.clone(),
         exits.clone(),
         pontia_home.clone(),

@@ -35,7 +35,7 @@ impl SqliteWorkflowRepository {
         node_id: &str,
         event_id: &str,
     ) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let result = sqlx::query(
             r#"UPDATE workflows
                SET activating_node_id = ?
@@ -84,7 +84,7 @@ impl SqliteWorkflowRepository {
     }
 
     pub async fn finish_node_activation(&self, node_id: &str, session_id: &str) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let node_result = sqlx::query(
             r#"UPDATE workflow_nodes
                SET session_id = ?
@@ -153,11 +153,17 @@ impl SqliteWorkflowRepository {
         runtime_id: Option<&str>,
         event_id: &str,
     ) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+        if let Some(node) = self.get_node(node_id).await?
+            && let Some(id) = node.session_id
+        {
+            self.refresh_session(&id).await?;
+        }
+        self.synchronize().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let context: Option<(String, Option<String>, Option<String>)> = sqlx::query_as(
             r#"SELECT n.workflow_id, n.session_id, s.current_turn_id
                FROM workflow_nodes AS n
-               LEFT JOIN sessions AS s ON s.session_id = n.session_id
+               LEFT JOIN workflow_session_snapshots AS s ON s.session_id = n.session_id
                WHERE n.node_id = ?"#,
         )
         .bind(node_id)
@@ -175,9 +181,9 @@ impl SqliteWorkflowRepository {
                      AND (? IS NULL OR r.runtime_id<>?)
                  )
                  AND NOT EXISTS (
-                     SELECT 1 FROM sessions
-                     WHERE sessions.session_id = workflow_nodes.session_id
-                       AND sessions.state = 'error'
+                     SELECT 1 FROM workflow_session_snapshots
+                     WHERE workflow_session_snapshots.session_id = workflow_nodes.session_id
+                       AND workflow_session_snapshots.state = 'error'
                  )
                  AND EXISTS (
                      SELECT 1 FROM workflows

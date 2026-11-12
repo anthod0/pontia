@@ -1,9 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
+use crate::repository::{CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository};
 use pontia_agent_control::SessionCommandService;
-use pontia_storage_sqlite::repositories::workflows::{
-    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
-};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -25,9 +23,14 @@ pub struct WorkflowScheduler<S, X> {
 }
 
 impl WorkflowScheduler<SessionCommandService, SessionCommandService> {
-    pub fn new(pool: SqlitePool, sessions: SessionCommandService, pontia_home: PathBuf) -> Self {
+    pub fn new(
+        pool: SqlitePool,
+        queries: pontia_agent_control::ControlQueryService,
+        sessions: SessionCommandService,
+        pontia_home: PathBuf,
+    ) -> Self {
         let exits = sessions.clone();
-        Self::with_services(pool, sessions, exits, pontia_home)
+        Self::with_services(pool, queries, sessions, exits, pontia_home)
     }
 }
 
@@ -36,9 +39,15 @@ where
     S: SessionCreator,
     X: GracefulExitRequester,
 {
-    pub fn with_services(pool: SqlitePool, sessions: S, exits: X, pontia_home: PathBuf) -> Self {
+    pub fn with_services(
+        pool: SqlitePool,
+        queries: pontia_agent_control::ControlQueryService,
+        sessions: S,
+        exits: X,
+        pontia_home: PathBuf,
+    ) -> Self {
         Self {
-            repository: SqliteWorkflowRepository::new(pool),
+            repository: SqliteWorkflowRepository::new(pool, queries),
             sessions,
             exits,
             pontia_home,

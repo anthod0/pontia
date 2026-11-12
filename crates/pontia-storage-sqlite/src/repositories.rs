@@ -8,5 +8,4 @@ pub mod session_files;
 pub mod session_runtimes;
 pub mod sessions;
 pub mod turns;
-pub mod workflows;
 pub mod workspaces;

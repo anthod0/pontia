@@ -1,6 +1,6 @@
 use pontia_core::domain::EventType;
-use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
 use pontia_workflow::WorkflowScheduler;
+use pontia_workflow::repository::SqliteWorkflowRepository;
 
 use crate::{
     fixture::{assert_transition, seed_linear_workflow, test_pool, wait_for_state},
@@ -13,7 +13,10 @@ use crate::{
 async fn unsubmitted_completed_turn_enters_idle_and_keeps_the_current_session() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("idle.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_linear_workflow(&repository, "wf_idle", "[]", true).await;
     let sessions = SequencedSessionCreator::new([Some("session_root"), Some("session_child")]);
     let exits = RecordingExitRequester::default();
@@ -26,8 +29,13 @@ async fn unsubmitted_completed_turn_enters_idle_and_keeps_the_current_session() 
         events.clone(),
         pontia_home.clone(),
     );
-    let scheduler =
-        WorkflowScheduler::with_services(pool, sessions.clone(), exits.clone(), pontia_home);
+    let scheduler = WorkflowScheduler::with_services(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        sessions.clone(),
+        exits.clone(),
+        pontia_home,
+    );
     scheduler.start("wf_idle").await.expect("start workflow");
 
     events

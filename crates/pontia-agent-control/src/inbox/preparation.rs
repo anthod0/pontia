@@ -32,6 +32,17 @@ impl InboxCommandService {
         };
         let lock = self.scheduler.command_lock(session_id);
         let _guard = lock.lock().await;
+        if self.get_message(session_id, message_id).await?.is_none()
+            && self
+                .queries
+                .session_snapshot(session_id)
+                .await?
+                .is_some_and(|snapshot| snapshot.has_unsettled_input)
+        {
+            return Err(Error::StateConflict(
+                "Input preparation requires no pending or uncertain input".into(),
+            ));
+        }
         let outcome = self
             .enqueue_message(message_id, session_id, request, None, true)
             .await?;
@@ -77,9 +88,18 @@ impl InboxCommandService {
         if !matches!(message.state.as_str(), "resuming" | "pending") {
             return Ok(());
         }
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let available: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions s JOIN session_runtimes r ON r.session_id=s.session_id WHERE s.session_id=? AND s.state='idle' AND r.runtime_id=? AND r.state='running')")
+            .bind(session_id).bind(required_runtime_id).fetch_one(&mut *tx).await?;
+        if !available {
+            return Err(Error::StateConflict(
+                "Input release requires an idle Session and the expected running Runtime".into(),
+            ));
+        }
         // Never turn an in-flight or uncertain delivery back into pending.
         sqlx::query("UPDATE inbox_messages SET state='pending',required_runtime_id=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE session_id=? AND message_id=? AND state='resuming'")
-            .bind(required_runtime_id).bind(session_id).bind(message_id).execute(&self.pool).await?;
+            .bind(required_runtime_id).bind(session_id).bind(message_id).execute(&mut *tx).await?;
+        tx.commit().await?;
         self.drain_inbox(session_id).await
     }
 }

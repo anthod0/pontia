@@ -1,6 +1,6 @@
 use pontia_core::Result;
 
-use crate::repositories::events::WORKFLOW_TERMINAL_EVENTS;
+use super::terminal::WORKFLOW_TERMINAL_EVENTS;
 
 use super::SqliteWorkflowRepository;
 
@@ -52,6 +52,7 @@ impl SqliteWorkflowRepository {
         workflow_id: &str,
         event_id: &str,
     ) -> Result<bool> {
+        self.synchronize().await?;
         Ok(sqlx::query_scalar::<_, i64>(&format!(
             r#"{WORKFLOW_TERMINAL_EVENTS}
                SELECT COUNT(*) FROM workflow_terminal_events AS e

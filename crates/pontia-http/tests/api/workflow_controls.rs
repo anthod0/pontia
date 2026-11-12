@@ -4,7 +4,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_http as http;
-use pontia_storage_sqlite::repositories::workflows::{
+use pontia_workflow::repository::{
     CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
 };
 use serde_json::Value;
@@ -39,7 +39,10 @@ async fn post(app: &TestApp, uri: &str, key: &str) -> (StatusCode, Value) {
 }
 
 async fn seed_running_workflow(app: &TestApp) -> SqliteWorkflowRepository {
-    let repository = SqliteWorkflowRepository::new(app.db.clone());
+    let repository = SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    );
     repository
         .create_definition(
             CreateWorkflowRecord {

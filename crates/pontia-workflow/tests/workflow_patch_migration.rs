@@ -38,7 +38,7 @@ async fn migration_upgrades_the_immediately_preceding_schema_without_an_active_p
     .expect("create preceding schema");
 
     sqlx::raw_sql(include_str!(
-        "../migrations/0017_add_workflow_patch_requests.sql"
+        "../../pontia-storage-sqlite/migrations/0017_add_workflow_patch_requests.sql"
     ))
     .execute(&pool)
     .await
@@ -66,7 +66,7 @@ async fn replanner_blocking_migration_upgrades_the_preceding_patch_schema() {
         .expect("create preceding Patch schema");
 
     sqlx::raw_sql(include_str!(
-        "../migrations/0018_complete_workflow_replanner_blocking.sql"
+        "../../pontia-storage-sqlite/migrations/0018_complete_workflow_replanner_blocking.sql"
     ))
     .execute(&pool)
     .await
@@ -97,7 +97,7 @@ async fn replanner_creation_token_migration_rejects_duplicate_sessions() {
     .await
     .expect("create preceding Session schema");
     sqlx::raw_sql(include_str!(
-        "../migrations/0019_fence_workflow_replanner_creation.sql"
+        "../../pontia-storage-sqlite/migrations/0019_fence_workflow_replanner_creation.sql"
     ))
     .execute(&pool)
     .await
@@ -146,13 +146,12 @@ async fn fresh_schema_enforces_one_active_patch_per_workflow() {
         let result = sqlx::query(
             r#"INSERT INTO workflow_patches
                (patch_id, workflow_id, requesting_node_id, requesting_session_id,
-                requesting_turn_id, requesting_runtime_id, replanner_creation_token,
+                requesting_turn_id, requesting_runtime_id,
                 base_revision, state, request_document_ref, request_size_bytes)
                VALUES (?, 'wf_patch', 'node_requester', 'sess_requester', 'turn_requester',
-                       'runtime_requester', ?, 1, 'requested', 'patches/request.md', 1)"#,
+                       'runtime_requester', 1, 'requested', 'patches/request.md', 1)"#,
         )
         .bind(patch_id)
-        .bind(format!("token_{patch_id}"))
         .execute(&pool)
         .await;
         if patch_id == "patch_one" {

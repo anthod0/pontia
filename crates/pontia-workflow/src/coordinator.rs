@@ -5,13 +5,11 @@ mod patch_resolution;
 
 use std::{path::PathBuf, time::Duration};
 
+use crate::repository::SqliteWorkflowRepository;
 use pontia_agent_control::{
     AgentEventBroker, InboxCommandService, SessionCommandService, TurnCommandService,
 };
 use pontia_core::domain::EventType;
-use pontia_storage_sqlite::repositories::{
-    events::SqliteEventRepository, workflows::SqliteWorkflowRepository,
-};
 use tokio::sync::watch;
 
 use crate::{
@@ -56,7 +54,6 @@ impl AgentTerminal {
 /// all follow the same path.
 pub struct WorkflowCoordinator<S, X, I, B> {
     repository: SqliteWorkflowRepository,
-    persisted_events: SqliteEventRepository,
     sessions: S,
     exits: X,
     interruptions: I,
@@ -71,6 +68,7 @@ where
     S: SessionCreator + Send + Sync + 'static,
 {
     pub fn new(
+        pool: sqlx::SqlitePool,
         app: &pontia_agent_control::AgentControl,
         sessions: S,
         agent_events: AgentEventBroker,
@@ -79,6 +77,7 @@ where
         let exits = app.session_commands();
         let interruptions = app.turn_commands();
         Self::with_services_and_interruptions(
+            pool,
             app,
             sessions,
             exits,
@@ -96,6 +95,7 @@ where
     B: AgentEventSubscriber + Send + Sync + 'static,
 {
     pub fn with_services(
+        pool: sqlx::SqlitePool,
         app: &pontia_agent_control::AgentControl,
         sessions: S,
         exits: X,
@@ -103,6 +103,7 @@ where
         pontia_home: PathBuf,
     ) -> Self {
         Self::with_services_and_interruptions(
+            pool,
             app,
             sessions,
             exits.clone(),
@@ -121,6 +122,7 @@ where
     B: AgentEventSubscriber + Send + Sync + 'static,
 {
     pub fn with_services_and_interruptions(
+        pool: sqlx::SqlitePool,
         app: &pontia_agent_control::AgentControl,
         sessions: S,
         exits: X,
@@ -129,15 +131,14 @@ where
         pontia_home: PathBuf,
     ) -> Self {
         Self {
-            repository: SqliteWorkflowRepository::new(app.db()),
-            persisted_events: SqliteEventRepository::new(app.db()),
+            repository: SqliteWorkflowRepository::new(pool.clone(), app.queries()),
             inbox: app.inbox_commands(),
             sessions,
             exits,
             interruptions,
             agent_events,
             pontia_home,
-            recovery: crate::WorkflowRecoveryService::new(app),
+            recovery: crate::WorkflowRecoveryService::new(pool, app),
         }
     }
 
@@ -201,6 +202,7 @@ where
     }
 
     pub async fn reconcile(&self, workflow_id: &str) -> Result<()> {
+        self.repository.synchronize().await?;
         if self.recovery.reconcile(workflow_id).await? {
             return Ok(());
         }

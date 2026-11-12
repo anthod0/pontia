@@ -1,4 +1,4 @@
-use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
+use pontia_workflow::repository::SqliteWorkflowRepository;
 use pontia_workflow::{
     BlockWorkflowPatch, RequestWorkflowPatch, WorkflowCoordinator, WorkflowPatchService,
 };
@@ -18,7 +18,10 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).expect("Pontia home");
     let pool = test_pool(&temp.path().join("patch-blocking.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_requester(&pool, &repository, &pontia_home, "wf_block", false).await;
 
     write_problem_report(
@@ -26,14 +29,18 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
         "wf_block",
         "The remaining plan cannot be completed safely.",
     );
-    let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .request_patch(RequestWorkflowPatch {
-            session_id: "sess_requester".into(),
-            runtime_id: "runtime_requester".into(),
-        })
-        .await
-        .expect("request Patch")
-        .patch_id;
+    let patch_id = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .request_patch(RequestWorkflowPatch {
+        session_id: "sess_requester".into(),
+        runtime_id: "runtime_requester".into(),
+    })
+    .await
+    .expect("request Patch")
+    .patch_id;
     insert_fact(
         &pool,
         "evt_requester_interrupted",
@@ -47,6 +54,7 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
     let creator = PersistingSessionCreator::new(pool.clone());
     let exits = RecordingExitRequester::default();
     let coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
@@ -73,7 +81,10 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
         assert_eq!(request.workspace.as_deref(), Some("/workspace/project"));
         assert_eq!(request.metadata["workflow_id"], "wf_block");
         assert_eq!(request.metadata["workflow_patch_id"], patch_id);
-        assert!(request.metadata["workflow_replanner_creation_token"].is_string());
+        assert_eq!(
+            request.ownership.as_ref().unwrap().reference,
+            format!("patch:{patch_id}")
+        );
         assert_eq!(
             request.runtime_environment["PONTIA_WORKFLOW_ID"],
             "wf_block"
@@ -113,19 +124,6 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
             )
         );
     }
-    assert_eq!(
-        pontia_agent_control::sessions::SessionEnvironment::environment(
-            &pontia_workflow::WorkflowSessionEnvironment::new(pool.clone()),
-            "sess_replanner",
-        )
-        .await
-        .unwrap(),
-        std::collections::BTreeMap::from([
-            ("PONTIA_WORKFLOW_ID".into(), "wf_block".into()),
-            ("PONTIA_WORKFLOW_PATCH_ID".into(), patch_id.clone()),
-        ])
-    );
-
     let patch = repository.get_patch(&patch_id).await.unwrap().unwrap();
     assert_eq!(patch.state, "planning");
     assert_eq!(
@@ -155,13 +153,17 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
         "reason.md",
         "No executable continuation exists.",
     );
-    let outcome = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .block_patch(BlockWorkflowPatch {
-            session_id: "sess_replanner".into(),
-            runtime_id: "runtime_replanner".into(),
-        })
-        .await
-        .expect("block Patch");
+    let outcome = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .block_patch(BlockWorkflowPatch {
+        session_id: "sess_replanner".into(),
+        runtime_id: "runtime_replanner".into(),
+    })
+    .await
+    .expect("block Patch");
     assert_eq!(outcome.patch_id, patch_id);
     assert_eq!(std::fs::read_to_string(&workflow_file).unwrap(), accepted);
     let blocked = repository.get_patch(&patch_id).await.unwrap().unwrap();
@@ -199,12 +201,16 @@ async fn confirmed_interruption_creates_one_real_replanner_and_explicit_block_is
         "workflow.patch_blocked"
     );
 
-    let stale = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .block_patch(BlockWorkflowPatch {
-            session_id: "sess_replanner".into(),
-            runtime_id: "runtime_replanner".into(),
-        })
-        .await;
+    let stale = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .block_patch(BlockWorkflowPatch {
+        session_id: "sess_replanner".into(),
+        runtime_id: "runtime_replanner".into(),
+    })
+    .await;
     assert!(stale.is_err());
     assert_eq!(
         std::fs::read_to_string(workflow_dir.join(blocked.reason_document_ref.as_deref().unwrap()))
@@ -242,7 +248,10 @@ async fn requester_terminal_fact_implicitly_blocks_and_preserves_the_accepted_ou
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).unwrap();
     let pool = test_pool(&temp.path().join("requester-terminal.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_requester(
         &pool,
         &repository,
@@ -256,14 +265,18 @@ async fn requester_terminal_fact_implicitly_blocks_and_preserves_the_accepted_ou
         "wf_requester_terminal",
         "Re-plan before continuing",
     );
-    let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .request_patch(RequestWorkflowPatch {
-            session_id: "sess_requester".into(),
-            runtime_id: "runtime_requester".into(),
-        })
-        .await
-        .unwrap()
-        .patch_id;
+    let patch_id = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .request_patch(RequestWorkflowPatch {
+        session_id: "sess_requester".into(),
+        runtime_id: "runtime_requester".into(),
+    })
+    .await
+    .unwrap()
+    .patch_id;
     insert_fact(
         &pool,
         "evt_requester_failed",
@@ -275,6 +288,7 @@ async fn requester_terminal_fact_implicitly_blocks_and_preserves_the_accepted_ou
     .await;
 
     let coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
@@ -330,7 +344,10 @@ async fn unresolved_replanner_terminal_blocks_once_restores_definition_and_late_
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).unwrap();
     let pool = test_pool(&temp.path().join("replanner-terminal.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_requester(
         &pool,
         &repository,
@@ -340,14 +357,18 @@ async fn unresolved_replanner_terminal_blocks_once_restores_definition_and_late_
     )
     .await;
     write_problem_report(&pontia_home, "wf_planner_terminal", "Re-plan");
-    let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .request_patch(RequestWorkflowPatch {
-            session_id: "sess_requester".into(),
-            runtime_id: "runtime_requester".into(),
-        })
-        .await
-        .unwrap()
-        .patch_id;
+    let patch_id = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .request_patch(RequestWorkflowPatch {
+        session_id: "sess_requester".into(),
+        runtime_id: "runtime_requester".into(),
+    })
+    .await
+    .unwrap()
+    .patch_id;
     insert_fact(
         &pool,
         "evt_requester_interrupted_terminal_case",
@@ -359,6 +380,7 @@ async fn unresolved_replanner_terminal_blocks_once_restores_definition_and_late_
     .await;
     let exits = RecordingExitRequester::default();
     let coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),

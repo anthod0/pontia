@@ -812,3 +812,48 @@ async fn submission_identity_still_enforces_session_and_retry_associations() {
     assert!(failed.retried_by_message_id.is_none());
     assert_eq!(*channel.input.lock().unwrap(), ["input"]);
 }
+
+#[tokio::test]
+async fn conditional_input_release_rejects_a_busy_session_without_delivering() {
+    let (_root, state, channel) = connected_inbox().await;
+    let inbox = state.inbox_commands();
+    inbox
+        .prepare_message_once(
+            &state.session_commands(),
+            "prepared",
+            "session",
+            "recover".into(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    sqlx::query("UPDATE sessions SET state='busy' WHERE session_id='session'")
+        .execute(&state.db())
+        .await
+        .unwrap();
+    assert!(matches!(
+        inbox
+            .release_prepared_message("session", "prepared", "runtime")
+            .await,
+        Err(Error::StateConflict(_))
+    ));
+    assert!(channel.input.lock().unwrap().is_empty());
+    assert_eq!(
+        inbox
+            .get_message("session", "prepared")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "resuming"
+    );
+    sqlx::query("UPDATE sessions SET state='idle' WHERE session_id='session'")
+        .execute(&state.db())
+        .await
+        .unwrap();
+    inbox
+        .release_prepared_message("session", "prepared", "runtime")
+        .await
+        .unwrap();
+    assert_eq!(*channel.input.lock().unwrap(), vec!["recover"]);
+}

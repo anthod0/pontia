@@ -1,8 +1,8 @@
 use std::path::{Component, Path, PathBuf};
 
-use pontia_storage_sqlite::{
-    models::workflows::{WorkflowNodeRow, WorkflowRow},
-    repositories::workflows::{
+use crate::{
+    models::{WorkflowNodeRow, WorkflowRow},
+    repository::{
         ApplyWorkflowNodeRecord, ApplyWorkflowPatchRecord, BlockWorkflowPatchRecord,
         RequestWorkflowPatchRecord, SqliteWorkflowRepository,
     },
@@ -25,9 +25,13 @@ pub struct WorkflowPatchService {
 }
 
 impl WorkflowPatchService {
-    pub fn new(pool: SqlitePool, pontia_home: PathBuf) -> Self {
+    pub fn new(
+        pool: SqlitePool,
+        queries: pontia_agent_control::ControlQueryService,
+        pontia_home: PathBuf,
+    ) -> Self {
         Self {
-            repository: SqliteWorkflowRepository::new(pool),
+            repository: SqliteWorkflowRepository::new(pool, queries),
             pontia_home,
         }
     }
@@ -95,7 +99,7 @@ impl WorkflowPatchService {
                 request_size_bytes: i64::try_from(document.len()).map_err(|_| {
                     Error::InvalidDefinition("Workflow Patch request document is too large".into())
                 })?,
-                replanner_creation_token: format!("workflow_replanner_{}", Uuid::now_v7()),
+
                 event_id: Uuid::now_v7().to_string(),
             })
             .await;
@@ -238,7 +242,7 @@ impl WorkflowPatchService {
 
     async fn rewrite_accepted_definition(
         &self,
-        patch: &pontia_storage_sqlite::models::workflows::WorkflowPatchRow,
+        patch: &crate::models::WorkflowPatchRow,
         base: &AcceptedWorkflowDefinition,
     ) -> Result<()> {
         let workflow = self

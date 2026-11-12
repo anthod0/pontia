@@ -1,9 +1,7 @@
 use std::collections::BTreeMap;
 
+use crate::models::{WorkflowPatchRow, WorkflowTerminalEventRow};
 use pontia_agent_control::{CreateSessionRequest, InitialTaskRequest};
-use pontia_storage_sqlite::models::{
-    events::WorkflowTerminalEventRow, workflows::WorkflowPatchRow,
-};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -102,10 +100,7 @@ where
         Ok(())
     }
 
-    async fn ensure_replanner(
-        &self,
-        patch: &pontia_storage_sqlite::models::workflows::WorkflowPatchRow,
-    ) -> Result<()> {
+    async fn ensure_replanner(&self, patch: &crate::models::WorkflowPatchRow) -> Result<()> {
         let workflow = self
             .repository
             .get_workflow(&patch.workflow_id)
@@ -145,12 +140,11 @@ where
             }
         }
 
-        let metadata_key = "workflow_replanner_creation_token";
-        let session_id = match self
-            .sessions
-            .find_session_by_creation_token(metadata_key, &patch.replanner_creation_token)
-            .await?
-        {
+        let ownership = pontia_agent_control::SessionOwnership {
+            application_id: "workflow".into(),
+            reference: format!("patch:{}", patch.patch_id),
+        };
+        let session_id = match self.sessions.find_session_by_ownership(&ownership).await? {
             Some(session_id) => session_id,
             None => {
                 let request =
@@ -167,6 +161,7 @@ where
                 );
                 self.sessions
                     .create_session(CreateSessionRequest {
+                        ownership: Some(ownership),
                         client_type: self.sessions.default_client_type()?,
                         title: Some(format!("Re-plan {}", workflow.title)),
                         workspace: Some(workflow.cwd.clone()),
@@ -180,7 +175,7 @@ where
                             "role": "workflow_replanner",
                             "workflow_id": patch.workflow_id,
                             "workflow_patch_id": patch.patch_id,
-                            "workflow_replanner_creation_token": patch.replanner_creation_token,
+
                         }),
                         initial_task: Some(InitialTaskRequest {
                             input: initial_task,
@@ -205,7 +200,7 @@ where
         patch: &WorkflowPatchRow,
     ) -> Result<Option<WorkflowTerminalEventRow>> {
         let Some(event) = self
-            .persisted_events
+            .repository
             .latest_workflow_terminal_event(
                 &patch.requesting_session_id,
                 Some(&patch.requesting_runtime_id),
@@ -238,7 +233,7 @@ where
             return Ok(());
         };
         let Some(event) = self
-            .persisted_events
+            .repository
             .latest_workflow_terminal_event(session_id, Some(runtime_id), None)
             .await?
         else {

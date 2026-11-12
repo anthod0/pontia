@@ -6,7 +6,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_http as http;
-use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
+use pontia_workflow::repository::SqliteWorkflowRepository;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
@@ -68,11 +68,14 @@ async fn workflow_run_rejects_unsupported_node_types_before_creation() {
             .is_some_and(|message| message.contains("unsupported Workflow Node type: control"))
     );
     assert!(
-        SqliteWorkflowRepository::new(app.db.clone())
-            .get_workflow("wf_unsupported_type")
-            .await
-            .expect("load workflow")
-            .is_none()
+        SqliteWorkflowRepository::new(
+            app.db.clone(),
+            pontia_agent_control::ControlQueryService::new(app.db.clone())
+        )
+        .get_workflow("wf_unsupported_type")
+        .await
+        .expect("load workflow")
+        .is_none()
     );
 }
 
@@ -173,7 +176,10 @@ async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
     assert!(body["data"]["node_id"].as_str().is_some());
     assert!(body["data"]["session_id"].as_str().is_some());
 
-    let repository = SqliteWorkflowRepository::new(app.db.clone());
+    let repository = SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    );
     let workflow = repository
         .get_workflow("wf_http_run")
         .await

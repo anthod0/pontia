@@ -1,6 +1,6 @@
 //! Workflow orchestration over Agent Control.
-mod environment;
-pub use environment::WorkflowSessionEnvironment;
+pub mod models;
+pub mod repository;
 
 mod activation;
 mod control;

@@ -15,7 +15,7 @@ struct RunningWorkflowTransition<'a> {
 
 impl SqliteWorkflowRepository {
     pub async fn start_workflow(&self, workflow_id: &str, event_id: &str) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let result = sqlx::query(
             r#"UPDATE workflows
                SET state = 'running',
@@ -74,7 +74,7 @@ impl SqliteWorkflowRepository {
         state: &str,
         event_type: &str,
     ) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let result = sqlx::query(
             r#"UPDATE workflows
                SET state = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -115,7 +115,7 @@ impl SqliteWorkflowRepository {
     }
 
     pub async fn complete_workflow(&self, workflow_id: &str, event_id: &str) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let result = sqlx::query(
             r#"UPDATE workflows
                SET state = 'completed',
@@ -218,7 +218,7 @@ impl SqliteWorkflowRepository {
         &self,
         transition: RunningWorkflowTransition<'_>,
     ) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let result = sqlx::query(
             r#"UPDATE workflows
                SET state = ?,

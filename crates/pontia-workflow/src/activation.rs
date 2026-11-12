@@ -1,10 +1,10 @@
 use std::{collections::BTreeMap, path::Path};
 
-use pontia_agent_control::{CreateSessionRequest, InitialTaskRequest};
-use pontia_storage_sqlite::{
-    models::workflows::{WorkflowNodeRow, WorkflowRow},
-    repositories::workflows::SqliteWorkflowRepository,
+use crate::{
+    models::{WorkflowNodeRow, WorkflowRow},
+    repository::SqliteWorkflowRepository,
 };
+use pontia_agent_control::{CreateSessionRequest, InitialTaskRequest};
 use serde_json::json;
 
 use crate::{Error, SessionCreator, validation::validate_handoff_file_name};
@@ -134,6 +134,10 @@ fn session_request(
         workflow.workflow_id.clone(),
     )]);
     CreateSessionRequest {
+        ownership: Some(pontia_agent_control::SessionOwnership {
+            application_id: "workflow".into(),
+            reference: format!("node:{}", node.node_id),
+        }),
         client_type,
         title: Some(node.title.clone()),
         workspace: Some(workflow.cwd.clone()),

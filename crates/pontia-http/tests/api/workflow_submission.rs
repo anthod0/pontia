@@ -1,3 +1,6 @@
+use pontia_workflow::repository::{
+    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
+};
 use std::{fs, sync::Arc};
 
 use pontia_client_pi::rpc::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
@@ -9,9 +12,8 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_http as http;
-use pontia_storage_sqlite::repositories::{
-    session_runtimes::{SessionRuntimeRecord, SqliteSessionRuntimeRepository},
-    workflows::{CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository},
+use pontia_storage_sqlite::repositories::session_runtimes::{
+    SessionRuntimeRecord, SqliteSessionRuntimeRepository,
 };
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -21,7 +23,10 @@ use crate::common::test_app::TestApp;
 async fn seed_running_workflow(
     app: &TestApp,
 ) -> (Arc<PiRpcPeer>, tokio::sync::mpsc::Receiver<RpcRequest>) {
-    let workflows = SqliteWorkflowRepository::new(app.db.clone());
+    let workflows = SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    );
     workflows
         .create_workflow(CreateWorkflowRecord {
             workflow_id: "wf_http_submit".to_string(),
@@ -160,7 +165,10 @@ async fn workflow_submission_accepts_the_node_owned_output_file() {
         .expect("read handoff"),
         "Submitted through HTTP: 完成\n"
     );
-    let workflows = SqliteWorkflowRepository::new(app.db.clone());
+    let workflows = SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    );
     let workflow = workflows
         .get_workflow("wf_http_submit")
         .await

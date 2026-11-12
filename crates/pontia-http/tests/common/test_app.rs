@@ -157,9 +157,6 @@ impl TestAppBuilder {
         }
         let mut builder = AppState::builder(
             pontia_agent_control::AgentControl::builder(db.clone(), pontia_home)
-                .environment(std::sync::Arc::new(
-                    pontia_workflow::WorkflowSessionEnvironment::new(db),
-                ))
                 .clients(crate::common::clients::clients())
                 .build(),
         )

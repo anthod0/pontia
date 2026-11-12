@@ -8,7 +8,7 @@ impl SqliteWorkflowRepository {
         workflow: CreateWorkflowRecord,
         nodes: Vec<CreateWorkflowNodeRecord>,
     ) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         sqlx::query(
             r#"INSERT INTO workflows (workflow_id, title, cwd, state)
                VALUES (?, ?, ?, ?)"#,

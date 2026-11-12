@@ -1,5 +1,5 @@
-use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
 use pontia_workflow::WorkflowCoordinator;
+use pontia_workflow::repository::SqliteWorkflowRepository;
 
 use crate::{
     fixture::{seed_linear_workflow, test_pool, wait_for_state},
@@ -10,7 +10,10 @@ use crate::{
 async fn startup_recovers_a_running_workflow_from_persisted_session_exit() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("restart-recovery.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_linear_workflow(&repository, "wf_restart", "[]", false).await;
     repository
         .start_workflow("wf_restart", "evt_workflow_started")
@@ -41,6 +44,7 @@ async fn startup_recovers_a_running_workflow_from_persisted_session_exit() {
 
     let (shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
     let coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
             .clients(crate::test_doubles::clients())
             .build(),
@@ -76,7 +80,10 @@ async fn startup_recovers_a_running_workflow_from_persisted_session_exit() {
 async fn repeated_reconciliation_activates_a_downstream_node_once() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("idempotent-reconciliation.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_linear_workflow(&repository, "wf_repeat", "[]", true).await;
     repository
         .start_workflow("wf_repeat", "evt_workflow_started")
@@ -110,6 +117,7 @@ async fn repeated_reconciliation_activates_a_downstream_node_once() {
 
     let sessions = SequencedSessionCreator::new([Some("session_child")]);
     let coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
             .clients(crate::test_doubles::clients())
             .build(),
@@ -152,7 +160,10 @@ async fn repeated_reconciliation_activates_a_downstream_node_once() {
 async fn restart_recovery_does_not_treat_a_pause_interruption_as_failure() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("paused-interruption.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_linear_workflow(&repository, "wf_paused_restart", "[]", false).await;
     repository
         .start_workflow("wf_paused_restart", "evt_workflow_started")
@@ -182,6 +193,7 @@ async fn restart_recovery_does_not_treat_a_pause_interruption_as_failure() {
         .expect("resume workflow");
 
     let coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
             .clients(crate::test_doubles::clients())
             .build(),
@@ -210,7 +222,10 @@ async fn restart_recovery_does_not_treat_a_pause_interruption_as_failure() {
 async fn periodic_reconciliation_recovers_a_missed_realtime_notification() {
     let temp = tempfile::tempdir().expect("tempdir");
     let pool = test_pool(&temp.path().join("missed-notification.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_linear_workflow(&repository, "wf_missed", "[]", false).await;
     repository
         .start_workflow("wf_missed", "evt_workflow_started")
@@ -231,6 +246,7 @@ async fn periodic_reconciliation_recovers_a_missed_realtime_notification() {
 
     let (shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
     let coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), temp.path().join("pontia-home"))
             .clients(crate::test_doubles::clients())
             .build(),

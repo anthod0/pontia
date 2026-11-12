@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use pontia_agent_control::CreateSessionRequest;
-use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
 use pontia_workflow::SessionCreator;
+use pontia_workflow::repository::SqliteWorkflowRepository;
 use serde_json::{Value, json};
 
 use crate::fixture::seed_linear_workflow;
@@ -46,20 +46,15 @@ impl SessionCreator for PersistingSessionCreator {
     fn default_client_type(&self) -> pontia_workflow::Result<String> {
         Ok("pi".into())
     }
-    async fn find_session_by_creation_token(
+    async fn find_session_by_ownership(
         &self,
-        metadata_key: &str,
-        token: &str,
+        ownership: &pontia_agent_control::SessionOwnership,
     ) -> pontia_workflow::Result<Option<String>> {
-        let path = format!("$.{metadata_key}");
-        Ok(sqlx::query_scalar(
-            "SELECT session_id FROM sessions WHERE json_extract(metadata, ?) = ?",
+        Ok(
+            pontia_agent_control::ControlQueryService::new(self.pool.clone())
+                .find_session_by_ownership(ownership)
+                .await?,
         )
-        .bind(path)
-        .bind(token)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(pontia_core::Error::from)?)
     }
 
     async fn create_session(
@@ -78,6 +73,17 @@ impl SessionCreator for PersistingSessionCreator {
             &request.metadata,
         )
         .await;
+        if let Some(ownership) = &request.ownership {
+            sqlx::query(
+                "UPDATE sessions SET application_id=?,application_ref=? WHERE session_id=?",
+            )
+            .bind(&ownership.application_id)
+            .bind(&ownership.reference)
+            .bind(self.session_id)
+            .execute(&self.pool)
+            .await
+            .unwrap();
+        }
         Ok(self.session_id.into())
     }
 }

@@ -1,4 +1,4 @@
-use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
+use pontia_workflow::repository::SqliteWorkflowRepository;
 use pontia_workflow::{
     ApplyWorkflowPatch, RequestWorkflowPatch, WorkflowCoordinator, WorkflowPatchService,
 };
@@ -18,17 +18,24 @@ async fn changed_apply_revises_the_graph_and_queues_one_continuation_without_pla
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).unwrap();
     let pool = test_pool(&temp.path().join("patch-apply.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_requester(&pool, &repository, &pontia_home, "wf_apply", true).await;
     write_problem_report(&pontia_home, "wf_apply", "Replace the remaining work.");
-    let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .request_patch(RequestWorkflowPatch {
-            session_id: "sess_requester".into(),
-            runtime_id: "runtime_requester".into(),
-        })
-        .await
-        .unwrap()
-        .patch_id;
+    let patch_id = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .request_patch(RequestWorkflowPatch {
+        session_id: "sess_requester".into(),
+        runtime_id: "runtime_requester".into(),
+    })
+    .await
+    .unwrap()
+    .patch_id;
     insert_fact(
         &pool,
         "evt_apply_interrupted",
@@ -40,6 +47,7 @@ async fn changed_apply_revises_the_graph_and_queues_one_continuation_without_pla
     .await;
     let exits = RecordingExitRequester::default();
     let coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
@@ -65,12 +73,16 @@ async fn changed_apply_revises_the_graph_and_queues_one_continuation_without_pla
         "decision.md",
         "Candidate needs correction.",
     );
-    let invalid = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .apply_patch(ApplyWorkflowPatch {
-            session_id: "sess_replanner".into(),
-            runtime_id: "runtime_replanner".into(),
-        })
-        .await;
+    let invalid = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .apply_patch(ApplyWorkflowPatch {
+        session_id: "sess_replanner".into(),
+        runtime_id: "runtime_replanner".into(),
+    })
+    .await;
     assert!(invalid.is_err());
     assert_eq!(
         repository
@@ -117,7 +129,11 @@ output = "replacement.md"
 "#,
     )
     .unwrap();
-    let service = WorkflowPatchService::new(pool.clone(), pontia_home.clone());
+    let service = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    );
     write_patch_file(
         &pontia_home,
         "wf_apply",
@@ -229,14 +245,18 @@ output = "replacement.md"
         "wf_apply",
         "Refine the replacement once more.",
     );
-    let second_patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .request_patch(RequestWorkflowPatch {
-            session_id: "sess_requester".into(),
-            runtime_id: "runtime_requester".into(),
-        })
-        .await
-        .unwrap()
-        .patch_id;
+    let second_patch_id = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .request_patch(RequestWorkflowPatch {
+        session_id: "sess_requester".into(),
+        runtime_id: "runtime_requester".into(),
+    })
+    .await
+    .unwrap()
+    .patch_id;
     insert_fact(
         &pool,
         "evt_apply_interrupted_second",
@@ -247,6 +267,7 @@ output = "replacement.md"
     )
     .await;
     let second_coordinator = WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
@@ -294,13 +315,17 @@ output = "final.md"
         "decision.md",
         "Use the final replacement.",
     );
-    let second_outcome = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .apply_patch(ApplyWorkflowPatch {
-            session_id: "sess_replanner_second".into(),
-            runtime_id: "runtime_replanner_second".into(),
-        })
-        .await
-        .unwrap();
+    let second_outcome = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .apply_patch(ApplyWorkflowPatch {
+        session_id: "sess_replanner_second".into(),
+        runtime_id: "runtime_replanner_second".into(),
+    })
+    .await
+    .unwrap();
     assert_eq!(second_outcome.revision, 3);
     let final_history = repository.list_node_history("wf_apply").await.unwrap();
     assert_eq!(final_history.len(), 4);
@@ -329,21 +354,28 @@ async fn unchanged_apply_rejects_without_advancing_the_revision() {
     let pontia_home = temp.path().join("pontia-home");
     std::fs::create_dir(&pontia_home).unwrap();
     let pool = test_pool(&temp.path().join("patch-reject.db")).await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     seed_requester(&pool, &repository, &pontia_home, "wf_reject", false).await;
     write_problem_report(
         &pontia_home,
         "wf_reject",
         "Check whether a change is needed.",
     );
-    let patch_id = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .request_patch(RequestWorkflowPatch {
-            session_id: "sess_requester".into(),
-            runtime_id: "runtime_requester".into(),
-        })
-        .await
-        .unwrap()
-        .patch_id;
+    let patch_id = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .request_patch(RequestWorkflowPatch {
+        session_id: "sess_requester".into(),
+        runtime_id: "runtime_requester".into(),
+    })
+    .await
+    .unwrap()
+    .patch_id;
     insert_fact(
         &pool,
         "evt_reject_interrupted",
@@ -354,6 +386,7 @@ async fn unchanged_apply_rejects_without_advancing_the_revision() {
     )
     .await;
     WorkflowCoordinator::with_services(
+        pool.clone(),
         &pontia_agent_control::AgentControl::builder(pool.clone(), pontia_home.clone())
             .clients(crate::test_doubles::clients())
             .build(),
@@ -373,13 +406,17 @@ async fn unchanged_apply_rejects_without_advancing_the_revision() {
         "decision.md",
         "The accepted plan remains valid.",
     );
-    let outcome = WorkflowPatchService::new(pool.clone(), pontia_home.clone())
-        .apply_patch(ApplyWorkflowPatch {
-            session_id: "sess_replanner".into(),
-            runtime_id: "runtime_replanner".into(),
-        })
-        .await
-        .expect("reject unchanged Patch");
+    let outcome = WorkflowPatchService::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+        pontia_home.clone(),
+    )
+    .apply_patch(ApplyWorkflowPatch {
+        session_id: "sess_replanner".into(),
+        runtime_id: "runtime_replanner".into(),
+    })
+    .await
+    .expect("reject unchanged Patch");
     assert_eq!(outcome.outcome, "rejected");
     assert_eq!(outcome.revision, 1);
     assert_eq!(

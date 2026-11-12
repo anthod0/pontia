@@ -292,6 +292,7 @@ impl SessionCommandService {
         )
         .await?;
         let prior_restart_count = 0;
+        let environment = self.runtime_environment(session_id).await?;
         let mut runtime_replacement_tx = self.pool.begin().await?;
         SqliteTurnRepository::serialize_session_turn_writes_in_tx(
             &mut runtime_replacement_tx,
@@ -328,7 +329,7 @@ impl SessionCommandService {
                     start_command: self
                         .start_command(session_id, target.control_runtime_role)
                         .await?,
-                    environment: self.runtime_environment(session_id).await?,
+                    environment,
                 },
                 prior_restart_count + 1,
             )
@@ -373,9 +374,11 @@ impl SessionCommandService {
     }
 
     async fn runtime_environment(&self, session_id: &str) -> Result<BTreeMap<String, String>> {
-        match &self.environment {
-            Some(environment) => environment.environment(session_id).await,
-            None => Ok(BTreeMap::new()),
-        }
+        let environment: String =
+            sqlx::query_scalar("SELECT runtime_environment FROM sessions WHERE session_id=?")
+                .bind(session_id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(serde_json::from_str(&environment)?)
     }
 }

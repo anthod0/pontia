@@ -41,7 +41,7 @@ pub use live_output::{
     LiveOutputUpdate, LiveReasoningBound, LiveToolOutcome, LiveToolOutput, LiveToolPhase,
     LiveToolResult, LiveToolStatus,
 };
-pub use queries::ControlQueryService;
+pub use queries::{ControlQueryService, DomainEventReader, SessionOwnership, SessionSnapshot};
 pub use raw_transcripts::{
     TurnTimelineDirection, TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage,
     TurnTimelineService, TurnTimelineServiceError, TurnTreeHistoryPage, TurnTreeUpdatesPage,

@@ -1,12 +1,9 @@
+use pontia_workflow::repository::{
+    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
+};
 use std::{path::Path, time::Duration};
 
-use pontia_storage_sqlite::{
-    connect_sqlite,
-    repositories::workflows::{
-        CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
-    },
-    run_migrations,
-};
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 pub(super) async fn test_pool(path: &Path) -> sqlx::SqlitePool {
     let database_url = format!("sqlite://{}", path.display());

@@ -52,7 +52,7 @@ async fn migration_backfills_the_immediately_preceding_workflow_schema_at_revisi
     .expect("create immediately preceding schema");
 
     sqlx::raw_sql(include_str!(
-        "../migrations/0016_add_workflow_graph_revisions.sql"
+        "../../pontia-storage-sqlite/migrations/0016_add_workflow_graph_revisions.sql"
     ))
     .execute(&pool)
     .await

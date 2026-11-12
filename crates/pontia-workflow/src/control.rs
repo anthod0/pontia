@@ -1,7 +1,7 @@
+use crate::repository::SqliteWorkflowRepository;
 use pontia_agent_control::{
     ControlQueryService, InboxCommandService, SubmitInboxMessageRequest, TurnCommandService,
 };
-use pontia_storage_sqlite::repositories::workflows::SqliteWorkflowRepository;
 use serde::Serialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -25,9 +25,9 @@ pub struct WorkflowControlService {
 }
 
 impl WorkflowControlService {
-    pub fn new(app: &pontia_agent_control::AgentControl) -> Self {
+    pub fn new(pool: sqlx::SqlitePool, app: &pontia_agent_control::AgentControl) -> Self {
         Self {
-            workflows: SqliteWorkflowRepository::new(app.db()),
+            workflows: SqliteWorkflowRepository::new(pool.clone(), app.queries()),
             queries: app.queries(),
             turns: app.turn_commands(),
             inbox: app.inbox_commands(),

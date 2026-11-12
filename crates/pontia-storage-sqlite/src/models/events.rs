@@ -9,16 +9,6 @@ pub struct EventRow {
     pub payload: String,
 }
 
-/// Persisted lifecycle evidence with its historical Runtime correlation.
-/// Turn Runtime identity comes from the confirmed start, not the terminal payload.
-#[derive(Debug, Clone, sqlx::FromRow)]
-pub struct WorkflowTerminalEventRow {
-    pub event_id: String,
-    pub turn_id: Option<String>,
-    pub event_type: String,
-    pub runtime_id: Option<String>,
-}
-
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct EventStreamRow {
     pub rowid: i64,

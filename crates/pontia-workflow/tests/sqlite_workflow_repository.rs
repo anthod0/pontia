@@ -1,9 +1,6 @@
-use pontia_storage_sqlite::{
-    connect_sqlite,
-    repositories::workflows::{
-        CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
-    },
-    run_migrations,
+use pontia_storage_sqlite::{connect_sqlite, run_migrations};
+use pontia_workflow::repository::{
+    CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
 };
 use serde_json::json;
 
@@ -19,7 +16,10 @@ async fn test_pool() -> (sqlx::SqlitePool, tempfile::TempDir) {
 #[tokio::test]
 async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_events() {
     let (pool, _pontia_home) = test_pool().await;
-    let repository = SqliteWorkflowRepository::new(pool.clone());
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     sqlx::query(
         "INSERT INTO sessions (session_id, client_type, state) VALUES ('session_1', 'pi', 'starting')",
     )
@@ -149,7 +149,10 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
 #[tokio::test]
 async fn starting_a_pending_workflow_atomically_updates_state_and_appends_started_event() {
     let (pool, _pontia_home) = test_pool().await;
-    let repository = SqliteWorkflowRepository::new(pool);
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     repository
         .create_workflow(CreateWorkflowRecord {
             workflow_id: "wf_start".to_string(),
@@ -221,7 +224,10 @@ async fn starting_a_pending_workflow_atomically_updates_state_and_appends_starte
 #[tokio::test]
 async fn completing_a_running_workflow_atomically_updates_state_and_appends_completed_event() {
     let (pool, _pontia_home) = test_pool().await;
-    let repository = SqliteWorkflowRepository::new(pool);
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     repository
         .create_workflow(CreateWorkflowRecord {
             workflow_id: "wf_complete".to_string(),
@@ -286,7 +292,10 @@ async fn completing_a_running_workflow_atomically_updates_state_and_appends_comp
 #[tokio::test]
 async fn node_activation_claim_blocks_pause_until_the_session_is_bound() {
     let (pool, _pontia_home) = test_pool().await;
-    let repository = SqliteWorkflowRepository::new(pool);
+    let repository = SqliteWorkflowRepository::new(
+        pool.clone(),
+        pontia_agent_control::ControlQueryService::new(pool.clone()),
+    );
     repository
         .create_workflow(CreateWorkflowRecord {
             workflow_id: "wf_activation_gate".to_string(),
@@ -355,13 +364,13 @@ async fn phase_migration_backfills_existing_workflow_nodes_with_an_empty_label()
         .expect("connect");
 
     sqlx::raw_sql(include_str!(
-        "../migrations/0010_add_workflow_orchestration.sql"
+        "../../pontia-storage-sqlite/migrations/0010_add_workflow_orchestration.sql"
     ))
     .execute(&pool)
     .await
     .expect("create pre-phase workflow schema");
     sqlx::raw_sql(include_str!(
-        "../migrations/0011_add_workflow_node_type.sql"
+        "../../pontia-storage-sqlite/migrations/0011_add_workflow_node_type.sql"
     ))
     .execute(&pool)
     .await
@@ -383,7 +392,7 @@ async fn phase_migration_backfills_existing_workflow_nodes_with_an_empty_label()
     .expect("insert pre-phase node");
 
     sqlx::raw_sql(include_str!(
-        "../migrations/0012_add_workflow_node_phase.sql"
+        "../../pontia-storage-sqlite/migrations/0012_add_workflow_node_phase.sql"
     ))
     .execute(&pool)
     .await

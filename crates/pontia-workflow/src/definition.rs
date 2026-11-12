@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use pontia_storage_sqlite::models::workflows::{WorkflowNodeRow, WorkflowRow};
+use crate::models::{WorkflowNodeRow, WorkflowRow};
 use serde::{Deserialize, Serialize};
 
 use crate::{

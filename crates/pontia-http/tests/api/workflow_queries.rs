@@ -4,10 +4,10 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use pontia_http as http;
-use pontia_storage_sqlite::repositories::workflows::{
+use pontia_workflow::WorkflowQueryService;
+use pontia_workflow::repository::{
     CreateWorkflowNodeRecord, CreateWorkflowRecord, SqliteWorkflowRepository,
 };
-use pontia_workflow::WorkflowQueryService;
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -53,23 +53,26 @@ async fn get(app: &TestApp, uri: &str) -> (StatusCode, Value) {
 }
 
 async fn create_observable_workflow(app: &TestApp) {
-    SqliteWorkflowRepository::new(app.db.clone())
-        .create_definition(
-            CreateWorkflowRecord {
-                workflow_id: "wf_observe".to_string(),
-                title: "Observe workflow".to_string(),
-                cwd: app.workspace().path().display().to_string(),
-                state: "pending".to_string(),
-            },
-            vec![
-                node("node_a", None, "Research", "Research one"),
-                node("node_b", Some("node_a"), "Research", "Research two"),
-                node("node_c", Some("node_b"), "Review", "Review"),
-                node("node_d", Some("node_c"), "Research", "Research again"),
-            ],
-        )
-        .await
-        .expect("create workflow");
+    SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    )
+    .create_definition(
+        CreateWorkflowRecord {
+            workflow_id: "wf_observe".to_string(),
+            title: "Observe workflow".to_string(),
+            cwd: app.workspace().path().display().to_string(),
+            state: "pending".to_string(),
+        },
+        vec![
+            node("node_a", None, "Research", "Research one"),
+            node("node_b", Some("node_a"), "Research", "Research two"),
+            node("node_c", Some("node_b"), "Review", "Review"),
+            node("node_d", Some("node_c"), "Research", "Research again"),
+        ],
+    )
+    .await
+    .expect("create workflow");
 }
 
 #[tokio::test]
@@ -107,18 +110,21 @@ async fn external_workflow_context_returns_current_node_instructions_and_handoff
     current.instructions = "Implement the requested change.".to_string();
     current.inputs = r#"["requirements.md"]"#.to_string();
     current.output = "result.md".to_string();
-    SqliteWorkflowRepository::new(app.db.clone())
-        .create_definition(
-            CreateWorkflowRecord {
-                workflow_id: "wf_observe".to_string(),
-                title: "Context workflow".to_string(),
-                cwd: app.workspace().path().display().to_string(),
-                state: "running".to_string(),
-            },
-            vec![current],
-        )
-        .await
-        .expect("create workflow");
+    SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    )
+    .create_definition(
+        CreateWorkflowRecord {
+            workflow_id: "wf_observe".to_string(),
+            title: "Context workflow".to_string(),
+            cwd: app.workspace().path().display().to_string(),
+            state: "running".to_string(),
+        },
+        vec![current],
+    )
+    .await
+    .expect("create workflow");
     let handoff_dir = app
         .pontia_home()
         .path()
@@ -173,7 +179,10 @@ async fn revision_membership_reconstructs_historical_and_current_node_chains() {
         .await
         .expect("advance current revision");
 
-    let queries = WorkflowQueryService::new(app.db.clone());
+    let queries = WorkflowQueryService::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    );
     let revision_one = queries
         .get_workflow_revision("wf_observe", 1)
         .await
@@ -267,10 +276,10 @@ async fn workflow_detail_and_context_expose_the_active_patch_snapshot() {
     sqlx::query(
         r#"INSERT INTO workflow_patches
            (patch_id, workflow_id, requesting_node_id, requesting_session_id, requesting_turn_id,
-            requesting_runtime_id, replanner_creation_token, base_revision, state,
+            requesting_runtime_id, base_revision, state,
             request_document_ref, request_size_bytes)
            VALUES ('patch_active', 'wf_observe', 'node_a', 'sess_active_patch',
-                   'turn_active_patch', 'rt_active_patch', 'token_active_patch', 1,
+                   'turn_active_patch', 'rt_active_patch', 1,
                    'requested', 'patches/patch_active/request.md', 7)"#,
     )
     .execute(&app.db)
@@ -374,17 +383,17 @@ async fn multiple_patch_snapshots_reconstruct_history_timeline_and_documents() {
     sqlx::query(
         r#"INSERT INTO workflow_patches
            (patch_id, workflow_id, requesting_node_id, requesting_session_id, requesting_turn_id,
-            requesting_runtime_id, replanner_creation_token, replanner_session_id,
+            requesting_runtime_id, replanner_session_id,
             replanner_turn_id, replanner_runtime_id, base_revision, result_revision,
             state, request_document_ref, request_size_bytes, decision_document_ref,
             requested_at, planning_at, resolved_at)
            VALUES
            ('patch_1', 'wf_observe', 'node_a', 'sess_request_1', 'turn_request_1', 'rt_req_1',
-            'token_1', 'sess_plan_1', 'turn_plan_1', 'rt_plan_1', 1, 2, 'applied',
+            'sess_plan_1', 'turn_plan_1', 'rt_plan_1', 1, 2, 'applied',
             'patches/patch_1/request.md', 13, 'patches/patch_1/decision.md',
             '2026-08-14T00:00:01.000Z', '2026-08-14T00:00:03.000Z', '2026-08-14T00:00:05.000Z'),
            ('patch_2', 'wf_observe', 'node_e', 'sess_request_2', 'turn_request_2', 'rt_req_2',
-            'token_2', 'sess_plan_2', 'turn_plan_2', 'rt_plan_2', 2, 3, 'applied',
+            'sess_plan_2', 'turn_plan_2', 'rt_plan_2', 2, 3, 'applied',
             'patches/patch_2/request.md', 14, 'patches/patch_2/decision.md',
             '2026-08-14T00:00:06.000Z', '2026-08-14T00:00:08.000Z', '2026-08-14T00:00:10.000Z')"#,
     )
@@ -514,18 +523,21 @@ async fn external_workflow_queries_reject_invalid_limits() {
 #[tokio::test]
 async fn invalid_legacy_phase_is_visible_in_list_but_detail_conflicts() {
     let app = TestApp::new().await;
-    SqliteWorkflowRepository::new(app.db.clone())
-        .create_definition(
-            CreateWorkflowRecord {
-                workflow_id: "wf_observe".to_string(),
-                title: "Legacy workflow".to_string(),
-                cwd: app.workspace().path().display().to_string(),
-                state: "pending".to_string(),
-            },
-            vec![node("node_a", None, "", "Legacy")],
-        )
-        .await
-        .expect("create legacy workflow");
+    SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    )
+    .create_definition(
+        CreateWorkflowRecord {
+            workflow_id: "wf_observe".to_string(),
+            title: "Legacy workflow".to_string(),
+            cwd: app.workspace().path().display().to_string(),
+            state: "pending".to_string(),
+        },
+        vec![node("node_a", None, "", "Legacy")],
+    )
+    .await
+    .expect("create legacy workflow");
 
     let (list_status, list) = get(&app, "/api/v1/workflows").await;
     assert_eq!(list_status, StatusCode::OK, "{list}");

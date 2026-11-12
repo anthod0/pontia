@@ -1,4 +1,4 @@
-use pontia_storage_sqlite::models::workflows::{WorkflowNodeRow, WorkflowRow};
+use crate::models::{WorkflowNodeRow, WorkflowRow};
 use uuid::Uuid;
 
 use super::{AgentTerminal, WorkflowCoordinator};
@@ -82,7 +82,7 @@ where
             .recovered_node_runtime(&node.node_id)
             .await?;
         let Some(event) = self
-            .persisted_events
+            .repository
             .latest_workflow_terminal_event(session_id, recovered_runtime.as_deref(), None)
             .await?
         else {

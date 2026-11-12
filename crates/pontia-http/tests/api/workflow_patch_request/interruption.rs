@@ -75,7 +75,10 @@ impl GracefulExitRequester for RuntimeControl {
 async fn reported_requester_interruption_starts_one_replanner() {
     let app = TestApp::new().await;
     seed_requester(&app).await;
-    let repository = SqliteWorkflowRepository::new(app.db.clone());
+    let repository = SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    );
     report_requester_fact(
         &app,
         "turn.started",
@@ -86,6 +89,7 @@ async fn reported_requester_interruption_starts_one_replanner() {
     assert_eq!(status, StatusCode::OK, "{requested}");
     let patch_id = requested["data"]["patch_id"].as_str().unwrap();
     let coordinator = WorkflowCoordinator::with_services(
+        app.db.clone(),
         app.state.control(),
         ReplannerCreator(app.db.clone()),
         RuntimeControl::default(),
@@ -124,11 +128,14 @@ async fn reported_requester_interruption_starts_one_replanner() {
         patch.replanner_session_id.as_deref(),
         Some("sess_patch_replanner")
     );
-    let view = WorkflowQueryService::new(app.db.clone())
-        .get_workflow("wf_patch_request")
-        .await
-        .unwrap()
-        .unwrap();
+    let view = WorkflowQueryService::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    )
+    .get_workflow("wf_patch_request")
+    .await
+    .unwrap()
+    .unwrap();
     assert_eq!(
         serde_json::to_value(&view).unwrap()["nodes"][0]["status"],
         "paused"
@@ -162,25 +169,31 @@ async fn submitted_current_node_remains_exiting_after_interruption() {
         json!({ "runtime_id": "runtime_patch_request" }),
     )
     .await;
-    SqliteWorkflowRepository::new(app.db.clone())
-        .record_node_submission(
-            "node_patch_request",
-            "runtime_patch_request",
-            "evt_submission",
-        )
-        .await
-        .unwrap();
+    SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    )
+    .record_node_submission(
+        "node_patch_request",
+        "runtime_patch_request",
+        "evt_submission",
+    )
+    .await
+    .unwrap();
     report_requester_fact(
         &app,
         "turn.interrupted",
         json!({ "terminal_leaf_id": null }),
     )
     .await;
-    let view = WorkflowQueryService::new(app.db.clone())
-        .get_workflow("wf_patch_request")
-        .await
-        .unwrap()
-        .unwrap();
+    let view = WorkflowQueryService::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    )
+    .get_workflow("wf_patch_request")
+    .await
+    .unwrap()
+    .unwrap();
     let view = serde_json::to_value(view).unwrap();
     assert_eq!(view["state"], "running");
     assert_eq!(view["nodes"][0]["status"], "exiting");
@@ -231,6 +244,7 @@ async fn planning_patch(app: &TestApp, control: RuntimeControl) -> (String, Coor
     let patch_id = requested["data"]["patch_id"].as_str().unwrap().to_string();
     report_requester_fact(app, "turn.interrupted", json!({ "terminal_leaf_id": null })).await;
     let coordinator = WorkflowCoordinator::with_services(
+        app.db.clone(),
         app.state.control(),
         ReplannerCreator(app.db.clone()),
         control,
@@ -268,7 +282,10 @@ async fn reported_replanner_terminal_blocks_an_unresolved_patch() {
         )
         .await;
         coordinator.reconcile("wf_patch_request").await.unwrap();
-        let repository = SqliteWorkflowRepository::new(app.db.clone());
+        let repository = SqliteWorkflowRepository::new(
+            app.db.clone(),
+            pontia_agent_control::ControlQueryService::new(app.db.clone()),
+        );
         let patch = repository.get_patch(&patch_id).await.unwrap().unwrap();
         assert_eq!(
             patch.state, "blocked",
@@ -321,18 +338,24 @@ async fn applied_and_rejected_patches_do_not_fail_on_the_requester_interruption(
         for _ in 0..3 {
             coordinator.reconcile("wf_patch_request").await.unwrap();
         }
-        let repository = SqliteWorkflowRepository::new(app.db.clone());
+        let repository = SqliteWorkflowRepository::new(
+            app.db.clone(),
+            pontia_agent_control::ControlQueryService::new(app.db.clone()),
+        );
         let patch = repository.get_patch(&patch_id).await.unwrap().unwrap();
         assert!(patch.continuation_queued_at.is_some());
         assert!(
             control.exits.lock().unwrap().is_empty(),
             "resolution is not a Turn terminal fact"
         );
-        let view = WorkflowQueryService::new(app.db.clone())
-            .get_workflow("wf_patch_request")
-            .await
-            .unwrap()
-            .unwrap();
+        let view = WorkflowQueryService::new(
+            app.db.clone(),
+            pontia_agent_control::ControlQueryService::new(app.db.clone()),
+        )
+        .get_workflow("wf_patch_request")
+        .await
+        .unwrap()
+        .unwrap();
         let view = serde_json::to_value(view).unwrap();
         assert_eq!(view["state"], "running");
         assert_eq!(view["nodes"][0]["status"], "paused");
@@ -386,17 +409,23 @@ async fn explicitly_blocked_patch_stays_stopped_and_closes_replanner_after_termi
     assert_eq!(status, StatusCode::OK, "{blocked}");
     coordinator.reconcile("wf_patch_request").await.unwrap();
     assert!(control.exits.lock().unwrap().is_empty());
-    let repository = SqliteWorkflowRepository::new(app.db.clone());
+    let repository = SqliteWorkflowRepository::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    );
     let patch = repository.get_patch(&patch_id).await.unwrap().unwrap();
     assert_eq!(patch.state, "blocked");
     assert!(patch.continuation_message_id.is_none());
     assert!(patch.blocked_draft_ref.is_some());
     assert_eq!(fs::read_to_string(&file).unwrap(), accepted);
-    let view = WorkflowQueryService::new(app.db.clone())
-        .get_workflow("wf_patch_request")
-        .await
-        .unwrap()
-        .unwrap();
+    let view = WorkflowQueryService::new(
+        app.db.clone(),
+        pontia_agent_control::ControlQueryService::new(app.db.clone()),
+    )
+    .get_workflow("wf_patch_request")
+    .await
+    .unwrap()
+    .unwrap();
     let view = serde_json::to_value(view).unwrap();
     assert_eq!(view["state"], "blocked");
     assert_eq!(view["nodes"][0]["status"], "paused");
