@@ -9,7 +9,7 @@ Pontia supports x86_64 and ARM64 Linux releases built for GNU userspace. The loc
 
 ## Local requirements
 
-The release installer requires `curl`, `grep`, `install`, `jq`, `mktemp`, `mv`, `openssl`, `rm`, `sha256sum`, `tar`, `tr`, `uname`, and `wc`. OpenSSL must support Ed25519 verification.
+The release installer requires `curl`, `grep`, `install`, `mktemp`, `mv`, `openssl`, `rm`, `sed`, `sha256sum`, `tar`, `tr`, `uname`, and `wc`. OpenSSL must support Ed25519 verification.
 
 A working systemd user manager is required. The standard installation directory is `$HOME/.local/bin`, which must be on your shell `PATH` before running `pontia init`.
 

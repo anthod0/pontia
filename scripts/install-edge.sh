@@ -46,7 +46,7 @@ case "$VERSION" in
     ;;
 esac
 
-for command_name in curl grep jq openssl rm tar sha256sum mktemp install mv; do
+for command_name in curl grep openssl rm sed tar sha256sum mktemp install mv; do
   require_command "$command_name"
 done
 
@@ -62,21 +62,33 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+# The envelope is untrusted until the signature is verified; the signed manifest
+# is the publisher's compact, key-sorted JSON, so fixed patterns parse it.
+envelope_field() {
+  sed -n "s|.*\"$1\": *\"\([A-Za-z0-9+/=]*\)\".*|\1|p" "$temporary_dir/envelope.json"
+}
+
+artifact_entry() {
+  pattern="$(printf '%s' "$1" | sed 's/\./\\./g')"
+  sed -n "s/.*\"$pattern\":{\([^}]*\)}.*/\1/p" "$temporary_dir/manifest.json"
+}
+
 curl -fsSL "$RELEASE_ORIGIN/$manifest_path" -o "$temporary_dir/envelope.json"
 printf '%s\n' "$RELEASE_PUBLIC_KEY" > "$temporary_dir/public.pem"
-jq -er '.manifest' "$temporary_dir/envelope.json" | openssl base64 -d -A > "$temporary_dir/manifest.json"
-jq -er '.signature' "$temporary_dir/envelope.json" | openssl base64 -d -A > "$temporary_dir/signature"
+envelope_field "manifest" | openssl base64 -d -A > "$temporary_dir/manifest.json"
+envelope_field "signature" | openssl base64 -d -A > "$temporary_dir/signature"
 openssl pkeyutl -verify -rawin -pubin -inkey "$temporary_dir/public.pem" -sigfile "$temporary_dir/signature" -in "$temporary_dir/manifest.json" >/dev/null || fail "release signature verification failed"
-jq -e '.schema_version == 1 and (.version | test("^v[0-9][0-9A-Za-z.+-]*$"))' "$temporary_dir/manifest.json" >/dev/null || fail "invalid release manifest"
-release_version="$(jq -er '.version' "$temporary_dir/manifest.json")"
+release_version="$(sed -n 's/^{"artifacts":{.*},"schema_version":1,"version":"\(v[0-9][0-9A-Za-z.+-]*\)"}$/\1/p' "$temporary_dir/manifest.json")"
+[ -n "$release_version" ] || fail "invalid release manifest"
 [ "$VERSION" = latest ] || [ "$VERSION" = "$release_version" ] || fail "release version mismatch"
 archive_url="$RELEASE_ORIGIN/releases/$release_version/$archive_name"
-manifest_url="$(jq -er --arg archive "$archive_name" '.artifacts[$archive].url' "$temporary_dir/manifest.json")"
+artifact="$(artifact_entry "$archive_name")"
+manifest_url="$(printf '%s\n' "$artifact" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')"
 [ "$manifest_url" = "$archive_url" ] || fail "unexpected artifact URL"
 printf 'Downloading pontia-edge for %s...\n' "$target"
 curl -fsSL "$archive_url" -o "$temporary_dir/$archive_name"
 
-expected_checksum="$(jq -er --arg archive "$archive_name" '.artifacts[$archive].sha256' "$temporary_dir/manifest.json")"
+expected_checksum="$(printf '%s\n' "$artifact" | sed -n 's/.*"sha256":"\([0-9a-f]\{64\}\)".*/\1/p')"
 actual_checksum="$(sha256sum "$temporary_dir/$archive_name")"
 actual_checksum="${actual_checksum%% *}"
 [ "$actual_checksum" = "$expected_checksum" ] || fail "checksum verification failed for $archive_name"

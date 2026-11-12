@@ -18,7 +18,7 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
 }
 
-for command_name in curl grep install jq mktemp mv rm tar tr uname wc; do
+for command_name in curl grep install mktemp mv rm sed tar tr uname wc; do
   require_command "$command_name"
 done
 
@@ -115,27 +115,40 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+# The envelope is untrusted until the signature is verified; the signed manifest
+# is the publisher's compact, key-sorted JSON, so fixed patterns parse it.
+envelope_field() {
+  sed -n "s|.*\"$1\": *\"\([A-Za-z0-9+/=]*\)\".*|\1|p" "$temporary_dir/envelope.json"
+}
+
+artifact_entry() {
+  pattern="$(printf '%s' "$1" | sed 's/\./\\./g')"
+  sed -n "s/.*\"$pattern\":{\([^}]*\)}.*/\1/p" "$temporary_dir/manifest.json"
+}
+
 download "$RELEASE_ORIGIN/$manifest_path" "$temporary_dir/envelope.json" "$MAX_MANIFEST_SIZE"
 printf '%s\n' "$RELEASE_PUBLIC_KEY" > "$temporary_dir/public.pem"
-jq -er '.manifest' "$temporary_dir/envelope.json" | "$OPENSSL" base64 -d -A > "$temporary_dir/manifest.json"
-jq -er '.signature' "$temporary_dir/envelope.json" | "$OPENSSL" base64 -d -A > "$temporary_dir/signature"
+envelope_field "manifest" | "$OPENSSL" base64 -d -A > "$temporary_dir/manifest.json"
+envelope_field "signature" | "$OPENSSL" base64 -d -A > "$temporary_dir/signature"
 "$OPENSSL" pkeyutl -verify -rawin -pubin -inkey "$temporary_dir/public.pem" -sigfile "$temporary_dir/signature" -in "$temporary_dir/manifest.json" >/dev/null || fail "release signature verification failed"
-jq -e '.schema_version == 1 and (.version | test("^v[0-9][0-9A-Za-z.+-]*$"))' "$temporary_dir/manifest.json" >/dev/null || fail "invalid release manifest"
-release_version="$(jq -er '.version' "$temporary_dir/manifest.json")"
+release_version="$(sed -n 's/^{"artifacts":{.*},"schema_version":1,"version":"\(v[0-9][0-9A-Za-z.+-]*\)"}$/\1/p' "$temporary_dir/manifest.json")"
+[ -n "$release_version" ] || fail "invalid release manifest"
 [ "$VERSION" = latest ] || [ "$VERSION" = "$release_version" ] || fail "release version mismatch"
 
 for binary in pontia pontiad; do
   archive_name="$binary-$target.tar.gz"
   printf 'Downloading %s for %s...\n' "$binary" "$target"
   archive_url="$RELEASE_ORIGIN/releases/$release_version/$archive_name"
-  manifest_url="$(jq -er --arg archive "$archive_name" '.artifacts[$archive].url' "$temporary_dir/manifest.json")"
+  artifact="$(artifact_entry "$archive_name")"
+  manifest_url="$(printf '%s\n' "$artifact" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')"
   [ "$manifest_url" = "$archive_url" ] || fail "unexpected artifact URL"
-  expected_size="$(jq -er --arg archive "$archive_name" --argjson maximum "$MAX_ARCHIVE_SIZE" '.artifacts[$archive].size | select(type == "number" and . > 0 and . <= $maximum and floor == .)' "$temporary_dir/manifest.json")"
+  expected_size="$(printf '%s\n' "$artifact" | sed -n 's/.*"size":\([1-9][0-9]*\),.*/\1/p')"
+  [ -n "$expected_size" ] && [ "$expected_size" -le "$MAX_ARCHIVE_SIZE" ] || fail "invalid size for $archive_name"
   download "$archive_url" "$temporary_dir/$archive_name" "$expected_size"
 
   actual_size="$(wc -c < "$temporary_dir/$archive_name" | tr -d '[:space:]')"
   [ "$actual_size" = "$expected_size" ] || fail "size verification failed for $archive_name"
-  expected_checksum="$(jq -er --arg archive "$archive_name" '.artifacts[$archive].sha256' "$temporary_dir/manifest.json")"
+  expected_checksum="$(printf '%s\n' "$artifact" | sed -n 's/.*"sha256":"\([0-9a-f]\{64\}\)".*/\1/p')"
   actual_checksum="$(checksum "$temporary_dir/$archive_name")"
   [ "$actual_checksum" = "$expected_checksum" ] || fail "checksum verification failed for $archive_name"
 

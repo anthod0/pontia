@@ -9,7 +9,7 @@ Pontia supports macOS 13.5 and later on Intel and Apple Silicon. The local contr
 
 ## Install requirements
 
-The release installer requires `curl`, `grep`, `install`, `jq`, `mktemp`, `mv`, `openssl`, `rm`, `shasum`, `tar`, `tr`, `uname`, and `wc`.
+The release installer requires `curl`, `grep`, `install`, `mktemp`, `mv`, `openssl`, `rm`, `sed`, `shasum`, `tar`, `tr`, `uname`, and `wc`.
 
 The system `openssl` may not provide the required Ed25519 command. The installer automatically checks Homebrew's standard `openssl@3` paths:
 

@@ -9,16 +9,9 @@ Install Pontia, connect your device to Pontia Cloud, and start using your coding
 
 ## Requirements
 
-The release installer supports **x86_64 and ARM64 Linux** and **Intel and Apple Silicon macOS 13.5 or later**. Linux lifecycle commands require a running systemd user service manager; macOS uses a per-user LaunchAgent.
-
-The installer requires `curl`, `grep`, `install`, `jq`, `mktemp`, `mv`, `openssl`, `rm`, `tar`, `tr`, `uname`, and `wc`, plus `sha256sum` on Linux or `shasum` on macOS. OpenSSL must support Ed25519 verification; on macOS the installer automatically detects Homebrew's `openssl@3` in its standard Intel and Apple Silicon locations.
-
-Install the clients you plan to use before initialization:
-
-- **pi:** install the `pi` CLI and `tmux`.
-- **Codex:** install the `codex` CLI. Automatic Codex startup uses systemd on Linux and a per-user LaunchAgent on macOS.
-- **Claude Agent:** install Node.js LTS with npm and sign in to Claude Code. See the [Claude Agent guide](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md).
-- **ACP agents:** install the agent, such as OpenCode, Kimi CLI, or Grok Build, then enable it after initialization as described in [Agent Clients](/docs/agent-clients#enable-an-acp-agent).
+- Linux with systemd, or macOS 13.5 or later.
+- `curl` and `openssl`. See [Linux](/docs/platforms/linux) or [macOS](/docs/platforms/macos) for details.
+- At least one coding agent: pi, Codex, Claude Code, or an ACP agent. See [Agent Clients](/docs/agent-clients) for what each one needs.
 
 ## Install Pontia
 
@@ -32,7 +25,7 @@ The installer places `pontia` and `pontiad` in `$HOME/.local/bin` by default. Ma
 
 ### Install with npm
 
-If you have Node.js with npm, you can install from the npm registry instead. This works with npm mirrors and private registries, and does not require `curl`, `jq`, or `openssl`:
+If you have Node.js with npm, you can install from the npm registry instead. This works with npm mirrors and private registries, and does not require `curl` or `openssl`:
 
 ```sh
 npx @pontia/cli init

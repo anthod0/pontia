@@ -15,7 +15,7 @@ Use a public Linux server with:
 - systemd as the system service manager;
 - a public IPv4 address that the server can bind and receive traffic on;
 - outbound HTTPS and DNS access;
-- `curl`, `grep`, `install`, `jq`, `mktemp`, `mv`, `openssl`, `rm`, `sha256sum`, and `tar`;
+- `curl`, `grep`, `install`, `mktemp`, `mv`, `openssl`, `rm`, `sed`, `sha256sum`, and `tar`;
 - OpenSSL with Ed25519 verification support.
 
 `pontia-edge` is supported only on Linux.

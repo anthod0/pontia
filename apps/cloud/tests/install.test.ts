@@ -125,6 +125,8 @@ sha256sum "$3"
 `,
   );
   await chmod(shasum, 0o755);
+  // Installers must not depend on jq, which many systems do not ship.
+  await writeFile(join(mocks, "jq"), "#!/bin/sh\nexit 127\n", { mode: 0o755 });
   const releaseTarget = `${platform.architecture === "arm64" ? "aarch64" : "x86_64"}-${platform.system === "Darwin" ? "apple-darwin" : "unknown-linux-gnu"}`;
   return {
     root,
