@@ -12,7 +12,8 @@ const PLATFORM_PACKAGES = {
   "darwin-x64": "@pontia/cli-darwin-x64",
   "darwin-arm64": "@pontia/cli-darwin-arm64",
 };
-const USAGE = "Usage: npx @pontia/cli <init|update> [pontia arguments...]";
+const USAGE = `Usage: npx @pontia/cli install
+       npx @pontia/cli <init|update> [pontia arguments...]`;
 const CURL_INSTALL = "curl -fsSL https://get.pontia.dev/install.sh | sh";
 
 class InstallerError extends Error {}
@@ -77,17 +78,26 @@ function runPontia(directory, args) {
   return result.status ?? 1;
 }
 
+// Install the packaged binaries unless both are already present.
+function ensureInstalled(directory) {
+  if (!isInstalled(directory)) install(platformPackageDir(), directory);
+  if (!onPath(directory)) {
+    console.error(`${directory} is not in PATH. Add it to PATH to run pontia directly.`);
+  }
+}
+
 function main([command, ...args]) {
+  if (command === "install" && args.length === 0) {
+    ensureInstalled(installDir());
+    return 0;
+  }
   if (command !== "init" && command !== "update") {
     console.error(USAGE);
     return 2;
   }
   const directory = installDir();
   if (command === "init") {
-    if (!isInstalled(directory)) install(platformPackageDir(), directory);
-    if (!onPath(directory)) {
-      console.error(`${directory} is not in PATH. Add it to PATH to run pontia directly.`);
-    }
+    ensureInstalled(directory);
   } else if (!isInstalled(directory)) {
     throw new InstallerError(`Pontia is not installed in ${directory}. Run: npx @pontia/cli init`);
   }

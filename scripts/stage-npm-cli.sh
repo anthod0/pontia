@@ -17,7 +17,7 @@ for entry in \
   target=${entry#*:}
   package="$staging/cli-$platform"
   mkdir "$package"
-  cp "$root/npm/cli-$platform/package.json" "$package/"
+  cp "$root/npm/cli-$platform/package.json" "$root/npm/cli-$platform/README.md" "$package/"
   for binary in pontia pontiad; do
     tar -xzf "$artifacts/$binary-$target.tar.gz" -C "$package" "$binary"
   done
@@ -25,6 +25,6 @@ for entry in \
 done
 
 mkdir "$staging/cli"
-cp "$root/npm/cli/package.json" "$root/LICENSE" "$staging/cli/"
+cp "$root/npm/cli/package.json" "$root/npm/cli/README.md" "$root/LICENSE" "$staging/cli/"
 cp -R "$root/npm/cli/bin" "$staging/cli/bin"
 python3 "$root/scripts/release-version.py" materialize-npm "$staging/cli/package.json"

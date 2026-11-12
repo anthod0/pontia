@@ -1,7 +1,7 @@
 {
   "name": "@pontia/cli",
   "version": "0.0.0",
-  "description": "Install Pontia and run pontia init or pontia update.",
+  "description": "Install Pontia from the npm registry.",
   "homepage": "https://pontia.dev/",
   "bugs": {
     "url": "https://github.com/anthod0/pontia/issues"

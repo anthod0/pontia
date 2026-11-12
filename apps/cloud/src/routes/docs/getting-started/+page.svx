@@ -33,6 +33,8 @@ npx @pontia/cli init
 
 This places `pontia` and `pontiad` in the same location as the release installer, then starts `pontia init`. If both binaries are already installed, it keeps them and only runs `pontia init`. Set `PONTIA_INSTALL_DIR` to install to a different directory.
 
+To install without starting the initializer, run `npx @pontia/cli install`.
+
 ## Initialize your device
 
 Run the interactive initializer:

@@ -137,10 +137,43 @@ test("update fails without installing when Pontia is not installed", () => {
   assert.equal(existsSync(join(installDir, "pontia")), false);
 });
 
+test("install installs packaged binaries without running pontia", () => {
+  createPlatformPackage();
+
+  const result = run(["install"]);
+
+  assert.equal(result.status, 0);
+  assert.equal(existsSync(join(testRoot, "pontia.log")), false);
+  assert.match(readFileSync(join(installDir, "pontia"), "utf8"), /packaged/);
+  for (const binary of ["pontia", "pontiad"]) {
+    assert.equal(statSync(join(installDir, binary)).mode & 0o777, 0o755);
+  }
+});
+
+test("install keeps an existing installation instead of overwriting it", () => {
+  createPlatformPackage();
+  mkdirSync(installDir, { recursive: true });
+  fakeBinary(join(installDir, "pontia"), "existing");
+  fakeBinary(join(installDir, "pontiad"), "existing-daemon");
+
+  const result = run(["install"]);
+
+  assert.equal(result.status, 0);
+  assert.match(readFileSync(join(installDir, "pontia"), "utf8"), /existing/);
+});
+
+test("install fails when the platform package is missing", () => {
+  const result = run(["install"]);
+
+  assert.equal(result.status, 1);
+  assert.equal(existsSync(join(installDir, "pontia")), false);
+});
+
 test("rejects missing or unknown subcommands", () => {
   createPlatformPackage();
 
   assert.notEqual(run([]).status, 0);
-  assert.notEqual(run(["install"]).status, 0);
+  assert.notEqual(run(["setup"]).status, 0);
+  assert.notEqual(run(["install", "--yes"]).status, 0);
   assert.equal(existsSync(join(installDir, "pontia")), false);
 });
