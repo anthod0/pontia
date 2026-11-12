@@ -323,6 +323,61 @@ jobs:
             npm publish "$STAGING" --access public
           fi
 
+  # Runs after R2 publishes the release and advances stable, so `pontia update` finds it.
+  publish-npm-cli:
+    name: Publish npm installer
+    needs:
+      - detect
+      - release
+    if: ${{ needs.detect.outputs.publish == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: binaries-*
+          path: artifacts
+          merge-multiple: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install npm with Trusted Publishing support
+        run: npm install --global npm@11
+      - name: Stage packages with the product version
+        env:
+          STAGING: ${{ runner.temp }}/npm-cli
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          scripts/stage-npm-cli.sh artifacts "$STAGING"
+          for package in "$STAGING"/*; do
+            test "$(jq -r .version "$package/package.json")" = "$VERSION"
+            jq -e --arg version "$VERSION" '(.optionalDependencies // {}) | all(. == $version)' "$package/package.json" >/dev/null
+            npm pack --dry-run "$package"
+          done
+      - name: Publish with Trusted Publishing
+        shell: bash
+        env:
+          STAGING: ${{ runner.temp }}/npm-cli
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Platform packages first, so @pontia/cli never references a missing version.
+          for package in "$STAGING"/cli-* "$STAGING/cli"; do
+            name="$(jq -r .name "$package/package.json")"
+            if npm view "$name@$VERSION" version >/dev/null 2>&1; then
+              echo "$name@$VERSION is already published"
+            else
+              npm publish "$package" --access public
+            fi
+          done
+
   deploy-cloudflare:
     name: Deploy Cloudflare ${{ matrix.app }}
     needs:

@@ -30,6 +30,16 @@ curl -fsSL https://get.pontia.dev/install.sh | sh
 
 The installer places `pontia` and `pontiad` in `$HOME/.local/bin` by default. Make sure that directory is included in your `PATH`.
 
+### Install with npm
+
+If you have Node.js with npm, you can install from the npm registry instead. This works with npm mirrors and private registries, and does not require `curl`, `jq`, or `openssl`:
+
+```sh
+npx @pontia/cli init
+```
+
+This places `pontia` and `pontiad` in the same location as the release installer, then starts `pontia init`. If both binaries are already installed, it keeps them and only runs `pontia init`. Set `PONTIA_INSTALL_DIR` to install to a different directory.
+
 ## Initialize your device
 
 Run the interactive initializer:
@@ -66,6 +76,8 @@ Update `pontia` and `pontiad` to the latest signed stable release on Linux or ma
 ```sh
 pontia update
 ```
+
+If you installed with npm, `npx @pontia/cli update` runs the same command. Updates always come from the signed release, not from npm.
 
 If the managed service is running, Pontia restarts it and waits for it to become healthy. If replacement or restart fails, Pontia restores the previous binaries and attempts to recover the service.
 

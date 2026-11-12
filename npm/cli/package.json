@@ -1,0 +1,35 @@
+{
+  "name": "@pontia/cli",
+  "version": "0.0.0",
+  "description": "Install Pontia and run pontia init or pontia update.",
+  "homepage": "https://pontia.dev/",
+  "bugs": {
+    "url": "https://github.com/anthod0/pontia/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anthod0/pontia.git",
+    "directory": "npm/cli"
+  },
+  "type": "module",
+  "bin": {
+    "pontia-install": "bin/pontia-install.js"
+  },
+  "files": [
+    "bin",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "optionalDependencies": {
+    "@pontia/cli-darwin-arm64": "0.0.0",
+    "@pontia/cli-darwin-x64": "0.0.0",
+    "@pontia/cli-linux-arm64": "0.0.0",
+    "@pontia/cli-linux-x64": "0.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

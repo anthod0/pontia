@@ -27,6 +27,7 @@ fmt:
     bun run --cwd apps/cloud fmt
     bun run --cwd clients/pi fmt
     ./apps/dashboard/node_modules/.bin/oxfmt clients/claude/src clients/claude/test
+    ./apps/dashboard/node_modules/.bin/oxfmt npm/cli/bin npm/cli/test
 
 fmt-check:
     cargo fmt --check
@@ -34,6 +35,7 @@ fmt-check:
     bun run --cwd apps/cloud fmt:check
     bun run --cwd clients/pi fmt:check
     ./apps/dashboard/node_modules/.bin/oxfmt --check clients/claude/src clients/claude/test
+    ./apps/dashboard/node_modules/.bin/oxfmt --check npm/cli/bin npm/cli/test
 
 sqlx-prepare:
     ./scripts/sqlx-prepare.sh
@@ -85,6 +87,9 @@ claude-client-test:
     bun run --cwd clients/claude typecheck
     bun run --cwd clients/claude test
 
+npm-cli-test:
+    cd npm/cli && node --test
+
 claude-delivery-test:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -96,4 +101,4 @@ claude-delivery-test:
 cloud-check:
     bun run --cwd apps/cloud check
 
-check: fmt-check sqlx-check clippy test dashboard-check dashboard-test pi-client-test claude-client-test cloud-check
+check: fmt-check sqlx-check clippy test dashboard-check dashboard-test pi-client-test claude-client-test npm-cli-test cloud-check
