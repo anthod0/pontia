@@ -265,38 +265,45 @@ async fn replay_preserves_turn_identity_and_state_without_ordinals() {
 
 #[tokio::test]
 async fn client_titles_respect_manual_names_and_match_history_replay() {
-    for (initial, input_title) in [
-        (None, false),
-        (Some("Named at creation"), false),
-        (Some("Input summary"), true),
-    ] {
-        let service = service().await;
-        let mut created = event("created", EventType::SessionCreated, "s", None);
-        created.payload = json!({"title":initial, "metadata":{"title_source": if input_title { Some("input") } else { None }}});
-        service.ingest_reported_event(created).await.unwrap();
-        for (index, (source, title, expected)) in [
-            (
+    // (created title, created title_source, [(source, reported title, expected title)])
+    type Update = (EventSource, Option<&'static str>, Option<&'static str>);
+    let cases: [(Option<&str>, Option<&str>, Vec<Update>); 3] = [
+        (
+            None,
+            None,
+            vec![
+                (EventSource::AgentClient, Some("Native A"), Some("Native A")),
+                (EventSource::AgentClient, None, Some("Native A")),
+                (EventSource::ExternalApi, Some("Manual"), Some("Manual")),
+                (EventSource::AgentClient, Some("Native B"), Some("Manual")),
+                (EventSource::ExternalApi, None, None),
+                (EventSource::AgentClient, Some("Native B"), Some("Native B")),
+            ],
+        ),
+        (
+            Some("Named at creation"),
+            None,
+            vec![(
                 EventSource::AgentClient,
                 Some("Native A"),
-                if input_title {
-                    Some("Native A")
-                } else {
-                    initial.or(Some("Native A"))
-                },
-            ),
-            (EventSource::ExternalApi, Some("Manual"), Some("Manual")),
-            (EventSource::AgentClient, Some("Native B"), Some("Manual")),
-            (EventSource::ExternalApi, None, Some("Native B")),
-            (EventSource::AgentClient, Some("Native A"), Some("Native A")),
-            (
-                EventSource::AgentClient,
-                None,
-                if input_title { initial } else { None },
-            ),
-        ]
-        .into_iter()
-        .enumerate()
-        {
+                Some("Named at creation"),
+            )],
+        ),
+        (
+            Some("Input summary"),
+            Some("input"),
+            vec![
+                (EventSource::AgentClient, None, Some("Input summary")),
+                (EventSource::AgentClient, Some("Native A"), Some("Native A")),
+            ],
+        ),
+    ];
+    for (initial, title_source, updates) in cases {
+        let service = service().await;
+        let mut created = event("created", EventType::SessionCreated, "s", None);
+        created.payload = json!({"title":initial, "metadata":{"title_source":title_source}});
+        service.ingest_reported_event(created).await.unwrap();
+        for (index, (source, title, expected)) in updates.into_iter().enumerate() {
             let mut update = event(
                 &format!("title-{index}"),
                 EventType::SessionTitleUpdated,

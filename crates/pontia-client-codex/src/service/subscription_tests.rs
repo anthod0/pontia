@@ -815,45 +815,53 @@ async fn native_title_notifications_update_sessions_without_overriding_manual_na
     })
     .await
     .unwrap();
-    for (name, expected) in [("Native A", "Native A"), ("Native B", "Manual")] {
-        *fixture.thread_name.lock().await = json!(name);
+    let send = |method: &str, params: Value| {
+        let mut params = params;
+        params["threadId"] = json!("thread-one");
         fixture
             .notifications
-            .send(json!({
-                "method":"thread/name/updated",
-                "params":{"threadId":"thread-one","threadName":name}
-            }))
+            .send(json!({"method":method,"params":params}))
             .unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(3), async {
-            loop {
-                let event = events.recv().await.unwrap();
-                if event.event_type == EventType::SessionTitleUpdated
-                    && event.payload["title"] == name
-                {
-                    break;
-                }
-            }
-        })
-        .await
-        .unwrap();
-        let session = fixture
+    };
+    let title = || async {
+        fixture
             .app
             .queries()
             .get_session(&fixture.session)
             .await
             .unwrap()
-            .unwrap();
-        assert_eq!(session.title.as_deref(), Some(expected));
-        fixture
-            .app
-            .session_commands()
-            .update_session(
-                &fixture.session,
-                serde_json::from_value(json!({"title":"Manual"})).unwrap(),
-            )
-            .await
-            .unwrap();
-    }
+            .unwrap()
+            .title
+    };
+
+    send("thread/name/updated", json!({"threadName":"Native A"}));
+    wait_for(
+        &mut events,
+        EventType::SessionTitleUpdated,
+        Some("Native A"),
+    )
+    .await;
+    assert_eq!(title().await.as_deref(), Some("Native A"));
+
+    fixture
+        .app
+        .session_commands()
+        .update_session(
+            &fixture.session,
+            serde_json::from_value(json!({"title":"Manual"})).unwrap(),
+        )
+        .await
+        .unwrap();
+    // A client title is ignored while the session has a manual name. The token usage
+    // notification that follows proves the title notification was processed.
+    send("thread/name/updated", json!({"threadName":"Native B"}));
+    send(
+        "thread/tokenUsage/updated",
+        json!({"tokenUsage":{"last":{"totalTokens":10},"modelContextWindow":100}}),
+    );
+    wait_for(&mut events, EventType::SessionContextUsageUpdated, None).await;
+    assert_eq!(title().await.as_deref(), Some("Manual"));
+
     fixture
         .app
         .session_commands()
@@ -863,15 +871,15 @@ async fn native_title_notifications_update_sessions_without_overriding_manual_na
         )
         .await
         .unwrap();
-    let session = fixture
-        .app
-        .queries()
-        .get_session(&fixture.session)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(session.title.as_deref(), Some("Native B"));
-    assert_eq!(session.state, "idle");
+    assert_eq!(title().await, None);
+    send("thread/name/updated", json!({"threadName":"Native C"}));
+    wait_for(
+        &mut events,
+        EventType::SessionTitleUpdated,
+        Some("Native C"),
+    )
+    .await;
+    assert_eq!(title().await.as_deref(), Some("Native C"));
     shutdown.send(true).unwrap();
     observer.await.unwrap();
     fixture.shutdown().await;
@@ -983,4 +991,23 @@ async fn malformed_client_title_reports_do_not_clear_a_session_name() {
         Some("Manual")
     );
     fixture.shutdown().await;
+}
+
+async fn wait_for(
+    events: &mut tokio::sync::broadcast::Receiver<pontia_core::domain::DomainEvent>,
+    event_type: pontia_core::domain::EventType,
+    title: Option<&str>,
+) {
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let event = events.recv().await.unwrap();
+            if event.event_type == event_type
+                && title.is_none_or(|title| event.payload["title"] == title)
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap();
 }

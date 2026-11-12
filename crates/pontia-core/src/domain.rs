@@ -9,6 +9,6 @@ mod state;
 pub use event::{DomainEvent, EventSource, EventType, ReportedEvent, TimelineBoundary};
 pub use projection::{
     MAX_TURN_INPUT_SUMMARY_CHARS, MAX_TURN_OUTPUT_SUMMARY_CHARS, ProjectionState,
-    SessionExecutionLifetime, SessionProjection, TurnProjection,
+    SessionExecutionLifetime, SessionProjection, TurnProjection, title_update_applies,
 };
 pub use state::{SessionState, TurnState, TurnTopology};

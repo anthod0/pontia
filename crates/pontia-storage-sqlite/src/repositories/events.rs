@@ -183,21 +183,6 @@ impl SqliteEventRepository {
         .await?)
     }
 
-    pub async fn title_history_in_tx(
-        tx: &mut Transaction<'_, Sqlite>,
-        session_id: &str,
-    ) -> Result<Vec<DomainEventRow>> {
-        Ok(sqlx::query_as::<_, DomainEventRow>(
-            "SELECT event_id, session_id, turn_id, report_key, source, client_type, event_type,
-                    occurred_at, payload, timeline_boundary, turn_topology
-             FROM events WHERE session_id=? AND event_type IN ('session.created','session.title_updated')
-             ORDER BY rowid",
-        )
-        .bind(session_id)
-        .fetch_all(&mut **tx)
-        .await?)
-    }
-
     pub async fn interaction_history_in_tx(
         tx: &mut Transaction<'_, Sqlite>,
         session_id: &str,
