@@ -89,7 +89,7 @@
 			/>
 			{#if form?.error}<p class="auth-error" role="alert">{form.error}</p>{/if}
 			<div class="decisions">
-				<Button type="submit" formaction="?/approve" class="button"
+				<Button type="submit" formaction="?/approve" class="button approve"
 					>Approve</Button
 				>
 				<Button
@@ -133,5 +133,9 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 12px;
+	}
+	/* Approve stays first in the DOM so Enter submits it; show it on the right. */
+	.decisions :global(.approve) {
+		order: 1;
 	}
 </style>
