@@ -1,0 +1,117 @@
+---
+title: "Is your coding agent remote end-to-end encrypted? What the relay, key service, and app can see"
+description: What Anthropic, OpenAI, T3 Connect, Cloudflare, Happy, Tailscale, and Pontia can see when you control Claude Code, Codex, or pi from your phone. Explains what end-to-end encryption protects, who hands out the keys, and when self-hosting the relay helps.
+published: "2026-11-12"
+---
+
+Remote control tools for coding agents keep the agent and your repository on your own machine, and most of them say that traffic is end-to-end encrypted and the relay is self-hostable. Both are useful, but each removes a specific risk and leaves others in place. This article explains which parts of the chain can see what, so you can decide whether a self-hosted relay is worth running.
+
+Pontia is the tool we build. Facts about other tools come from their own docs, checked on November 12, 2026.
+
+## The short answer
+
+- **Claude Code Remote Control** is encrypted only in transit to Anthropic, which stores the transcript while you are connected.
+- **Happy, Conductor, and Pontia** relay end-to-end encrypted traffic, so the relay can't read your sessions.
+- **T3 Connect** carries traffic through a Cloudflare tunnel. T3's docs don't describe end-to-end encryption on top of it.
+- **End-to-end encryption alone isn't enough.** Whoever tells your phone which key belongs to your machine can still authorize a client of its own. Happy and Conductor pair devices by QR code. Pontia Cloud and Tailscale's coordination server hand out the keys.
+- **Your code still goes to the model provider**, whichever remote you use.
+
+## Your code still goes to the model provider
+
+The agent runs on your machine, but it sends prompts, file contents it reads, and command output to the model provider, such as Anthropic, OpenAI, or xAI, under that provider's data policy. A remote control tool doesn't change this, and no relay setting does. The rest of this article is about the extra parties a remote adds, on top of the provider you already use.
+
+## The parts of a remote
+
+Every remote for a coding agent has four parts, even when one company runs several of them:
+
+| Part | What it does |
+| --- | --- |
+| Host | Runs the agent, the tools, and the project files |
+| Client | The phone app, browser page, or desktop app you type into |
+| Relay | Moves bytes between the client and the host when they can't connect directly |
+| Key and identity service | Signs you in, decides which clients may reach which host, and tells each side which public key belongs to the other |
+
+End-to-end encryption takes the relay out of the trust picture: it carries data it can't read or change. It does not remove trust in the key service, the client code, or the two ends.
+
+## What each option exposes
+
+| Option | Relay sees | Key service | Notes |
+| --- | --- | --- | --- |
+| [Claude Code Remote Control](https://code.claude.com/docs/en/remote-control#connection-and-security) | Plaintext. Traffic goes through the Anthropic API over TLS, and the transcript is stored on Anthropic's servers while connected | Anthropic | Not available with Zero Data Retention |
+| [Codex in the ChatGPT app](https://learn.chatgpt.com/docs/remote-connections) | OpenAI's guide describes "a secure relay layer" and doesn't say whether it is end-to-end encrypted | OpenAI | |
+| [T3 Connect](https://github.com/pingdotgg/t3code/blob/main/docs/user/faq.md) | Traffic rides a Cloudflare tunnel. T3's relay sets up the link and doesn't proxy sessions | T3 Connect account, plus a pairing link per device | Cloudflare terminates HTTPS for tunnel hostnames, and T3's docs don't describe a second layer of encryption. Product usage events go to T3 and PostHog unless you turn them off |
+| [Happy](https://happy.engineering/how-it-works/) | Ciphertext, stored on the relay so the phone can read sessions while the host is offline | Your phone. The phone holds the account's primary key, and a computer is authorized by scanning a QR code with the phone ([mobile access](https://happy.engineering/recepies/mobile-access/)) | Push notifications go through Expo with the session title in plain text, and the phone app sends analytics to PostHog unless you turn them off ([self-hosting guide](https://happy.engineering/docs/guides/self-hosting/)) |
+| [Conductor](https://www.conductor.build/docs/reference/remote-control) | Ciphertext | Your Mac. The phone pairs by scanning a QR code that works once and expires after 10 minutes | iOS only, for local workspaces on a Mac |
+| [Tailscale](https://tailscale.com/docs/features/tailnet-lock) + SSH | WireGuard ciphertext on DERP relays | Tailscale's coordination server distributes node keys, unless you turn on Tailnet Lock | Then SSH host keys, which you verify yourself |
+| [Pontia](/docs/security) | Ciphertext, not stored. The Edge sees which device, IP addresses, timing, and sizes | Pontia Cloud | No product analytics. Details below |
+
+The Happy, Conductor, and Tailscale rows show why the key service matters. Tailscale's docs state it directly: without Tailnet Lock, a malicious coordination server could insert nodes into your network and exchange traffic with your machines. End-to-end encryption between nodes doesn't help when the server chooses the keys. Happy and Conductor avoid this by pairing through a QR scan between your own devices.
+
+## What end-to-end encryption doesn't cover
+
+**The key and identity service.** If a service tells your browser which public key belongs to your machine, and tells your machine which clients are allowed, that service can authorize a client of its own. Encryption is still end to end, just with the wrong end. Pairing devices directly, by QR code or by checking a fingerprint, removes this risk. A signed-in account alone does not.
+
+**The client code.** A web client loads its JavaScript from the service every time you open it. A native app gets its code through store updates. Either way, the company that ships the client could ship a version that leaks what it decrypts. Open source code makes this auditable. It doesn't prove the build you run matches the source.
+
+**Metadata.** A relay that can't read content still sees IP addresses, when you connect, how long, and how much data moves.
+
+**The two ends.** A compromised host exposes everything, because that is where the agent runs. A lost phone exposes whatever the client stores, plus anything you can reach from it while it stays signed in.
+
+**Side channels outside the relay.** Push notifications, product analytics, and crash reporting usually go to other services. Check what they carry. Happy's self-hosting guide lists them, and T3 Code documents its usage events.
+
+## How Pontia handles each part
+
+The relay is called an Edge, and Pontia Cloud is the key and identity service.
+
+**Encryption.** For each connection, the browser creates a fresh key pair. Pontia Cloud signs a capability that binds that browser key to one device and device key version, valid for 60 seconds. The browser sends it to the device inside an HPKE handshake (X25519, then ChaCha20-Poly1305). The device rejects the session unless the capability carries a valid Cloud signature. Requests carry authenticated IDs, so a captured request can't be replayed.
+
+**The Edge** forwards ciphertext and stores none of it. It can see the device ID, IP addresses, timing, and sizes, and it can refuse to forward traffic. It can't read or alter requests. Session history stays on your device, so you can't reach sessions while the device is offline.
+
+**Pontia Cloud** is not on the data path, but it holds each device's public key, gives it to your browser, and signs the capabilities your device accepts. A compromised Pontia Cloud could therefore authorize a browser of its own to reach your device. Pontia doesn't offer device pairing or fingerprint checks that would remove this. Self-hosting the Edge doesn't change it either, because Cloud still provides sign-in and authorization.
+
+**The client code** for [app.pontia.dev](https://app.pontia.dev) is served by Pontia, including when you install it as an app. The Local Dashboard is served by `pontiad` on your device.
+
+**On the phone**, the Dashboard caches recent session timelines in the browser's storage so they open quickly. Someone who can use your unlocked phone's browser can read them.
+
+**On the device**, protect `$PONTIA_HOME`, which holds the device's identity key and credentials. To replace a leaked identity, run `pontia remote rotate-key`. To cut off a lost device, remove it in [Device settings](/settings/devices). [Security](/docs/security) lists every secret and how to respond to exposure.
+
+### Using Pontia without Pontia Cloud
+
+If you don't want to trust Pontia Cloud or its hosted client, skip remote access. The Local Dashboard listens on `127.0.0.1:8080` and uses the `external_api_token` from `$PONTIA_HOME/config.toml`. Reach it through an SSH tunnel:
+
+```sh
+ssh -N -L 8080:127.0.0.1:8080 agent@your-server
+```
+
+Then open the URL that `pontia up` prints, which includes the token. The phone needs an SSH client that can forward ports, and the trust moves to your SSH keys and your network, as in the Tailscale + SSH row above. Keep `bind_addr` on loopback. Changing it exposes the token-protected API to that network.
+
+## When to self-host the relay
+
+A self-hosted Edge changes who relays your ciphertext, and nothing else. It is worth running when:
+
+- **metadata matters.** Your own Edge, not Pontia's, sees your IP addresses and connection times;
+- **traffic must stay on your infrastructure** for a policy or contract, even when encrypted;
+- **you want control over availability and location**, such as a relay near the device or one that doesn't depend on our servers being up.
+
+It doesn't help with the key service or the client code, because Pontia Cloud still signs you in, authorizes connections, and serves app.pontia.dev.
+
+Happy's self-hosted server goes further: it moves the account records and encrypted session storage off Happy's servers, so the company drops out of the data path except for push notifications and analytics. If removing the vendor entirely is the goal, compare that model, or plain SSH, against a relay-only self-host.
+
+### Deploying a Pontia Edge
+
+You need a public Linux server with systemd, a public IPv4 address, and either ports 80 and 443 or one custom HTTPS port, 8443 by default, with DNS-01 certificates. Generate a one-time command in [Edge settings](/settings/edges) and run it on the server. It installs a signed `pontia-edge` release, gets a Let's Encrypt certificate for a hostname under `edge.pontia.dev`, and starts the service. Then select the Edge when you register a device. [Self-host an Edge](/docs/self-hosted-edge) has the details.
+
+## Questions to ask any remote
+
+- Who tells my client which key belongs to my machine, and can I check it myself?
+- Where does the client code come from each time I open it?
+- What does the relay store, and for how long?
+- What leaves through other channels, such as push, analytics, or crash reports?
+- What can someone read on a lost phone, and how do I revoke it?
+- Can I use the tool with no vendor service at all?
+
+## Related
+
+- [Remote control for Codex, Claude Code, and pi: the options compared](/blog/coding-agent-remote-control-alternatives)
+- [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
+- [Security](/docs/security) and [Self-host an Edge](/docs/self-hosted-edge)
