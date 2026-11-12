@@ -124,6 +124,30 @@ fn run(
 }
 
 #[test]
+fn list_prints_a_table_by_default_and_full_entries_with_json() {
+    let mut disabled = entry("acp", "kimi", "opaque-kimi", "kimi");
+    disabled["name"] = json!("Kimi CLI");
+    disabled["enabled"] = json!(false);
+    let entries = vec![entry("pi", "default", "opaque-pi", "pi"), disabled];
+
+    let output = run(&["list"], entries.clone(), None);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "CLIENT  NAME                   TYPE  STATUS\n\
+         pi      Editable display name  pi    enabled\n\
+         kimi    Kimi CLI               acp   disabled\n"
+    );
+
+    let output = run(&["list", "--json"], entries.clone(), None);
+    assert!(output.status.success());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap(),
+        json!({"agent_clients": entries})
+    );
+}
+
+#[test]
 fn single_short_selector_and_opaque_ids_locate_without_display_names() {
     for selector in [vec!["show", "kimi"], vec!["show", "--id", "opaque-key"]] {
         let output = run(

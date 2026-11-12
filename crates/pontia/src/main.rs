@@ -156,11 +156,7 @@ async fn execute(command: Command) -> Result<bool, String> {
         }
         Command::Client(command) => {
             let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
-            let result = pontia::client::run(command, &config).await?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&result).map_err(|error| error.to_string())?
-            );
+            println!("{}", pontia::client::run(command, &config).await?);
             Ok(true)
         }
         Command::Login => {

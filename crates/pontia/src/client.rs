@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::path::PathBuf;
 
 const CLIENT_HELP: &str = "\
-Requires a running service. Output is JSON.
+Requires a running service. Output is JSON, except for 'list' without --json.
 
 For Client setup, see https://pontia.dev/docs/agent-clients.md";
 
@@ -27,7 +27,11 @@ pub struct ClientCommand {
 #[derive(Debug, Subcommand)]
 enum ClientCommandKind {
     /// List all Agent Client entries
-    List,
+    List {
+        /// Print the full entries as JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Show one entry, including its effective configuration
     Show(Target),
     /// Replace an entry's configuration overrides
@@ -52,7 +56,7 @@ enum ClientCommandKind {
 struct Target {
     /// Entry short ID, e.g. pi or codex
     client: Option<String>,
-    /// Entry ID from 'pontia client list', for ambiguous short IDs
+    /// Entry ID from 'pontia client list --json', for ambiguous short IDs
     #[arg(long)]
     id: Option<String>,
 }
@@ -128,10 +132,50 @@ impl ClientApi {
     }
 }
 
-pub async fn run(command: ClientCommand, config: &AppConfig) -> Result<Value, String> {
+pub async fn run(command: ClientCommand, config: &AppConfig) -> Result<String, String> {
     let api = ClientApi::new(config)?;
-    let target = match &command.command {
-        ClientCommandKind::List => return Ok(json!({"agent_clients": api.list().await?})),
+    let result = match command.command {
+        ClientCommandKind::List { json: false } => return Ok(table(&api.list().await?)),
+        ClientCommandKind::List { json: true } => json!({"agent_clients": api.list().await?}),
+        command => manage(&api, command).await?,
+    };
+    serde_json::to_string_pretty(&result).map_err(|error| error.to_string())
+}
+
+fn table(entries: &[AgentClientDetails]) -> String {
+    let mut rows = vec![["CLIENT", "NAME", "TYPE", "STATUS"].map(String::from)];
+    rows.extend(entries.iter().map(|entry| {
+        [
+            entry.short_id.clone(),
+            entry.name.clone(),
+            entry.client_type.clone(),
+            if entry.enabled { "enabled" } else { "disabled" }.into(),
+        ]
+    }));
+    let widths: Vec<usize> = (0..4)
+        .map(|column| {
+            rows.iter()
+                .map(|row| row[column].chars().count())
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+    rows.iter()
+        .map(|row| {
+            let line: Vec<String> = row
+                .iter()
+                .zip(&widths)
+                .map(|(cell, width)| format!("{cell:<width$}"))
+                .collect();
+            line.join("  ").trim_end().to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+async fn manage(api: &ClientApi, command: ClientCommandKind) -> Result<Value, String> {
+    let target = match &command {
+        ClientCommandKind::List { .. } => unreachable!(),
         ClientCommandKind::Show(target)
         | ClientCommandKind::Enable(target)
         | ClientCommandKind::Disable(target)
@@ -153,12 +197,13 @@ pub async fn run(command: ClientCommand, config: &AppConfig) -> Result<Value, St
         [] => return Err("Client not found; use pontia client list".into()),
         _ => {
             return Err(
-                "Ambiguous client selector; use --id with an ID from pontia client list".into(),
+                "Ambiguous client selector; use --id with an ID from pontia client list --json"
+                    .into(),
             );
         }
     };
     let identity = Some((entry.client_type.as_str(), entry.client_key.as_str()));
-    match command.command {
+    match command {
         ClientCommandKind::Show(_) => api.request(Method::GET, identity, None).await,
         ClientCommandKind::Reset(_) => api.request(Method::DELETE, identity, None).await,
         ClientCommandKind::Enable(_) => {
@@ -192,6 +237,6 @@ pub async fn run(command: ClientCommand, config: &AppConfig) -> Result<Value, St
             )
             .await
         }
-        ClientCommandKind::List => unreachable!(),
+        ClientCommandKind::List { .. } => unreachable!(),
     }
 }

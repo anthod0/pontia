@@ -105,7 +105,7 @@ pontia status
 Now list the available Client entries:
 
 ```sh
-pontia client list
+pontia client list --json
 ```
 
 The result is JSON with an `agent_clients` array. Locate each selected entry by its `client_type` and check its `effective_config`. Check that `tui_command` points to an executable available to the Pontia service.
@@ -137,13 +137,13 @@ pontia client enable codex
 pontia client enable claude-agent
 ```
 
-If a short selector is ambiguous, use the entry's `id` from `pontia client list`:
+If a short selector is ambiguous, use the entry's `id` from `pontia client list --json`:
 
 ```sh
 pontia client enable --id <CLIENT_ID>
 ```
 
-Run `pontia client list` again to confirm `enabled: true` for each selected entry. Step 7 verifies these Clients by starting Sessions from the Remote Dashboard.
+Run `pontia client list` again to confirm that each selected entry shows `enabled`. Step 7 verifies these Clients by starting Sessions from the Remote Dashboard.
 
 ### 5. Sign in to Pontia Cloud
 

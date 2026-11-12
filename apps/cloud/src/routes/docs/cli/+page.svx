@@ -32,14 +32,15 @@ Stopping `pontiad` stops observation, input reception, and Workflow scheduling. 
 
 | Command | Purpose |
 | --- | --- |
-| `pontia client list` | List every Agent Client entry as JSON, including its ID, short ID, enabled state, and effective configuration |
+| `pontia client list` | List every Agent Client entry with its short ID, name, type, and enabled state |
+| `pontia client list --json` | List every entry as JSON, including its ID, configuration overrides, and effective configuration |
 | `pontia client show CLIENT` | Show one entry |
 | `pontia client set CLIENT --config JSON_FILE` | Replace the entry's configuration overrides with a JSON object |
 | `pontia client enable CLIENT` | Allow new Sessions to use the entry |
 | `pontia client disable CLIENT` | Stop new Sessions from using the entry; existing Sessions are unchanged |
 | `pontia client reset CLIENT` | Delete the entry's saved settings, which also disables it |
 
-`CLIENT` is a short ID such as `pi`, `codex`, `claude-agent`, or an ACP agent ID. Use `--id ID` with an ID from `pontia client list` when a short ID is ambiguous.
+`CLIENT` is a short ID such as `pi`, `codex`, `claude-agent`, or an ACP agent ID. Use `--id ID` with an ID from `pontia client list --json` when a short ID is ambiguous.
 
 ## Agent commands
 
