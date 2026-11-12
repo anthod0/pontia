@@ -30,6 +30,7 @@ pub trait SetupPlatform {
         &self,
         user_home: &Path,
     ) -> Result<Vec<(String, PathBuf)>, String>;
+    fn enable_client(&self, config: &AppConfig, client: &str, key: &str) -> Result<(), String>;
 }
 
 pub(crate) fn integration_vars<P: SetupPlatform>(
@@ -108,8 +109,8 @@ where
     let vars = integration_vars(vars, &user_home, platform)?;
     platform.preflight()?;
     let prepared = selected
-        .into_iter()
-        .map(|index| integrations[index].prepare(&vars, &user_home, platform.command_runner()))
+        .iter()
+        .map(|&index| integrations[index].prepare(&vars, &user_home, platform.command_runner()))
         .collect::<Result<Vec<_>, _>>()?;
     for setup in &prepared {
         for line in setup.summary() {
@@ -135,5 +136,14 @@ where
         .flat_map(|setup| setup.service_environment_paths())
         .collect::<Vec<_>>();
     platform.start_service(&config, changed, &paths)?;
-    writeln!(output, "✓ Pontia service configuration verified").map_err(|error| error.to_string())
+    writeln!(output, "✓ Pontia service configuration verified")
+        .map_err(|error| error.to_string())?;
+    for client in selected.iter().map(|&index| &integrations[index]) {
+        platform
+            .enable_client(&config, client.client_type(), client.client_key())
+            .map_err(|error| format!("Failed to enable {}: {error}", client.client_type()))?;
+        writeln!(output, "✓ Enabled {}", client.client_type())
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }

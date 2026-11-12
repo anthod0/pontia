@@ -45,7 +45,7 @@ args = ["--acp"]
 
 Instead of `command` and `args`, an entry can set `registry_id` to launch an agent from the ACP registry. The agent must support loading and closing sessions; Pontia reports a missing capability when the Session starts.
 
-Run `pontia setup pi`, `pontia setup codex`, or `pontia setup claude-agent` to install or repair a local integration. Omit the Client to select interactively. Setup preserves entry enablement; use `pontia client enable CLIENT` separately to allow new Sessions.
+Run `pontia setup pi`, `pontia setup codex`, or `pontia setup claude-agent` to install or repair a local integration. Omit the Client to select interactively. Setup also enables the Client.
 
 ## Client capabilities differ
 

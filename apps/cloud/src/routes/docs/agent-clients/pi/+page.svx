@@ -31,7 +31,7 @@ Select **pi** when running:
 pontia init
 ```
 
-For later installation or repair, run `pontia setup pi`. This preserves the Client entry's enabled state; use `pontia client enable pi` to enable new Sessions.
+For later installation or repair, run `pontia setup pi`. This also enables the pi Client.
 
 Both setup commands verify `pi --version` and run:
 

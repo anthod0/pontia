@@ -6,7 +6,6 @@ use std::{
 };
 
 use dialoguer::{MultiSelect, console::Term};
-use pontia_config::AppConfig;
 
 use crate::{lifecycle::local_health_addr, local_config};
 use pontia_agent_control::client_contract::ClientIntegration;
@@ -19,7 +18,6 @@ pub struct InitOutcome {
 }
 
 pub trait InitPlatform: crate::setup::SetupPlatform {
-    fn enable_client(&self, config: &AppConfig, client: &str, key: &str) -> Result<(), String>;
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String>;
 }
 

@@ -14,7 +14,7 @@ Use `pontia COMMAND --help` for the exact options in your installed version.
 | Command | Purpose |
 | --- | --- |
 | `pontia init` | Select Agent Clients, create persistent configuration, install integrations, start the per-user service, and offer remote setup |
-| `pontia setup [CLIENT]` | Install or repair recommended local integrations; select Clients when omitted; preserve Client enablement |
+| `pontia setup [CLIENT]` | Install or repair recommended local integrations; select Clients when omitted; enable the selected Clients |
 | `pontia up` | Install or refresh the per-user service definition and start or restart the service |
 | `pontia status` | Show the data directory, local service health, signed-in user, remote handle, and selected edge |
 | `pontia doctor` | Explain service, configuration, login, and remote-registration checks, with repair hints |

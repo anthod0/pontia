@@ -38,7 +38,7 @@ pontia setup codex
 pontia setup claude-agent
 ```
 
-Each command applies the recommended local configuration and checks the installation. Existing valid configuration is reused and missing integration files are restored. Client enablement is unchanged, including when no saved entry exists. Use `pontia client enable CLIENT` when you also want to enable new Sessions.
+Each command applies the recommended local configuration and checks the installation. Existing valid configuration is reused and missing integration files are restored. After the Pontia service starts, the selected Clients are enabled.
 
 Selected Client runtime paths are saved for the Pontia service. Explicit environment paths take precedence over saved paths. The service restarts when its configuration changes. For Codex, open a new terminal or run the printed shell activation command afterward.
 
@@ -73,7 +73,7 @@ Use these environment values in every shell used for setup. Substitute your actu
 
 ### 2. Install and verify the Client integrations
 
-Install the integrations for your selected Clients here, then enable them in Pontia in step 4.
+Install and enable the integrations for your selected Clients here.
 
 Run only the commands for your selected Clients:
 
@@ -85,7 +85,7 @@ pontia setup claude-agent
 
 Pi requires an installed `pi`; its setup installs `@pontia/pi-client-plugin`. Codex requires an installed CLI with daemon support; its setup configures autostart, verifies the connection, and installs the launcher and shell PATH. Claude Agent requires Node.js LTS; setup installs the default host when missing and checks an existing or explicitly selected host.
 
-These commands preserve Client enablement. They save runtime paths and configure the Pontia service. For Codex, open a new terminal or run the printed activation command. Complete authentication using each Client's own login flow; setup does not sign in or change model credentials, sandbox settings, or approval policy.
+These commands save runtime paths, configure the Pontia service, and enable the selected Clients. For Codex, open a new terminal or run the printed activation command. Complete authentication using each Client's own login flow; setup does not sign in or change model credentials, sandbox settings, or approval policy.
 
 <h3 id="start-the-local-service">3. Configure and start the local service</h3>
 
@@ -100,7 +100,7 @@ pontia status
 
 `pontia up` creates or retains the API token in `config.toml`, installs or refreshes the per-user service, waits for it to become healthy, and prints the Local Dashboard URL. It restarts the service if it is already running. The printed URL contains the local API token; keep it private.
 
-### 4. Align Client settings and enable the integrations
+### 4. Align Client settings
 
 Now list the available Client entries:
 
@@ -123,25 +123,6 @@ pontia client set --id <CLIENT_ID> --config <JSON_FILE>
 ```
 
 Use the original pi or Codex executable path in the file, then check that `effective_config` reflects the change.
-
-Enable only the Clients whose installation and configuration you completed:
-
-```sh
-# Run this if you installed the pi integration.
-pontia client enable pi
-
-# Run this if you configured the Codex daemon.
-pontia client enable codex
-
-# Run this if you configured Claude Agent.
-pontia client enable claude-agent
-```
-
-If a short selector is ambiguous, use the entry's `id` from `pontia client list --json`:
-
-```sh
-pontia client enable --id <CLIENT_ID>
-```
 
 Run `pontia client list` again to confirm that each selected entry shows `enabled`. Step 7 verifies these Clients by starting Sessions from the Remote Dashboard.
 

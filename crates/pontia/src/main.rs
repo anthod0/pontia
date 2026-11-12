@@ -506,9 +506,7 @@ impl SetupPlatform for RealInitPlatform {
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         Err("automatic lifecycle management is unavailable".into())
     }
-}
 
-impl InitPlatform for RealInitPlatform {
     fn enable_client(&self, config: &AppConfig, client: &str, key: &str) -> Result<(), String> {
         let config = config.clone();
         let client = client.to_string();
@@ -526,7 +524,9 @@ impl InitPlatform for RealInitPlatform {
         .join()
         .map_err(|_| "Client enable request panicked".to_string())?
     }
+}
 
+impl InitPlatform for RealInitPlatform {
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String> {
         dashboard_available(addr)
     }

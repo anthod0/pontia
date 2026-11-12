@@ -167,9 +167,7 @@ impl pontia::setup::SetupPlatform for FakePlatform {
     fn persisted_environment_paths(&self, _: &Path) -> Result<Vec<(String, PathBuf)>, String> {
         Ok(self.persisted_paths.clone())
     }
-}
 
-impl InitPlatform for FakePlatform {
     fn enable_client(&self, _config: &AppConfig, client: &str, key: &str) -> Result<(), String> {
         assert!(
             self.events
@@ -183,7 +181,9 @@ impl InitPlatform for FakePlatform {
         self.enabled.borrow_mut().push((client.into(), key.into()));
         Ok(())
     }
+}
 
+impl InitPlatform for FakePlatform {
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String> {
         self.events
             .borrow_mut()
@@ -737,7 +737,7 @@ fn selected_integration_requires_only_final_confirmation() {
 }
 
 #[test]
-fn setup_applies_only_selected_clients_without_enabling_them_or_consuming_extra_input() {
+fn setup_applies_and_enables_only_selected_clients_without_consuming_extra_input() {
     for client in [Some("codex"), None] {
         let root = tempfile::tempdir().unwrap();
         let platform = FakePlatform::default();
@@ -751,7 +751,10 @@ fn setup_applies_only_selected_clients_without_enabling_them_or_consuming_extra_
         )
         .unwrap();
         assert_eq!(input.position(), if client.is_some() { 0 } else { 6 });
-        assert!(platform.enabled.borrow().is_empty());
+        assert_eq!(
+            *platform.enabled.borrow(),
+            vec![("codex".to_string(), "default".to_string())]
+        );
         let events = platform.events.borrow();
         assert!(!events.iter().any(|event| event == "install-pi"));
         assert!(
@@ -810,41 +813,32 @@ fn unsupported_setup_client_has_no_side_effects() {
 }
 
 #[test]
-fn setup_reuses_persisted_paths_and_preserves_existing_enablement() {
-    for enabled in [false, true] {
-        let root = tempfile::tempdir().unwrap();
-        let saved_home = root.path().join("saved-codex");
-        let platform = FakePlatform {
-            persisted_paths: vec![("CODEX_HOME".into(), saved_home.clone())],
-            enabled: RefCell::new(if enabled {
-                vec![("codex".into(), "default".into())]
-            } else {
-                Vec::new()
-            }),
-            ..Default::default()
-        };
-        let before = platform.enabled.borrow().clone();
-        let mut vars = vars(root.path(), &root.path().join("pontia"));
-        for expected in [saved_home, root.path().join("chosen-codex")] {
-            pontia::setup::run(
-                Some("codex"),
-                &mut Cursor::new(""),
-                &mut Vec::new(),
-                &vars,
-                &platform,
-            )
-            .unwrap();
-            assert!(
-                platform
-                    .events
-                    .borrow()
-                    .contains(&format!("initialize-codex:{}", expected.display()))
-            );
-            assert_eq!(*platform.enabled.borrow(), before);
-            vars.insert(
-                "CODEX_HOME".into(),
-                root.path().join("chosen-codex").display().to_string(),
-            );
-        }
+fn setup_reuses_persisted_paths() {
+    let root = tempfile::tempdir().unwrap();
+    let saved_home = root.path().join("saved-codex");
+    let platform = FakePlatform {
+        persisted_paths: vec![("CODEX_HOME".into(), saved_home.clone())],
+        ..Default::default()
+    };
+    let mut vars = vars(root.path(), &root.path().join("pontia"));
+    for expected in [saved_home, root.path().join("chosen-codex")] {
+        pontia::setup::run(
+            Some("codex"),
+            &mut Cursor::new(""),
+            &mut Vec::new(),
+            &vars,
+            &platform,
+        )
+        .unwrap();
+        assert!(
+            platform
+                .events
+                .borrow()
+                .contains(&format!("initialize-codex:{}", expected.display()))
+        );
+        vars.insert(
+            "CODEX_HOME".into(),
+            root.path().join("chosen-codex").display().to_string(),
+        );
     }
 }
