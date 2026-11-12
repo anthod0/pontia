@@ -7,9 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-11-13
+
 ### Added
 
 - Added `npx @pontia/cli install`, which installs `pontia` and `pontiad` from npm without running `pontia init`.
+- Added `pontia client list --json` for the full entries, including IDs and effective configuration.
+- The Cloud site is now available in Chinese, Japanese, and Brazilian Portuguese, with a language switcher in the header.
+
+### Changed
+
+- `pontia client list` now prints a table by default.
+- `pontia setup [CLIENT]` now enables the selected Clients after the Pontia service starts.
+- `pontia --help` now lists agent tools such as `send-file` and `workflow` in their own section.
+- `pontia update` now stops and lists the affected Sessions when the running service has active tasks, pending interactions, or pending inputs.
+- The install scripts no longer require `jq`.
+
+### Fixed
+
+- Codex threads started, resumed, or forked through the Pontia launcher now have the Pontia session environment, such as `PONTIA_SESSION_ID`, from the first input.
 
 ## [0.7.6] - 2026-11-12
 
