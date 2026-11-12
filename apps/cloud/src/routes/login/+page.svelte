@@ -277,9 +277,9 @@
 	.auth-error {
 		margin-top: 20px;
 		padding: 12px;
-		border: 1px solid #dab0aa;
+		border: 1px solid var(--destructive-border);
 		border-radius: 4px;
-		color: #9d3229;
+		color: var(--destructive);
 		font-size: 14px;
 	}
 	.providers {

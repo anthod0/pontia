@@ -93,7 +93,7 @@
 
 		<div class="flex min-h-0 flex-1 flex-col">
 			<div class="p-2" aria-hidden="true">
-				<div class={cn(menuButton, 'mb-2 h-10 bg-primary text-[13px] font-semibold text-primary-foreground')}>
+				<div class={cn(menuButton, 'mb-2 h-10 bg-primary-solid text-[13px] font-semibold text-primary-foreground')}>
 					<NotePencilIcon />
 					<span>New Chat</span>
 					<span class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-sm border border-primary-foreground/40 px-1 text-[10px] font-medium text-primary-foreground/80">Alt+N</span>

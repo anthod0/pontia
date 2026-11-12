@@ -91,7 +91,7 @@ To set up a device, continue with [Getting started](/docs/getting-started). To c
 		justify-items: center;
 		max-width: 420px;
 		margin: 0 auto 28px;
-		border: 1px dashed #9ebbbc;
+		border: 1px dashed var(--link-decoration);
 		border-radius: 6px;
 		background: var(--background);
 		padding: 14px 18px;

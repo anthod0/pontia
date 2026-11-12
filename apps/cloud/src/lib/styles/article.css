@@ -36,9 +36,9 @@
   margin-top: 7px;
 }
 .article-content a {
-  color: #366e71;
+  color: var(--link);
   text-decoration: underline;
-  text-decoration-color: #9ebbbc;
+  text-decoration-color: var(--link-decoration);
   text-underline-offset: 3px;
 }
 .article-content a:hover {

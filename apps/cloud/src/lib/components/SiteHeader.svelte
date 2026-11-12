@@ -1,3 +1,7 @@
+<script lang="ts">
+  import ThemeToggle from "$lib/components/ThemeToggle.svelte";
+</script>
+
 <header class="site-header page-width">
   <a class="brand" href="/" aria-label="Pontia home">
     <img src="/logo.svg" alt="" />
@@ -7,5 +11,6 @@
     <a class="nav-link" href="/docs">Docs</a>
     <a class="nav-link" href="/blog">Blog</a>
     <a class="nav-link" href="/settings/account">Account</a>
+    <ThemeToggle />
   </nav>
 </header>

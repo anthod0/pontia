@@ -5,12 +5,15 @@
 @import "tailwindcss";
 @plugin '@tailwindcss/typography';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-heading: var(--heading);
   --color-surface: var(--surface);
   --color-muted-foreground: var(--muted-foreground);
+  --color-inactive: var(--inactive);
   --color-accent: var(--muted);
   --color-accent-foreground: var(--heading);
   --color-busy: #d79921;
@@ -19,11 +22,14 @@
   --color-popover: var(--background);
   --color-popover-foreground: var(--foreground);
   --color-primary: var(--primary);
-  --color-primary-foreground: white;
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-solid: var(--primary-solid);
+  --color-primary-solid-hover: var(--primary-solid-hover);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-input: var(--border);
   --color-ring: var(--primary);
-  --color-destructive: #9d3229;
+  --color-destructive: var(--destructive);
   --color-secondary: var(--muted);
   --color-secondary-foreground: var(--foreground);
   --radius-sm: 2px;
@@ -43,12 +49,58 @@
   --foreground: #3c3836;
   --muted-foreground: #7c6f64;
   --primary: #458588;
+  --primary-solid: #458588;
+  --primary-solid-hover: #5299a0;
+  --primary-foreground: #fff;
+  --inactive: #7c6f64;
+  --button: #407e81;
+  --button-hover: #3c7478;
+  --border-strong: #d5d2ca;
+  --border-stronger: #b5b1a8;
+  --selection: #d8e9e7;
+  --link: #366e71;
+  --link-decoration: #9ebbbc;
+  --destructive: #9d3229;
+  --destructive-border: #dab0aa;
+  --success: #15803d;
+  --olive: #79740e;
+  --coverage-supported: #326b60;
+  --coverage-partial: #8a651e;
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
   font-family: var(--font-sans);
   color: var(--foreground);
   background: var(--background);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #282828;
+  --surface: #1d2021;
+  --muted: #32302f;
+  --border: #3c3836;
+  --heading: #fbf1c7;
+  --foreground: #fbf1c7;
+  --muted-foreground: #a89984;
+  --primary: #83a598;
+  --primary-solid: #3f7b7e;
+  --primary-solid-hover: #458588;
+  --primary-foreground: #fbf1c7;
+  --inactive: #928374;
+  --button: #3f7b7e;
+  --button-hover: #458588;
+  --border-strong: #504945;
+  --border-stronger: #665c54;
+  --selection: #3c5a5b;
+  --link: #83a598;
+  --link-decoration: #4f6d6a;
+  --destructive: #fb4934;
+  --destructive-border: #7c2f28;
+  --success: #b8bb26;
+  --olive: #b8bb26;
+  --coverage-supported: #8ec07c;
+  --coverage-partial: #fabd2f;
 }
 
 * {
@@ -81,7 +133,7 @@ button:focus-visible {
   outline-offset: 5px;
 }
 ::selection {
-  background: #d8e9e7;
+  background: var(--selection);
   color: var(--heading);
 }
 h1,
@@ -154,8 +206,8 @@ code {
   gap: 18px;
   min-height: 46px;
   padding: 12px 22px;
-  background: #407e81;
-  border: 1px solid #407e81;
+  background: var(--button);
+  border: 1px solid var(--button);
   border-radius: 4px;
   color: white;
   font-size: 14px;
@@ -165,18 +217,18 @@ code {
     border-color 0.15s;
 }
 .button:hover {
-  background: #3c7478;
-  border-color: #3c7478;
+  background: var(--button-hover);
+  border-color: var(--button-hover);
 }
 .button-secondary {
   background: transparent;
-  border-color: #d5d2ca;
+  border-color: var(--border-strong);
   color: var(--foreground);
   gap: 10px;
 }
 .button-secondary:hover {
   background: var(--muted);
-  border-color: #b5b1a8;
+  border-color: var(--border-stronger);
 }
 .eyebrow {
   font: 10px/1.6 var(--font-mono);

@@ -262,9 +262,9 @@
     color: var(--foreground);
   }
   :global(.health-healthy) {
-    border-color: color-mix(in oklab, var(--success, #15803d) 35%, transparent);
-    background: color-mix(in oklab, var(--success, #15803d) 12%, transparent);
-    color: var(--success, #15803d);
+    border-color: color-mix(in oklab, var(--success) 35%, transparent);
+    background: color-mix(in oklab, var(--success) 12%, transparent);
+    color: var(--success);
   }
   .row-actions {
     display: flex;

@@ -105,8 +105,8 @@
   .coverage-status { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; color: var(--muted-foreground); }
   .coverage-legend { display: flex; flex-wrap: wrap; gap: 12px 24px; list-style: none; padding: 0; margin: 0; }
   .coverage-legend li { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted-foreground); }
-  .coverage-status.supported { color: #326b60; }
-  .coverage-status.partial { color: #8a651e; }
+  .coverage-status.supported { color: var(--coverage-supported); }
+  .coverage-status.partial { color: var(--coverage-partial); }
   .section-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 20px; font-size: 12px; }
   .section-footer a { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; color: var(--primary); font-weight: 500; }
   .section-footer a:hover { text-decoration: underline; }

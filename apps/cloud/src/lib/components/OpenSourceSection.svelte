@@ -43,8 +43,8 @@
 	h2 { color: #fbf1c7; font-size: 40px; }
 	.lede { margin-top: 16px; max-width: 440px; font-size: 15px; line-height: 1.75; color: #bdae93; text-wrap: pretty; }
 	.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-top: 32px; }
-	.actions .button { gap: 10px; background: #8ec07c; border-color: #8ec07c; color: #1d2021; }
-	.actions .button:hover { background: #a3d08f; border-color: #a3d08f; }
+	.actions .button { gap: 10px; background: #ebdbb2; border-color: #ebdbb2; color: #282828; font-weight: 600; }
+	.actions .button:hover { background: #fbf1c7; border-color: #fbf1c7; }
 	.text-link { display: inline-flex; align-items: center; gap: 4px; color: #ebdbb2; font-size: 13px; font-weight: 500; }
 	.text-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 	.open-source a:focus-visible { outline-color: #8ec07c; }

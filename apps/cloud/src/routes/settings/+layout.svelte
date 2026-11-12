@@ -81,11 +81,11 @@
     line-height: 1.8;
   }
   .settings-content :global(.auth-error) {
-    border: 1px solid #dab0aa;
+    border: 1px solid var(--destructive-border);
     border-radius: 4px;
     margin-block: 20px;
     padding: 12px;
-    color: #9d3229;
+    color: var(--destructive);
   }
 
   @media (max-width: 760px) {

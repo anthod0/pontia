@@ -74,15 +74,16 @@
 </section>
 
 <style>
-	.hero { position: relative; overflow: hidden; padding-top: 72px; }
+	.hero { position: relative; overflow: hidden; padding-top: 72px; --grid-dot: #dedbd4; --accent-1: #2f6f72; --accent-2: #458588; --accent-3: #6aa19a; --inset-highlight: rgb(255 255 255 / 80%); }
+	:global(.dark) .hero { --grid-dot: #3c3836; --accent-1: #90b1a7; --accent-2: #83a598; --accent-3: #779d96; --inset-highlight: rgb(255 255 255 / 4%); }
 
 	/* Dotted grid with a teal glow, fading out toward the demo. */
-	.backdrop { position: absolute; z-index: -1; inset: 0 0 auto; height: 900px; pointer-events: none; background: radial-gradient(ellipse 45% 40% at 50% 30%, rgb(69 133 136 / 12%), transparent 70%), radial-gradient(circle at 1px 1px, #dedbd4 1px, transparent 0) 0 0 / 22px 22px; mask-image: radial-gradient(ellipse 70% 65% at 50% 25%, #000 30%, transparent 75%); }
+	.backdrop { position: absolute; z-index: -1; inset: 0 0 auto; height: 900px; pointer-events: none; background: radial-gradient(ellipse 45% 40% at 50% 30%, rgb(69 133 136 / 12%), transparent 70%), radial-gradient(circle at 1px 1px, var(--grid-dot) 1px, transparent 0) 0 0 / 22px 22px; mask-image: radial-gradient(ellipse 70% 65% at 50% 25%, #000 30%, transparent 75%); }
 
 	.hero-copy { display: flex; flex-direction: column; align-items: center; text-align: center; }
 
 	h1 { display: flex; flex-direction: column; font-size: clamp(44px, 7.4vw, 92px); font-weight: 500; line-height: 1; letter-spacing: -0.055em; }
-	.accent { padding-bottom: 0.08em; background: linear-gradient(100deg, #2f6f72 10%, #458588 45%, #6aa19a 60%, #458588 75%); background-size: 220% 100%; background-clip: text; -webkit-background-clip: text; color: transparent; }
+	.accent { padding-bottom: 0.08em; background: linear-gradient(100deg, var(--accent-1) 10%, var(--accent-2) 45%, var(--accent-3) 60%, var(--accent-2) 75%); background-size: 220% 100%; background-clip: text; -webkit-background-clip: text; color: transparent; }
 	.hero-description { max-width: 520px; margin-top: 24px; font-size: 18px; line-height: 1.6; color: var(--muted-foreground); text-wrap: balance; }
 	.hero-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 36px; }
 	.hero-actions .button-secondary { background: var(--background); }
@@ -103,12 +104,12 @@
 	.copy-feedback { font: 11px/1.8 var(--font-mono); }
 
 	.dashboard-preview { margin: 88px auto 0; padding-bottom: 96px; }
-	.window { position: relative; overflow: hidden; border: 1px solid #d6d3cc; border-radius: 12px; background: var(--surface); box-shadow: 0 1px 0 rgb(255 255 255 / 80%) inset, 0 40px 80px -40px rgb(40 60 60 / 35%), 0 12px 24px -12px rgb(60 56 54 / 12%); }
+	.window { position: relative; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface); box-shadow: 0 1px 0 var(--inset-highlight) inset, 0 40px 80px -40px rgb(40 60 60 / 35%), 0 12px 24px -12px rgb(60 56 54 / 12%); }
 	.window-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 40px; padding-inline: 14px; border-bottom: 1px solid var(--border); background: var(--muted); }
 	.lights { display: flex; gap: 7px; }
-	.lights i { width: 10px; height: 10px; border-radius: 50%; background: #dcd8d0; }
+	.lights i { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); }
 	.address { display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px; border-radius: 6px; background: var(--background); font: 11px var(--font-mono); color: var(--muted-foreground); }
-	.address :global(svg) { color: #79740e; }
+	.address :global(svg) { color: var(--olive); }
 	.dashboard-frame { height: 640px; overflow: hidden; }
 
 	/* Load sequence: copy rises in line by line, then the demo window.

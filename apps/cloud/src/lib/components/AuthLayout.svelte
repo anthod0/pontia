@@ -33,8 +33,8 @@
 		width: 100%;
 	}
 	.auth-content :global(.auth-error) {
-		color: #9d3229;
-		border: 1px solid #dab0aa;
+		color: var(--destructive);
+		border: 1px solid var(--destructive-border);
 		border-radius: 4px;
 		padding: 12px;
 		margin-block: 20px;

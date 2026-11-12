@@ -102,10 +102,10 @@
 	.card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); transition: border-color 0.25s, box-shadow 0.25s, translate 0.25s; }
 	/* Keep the reveal transition alongside the hover transitions. */
 	.bento :global(.card.reveal) { transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out), border-color 0.25s, box-shadow 0.25s, translate 0.25s; transition-delay: calc(var(--i, 0) * 90ms), calc(var(--i, 0) * 90ms), 0s, 0s, 0s; }
-	.card:hover { border-color: #d6d3cc; box-shadow: 0 18px 40px -24px rgb(60 56 54 / 28%); translate: 0 -2px; }
+	.card:hover { border-color: var(--border-strong); box-shadow: 0 18px 40px -24px rgb(60 56 54 / 28%); translate: 0 -2px; }
 	.wide { grid-column: span 4; }
 	.narrow { grid-column: span 2; }
-	.visual { position: relative; display: grid; place-items: center; height: 200px; overflow: hidden; border-bottom: 1px solid var(--border); background: radial-gradient(circle at 1px 1px, #e6e4df 1px, transparent 0) 0 0 / 16px 16px, var(--background); }
+	.visual { position: relative; display: grid; place-items: center; height: 200px; overflow: hidden; border-bottom: 1px solid var(--border); background: radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 16px 16px, var(--background); }
 	.card-copy { display: flex; flex: 1; flex-direction: column; padding: 22px 24px 24px; }
 	.card h3 { margin-bottom: 8px; font-size: 19px; font-weight: 500; letter-spacing: -0.025em; }
 	.card p { flex: 1; font-size: 14px; line-height: 1.7; color: var(--muted-foreground); text-wrap: pretty; }
@@ -118,10 +118,10 @@
 	.edge { border-color: var(--primary); border-style: dashed; }
 	.edge .node-name { color: var(--primary); }
 	.cipher { width: 96px; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent); }
-	.cipher span { display: block; width: max-content; font: 9px var(--font-mono); color: #79740e; animation: scroll-x 6s linear infinite; }
+	.cipher span { display: block; width: max-content; font: 9px var(--font-mono); color: var(--olive); animation: scroll-x 6s linear infinite; }
 	.wire { position: relative; flex: 1; height: 1px; margin-inline: 4px; background: repeating-linear-gradient(90deg, var(--primary) 0 4px, transparent 4px 8px); }
 	.packet { position: absolute; top: -3px; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px rgb(69 133 136 / 18%); opacity: 0; animation: send 2.4s cubic-bezier(0.6, 0, 0.4, 1) infinite; }
-	.packet.back { background: #79740e; box-shadow: 0 0 0 3px rgb(121 116 14 / 18%); animation-name: reply; }
+	.packet.back { background: var(--olive); box-shadow: 0 0 0 3px color-mix(in srgb, var(--olive) 18%, transparent); animation-name: reply; }
 	/* The device-side wire runs slightly ahead so the two wires do not move in lockstep. */
 	.from-edge .packet { animation-delay: -0.7s; }
 
@@ -139,12 +139,12 @@
 
 	/* Phone: the busy dot pulses and the approval row asks for attention. */
 	.phone-visual { place-items: end center; }
-	.phone { display: flex; flex-direction: column; gap: 7px; width: 196px; height: 172px; padding: 22px 12px 0; border: 1px solid #d6d3cc; border-bottom: 0; border-radius: 24px 24px 0 0; background: var(--surface); box-shadow: 0 -8px 30px -18px rgb(60 56 54 / 30%); }
-	.phone-notch { align-self: center; width: 44px; height: 5px; margin: -10px 0 6px; border-radius: 3px; background: #d6d3cc; }
+	.phone { display: flex; flex-direction: column; gap: 7px; width: 196px; height: 172px; padding: 22px 12px 0; border: 1px solid var(--border-strong); border-bottom: 0; border-radius: 24px 24px 0 0; background: var(--surface); box-shadow: 0 -8px 30px -18px rgb(60 56 54 / 30%); }
+	.phone-notch { align-self: center; width: 44px; height: 5px; margin: -10px 0 6px; border-radius: 3px; background: var(--border-strong); }
 	.phone-title { font-size: 12px; font-weight: 600; color: var(--heading); }
 	.phone-row { display: flex; align-items: center; gap: 7px; padding: 7px 8px; overflow: hidden; border: 1px solid transparent; border-radius: 6px; background: var(--background); font-size: 10px; color: var(--foreground); white-space: nowrap; }
 	.approval { border-color: rgb(177 98 134 / 35%); animation: attention 2.8s ease-in-out infinite; }
-	.approve { margin-left: auto; padding: 2px 6px; border-radius: 4px; background: #407e81; color: white; font-size: 9px; font-weight: 500; }
+	.approve { margin-left: auto; padding: 2px 6px; border-radius: 4px; background: var(--button); color: white; font-size: 9px; font-weight: 500; }
 	.dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; }
 	.dot.busy { background: var(--color-busy); animation: pulse 1.6s ease-out infinite; }
 	.dot.waiting { background: var(--color-interrupted); }
