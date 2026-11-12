@@ -24,12 +24,30 @@ pub(crate) struct Observation {
 
 pub(crate) enum ObservedEvent {
     ThreadOpened {
+        runtime_id: String,
         operation: ThreadOperation,
         result: Value,
         params: Value,
         profile_binding: Option<Value>,
     },
+    ThreadUnsubscribed {
+        thread: String,
+        runtime_id: String,
+    },
+    ConnectionClosed(HashMap<String, String>),
     TurnStarted(String),
+}
+
+enum PendingRequest {
+    Open(ThreadOperation, Value, Option<Value>),
+    Unsubscribe(String),
+}
+
+pub(crate) fn unsubscribe_confirmed(result: &Value) -> bool {
+    matches!(
+        result["status"].as_str(),
+        Some("unsubscribed" | "notSubscribed" | "notLoaded")
+    )
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -134,11 +152,12 @@ async fn relay(
         .map_err(protocol::protocol_error)?;
     let mut upstream = protocol::open(upstream).await?;
     let daemon = DaemonIdentity::capture(upstream.get_ref())?;
-    let mut pending = HashMap::<String, (ThreadOperation, Value, Option<Value>)>::new();
-    loop {
+    let mut pending = HashMap::<String, PendingRequest>::new();
+    let mut runtimes = HashMap::<String, String>::new();
+    let cli_closed = loop {
         tokio::select! {
             frame = downstream.next() => {
-                let Some(frame) = frame else { break };
+                let Some(frame) = frame else { break true };
                 let mut frame = frame.map_err(protocol::protocol_error)?;
                 if let Message::Text(text) = &frame
                     && let Ok(mut value) = serde_json::from_str::<Value>(text)
@@ -152,26 +171,39 @@ async fn relay(
                     };
                     if let Some(operation) = operation {
                         let profile_binding = crate::service::profile::prepare_proxy_request(&state, operation, &mut value["params"]).await?;
-                        pending.insert(id.to_string(), (operation, value["params"].clone(), profile_binding));
+                        pending.insert(id.to_string(), PendingRequest::Open(operation, value["params"].clone(), profile_binding));
                         frame = Message::text(value.to_string());
+                    } else if value["method"] == "thread/unsubscribe"
+                        && let Some(thread) = value["params"]["threadId"].as_str() {
+                        pending.insert(id.to_string(), PendingRequest::Unsubscribe(thread.into()));
                     }
                 }
                 let closed = frame.is_close();
                 upstream.send(frame).await.map_err(protocol::protocol_error)?;
-                if closed { break; }
+                if closed { break true; }
             }
             frame = upstream.next() => {
-                let Some(frame) = frame else { break };
+                let Some(frame) = frame else { break false };
                 let frame = frame.map_err(protocol::protocol_error)?;
                 if let Message::Text(text) = &frame
                     && let Ok(value) = serde_json::from_str::<Value>(text)
                 {
                     let event = if value.get("method").is_none()
                         && let Some(id) = value.get("id")
-                        && let Some((operation, params, profile_binding)) = pending.remove(&id.to_string())
+                        && let Some(request) = pending.remove(&id.to_string())
                     {
-                        value.get("result").filter(|_| value.get("error").is_none())
-                            .cloned().map(|result| ObservedEvent::ThreadOpened { operation, result, params, profile_binding })
+                        match (request, value.get("result").filter(|_| value.get("error").is_none())) {
+                            (PendingRequest::Open(operation, params, profile_binding), Some(result)) => {
+                                result["thread"]["id"].as_str().map(|thread| {
+                                    let runtime_id = runtimes.entry(thread.into()).or_insert_with(|| pontia_core::ids::new_runtime_id().to_string()).clone();
+                                    ObservedEvent::ThreadOpened { runtime_id, operation, result: result.clone(), params, profile_binding }
+                                })
+                            }
+                            (PendingRequest::Unsubscribe(thread), Some(result)) if unsubscribe_confirmed(result) => {
+                                runtimes.get(&thread).map(|runtime_id| ObservedEvent::ThreadUnsubscribed { thread, runtime_id: runtime_id.clone() })
+                            }
+                            _ => None,
+                        }
                     } else if value["method"] == "turn/started" {
                         value["params"]["threadId"].as_str().map(|thread| ObservedEvent::TurnStarted(thread.into()))
                     } else { None };
@@ -182,9 +214,18 @@ async fn relay(
                 }
                 let closed = frame.is_close();
                 downstream.send(frame).await.map_err(protocol::protocol_error)?;
-                if closed { break; }
+                if closed { break false; }
             }
         }
+    };
+    if cli_closed {
+        observations
+            .send(Observation {
+                daemon,
+                event: ObservedEvent::ConnectionClosed(runtimes),
+            })
+            .await
+            .map_err(|_| protocol::protocol_error("proxy observation stopped"))?;
     }
     Ok(())
 }

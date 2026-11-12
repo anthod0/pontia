@@ -36,7 +36,7 @@ impl CodexService {
         })
     }
 
-    async fn confirm_exit(&self, session: &str, runtime: &CodexRuntime) {
+    pub(super) async fn confirm_exit(&self, session: &str, runtime: &CodexRuntime) {
         runtime
             .set_subscription(session, SubscriptionState::ExitPending)
             .await;

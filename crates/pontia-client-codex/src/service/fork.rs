@@ -88,6 +88,7 @@ impl CodexService {
             None,
         )
         .await
+        .map(|(session, _operation)| session)
     }
 
     pub(super) async fn record_fork_lineage(

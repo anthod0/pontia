@@ -20,6 +20,7 @@ mod models;
 mod observer;
 pub(crate) mod profile;
 mod proxy_observer;
+mod proxy_runtimes;
 #[cfg(test)]
 mod subscription_tests;
 use crate::runtime::{CodexRuntime, SubscriptionState};
@@ -298,6 +299,13 @@ impl CodexService {
         let _operation = runtime.lock_session(&target.session_id).await;
         target.validate(&self.pool).await?;
         let binding = self.binding(&target.session_id).await?;
+        self.reconcile_proxy_archive(
+            &runtime,
+            &target.session_id,
+            &binding.client_session_key,
+            None,
+        )
+        .await?;
         confirmed_exits().lock().await.remove(&target.session_id);
         self.subscribe(
             &target.session_id,

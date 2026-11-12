@@ -218,3 +218,109 @@ async fn test_state(root: &Path) -> pontia_agent_control::AgentControl {
     pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
     pontia_agent_control::AgentControl::builder(pool, root.into()).build()
 }
+
+#[tokio::test]
+async fn unsubscribe_requires_a_matching_success_and_only_cli_close_ends_associations() {
+    for cli_close in [true, false] {
+        let root = tempfile::tempdir().unwrap();
+        let upstream_path = root.path().join("native.sock");
+        let upstream = UnixListener::bind(&upstream_path).unwrap();
+        let proxy = Proxy::bind(root.path()).await.unwrap();
+        let path = proxy.path.clone();
+        let (shutdown, stop) = watch::channel(false);
+        let (observations, mut incoming) = mpsc::channel(128);
+        let state = test_state(root.path()).await;
+        let task = tokio::spawn(async move {
+            proxy
+                .run(stop, move || Ok(upstream_path.clone()), observations, state)
+                .await
+        });
+        let mut client = connect(&path).await;
+        let mut native = accept_async(upstream.accept().await.unwrap().0)
+            .await
+            .unwrap();
+        client
+            .send(Message::text(
+                r#"{"id":1,"method":"thread/resume","params":{"threadId":"a"}}"#,
+            ))
+            .await
+            .unwrap();
+        receive(&mut native).await;
+        native
+            .send(Message::text(r#"{"id":1,"result":{"thread":{"id":"a"}}}"#))
+            .await
+            .unwrap();
+        receive(&mut client).await;
+        let ObservedEvent::ThreadOpened { runtime_id, .. } = incoming.recv().await.unwrap().event
+        else {
+            panic!("expected open")
+        };
+        for (response, confirmed) in [
+            (serde_json::json!({"id":2,"error":{"code":-32600}}), false),
+            (
+                serde_json::json!({"id":"2","result":{"status":"unsubscribed"}}),
+                false,
+            ),
+            (
+                serde_json::json!({"id":2,"result":{"status":"futureStatus"}}),
+                false,
+            ),
+            (
+                serde_json::json!({"id":2,"result":{"status":"unsubscribed"}}),
+                true,
+            ),
+            (
+                serde_json::json!({"id":2,"result":{"status":"notSubscribed"}}),
+                true,
+            ),
+            (
+                serde_json::json!({"id":2,"result":{"status":"notLoaded"}}),
+                true,
+            ),
+        ] {
+            client
+                .send(Message::text(
+                    r#"{"id":2,"method":"thread/unsubscribe","params":{"threadId":"a"}}"#,
+                ))
+                .await
+                .unwrap();
+            receive(&mut native).await;
+            assert!(incoming.try_recv().is_err());
+            native
+                .send(Message::text(response.to_string()))
+                .await
+                .unwrap();
+            receive(&mut client).await;
+            if confirmed {
+                let ObservedEvent::ThreadUnsubscribed {
+                    thread,
+                    runtime_id: ended,
+                } = incoming.recv().await.unwrap().event
+                else {
+                    panic!("expected unsubscribe")
+                };
+                assert_eq!(thread, "a");
+                assert_eq!(ended, runtime_id);
+            } else {
+                assert!(incoming.try_recv().is_err());
+            }
+        }
+        if cli_close {
+            client.close(None).await.unwrap();
+            let observation = timeout(Duration::from_secs(3), incoming.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            let ObservedEvent::ConnectionClosed(runtimes) = observation.event else {
+                panic!("expected CLI close")
+            };
+            assert_eq!(runtimes, HashMap::from([("a".into(), runtime_id)]));
+        } else {
+            native.close(None).await.unwrap();
+            assert!(receive(&mut client).await.is_close());
+        }
+        shutdown.send(true).unwrap();
+        task.await.unwrap().unwrap();
+        assert!(incoming.recv().await.is_none());
+    }
+}

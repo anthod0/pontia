@@ -98,6 +98,7 @@ enum Outgoing {
 pub struct Connection {
     pub(crate) unloaded_threads: Arc<Mutex<HashMap<String, u64>>>,
     thread_activity: Arc<Mutex<HashMap<String, u64>>>,
+    pub(crate) pending_archives: Arc<Mutex<HashMap<String, u64>>>,
     outgoing: mpsc::Sender<Outgoing>,
     pub(crate) interactions:
         Mutex<HashMap<String, crate::service::interactions::NativeInteraction>>,
@@ -191,9 +192,11 @@ impl Connection {
         let server_requests: ServerRequests = Arc::new(Mutex::new(HashMap::new()));
         let interaction_events = Arc::new(Mutex::new(std::collections::VecDeque::new()));
         let thread_activity = Arc::new(Mutex::new(HashMap::<String, u64>::new()));
+        let pending_archives = Arc::new(Mutex::new(HashMap::<String, u64>::new()));
         let connection = Arc::new(Self {
             unloaded_threads: unloaded_threads.clone(),
             thread_activity: thread_activity.clone(),
+            pending_archives: pending_archives.clone(),
             outgoing,
             interactions: Mutex::new(HashMap::new()),
             task: Mutex::new(None),
@@ -285,6 +288,10 @@ impl Connection {
                                         && let Some(thread) = value["params"]["threadId"].as_str()
                                     {
                                         unloaded_threads.lock().await.insert(thread.into(), notification_sequence);
+                                    }
+                                    if value["method"] == "thread/archived"
+                                        && let Some(thread) = value["params"]["threadId"].as_str() {
+                                        pending_archives.lock().await.insert(thread.into(), notification_sequence);
                                     }
                                     if let Some(id) = value.get("id").filter(|id| id.is_string() || id.is_number()) {
                                         server_requests.lock().await.insert(id.to_string(), Notification { value: value.clone(), sequence: notification_sequence });

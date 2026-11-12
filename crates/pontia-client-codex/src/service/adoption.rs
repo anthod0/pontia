@@ -18,7 +18,7 @@ impl CodexService {
         result: &Value,
         params: &Value,
         profile_binding: Option<Value>,
-    ) -> Result<String> {
+    ) -> Result<(String, tokio::sync::OwnedMutexGuard<()>)> {
         let connection = runtime.connection().await?;
         let thread = &result["thread"];
         let native = string(thread, "id")?;
@@ -53,6 +53,21 @@ impl CodexService {
             ));
         }
         if operation == ThreadOperation::Start {
+            if connection
+                .pending_archives
+                .lock()
+                .await
+                .contains_key(native)
+                || connection
+                    .unloaded_threads
+                    .lock()
+                    .await
+                    .contains_key(native)
+            {
+                return Err(Error::CapabilityUnavailable(
+                    "Codex thread was unloaded before attachment".into(),
+                ));
+            }
             // Before the first input even thread/read can fail on an empty rollout.
             // The successful start response already confirms identity and readiness.
             self.ready(&session, runtime, thread).await?;
@@ -61,7 +76,7 @@ impl CodexService {
                 .set_subscription(&session, SubscriptionState::AwaitingFirstInput)
                 .await;
             let _ = observation_changes().send((runtime.root.clone(), session.clone()));
-            return Ok(session);
+            return Ok((session, _operation));
         }
         // A queued proxy receipt must not resurrect a thread unloaded since the operation.
         let (snapshot, boundary) = connection
@@ -94,6 +109,8 @@ impl CodexService {
             }
             unloaded.remove(native);
         }
+        self.reconcile_proxy_archive(runtime, &session, native, Some(boundary))
+            .await?;
         let state: String = sqlx::query_scalar("SELECT state FROM sessions WHERE session_id=?")
             .bind(&session)
             .fetch_one(&self.pool)
@@ -115,7 +132,7 @@ impl CodexService {
                 .bind(&session).execute(&self.pool).await?;
         self.subscribe_opened_thread(runtime, &session, native)
             .await?;
-        Ok(session)
+        Ok((session, _operation))
     }
     pub(super) async fn subscribe_opened_thread(
         &self,

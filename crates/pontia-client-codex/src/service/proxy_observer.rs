@@ -31,6 +31,7 @@ async fn observe(
     }
     match observation.event {
         ObservedEvent::ThreadOpened {
+            runtime_id,
             operation,
             result,
             params,
@@ -40,9 +41,27 @@ async fn observe(
             if thread["ephemeral"] == true {
                 return Ok(());
             }
-            service
+            let (session, _operation) = service
                 .adopt_opened_thread(&runtime, operation, &result, &params, profile_binding)
                 .await?;
+            service
+                .register_proxy_runtime(&session, &runtime_id)
+                .await?;
+        }
+        ObservedEvent::ThreadUnsubscribed { thread, runtime_id } => {
+            service
+                .end_proxy_runtime(&runtime, &thread, &runtime_id)
+                .await?;
+        }
+        ObservedEvent::ConnectionClosed(runtimes) => {
+            for (thread, runtime_id) in runtimes {
+                if let Err(error) = service
+                    .end_proxy_runtime(&runtime, &thread, &runtime_id)
+                    .await
+                {
+                    tracing::warn!(%thread, %error, "Codex proxy close observation failed");
+                }
+            }
         }
         ObservedEvent::TurnStarted(native) => {
             let Some(binding) = AgentBindingService::new(service.pool.clone())

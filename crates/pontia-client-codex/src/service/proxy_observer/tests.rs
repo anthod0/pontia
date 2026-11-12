@@ -1,3 +1,5 @@
+mod lifecycle;
+
 use super::*;
 use crate::service::confirmed_exits;
 use crate::{CodexObserver, proxy::Proxy};
@@ -33,12 +35,17 @@ struct Fixture {
     root: tempfile::TempDir,
     threads: Arc<Mutex<HashMap<String, Thread>>>,
     faults: Arc<Mutex<std::collections::HashSet<String>>>,
+    calls: Arc<Mutex<Vec<(bool, String, String)>>>,
     tasks: JoinSet<()>,
     shutdown: watch::Sender<bool>,
 }
 
 impl Fixture {
     async fn new() -> Self {
+        Self::with_observer(true).await
+    }
+
+    async fn with_observer(start_observer: bool) -> Self {
         let root = tempfile::tempdir().unwrap();
         let socket = root.path().join("native.sock");
         let listener = UnixListener::bind(&socket).unwrap();
@@ -46,6 +53,8 @@ impl Fixture {
         let shared = threads.clone();
         let faults = Arc::new(Mutex::new(std::collections::HashSet::<String>::new()));
         let shared_faults = faults.clone();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let shared_calls = calls.clone();
         let home = root.path().canonicalize().unwrap();
         let mut tasks = JoinSet::new();
         tasks.spawn(async move {
@@ -55,6 +64,7 @@ impl Fixture {
                 let threads = shared.clone();
                 let faults = shared_faults.clone();
                 let home = home.clone();
+                let calls = shared_calls.clone();
                 peers.spawn(async move {
                     let mut wire = accept_async(stream).await.unwrap();
                     let (sender, mut events) = mpsc::unbounded_channel::<Value>();
@@ -75,6 +85,7 @@ impl Fixture {
                         let method = request["method"].as_str().unwrap();
                         let params = &request["params"];
                         let native = params["threadId"].as_str().unwrap_or("");
+                        calls.lock().await.push((pontia, method.into(), native.into()));
                         let mut threads = threads.lock().await;
                         let response = if params["reject"] == true || faults.lock().await.contains(method) {
                             json!({"id":id,"error":{"code":-32600,"message":"rejected"}})
@@ -118,6 +129,23 @@ impl Fixture {
                                     thread.subscribers.push(sender.clone());
                                     json!({"thread":thread.value,"model":"cli-model"})
                                 }
+                                "thread/unsubscribe" => {
+                                    let status = if let Some(thread) = threads.get_mut(native) {
+                                        let subscribed = thread.subscribers.iter().any(|peer| peer.same_channel(&sender));
+                                        thread.subscribers.retain(|peer| !peer.same_channel(&sender));
+                                        if subscribed { "unsubscribed" } else { "notSubscribed" }
+                                    } else { "notLoaded" };
+                                    json!({"status":status})
+                                }
+                                "thread/archive" => {
+                                    let thread = threads.get_mut(native).unwrap();
+                                    thread.value["status"]["type"] = json!("notLoaded");
+                                    thread.notify(json!({"method":"thread/archived","params":{"threadId":native}}));
+                                    thread.notify(json!({"method":"thread/status/changed","params":{"threadId":native,"status":{"type":"notLoaded"}}}));
+                                    thread.subscribers.clear();
+                                    json!({})
+                                }
+                                "thread/unarchive" => json!({"thread":threads[native].value}),
                                 "thread/turns/list" => json!({"data":threads[native].turns,"nextCursor":null}),
                                 "turn/start" => {
                                     let thread = threads.get_mut(native).unwrap();
@@ -159,7 +187,9 @@ impl Fixture {
         let (shutdown, stop) = watch::channel(false);
         let observer = CodexObserver::new(&app, root.path().into());
         observer.prepare().await.unwrap();
-        tasks.spawn(observer.run(stop.clone()));
+        if start_observer {
+            tasks.spawn(observer.run(stop.clone()));
+        }
         let proxy = Proxy::bind(root.path()).await.unwrap();
         let (observations, incoming) = mpsc::channel(128);
         let proxy_state = app.clone();
@@ -175,6 +205,7 @@ impl Fixture {
             root,
             threads,
             faults,
+            calls,
             tasks,
             shutdown,
         }

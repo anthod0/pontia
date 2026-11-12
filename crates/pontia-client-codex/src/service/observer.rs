@@ -341,6 +341,10 @@ impl CodexObserver {
                         },
                     };
                     observation.threads.insert(thread.to_string(), session.clone());
+                    if event["method"] == "thread/archived" {
+                        self.service.archive_proxy_runtimes(&runtime, &session, thread).await?;
+                        return Ok(());
+                    }
                     if event["method"] == "thread/reverted" {
                         let _operation = runtime.lock_session(&session).await;
                         let _current = runtime.current_guard().await?;
