@@ -116,6 +116,23 @@ fn help_describes_the_cli() {
 }
 
 #[test]
+fn help_lists_agent_tools_in_their_own_section() {
+    let output = pontia().arg("--help").output().expect("run pontia");
+
+    let stdout = String::from_utf8(output.stdout).expect("help is utf-8");
+    let (commands, agent_tools) = stdout
+        .split_once("Agent tools:\n")
+        .expect("help has an Agent tools section");
+    let agent_tools = agent_tools.split("\n\n").next().unwrap();
+    for tool in ["send-file", "workflow"] {
+        assert!(agent_tools.contains(&format!("  {tool} ")), "{tool}");
+        assert!(!commands.contains(&format!("  {tool} ")), "{tool}");
+    }
+    assert!(commands.contains("  init "));
+    assert!(!agent_tools.contains("init"));
+}
+
+#[test]
 fn update_help_has_no_version_selection() {
     let output = pontia().args(["update", "--help"]).output().unwrap();
     assert!(output.status.success());

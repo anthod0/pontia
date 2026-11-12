@@ -14,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, builder::StyledStr};
 use dialoguer::Confirm;
 use pontia::{
     init::{self, InitPlatform},
@@ -39,6 +39,8 @@ const ROOT_HELP: &str = "\
 Configuration and state live in $PONTIA_HOME (default: ~/.pontia).
 
 For documentation, see https://pontia.dev/llms.txt";
+
+const AGENT_TOOLS: [&str; 2] = ["send-file", "workflow"];
 
 const INIT_HELP: &str = "\
 Prompts on the terminal. Rerunning keeps the existing API token and Workspace roots.
@@ -130,7 +132,7 @@ enum LifecycleCommand {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = Cli::from_arg_matches(&cli_command().get_matches()).unwrap_or_else(|e| e.exit());
     match execute(cli.command).await {
         Ok(operational) if operational => ExitCode::SUCCESS,
         Ok(_) => ExitCode::FAILURE,
@@ -139,6 +141,39 @@ async fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Lists Agent tools in their own section of `pontia --help`, after the commands for people.
+fn cli_command() -> clap::Command {
+    use std::fmt::Write as _;
+
+    let mut command = Cli::command();
+    let styles = command.get_styles();
+    let (header, literal) = (styles.get_header(), styles.get_literal());
+    let width = AGENT_TOOLS.iter().map(|name| name.len()).max().unwrap_or(0);
+    let mut template = StyledStr::new();
+    let _ = write!(
+        template,
+        "{{before-help}}{{about-with-newline}}\n{{usage-heading}} {{usage}}\n\n\
+         {header}Commands:{header:#}\n{{subcommands}}\n\n\
+         {header}Agent tools:{header:#}"
+    );
+    for name in AGENT_TOOLS {
+        let about = command
+            .find_subcommand(name)
+            .and_then(clap::Command::get_about)
+            .map(StyledStr::to_string)
+            .unwrap_or_default();
+        let _ = write!(template, "\n  {literal}{name:<width$}{literal:#}  {about}");
+    }
+    let _ = write!(
+        template,
+        "\n\n{header}Options:{header:#}\n{{options}}{{after-help}}"
+    );
+    for name in AGENT_TOOLS {
+        command = command.mut_subcommand(name, |tool| tool.hide(true));
+    }
+    command.help_template(template)
 }
 
 async fn execute(command: Command) -> Result<bool, String> {
@@ -814,6 +849,19 @@ fn current_uid<R: CommandRunner>(runner: &R) -> Result<u32, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_tools_are_subcommands() {
+        let command = Cli::command();
+        for name in AGENT_TOOLS {
+            assert!(command.find_subcommand(name).is_some(), "{name}");
+        }
+    }
+
+    #[test]
+    fn cli_command_is_valid() {
+        cli_command().debug_assert();
+    }
 
     #[test]
     fn remote_dashboard_url_targets_the_registered_device() {

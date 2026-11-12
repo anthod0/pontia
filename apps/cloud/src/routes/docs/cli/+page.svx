@@ -42,11 +42,28 @@ Stopping `pontiad` stops observation, input reception, and Workflow scheduling. 
 
 `CLIENT` is a short ID such as `pi`, `codex`, `claude-agent`, or an ACP agent ID. Use `--id ID` with an ID from `pontia client list --json` when a short ID is ambiguous.
 
-## Agent commands
+## Agent tools
+
+`pontia --help` lists `send-file` and `workflow` under Agent tools.
+
+### Files
 
 | Command | Context | Purpose |
 | --- | --- | --- |
 | `pontia send-file PATH` | Inside a Pontia Session | Share one file with the Session's user; it appears in the Dashboard chat |
+
+### Workflows
+
+| Command | Context | Purpose |
+| --- | --- | --- |
+| `pontia workflow run FILE` | Any local shell | Parse a TOML definition and start a Workflow through the local API |
+| `pontia workflow show [WORKFLOW_ID]` | Any local shell; ID optional inside a managed Node | Print compact Workflow, current Node, input, output, and Patch context |
+| `pontia workflow submit` | Current managed Agent Node pane | Declare the Node's output ready |
+| `pontia workflow patch request` | Current managed Agent Node pane | Report a blocking problem and start replanning |
+| `pontia workflow patch apply` | Current Re-planner pane | Accept the candidate definition as a new revision |
+| `pontia workflow patch block` | Current Re-planner pane | Finish the Patch without applying the candidate definition |
+
+Run pane-scoped commands in the current Agent Node or Re-planner's Pontia-managed `tmux` pane.
 
 ## Cloud login and remote access
 
@@ -62,19 +79,6 @@ Stopping `pontiad` stops observation, input reception, and Workflow scheduling. 
 | `pontia remote disable` | Unregister this device and remove its local remote identity |
 
 Remote configuration changes that affect `pontiad` restart the local service automatically.
-
-## Workflows
-
-| Command | Context | Purpose |
-| --- | --- | --- |
-| `pontia workflow run FILE` | Any local shell | Parse a TOML definition and start a Workflow through the local API |
-| `pontia workflow show [WORKFLOW_ID]` | Any local shell; ID optional inside a managed Node | Print compact Workflow, current Node, input, output, and Patch context |
-| `pontia workflow submit` | Current managed Agent Node pane | Declare the Node's output ready |
-| `pontia workflow patch request` | Current managed Agent Node pane | Report a blocking problem and start replanning |
-| `pontia workflow patch apply` | Current Re-planner pane | Accept the candidate definition as a new revision |
-| `pontia workflow patch block` | Current Re-planner pane | Finish the Patch without applying the candidate definition |
-
-Run pane-scoped commands in the current Agent Node or Re-planner's Pontia-managed `tmux` pane.
 
 ## Exit status and errors
 
