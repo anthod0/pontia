@@ -1,0 +1,166 @@
+---
+title: "スマートフォンから pi コーディングエージェントを使う方法"
+description: "ネイティブの pi TUI を維持したまま、スマートフォンから pi コーディングエージェントの Session を追いかけ、指示を出す方法を紹介します。Pontia、自分で組む SSH と tmux、Termux 上の pi を比較し、tmux のキー設定と安全上の注意も扱います。"
+published: "2026-11-11"
+---
+
+[pi](https://pi.dev) はミニマルなターミナル型コーディングエージェントです。Session は自分のマシンのターミナルで動くため、長いタスクを始めるのは簡単ですが、席を離れると様子を確認しにくくなります。この記事では、スマートフォンや別のコンピューターから pi の Session にアクセスする方法を紹介します。
+
+Pontia は私たちが開発しているツールです。
+
+## 結論
+
+pi には公式のリモートクライアントやモバイルクライアントはありません。
+
+| 状況 | 最適な選択肢 |
+| --- | --- |
+| スマートフォンのブラウザから pi の Session を追いかけ、指示を出し、続けたい。TUI も維持したい | Pontia |
+| リモートアクセスを自分で組み立てて保守したい | SSH または Mosh、tmux、プライベートネットワーク |
+| 別のマシンを使わず、スマートフォン自体でコーディングしたい | Android の Termux 上の pi |
+
+## 選択肢1: Pontia
+
+Pontia は、自分のマシンで動くコーディングエージェント向けの、無料でオープンソースのリモート操作ツールです。一度インストールしてサインインし、スマートフォンで [app.pontia.dev](https://app.pontia.dev) を開くだけです。VPN、ポート転送、ターミナルアプリの設定は不要です。
+
+Pontia はネイティブの pi TUI を維持します。Dashboard から Session を開始すると、Pontia は選択したプロジェクトの tmux ペインで pi を起動します。pi プラグインが会話を Dashboard に報告し、Dashboard からの操作を受け付けます。スマートフォンからは次のことができます。
+
+- プロジェクトディレクトリで pi の Session を開始し、返信とツールの出力をストリーミングで追う
+- メッセージを送る、pi の作業中にキューに入れる、現在のターンを中断する
+- 以前のメッセージを編集し、その時点から会話を分岐させる
+- `/model` でモデルを変更し、`/compact` で圧縮し、推定のコンテキスト使用量を確認する
+- `@` でファイルを参照する
+
+Session は本物の pi プロセスなので、いつでもターミナルからアタッチできます。TUI から送ったメッセージと Dashboard から送ったメッセージは同じ会話に入り、履歴は pi 自身の Session ファイルに残ります。
+
+```sh
+tmux ls                       # Pontia sessions start with pontia_
+tmux attach -t SESSION_NAME
+```
+
+pi は自分のマシン上で、pi 自身のプロバイダー認証情報と設定を使って動き続けます。ブラウザとマシンは Pontia のリレーを通じてエンドツーエンド暗号化された Session を確立し、リレーは暗号文を転送するだけです。マシンは外向きに接続するため、受信ポートを開く必要はありません。
+
+Pontia は Linux と macOS 13.5 以降をサポートしており、ヘッドレスサーバーでも使えます。単一の Session だけでなく、[Workflow](/docs/workflows) を使えば、大きなタスクを一連の pi Session として実行できます。各 Session は新しいコンテキストと明示的な Handoff ファイルを持ちます。
+
+### セットアップ
+
+`pi` と `tmux` をインストールし、pi でモデルプロバイダーを設定します(`/login` と `/model`)。Node.js と npm をインストールした状態で、次を実行します。
+
+```sh
+npx @pontia/cli init   # pi is selected by default
+```
+
+`pontia init` は pi プラグインをインストールし、Pontia サービスを起動し、Google または GitHub でサインインして、マシンを公式リレーに登録します。ヘッドレスマシンでは、サインイン時に URL とワンタイムコードが表示され、スマートフォンから承認できます。完了したら [app.pontia.dev](https://app.pontia.dev) を開き、マシンを選んで Session を開始します。
+
+[pi Agent Client リファレンス](/docs/agent-clients/pi) では、pi のカスタムコマンドと診断について説明しています。上級ユーザーは、公式のリレーの代わりに [自分のリレーを運用する](/docs/self-hosted-edge) こともできます。
+
+## 選択肢2: SSH と tmux で自分で組む
+
+標準的なツールでリモートアクセスを組み立てることもできます。tmux で pi を動かし続け、プライベートネットワークでマシンに到達できるようにし、スマートフォンの SSH クライアントから接続します。小さな pi 拡張機能を使えば、pi が入力を待っているときにスマートフォンに通知できます。
+
+### 1. Tailscale でマシンに到達できるようにする
+
+ホストに Tailscale をインストールしてサインインします。
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4      # note the 100.x.y.z address
+```
+
+スマートフォンに Tailscale アプリをインストールし、同じアカウントでサインインします。常時稼働するホストでは、管理コンソールで [鍵の有効期限](https://tailscale.com/docs/features/access-control/key-expiry) を無効にしてください。デフォルトでは鍵は180日で失効します。
+
+スマートフォンで同時に動かせる VPN は1つだけなので、Tailscale アプリは他の VPN アプリやプロキシアプリをオフにします。[Tailscale と Cloudflare Tunnel の比較](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) では、スマートフォンの VPN 枠を使わない Cloudflare Tunnel と、VPN 同士のルーティングの競合について説明しています。
+
+### 2. tmux で pi を動かす
+
+まず、後述の tmux のセクションにある extended-keys の設定を `~/.tmux.conf` に追加します。そのうえで次を実行します。
+
+```sh
+tmux new -s pi
+pi
+# detach with Ctrl-b d
+```
+
+スマートフォンから接続して再アタッチします。
+
+```sh
+mosh agent@100.x.y.z tmux attach -t pi
+```
+
+Mosh を使うと、スマートフォンがネットワークを切り替えたりスリープしたりしても Session が維持されます。ホストに `mosh` が必要で、スマートフォン側にも対応するクライアントが必要です。Mosh を使わない場合は `ssh -t agent@100.x.y.z tmux attach -t pi` を使います。
+
+再起動後など tmux 自体が終了していた場合は、プロジェクトディレクトリで `pi --continue` を実行すると、直近の Session を再開できます。
+
+### 3. スマートフォンのキーボードでスクロールし、指示を出す
+
+pi はデフォルトでフルスクリーンモードで動きます。エディターを固定し、トランスクリプトを `PageUp` と `PageDown` で自らスクロールするため、pi の出力は tmux のスクロールバックに残りません。スマートフォンのキーボードにはこれらのキーがほとんどありません。選択肢は2つです。
+
+- pi をレギュラーモードに切り替え、ターミナルの通常のスクロールバックに出力させる。`~/.pi/agent/settings.json` で `"tuiMode": "regular"` を設定するか、`--tui-mode regular` を付けて pi を起動します。その後は tmux のコピーモード `Ctrl-b [` でスクロールします。
+- フルスクリーンモードのまま、`PageUp` と `PageDown` を含む追加キー列を持つスマートフォンの SSH アプリを使う。
+
+pi の作業中によく使うキーは次のとおりです。
+
+| 操作 | キー |
+| --- | --- |
+| 現在のタスクを止める | `Escape` |
+| 現在のタスクの方向を変えるメッセージを送る | pi の作業中に `Enter` |
+| タスク完了後のフォローアップをキューに入れる | `Alt+Enter` |
+| キューに入ったメッセージをエディターに戻す | `Alt+Up` |
+
+タスク中に `Enter` で送ったメッセージは、現在の応答とそのツール呼び出しが終わった後に届きます。キーを割り当て直すには、`~/.pi/agent/keybindings.json` に記述して `/reload` を実行します。アクション名は pi の [キーバインドリファレンス](https://pi.dev/docs/latest/keybindings) に一覧があります。
+
+### 4. pi が待っているときに通知を受け取る
+
+ntfy のスマートフォンアプリで、長くランダムな [ntfy](https://ntfy.sh/) トピックを購読します。次に、以下を `~/.pi/agent/extensions/ntfy.ts` として保存します。pi はこれを自動的に読み込み、`/reload` で変更が反映されます。
+
+```ts
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { basename } from "node:path";
+
+const url = "https://ntfy.sh/YOUR_TOPIC";
+
+export default function (pi: ExtensionAPI) {
+  pi.on("agent_settled", async (event, ctx) => {
+    if (event.aborted) return; // you pressed Escape, so you are already there
+    await fetch(url, {
+      method: "POST",
+      headers: { Title: `pi: ${basename(ctx.cwd)}` },
+      body: "Waiting for input",
+    }).catch(() => {});
+  });
+}
+```
+
+`agent_end` ではなく `agent_settled` を使ってください。pi は `agent_end` の後に再試行、圧縮、キューに入ったメッセージでの続行を行うことがあるため、そこで送った通知は pi がまだ作業中のときに届く可能性があります。プライバシーとセルフホストの ntfy については [Codex と pi のスマートフォン通知](/blog/coding-agent-phone-notifications) で説明しています。
+
+### 最終的な構成
+
+両方のデバイスの Tailscale、スマートフォンの SSH 鍵、tmux、拡張機能のそれぞれを自分で保守します。スマートフォンでは、小さなキーボードで pi のフル TUI を使います。
+
+## 選択肢3: スマートフォン自体で pi を動かす
+
+pi は [Termux](https://termux.dev/) を通じて Android で動きます。`npm` で Node.js と pi をインストールし、スマートフォン上のフォルダーで作業します。小さな編集やスクリプトに向いています。プロジェクトファイル、ツールチェーン、ビルドはスマートフォン上に置かれるため、メインマシンでの作業にはアクセスできません。
+
+## tmux 内で pi のキーを使えるようにする
+
+デフォルトでは、tmux は `Shift+Enter`、`Ctrl+Enter`、`Enter` を同じキーとして報告することがあり、`Shift+Enter` で改行を入れるつもりがプロンプトの送信になってしまいます。これは、アタッチした Pontia の Session も含め、tmux 内で pi TUI を使うときは常に影響します。pi の [tmux ガイド](https://pi.dev/docs/latest/tmux) は、tmux 3.5 以降向けに次の `~/.tmux.conf` を推奨しています。
+
+```tmux
+set -g extended-keys on
+set -g extended-keys-format csi-u
+```
+
+tmux 3.2 から 3.4 では、`set -g extended-keys on` のみを使います。この設定は tmux サーバーに適用されるため、テストの前に tmux を再起動してください。
+
+## リモート操作で pi が安全になるわけではない
+
+pi は、ツール呼び出しのたびに立ち止まって承認を求めることはしません。pi の [セキュリティガイド](https://pi.dev/docs/latest/security) には、pi は起動したアカウントの権限で動作すること、トランスクリプトを見ていてもセキュリティ境界にはならないことが書かれています。これはここで紹介したすべての選択肢に当てはまります。スマートフォンから見ていれば、うまくいかない実行を中断できますが、個々のコマンドを実行前に止めることはできません。
+
+pi を無人で作業させる場合は、pi が到達できる範囲を制限してください。専用のユーザーアカウント、コンテナまたは VM、タスクに限定した短期間の認証情報を使います。選択肢については pi の [隔離環境での実行](https://pi.dev/docs/latest/containerization) ガイドで説明されています。
+
+## 関連記事
+
+- [Codex や pi に呼ばれたときにスマートフォンで通知を受け取る](/blog/coding-agent-phone-notifications)
+- [VPS でコーディングエージェントを動かす](/blog/run-coding-agents-on-a-vps): pi を常時稼働のサーバーで動かし続ける
+- [スマートフォンから Codex CLI を使う方法](/blog/control-codex-cli-from-your-phone)
+- [Pontia の仕組み](/docs/how-it-works)

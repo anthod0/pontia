@@ -8,6 +8,9 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   import * as Table from "$lib/components/ui/table";
+  import { ParaglideMessage } from "@inlang/paraglide-js-svelte";
+  import { m } from "$lib/paraglide/messages";
+  import { getLocale, localizeHref } from "$lib/paraglide/runtime";
   import type { ActionData, PageData } from "./$types";
 
   type HealthStatus = "checking" | "healthy" | "unreachable";
@@ -57,30 +60,30 @@
     class={status === "healthy" ? "health-healthy" : undefined}
     aria-live="polite"
   >
-    {status === "checking" ? "Checking" : status === "healthy" ? "Healthy" : "Unreachable"}
+    {status === "checking" ? m.edges_health_checking() : status === "healthy" ? m.edges_health_healthy() : m.edges_health_unreachable()}
   </Badge>
 {/snippet}
 
 <svelte:head>
-  <title>Edge settings — Pontia</title>
+  <title>{m.edges_title()}</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
-<h1>Edges</h1>
-<p>Deploy and manage self-hosted Edge registrations.</p>
+<h1>{m.settings_edges()}</h1>
+<p>{m.edges_intro()}</p>
 {#if form?.error}<p class="auth-error" role="alert">{form.error}</p>{/if}
 
 <section aria-labelledby="your-edges">
-  <h2 id="your-edges">Your edges</h2>
+  <h2 id="your-edges">{m.edges_yours()}</h2>
   {#if data.ownedEdges.length > 0}
     <Table.Root class="table-fixed">
       <Table.Header>
         <Table.Row>
-          <Table.Head class="w-[22%]">Name</Table.Head>
-          <Table.Head>Address</Table.Head>
-          <Table.Head class="w-28">Created</Table.Head>
-          <Table.Head class="w-28">Health</Table.Head>
-          <Table.Head class="w-20"><span class="visually-hidden">Manage</span></Table.Head>
+          <Table.Head class="w-[22%]">{m.edges_name()}</Table.Head>
+          <Table.Head>{m.edges_address()}</Table.Head>
+          <Table.Head class="w-28">{m.edges_created()}</Table.Head>
+          <Table.Head class="w-28">{m.edges_health()}</Table.Head>
+          <Table.Head class="w-20"><span class="visually-hidden">{m.edges_manage()}</span></Table.Head>
         </Table.Row>
       </Table.Header>
       <Table.Body>
@@ -92,28 +95,28 @@
             <Table.Cell class="max-w-0">
               <div class="truncate" title={edge.tunnelUrl}>{edge.tunnelUrl}</div>
             </Table.Cell>
-            <Table.Cell>{new Date(edge.createdAt).toLocaleDateString()}</Table.Cell>
+            <Table.Cell>{new Date(edge.createdAt).toLocaleDateString(getLocale())}</Table.Cell>
             <Table.Cell>{@render healthBadge(edge.id)}</Table.Cell>
             <Table.Cell>
               <div class="row-actions">
                 <Dialog.Root>
                   <Dialog.Trigger
                     class="row-action"
-                    aria-label={`Rename ${edge.name}`}
-                    title="Rename"
+                    aria-label={m.edges_rename_named({ name: edge.name })}
+                    title={m.edges_rename()}
                   >
                     <PencilSimpleIcon size={16} />
                   </Dialog.Trigger>
                   <Dialog.Content>
                     <Dialog.Header>
-                      <Dialog.Title>Rename {edge.name}</Dialog.Title>
-                      <Dialog.Description>Choose a new display name for this edge.</Dialog.Description>
+                      <Dialog.Title>{m.edges_rename_named({ name: edge.name })}</Dialog.Title>
+                      <Dialog.Description>{m.edges_rename_text()}</Dialog.Description>
                     </Dialog.Header>
                     <form class="rename-dialog-form" method="POST" action="?/rename">
                       <input type="hidden" name="edge_id" value={edge.id} />
                       <Input
                         name="name"
-                        aria-label="Edge name"
+                        aria-label={m.edges_name_label()}
                         value={edge.name}
                         maxlength={100}
                         required
@@ -121,10 +124,10 @@
                       <Dialog.Footer>
                         <Dialog.Close>
                           {#snippet child({ props })}
-                            <Button variant="outline" {...props}>Cancel</Button>
+                            <Button variant="outline" {...props}>{m.cancel()}</Button>
                           {/snippet}
                         </Dialog.Close>
-                        <Button type="submit">Save</Button>
+                        <Button type="submit">{m.save()}</Button>
                       </Dialog.Footer>
                     </form>
                   </Dialog.Content>
@@ -132,22 +135,22 @@
                 <AlertDialog.Root>
                   <AlertDialog.Trigger
                     class="row-action delete-action"
-                    aria-label={`Delete ${edge.name}`}
-                    title="Delete"
+                    aria-label={m.edges_delete_named({ name: edge.name })}
+                    title={m.edges_delete()}
                   >
                     <TrashIcon size={16} />
                   </AlertDialog.Trigger>
                   <AlertDialog.Content>
                     <AlertDialog.Header>
-                      <AlertDialog.Title>Delete {edge.name}?</AlertDialog.Title>
+                      <AlertDialog.Title>{m.edges_delete_title({ name: edge.name })}</AlertDialog.Title>
                       <AlertDialog.Description>
-                        This permanently removes the edge registration and associated devices.
+                        {m.edges_delete_text()}
                       </AlertDialog.Description>
                     </AlertDialog.Header>
                     <AlertDialog.Footer>
-                      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+                      <AlertDialog.Cancel>{m.cancel()}</AlertDialog.Cancel>
                       <AlertDialog.Action type="submit" form={`delete-edge-${edge.id}`}>
-                        Delete edge
+                        {m.edges_delete_confirm()}
                       </AlertDialog.Action>
                     </AlertDialog.Footer>
                   </AlertDialog.Content>
@@ -162,19 +165,19 @@
       </Table.Body>
     </Table.Root>
   {:else}
-    <p>You haven't deployed any edges yet. Generate a command below to get started.</p>
+    <p>{m.edges_none()}</p>
   {/if}
 </section>
 
 <section aria-labelledby="public-edges">
-  <h2 id="public-edges">Public edges</h2>
+  <h2 id="public-edges">{m.edges_public()}</h2>
   {#if data.publicEdges.length > 0}
     <Table.Root class="table-fixed">
       <Table.Header>
         <Table.Row>
-          <Table.Head class="w-[30%]">Name</Table.Head>
-          <Table.Head>Address</Table.Head>
-          <Table.Head class="w-28">Health</Table.Head>
+          <Table.Head class="w-[30%]">{m.edges_name()}</Table.Head>
+          <Table.Head>{m.edges_address()}</Table.Head>
+          <Table.Head class="w-28">{m.edges_health()}</Table.Head>
         </Table.Row>
       </Table.Header>
       <Table.Body>
@@ -192,24 +195,25 @@
       </Table.Body>
     </Table.Root>
   {:else}
-    <p>No public edges are available.</p>
+    <p>{m.edges_public_none()}</p>
   {/if}
 </section>
 
 <section aria-labelledby="deploy-edge">
-  <h2 id="deploy-edge">Deploy a self-hosted edge</h2>
-  <p>Generate a one-time command, then run it on your public Linux server.</p>
+  <h2 id="deploy-edge">{m.edges_deploy_heading()}</h2>
+  <p>{m.edges_deploy_text()}</p>
   <p>
-    Run <code>sudo pontia-edge retry</code> on the same server if initialization is incomplete.
+    <ParaglideMessage message={m.edges_deploy_retry}>
+      {#snippet code({ children })}<code>{@render children?.()}</code>{/snippet}
+    </ParaglideMessage>
   </p>
 
-  <form class="deployment-form" method="POST" action="/settings/edges/deploy">
-    <Button type="submit">Generate deployment command</Button>
+  <form class="deployment-form" method="POST" action={localizeHref("/settings/edges/deploy")}>
+    <Button type="submit">{m.edges_deploy_generate()}</Button>
     <p class="agreement">
-      By generating this command, you agree to the
-      <a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">
-        Let's Encrypt Subscriber Agreement</a
-      >.
+      <ParaglideMessage message={m.edges_deploy_agreement}>
+        {#snippet agreement({ children })}<a href="https://letsencrypt.org/repository/" target="_blank" rel="noreferrer">{@render children?.()}</a>{/snippet}
+      </ParaglideMessage>
     </p>
   </form>
 </section>

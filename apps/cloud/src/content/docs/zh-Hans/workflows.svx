@@ -1,0 +1,94 @@
+<svelte:head>
+	<title>Workflow — Pontia</title>
+	<meta name="description" content="使用 Pontia 运行和监控持久的多 Agent Workflow。" />
+</svelte:head>
+
+# Workflow
+
+Workflow 是围绕共同目标对多个 Agent Node 进行的持久编排。每个 Agent Node 获得一个新的 Pontia Session，读取声明的 Handoff 输入，写入一个 Handoff 输出，并在分配的工作完成后显式提交。
+
+当任务需要分阶段交接、持久进度和独立的 Agent 上下文时，使用 Workflow。对于不需要明确执行计划的探索性工作，使用普通 Session。
+
+## 创建定义
+
+Workflow 定义使用 TOML。路径相对于定义文件解析：
+
+```toml
+title = "Implement search"
+cwd = "."
+
+[[handoffs]]
+name = "requirements.md"
+source = "./requirements.md"
+
+[[nodes]]
+type = "agent"
+phase = "Discovery"
+title = "Research"
+instructions = "Inspect the current search implementation and propose a plan."
+inputs = ["requirements.md"]
+output = "research.md"
+
+[[nodes]]
+type = "agent"
+phase = "Delivery"
+title = "Implement"
+instructions = "Implement and verify the accepted plan."
+inputs = ["research.md"]
+output = "result.md"
+```
+
+将 `cwd` 设为一个已存在的目录。Workflow 中的每个 Agent Client 都在该目录中启动。如果还想在 New chat 中使用该目录，请[将其激活为 Workspace](/docs/workspaces)。
+
+每个 Node 都使用 `type = "agent"`。Node 按定义顺序执行。每个输入指向一个初始 Handoff 或之前某个 Node 的输出。为每个输出指定一个唯一的、不含目录部分的文件名。
+
+## 运行和查看
+
+在 `pontiad` 正常运行时启动 Workflow：
+
+```sh
+pontia workflow run ./workflow.toml
+```
+
+该命令会打印新的 Workflow ID。[Workflow](https://app.pontia.dev/workflows) 页面显示各阶段、Agent Node 状态、已用时间，以及为每个活动 Node 创建的 Session。
+
+从 CLI 显示精简的上下文：
+
+```sh
+pontia workflow show wf_...
+```
+
+在由 Workflow 管理的 Agent Session 中，`PONTIA_WORKFLOW_ID` 提供当前目标，因此 `pontia workflow show` 可以省略 ID。
+
+## 完成 Agent Node
+
+将完整结果写入 Pontia 提供的输出文件路径，然后在该 Agent Node 的托管 `tmux` 窗格中提交：
+
+```sh
+pontia workflow submit
+```
+
+提交成功后，该 Node 的输出会被标记为就绪。如果 Turn 在提交之前就已完成，Workflow 会变为空闲并等待干预。
+
+## 暂停、恢复和重试
+
+在 Workflow 详情页中暂停运行中的 Workflow，或恢复已暂停的 Workflow。暂停时，如果支持，会请求中断正在进行的当前 Turn。恢复已中断的当前 Session 时，会先发送一条继续消息，然后再继续调度。
+
+当失败的 Workflow 可恢复时，**Retry** 会继续同一个 Agent Node 的对话。之前已提交的 Node 保持完成状态，现有的 Workspace 更改保持不变，未提交的输出会被归档。恢复中的 Node 会审查现有更改，并提交一份新的完整输出。
+
+## 请求重新规划
+
+如果 Agent Node 被意外问题阻塞，它会写入所要求的问题报告并运行：
+
+```sh
+pontia workflow patch request
+```
+
+Pontia 会创建一个专用的 Re-planner Session。Re-planner 查看 `pontia workflow show`，编辑提供的候选定义，记录决定，并以以下命令之一结束：
+
+```sh
+pontia workflow patch apply
+pontia workflow patch block
+```
+
+应用的 Workflow Patch 会创建新的图修订版本，同时保留现有 Node 的身份和执行历史。你可以在 Dashboard 中比较修订版本，并查看 Patch 请求、Re-planner Session、结果以及生成的修订版本。

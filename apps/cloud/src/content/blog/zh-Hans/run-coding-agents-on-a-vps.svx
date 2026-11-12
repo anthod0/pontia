@@ -1,0 +1,178 @@
+---
+title: "在 VPS 上运行 Codex 和 pi：常驻编程 Agent 的设置清单"
+description: 如何为长时间运行的 Codex、pi 等编程 Agent 设置 Linux VPS 并在手机上访问它们，涵盖用户账户、systemd lingering、无头登录、Session 持久化，以及无需开放端口的远程访问。
+published: "2026-11-11"
+---
+
+笔记本上的编程 Agent 会在合上盖子时停止。把它移到一台常驻的 Linux 服务器上，长时间的重构或测试就能整夜运行，紧挨着仓库和构建工具，而你可以在任何设备上查看进度。
+
+服务器不一定是 VPS。家里的机器或闲置的迷你主机也一样可用。这份清单涵盖无头主机上最容易出问题的部分：用哪个账户运行 Agent、注销后保持进程存活、没有浏览器时如何登录，以及从手机访问 Session。示例使用 Codex CLI 和 pi。
+
+## 简短回答
+
+1. 为 Agent 创建一个专用的非 root 用户，并以该用户身份登录每个 Agent。
+2. 用 `npx @pontia/cli init` 安装并初始化 [Pontia](https://pontia.dev)，这是我们开发的工具。
+3. 在手机上打开 [app.pontia.dev](https://app.pontia.dev)。
+
+Pontia 在你注销后保持 Session 运行，并通过端到端加密的中继把服务器连接到你的手机，无需开放入站端口。OpenAI 的 ChatGPT 移动端远程控制无法直接在 Linux 服务器上运行。它需要一台保持唤醒的 Mac 或 Windows 主机运行 ChatGPT 桌面应用，并通过 SSH 连接服务器。
+
+本文其余部分逐步解释每个步骤，以及如果你愿意，如何自己搭建同样的组件。
+
+## 1. 用专用的非 root 用户运行 Agent
+
+Agent 以运行它的账户的权限执行操作。Codex 有操作系统强制的沙箱和审批策略。pi 默认两者都没有：它的[安全指南](https://pi.dev/docs/latest/security)说明，它以其用户的权限执行操作，并且不会在每次工具调用前询问。无论哪种情况，账户都是你最外层的边界。
+
+```sh
+sudo adduser agent
+```
+
+把你的 SSH 公钥添加到新账户的 `~/.ssh/authorized_keys`。只给该账户它需要的仓库和凭据。优先使用限定到特定仓库的 deploy key 或细粒度 token，而不是你的个人 SSH 密钥，这样错误的或被提示注入的命令就无法推送到你拥有的所有仓库。
+
+后续步骤请以该用户身份通过 SSH 运行（`ssh agent@your-server`），而不是通过 `su` 或 `sudo -u`。这些命令不会设置 `systemctl --user` 所需的会话环境。
+
+## 2. 在没有浏览器的情况下登录 Agent
+
+服务器没有浏览器，所以在支持的地方使用设备代码流程：
+
+```sh
+codex login --device-auth
+```
+
+Codex 会输出一个 URL 和一个代码，你在手机或笔记本上打开即可。对于 pi，把提供商的 API key 设置为环境变量，或在 `pi` 中运行 `/login`。[pi 快速开始](https://pi.dev/docs/latest/quickstart)列出了支持的提供商。
+
+## 3. 注销后保持服务运行
+
+在大多数发行版上，用户的最后一个会话结束时，systemd 会停止该用户的服务。启用 lingering 让用户管理器保持运行：
+
+```sh
+sudo loginctl enable-linger agent   # from an admin account
+systemctl --user is-system-running  # as agent, over SSH
+```
+
+`is-system-running` 应输出 `running`，如果有无关的单元失败则输出 `degraded`。选择 Codex 时，`pontia init` 会为你启用 lingering。仅使用 pi 的设置需要你自己运行上面的命令。
+
+## 4. 安装 Pontia
+
+在已安装 Node.js 和 npm 的情况下，以 Agent 用户身份运行：
+
+```sh
+npx @pontia/cli init
+```
+
+选择 pi、Codex 或两者。初始化程序会：
+
+- 将 Pontia 安装为 systemd 用户服务；
+- 对于 Codex，安装一个启动 Codex app-server 守护进程的服务；
+- 对于 pi，安装 Pontia pi 插件；
+- 通过 URL 和一次性代码让你使用 Google 或 GitHub 登录，你在手机上批准即可；
+- 将服务器注册到官方中继。
+
+完成后，在手机上打开 [app.pontia.dev](https://app.pontia.dev) 并选择该服务器。你可以在这里启动、跟进、中断和继续 Codex 或 pi Session，并用 **Allow** 或 **Deny** 回应 Codex 的审批请求。
+
+服务器主动向外连接到中继，中继只在你的浏览器和服务器之间转发密文。你无需开放端口、配置 VPN 或在任何服务前面放置反向代理。高级用户可以[运行自己的中继](/docs/self-hosted-edge)。
+
+从 Dashboard 启动的 pi Session 在 tmux 中运行，独立于 Pontia 服务，因此重启或更新 Pontia 不会停止它们。你仍然可以 SSH 登录，用 `tmux attach -t SESSION_NAME` 附加到其中一个。名称以 `pontia_` 开头。
+
+检查和维护设置：
+
+```sh
+pontia status
+pontia doctor   # checks service, config, login, and remote registration
+pontia update   # installs the latest signed release and restarts the service
+journalctl --user -u pontia.service --no-pager -n 200
+```
+
+## 自己搭建
+
+不用 Pontia 的话，你需要用标准工具搭建同样的组件。
+
+**Session 持久化。** 直接在 SSH shell 中启动的 Agent 会随连接一起终止。在 tmux 中运行它：
+
+```sh
+tmux new -s work
+pi        # or codex
+# detach with Ctrl-b d, reattach later with: tmux attach -t work
+```
+
+从 SSH 启动的 tmux 服务器属于你的登录会话。启用 lingering 后它通常能在注销后存活，但在 `logind.conf` 中设置了 `KillUserProcesses=yes` 的系统上仍会被终止，而且重启后永远不会恢复。要让它在这两种情况下都存活，把 tmux 作为用户服务运行。将以下内容保存为 `~/.config/systemd/user/agent-tmux.service`：
+
+```ini
+[Unit]
+Description=tmux server for coding agents
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/tmux -L agents new-session -d -s main
+ExecStop=/usr/bin/tmux -L agents kill-server
+
+[Install]
+WantedBy=default.target
+```
+
+然后启用并附加：
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now agent-tmux
+tmux -L agents attach -t main
+```
+
+`-L agents` 让这个服务器使用自己的 socket，不会和你手动启动的 tmux Session 混在一起。重启后 Session 会以空状态恢复，你用 `codex resume --last` 或 `pi --continue` 继续对话。
+
+**网络访问。** 让 Agent 服务只监听 localhost。OpenAI 的 [Remote connections 指南](https://learn.chatgpt.com/docs/remote-connections)指出，不要在共享或公共网络上暴露 Codex app-server 的传输端口，而应使用 VPN 或网状网络。
+
+使用 Tailscale 时，在服务器和手机上安装它，并在两者上登录同一个账户：
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+```
+
+在 Tailscale 管理控制台中为服务器禁用密钥过期。设备密钥默认 180 天后过期，过期的服务器会掉出网络。
+
+**关闭公网 SSH。** 确认通过 Tailscale 的 SSH 可用后，屏蔽来自其他任何地方的入站流量。Tailscale 的 [ufw 指南](https://tailscale.com/docs/how-to/secure-ubuntu-server-with-ufw)在 Ubuntu 上是这样做的：
+
+```sh
+sudo ufw allow in on tailscale0
+sudo ufw default deny incoming
+sudo ufw delete allow 22/tcp     # only after testing SSH over Tailscale
+sudo ufw enable
+```
+
+先确认你的 VPS 提供商有网页控制台。如果 Tailscale 失效，它就是你重新进入的途径。如果你选择保留公网 SSH，只允许密钥登录。把以下内容放在 `/etc/ssh/sshd_config` 的靠前位置，因为 sshd 对每项设置采用它读到的第一个值，包括来自 `Include` 文件中的值：
+
+```sshconfig
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+```
+
+在重新加载 sshd 之前，运行 `sudo sshd -T | grep -E 'passwordauthentication|permitrootlogin'` 确认实际生效的值。
+
+**手机客户端。** 安装一个支持 Mosh 的 SSH 应用，添加密钥，然后附加到 tmux。手机切换网络或休眠时，Mosh 能保持 Session 存活。它需要服务器上安装 `mosh`，它使用的 UDP 端口 60000 到 61000 通过 Tailscale 无需修改防火墙即可工作。
+
+如果你的手机还必须运行另一个 VPN，Tailscale 就无法同时运行。[Tailscale 与 Cloudflare Tunnel 对比](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)介绍了无需在手机上使用 VPN 的 Cloudflare Tunnel，以及 VPN 和代理之间的路由冲突。
+
+**通知。** Codex hook 和 pi 扩展可以在 Agent 需要你时推送通知。[Codex 和 pi 的手机通知](/blog/coding-agent-phone-notifications)提供了这两个脚本。
+
+这些都需要你自己维护，而且在手机上你要用小键盘操作全屏 TUI。
+
+## 常见问题
+
+| 症状 | 可能原因 |
+| --- | --- |
+| 注销后 Agent 或服务停止 | 该用户未启用 lingering |
+| `systemctl --user` 失败并提示 "Failed to connect to bus" | 你用 `su` 切换了用户。请以该用户身份通过 SSH 登录 |
+| Agent 在你的 shell 中可用，但在服务中不可用 | 服务的 `PATH` 缺少包含 Agent 或 Node.js 的目录 |
+| 服务中的 Codex 使用的凭据与你的 shell 不同 | 服务和你的 shell 使用了不同的 `CODEX_HOME` 值 |
+| 在 pi 中 `Shift+Enter` 直接提交而不是换行 | tmux 的扩展按键未开启。参见 pi 的 [tmux 指南](https://pi.dev/docs/latest/tmux) |
+| 即使启用了 lingering，注销时 tmux Session 仍被终止 | `/etc/systemd/logind.conf` 中的 `KillUserProcesses=yes` 会终止登录会话 scope。按上文把 tmux 作为用户服务运行 |
+| 几个月后通过 Tailscale 的 SSH 失效 | 服务器的 Tailscale 密钥已过期。为服务器禁用密钥过期 |
+
+## 相关内容
+
+- [Tailscale 与 Cloudflare Tunnel：访问编程 Agent 服务器的对比](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
+- [在 Codex 或 pi 需要你时收到手机通知](/blog/coding-agent-phone-notifications)
+- [如何在手机上使用 Codex CLI](/blog/control-codex-cli-from-your-phone)
+- [如何在手机上使用 pi 编程 Agent](/blog/pi-coding-agent-remote-control)
+- [Linux 平台说明](/docs/platforms/linux)和[安全](/docs/security)

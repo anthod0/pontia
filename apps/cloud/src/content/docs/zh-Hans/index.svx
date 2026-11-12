@@ -1,0 +1,37 @@
+<svelte:head>
+	<title>文档 — Pontia</title>
+	<meta name="description" content="安装 Pontia，把你的设备变成可以随时随地控制的 Agent 云。" />
+</svelte:head>
+
+# Pontia 文档
+
+Pontia 把你的设备变成 Agent 云。编程 Agent 使用你设备上的工具和项目文件运行，而你通过托管的 Remote Dashboard 监控和控制它们的 Session。还可以使用 Local Dashboard 直接访问 `pontiad`。
+
+## 从这里开始
+
+- [快速开始](/docs/getting-started) — 安装 Pontia 并准备你的 Agent Client。
+- [初始化](/docs/initialization) — 使用交互式向导，或通过非交互式命令逐步初始化。
+- [远程访问](/docs/remote-access) — 注册设备并通过托管的 Dashboard 连接。
+- [Dashboard 指南](/docs/dashboard) — 激活 Workspace、启动 Session 并控制 Agent 的工作。
+- [Pontia 的工作原理](/docs/how-it-works) — 了解本地执行，以及你的设备、Pontia Cloud 和 Edge 之间的边界。
+
+## 远程访问与安全
+
+- [设备和账户管理](/docs/device-management) — 重命名、轮换、移除和撤销远程访问资源。
+- [自托管 Edge](/docs/self-hosted-edge) — 在公网 Linux 服务器上部署和运维加密中继。
+- [安全](/docs/security) — 了解信任边界、端到端加密、凭据和事件响应。
+
+## 使用 Pontia
+
+- [Agent Client](/docs/agent-clients) — 配置 pi、Codex、Claude Agent 和 ACP agent，并了解它们的功能差异。
+- [Workspace](/docs/workspaces) — 配置项目目录和文件发现。
+- [Workflow](/docs/workflows) — 运行持久、分阶段的 Agent 工作，使用明确的 Handoff 和重新规划。
+
+## 参考
+
+- [配置](/docs/configuration)和 [CLI 参考](/docs/cli)
+- [更新 Pontia](/docs/updating)
+- [Linux](/docs/platforms/linux) 和 [macOS](/docs/platforms/macos) 平台说明
+- [故障排除](/docs/troubleshooting)和 [FAQ](/docs/faq)
+
+Agent 的执行留在你的设备上。Remote Dashboard 流量在浏览器和设备之间端到端加密；Edge 提供连接，但不会收到明文业务流量。

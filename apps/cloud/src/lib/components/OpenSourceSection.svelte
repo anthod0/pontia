@@ -2,14 +2,16 @@
 	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon';
 	import { reveal } from '$lib/reveal';
+	import { m } from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 
 	const repository = 'https://github.com/anthod0/pontia';
 	const components = [
-		{ path: 'crates/pontiad', role: 'Device daemon' },
-		{ path: 'crates/pontia-e2e', role: 'Encryption protocol' },
-		{ path: 'crates/pontia-edge', role: 'Self-hostable relay' },
-		{ path: 'apps/dashboard', role: 'Dashboard' },
-		{ path: 'apps/cloud', role: 'Sign-in and authorization' }
+		{ path: 'crates/pontiad', role: m.open_source_role_daemon },
+		{ path: 'crates/pontia-e2e', role: m.open_source_role_encryption },
+		{ path: 'crates/pontia-edge', role: m.open_source_role_relay },
+		{ path: 'apps/dashboard', role: m.open_source_role_dashboard },
+		{ path: 'apps/cloud', role: m.open_source_role_cloud }
 	];
 </script>
 
@@ -17,19 +19,19 @@
 	<div class="panel">
 		<div class="glow" aria-hidden="true"></div>
 		<div class="copy reveal">
-			<h2 id="open-source-title">Every part of Pontia is open source.</h2>
-			<p class="lede">The daemon, Dashboard, encryption, relay, and Cloud live in one public repository. See exactly what runs on your device.</p>
+			<h2 id="open-source-title">{m.open_source_title()}</h2>
+			<p class="lede">{m.open_source_text()}</p>
 			<div class="actions">
-				<a class="button" href={repository} target="_blank" rel="noreferrer">View on GitHub<ArrowUpRightIcon size={16} /></a>
-				<a class="text-link" href="/docs/security">Security model<ArrowRightIcon size={12} /></a>
+				<a class="button" href={repository} target="_blank" rel="noreferrer">{m.view_on_github()}<ArrowUpRightIcon size={16} /></a>
+				<a class="text-link" href={localizeHref('/docs/security')}>{m.security_model()}<ArrowRightIcon size={12} /></a>
 			</div>
 		</div>
 
-		<nav class="repo reveal" style="--i: 2" aria-label="Pontia source code">
+		<nav class="repo reveal" style="--i: 2" aria-label={m.open_source_repository_label()}>
 			<div class="repo-header"><span class="lights"><i></i><i></i><i></i></span><span>anthod0/pontia</span></div>
 			<ul>
 				{#each components as component, index}
-					<li class="reveal" style={`--i: ${index + 3}`}><a href={`${repository}/tree/main/${component.path}`} target="_blank" rel="noreferrer"><code>{component.path}</code><span>{component.role}</span><ArrowUpRightIcon size={12} /></a></li>
+					<li class="reveal" style={`--i: ${index + 3}`}><a href={`${repository}/tree/main/${component.path}`} target="_blank" rel="noreferrer"><code>{component.path}</code><span>{component.role()}</span><ArrowUpRightIcon size={12} /></a></li>
 				{/each}
 			</ul>
 		</nav>

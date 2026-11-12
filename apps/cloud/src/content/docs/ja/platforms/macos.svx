@@ -1,0 +1,67 @@
+<svelte:head>
+	<title>macOS — Pontia</title>
+	<meta name="description" content="Pontia の macOS の要件と LaunchAgent の管理について説明します。" />
+</svelte:head>
+
+# macOS
+
+Pontia は、Intel と Apple Silicon の macOS 13.5 以降をサポートします。ローカルのコントロールプレーンと Codex デーモンは、ユーザーごとの LaunchAgent を使います。セルフホストの Edge には [Linux サーバー](/docs/self-hosted-edge) を使ってください。
+
+## インストール要件
+
+推奨の `npx @pontia/cli init` によるセットアップでは、Node.js と npm をインストールします。[はじめに](/docs/getting-started) を参照してください。
+
+代替のシェルインストーラーには、`curl`、`grep`、`install`、`mktemp`、`mv`、`openssl`、`rm`、`sed`、`shasum`、`tar`、`tr`、`uname`、`wc` が必要です。
+
+システムの `openssl` には、必要な Ed25519 コマンドがない場合があります。インストーラーは Homebrew の標準的な `openssl@3` のパスを自動的に確認します。
+
+```text
+/opt/homebrew/opt/openssl@3/bin/openssl
+/usr/local/opt/openssl@3/bin/openssl
+```
+
+`PONTIA_OPENSSL` を使って、互換性のある別の実行ファイルをインストーラーに指定できます。
+
+デフォルトのバイナリディレクトリは `$HOME/.local/bin` です。`pontia` コマンドを直接実行するには、シェルの `PATH` に追加してください。
+
+## LaunchAgent
+
+初期化により、Pontia のサービス定義が次の場所にインストールされます。
+
+```text
+~/Library/LaunchAgents/dev.pontia.pontiad.plist
+```
+
+次のコマンドで管理します。
+
+```sh
+pontia up
+pontia status
+pontia down
+```
+
+直接診断するには次を使います。
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.pontiad
+```
+
+Codex を選択した場合、Pontia は次もインストールします。
+
+```text
+~/Library/LaunchAgents/dev.pontia.codex-daemon.plist
+```
+
+次のコマンドで確認します。
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.codex-daemon
+```
+
+LaunchAgent の定義には、実行ファイルの絶対パスと、管理された実行ファイルの検索パスが保存されます。Client やそのホームディレクトリを移動した後は、カスタムのランタイムパスがあればそれも渡して、`pontia setup CLIENT` を実行してください。
+
+## 更新
+
+`pontia update` は、置き換えの前に `/usr/sbin/lsof` を使って、実行中の CLI がインストール済みのファイルであることを確認します。`pontia` と `pontiad` は通常のファイルとして一緒に置き、インストール済みの `pontia` を直接実行してください。
+
+初期化とライフサイクルのコマンドは、Agent Client を実行するユーザーで実行してください。Pontia は、そのユーザーのホーム、認証情報、GUI の LaunchAgent ドメインを使います。

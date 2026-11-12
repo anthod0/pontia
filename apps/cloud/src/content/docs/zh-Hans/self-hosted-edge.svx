@@ -1,0 +1,105 @@
+<svelte:head>
+	<title>自托管 Edge — Pontia</title>
+	<meta name="description" content="在公网 Linux 服务器上部署和运维自托管的 Pontia Edge。" />
+</svelte:head>
+
+# 自托管 Edge
+
+自托管 Edge 负责中继 Dashboard 流量，这些流量在浏览器和你的 Pontia 设备之间始终保持端到端加密。Agent 运行在你的设备上，Pontia Cloud 则提供登录、设备归属、Edge 注册和连接授权。
+
+## 要求
+
+使用满足以下条件的公网 Linux 服务器：
+
+- x86_64 或 ARM64 架构；
+- 以 systemd 作为系统服务管理器；
+- 一个服务器可以绑定并接收流量的公网 IPv4 地址；
+- 出站 HTTPS 和 DNS 访问；
+- `curl`、`grep`、`install`、`mktemp`、`mv`、`openssl`、`rm`、`sed`、`sha256sum` 和 `tar`；
+- 支持 Ed25519 验证的 OpenSSL。
+
+`pontia-edge` 仅支持 Linux。
+
+## 选择网络模式
+
+默认部署在公网 443 端口上提供 HTTPS 和 WSS，并使用 HTTP-01 证书验证。在初始化和证书续期期间，公网 80 端口也必须能访问到服务器。
+
+如果 80 或 443 端口不可用，请在 [Edge 设置](/settings/edges)中选择替代部署方式。它使用一个浏览器允许的自定义 HTTPS/WSS 端口（推荐 8443）和 DNS-01 证书验证。请在主机防火墙和服务商防火墙中开放所选端口。
+
+Pontia Cloud 会在 `edge.pontia.dev` 下为 Edge 分配主机名，并自动配置其 DNS 记录。
+
+## 从 Cloud 部署
+
+[打开 Edge 设置](/settings/edges)，按提示登录。然后：
+
+1. 选择**生成部署命令**。
+2. 选择默认端口模式或替代端口模式。
+3. 复制一次性命令，并在公网 Linux 服务器上运行。
+
+该命令包含一个短期有效的部署票据。请妥善保密，并在 Cloud 显示的过期时间之前运行。初始化过程会：
+
+- 下载并验证已签名的 `pontia-edge` 版本；
+- 检测并证明对服务器公网 IPv4 地址的控制权；
+- 通过 Pontia Cloud 配置分配的 DNS 名称；
+- 获取 Let's Encrypt 证书；
+- 安装并启动 `pontia-edge.service`；
+- 等待 Cloud 验证公网 HTTPS 健康检查端点；
+- 启用稳定版本的自动检查。
+
+部署成功的 Edge 会出现在 [Edge 设置](/settings/edges)的**你的 Edge** 下，并显示为正常状态。
+
+## 继续未完成的部署
+
+修复报告的问题后，在同一台服务器上继续初始化：
+
+```sh
+sudo pontia-edge retry
+```
+
+在设置成功之前，初始化状态保存在 `/etc/pontia/edge/pending-init.json` 中。重试可以继续一个已注册的 Edge，而不会创建第二个注册。
+
+## 运维 Edge
+
+检查服务和日志：
+
+```sh
+sudo systemctl status pontia-edge.service
+sudo journalctl -u pontia-edge.service --no-pager -n 200
+```
+
+公网健康检查端点是 `https://HOST[:PORT]/healthz`，服务可访问时返回 `ok`。
+
+手动更新：
+
+```sh
+sudo pontia-edge update
+```
+
+管理稳定版本的自动更新：
+
+```sh
+sudo pontia-edge auto-update status
+sudo pontia-edge auto-update enable
+sudo pontia-edge auto-update disable
+```
+
+自动更新每小时检查一次，附带最多十分钟的随机延迟。禁用后续检查时，已在进行中的更新会继续完成。
+
+## 存储的文件
+
+托管安装使用以下文件：
+
+| 路径 | 用途 |
+| --- | --- |
+| `/usr/local/bin/pontia-edge` | Edge 可执行文件 |
+| `/etc/pontia/edge/config.json` | 端点配置 |
+| `/etc/pontia/edge/credential` | Edge 服务凭据 |
+| `/etc/pontia/edge/tls.pem` | TLS 证书和密钥材料 |
+| `/etc/pontia/edge/acme-account.json` | ACME 账户状态 |
+| `/etc/systemd/system/pontia-edge.service` | systemd 服务定义 |
+
+请保持 `/etc/pontia/edge` 的私密性，并按照你的服务器策略进行备份。
+
+## 删除 Edge
+
+在 Cloud 中删除自托管 Edge 会永久移除其注册及关联的设备。服务器上的安装需要单独处理：先迁移或停用受影响的设备，然后停止服务并从服务器上删除其文件。

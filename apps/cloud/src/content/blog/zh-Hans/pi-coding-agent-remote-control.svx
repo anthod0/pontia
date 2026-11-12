@@ -1,0 +1,166 @@
+---
+title: "如何在手机上使用 pi coding agent"
+description: 在保留原生 pi TUI 的同时，从手机上跟进和引导 pi coding agent 会话。对比 Pontia、自行搭建的 SSH 加 tmux 方案和在 Termux 中运行 pi，并介绍 tmux 按键设置和安全注意事项。
+published: "2026-11-11"
+---
+
+[pi](https://pi.dev) 是一个极简的终端 coding agent。它的会话运行在你机器上的终端中，所以长任务很容易启动，但离开电脑后就很难查看进度。本文介绍从手机或另一台电脑访问 pi 会话的几种方式。
+
+Pontia 是我们开发的工具。
+
+## 简短回答
+
+pi 没有官方的远程或移动客户端。
+
+| 你的情况 | 最合适的方案 |
+| --- | --- |
+| 你想在手机浏览器中跟进、引导和继续 pi 会话，同时保留 TUI | Pontia |
+| 你更愿意自己搭建和维护远程访问 | SSH 或 Mosh、tmux，以及一个私有网络 |
+| 你想直接在手机上写代码，不依赖另一台机器 | 在 Android 的 Termux 中运行 pi |
+
+## 方案 1：Pontia
+
+Pontia 是一个免费、开源的远程控制工具，用于控制运行在你自己机器上的 coding agent。只需安装一次并登录，然后在手机上打开 [app.pontia.dev](https://app.pontia.dev)。无需设置 VPN、端口转发或终端应用。
+
+Pontia 保留原生的 pi TUI。当你从 Dashboard 启动一个 Session 时，Pontia 会在所选项目中的一个 tmux 窗格里启动 pi。一个 pi 插件会把对话上报给 Dashboard，并接收来自 Dashboard 的控制操作。在手机上你可以：
+
+- 在项目目录中启动 pi Session，并实时跟进流式输出的回复和工具输出；
+- 发送消息，在 pi 工作时将消息排队，或中断当前轮次；
+- 编辑之前的消息，从该位置分叉对话；
+- 用 `/model` 切换模型，用 `/compact` 压缩上下文，并查看估算的上下文用量；
+- 用 `@` 引用文件。
+
+该 Session 是一个真实的 pi 进程，因此你也可以随时从终端连接到它。来自 TUI 和 Dashboard 的消息进入同一个对话，历史记录保存在 pi 自己的会话文件中：
+
+```sh
+tmux ls                       # Pontia sessions start with pontia_
+tmux attach -t SESSION_NAME
+```
+
+pi 继续在你的机器上运行，使用它自己的提供商凭据和配置。浏览器和你的机器通过 Pontia 的中继建立端到端加密的会话，中继只转发密文。你的机器主动向外连接，因此不需要开放任何入站端口。
+
+Pontia 支持 Linux 和 macOS 13.5 或更高版本，包括无头服务器。除了单个 Session，[Workflow](/docs/workflows) 可以把一个大型任务作为一系列 pi Session 来运行，每个 Session 都有全新的上下文和明确的 Handoff 文件。
+
+### 设置
+
+安装 `pi` 和 `tmux`，并在 pi 中配置你的模型提供商（`/login` 和 `/model`）。安装好 Node.js 和 npm 后，运行：
+
+```sh
+npx @pontia/cli init   # pi is selected by default
+```
+
+`pontia init` 会安装 pi 插件，启动 Pontia 服务，让你通过 Google 或 GitHub 登录，并将机器注册到一个官方中继。在无头机器上，登录过程会打印一个 URL 和一个一次性代码，你可以在手机上批准。完成后，打开 [app.pontia.dev](https://app.pontia.dev)，选择这台机器，然后启动一个 Session。
+
+[pi Agent Client 参考](/docs/agent-clients/pi)介绍了自定义 pi 命令和诊断方法。高级用户可以[运行自己的中继](/docs/self-hosted-edge)来代替官方中继。
+
+## 方案 2：用 SSH 和 tmux 自行搭建
+
+你也可以用标准工具搭建远程访问：tmux 让 pi 保持运行，私有网络让机器可被访问，手机上的 SSH 客户端连接到它。一个小型 pi 扩展可以在 pi 等待输入时通知手机。
+
+### 1. 用 Tailscale 让机器可被访问
+
+在主机上安装 Tailscale 并登录：
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4      # note the 100.x.y.z address
+```
+
+在手机上安装 Tailscale 应用，并用同一个账户登录。对于常开的主机，请在管理控制台中禁用[密钥过期](https://tailscale.com/docs/features/access-control/key-expiry)，因为密钥默认在 180 天后过期。
+
+手机同一时间只能运行一个 VPN，因此 Tailscale 应用会关闭其他 VPN 或代理应用。[Tailscale 与 Cloudflare Tunnel 对比](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)介绍了不占用手机 VPN 槽位的 Cloudflare Tunnel，以及 VPN 之间的路由冲突。
+
+### 2. 在 tmux 中运行 pi
+
+先把下文 tmux 一节中的 extended-keys 设置添加到 `~/.tmux.conf`。然后：
+
+```sh
+tmux new -s pi
+pi
+# detach with Ctrl-b d
+```
+
+在手机上连接并重新接入：
+
+```sh
+mosh agent@100.x.y.z tmux attach -t pi
+```
+
+Mosh 能在手机切换网络或休眠时保持会话。它需要主机上安装 `mosh`，以及支持它的手机客户端。不使用 Mosh 时，请用 `ssh -t agent@100.x.y.z tmux attach -t pi`。
+
+如果 tmux 本身退出了（例如重启之后），在项目目录中运行 `pi --continue` 可以恢复最近的会话。
+
+### 3. 用手机键盘滚动和引导
+
+pi 默认以全屏模式运行。它会固定编辑器，并自己用 `PageUp` 和 `PageDown` 滚动对话记录，因此 pi 的输出不会进入 tmux 的回滚缓冲区。手机键盘很少有这些按键。你有两种选择：
+
+- 将 pi 切换到常规模式，它会写入终端的普通回滚缓冲区。在 `~/.pi/agent/settings.json` 中设置 `"tuiMode": "regular"`，或使用 `--tui-mode regular` 启动 pi。之后用 tmux 复制模式 `Ctrl-b [` 滚动。
+- 保持全屏模式，并使用带有包含 `PageUp` 和 `PageDown` 的额外按键行的手机 SSH 应用。
+
+pi 工作时最常用的按键：
+
+| 操作 | 按键 |
+| --- | --- |
+| 停止当前任务 | `Escape` |
+| 发送一条引导当前任务的消息 | pi 工作时按 `Enter` |
+| 将后续消息排队到任务完成后 | `Alt+Enter` |
+| 把排队的消息取回编辑器 | `Alt+Up` |
+
+任务期间用 `Enter` 发送的消息会在当前回复及其工具调用完成后送达。要重新映射按键，请把它们写入 `~/.pi/agent/keybindings.json` 并运行 `/reload`。pi 的[按键绑定参考](https://pi.dev/docs/latest/keybindings)列出了各操作的名称。
+
+### 4. 在 pi 等待时收到通知
+
+在 ntfy 手机应用中订阅一个足够长的随机 [ntfy](https://ntfy.sh/) 主题。然后把以下内容保存为 `~/.pi/agent/extensions/ntfy.ts`。pi 会自动加载它，`/reload` 可以应用更改。
+
+```ts
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { basename } from "node:path";
+
+const url = "https://ntfy.sh/YOUR_TOPIC";
+
+export default function (pi: ExtensionAPI) {
+  pi.on("agent_settled", async (event, ctx) => {
+    if (event.aborted) return; // you pressed Escape, so you are already there
+    await fetch(url, {
+      method: "POST",
+      headers: { Title: `pi: ${basename(ctx.cwd)}` },
+      body: "Waiting for input",
+    }).catch(() => {});
+  });
+}
+```
+
+请使用 `agent_settled` 而不是 `agent_end`。在 `agent_end` 之后，pi 可能会重试、压缩上下文或继续处理排队的消息，因此在那里发送的通知可能在 pi 仍在工作时就到达。[Codex 和 pi 的手机通知](/blog/coding-agent-phone-notifications)介绍了隐私问题和自托管 ntfy。
+
+### 最终效果
+
+每个部分都需要你自己维护：两台设备上的 Tailscale、手机上的 SSH 密钥、tmux 和扩展。在手机上，你要用小键盘操作 pi 的完整 TUI。
+
+## 方案 3：直接在手机上运行 pi
+
+pi 可以通过 [Termux](https://termux.dev/) 在 Android 上运行。用 `npm` 安装 Node.js 和 pi，然后在手机上的某个文件夹中工作。这适合小的修改和脚本。此时项目文件、工具链和构建都在手机上，因此它无法让你访问主机器上的工作。
+
+## 让 pi 按键在 tmux 中正常工作
+
+默认情况下，tmux 可能把 `Shift+Enter`、`Ctrl+Enter` 和 `Enter` 报告为同一个按键，导致 `Shift+Enter` 提交了你的提示词，而不是插入新行。只要你在 tmux 中使用 pi TUI 就会受影响，包括你接入的 Pontia Session。pi 的 [tmux 指南](https://pi.dev/docs/latest/tmux)建议 tmux 3.5 或更高版本使用以下 `~/.tmux.conf`：
+
+```tmux
+set -g extended-keys on
+set -g extended-keys-format csi-u
+```
+
+对于 tmux 3.2 到 3.4，只使用 `set -g extended-keys on`。该设置作用于 tmux 服务器，因此测试前请重启 tmux。
+
+## 远程控制不会让 pi 更安全
+
+pi 不会在每次工具调用前停下来请求批准。它的[安全指南](https://pi.dev/docs/latest/security)指出，pi 以启动它的账户的权限运行，而查看对话记录并不构成安全边界。这一点适用于本文的所有方案。在手机上查看可以让你中断出错的运行，但无法在单条命令执行前阻止它。
+
+如果让 pi 在无人看管的情况下工作，请限制它能访问的范围。使用专用的用户账户、容器或虚拟机，以及针对该任务限定范围的短期凭据。pi 的[在隔离环境中运行](https://pi.dev/docs/latest/containerization)指南介绍了这些选项。
+
+## 相关文章
+
+- [在 Codex 或 pi 需要你时收到手机通知](/blog/coding-agent-phone-notifications)
+- [在 VPS 上运行 coding agent](/blog/run-coding-agents-on-a-vps)，让 pi 保持在常开的服务器上
+- [如何在手机上使用 Codex CLI](/blog/control-codex-cli-from-your-phone)
+- [Pontia 的工作原理](/docs/how-it-works)

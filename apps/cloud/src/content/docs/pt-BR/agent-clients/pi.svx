@@ -1,0 +1,69 @@
+<svelte:head>
+	<title>Agent Client pi — Pontia</title>
+	<meta name="description" content="Instale e use a integração do Agent Client pi com o Pontia." />
+</svelte:head>
+
+# Agent Client pi
+
+A integração com o pi conecta sessões reais do pi, mantidas pelo `tmux`, ao Pontia. Você pode usar a TUI nativa e o Dashboard com a mesma conversa por trás.
+
+## Requisitos
+
+Instale estes comandos antes de executar a inicialização do Pontia:
+
+- `pi`
+- `tmux`
+
+Confirme que eles estão disponíveis para o seu usuário:
+
+```sh
+pi --version
+tmux -V
+```
+
+Configure as credenciais do seu provedor de modelos no pi antes de iniciar Sessions.
+
+## Instalar a integração
+
+Selecione **pi** ao executar:
+
+```sh
+pontia init
+```
+
+Para instalar ou reparar depois, execute `pontia setup pi`. Isso também ativa o Client pi.
+
+Os dois comandos de configuração verificam `pi --version` e executam:
+
+```sh
+pi install npm:@pontia/pi-client-plugin
+```
+
+O plugin informa ao `pontiad` os eventos nativos de ciclo de vida e de conversa do pi e aceita os controles suportados vindos do Pontia.
+
+## Como as Sessions do pi rodam
+
+O Pontia inicia o pi dentro de um painel `tmux` gerenciado, na Workspace selecionada. Execute comandos de Workflow como `pontia workflow submit` no painel gerenciado do Agent Node atual do Workflow.
+
+O histórico de conversas é lido dos dados nativos do pi. Mantenha esses dados disponíveis para navegar pelas conversas e retomá-las pelo Pontia.
+
+## Substituir o comando do pi
+
+O comando padrão da TUI é `pi`. Para usar outro executável ou wrapper, defina-o em `$PONTIA_HOME/config.toml`:
+
+```toml
+[runtime.pi]
+tui_command = "/absolute/path/to/pi"
+```
+
+Para uma substituição restrita a um comando, use `PONTIA_PI_TUI_COMMAND`. Para uma configuração persistente do serviço, atualize o `config.toml` e execute `pontia up`.
+
+## Diagnosticar a integração
+
+O log de hooks do pi do Pontia fica em:
+
+```text
+$PONTIA_HOME/state/pi-hook.log
+```
+
+Verifique também se `pontia status` informa um serviço saudável e se o plugin do pi continua instalado. Veja [Solução de problemas](/docs/troubleshooting) para logs do serviço e etapas comuns de recuperação.

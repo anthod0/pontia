@@ -1,0 +1,63 @@
+<svelte:head>
+	<title>Gerenciamento de dispositivos e conta — Pontia</title>
+	<meta name="description" content="Gerencie dispositivos remotos do Pontia, identidades de criptografia, métodos de login e sessões." />
+</svelte:head>
+
+# Gerenciamento de dispositivos e conta
+
+Um dispositivo registrado é um alvo de controle remoto que pertence ao seu usuário do Pontia Cloud. O registro, a identidade de criptografia local, o Edge selecionado e o serviço local precisam estar em acordo para que o acesso remoto funcione.
+
+## Verificar um dispositivo
+
+Execute no dispositivo registrado:
+
+```sh
+pontia doctor
+```
+
+O comando verifica o ID local do dispositivo, o registro no Cloud, o Edge selecionado e a identidade de criptografia de ponta a ponta armazenada. Ele exige uma credencial de CLI válida obtida com `pontia login`.
+
+## Renomear um dispositivo ou mudar o handle
+
+Use as [configurações de Dispositivos](/settings/devices) ou execute:
+
+```sh
+pontia remote edit --name "Build workstation"
+pontia remote edit --handle build-workstation
+```
+
+As duas opções podem ser usadas juntas. Mudar o handle atualiza a URL do dispositivo em `app.pontia.dev/HANDLE`, preservando a identidade de criptografia e o Edge selecionado.
+
+## Rotacionar a chave do dispositivo
+
+Execute:
+
+```sh
+pontia remote rotate-key
+```
+
+O Pontia cria uma nova identidade E2E do dispositivo, atualiza o registro no Cloud, grava a substituta em `$PONTIA_HOME/e2e-identity.json` e reinicia o serviço local. As sessões criptografadas existentes entre navegador e dispositivo deixam de corresponder à nova identidade e precisam se reconectar.
+
+Use este comando quando o arquivo de identidade puder ter sido exposto ou quando você quiser substituir a identidade criptográfica do dispositivo.
+
+## Desativar o acesso remoto
+
+No dispositivo:
+
+```sh
+pontia remote disable
+```
+
+Isso cancela o registro do dispositivo, remove a identidade E2E local, atualiza a configuração local e reinicia o serviço. A credencial de CLI é preservada para os comandos seguintes do Cloud.
+
+Remover um dispositivo nas [configurações de Dispositivos](/settings/devices) cancela o registro desse dispositivo. O seu login na CLI e os outros dispositivos registrados continuam disponíveis.
+
+## Gerenciar métodos de login
+
+Nas [configurações de Conta](/settings/account), vincule o Google ou o GitHub como métodos de login. Cada conta de provedor pode ser vinculada a apenas um usuário do Pontia. O Pontia identifica as contas de provedor pela identidade estável no provedor, em vez de tratar endereços de e-mail iguais como a mesma conta.
+
+Mantenha pelo menos um método de login funcional vinculado ao seu usuário.
+
+## Gerenciar sessões do navegador
+
+Nas [configurações de Sessões](/settings/sessions), você pode revogar uma sessão do navegador ou sair de todos os outros navegadores. Uma sessão do navegador revogada não pode ser renovada depois que o token de acesso atual expirar.

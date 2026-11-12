@@ -10,6 +10,7 @@ node_modules
 /static/docs/**/*.md
 /static/blog/*.md
 worker-configuration.d.ts
+/project.inlang/cache
 
 # OS
 .DS_Store

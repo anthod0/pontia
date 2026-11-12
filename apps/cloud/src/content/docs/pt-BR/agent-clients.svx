@@ -1,0 +1,60 @@
+<svelte:head>
+	<title>Agent Clients — Pontia</title>
+	<meta name="description" content="Escolha e configure os clientes de agentes de programação suportados pelo Pontia." />
+</svelte:head>
+
+# Agent Clients
+
+Um Agent Client conecta o Pontia à sessão nativa, ao canal de controle e ao histórico de conversas de um agente de programação. O agente continua rodando localmente com suas próprias credenciais, configuração, ferramentas e permissões de sistema de arquivos.
+
+O Pontia inclui estes Agent Clients:
+
+| Cliente | Requisito local | Integração local |
+| --- | --- | --- |
+| [pi](/docs/agent-clients/pi) | `pi` e `tmux` | Plugin do pi do Pontia |
+| [Codex](/docs/codex) | Um Codex CLI com suporte ao daemon app-server | Inicialização do daemon do Codex por usuário, launcher e PATH do shell |
+| [Claude Agent](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) | Node.js LTS, npm e autenticação do Claude Code | O pacote `@pontia/claude-client` do npm |
+| Agentes ACP | Um agente que fala o Agent Client Protocol via stdio | Nenhuma; ative a entrada depois de instalar o agente |
+
+## Escolha os Clients durante a inicialização
+
+Execute:
+
+```sh
+pontia init
+```
+
+O inicializador verifica os Clients selecionados antes de aplicar a configuração. O pi vem selecionado por padrão; Codex e `claude-agent` são opcionais. Os Clients selecionados ficam ativados para novas Sessions.
+
+<h2 id="enable-an-acp-agent">Ativar um agente ACP</h2>
+
+O Pontia oferece entradas ACP para Grok Build (`grok agent stdio`), Kimi CLI (`kimi acp`) e OpenCode (`opencode acp`). Instale o agente e depois ative a entrada dele no Dashboard em **Settings → Agent Clients**, ou execute:
+
+```sh
+pontia client enable opencode
+```
+
+Para adicionar outro agente, use **Add custom client** na mesma página de configurações, ou defina-o em `$PONTIA_HOME/config.toml`:
+
+```toml
+[acp.agents.company-agent]
+name = "Company Agent"
+command = "/opt/company-agent/bin/agent"
+args = ["--acp"]
+```
+
+Em vez de `command` e `args`, uma entrada pode definir `registry_id` para iniciar um agente a partir do registro ACP. O agente precisa suportar carregar e fechar sessões; o Pontia informa um recurso ausente quando a Session é iniciada.
+
+Execute `pontia setup pi`, `pontia setup codex` ou `pontia setup claude-agent` para instalar ou reparar uma integração local. Omita o Client para selecioná-lo de forma interativa. O setup também ativa o Client.
+
+## Os recursos variam entre Clients
+
+O Dashboard apresenta os controles suportados pelo Client selecionado, como interrupção, troca de modelo, ramificação do histórico e entrega em fila.
+
+Depois da vinculação, uma Session do Pontia fica associada de forma permanente a uma identidade de conversa nativa do cliente. Reabrir a mesma conversa nativa continua a Session existente; uma nova conversa nativa pertence a uma nova Session.
+
+## Credenciais e permissões dos Clients
+
+Cada Client usa suas próprias credenciais, sandbox e permissões locais. Entre em cada Client e verifique se ele consegue fazer o trabalho pretendido antes de iniciar a integração.
+
+Veja [Solução de problemas](/docs/troubleshooting) quando um Client estiver ausente, não conseguir iniciar ou parar de reportar saída.

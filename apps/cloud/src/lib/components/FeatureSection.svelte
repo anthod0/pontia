@@ -2,6 +2,8 @@
 	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import LockSimpleIcon from 'phosphor-svelte/lib/LockSimpleIcon';
 	import { reveal } from '$lib/reveal';
+	import { m } from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 
 	const clients = [
 		{ name: 'pi', logo: '/client-logos/pi.svg' },
@@ -16,10 +18,10 @@
 <section id="features" class="highlights page-width section-block" aria-labelledby="features-title" {@attach reveal()}>
 	<div class="section-intro reveal">
 		<div class="section-heading">
-			<h2 id="features-title">Control your agents from anywhere.</h2>
-			<p>Start work on your device. Follow it and step in from any browser.</p>
+			<h2 id="features-title">{m.features_title()}</h2>
+			<p>{m.features_intro()}</p>
 		</div>
-		<a class="section-link" href="/docs/how-it-works">How Pontia works<ArrowRightIcon size={12} /></a>
+		<a class="section-link" href={localizeHref('/docs/how-it-works')}>{m.how_pontia_works()}<ArrowRightIcon size={12} /></a>
 	</div>
 
 	<div class="bento">
@@ -34,9 +36,9 @@
 				</div>
 			</div>
 			<div class="card-copy">
-				<h3>Bring your own subscriptions.</h3>
-				<p>Pontia doesn't sell models or tokens. Your agents run on the accounts and plans you already pay for.</p>
-				<a class="card-link" href="/docs/agent-clients">Agent Clients<ArrowRightIcon size={12} /></a>
+				<h3>{m.features_subscriptions_title()}</h3>
+				<p>{m.features_subscriptions_text()}</p>
+				<a class="card-link" href={localizeHref('/docs/agent-clients')}>{m.agent_clients()}<ArrowRightIcon size={12} /></a>
 			</div>
 		</article>
 
@@ -51,9 +53,9 @@
 				</div>
 			</div>
 			<div class="card-copy">
-				<h3>In your pocket.</h3>
-				<p>Add the Dashboard to your home screen. Control from anywhere.</p>
-				<a class="card-link" href="/docs/dashboard">Dashboard guide<ArrowRightIcon size={12} /></a>
+				<h3>{m.features_pocket_title()}</h3>
+				<p>{m.features_pocket_text()}</p>
+				<a class="card-link" href={localizeHref('/docs/dashboard')}>{m.dashboard_guide()}<ArrowRightIcon size={12} /></a>
 			</div>
 		</article>
 
@@ -67,8 +69,8 @@
 				</div>
 			</div>
 			<div class="card-copy">
-				<h3>Execution stays local.</h3>
-				<p>Agents run on your own devices, not a remote sandbox. Pontia connects you to them.</p>
+				<h3>{m.features_local_title()}</h3>
+				<p>{m.features_local_text()}</p>
 			</div>
 		</article>
 
@@ -86,9 +88,9 @@
 				</div>
 			</div>
 			<div class="card-copy">
-				<h3>Encrypted end to end.</h3>
-				<p>Only your browser and your device can read the session. Use an official Edge or run your own. Either way, the Edge only relays ciphertext.</p>
-				<a class="card-link" href="/docs/security">Security model<ArrowRightIcon size={12} /></a>
+				<h3>{m.features_encrypted_title()}</h3>
+				<p>{m.features_encrypted_text()}</p>
+				<a class="card-link" href={localizeHref('/docs/security')}>{m.security_model()}<ArrowRightIcon size={12} /></a>
 			</div>
 		</article>
 	</div>

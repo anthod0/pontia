@@ -1,0 +1,102 @@
+<svelte:head>
+	<title>Referência do CLI — Pontia</title>
+	<meta name="description" content="Referência dos comandos do Pontia para o serviço local, acesso remoto, atualização e Workflows." />
+</svelte:head>
+
+# Referência do CLI
+
+O CLI `pontia` configura a instalação local e delega as operações persistentes do plano de controle ao serviço `pontiad` em execução.
+
+Use `pontia COMMAND --help` para ver as opções exatas da versão instalada.
+
+## Configuração e ciclo de vida
+
+| Comando | Finalidade |
+| --- | --- |
+| `pontia init` | Selecionar Agent Clients, criar a configuração persistente, instalar integrações, iniciar o serviço por usuário e oferecer a configuração remota |
+| `pontia setup [CLIENT]` | Instalar ou reparar as integrações locais recomendadas; selecionar Clients quando omitido; habilitar os Clients selecionados |
+| `pontia up` | Instalar ou atualizar a definição do serviço por usuário e iniciar ou reiniciar o serviço |
+| `pontia status` | Mostrar o diretório de dados, a saúde do serviço local, o usuário conectado, o identificador remoto e o Edge selecionado |
+| `pontia doctor` | Explicar as verificações de serviço, configuração, login e registro remoto, com dicas de reparo |
+| `pontia down` | Parar e desativar o serviço por usuário |
+| `pontia update` | Instalar a release estável assinada mais recente de `pontia` e `pontiad` |
+| `pontia --version` | Exibir a versão instalada |
+
+`pontia setup` aceita `pi`, `codex` ou `claude-agent` e aplica a configuração recomendada sem opções adicionais de Client.
+
+Veja [Inicialização](/docs/initialization) para a configuração interativa e a sequência equivalente de comandos passo a passo.
+
+Parar o `pontiad` interrompe a observação, o recebimento de entradas e o agendamento de Workflows. Os Agent Clients gerenciam o ciclo de vida das suas conversas nativas separadamente.
+
+## Agent Clients
+
+| Comando | Finalidade |
+| --- | --- |
+| `pontia client list` | Listar todas as entradas de Agent Client com ID curto, nome, tipo e estado de habilitação |
+| `pontia client list --json` | Listar todas as entradas como JSON, incluindo ID, sobrescritas de configuração e configuração efetiva |
+| `pontia client show CLIENT` | Mostrar uma entrada |
+| `pontia client set CLIENT --config JSON_FILE` | Substituir as sobrescritas de configuração da entrada por um objeto JSON |
+| `pontia client enable CLIENT` | Permitir que novas Sessions usem a entrada |
+| `pontia client disable CLIENT` | Impedir que novas Sessions usem a entrada; as Sessions existentes não mudam |
+| `pontia client reset CLIENT` | Excluir as configurações salvas da entrada, o que também a desabilita |
+
+`CLIENT` é um ID curto como `pi`, `codex`, `claude-agent` ou o ID de um agente ACP. Use `--id ID` com um ID de `pontia client list --json` quando um ID curto for ambíguo.
+
+## Ferramentas para agentes
+
+`pontia --help` lista `send-file` e `workflow` em Agent tools.
+
+### Arquivos
+
+| Comando | Contexto | Finalidade |
+| --- | --- | --- |
+| `pontia send-file PATH` | Dentro de uma Session do Pontia | Compartilhar um arquivo com o usuário da Session; ele aparece no chat do Dashboard |
+
+### Workflows
+
+| Comando | Contexto | Finalidade |
+| --- | --- | --- |
+| `pontia workflow run FILE` | Qualquer shell local | Interpretar uma definição TOML e iniciar um Workflow pela API local |
+| `pontia workflow show [WORKFLOW_ID]` | Qualquer shell local; ID opcional dentro de um Node gerenciado | Exibir um contexto compacto do Workflow, do Node atual, da entrada, da saída e do Patch |
+| `pontia workflow submit` | Pane do Agent Node gerenciado atual | Declarar que a saída do Node está pronta |
+| `pontia workflow patch request` | Pane do Agent Node gerenciado atual | Relatar um problema bloqueante e iniciar o replanejamento |
+| `pontia workflow patch apply` | Pane do Re-planner atual | Aceitar a definição candidata como uma nova revisão |
+| `pontia workflow patch block` | Pane do Re-planner atual | Encerrar o Patch sem aplicar a definição candidata |
+
+Execute os comandos com escopo de pane no pane `tmux` gerenciado pelo Pontia do Agent Node ou Re-planner atual.
+
+## Login no Cloud e acesso remoto
+
+| Comando | Finalidade |
+| --- | --- |
+| `pontia login` | Concluir a autorização do dispositivo pelo navegador e guardar uma credencial do CLI |
+| `pontia remote edges` | Listar os Edges disponíveis como um array JSON de IDs e nomes |
+| `pontia remote enable` | Registrar este dispositivo, selecionar um Edge de forma interativa e criar sua identidade E2E |
+| `pontia remote enable --edge EDGE_ID --name NAME` | Registrar sem prompts; as duas opções são obrigatórias |
+| `pontia remote edit --name NAME` | Alterar o nome de exibição do dispositivo |
+| `pontia remote edit --handle HANDLE` | Alterar o identificador de URL do Dashboard do dispositivo |
+| `pontia remote rotate-key` | Substituir a identidade E2E e a versão da chave do dispositivo |
+| `pontia remote disable` | Cancelar o registro deste dispositivo e remover sua identidade remota local |
+
+Mudanças na configuração remota que afetam o `pontiad` reiniciam o serviço local automaticamente.
+
+## Código de saída e erros
+
+`pontia status` e `pontia doctor` terminam com sucesso quando o serviço local está em execução e a verificação de saúde HTTP passa. Leia os resultados de conta e remoto separadamente; o registro no Cloud não prova que o dispositivo está acessível pela internet.
+
+Use o código de saída para verificar se um comando teve sucesso. Os erros são escritos na saída de erro padrão com o prefixo `pontia:`. Inclua o erro, com dados sensíveis removidos, ao diagnosticar uma falha.
+
+## `pontia-edge`
+
+Um Edge auto-hospedado tem um CLI separado, operado como root:
+
+| Comando | Finalidade |
+| --- | --- |
+| `pontia-edge init --edge-id ID --ticket TICKET` | Inicializar e registrar um Edge; normalmente use o comando completo gerado pelo Cloud |
+| `pontia-edge retry` | Retomar uma inicialização incompleta no mesmo servidor |
+| `pontia-edge update` | Instalar a release estável assinada mais recente do Edge |
+| `pontia-edge auto-update enable` | Instalar e ativar verificações de atualização a cada hora |
+| `pontia-edge auto-update disable` | Desativar verificações futuras |
+| `pontia-edge auto-update status` | Mostrar o agendamento do timer e o resultado da última atualização |
+
+Veja [Auto-hospedar um Edge](/docs/self-hosted-edge) antes de usar esses comandos diretamente.

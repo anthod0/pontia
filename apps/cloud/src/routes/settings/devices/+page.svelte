@@ -5,23 +5,25 @@
   import { Button } from "$lib/components/ui/button";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
+  import { m } from "$lib/paraglide/messages";
+  import { getLocale } from "$lib/paraglide/runtime";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
   const deviceHandlePattern = "[a-z][a-z0-9_-]{3,47}";
 
   function date(value: string) {
-    return new Date(value).toLocaleString();
+    return new Date(value).toLocaleString(getLocale());
   }
 </script>
 
 <svelte:head>
-  <title>Device settings — Pontia</title>
+  <title>{m.devices_title()}</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
-<h1>Devices</h1>
-<p>Manage devices registered for remote Dashboard access.</p>
+<h1>{m.settings_devices()}</h1>
+<p>{m.devices_intro()}</p>
 {#if form?.error}<p class="auth-error" role="alert">{form.error}</p>{/if}
 
 {#if data.devices.length > 0}
@@ -36,34 +38,34 @@
               href={`https://app.pontia.dev/${device.handle}`}
               target="_blank"
               rel="noreferrer"
-              title={`Open ${device.name} in Dashboard`}
+              title={m.devices_open({ name: device.name })}
             >
               <code>{device.handle}</code>
               <ArrowSquareOutIcon size={13} />
             </a>
           </div>
-          <p>{device.edgeName} · Registered {date(device.createdAt)}</p>
+          <p>{m.devices_registered({ edge: device.edgeName, date: date(device.createdAt) })}</p>
         </div>
         <div class="device-actions">
           <Dialog.Root>
-            <Dialog.Trigger class="row-action" aria-label={`Edit ${device.name}`} title="Edit">
+            <Dialog.Trigger class="row-action" aria-label={m.devices_edit_named({ name: device.name })} title={m.devices_edit()}>
               <PencilSimpleIcon size={16} />
             </Dialog.Trigger>
             <Dialog.Content>
               <Dialog.Header>
-                <Dialog.Title>Edit {device.name}</Dialog.Title>
+                <Dialog.Title>{m.devices_edit_named({ name: device.name })}</Dialog.Title>
                 <Dialog.Description>
-                  Update the display name and Dashboard URL handle for this device.
+                  {m.devices_edit_text()}
                 </Dialog.Description>
               </Dialog.Header>
               <form class="edit-dialog-form" method="POST" action="?/updateDevice">
                 <input type="hidden" name="device_id" value={device.id} />
                 <label>
-                  <span>Name</span>
+                  <span>{m.devices_name()}</span>
                   <Input name="name" value={device.name} required />
                 </label>
                 <label>
-                  <span>Handle</span>
+                  <span>{m.devices_handle()}</span>
                   <Input
                     name="handle"
                     value={device.handle}
@@ -75,15 +77,15 @@
                   />
                 </label>
                 <p id={`handle-help-${device.id}`} class="field-help">
-                  Changing this also changes the device's app.pontia.dev URL.
+                  {m.devices_handle_help()}
                 </p>
                 <Dialog.Footer>
                   <Dialog.Close>
                     {#snippet child({ props })}
-                      <Button variant="outline" {...props}>Cancel</Button>
+                      <Button variant="outline" {...props}>{m.cancel()}</Button>
                     {/snippet}
                   </Dialog.Close>
-                  <Button type="submit">Save</Button>
+                  <Button type="submit">{m.save()}</Button>
                 </Dialog.Footer>
               </form>
             </Dialog.Content>
@@ -94,8 +96,8 @@
               type="submit"
               variant="destructive"
               size="icon"
-              aria-label={`Remove ${device.name}`}
-              title="Remove device"
+              aria-label={m.devices_remove_named({ name: device.name })}
+              title={m.devices_remove()}
             >
               <TrashIcon size={16} />
             </Button>
@@ -105,7 +107,7 @@
     {/each}
   </ul>
 {:else}
-  <p class="empty">No registered devices.</p>
+  <p class="empty">{m.devices_none()}</p>
 {/if}
 
 <style>

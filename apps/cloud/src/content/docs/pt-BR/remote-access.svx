@@ -1,0 +1,62 @@
+<svelte:head>
+	<title>Acesso remoto — Pontia</title>
+	<meta name="description" content="Conecte seu dispositivo Pontia e controle Sessions de agentes remotamente." />
+</svelte:head>
+
+# Acesso remoto
+
+O acesso remoto permite monitorar e controlar as Sessions de agentes no seu dispositivo pelo dashboard web do Pontia. Os agentes, as ferramentas de desenvolvimento e os arquivos de projeto continuam rodando e permanecem nesse dispositivo.
+
+## Ative o acesso remoto durante a configuração
+
+Quando `pontia init` solicitar que você entre e ative o acesso remoto, aceite e conclua a autorização no navegador. Continue pelo registro do dispositivo para conectá-lo ao Pontia Cloud. O Pontia reinicia o serviço local com a configuração remota e abre o Remote Dashboard desse dispositivo.
+
+## Conecte uma instalação existente
+
+Primeiro, entre:
+
+```sh
+pontia login
+```
+
+O Pontia exibe um endereço de verificação e um código de uso único. Abra o endereço em um navegador, entre com Google ou GitHub e aprove o código. O CLI guarda a credencial resultante no diretório home do Pontia.
+
+Depois, registre o dispositivo atual:
+
+```sh
+pontia remote enable
+```
+
+Escolha um Edge disponível e confirme o nome do dispositivo quando solicitado. O Pontia gera a identidade do dispositivo usada para o acesso criptografado de ponta a ponta e atualiza o serviço em execução quando necessário.
+
+Para registrar sem prompts no terminal, use `pontia remote edges` para obter o ID de um Edge e então execute `pontia remote enable --edge EDGE_ID --name "Device name"`. As duas opções são obrigatórias. Veja [inicialização não interativa](/docs/initialization#non-interactive-initialization) para a sequência completa e os requisitos de autorização no navegador.
+
+Abra [app.pontia.dev](https://app.pontia.dev) para acessar seu dispositivo registrado.
+
+## Verifique e gerencie o registro
+
+Execute este comando no dispositivo para comparar a identidade local com o registro no Cloud:
+
+```sh
+pontia doctor
+```
+
+Você pode alterar o nome de exibição ou o identificador de URL do Dashboard do dispositivo com `pontia remote edit`, e substituir a identidade de criptografia com `pontia remote rotate-key`. O Cloud oferece [Configurações de dispositivos](/settings/devices), [Configurações de sessões](/settings/sessions) e [Configurações da conta](/settings/account). Veja [Gerenciamento de dispositivos e conta](/docs/device-management) para o efeito de cada operação.
+
+## Modelo de segurança
+
+O navegador e o seu dispositivo estabelecem uma sessão criptografada de ponta a ponta. O Edge transporta a conexão e repassa o texto cifrado, enquanto o Pontia Cloud gerencia o login, o registro de dispositivos e a autorização de acesso.
+
+A execução dos agentes e os arquivos de projeto permanecem no seu dispositivo. Veja [Segurança](/docs/security) para detalhes do protocolo e das credenciais.
+
+Você pode selecionar um Edge oficial ou [implantar um Edge auto-hospedado](/docs/self-hosted-edge). Ambos usam o Pontia Cloud para autorização; a auto-hospedagem permite escolher onde o texto cifrado é repassado.
+
+## Desative o acesso remoto
+
+Para cancelar o registro do dispositivo atual e desativar o acesso remoto dele:
+
+```sh
+pontia remote disable
+```
+
+O acesso local continua disponível depois que o acesso remoto é desativado. Para falhas de conexão, veja [Solução de problemas](/docs/troubleshooting).

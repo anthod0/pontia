@@ -1,0 +1,178 @@
+---
+title: "VPS で Codex と pi を実行する: 常時稼働のコーディングエージェントのためのセットアップチェックリスト"
+description: Codex や pi のような長時間動くコーディングエージェント向けに Linux VPS をセットアップし、スマートフォンからアクセスする方法です。ユーザーアカウント、systemd の lingering、ヘッドレスでのサインイン、Session の永続化、ポートを開かないリモートアクセスを扱います。
+published: "2026-11-11"
+---
+
+ノートパソコン上のコーディングエージェントは、蓋を閉じると止まります。常時稼働の Linux サーバーに移せば、長いリファクタリングやテスト実行もリポジトリやビルドツールのそばで夜通し続き、どのデバイスからでも様子を確認できます。
+
+サーバーは VPS である必要はありません。自宅のマシンや余っているミニ PC でも同じように使えます。このチェックリストでは、ヘッドレスホストでつまずきやすい点を扱います。どのアカウントでエージェントを実行するか、ログアウト後もプロセスを動かし続ける方法、ブラウザーなしでのサインイン、スマートフォンから Session にアクセスする方法です。例では Codex CLI と pi を使います。
+
+## 結論
+
+1. エージェント専用の非 root ユーザーを作成し、そのユーザーとして各エージェントにサインインします。
+2. 私たちが開発しているツール [Pontia](https://pontia.dev) を `npx @pontia/cli init` でインストールして初期化します。
+3. スマートフォンで [app.pontia.dev](https://app.pontia.dev) を開きます。
+
+Pontia はログアウト後も Session を動かし続け、エンドツーエンドで暗号化されたリレーを通じてサーバーとスマートフォンをつなぎます。受信用のポートを開く必要はありません。OpenAI の ChatGPT モバイルのリモートコントロールは、Linux サーバー上で直接は動作しません。スリープせずに動き続け、SSH でサーバーに接続する Mac または Windows ホスト上の ChatGPT デスクトップアプリが必要です。
+
+この記事の残りでは、各手順と、同じ部品を自分で組み立てたい場合の方法を説明します。
+
+## 1. 専用の非 root ユーザーでエージェントを実行する
+
+エージェントは、それを実行するアカウントの権限で動作します。Codex には OS が強制するサンドボックスと承認ポリシーがあります。pi にはデフォルトでどちらもありません。pi の[セキュリティガイド](https://pi.dev/docs/latest/security)には、pi はユーザーの権限で動作し、ツール呼び出しのたびに確認を求めることはないと記載されています。いずれにしても、アカウントが外側の境界になります。
+
+```sh
+sudo adduser agent
+```
+
+新しいアカウントの `~/.ssh/authorized_keys` に SSH 公開鍵を追加します。アカウントには必要なリポジトリと認証情報だけを与えてください。個人の SSH キーよりも、特定のリポジトリに限定したデプロイキーや Fine-grained トークンを使うと、誤ったコマンドやプロンプトインジェクションされたコマンドが、自分のすべてのリポジトリにプッシュすることを防げます。
+
+以降の手順は、`su` や `sudo -u` ではなく、このユーザーとして SSH 経由で実行してください（`ssh agent@your-server`）。これらのコマンドでは、`systemctl --user` に必要なセッション環境が設定されません。
+
+## 2. ブラウザーなしでエージェントにサインインする
+
+サーバーにはブラウザーがないので、利用できる場合はデバイスコードフローを使います。
+
+```sh
+codex login --device-auth
+```
+
+Codex が URL とコードを表示するので、スマートフォンかノートパソコンで開きます。pi の場合は、プロバイダーの API キーを環境変数に設定するか、`pi` の中で `/login` を実行します。プロバイダーの一覧は [pi のクイックスタート](https://pi.dev/docs/latest/quickstart)にあります。
+
+## 3. ログアウト後もサービスを動かし続ける
+
+ほとんどのディストリビューションでは、systemd はユーザーの最後のセッションが終了するとそのユーザーのサービスを停止します。lingering を有効にして、ユーザーマネージャーが動き続けるようにします。
+
+```sh
+sudo loginctl enable-linger agent   # from an admin account
+systemctl --user is-system-running  # as agent, over SSH
+```
+
+`is-system-running` は `running` を出力するはずです。無関係なユニットが失敗している場合は `degraded` になります。Codex を選択すると、`pontia init` が lingering を有効にします。pi だけを使う構成では、上のコマンドを自分で実行してください。
+
+## 4. Pontia をインストールする
+
+Node.js と npm をインストールした状態で、エージェント用のユーザーとして次を実行します。
+
+```sh
+npx @pontia/cli init
+```
+
+pi、Codex、またはその両方を選択します。初期化処理では次のことを行います。
+
+- Pontia を systemd ユーザーサービスとしてインストールします。
+- Codex の場合は、Codex の app-server デーモンを起動するサービスをインストールします。
+- pi の場合は、Pontia の pi プラグインをインストールします。
+- URL とワンタイムコードを使って Google または GitHub でサインインします。承認はスマートフォンから行います。
+- サーバーを公式のリレーに登録します。
+
+完了したら、スマートフォンで [app.pontia.dev](https://app.pontia.dev) を開いてサーバーを選択します。そこから Codex や pi の Session を開始、確認、中断、継続でき、Codex の承認リクエストに **Allow** または **Deny** で応答できます。
+
+サーバーはリレーに外向きに接続し、リレーはブラウザーとサーバーの間で暗号文を転送するだけです。ポートを開いたり、VPN を設定したり、リバースプロキシを置いたりする必要はありません。上級者は[自分のリレーを運用](/docs/self-hosted-edge)することもできます。
+
+Dashboard から開始した pi の Session は Pontia サービスの外の tmux で動作するので、Pontia を再起動やアップデートしても停止しません。SSH でログインして `tmux attach -t SESSION_NAME` でアタッチすることもできます。名前は `pontia_` で始まります。
+
+セットアップの確認と保守には次のコマンドを使います。
+
+```sh
+pontia status
+pontia doctor   # checks service, config, login, and remote registration
+pontia update   # installs the latest signed release and restarts the service
+journalctl --user -u pontia.service --no-pager -n 200
+```
+
+## 代わりに自分で組み立てる
+
+Pontia を使わない場合は、同じ部品を標準的なツールで組み立てます。
+
+**Session の永続化。** SSH シェルで直接起動したエージェントは、接続が切れると一緒に終了します。tmux で実行してください。
+
+```sh
+tmux new -s work
+pi        # or codex
+# detach with Ctrl-b d, reattach later with: tmux attach -t work
+```
+
+SSH から起動した tmux サーバーはログインセッションに属します。lingering が有効なら通常はログアウト後も残りますが、`logind.conf` で `KillUserProcesses=yes` が設定されているシステムでは終了させられ、再起動後には戻りません。どちらにも耐えるようにするには、tmux をユーザーサービスとして実行します。次の内容を `~/.config/systemd/user/agent-tmux.service` として保存します。
+
+```ini
+[Unit]
+Description=tmux server for coding agents
+
+[Service]
+Type=forking
+ExecStart=/usr/bin/tmux -L agents new-session -d -s main
+ExecStop=/usr/bin/tmux -L agents kill-server
+
+[Install]
+WantedBy=default.target
+```
+
+次に、有効にしてアタッチします。
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now agent-tmux
+tmux -L agents attach -t main
+```
+
+`-L agents` によってこのサーバーは専用のソケットを持つので、手動で起動した tmux セッションと混ざりません。再起動後はセッションが空の状態で戻るので、`codex resume --last` または `pi --continue` で会話を再開します。
+
+**ネットワークアクセス。** エージェントのサーバーは localhost に限定してください。OpenAI の [Remote connections ガイド](https://learn.chatgpt.com/docs/remote-connections)では、Codex の app-server のトランスポートを共有ネットワークや公開ネットワークに公開せず、VPN やメッシュネットワークを使うよう求めています。
+
+Tailscale を使う場合は、サーバーとスマートフォンにインストールし、両方で同じアカウントにサインインします。
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+```
+
+Tailscale の管理コンソールで、サーバーのキーの有効期限を無効にします。デバイスのキーはデフォルトで 180 日後に期限切れになり、期限切れになったサーバーはネットワークから外れます。
+
+**公開 SSH を閉じる。** Tailscale 経由の SSH が動作したら、それ以外からの受信トラフィックをブロックします。Tailscale の [ufw ガイド](https://tailscale.com/docs/how-to/secure-ubuntu-server-with-ufw)では、Ubuntu での手順を次のように示しています。
+
+```sh
+sudo ufw allow in on tailscale0
+sudo ufw default deny incoming
+sudo ufw delete allow 22/tcp     # only after testing SSH over Tailscale
+sudo ufw enable
+```
+
+先に、VPS プロバイダーに Web コンソールがあることを確認してください。Tailscale が動かなくなったときの入り口になります。代わりに公開 SSH を開いたままにする場合は、鍵によるログインだけを許可してください。次の内容を `/etc/ssh/sshd_config` の先頭近くに置きます。sshd は、`Include` されたファイルの値を含め、各設定について最初に読んだ値を使うためです。
+
+```sshconfig
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+```
+
+sshd をリロードする前に、`sudo sshd -T | grep -E 'passwordauthentication|permitrootlogin'` を実行して実際に有効な値を確認してください。
+
+**スマートフォンのクライアント。** Mosh に対応した SSH アプリをインストールし、鍵を追加して tmux にアタッチします。Mosh を使うと、スマートフォンのネットワークが変わったりスリープしたりしてもセッションが維持されます。サーバーに `mosh` が必要で、Mosh が使う UDP ポート 60000〜61000 は、ファイアウォールを変更しなくても Tailscale 経由で動作します。
+
+スマートフォンで別の VPN も実行する必要がある場合、Tailscale は同時に実行できません。[Tailscale と Cloudflare Tunnel の比較](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)では、スマートフォンに VPN がなくても使える Cloudflare Tunnel と、VPN やプロキシ同士のルーティングの競合について説明しています。
+
+**通知。** Codex のフックと pi の拡張機能を使うと、エージェントが対応を必要としたときに通知を送れます。[Codex と pi のスマートフォン通知](/blog/coding-agent-phone-notifications)に両方のスクリプトがあります。
+
+これらはすべて自分で保守することになり、スマートフォンでは小さなキーボードで全画面の TUI を操作することになります。
+
+## よくある問題
+
+| 症状 | 考えられる原因 |
+| --- | --- |
+| ログアウトするとエージェントやサービスが停止する | ユーザーの lingering が有効になっていない |
+| `systemctl --user` が "Failed to connect to bus" で失敗する | `su` でユーザーを切り替えている。そのユーザーとして SSH でログインする |
+| エージェントがシェルでは動くがサービスからは動かない | サービスの `PATH` に、エージェントや Node.js を含むディレクトリがない |
+| サービス内の Codex がシェルとは異なる認証情報を使う | サービスとシェルで `CODEX_HOME` の値が異なる |
+| pi で `Shift+Enter` が改行ではなく送信になる | tmux の extended keys がオフになっている。pi の [tmux ガイド](https://pi.dev/docs/latest/tmux)を参照 |
+| lingering を有効にしてもログアウトすると tmux セッションが終了する | `/etc/systemd/logind.conf` の `KillUserProcesses=yes` がログインセッションのスコープを終了させている。上記のユーザーサービスとして tmux を実行する |
+| 数か月後に Tailscale 経由の SSH が動かなくなる | サーバーの Tailscale キーが期限切れになった。サーバーではキーの有効期限を無効にする |
+
+## 関連記事
+
+- [コーディングエージェントのサーバーにアクセスするための Tailscale と Cloudflare Tunnel の比較](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
+- [Codex や pi が対応を必要としたときにスマートフォンに通知を受け取る](/blog/coding-agent-phone-notifications)
+- [スマートフォンから Codex CLI を使う方法](/blog/control-codex-cli-from-your-phone)
+- [スマートフォンから pi コーディングエージェントを使う方法](/blog/pi-coding-agent-remote-control)
+- [Linux プラットフォームに関する注意事項](/docs/platforms/linux)と[セキュリティ](/docs/security)

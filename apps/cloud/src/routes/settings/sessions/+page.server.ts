@@ -2,6 +2,8 @@ import { fail, redirect, type RequestEvent } from "@sveltejs/kit";
 import { and, asc, eq, gt, isNull, ne, or } from "drizzle-orm";
 import { currentLogin, environment } from "$lib/server/auth/http";
 import { database } from "$lib/server/db";
+import { m } from "$lib/paraglide/messages";
+import { localizeHref } from "$lib/paraglide/runtime";
 import { accounts, authSessions } from "$lib/server/db/schema";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -13,7 +15,7 @@ async function authenticated(event: RequestEvent) {
 
 export const load: PageServerLoad = async (event) => {
   const authentication = await authenticated(event);
-  if (!authentication) redirect(303, "/login");
+  if (!authentication) redirect(303, localizeHref("/login"));
   const sessions = await authentication.db
     .select({
       id: authSessions.id,
@@ -49,9 +51,9 @@ function sessionId(data: FormData) {
 export const actions: Actions = {
   revokeSession: async (event) => {
     const authentication = await authenticated(event);
-    if (!authentication) return fail(401, { error: "Sign in to manage sessions." });
+    if (!authentication) return fail(401, { error: m.sessions_error_sign_in() });
     const id = sessionId(await event.request.formData());
-    if (!id) return fail(400, { error: "Select a session to revoke." });
+    if (!id) return fail(400, { error: m.sessions_error_select() });
     await authentication.db
       .delete(authSessions)
       .where(
@@ -66,7 +68,7 @@ export const actions: Actions = {
 
   revokeOtherBrowsers: async (event) => {
     const authentication = await authenticated(event);
-    if (!authentication) return fail(401, { error: "Sign in to manage sessions." });
+    if (!authentication) return fail(401, { error: m.sessions_error_sign_in() });
     await authentication.db
       .delete(authSessions)
       .where(

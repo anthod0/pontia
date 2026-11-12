@@ -1,3 +1,5 @@
+import { getLocale } from "$lib/paraglide/runtime";
+
 export interface BlogPostMetadata {
   title: string;
   description: string;
@@ -12,7 +14,7 @@ export interface BlogPost extends BlogPostMetadata {
 }
 
 export function formatDate(date: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString(getLocale(), {
     year: "numeric",
     month: "long",
     day: "numeric",

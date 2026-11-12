@@ -1,0 +1,36 @@
+<svelte:head>
+	<title>FAQ — Pontia</title>
+	<meta name="description" content="关于 Pontia 会话、数据、远程访问和运行的常见问题解答。" />
+</svelte:head>
+
+# 常见问题
+
+## Agent 运行在 Pontia Cloud 中吗？
+
+不是。Agent Client、工具、凭据和项目文件都保留在你的设备上。Pontia Cloud 负责协调身份和远程授权；Edge 负责转发加密流量。
+
+## Workspace 是操作系统沙箱吗？
+
+不是。Workspace 根目录限制的是 Pontia 浏览器为激活和文件发现所暴露的范围。Agent Client 仍具有其本地进程的权限和沙箱策略。
+
+## 如何远程访问我的设备？
+
+登录 Pontia Cloud，注册你的设备，然后在 [app.pontia.dev](https://app.pontia.dev) 打开它的 Remote Dashboard。完整设置请参阅[初始化](/docs/initialization)。
+
+## Pontia 能读取我的提示词或项目数据吗？
+
+Pontia 有三个运行时组件：
+
+- **Pontia Cloud** 管理用户、认证、设备注册和访问授权。Dashboard 流量通过 Edge 在浏览器和设备之间传输。
+- **pontiad** 运行在你的设备上，协调 Agent Client，并向你的 Dashboard 提供提示词和 Agent 数据。
+- **Pontia Edge** 转发在浏览器与 `pontiad` 之间保持端到端加密的流量。
+
+你的提示词和项目数据保留在你的设备上。
+
+## 我应该备份什么？
+
+备份项目文件、`$PONTIA_HOME` 以及各 Agent Client 的原生对话数据。`$PONTIA_HOME` 包含凭据以及控制状态和 Workflow 文件，请将其备份到可信的加密位置。对话数据请按照各 Client 的备份说明进行备份。
+
+## Pontia 支持 Windows 吗？
+
+不支持。本地控制平面支持 Linux 和 macOS 13.5 及更高版本。自托管 Edge 仅支持 Linux。

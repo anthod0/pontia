@@ -7,6 +7,8 @@ import {
 } from "$lib/server/auth/device";
 import { currentLogin, environment } from "$lib/server/auth/http";
 import { database } from "$lib/server/db";
+import { m } from "$lib/paraglide/messages";
+import { localizeHref } from "$lib/paraglide/runtime";
 import type { Actions, PageServerLoad } from "./$types";
 
 async function browserLogin(event: RequestEvent) {
@@ -25,11 +27,11 @@ export const load: PageServerLoad = async (event) => {
 
 async function decide(event: RequestEvent, decision: "approved" | "denied") {
   const login = await browserLogin(event);
-  if (!login) return fail(401, { error: "Sign in before confirming this request." });
+  if (!login) return fail(401, { error: m.device_error_sign_in() });
   const db = database(environment(event).DB);
   if (!(await recordUserCodeAttempt(db, login.sub)))
     return fail(429, {
-      error: "Too many attempts. Wait a few minutes and try again.",
+      error: m.device_error_rate_limited(),
     });
   const data = await event.request.formData();
   const code = data.get("user_code");
@@ -37,8 +39,8 @@ async function decide(event: RequestEvent, decision: "approved" | "denied") {
     typeof code !== "string" ||
     !(await decideDeviceAuthorization(db, code, login.user_id, decision))
   )
-    redirect(303, "/device?result=invalid");
-  redirect(303, `/device?result=${decision}`);
+    redirect(303, localizeHref("/device?result=invalid"));
+  redirect(303, localizeHref(`/device?result=${decision}`));
 }
 
 export const actions: Actions = {

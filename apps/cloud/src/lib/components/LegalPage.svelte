@@ -2,6 +2,7 @@
   import SiteFooter from "$lib/components/SiteFooter.svelte";
   import SiteHeader from "$lib/components/SiteHeader.svelte";
   import type { Snippet } from "svelte";
+  import { m } from "$lib/paraglide/messages";
 
   let {
     title,
@@ -15,7 +16,7 @@
   <meta name="description" content={description} />
 </svelte:head>
 
-<a class="skip-link" href="#legal-content">Skip to content</a>
+<a class="skip-link" href="#legal-content">{m.skip_to_content()}</a>
 <SiteHeader />
 <main id="legal-content" class="legal-content page-width">
   {@render children()}

@@ -28,6 +28,9 @@
     "uuid": "14.0.2"
   },
   "devDependencies": {
+    "@inlang/paraglide-js": "^3.2.1",
+    "@inlang/paraglide-js-svelte": "^1.0.5",
+    "@inlang/plugin-message-format": "^4.6.0",
     "@internationalized/date": "^3.12.0",
     "@sveltejs/adapter-cloudflare": "^7.2.9",
     "@sveltejs/kit": "^2.63.0",

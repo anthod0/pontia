@@ -1,0 +1,246 @@
+<svelte:head>
+	<title>Pontia の仕組み — Pontia</title>
+	<meta name="description" content="Pontia がエージェントをどこで実行し、ローカルアクセスとリモートアクセスがどのように機能するかを説明します。" />
+</svelte:head>
+
+# Pontia の仕組み
+
+Pontia は、エージェントの実行とリモートアクセスを分離します。コーディングエージェントは、開発ツールやプロジェクトファイルと同じデバイス上で動きます。Pontia はそこに、ローカルのコントロールプレーンと、ホスト型の Remote Dashboard への暗号化された経路を追加します。
+
+<figure
+	class="architecture-diagram"
+	role="img"
+	aria-label="リモートのブラウザは、エンドツーエンド暗号化された経路で Edge を通じて接続します。デバイス上では、pontiad がプロジェクトの Workspace で作業する Agent Client を調整します。Pontia Cloud は、Dashboard の通信経路の外で ID、デバイス登録、認可を提供します。"
+>
+	<div class="cloud-service">
+		<strong>Pontia Cloud</strong>
+		<span>ID · デバイス登録 · 認可</span>
+		<small>ブラウザとデバイスの間の接続を認可します</small>
+	</div>
+	<div class="connection-map">
+		<div class="access-paths">
+			<div class="access-path">
+				<span class="path-label">リモートアクセス</span>
+				<span class="diagram-node">リモートのブラウザ</span>
+				<span class="diagram-arrow" aria-hidden="true">→</span>
+				<span class="diagram-node">Edge<small>暗号化リレー</small></span>
+			</div>
+		</div>
+		<span class="diagram-arrow entry-arrow" aria-hidden="true">→</span>
+		<div class="device-boundary">
+			<span class="boundary-label">自分のデバイス</span>
+			<div class="device-flow">
+				<span class="diagram-node"><code>pontiad</code><small>コントロールプレーン</small></span>
+				<span class="diagram-arrow" aria-hidden="true">→</span>
+				<span class="diagram-node">Agent Client</span>
+				<span class="diagram-arrow" aria-hidden="true">→</span>
+				<span class="diagram-node">Workspace<small>ファイルとツール</small></span>
+			</div>
+		</div>
+	</div>
+	<figcaption>Remote Dashboard の通信は、ブラウザとデバイスの間でエンドツーエンド暗号化されます。</figcaption>
+</figure>
+
+## ローカルのコントロールプレーン
+
+`pontiad` サービスはデバイス上で動きます。エージェントの Session を調整し、pi、Codex、Claude Agent、ACP エージェントなどのサポートされた Agent Client と通信し、Local Dashboard と API を提供します。
+
+Agent Client は、デバイスにインストールされたファイルとツールを使ってコマンドを実行します。
+
+## Remote Dashboard と Local Dashboard
+
+Pontia Cloud を通じてホスト型の Remote Dashboard にサインインし、登録済みのデバイスを選択します。ブラウザとデバイスは、選択した Edge を通じてエンドツーエンド暗号化された Session を確立し、Edge は暗号文を中継します。
+
+デバイス上で直接アクセスする場合、Local Dashboard はループバックアドレスで `pontiad` に接続します。
+
+## Pontia Cloud と Edge
+
+Pontia Cloud は、ユーザーのサインイン、登録済みデバイス、接続の認可、Edge の検出を管理します。エージェントとプロジェクトファイルはデバイス上に留まります。
+
+Edge は、リモートのブラウザとデバイスの間の接続を提供します。公式の Edge を使うことも、自分でデプロイすることもできます。セルフホストで変わるのは暗号化された通信を中継する場所であり、アカウント、デバイス登録、認可のサービスは引き続き Pontia Cloud が提供します。
+
+## Session と Agent Client
+
+Session は、エージェントの作業単位に対する Pontia の永続的なビューです。選択した Agent Client が作業を行い、Pontia は Dashboard から Session を表示・操作するのに必要な状態を記録します。
+
+Dashboard からは、デバイス上で動くサポートされたエージェントの Session を作成、監視、継続、中断できます。
+
+## データの境界
+
+| コンポーネント | 役割 | プロジェクトファイルへのアクセス |
+| --- | --- | --- |
+| デバイスと `pontiad` | ローカルのコントロールプレーンを動かし、エージェントを調整する | あり。Pontia に公開した Workspace の範囲内 |
+| Agent Client | ローカルのツールでエージェントの作業を行う | クライアントのローカル権限に従う |
+| ブラウザ | Dashboard を表示し、操作を送信する | ファイルシステムへの直接アクセスはなし。デバイスから返されたデータを表示する |
+| Edge | エンドツーエンド暗号化された Dashboard の通信を中継する | なし |
+| Pontia Cloud | ID、デバイス登録、リモート認可を扱う | なし |
+
+デバイスをセットアップするには、[はじめに](/docs/getting-started) に進んでください。別のデバイスから接続するには、[リモートアクセス](/docs/remote-access) を参照してください。
+
+<style>
+	.architecture-diagram {
+		margin: 32px 0 44px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface);
+		padding: 24px;
+	}
+
+	.cloud-service {
+		display: grid;
+		justify-items: center;
+		max-width: 420px;
+		margin: 0 auto 28px;
+		border: 1px dashed var(--link-decoration);
+		border-radius: 6px;
+		background: var(--background);
+		padding: 14px 18px;
+		text-align: center;
+	}
+
+	.cloud-service strong,
+	.diagram-node,
+	.boundary-label {
+		color: var(--heading);
+	}
+
+	.cloud-service span,
+	.cloud-service small,
+	.diagram-node small,
+	figcaption {
+		color: var(--muted-foreground);
+	}
+
+	.cloud-service span {
+		margin-top: 3px;
+		font-size: 13px;
+	}
+
+	.cloud-service small {
+		margin-top: 7px;
+		font-size: 11px;
+	}
+
+	.connection-map {
+		display: grid;
+		grid-template-columns: minmax(230px, 0.85fr) auto minmax(310px, 1.15fr);
+		align-items: center;
+		gap: 18px;
+	}
+
+	.access-paths {
+		display: grid;
+		gap: 20px;
+	}
+
+	.access-path {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+		align-items: center;
+		gap: 8px;
+	}
+
+	.path-label {
+		grid-column: 1 / -1;
+		color: var(--muted-foreground);
+		font-size: 11px;
+		font-weight: 500;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.diagram-node {
+		display: grid;
+		place-items: center;
+		min-height: 58px;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--background);
+		padding: 10px;
+		font-size: 13px;
+		font-weight: 500;
+		text-align: center;
+	}
+
+	.diagram-node small {
+		margin-top: 3px;
+		font-size: 10px;
+		font-weight: 400;
+	}
+
+	.diagram-node :global(code) {
+		border: 0;
+		background: transparent;
+		padding: 0;
+		font-size: 13px;
+	}
+
+	.diagram-arrow {
+		color: var(--primary);
+		font: 18px var(--font-mono);
+	}
+
+	.entry-arrow {
+		transform: translateY(13px);
+	}
+
+	.device-boundary {
+		border: 1px solid var(--primary);
+		border-radius: 6px;
+		padding: 12px;
+	}
+
+	.boundary-label {
+		display: block;
+		margin-bottom: 10px;
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.device-flow {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+		align-items: center;
+		gap: 7px;
+	}
+
+	figcaption {
+		margin-top: 18px;
+		font-size: 12px;
+		text-align: center;
+	}
+
+	@media (max-width: 720px) {
+		.architecture-diagram {
+			padding: 18px;
+		}
+
+		.connection-map {
+			grid-template-columns: 1fr;
+		}
+
+		.entry-arrow {
+			justify-self: center;
+			transform: rotate(90deg);
+		}
+	}
+
+	@media (max-width: 480px) {
+		.access-path,
+		.device-flow {
+			grid-template-columns: 1fr;
+		}
+
+		.access-path .diagram-arrow,
+		.device-flow .diagram-arrow {
+			justify-self: center;
+			transform: rotate(90deg);
+		}
+
+		.path-label {
+			grid-column: 1;
+		}
+	}
+</style>

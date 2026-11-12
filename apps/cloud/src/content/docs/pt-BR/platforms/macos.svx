@@ -1,0 +1,67 @@
+<svelte:head>
+	<title>macOS — Pontia</title>
+	<meta name="description" content="Requisitos do macOS e gerenciamento de LaunchAgents para o Pontia." />
+</svelte:head>
+
+# macOS
+
+O Pontia é compatível com o macOS 13.5 e posterior, em Intel e Apple Silicon. O plano de controle local e o daemon do Codex usam LaunchAgents por usuário. Para um Edge auto-hospedado, use um [servidor Linux](/docs/self-hosted-edge).
+
+## Requisitos de instalação
+
+Para a configuração recomendada com `npx @pontia/cli init`, instale o Node.js com npm. Veja [Primeiros passos](/docs/getting-started).
+
+O instalador alternativo em shell exige `curl`, `grep`, `install`, `mktemp`, `mv`, `openssl`, `rm`, `sed`, `shasum`, `tar`, `tr`, `uname` e `wc`.
+
+O `openssl` do sistema pode não oferecer o comando Ed25519 necessário. O instalador verifica automaticamente os caminhos padrão do `openssl@3` do Homebrew:
+
+```text
+/opt/homebrew/opt/openssl@3/bin/openssl
+/usr/local/opt/openssl@3/bin/openssl
+```
+
+Você pode apontar o instalador para outro executável compatível com `PONTIA_OPENSSL`.
+
+O diretório padrão dos binários é `$HOME/.local/bin`. Adicione-o ao `PATH` do seu shell para executar os comandos `pontia` diretamente.
+
+## LaunchAgents
+
+A inicialização instala a definição do serviço do Pontia em:
+
+```text
+~/Library/LaunchAgents/dev.pontia.pontiad.plist
+```
+
+Gerencie-o com:
+
+```sh
+pontia up
+pontia status
+pontia down
+```
+
+Para diagnóstico direto:
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.pontiad
+```
+
+Quando o Codex é selecionado, o Pontia também instala:
+
+```text
+~/Library/LaunchAgents/dev.pontia.codex-daemon.plist
+```
+
+Inspecione-o com:
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.codex-daemon
+```
+
+As definições dos LaunchAgents armazenam caminhos absolutos dos executáveis e um caminho de busca de executáveis controlado. Execute `pontia setup CLIENT` depois de mover um Client ou o diretório home dele, informando quaisquer caminhos de runtime personalizados.
+
+## Atualizações
+
+O `pontia update` usa `/usr/sbin/lsof` para verificar se a CLI em execução é o arquivo instalado antes da substituição. Mantenha `pontia` e `pontiad` juntos como arquivos regulares e execute diretamente o `pontia` instalado.
+
+Execute os comandos de inicialização e de ciclo de vida com o usuário que executa os seus Agent Clients. O Pontia usa o home, as credenciais e o domínio de LaunchAgent da GUI desse usuário.

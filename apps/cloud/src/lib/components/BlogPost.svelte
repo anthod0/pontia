@@ -4,10 +4,13 @@
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
 	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import LocaleLinks from '$lib/components/LocaleLinks.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import { addCodeCopyButtons } from '$lib/code-copy';
 	import { formatDate, type BlogPostMetadata } from '$lib/blog';
 	import '$lib/styles/article.css';
+	import { m } from '$lib/paraglide/messages';
+	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 
 	let { title, description, published, updated, children }: BlogPostMetadata & { children: Snippet } =
 		$props();
@@ -19,6 +22,7 @@
 		'@context': 'https://schema.org',
 		'@type': 'Article',
 		headline: title,
+		inLanguage: getLocale(),
 		description,
 		datePublished: published,
 		dateModified: updated ?? published,
@@ -36,7 +40,6 @@
 <svelte:head>
 	<title>{title} — Pontia</title>
 	<meta name="description" content={description} />
-	<link rel="canonical" href={url} />
 	<meta property="og:site_name" content="Pontia" />
 	<meta property="og:title" content={title} />
 	<meta property="og:description" content={description} />
@@ -54,27 +57,29 @@
 	{@html `<script type="application/ld+json">${JSON.stringify(structuredData).replaceAll('<', '\\u003c')}</script>`}
 </svelte:head>
 
-<a class="skip-link" href="#post">Skip to content</a>
+<LocaleLinks />
+
+<a class="skip-link" href="#post">{m.skip_to_content()}</a>
 
 <SiteHeader />
 
 <main id="post" class="post page-width">
-	<a class="back" href="/blog"><ArrowLeftIcon size={14} />Blog</a>
+	<a class="back" href={localizeHref('/blog')}><ArrowLeftIcon size={14} />{m.nav_blog()}</a>
 	<article class="article-content" bind:this={article}>
 		<header>
 			<h1>{title}</h1>
 			<p class="dates">
 				<time datetime={published}>{formatDate(published)}</time>
 				{#if updated}
-					<span>· Updated <time datetime={updated}>{formatDate(updated)}</time></span>
+					<span>· <time datetime={updated}>{m.blog_updated({ date: formatDate(updated) })}</time></span>
 				{/if}
 			</p>
 		</header>
 		{@render children()}
 	</article>
 	<aside class="cta">
-		<p>Pontia is free and open source. Install it on Linux or macOS in a few minutes.</p>
-		<a class="button" href="/docs/getting-started">Get started<ArrowRightIcon size={18} /></a>
+		<p>{m.blog_cta()}</p>
+		<a class="button" href={localizeHref('/docs/getting-started')}>{m.get_started()}<ArrowRightIcon size={18} /></a>
 	</aside>
 </main>
 

@@ -3,6 +3,8 @@
   import CopyIcon from "phosphor-svelte/lib/CopyIcon";
   import { Button } from "$lib/components/ui/button";
   import { authError } from "$lib/auth-errors";
+  import { m } from "$lib/paraglide/messages";
+  import { localizeHref } from "$lib/paraglide/runtime";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -25,49 +27,49 @@
 </script>
 
 <svelte:head>
-  <title>Account settings — Pontia</title>
+  <title>{m.account_title()}</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
-<h1>Account</h1>
-<p>Manage your profile and the accounts you use to sign in to Pontia.</p>
+<h1>{m.settings_account()}</h1>
+<p>{m.account_intro()}</p>
 {#if message}<p class="auth-error" role="alert">{message}</p>{/if}
 
 {#if !data.hasDevices}
   <section class="getting-started" aria-labelledby="getting-started-heading">
-    <h2 id="getting-started-heading">Connect your first device</h2>
-    <p>With Node.js and npm installed, run this command on your Linux or macOS device to install and set up Pontia. When prompted, enable remote access and authorize with this account.</p>
+    <h2 id="getting-started-heading">{m.account_first_device_heading()}</h2>
+    <p>{m.account_first_device_text()}</p>
     <div class="install-command">
       <code>{installCommand}</code>
       <Button
         variant="outline"
         size="icon"
         onclick={copyCommand}
-        aria-label={copyStatus === "copied" ? "Copy install command again" : "Copy install command"}
-        title="Copy install command"
+        aria-label={copyStatus === "copied" ? m.copy_install_command_again() : m.copy_install_command()}
+        title={m.copy_install_command()}
       >
         {#if copyStatus === "copied"}<CheckIcon size={17} />{:else}<CopyIcon size={17} />{/if}
       </Button>
     </div>
     <p class="copy-feedback" aria-live="polite">
-      {copyStatus === "copied" ? "Copied to clipboard." : copyStatus === "error" ? "Could not copy. Select the command above to copy manually." : ""}
+      {copyStatus === "copied" ? m.copied_to_clipboard() : copyStatus === "error" ? m.account_copy_failed() : ""}
     </p>
-    <Button href="/docs/getting-started" class="button">Getting started</Button>
+    <Button href={localizeHref("/docs/getting-started")} class="button">{m.faq_getting_started_link()}</Button>
   </section>
 {/if}
 
 <section aria-labelledby="profile-heading">
-  <h2 id="profile-heading">Profile</h2>
+  <h2 id="profile-heading">{m.account_profile()}</h2>
   <div class="profile">
     {#if data.profile.avatarUrl}
       <img src={data.profile.avatarUrl} alt="" referrerpolicy="no-referrer" />
     {/if}
-    <h3>{data.profile.displayName ?? "Pontia user"}</h3>
+    <h3>{data.profile.displayName ?? m.account_default_name()}</h3>
   </div>
 </section>
 
 <section aria-labelledby="methods-heading">
-  <h2 id="methods-heading">Sign-in methods</h2>
+  <h2 id="methods-heading">{m.account_sign_in_methods()}</h2>
   <ul class="management-list">
     {#each providers as provider}
       {@const account = data.accounts.find((item) => item.provider === provider.id)}
@@ -76,25 +78,24 @@
           <h3>{provider.name}</h3>
           {#if account}
             <p>
-              Linked{account.email ? ` as ${account.email}` : ""}
               {account.email
                 ? account.emailVerified
-                  ? " · Verified email"
-                  : " · Unverified email"
-                : ""}
+                  ? m.account_linked_verified({ email: account.email })
+                  : m.account_linked_unverified({ email: account.email })
+                : m.account_linked()}
             </p>
           {:else}
-            <p>Not linked</p>
+            <p>{m.account_not_linked()}</p>
           {/if}
         </div>
         {#if account}
           <form method="POST" action="?/unlinkProvider">
             <input type="hidden" name="provider" value={provider.id} />
-            <Button type="submit" class="button button-secondary">Unlink</Button>
+            <Button type="submit" class="button button-secondary">{m.account_unlink()}</Button>
           </form>
         {:else}
           <form method="POST" action={`/api/auth/${provider.id}/bind`}>
-            <Button type="submit" class="button button-secondary">Link</Button>
+            <Button type="submit" class="button button-secondary">{m.account_link()}</Button>
           </form>
         {/if}
       </li>
@@ -103,7 +104,7 @@
 </section>
 
 <form method="POST" action="/api/auth/logout" class="sign-out-form">
-  <Button type="submit" class="button">Sign out</Button>
+  <Button type="submit" class="button">{m.sign_out()}</Button>
 </form>
 
 <style>

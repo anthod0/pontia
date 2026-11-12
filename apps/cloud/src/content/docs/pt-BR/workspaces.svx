@@ -1,0 +1,35 @@
+<svelte:head>
+	<title>Workspaces — Pontia</title>
+	<meta name="description" content="Configure diretórios de projeto e a descoberta de arquivos no Pontia." />
+</svelte:head>
+
+# Workspaces
+
+Uma Workspace é o diretório de projeto em que um agente roda. Uma Workspace pode estar associada a várias Sessions.
+
+## Raízes do Workspace Browser
+
+Uma raiz é um diretório configurado pelo administrador que o Dashboard pode navegar. As raízes são definidas em `$PONTIA_HOME/config.toml`:
+
+```toml
+[workspace_browser]
+roots = [
+  { root_id = "projects", label = "Projects", path = "/home/me/projects" }
+]
+```
+
+Cada `root_id` precisa ser único. O caminho precisa ser um diretório absoluto existente quando o Pontia o usa. Na primeira inicialização, o Pontia configura o diretório home do usuário como raiz; execuções posteriores de `pontia init` preservam as raízes existentes.
+
+As raízes controlam quais diretórios o Dashboard pode navegar. O sandbox do Agent Client e as permissões do processo local controlam o acesso dele ao sistema de arquivos.
+
+## Ativar uma Workspace
+
+Em [Workspaces](https://app.pontia.dev/workspaces), escolha uma raiz, navegue até um projeto e ative esse diretório. Uma Workspace ativa fica disponível em New chat e pode ser associada a várias Sessions.
+
+Renomear uma Workspace mantém o diretório no lugar. Desativá-la ou revogá-la a remove das novas seleções, preservando os arquivos do projeto. Se um diretório for movido para fora de todas as raízes configuradas ou desaparecer, o Dashboard marca o registro como indisponível para que você possa revogá-lo.
+
+## Menções de arquivos
+
+Dentro de uma Workspace ativa, digite `@` no compositor para buscar arquivos e diretórios. O comportamento do seletor de arquivos é configurável, incluindo arquivos ignorados, entradas ocultas, travessia de symlinks, limites de resultados e timeouts. Veja [Configuração](/docs/configuration).
+
+Uma menção de arquivo aponta o Agent Client para o contexto relevante na sua Workspace local.

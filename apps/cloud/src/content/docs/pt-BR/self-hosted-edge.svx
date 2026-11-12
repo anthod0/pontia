@@ -1,0 +1,105 @@
+<svelte:head>
+	<title>Auto-hospedar um Edge — Pontia</title>
+	<meta name="description" content="Implante e opere um Edge do Pontia auto-hospedado em um servidor Linux público." />
+</svelte:head>
+
+# Auto-hospedar um Edge
+
+Um Edge auto-hospedado retransmite o tráfego do Dashboard, que permanece com criptografia de ponta a ponta entre os navegadores e os seus dispositivos Pontia. Os agentes rodam nos seus dispositivos, enquanto o Pontia Cloud fornece login, propriedade dos dispositivos, registro de Edges e autorização de conexões.
+
+## Requisitos
+
+Use um servidor Linux público com:
+
+- arquitetura x86_64 ou ARM64;
+- systemd como gerenciador de serviços do sistema;
+- um endereço IPv4 público ao qual o servidor possa se vincular e pelo qual receba tráfego;
+- acesso de saída a HTTPS e DNS;
+- `curl`, `grep`, `install`, `mktemp`, `mv`, `openssl`, `rm`, `sed`, `sha256sum` e `tar`;
+- OpenSSL com suporte à verificação Ed25519.
+
+O `pontia-edge` é compatível apenas com Linux.
+
+## Escolha um modo de rede
+
+A implantação padrão serve HTTPS e WSS na porta pública 443 e usa validação de certificado HTTP-01. A porta pública 80 também precisa alcançar o servidor durante a inicialização e a renovação do certificado.
+
+Se a porta 80 ou 443 não estiver disponível, escolha a implantação alternativa nas [configurações de Edges](/settings/edges). Ela usa uma porta HTTPS/WSS personalizada que os navegadores aceitam (recomendamos a 8443) e validação de certificado DNS-01. Abra a porta selecionada nos firewalls do host e do provedor.
+
+O Pontia Cloud atribui o hostname do Edge sob `edge.pontia.dev` e configura o registro DNS automaticamente.
+
+## Implantar pelo Cloud
+
+[Abra as configurações de Edges](/settings/edges), fazendo login quando solicitado. Depois:
+
+1. Selecione **Gerar comando de implantação**.
+2. Escolha o modo de porta padrão ou alternativo.
+3. Copie o comando de uso único e execute-o no servidor Linux público.
+
+O comando contém um ticket de implantação de curta duração. Mantenha-o em sigilo e execute-o antes do prazo de expiração mostrado pelo Cloud. A inicialização:
+
+- baixa e verifica a release assinada do `pontia-edge`;
+- detecta e comprova o controle do endereço IPv4 público do servidor;
+- configura o nome DNS atribuído por meio do Pontia Cloud;
+- obtém um certificado do Let's Encrypt;
+- instala e inicia o `pontia-edge.service`;
+- espera o Cloud verificar o endpoint público de saúde via HTTPS;
+- ativa as verificações automáticas de releases estáveis.
+
+Um Edge implantado com sucesso aparece em **Seus Edges** nas [configurações de Edges](/settings/edges) com status saudável.
+
+## Retomar uma implantação incompleta
+
+Depois de corrigir o problema relatado, retome a inicialização no mesmo servidor:
+
+```sh
+sudo pontia-edge retry
+```
+
+O estado da inicialização fica em `/etc/pontia/edge/pending-init.json` até a configuração ser concluída. A nova tentativa pode continuar um Edge já inscrito sem criar um segundo registro.
+
+## Operar o Edge
+
+Verifique o serviço e os logs:
+
+```sh
+sudo systemctl status pontia-edge.service
+sudo journalctl -u pontia-edge.service --no-pager -n 200
+```
+
+O endpoint público de saúde é `https://HOST[:PORT]/healthz` e retorna `ok` quando o serviço está acessível.
+
+Atualize manualmente:
+
+```sh
+sudo pontia-edge update
+```
+
+Gerencie as atualizações estáveis automáticas:
+
+```sh
+sudo pontia-edge auto-update status
+sudo pontia-edge auto-update enable
+sudo pontia-edge auto-update disable
+```
+
+As atualizações automáticas são verificadas a cada hora, com até dez minutos de atraso aleatório. Uma atualização já em andamento continua mesmo quando as verificações futuras são desativadas.
+
+## Arquivos armazenados
+
+A instalação gerenciada usa:
+
+| Caminho | Finalidade |
+| --- | --- |
+| `/usr/local/bin/pontia-edge` | Executável do Edge |
+| `/etc/pontia/edge/config.json` | Configuração do endpoint |
+| `/etc/pontia/edge/credential` | Credencial do serviço do Edge |
+| `/etc/pontia/edge/tls.pem` | Certificado TLS e material de chave |
+| `/etc/pontia/edge/acme-account.json` | Estado da conta ACME |
+| `/etc/systemd/system/pontia-edge.service` | Definição do serviço do systemd |
+
+Mantenha `/etc/pontia/edge` com acesso restrito e com backup de acordo com a política do seu servidor.
+
+## Excluir um Edge
+
+Excluir um Edge auto-hospedado no Cloud remove permanentemente o registro dele e os dispositivos associados. A instalação no servidor é gerenciada separadamente: mova ou desative os dispositivos afetados e depois pare o serviço e remova os arquivos dele do servidor.

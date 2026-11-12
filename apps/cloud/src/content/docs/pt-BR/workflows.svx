@@ -1,0 +1,94 @@
+<svelte:head>
+	<title>Workflows — Pontia</title>
+	<meta name="description" content="Execute e acompanhe Workflows multiagente duráveis com o Pontia." />
+</svelte:head>
+
+# Workflows
+
+Um Workflow é uma orquestração durável de Agent Nodes em direção a um objetivo comum. Cada Agent Node recebe uma nova Session do Pontia, lê as entradas de Handoff declaradas, grava uma saída de Handoff e faz o envio explicitamente quando o trabalho atribuído a ele está pronto.
+
+Use um Workflow quando uma tarefa se beneficia de Handoffs em etapas, progresso durável e contextos de agente separados. Use uma Session comum para trabalho exploratório que não precisa de um plano de execução explícito.
+
+## Criar uma definição
+
+As definições de Workflow usam TOML. Os caminhos são resolvidos em relação ao arquivo de definição:
+
+```toml
+title = "Implement search"
+cwd = "."
+
+[[handoffs]]
+name = "requirements.md"
+source = "./requirements.md"
+
+[[nodes]]
+type = "agent"
+phase = "Discovery"
+title = "Research"
+instructions = "Inspect the current search implementation and propose a plan."
+inputs = ["requirements.md"]
+output = "research.md"
+
+[[nodes]]
+type = "agent"
+phase = "Delivery"
+title = "Implement"
+instructions = "Implement and verify the accepted plan."
+inputs = ["research.md"]
+output = "result.md"
+```
+
+Defina `cwd` como um diretório existente. Todos os Agent Clients do Workflow são iniciados nele. Para usar o diretório também a partir de New chat, [ative-o como uma Workspace](/docs/workspaces).
+
+Use `type = "agent"` em cada Node. Os Nodes são executados na ordem da definição. Cada entrada indica um Handoff inicial ou a saída de um Node anterior. Dê a cada saída um nome de arquivo único, sem componentes de diretório.
+
+## Executar e inspecionar
+
+Inicie o Workflow enquanto o `pontiad` estiver saudável:
+
+```sh
+pontia workflow run ./workflow.toml
+```
+
+O comando imprime o ID do novo Workflow. [Workflows](https://app.pontia.dev/workflows) mostra as fases, os estados dos Agent Nodes, o tempo decorrido e a Session criada para cada Node ativo.
+
+Mostre um contexto compacto pela CLI:
+
+```sh
+pontia workflow show wf_...
+```
+
+Dentro de uma Agent Session gerenciada por um Workflow, `PONTIA_WORKFLOW_ID` fornece o alvo atual, então `pontia workflow show` pode omitir o ID.
+
+## Concluir um Agent Node
+
+Grave o resultado completo no caminho do arquivo de saída fornecido pelo Pontia e depois envie-o a partir do painel `tmux` gerenciado do Agent Node:
+
+```sh
+pontia workflow submit
+```
+
+Um envio bem-sucedido marca a saída do Node como pronta. Se o Turn terminar antes do envio, o Workflow fica ocioso e aguarda intervenção.
+
+## Pausar, retomar e tentar novamente
+
+Use a página de detalhes do Workflow para pausar um Workflow em execução ou retomar um pausado. Pausar solicita a interrupção do Turn atual em andamento, quando suportado. Retomar uma Session atual interrompida envia uma continuação antes que o agendamento prossiga.
+
+Quando um Workflow com falha é recuperável, **Retry** continua a mesma conversa do Agent Node. Os Nodes enviados antes continuam concluídos, as alterações existentes na Workspace permanecem e a saída não enviada é arquivada. O Node em recuperação revisa as alterações existentes e envia uma nova saída completa.
+
+## Solicitar um novo planejamento
+
+Se um Agent Node for bloqueado por um problema inesperado, ele grava o relatório de problema solicitado e executa:
+
+```sh
+pontia workflow patch request
+```
+
+O Pontia cria uma Re-planner Session dedicada. O Re-planner inspeciona `pontia workflow show`, edita a definição candidata fornecida, registra uma decisão e termina com um destes comandos:
+
+```sh
+pontia workflow patch apply
+pontia workflow patch block
+```
+
+Um Workflow Patch aplicado cria uma nova revisão do grafo, preservando as identidades dos Nodes existentes e o histórico de execução. O Dashboard permite comparar revisões e inspecionar pedidos de Patch, Re-planner Sessions, resultados e as revisões resultantes.

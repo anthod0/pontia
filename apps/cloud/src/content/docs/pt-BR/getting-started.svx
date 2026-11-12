@@ -1,0 +1,74 @@
+<svelte:head>
+	<title>Primeiros passos — Pontia</title>
+	<meta name="description" content="Instale o Pontia e inicialize sua nuvem de agentes local." />
+</svelte:head>
+
+# Primeiros passos
+
+Instale o Pontia, conecte seu dispositivo ao Pontia Cloud e comece a usar seus agentes de programação pelo Remote Dashboard.
+
+<h2 id="requirements">Requisitos</h2>
+
+- Linux com systemd, ou macOS 13.5 ou posterior.
+- Node.js com npm para o comando `npx` recomendado. Sem Node.js, use o [instalador via shell](#install-with-the-shell-script).
+- Pelo menos um agente de programação: pi, Codex, Claude Code ou um agente ACP. Veja [Agent Clients](/docs/agent-clients) para saber o que cada um precisa.
+
+## Instale e inicialize o Pontia
+
+Execute o comando de configuração recomendado:
+
+```sh
+npx @pontia/cli init
+```
+
+Isso instala o Pontia e abre o inicializador interativo. Se o Pontia já estiver instalado, a instalação existente é reaproveitada. Você não precisa executar `pontia init` novamente.
+
+O diretório de instalação padrão é `$HOME/.local/bin`. Adicione-o ao `PATH` do seu shell para executar os comandos `pontia` diretamente. Defina `PONTIA_INSTALL_DIR` para usar outro diretório.
+
+A instalação via npm funciona com mirrors do npm e registros privados e não exige `curl` nem `openssl`. Para instalar sem abrir o inicializador, execute `npx @pontia/cli install`.
+
+<h3 id="install-with-the-shell-script">Instale com o script de shell</h3>
+
+Se preferir instalar sem Node.js, use o instalador de release assinado. Ele exige `curl` e `openssl`; veja [Linux](/docs/platforms/linux) ou [macOS](/docs/platforms/macos) para os requisitos completos.
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | sh
+"$HOME/.local/bin/pontia" init
+```
+
+Esses comandos usam o diretório de instalação padrão. Se você definiu `PONTIA_INSTALL_DIR`, execute `pontia init` a partir desse diretório.
+
+## Conclua a inicialização
+
+O inicializador permite:
+
+1. Selecionar as integrações de pi, Codex e Claude Agent que você quer.
+2. Gerar a credencial do dashboard local.
+3. Iniciar o serviço em segundo plano do Pontia.
+4. Entrar no Pontia Cloud e registrar seu dispositivo para o Remote Dashboard.
+
+Na primeira inicialização, o Pontia usa seu diretório pessoal como raiz do Workspace Browser. As raízes existentes são preservadas quando você executa o inicializador novamente.
+
+Quando for solicitado que você entre e ative o acesso remoto, aceite e conclua a autorização no navegador. Selecione um Edge disponível e confirme o nome do seu dispositivo. O Pontia abre o Remote Dashboard quando a configuração termina.
+
+Para um agente ou script, siga [Inicialização](/docs/initialization) para instalar as integrações de Client, iniciar o serviço e registrar o acesso remoto com comandos separados, em vez de responder aos prompts do assistente.
+
+## Verifique o serviço
+
+```sh
+pontia status
+```
+
+Use `pontia down` para parar o serviço e `pontia up` para iniciá-lo novamente.
+
+## Atualize o Pontia
+
+Atualize `pontia` e `pontiad` para a release estável assinada mais recente no Linux ou macOS:
+
+```sh
+pontia update
+```
+
+Se o serviço gerenciado estiver em execução, o Pontia o reinicia e aguarda até que fique saudável. Se a substituição ou a reinicialização falhar, o Pontia restaura os binários anteriores e tenta recuperar o serviço.
+
+Abra o Remote Dashboard do seu dispositivo e siga o [guia do Dashboard](/docs/dashboard) para ativar uma Workspace e iniciar sua primeira Session. Se o registro do dispositivo ainda não estiver concluído, termine primeiro a [configuração do acesso remoto](/docs/remote-access).

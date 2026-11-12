@@ -1,0 +1,117 @@
+---
+title: "O controle remoto do seu agente de programação é criptografado de ponta a ponta? O que o relay, o serviço de chaves e o app podem ver"
+description: "O que Anthropic, OpenAI, T3 Connect, Cloudflare, Happy, Tailscale e Pontia podem ver quando você controla o Claude Code, o Codex ou o pi pelo celular. Explica o que a criptografia de ponta a ponta protege, quem distribui as chaves e quando auto-hospedar o relay ajuda."
+published: "2026-11-12"
+---
+
+As ferramentas de controle remoto para agentes de programação mantêm o agente e o seu repositório na sua própria máquina, e a maioria delas diz que o tráfego é criptografado de ponta a ponta e que o relay pode ser auto-hospedado. As duas coisas são úteis, mas cada uma remove um risco específico e deixa outros no lugar. Este artigo explica quais partes da cadeia podem ver o quê, para que você decida se vale a pena rodar um relay auto-hospedado.
+
+O Pontia é a ferramenta que nós desenvolvemos. As informações sobre outras ferramentas vêm da documentação delas, consultada em 12 de novembro de 2026.
+
+## A resposta curta
+
+- **Claude Code Remote Control** é criptografado apenas em trânsito até a Anthropic, que armazena o histórico enquanto você está conectado.
+- **Happy, Conductor e Pontia** retransmitem tráfego criptografado de ponta a ponta, então o relay não consegue ler as suas sessões.
+- **T3 Connect** leva o tráfego por um túnel da Cloudflare. A documentação do T3 não descreve criptografia de ponta a ponta sobre ele.
+- **Criptografia de ponta a ponta sozinha não basta.** Quem diz ao seu celular qual chave pertence à sua máquina ainda pode autorizar um cliente próprio. Happy e Conductor pareiam dispositivos por QR code. O Pontia Cloud e o servidor de coordenação do Tailscale distribuem as chaves.
+- **O seu código continua indo para o provedor do modelo**, qualquer que seja o controle remoto usado.
+
+## O seu código continua indo para o provedor do modelo
+
+O agente roda na sua máquina, mas envia prompts, o conteúdo dos arquivos que lê e a saída dos comandos ao provedor do modelo, como Anthropic, OpenAI ou xAI, sob a política de dados desse provedor. Uma ferramenta de controle remoto não muda isso, e nenhuma configuração de relay muda. O restante deste artigo trata das partes extras que um controle remoto acrescenta, além do provedor que você já usa.
+
+## As partes de um controle remoto
+
+Todo controle remoto para um agente de programação tem quatro partes, mesmo quando uma única empresa opera várias delas:
+
+| Parte | O que faz |
+| --- | --- |
+| Host | Roda o agente, as ferramentas e os arquivos do projeto |
+| Cliente | O app de celular, a página no navegador ou o app desktop em que você digita |
+| Relay | Transporta bytes entre o cliente e o host quando eles não conseguem se conectar diretamente |
+| Serviço de chaves e identidade | Faz o seu login, decide quais clientes podem alcançar qual host e informa a cada lado qual chave pública pertence ao outro |
+
+A criptografia de ponta a ponta tira o relay do quadro de confiança: ele transporta dados que não consegue ler nem alterar. Ela não elimina a confiança no serviço de chaves, no código do cliente ou nas duas pontas.
+
+## O que cada opção expõe
+
+| Opção | O que o relay vê | Serviço de chaves | Observações |
+| --- | --- | --- | --- |
+| [Claude Code Remote Control](https://code.claude.com/docs/en/remote-control#connection-and-security) | Texto puro. O tráfego passa pela API da Anthropic sobre TLS, e o histórico fica armazenado nos servidores da Anthropic enquanto você está conectado | Anthropic | Não disponível com Zero Data Retention |
+| [Codex no app do ChatGPT](https://learn.chatgpt.com/docs/remote-connections) | O guia da OpenAI descreve "uma camada de relay segura" e não diz se ela é criptografada de ponta a ponta | OpenAI | |
+| [T3 Connect](https://github.com/pingdotgg/t3code/blob/main/docs/user/faq.md) | O tráfego passa por um túnel da Cloudflare. O relay do T3 estabelece o link e não faz proxy das sessões | Conta do T3 Connect, mais um link de pareamento por dispositivo | A Cloudflare termina o HTTPS dos hostnames do túnel, e a documentação do T3 não descreve uma segunda camada de criptografia. Eventos de uso do produto vão para o T3 e o PostHog, a menos que você os desative |
+| [Happy](https://happy.engineering/how-it-works/) | Texto cifrado, armazenado no relay para que o celular possa ler as sessões enquanto o host está offline | O seu celular. O celular guarda a chave primária da conta, e um computador é autorizado escaneando um QR code com o celular ([acesso móvel](https://happy.engineering/recepies/mobile-access/)) | As notificações push passam pelo Expo com o título da sessão em texto puro, e o app de celular envia dados analíticos ao PostHog, a menos que você os desative ([guia de auto-hospedagem](https://happy.engineering/docs/guides/self-hosting/)) |
+| [Conductor](https://www.conductor.build/docs/reference/remote-control) | Texto cifrado | O seu Mac. O celular pareia escaneando um QR code que funciona uma vez e expira após 10 minutos | Somente iOS, para Workspaces locais em um Mac |
+| [Tailscale](https://tailscale.com/docs/features/tailnet-lock) + SSH | Texto cifrado do WireGuard nos relays DERP | O servidor de coordenação do Tailscale distribui as chaves dos nós, a menos que você ative o Tailnet Lock | Depois, as chaves de host SSH, que você mesmo verifica |
+| [Pontia](/docs/security) | Texto cifrado, não armazenado. O Edge vê qual dispositivo, os endereços IP, os horários e os tamanhos | Pontia Cloud | Sem dados analíticos de produto. Detalhes abaixo |
+
+As linhas do Happy, do Conductor e do Tailscale mostram por que o serviço de chaves importa. A documentação do Tailscale diz isso diretamente: sem o Tailnet Lock, um servidor de coordenação malicioso poderia inserir nós na sua rede e trocar tráfego com as suas máquinas. A criptografia de ponta a ponta entre os nós não ajuda quando o servidor escolhe as chaves. Happy e Conductor evitam isso pareando por meio de um QR code escaneado entre os seus próprios dispositivos.
+
+## O que a criptografia de ponta a ponta não cobre
+
+**O serviço de chaves e identidade.** Se um serviço diz ao seu navegador qual chave pública pertence à sua máquina e diz à sua máquina quais clientes são permitidos, esse serviço pode autorizar um cliente próprio. A criptografia continua de ponta a ponta, só que com a ponta errada. Parear os dispositivos diretamente, por QR code ou conferindo uma impressão digital, remove esse risco. Uma conta com login, por si só, não remove.
+
+**O código do cliente.** Um cliente web carrega o JavaScript a partir do serviço toda vez que você o abre. Um app nativo recebe o código por atualizações da loja. De qualquer forma, a empresa que distribui o cliente poderia distribuir uma versão que vaza o que ele descriptografa. Código aberto torna isso auditável. Não prova que o build que você roda corresponde ao código-fonte.
+
+**Metadados.** Um relay que não consegue ler o conteúdo ainda vê os endereços IP, quando você se conecta, por quanto tempo e quantos dados trafegam.
+
+**As duas pontas.** Um host comprometido expõe tudo, porque é ali que o agente roda. Um celular perdido expõe o que o cliente armazena, mais tudo o que pode ser alcançado a partir dele enquanto continuar com login ativo.
+
+**Canais laterais fora do relay.** Notificações push, dados analíticos de produto e relatórios de falhas costumam ir para outros serviços. Verifique o que eles carregam. O guia de auto-hospedagem do Happy os lista, e o T3 Code documenta os eventos de uso.
+
+## Como o Pontia trata cada parte
+
+O relay se chama Edge, e o Pontia Cloud é o serviço de chaves e identidade.
+
+**Criptografia.** Para cada conexão, o navegador cria um par de chaves novo. O Pontia Cloud assina uma capability que vincula essa chave do navegador a um dispositivo e a uma versão da chave do dispositivo, válida por 60 segundos. O navegador a envia ao dispositivo dentro de um handshake HPKE (X25519, depois ChaCha20-Poly1305). O dispositivo rejeita a sessão se a capability não tiver uma assinatura válida do Cloud. As requisições carregam IDs autenticados, então uma requisição capturada não pode ser reenviada.
+
+**O Edge** encaminha texto cifrado e não armazena nada dele. Ele pode ver o ID do dispositivo, os endereços IP, os horários e os tamanhos, e pode se recusar a encaminhar o tráfego. Ele não consegue ler nem alterar as requisições. O histórico das sessões fica no seu dispositivo, então você não consegue acessar as sessões enquanto o dispositivo está offline.
+
+**O Pontia Cloud** não fica no caminho dos dados, mas guarda a chave pública de cada dispositivo, a entrega ao seu navegador e assina as capabilities que o seu dispositivo aceita. Um Pontia Cloud comprometido poderia, portanto, autorizar um navegador próprio a alcançar o seu dispositivo. O Pontia não oferece pareamento de dispositivos nem verificação de impressão digital que eliminariam isso. Auto-hospedar o Edge também não muda isso, porque o Cloud continua fornecendo login e autorização.
+
+**O código do cliente** de [app.pontia.dev](https://app.pontia.dev) é servido pelo Pontia, inclusive quando você o instala como app. O Local Dashboard é servido pelo `pontiad` no seu dispositivo.
+
+**No celular**, o Dashboard guarda em cache as linhas do tempo das sessões recentes no armazenamento do navegador para que elas abram rapidamente. Alguém que consiga usar o navegador do seu celular desbloqueado pode lê-las.
+
+**No dispositivo**, proteja o `$PONTIA_HOME`, que guarda a chave de identidade e as credenciais do dispositivo. Para substituir uma identidade vazada, execute `pontia remote rotate-key`. Para cortar o acesso de um dispositivo perdido, remova-o nas [Configurações de dispositivos](/settings/devices). [Segurança](/docs/security) lista cada segredo e como responder a uma exposição.
+
+### Usar o Pontia sem o Pontia Cloud
+
+Se você não quer confiar no Pontia Cloud nem no cliente hospedado dele, dispense o acesso remoto. O Local Dashboard escuta em `127.0.0.1:8080` e usa o `external_api_token` de `$PONTIA_HOME/config.toml`. Acesse-o por um túnel SSH:
+
+```sh
+ssh -N -L 8080:127.0.0.1:8080 agent@your-server
+```
+
+Depois, abra a URL que o `pontia up` exibe, que inclui o token. O celular precisa de um cliente SSH capaz de redirecionar portas, e a confiança passa para as suas chaves SSH e a sua rede, como na linha Tailscale + SSH acima. Mantenha `bind_addr` no loopback. Alterá-lo expõe a API protegida por token a essa rede.
+
+## Quando auto-hospedar o relay
+
+Um Edge auto-hospedado muda quem retransmite o seu texto cifrado, e nada mais. Vale a pena rodar um quando:
+
+- **os metadados importam.** O seu próprio Edge, e não o do Pontia, vê os seus endereços IP e horários de conexão;
+- **o tráfego precisa ficar na sua infraestrutura** por uma política ou contrato, mesmo criptografado;
+- **você quer controlar a disponibilidade e a localização**, como um relay perto do dispositivo ou um que não dependa dos nossos servidores estarem no ar.
+
+Isso não ajuda com o serviço de chaves nem com o código do cliente, porque o Pontia Cloud continua fazendo o seu login, autorizando as conexões e servindo o app.pontia.dev.
+
+O servidor auto-hospedado do Happy vai além: ele tira os registros de conta e o armazenamento criptografado das sessões dos servidores do Happy, então a empresa sai do caminho dos dados, exceto pelas notificações push e pelos dados analíticos. Se o objetivo é eliminar o fornecedor por completo, compare esse modelo, ou o SSH puro, com uma auto-hospedagem apenas do relay.
+
+### Implantar um Edge do Pontia
+
+Você precisa de um servidor Linux público com systemd, um endereço IPv4 público e as portas 80 e 443 ou uma porta HTTPS personalizada, 8443 por padrão, com certificados DNS-01. Gere um comando de uso único nas [Configurações de Edges](/settings/edges) e execute-o no servidor. Ele instala uma release assinada do `pontia-edge`, obtém um certificado Let's Encrypt para um hostname em `edge.pontia.dev` e inicia o serviço. Depois, selecione o Edge ao registrar um dispositivo. [Auto-hospedar um Edge](/docs/self-hosted-edge) tem os detalhes.
+
+## Perguntas a fazer sobre qualquer controle remoto
+
+- Quem diz ao meu cliente qual chave pertence à minha máquina, e eu mesmo posso verificar?
+- De onde vem o código do cliente cada vez que eu o abro?
+- O que o relay armazena, e por quanto tempo?
+- O que sai por outros canais, como push, dados analíticos ou relatórios de falhas?
+- O que alguém pode ler em um celular perdido, e como eu revogo o acesso?
+- Posso usar a ferramenta sem nenhum serviço do fornecedor?
+
+## Relacionados
+
+- [Controle remoto para Codex, Claude Code e pi: as opções comparadas](/blog/coding-agent-remote-control-alternatives)
+- [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
+- [Segurança](/docs/security) e [Auto-hospedar um Edge](/docs/self-hosted-edge)

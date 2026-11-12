@@ -1,0 +1,117 @@
+---
+title: "你的 coding agent 远程控制是端到端加密的吗？中继、密钥服务和应用能看到什么"
+description: 当你用手机控制 Claude Code、Codex 或 pi 时，Anthropic、OpenAI、T3 Connect、Cloudflare、Happy、Tailscale 和 Pontia 分别能看到什么。本文说明端到端加密保护了什么、谁在分发密钥，以及自托管中继在什么时候有用。
+published: "2026-11-12"
+---
+
+Coding agent 的远程控制工具会把 agent 和你的代码仓库留在你自己的机器上，其中大多数都声称流量是端到端加密的，且中继可以自托管。这两点都有用，但各自只消除一种特定风险，其他风险仍然存在。本文说明链路中的每个部分能看到什么，帮助你判断是否值得运行自托管中继。
+
+Pontia 是我们开发的工具。关于其他工具的信息来自它们各自的文档，核对时间为 2026 年 11 月 12 日。
+
+## 简短回答
+
+- **Claude Code Remote Control** 只在传输到 Anthropic 的过程中加密，Anthropic 会在你连接期间存储对话记录。
+- **Happy、Conductor 和 Pontia** 中继的是端到端加密的流量，因此中继无法读取你的会话。
+- **T3 Connect** 通过 Cloudflare 隧道传输流量。T3 的文档没有描述在此之上的端到端加密。
+- **仅有端到端加密是不够的。** 负责告诉你的手机哪个密钥属于你的机器的一方，仍然可以授权它自己的客户端。Happy 和 Conductor 通过二维码配对设备。Pontia Cloud 和 Tailscale 的协调服务器负责分发密钥。
+- **你的代码仍然会发送给模型提供商**，无论你使用哪种远程控制方式。
+
+## 你的代码仍然会发送给模型提供商
+
+Agent 在你的机器上运行，但它会把提示词、读取的文件内容和命令输出发送给模型提供商（如 Anthropic、OpenAI 或 xAI），并受该提供商的数据政策约束。远程控制工具不会改变这一点，任何中继设置也不会。本文其余部分讨论的是远程控制在你已在使用的提供商之外额外引入的各方。
+
+## 远程控制的组成部分
+
+每种 coding agent 远程控制方案都有四个部分，即使其中几部分由同一家公司运营：
+
+| 部分 | 作用 |
+| --- | --- |
+| 主机 | 运行 agent、工具和项目文件 |
+| 客户端 | 你输入内容的手机应用、浏览器页面或桌面应用 |
+| 中继 | 在客户端和主机无法直接连接时，在两者之间传递字节 |
+| 密钥和身份服务 | 让你登录，决定哪些客户端可以访问哪台主机，并告诉每一方哪个公钥属于另一方 |
+
+端到端加密把中继排除在信任范围之外：它传输的数据既无法读取也无法篡改。但它并不能消除对密钥服务、客户端代码或两端的信任。
+
+## 各方案暴露了什么
+
+| 方案 | 中继能看到 | 密钥服务 | 备注 |
+| --- | --- | --- | --- |
+| [Claude Code Remote Control](https://code.claude.com/docs/en/remote-control#connection-and-security) | 明文。流量通过 TLS 经由 Anthropic API 传输，连接期间对话记录存储在 Anthropic 的服务器上 | Anthropic | 启用 Zero Data Retention 时不可用 |
+| [ChatGPT 应用中的 Codex](https://learn.chatgpt.com/docs/remote-connections) | OpenAI 的指南描述了“一个安全的中继层”，但没有说明它是否端到端加密 | OpenAI | |
+| [T3 Connect](https://github.com/pingdotgg/t3code/blob/main/docs/user/faq.md) | 流量经由 Cloudflare 隧道。T3 的中继负责建立连接，不代理会话 | T3 Connect 账户，外加每台设备一个配对链接 | Cloudflare 会为隧道主机名终止 HTTPS，而 T3 的文档没有描述第二层加密。除非你关闭，产品使用事件会发送给 T3 和 PostHog |
+| [Happy](https://happy.engineering/how-it-works/) | 密文，存储在中继上，以便主机离线时手机仍能读取会话 | 你的手机。手机持有账户主密钥，电脑通过用手机扫描二维码获得授权（[移动访问](https://happy.engineering/recepies/mobile-access/)） | 推送通知经由 Expo 发送，会话标题为明文；除非你关闭，手机应用会向 PostHog 发送分析数据（[自托管指南](https://happy.engineering/docs/guides/self-hosting/)） |
+| [Conductor](https://www.conductor.build/docs/reference/remote-control) | 密文 | 你的 Mac。手机通过扫描一个只能使用一次、10 分钟后过期的二维码进行配对 | 仅支持 iOS，用于 Mac 上的本地 Workspace |
+| [Tailscale](https://tailscale.com/docs/features/tailnet-lock) + SSH | DERP 中继上的 WireGuard 密文 | 除非你开启 Tailnet Lock，否则由 Tailscale 的协调服务器分发节点密钥 | 然后是由你自己验证的 SSH 主机密钥 |
+| [Pontia](/docs/security) | 密文，不存储。Edge 能看到是哪台设备、IP 地址、时间和数据大小 | Pontia Cloud | 没有产品分析。详见下文 |
+
+Happy、Conductor 和 Tailscale 这几行说明了密钥服务为什么重要。Tailscale 的文档直接指出：没有 Tailnet Lock 时，恶意的协调服务器可以向你的网络中插入节点，并与你的机器交换流量。当服务器决定密钥时，节点之间的端到端加密无济于事。Happy 和 Conductor 通过在你自己的设备之间扫码配对来避免这一问题。
+
+## 端到端加密没有覆盖的部分
+
+**密钥和身份服务。** 如果一个服务告诉你的浏览器哪个公钥属于你的机器，并告诉你的机器哪些客户端被允许，那么这个服务就可以授权它自己的客户端。加密仍然是端到端的，只是另一端不对。直接配对设备（通过二维码或核对指纹）可以消除这种风险。仅凭已登录的账户则不行。
+
+**客户端代码。** Web 客户端每次打开时都从服务端加载 JavaScript。原生应用通过应用商店更新获取代码。无论哪种方式，发布客户端的公司都可能发布一个泄露其解密内容的版本。开源代码让这一点可以被审计，但无法证明你运行的构建与源代码一致。
+
+**元数据。** 无法读取内容的中继仍然能看到 IP 地址、你何时连接、连接多久以及传输了多少数据。
+
+**两端。** 主机一旦被攻破，一切都会暴露，因为 agent 就在那里运行。手机丢失会暴露客户端存储的所有内容，以及在其保持登录期间你能从它访问到的任何东西。
+
+**中继之外的旁路通道。** 推送通知、产品分析和崩溃报告通常会发送到其他服务。请检查它们携带了什么。Happy 的自托管指南列出了这些通道，T3 Code 也记录了其使用事件。
+
+## Pontia 如何处理每个部分
+
+中继称为 Edge，Pontia Cloud 是密钥和身份服务。
+
+**加密。** 每次连接时，浏览器都会创建一个新的密钥对。Pontia Cloud 签发一个 capability，将该浏览器密钥绑定到一台设备及其设备密钥版本，有效期 60 秒。浏览器在 HPKE 握手（X25519，然后是 ChaCha20-Poly1305）中将其发送给设备。除非 capability 带有有效的 Cloud 签名，否则设备会拒绝该会话。请求带有经过认证的 ID，因此截获的请求无法被重放。
+
+**Edge** 只转发密文，不存储任何内容。它能看到设备 ID、IP 地址、时间和数据大小，也可以拒绝转发流量，但无法读取或篡改请求。会话历史保留在你的设备上，因此设备离线时你无法访问会话。
+
+**Pontia Cloud** 不在数据路径上，但它持有每台设备的公钥，将其提供给你的浏览器，并签发你的设备所接受的 capability。因此，被攻破的 Pontia Cloud 可以授权它自己的浏览器访问你的设备。Pontia 不提供能消除这一风险的设备配对或指纹核对。自托管 Edge 也不会改变这一点，因为 Cloud 仍然提供登录和授权。
+
+**客户端代码**：[app.pontia.dev](https://app.pontia.dev) 的代码由 Pontia 提供，包括你将其安装为应用时。Local Dashboard 由你设备上的 `pontiad` 提供。
+
+**在手机上**，Dashboard 会把最近的会话时间线缓存在浏览器存储中，以便快速打开。能够使用你已解锁手机浏览器的人可以读取它们。
+
+**在设备上**，请保护好 `$PONTIA_HOME`，其中保存着设备的身份密钥和凭据。要替换泄露的身份，运行 `pontia remote rotate-key`。要切断丢失的设备，请在[设备设置](/settings/devices)中将其移除。[安全](/docs/security)列出了所有密钥以及泄露时的应对方法。
+
+### 不使用 Pontia Cloud 运行 Pontia
+
+如果你不想信任 Pontia Cloud 或其托管的客户端，可以不使用远程访问。Local Dashboard 监听 `127.0.0.1:8080`，并使用 `$PONTIA_HOME/config.toml` 中的 `external_api_token`。通过 SSH 隧道访问它：
+
+```sh
+ssh -N -L 8080:127.0.0.1:8080 agent@your-server
+```
+
+然后打开 `pontia up` 打印出的 URL，其中包含令牌。手机需要一个支持端口转发的 SSH 客户端，信任也随之转移到你的 SSH 密钥和网络上，与上面 Tailscale + SSH 那一行相同。请将 `bind_addr` 保持在回环地址。更改它会把受令牌保护的 API 暴露给对应的网络。
+
+## 什么时候应该自托管中继
+
+自托管 Edge 只改变由谁来中继你的密文，不改变其他任何东西。在以下情况下值得运行：
+
+- **元数据很重要。** 看到你的 IP 地址和连接时间的是你自己的 Edge，而不是 Pontia 的；
+- **流量必须留在你的基础设施上**，出于政策或合同要求，即使流量已加密；
+- **你希望控制可用性和位置**，例如让中继靠近设备，或不依赖我们的服务器在线。
+
+它对密钥服务和客户端代码没有帮助，因为 Pontia Cloud 仍然负责让你登录、授权连接并提供 app.pontia.dev。
+
+Happy 的自托管服务器走得更远：它把账户记录和加密的会话存储从 Happy 的服务器上移走，因此除了推送通知和分析之外，该公司退出了数据路径。如果你的目标是完全移除供应商，请将这种模式或纯 SSH 与仅自托管中继的方案进行比较。
+
+### 部署 Pontia Edge
+
+你需要一台带有 systemd 和公网 IPv4 地址的公网 Linux 服务器，并且要么开放 80 和 443 端口，要么开放一个自定义 HTTPS 端口（默认 8443）并使用 DNS-01 证书。在 [Edge 设置](/settings/edges)中生成一条一次性命令，然后在服务器上运行。它会安装签名的 `pontia-edge` 版本，为 `edge.pontia.dev` 下的主机名获取 Let's Encrypt 证书，并启动服务。之后在注册设备时选择该 Edge。详情请参阅[自托管 Edge](/docs/self-hosted-edge)。
+
+## 评估任何远程控制方案时要问的问题
+
+- 谁告诉我的客户端哪个密钥属于我的机器？我能自己核对吗？
+- 每次打开时，客户端代码从哪里来？
+- 中继存储了什么，存储多久？
+- 有什么内容会通过其他通道（如推送、分析或崩溃报告）流出？
+- 手机丢失后别人能读取什么？我如何撤销它？
+- 我能在完全不使用供应商服务的情况下使用这个工具吗？
+
+## 相关文章
+
+- [Codex、Claude Code 和 pi 的远程控制：方案对比](/blog/coding-agent-remote-control-alternatives)
+- [Tailscale 与 Cloudflare Tunnel 对比](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
+- [安全](/docs/security)和[自托管 Edge](/docs/self-hosted-edge)

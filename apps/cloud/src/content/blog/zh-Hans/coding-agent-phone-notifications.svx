@@ -1,0 +1,157 @@
+---
+title: "在 Codex 或 pi 需要你时收到手机通知"
+description: 当 Codex CLI 请求审批或完成一个 turn，以及 pi 等待输入时，向你的手机推送通知。本文提供经过测试的 Codex hooks 和 pi 扩展，通过 ntfy 发送通知，并说明容易让人踩坑的隐私和信任细节。
+published: "2026-11-12"
+---
+
+在服务器上运行的编程 Agent，等你的时间往往比工作的时间还长。Codex 停在审批提示上，pi 完成任务后等待下一条消息，而你只有在下次查看终端时才会发现。本文使用 Codex hooks、一个小型 pi 扩展和 [ntfy](https://ntfy.sh/)，为这两个 Agent 设置推送到手机的通知。
+
+下面的脚本已在 Linux 上使用 Codex CLI 0.167.1 和 pi 1.5.2 测试过，在 macOS 上同样适用。
+
+## 为什么内置通知无法送达手机
+
+Codex 有两种通知功能，但都无法覆盖这种情况：
+
+- **TUI 通知**（`config.toml` 中的 `[tui] notifications`）会发送桌面通知或触发终端响铃。它们只发送到连接着 Codex 的终端，因此分离的 tmux 会话不会产生任何你能看到的提示。
+- **`notify`** 会运行你指定的程序，但 OpenAI 的[高级配置指南](https://developers.openai.com/codex/config-advanced)指出，它目前只在 `agent-turn-complete` 时触发。它不会告诉你有审批在等待，而这恰恰是你最关心的事件。
+
+Codex [hooks](https://developers.openai.com/codex/hooks) 可以覆盖这两种事件。`PermissionRequest` 在 Codex 即将请求审批时运行，`Stop` 在一个 turn 结束时运行。pi 没有审批机制。它的扩展 API 提供了 `agent_settled` 事件，会在 pi 完成所有自动工作并开始等待输入时触发。
+
+## 设置 ntfy
+
+ntfy 会把 HTTP POST 请求作为推送通知送达。安装 [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy) 或 [iOS](https://apps.apple.com/us/app/ntfy/id1625396347) 应用并订阅一个 topic。
+
+公共的 ntfy.sh 服务器无需注册，因此 [topic 名称就相当于密码](https://docs.ntfy.sh/publish/)：任何知道它的人都可以读取和发送消息。请生成一个较长的随机名称：
+
+```sh
+echo "agents-$(openssl rand -hex 12)"
+```
+
+在服务器上测试：
+
+```sh
+curl -d "Test from $(hostname)" https://ntfy.sh/YOUR_TOPIC
+```
+
+在 Android 上，请为该 topic 开启 **instant delivery**。ntfy 文档提醒，如果不开启，手机处于休眠模式时消息可能会明显延迟。
+
+## Codex：在审批请求和 turn 结束时通知
+
+将以下脚本保存为 `~/.codex/hooks/ntfy.sh`，并用 `chmod +x` 设为可执行。它需要 `jq` 和 `curl`。
+
+```sh
+#!/bin/sh
+# Codex hook: push a phone notification through ntfy.
+url=https://ntfy.sh/YOUR_TOPIC
+
+event=$(cat)
+field() { printf '%s' "$event" | jq -r "$1"; }
+project=$(field '.cwd | split("/") | last')
+
+case $(field .hook_event_name) in
+  PermissionRequest)
+    title="Codex needs approval: $project"
+    body=$(field '.tool_input.description // .tool_input.command // .tool_name')
+    priority=high
+    ;;
+  Stop)
+    title="Codex finished: $project"
+    body=$(field '(.last_assistant_message // "Turn complete")[0:300]')
+    priority=default
+    ;;
+  *) exit 0 ;;
+esac
+
+curl -fsS --max-time 5 -o /dev/null \
+  -H "Title: $title" -H "Priority: $priority" -d "$body" "$url" || true
+```
+
+在 `~/.codex/config.toml` 中为这两个事件注册它：
+
+```toml
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+
+[[hooks.PermissionRequest]]
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+```
+
+启动 `codex` 并运行 `/hooks`。Codex 会跳过新增或修改过的 hook，直到你审查并信任它为止，并且信任是按 hook 的哈希值记录的。**之后修改脚本或配置条目，都需要重新信任**，否则通知会停止，而你的手机上不会出现任何错误。
+
+对于审批请求，Codex 通过 stdin 传入的 JSON 如下所示：
+
+```json
+{
+  "hook_event_name": "PermissionRequest",
+  "cwd": "/home/agent/projects/api",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "touch /tmp/created.txt",
+    "description": "Allow creating /tmp/created.txt? The sandbox is read-only."
+  }
+}
+```
+
+`Stop` 事件携带的是 `last_assistant_message`，而不是 `tool_input`。两者都包含 `session_id` 和 `turn_id`。
+
+### 需要注意的细节
+
+- **hook 必须保持静默。** `PermissionRequest` hook 可以通过打印决定来批准或拒绝请求。该脚本不打印任何内容并以 0 退出，因此 Codex 会显示正常的审批提示。`curl -o /dev/null` 让 ntfy 的响应不进入 stdout，`|| true` 防止网络故障被当作 hook 错误显示。
+- **设置较短的超时。** hooks 同步运行，默认超时为 600 秒。如果 ntfy 无法访问，较长的超时会拖住审批提示本身。
+- **你只会收到需要你处理的请求。** 对于沙箱已经允许的命令，`PermissionRequest` 不会运行。使用 `workspace-write` 沙箱和 `on-request` 审批时，这意味着只有 workspace 之外的写入和网络访问会触发通知，而这些正是值得查看的请求。
+- **`Stop` 在每个 turn 都会触发，** 包括交互式会话中的简短回复。如果觉得太吵，可以只注册 `PermissionRequest`。
+- **hooks 属于 Codex，而不是 TUI。** 它们在 `codex exec` 中同样会运行。
+
+## pi：在 pi 等待输入时通知
+
+将以下内容保存为 `~/.pi/agent/extensions/ntfy.ts`。pi 会自动从该目录加载扩展，`/reload` 可以在不重启的情况下载入修改。
+
+```ts
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { basename } from "node:path";
+
+const url = "https://ntfy.sh/YOUR_TOPIC";
+
+export default function (pi: ExtensionAPI) {
+  pi.on("agent_settled", async (event, ctx) => {
+    if (event.aborted) return; // you pressed Escape, so you are already there
+    await fetch(url, {
+      method: "POST",
+      headers: { Title: `pi: ${basename(ctx.cwd)}` },
+      body: "Waiting for input",
+    }).catch(() => {});
+  });
+}
+```
+
+请使用 `agent_settled`，而不是 `agent_end`。pi 的[扩展文档](https://pi.dev/docs/latest/extensions)说明，`agent_end` 会在每次底层运行后触发，之后 pi 可能会重试、压缩后重试，或继续处理排队的消息。基于 `agent_end` 的通知可能在 pi 仍在工作时就到达。
+
+由于 pi 不会暂停等待审批，通知只能告诉你某次运行已经结束。如需在命令运行前阻止它，请参阅 pi 的[安全指南](https://pi.dev/docs/latest/security)。
+
+## 不要让机密进入通知
+
+审批描述、命令以及最后一条助手消息中，可能包含文件路径、主机名，或出现在命令行里的 token。在 ntfy.sh 上，它们会经过第三方服务器，并送达任何知道 topic 名称的人。
+
+如果这对你的工作很重要，可以选择以下方式之一：
+
+- 只发送项目名称，将 `body` 替换为固定字符串，例如 `"Waiting"`；
+- [自托管 ntfy](https://docs.ntfy.sh/install/)，并要求发布和读取时使用[访问 token](https://docs.ntfy.sh/config/#access-control)。
+
+## 当通知不够用时
+
+通知告诉你 Agent 需要你，但你仍然需要一种回应的方式。在手机上通过 SSH，你需要连接 tmux、向上滚动找到提示，然后在全屏 TUI 中输入。[从手机访问编程 Agent 服务器](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)介绍了这种设置的网络部分。
+
+我们开发的工具 [Pontia](/docs/how-it-works) 会在手机浏览器中显示 Codex 审批请求，并提供 **Allow** 和 **Deny** 按钮，还会将 pi 会话以聊天形式实时显示。
+
+## 相关文章
+
+- [如何在手机上使用 Codex CLI](/blog/control-codex-cli-from-your-phone)
+- [如何在手机上使用 pi 编程 Agent](/blog/pi-coding-agent-remote-control)
+- [在 VPS 上运行 Codex 和 pi](/blog/run-coding-agents-on-a-vps)

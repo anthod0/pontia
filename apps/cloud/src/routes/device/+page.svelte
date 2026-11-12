@@ -4,6 +4,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import AuthLayout from '$lib/components/AuthLayout.svelte';
+	import { m } from '$lib/paraglide/messages';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -13,11 +14,11 @@
 	);
 	const resultMessage = $derived(
 		data.result === 'approved'
-			? 'Access approved. You can return to the terminal.'
+			? m.device_approved()
 			: data.result === 'denied'
-				? 'Access denied. You can return to the terminal.'
+				? m.device_denied()
 				: data.result === 'invalid'
-					? 'This code is invalid, expired, or has already been used.'
+					? m.device_invalid()
 					: null
 	);
 
@@ -37,20 +38,20 @@
 </script>
 
 <svelte:head
-	><title>Confirm device — Pontia</title><meta
+	><title>{m.device_title()}</title><meta
 		name="robots"
 		content="noindex"
 	/></svelte:head
 >
 
 <AuthLayout>
-	<h1>Confirm device access.</h1>
+	<h1>{m.device_heading()}</h1>
 	{#if resultMessage}
 		<p class:auth-error={data.result === 'invalid'} role="status">
 			{resultMessage}
 		</p>
 	{:else if !data.user}
-		<p>Sign in to approve or deny the request from your terminal.</p>
+		<p>{m.device_sign_in_prompt()}</p>
 		{#if data.userCode}<p class="device-code">{data.userCode}</p>{/if}
 		<div class="providers">
 			<form
@@ -58,7 +59,7 @@
 				action={`/api/auth/google/login?return_to=${encodeURIComponent(returnTo)}`}
 			>
 				<Button type="submit" class="button button-secondary"
-					><GoogleLogoIcon size={20} />Continue with Google</Button
+					><GoogleLogoIcon size={20} />{m.continue_with_google()}</Button
 				>
 			</form>
 			<form
@@ -66,17 +67,17 @@
 				action={`/api/auth/github/login?return_to=${encodeURIComponent(returnTo)}`}
 			>
 				<Button type="submit" class="button button-secondary"
-					><GithubLogoIcon size={20} />Continue with GitHub</Button
+					><GithubLogoIcon size={20} />{m.continue_with_github()}</Button
 				>
 			</form>
 		</div>
 	{:else}
-		<p>Compare this code with the code shown in your terminal.</p>
+		<p>{m.device_compare_code()}</p>
 		<form method="POST" class="code-entry">
 			<Input
 				id="user_code"
 				name="user_code"
-				aria-label="User code"
+				aria-label={m.device_user_code()}
 				class="user-code-input"
 				value={userCode}
 				oninput={updateUserCode}
@@ -90,12 +91,12 @@
 			{#if form?.error}<p class="auth-error" role="alert">{form.error}</p>{/if}
 			<div class="decisions">
 				<Button type="submit" formaction="?/approve" class="button approve"
-					>Approve</Button
+					>{m.device_approve()}</Button
 				>
 				<Button
 					type="submit"
 					formaction="?/deny"
-					class="button button-secondary">Deny</Button
+					class="button button-secondary">{m.device_deny()}</Button
 				>
 			</div>
 		</form>

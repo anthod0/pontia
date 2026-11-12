@@ -1,0 +1,35 @@
+<svelte:head>
+	<title>Workspace — Pontia</title>
+	<meta name="description" content="Pontia でプロジェクトディレクトリとファイル検索を設定します。" />
+</svelte:head>
+
+# Workspace
+
+Workspace は、エージェントが動作するプロジェクトディレクトリです。ひとつの Workspace を複数の Session に関連付けられます。
+
+## Workspace Browser のルート
+
+ルートは、Dashboard が参照できる、管理者が設定したディレクトリです。ルートは `$PONTIA_HOME/config.toml` で設定します。
+
+```toml
+[workspace_browser]
+roots = [
+  { root_id = "projects", label = "Projects", path = "/home/me/projects" }
+]
+```
+
+各 `root_id` は一意である必要があります。Pontia が使用する時点で、パスは既存のディレクトリの絶対パスである必要があります。初回の初期化では、Pontia はユーザーのホームディレクトリをルートとして設定します。以降の `pontia init` の実行では既存のルートが保持されます。
+
+ルートは、Dashboard が参照できるディレクトリを制御します。Agent Client のファイルシステムへのアクセスは、そのサンドボックスとローカルのプロセスの権限によって制御されます。
+
+## Workspace を有効にする
+
+[Workspaces](https://app.pontia.dev/workspaces) でルートを選択し、プロジェクトまで移動して、そのディレクトリを有効にします。有効な Workspace は New chat で選択できるようになり、複数の Session に関連付けられます。
+
+Workspace の名前を変更しても、ディレクトリはそのままです。無効化または取り消しを行うと、プロジェクトファイルは保持されたまま、新規の選択肢から外れます。ディレクトリが設定済みのすべてのルートの外に移動したり消えたりした場合、Dashboard はその登録を利用不可として表示するので、取り消すことができます。
+
+## ファイルのメンション
+
+有効な Workspace 内でコンポーザーに `@` を入力すると、ファイルやディレクトリを検索できます。無視するファイル、隠しエントリ、シンボリックリンクのたどり方、結果の上限、タイムアウトなど、ファイルピッカーの動作は設定できます。[設定](/docs/configuration)を参照してください。
+
+ファイルのメンションは、ローカルの Workspace 内の関連するコンテキストを Agent Client に示します。

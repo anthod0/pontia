@@ -1,0 +1,37 @@
+<svelte:head>
+	<title>ドキュメント — Pontia</title>
+	<meta name="description" content="Pontia をインストールして、デバイスをどこからでも操作できるエージェントクラウドにします。" />
+</svelte:head>
+
+# Pontia ドキュメント
+
+Pontia はデバイスをエージェントクラウドに変えます。コーディングエージェントはデバイス上のツールとプロジェクトファイルを使って動作し、あなたはホスト型の Remote Dashboard からその Session を監視して操作します。`pontiad` に直接アクセスするための Local Dashboard も利用できます。
+
+## はじめに
+
+- [はじめに](/docs/getting-started) — Pontia をインストールし、Agent Client を準備します。
+- [初期化](/docs/initialization) — 対話型ウィザードを使うか、非対話型のコマンドで段階的に初期化します。
+- [リモートアクセス](/docs/remote-access) — デバイスを登録し、ホスト型の Dashboard から接続します。
+- [Dashboard ガイド](/docs/dashboard) — Workspace を有効にし、Session を開始して、エージェントの作業を操作します。
+- [Pontia の仕組み](/docs/how-it-works) — ローカル実行と、デバイス、Pontia Cloud、Edge の間の境界を理解します。
+
+## リモートアクセスとセキュリティ
+
+- [デバイスとアカウントの管理](/docs/device-management) — リモートアクセスのリソースの名前変更、ローテーション、削除、取り消しを行います。
+- [Edge をセルフホスト](/docs/self-hosted-edge) — 公開 Linux サーバーに暗号化リレーをデプロイして運用します。
+- [セキュリティ](/docs/security) — 信頼境界、E2E 暗号化、認証情報、インシデント対応を確認します。
+
+## Pontia の使い方
+
+- [Agent Client](/docs/agent-clients) — pi、Codex、Claude Agent、ACP エージェントを設定し、機能の違いを理解します。
+- [Workspace](/docs/workspaces) — プロジェクトディレクトリとファイル検出を設定します。
+- [Workflow](/docs/workflows) — 明示的な Handoff と再計画を使って、永続的で段階的なエージェントの作業を実行します。
+
+## リファレンス
+
+- [設定](/docs/configuration)と [CLI リファレンス](/docs/cli)
+- [Pontia のアップデート](/docs/updating)
+- [Linux](/docs/platforms/linux) と [macOS](/docs/platforms/macos) のプラットフォームに関する注意事項
+- [トラブルシューティング](/docs/troubleshooting)と [FAQ](/docs/faq)
+
+エージェントの実行はデバイス上にとどまります。Remote Dashboard の通信はブラウザーとデバイスの間でエンドツーエンドで暗号化され、Edge は平文の業務トラフィックを受け取ることなく接続を提供します。

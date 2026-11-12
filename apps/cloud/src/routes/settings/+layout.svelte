@@ -2,29 +2,32 @@
   import { page } from "$app/state";
   import SiteHeader from "$lib/components/SiteHeader.svelte";
   import type { Snippet } from "svelte";
+  import { m } from "$lib/paraglide/messages";
+  import { deLocalizeHref, localizeHref } from "$lib/paraglide/runtime";
   let { children }: { children: Snippet } = $props();
   const sections = [
-    { href: "/settings/account", label: "Account" },
-    { href: "/settings/sessions", label: "Sessions" },
-    { href: "/settings/devices", label: "Devices" },
-    { href: "/settings/edges", label: "Edges" },
+    { href: "/settings/account", label: m.settings_account },
+    { href: "/settings/sessions", label: m.settings_sessions },
+    { href: "/settings/devices", label: m.settings_devices },
+    { href: "/settings/edges", label: m.settings_edges },
   ];
+  const pathname = $derived(deLocalizeHref(page.url.pathname));
 
   function active(href: string) {
-    return page.url.pathname === href || page.url.pathname.startsWith(`${href}/`);
+    return pathname === href || pathname.startsWith(`${href}/`);
   }
 </script>
 
-<a class="skip-link" href="#settings-content">Skip to settings</a>
+<a class="skip-link" href="#settings-content">{m.skip_to_settings()}</a>
 <SiteHeader />
 
 <div class="settings-shell page-width">
   <aside>
-    <a class="settings-title" href="/settings/account">Settings</a>
-    <nav aria-label="Settings sections">
+    <a class="settings-title" href={localizeHref("/settings/account")}>{m.settings_heading()}</a>
+    <nav aria-label={m.settings_sections()}>
       {#each sections as section}
-        <a href={section.href} aria-current={active(section.href) ? "page" : undefined}>
-          {section.label}
+        <a href={localizeHref(section.href)} aria-current={active(section.href) ? "page" : undefined}>
+          {section.label()}
         </a>
       {/each}
     </nav>

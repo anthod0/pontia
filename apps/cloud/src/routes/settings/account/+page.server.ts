@@ -2,6 +2,8 @@ import { fail, redirect, type RequestEvent } from "@sveltejs/kit";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { currentLogin, environment } from "$lib/server/auth/http";
 import { database } from "$lib/server/db";
+import { m } from "$lib/paraglide/messages";
+import { localizeHref } from "$lib/paraglide/runtime";
 import { accounts, authSessions, devices, users } from "$lib/server/db/schema";
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -13,7 +15,7 @@ async function authenticated(event: RequestEvent) {
 
 export const load: PageServerLoad = async (event) => {
   const authentication = await authenticated(event);
-  if (!authentication) redirect(303, "/login");
+  if (!authentication) redirect(303, localizeHref("/login"));
   const { login, db } = authentication;
   const [profile, linked, registeredDevice] = await Promise.all([
     db
@@ -42,7 +44,7 @@ export const load: PageServerLoad = async (event) => {
       .limit(1)
       .get(),
   ]);
-  if (!profile) redirect(303, "/login");
+  if (!profile) redirect(303, localizeHref("/login"));
   return {
     profile,
     accounts: linked,
@@ -59,10 +61,10 @@ function formText(data: FormData, name: string) {
 export const actions: Actions = {
   unlinkProvider: async (event) => {
     const authentication = await authenticated(event);
-    if (!authentication) return fail(401, { error: "Sign in to manage sign-in methods." });
+    if (!authentication) return fail(401, { error: m.account_error_sign_in() });
     const provider = formText(await event.request.formData(), "provider");
     if (provider !== "google" && provider !== "github") {
-      return fail(400, { error: "Select a sign-in method to unlink." });
+      return fail(400, { error: m.account_error_select() });
     }
     const userId = authentication.login.user_id;
     const canUnlink = sql`EXISTS (
@@ -90,7 +92,7 @@ export const actions: Actions = {
         .returning({ id: accounts.id }),
     ]);
     if (removed.length !== 1) {
-      return fail(409, { error: "Keep at least one sign-in method linked to your account." });
+      return fail(409, { error: m.account_error_last_method() });
     }
     return { success: "provider_unlinked", revokedSessions: revoked.length };
   },

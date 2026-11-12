@@ -1,0 +1,69 @@
+<svelte:head>
+	<title>pi Agent Client — Pontia</title>
+	<meta name="description" content="pi Agent Client の連携をインストールして Pontia で使います。" />
+</svelte:head>
+
+# pi Agent Client
+
+pi の連携は、`tmux` 上で動く実際の pi のセッションを Pontia に接続します。同じ会話を、ネイティブの TUI と Dashboard の両方で使えます。
+
+## 要件
+
+Pontia の初期化を実行する前に、次のコマンドをインストールします。
+
+- `pi`
+- `tmux`
+
+ユーザーがこれらを利用できることを確認します。
+
+```sh
+pi --version
+tmux -V
+```
+
+Session を開始する前に、pi でモデルプロバイダーの認証情報を設定してください。
+
+## 連携をインストールする
+
+次のコマンドの実行時に **pi** を選択します。
+
+```sh
+pontia init
+```
+
+後からインストールまたは修復するには、`pontia setup pi` を実行します。これにより pi の Client も有効になります。
+
+どちらのセットアップコマンドも `pi --version` を確認し、次を実行します。
+
+```sh
+pi install npm:@pontia/pi-client-plugin
+```
+
+このプラグインは、pi のネイティブなライフサイクルと会話の情報を `pontiad` に報告し、Pontia からのサポートされている操作を受け付けます。
+
+## pi の Session の実行方法
+
+Pontia は、選択した Workspace 内の管理対象の `tmux` ペインで pi を起動します。`pontia workflow submit` などの Workflow コマンドは、現在の Workflow の Agent Node の管理対象ペインで実行してください。
+
+会話履歴は pi のネイティブなデータから読み込まれます。Pontia で会話を閲覧して再開できるよう、このデータを残しておいてください。
+
+## pi のコマンドを上書きする
+
+デフォルトの TUI コマンドは `pi` です。別の実行ファイルやラッパーを使うには、`$PONTIA_HOME/config.toml` で設定します。
+
+```toml
+[runtime.pi]
+tui_command = "/absolute/path/to/pi"
+```
+
+コマンド単位で上書きするには `PONTIA_PI_TUI_COMMAND` を使います。永続的なサービス設定にするには、`config.toml` を更新して `pontia up` を実行します。
+
+## 連携を診断する
+
+Pontia の pi フックのログは次の場所にあります。
+
+```text
+$PONTIA_HOME/state/pi-hook.log
+```
+
+あわせて、`pontia status` がサービスの正常な状態を報告し、pi プラグインがインストールされたままであることを確認してください。サービスのログと一般的な復旧手順については[トラブルシューティング](/docs/troubleshooting)を参照してください。

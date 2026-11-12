@@ -1,0 +1,138 @@
+<svelte:head>
+	<title>Codex — Pontia</title>
+	<meta name="description" content="在 Linux 和 macOS 上为 Pontia 设置 Codex 守护进程。" />
+</svelte:head>
+
+# Codex
+
+Pontia 连接到 Codex 的 app-server 守护进程。请以运行 Pontia 的同一用户身份安装 Codex 并完成认证，然后检查守护进程支持情况：
+
+```sh
+codex app-server daemon start --help
+codex app-server daemon version --help
+```
+
+Codex 使用它自己的模型凭据、沙箱和审批策略。请根据你要从 Dashboard 运行的工作选择合适的策略。当 Codex 请求运行命令、修改文件或使用额外权限时，请求会出现在 Dashboard 中，并提供 **Allow** 和 **Deny** 选项。
+
+## 设置
+
+首次初始化时，运行 `pontia init` 并选择 **Codex**。之后要安装或修复集成，运行：
+
+```sh
+pontia setup codex
+```
+
+这两个命令都会配置自动启动、验证守护进程连接、为两个服务保存 Codex home，并安装启动器。在 Linux 上，它们还会启用用户 lingering。`setup` 会保留 Client 条目的启用状态；使用 `pontia client enable codex` 来为新 Session 启用它。
+
+<h2 id="codex-launcher">Codex 启动器</h2>
+
+Codex 设置会安装 `$PONTIA_HOME/bin/codex`，并在你的 bash、zsh 或 fish 启动文件中把它添加到 `PATH` 的最前面。此后，新 shell 中的交互式 `codex` 命令会连接到由 Pontia 管理的守护进程，它们启动、恢复或分叉的线程会显示为 Pontia Session。其他子命令，例如 `codex exec` 或 `codex login`，会原样运行原始可执行文件。
+
+打开一个新终端，或运行设置后打印的激活命令，即可使用启动器。如果启动器或其托管的 PATH 配置缺失，请重新运行 `pontia setup codex`。重复设置会保留无关的 shell 配置，并且不会重复添加托管的 PATH 块。原始的 Codex 可执行文件仍然可用。
+
+## 编辑之前的提示词
+
+在任一 Dashboard 中，对已完成 Turn 的起始提示词使用 **Edit message**。保存后会创建一个独立的 Session，包含该提示词之前的历史，然后发送你替换后的内容并打开新 Session。编辑第一条提示词会从空历史开始。原 Session 仍然可用，其中已在运行的工作会继续进行。
+
+如果新 Session 已创建但替换内容无法提交，使用 **Check / recover edit** 将其提交到同一个 Session。当操作结果未确认时，请保留已保存的操作，以免恢复时再创建一个分叉。
+
+分叉只改变对话历史；不会回滚 Workspace 文件。
+
+<h2 id="manual-setup">手动设置</h2>
+
+如需非交互式初始化，请为你的平台创建或更新下面的服务定义。可执行文件和 Codex home 都使用绝对路径。用 `command -v codex` 找到你的可执行文件；如果它需要 Node，请把 Node 所在目录加入服务的 `PATH`。
+
+### Linux
+
+如有需要，创建 `~/.config/systemd/user/`，然后在其中将以下内容保存为 `pontia-codex.service`：
+
+```ini
+[Unit]
+Description=Codex App Server Daemon Startup
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart="/absolute/path/to/codex" app-server daemon start
+Environment="CODEX_HOME=/home/you/.codex"
+
+[Install]
+WantedBy=default.target
+```
+
+启用并检查自动启动：
+
+```sh
+systemctl --user daemon-reload
+loginctl enable-linger "$(id -un)"
+systemctl --user enable --now pontia-codex.service
+systemctl --user is-enabled pontia-codex.service
+```
+
+Lingering 让用户服务在注销后仍然可用，可能需要管理员授权。查看日志请使用 `journalctl --user -u pontia-codex.service`。
+
+### macOS
+
+如有需要，创建 `~/Library/LaunchAgents/`，然后在其中将以下内容保存为 `dev.pontia.codex-daemon.plist`：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.pontia.codex-daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/absolute/path/to/codex</string>
+    <string>app-server</string><string>daemon</string><string>start</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CODEX_HOME</key><string>/Users/you/.codex</string>
+    <key>PATH</key><string>/absolute/path/to/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
+```
+
+验证该文件，并在当前登录用户的 GUI 域中加载它：
+
+```sh
+plutil -lint "$HOME/Library/LaunchAgents/dev.pontia.codex-daemon.plist"
+launchctl enable "gui/$(id -u)/dev.pontia.codex-daemon"
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dev.pontia.codex-daemon.plist"
+launchctl print "gui/$(id -u)/dev.pontia.codex-daemon"
+```
+
+要替换已加载的定义，请在 `bootstrap` 之前运行 `launchctl bootout "gui/$(id -u)/dev.pontia.codex-daemon"`。
+
+## 验证守护进程
+
+使用与服务定义相同的 Codex home：
+
+```sh
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}" codex app-server daemon version
+```
+
+正在运行的守护进程会返回包含 `"status": "running"` 的 JSON。接着按照[初始化](/docs/initialization#start-the-local-service)启动 Pontia，按下文所述使其 Codex home 保持一致，启用 Codex，并连接到 Remote Dashboard。
+
+<h2 id="pontia-codex-home">使 Pontia 的 Codex home 保持一致</h2>
+
+首次运行 `pontia up` 后，检查 Pontia 的服务定义是否保存了与 Codex 守护进程相同的绝对 `CODEX_HOME`。这同时适用于默认的 `~/.codex` 目录和自定义 home。根据需要添加或更新该值，并保留其他服务设置：
+
+| 平台 | Pontia 定义 | 修改 | 应用 |
+| --- | --- | --- | --- |
+| Linux | `~/.config/systemd/user/pontia.service` | 在 `[Service]` 下添加 `Environment="CODEX_HOME=/your/path"` | `pontia up` |
+| macOS | `~/Library/LaunchAgents/dev.pontia.pontiad.plist` | 在 `EnvironmentVariables` 中添加一个 `CODEX_HOME` 字符串 | `pontia down`，然后 `pontia up` |
+
+在 macOS 上，请保持 Pontia 定义为 XML 格式，并在 `EnvironmentVariables` 中插入或更新以下条目，保留所示的换行和四个空格的缩进：
+
+```xml
+    <key>CODEX_HOME</key>
+    <string>/your/path</string>
+```
+
+将 `/your/path` 替换为你选择的路径，对 `&` 等 XML 字符进行转义，并保留周围条目的布局。已有的匹配配置可以直接使用。
+
+修改后，使用表中的命令重新加载服务。检查已保存的 `CODEX_HOME`，确认 `pontia status` 报告服务正常，然后启用 Codex。把路径保存在服务定义中，可以让 Pontia 的后台进程使用它。

@@ -3,6 +3,9 @@
 	import GoogleLogoIcon from 'phosphor-svelte/lib/GoogleLogoIcon';
 	import { Button } from '$lib/components/ui/button';
 	import { authError } from '$lib/auth-errors';
+	import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
+	import { m } from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 	const message = $derived(authError(data.error));
@@ -18,7 +21,7 @@
 </script>
 
 <svelte:head
-	><title>Sign in — Pontia</title><meta
+	><title>{m.login_title()}</title><meta
 		name="robots"
 		content="noindex"
 	/></svelte:head
@@ -26,15 +29,15 @@
 
 <div class="login">
 	<aside class="showcase" aria-hidden="true">
-		<a class="showcase-brand" href="/" tabindex="-1">
+		<a class="showcase-brand" href={localizeHref('/')} tabindex="-1">
 			<img src="/logo.svg" alt="" />
 			<span>Pontia</span>
 		</a>
 		<div class="showcase-body">
 			<div class="showcase-copy">
-				<p class="showcase-title">Leave your desk,<br /><span>not your agents.</span></p>
+				<p class="showcase-title">{m.login_showcase_title_first()}<br /><span>{m.login_showcase_title_second()}</span></p>
 				<p class="showcase-text">
-					Follow, approve, and steer coding agents running on your own devices from any browser.
+					{m.login_showcase_text()}
 				</p>
 			</div>
 			<div class="preview">
@@ -58,37 +61,43 @@
 	</aside>
 
 	<main class="panel">
-		<a class="panel-brand" href="/" aria-label="Pontia home">
+		<a class="panel-brand" href={localizeHref('/')} aria-label={m.home_link_label()}>
 			<img src="/logo.svg" alt="" />
 			<span>Pontia</span>
 		</a>
 		<div class="card">
-			<h1>Welcome to Pontia</h1>
-			<p class="lead">Sign in or create your account to open the Dashboard.</p>
+			<h1>{m.login_heading()}</h1>
+			<p class="lead">{m.login_lead()}</p>
 			{#if message}<p class="auth-error" role="alert">{message}</p>{/if}
 			<div class="providers">
 				<form method="POST" action={`/api/auth/google/login${returnToQuery}`}>
 					<Button type="submit" class="button button-secondary provider"
-						><GoogleLogoIcon size={20} />Continue with Google</Button
+						><GoogleLogoIcon size={20} />{m.continue_with_google()}</Button
 					>
 				</form>
 				<form method="POST" action={`/api/auth/github/login${returnToQuery}`}>
 					<Button type="submit" class="button button-secondary provider"
-						><GithubLogoIcon size={20} />Continue with GitHub</Button
+						><GithubLogoIcon size={20} />{m.continue_with_github()}</Button
 					>
 				</form>
 			</div>
 			{#if data.hasCredential}
 				<form method="POST" action="/api/auth/logout" class="sign-out">
-					<Button type="submit" variant="link">Sign out of the current session</Button>
+					<Button type="submit" variant="link">{m.login_sign_out_current()}</Button>
 				</form>
 			{/if}
 			<p class="legal-notice">
-				By continuing, you agree to the <a href="/terms">Terms of Service</a> and acknowledge the
-				<a href="/privacy">Privacy Policy</a>.
+				<ParaglideMessage message={m.login_legal}>
+					{#snippet terms({ children })}<a href="/terms">{@render children?.()}</a>{/snippet}
+					{#snippet privacy({ children })}<a href="/privacy">{@render children?.()}</a>{/snippet}
+				</ParaglideMessage>
 			</p>
 		</div>
-		<p class="help">New to Pontia? Read the <a href="/docs/getting-started">setup guide</a>.</p>
+		<p class="help">
+			<ParaglideMessage message={m.login_help}>
+				{#snippet guide({ children })}<a href={localizeHref('/docs/getting-started')}>{@render children?.()}</a>{/snippet}
+			</ParaglideMessage>
+		</p>
 	</main>
 </div>
 

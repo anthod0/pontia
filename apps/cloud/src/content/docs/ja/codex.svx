@@ -1,0 +1,138 @@
+<svelte:head>
+	<title>Codex — Pontia</title>
+	<meta name="description" content="Linux と macOS で Pontia 用の Codex デーモンをセットアップします。" />
+</svelte:head>
+
+# Codex
+
+Pontia は Codex の app-server デーモンに接続します。Pontia を実行するユーザーと同じユーザーで Codex をインストールして認証し、デーモンのサポートを確認します。
+
+```sh
+codex app-server daemon start --help
+codex app-server daemon version --help
+```
+
+Codex は独自のモデル認証情報、サンドボックス、承認ポリシーを使います。Dashboard から実行する作業に適したポリシーを選んでください。Codex がコマンドの実行、ファイルの変更、追加権限の使用を求めると、そのリクエストが **Allow** と **Deny** の選択肢付きで Dashboard に表示されます。
+
+## セットアップ
+
+初回の初期化では、`pontia init` を実行して **Codex** を選択します。後から連携をインストールまたは修復するには、次を実行します。
+
+```sh
+pontia setup codex
+```
+
+どちらのコマンドも、自動起動の設定、デーモン接続の確認、両方のサービスへの Codex ホームの保存、ランチャーのインストールを行います。Linux ではユーザーの lingering も有効にします。`setup` は Client エントリーの有効状態を維持します。新しい Session を有効にするには `pontia client enable codex` を使います。
+
+<h2 id="codex-launcher">Codex ランチャー</h2>
+
+Codex のセットアップでは `$PONTIA_HOME/bin/codex` をインストールし、bash、zsh、fish の起動ファイルで `PATH` の先頭に追加します。これにより、新しいシェルで対話的に実行した `codex` コマンドは Pontia が管理するデーモンに接続し、そこで開始、再開、フォークしたスレッドが Pontia の Session として表示されます。`codex exec` や `codex login` などの他のサブコマンドは、元の実行ファイルをそのまま実行します。
+
+ランチャーを使うには、新しいターミナルを開くか、セットアップ後に表示される有効化コマンドを実行します。ランチャーや管理対象の PATH 設定が見つからない場合は、`pontia setup codex` を再実行してください。セットアップを繰り返しても、無関係なシェル設定は維持され、管理対象の PATH ブロックは重複しません。元の Codex 実行ファイルも引き続き利用できます。
+
+## 以前のプロンプトを編集する
+
+どちらの Dashboard でも、完了した Turn の最初のプロンプトで **Edit message** を使います。保存すると、そのプロンプトより前の履歴を持つ独立した Session が作成され、置き換えたプロンプトが送信されて新しい Session が開きます。最初のプロンプトを編集した場合は、空の履歴から始まります。元の Session は引き続き利用でき、そこで実行中の作業も続行されます。
+
+新しい Session が作成されたものの置き換えたプロンプトを送信できなかった場合は、**Check / recover edit** を使って同じ Session に送信します。結果が未確認の場合は保存済みの操作を残しておくと、復旧時に別のフォークが作成されません。
+
+フォークで変わるのは会話履歴だけです。Workspace のファイルはロールバックされません。
+
+<h2 id="manual-setup">手動セットアップ</h2>
+
+非対話的に初期化するには、以下のプラットフォーム別のサービス定義を作成または更新します。実行ファイルと Codex ホームには絶対パスを使ってください。実行ファイルは `command -v codex` で確認できます。Node が必要な場合は、Node のディレクトリをサービスの `PATH` に含めてください。
+
+### Linux
+
+必要に応じて `~/.config/systemd/user/` を作成し、その中に次の内容を `pontia-codex.service` として保存します。
+
+```ini
+[Unit]
+Description=Codex App Server Daemon Startup
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart="/absolute/path/to/codex" app-server daemon start
+Environment="CODEX_HOME=/home/you/.codex"
+
+[Install]
+WantedBy=default.target
+```
+
+自動起動を有効にして確認します。
+
+```sh
+systemctl --user daemon-reload
+loginctl enable-linger "$(id -un)"
+systemctl --user enable --now pontia-codex.service
+systemctl --user is-enabled pontia-codex.service
+```
+
+lingering を有効にすると、ログアウト後もユーザーサービスが利用でき続けます。管理者の認可が必要な場合があります。ログは `journalctl --user -u pontia-codex.service` で確認します。
+
+### macOS
+
+必要に応じて `~/Library/LaunchAgents/` を作成し、その中に次の内容を `dev.pontia.codex-daemon.plist` として保存します。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.pontia.codex-daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/absolute/path/to/codex</string>
+    <string>app-server</string><string>daemon</string><string>start</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CODEX_HOME</key><string>/Users/you/.codex</string>
+    <key>PATH</key><string>/absolute/path/to/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
+```
+
+検証し、ログイン中のユーザーの GUI ドメインに読み込みます。
+
+```sh
+plutil -lint "$HOME/Library/LaunchAgents/dev.pontia.codex-daemon.plist"
+launchctl enable "gui/$(id -u)/dev.pontia.codex-daemon"
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dev.pontia.codex-daemon.plist"
+launchctl print "gui/$(id -u)/dev.pontia.codex-daemon"
+```
+
+読み込み済みの定義を置き換えるには、`bootstrap` の前に `launchctl bootout "gui/$(id -u)/dev.pontia.codex-daemon"` を実行します。
+
+## デーモンを確認する
+
+サービス定義と同じ Codex ホームを使います。
+
+```sh
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}" codex app-server daemon version
+```
+
+デーモンが実行中であれば、`"status": "running"` を含む JSON が返ります。続いて[初期化](/docs/initialization#start-the-local-service)に進み、Pontia を起動し、以下の説明に従って Codex ホームを一致させ、Codex を有効にして Remote Dashboard に接続します。
+
+<h2 id="pontia-codex-home">Pontia の Codex ホームを一致させる</h2>
+
+最初の `pontia up` の後、Pontia のサービス定義に Codex デーモンと同じ絶対パスの `CODEX_HOME` が保存されていることを確認します。これはデフォルトの `~/.codex` ディレクトリとカスタムのホームの両方に当てはまります。他のサービス設定は残したまま、必要に応じて値を追加または更新してください。
+
+| プラットフォーム | Pontia の定義 | 変更内容 | 適用方法 |
+| --- | --- | --- | --- |
+| Linux | `~/.config/systemd/user/pontia.service` | `[Service]` の下に `Environment="CODEX_HOME=/your/path"` を追加 | `pontia up` |
+| macOS | `~/Library/LaunchAgents/dev.pontia.pontiad.plist` | `EnvironmentVariables` に `CODEX_HOME` の文字列を追加 | `pontia down` の後に `pontia up` |
+
+macOS では Pontia の定義を XML のまま保ち、`EnvironmentVariables` の中に次のエントリーを挿入または更新します。示されている改行と 4 スペースのインデントを維持してください。
+
+```xml
+    <key>CODEX_HOME</key>
+    <string>/your/path</string>
+```
+
+`/your/path` を選択したパスに置き換え、`&` などの XML 文字をエスケープし、周囲のエントリーのレイアウトを維持してください。既存の設定が一致していれば、そのまま使えます。
+
+変更後は、表のコマンドを使ってサービスを再読み込みします。保存された `CODEX_HOME` を確認し、`pontia status` がサービスの正常な状態を報告することを確かめてから、Codex を有効にします。サービス定義にパスを保存すると、Pontia のバックグラウンドプロセスがそのパスを使えるようになります。

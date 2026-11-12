@@ -1,0 +1,63 @@
+<svelte:head>
+	<title>设备与账户管理 — Pontia</title>
+	<meta name="description" content="管理 Pontia 远程设备、加密身份、登录方式和会话。" />
+</svelte:head>
+
+# 设备与账户管理
+
+已注册设备是归属于你的 Pontia Cloud 用户的远程控制目标。只有当它的注册信息、本地加密身份、所选 Edge 和本地服务全部一致时，远程访问才能正常工作。
+
+## 检查设备
+
+在已注册的设备上运行：
+
+```sh
+pontia doctor
+```
+
+该命令会检查本地设备 ID、Cloud 注册、所选 Edge 以及存储的端到端加密身份。它需要通过 `pontia login` 获得的有效 CLI 凭据。
+
+## 重命名设备或更改其标识
+
+使用[设备设置](/settings/devices)，或运行：
+
+```sh
+pontia remote edit --name "Build workstation"
+pontia remote edit --handle build-workstation
+```
+
+两个选项可以同时提供。更改标识会更新 `app.pontia.dev/HANDLE` 处的设备 URL，同时保留其加密身份和所选 Edge。
+
+## 轮换设备密钥
+
+运行：
+
+```sh
+pontia remote rotate-key
+```
+
+Pontia 会创建新的设备 E2E 身份，更新 Cloud 注册，将新身份写入 `$PONTIA_HOME/e2e-identity.json`，并重启本地服务。现有的浏览器与设备之间的加密会话与新身份不再匹配，必须重新连接。
+
+当身份文件可能已泄露，或你想替换设备的加密身份时，使用此命令。
+
+## 禁用远程访问
+
+在设备上运行：
+
+```sh
+pontia remote disable
+```
+
+这会注销该设备，移除其本地 E2E 身份，更新本地配置，并重启服务。CLI 凭据会保留，以供后续 Cloud 命令使用。
+
+在[设备设置](/settings/devices)中移除设备会注销该设备。你的 CLI 登录和其他已注册设备仍然可用。
+
+## 管理登录方式
+
+在[账户设置](/settings/account)中，可以关联 Google 或 GitHub 作为登录方式。每个提供商账户只能关联到一个 Pontia 用户。Pontia 通过提供商账户稳定的提供商身份来识别它们，而不会把邮箱地址相同的账户视为同一账户。
+
+请为你的用户至少保留一种可用的已关联登录方式。
+
+## 管理浏览器会话
+
+在[会话设置](/settings/sessions)中，你可以撤销单个浏览器会话，或退出其他所有浏览器。被撤销的浏览器会话在当前访问令牌过期后将无法刷新。

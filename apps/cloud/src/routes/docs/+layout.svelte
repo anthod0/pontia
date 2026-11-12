@@ -2,57 +2,61 @@
 	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
 	import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon';
+	import LocaleLinks from '$lib/components/LocaleLinks.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import * as Popover from '$lib/components/ui/popover';
 	import { tick, type Snippet } from 'svelte';
 	import { addCodeCopyButtons } from '$lib/code-copy';
 	import '$lib/styles/article.css';
+	import { m } from '$lib/paraglide/messages';
+	import { deLocalizeHref, localizeHref } from '$lib/paraglide/runtime';
 
 	let { children }: { children: Snippet } = $props();
 
 	const sections = [
 		{
-			title: 'Overview',
+			title: m.docs_group_overview,
 			links: [
-				{ href: '/docs/getting-started', title: 'Getting started' },
-				{ href: '/docs/initialization', title: 'Initialization' },
-				{ href: '/docs/how-it-works', title: 'How Pontia works' }
+				{ href: '/docs/getting-started', title: m.docs_getting_started },
+				{ href: '/docs/initialization', title: m.docs_initialization },
+				{ href: '/docs/how-it-works', title: m.how_pontia_works }
 			]
 		},
 		{
-			title: 'Remote access',
+			title: m.docs_group_remote_access,
 			links: [
-				{ href: '/docs/remote-access', title: 'Remote access' },
-				{ href: '/docs/device-management', title: 'Device management' },
-				{ href: '/docs/self-hosted-edge', title: 'Self-host an Edge' },
-				{ href: '/docs/security', title: 'Security' }
+				{ href: '/docs/remote-access', title: m.docs_remote_access },
+				{ href: '/docs/device-management', title: m.docs_device_management },
+				{ href: '/docs/self-hosted-edge', title: m.docs_self_hosted_edge },
+				{ href: '/docs/security', title: m.docs_security }
 			]
 		},
 		{
-			title: 'Using Pontia',
+			title: m.docs_group_using,
 			links: [
-				{ href: '/docs/dashboard', title: 'Dashboard' },
-				{ href: '/docs/agent-clients', title: 'Agent Clients' },
-				{ href: '/docs/codex', title: 'Codex' },
-				{ href: '/docs/workspaces', title: 'Workspaces' },
-				{ href: '/docs/workflows', title: 'Workflows' }
+				{ href: '/docs/dashboard', title: m.docs_dashboard },
+				{ href: '/docs/agent-clients', title: m.agent_clients },
+				{ href: '/docs/codex', title: () => 'Codex' },
+				{ href: '/docs/workspaces', title: m.docs_workspaces },
+				{ href: '/docs/workflows', title: m.docs_workflows }
 			]
 		},
 		{
-			title: 'Reference',
+			title: m.docs_group_reference,
 			links: [
-				{ href: '/docs/configuration', title: 'Configuration' },
-				{ href: '/docs/cli', title: 'CLI' },
-				{ href: '/docs/updating', title: 'Updating' },
-				{ href: '/docs/platforms/linux', title: 'Linux' },
-				{ href: '/docs/platforms/macos', title: 'macOS' },
-				{ href: '/docs/troubleshooting', title: 'Troubleshooting' },
-				{ href: '/docs/faq', title: 'FAQ' }
+				{ href: '/docs/configuration', title: m.docs_configuration },
+				{ href: '/docs/cli', title: () => 'CLI' },
+				{ href: '/docs/updating', title: m.docs_updating },
+				{ href: '/docs/platforms/linux', title: () => 'Linux' },
+				{ href: '/docs/platforms/macos', title: () => 'macOS' },
+				{ href: '/docs/troubleshooting', title: m.docs_troubleshooting },
+				{ href: '/docs/faq', title: m.docs_faq }
 			]
 		}
 	];
+	const pathname = $derived(deLocalizeHref(page.url.pathname));
 	const currentTitle = $derived(
-		sections.flatMap((section) => section.links).find((link) => link.href === page.url.pathname)?.title ?? 'Contents'
+		(sections.flatMap((section) => section.links).find((link) => link.href === pathname)?.title ?? m.docs_contents)()
 	);
 	// On narrow screens the section list lives in a popover behind a sticky bar.
 	let menuOpen = $state(false);
@@ -67,22 +71,22 @@
 {#snippet navGroups()}
 	{#each sections as section}
 		<div class="nav-group">
-			<span>{section.title}</span>
+			<span>{section.title()}</span>
 			{#each section.links as link}
-				<a href={link.href} aria-current={page.url.pathname === link.href ? 'page' : undefined}>{link.title}</a>
+				<a href={localizeHref(link.href)} aria-current={pathname === link.href ? 'page' : undefined}>{link.title()}</a>
 			{/each}
 		</div>
 	{/each}
 {/snippet}
 
-<a class="skip-link" href="#docs-content">Skip to content</a>
+<a class="skip-link" href="#docs-content">{m.skip_to_content()}</a>
 
 <SiteHeader />
 
 <div class="docs-shell page-width">
 	<aside>
-		<a class="docs-title" href="/docs">Documentation</a>
-		<nav aria-label="Documentation sections">{@render navGroups()}</nav>
+		<a class="docs-title" href={localizeHref('/docs')}>{m.docs_heading()}</a>
+		<nav aria-label={m.docs_sections()}>{@render navGroups()}</nav>
 	</aside>
 	<div class="docs-menu">
 		<Popover.Root bind:open={menuOpen}>
@@ -91,12 +95,14 @@
 				<CaretDownIcon size={16} />
 			</Popover.Trigger>
 			<Popover.Content class="docs-menu-content" align="start" sideOffset={6}>
-				<nav aria-label="Documentation sections">{@render navGroups()}</nav>
+				<nav aria-label={m.docs_sections()}>{@render navGroups()}</nav>
 			</Popover.Content>
 		</Popover.Root>
 	</div>
 	<main id="docs-content" class="docs-content article-content">{@render children()}</main>
 </div>
+
+<LocaleLinks />
 
 <style>
 	.docs-shell { display: grid; grid-template-columns: 210px minmax(0, 720px); gap: 64px; padding-block: 64px 96px; }

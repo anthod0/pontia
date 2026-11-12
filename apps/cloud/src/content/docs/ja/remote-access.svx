@@ -1,0 +1,62 @@
+<svelte:head>
+	<title>リモートアクセス — Pontia</title>
+	<meta name="description" content="Pontia のデバイスを接続し、エージェントの Session をリモートから操作します。" />
+</svelte:head>
+
+# リモートアクセス
+
+リモートアクセスを使うと、Pontia の Web Dashboard を通じて、デバイス上のエージェントの Session を監視して操作できます。エージェント、開発ツール、プロジェクトファイルは、引き続きそのデバイス上で動作し、デバイス上に残ります。
+
+## セットアップ時にリモートアクセスを有効にする
+
+`pontia init` でサインインとリモートアクセスの有効化を求められたら、承諾してブラウザーでの認可を完了してください。そのままデバイスの登録を進め、デバイスを Pontia Cloud に接続します。Pontia はリモートの設定でローカルサービスを再起動し、そのデバイスの Remote Dashboard を開きます。
+
+## 既存のインストールを接続する
+
+まず、サインインします。
+
+```sh
+pontia login
+```
+
+Pontia が確認用のアドレスとワンタイムコードを表示します。ブラウザーでアドレスを開き、Google または GitHub でサインインして、コードを承認してください。CLI は、得られた認証情報を Pontia のホームディレクトリに保存します。
+
+次に、現在のデバイスを登録します。
+
+```sh
+pontia remote enable
+```
+
+プロンプトが表示されたら、利用可能な Edge を選択し、デバイス名を確認します。Pontia は、エンドツーエンドで暗号化されたアクセスに使うデバイスの ID を生成し、必要に応じて動作中のサービスを更新します。
+
+ターミナルのプロンプトなしで登録するには、`pontia remote edges` で Edge の ID を取得してから、`pontia remote enable --edge EDGE_ID --name "Device name"` を実行します。両方のオプションが必須です。全体の手順とブラウザーでの認可の要件については、[非対話型の初期化](/docs/initialization#non-interactive-initialization)を参照してください。
+
+登録したデバイスにアクセスするには、[app.pontia.dev](https://app.pontia.dev) を開きます。
+
+## 登録の確認と管理
+
+デバイスで次のコマンドを実行すると、ローカルの ID と Cloud の登録を比較できます。
+
+```sh
+pontia doctor
+```
+
+デバイスの表示名や Dashboard URL のハンドルは `pontia remote edit` で変更でき、暗号化 ID は `pontia remote rotate-key` で置き換えられます。Cloud には[デバイス設定](/settings/devices)、[Session 設定](/settings/sessions)、[アカウント設定](/settings/account)があります。各操作の影響については[デバイスとアカウントの管理](/docs/device-management)を参照してください。
+
+## セキュリティモデル
+
+ブラウザーとデバイスは、エンドツーエンドで暗号化された Session を確立します。Edge は接続を運んで暗号文を中継し、Pontia Cloud はログイン、デバイス登録、アクセスの認可を管理します。
+
+エージェントの実行とプロジェクトファイルはデバイス上に残ります。プロトコルと認証情報の詳細は[セキュリティ](/docs/security)を参照してください。
+
+公式の Edge を選ぶことも、[セルフホストの Edge をデプロイ](/docs/self-hosted-edge)することもできます。どちらも認可には Pontia Cloud を使います。セルフホストにすると、暗号文を中継する場所を選べます。
+
+## リモートアクセスを無効にする
+
+現在のデバイスの登録を解除し、リモートアクセスを無効にするには、次を実行します。
+
+```sh
+pontia remote disable
+```
+
+リモートアクセスを無効にした後も、ローカルからのアクセスは引き続き利用できます。接続に失敗する場合は、[トラブルシューティング](/docs/troubleshooting)を参照してください。

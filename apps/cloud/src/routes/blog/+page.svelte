@@ -1,20 +1,21 @@
 <script lang="ts">
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import LocaleLinks from '$lib/components/LocaleLinks.svelte';
 	import { formatDate } from '$lib/blog';
+	import { m } from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 
 	let { data } = $props();
 
-	const url = 'https://pontia.dev/blog';
-	const title = 'Blog — Pontia';
-	const description =
-		'Guides for running coding agents such as Codex and pi on your own machines and controlling them from a browser.';
+	const url = `https://pontia.dev${localizeHref('/blog')}`;
+	const title = m.blog_title();
+	const description = m.blog_description();
 </script>
 
 <svelte:head>
 	<title>{title}</title>
 	<meta name="description" content={description} />
-	<link rel="canonical" href={url} />
 	<meta property="og:site_name" content="Pontia" />
 	<meta property="og:title" content={title} />
 	<meta property="og:description" content={description} />
@@ -29,17 +30,19 @@
 	<meta name="twitter:image" content="https://pontia.dev/og.png" />
 </svelte:head>
 
-<a class="skip-link" href="#blog">Skip to content</a>
+<LocaleLinks />
+
+<a class="skip-link" href="#blog">{m.skip_to_content()}</a>
 
 <SiteHeader />
 
 <main id="blog" class="blog page-width">
-	<h1>Blog</h1>
+	<h1>{m.blog_heading()}</h1>
 	<p class="intro">{description}</p>
 	<ul>
 		{#each data.posts as post (post.slug)}
 			<li>
-				<a href={`/blog/${post.slug}`}>
+				<a href={localizeHref(`/blog/${post.slug}`)}>
 					<time datetime={post.published}>{formatDate(post.published)}</time>
 					<h2>{post.title}</h2>
 					<p>{post.description}</p>

@@ -1,0 +1,138 @@
+<svelte:head>
+	<title>Codex — Pontia</title>
+	<meta name="description" content="Configure o daemon do Codex para o Pontia no Linux e no macOS." />
+</svelte:head>
+
+# Codex
+
+O Pontia se conecta ao daemon app-server do Codex. Instale e autentique o Codex com o mesmo usuário que roda o Pontia e depois verifique o suporte ao daemon:
+
+```sh
+codex app-server daemon start --help
+codex app-server daemon version --help
+```
+
+O Codex usa suas próprias credenciais de modelo, sandbox e política de aprovação. Escolha uma política adequada ao trabalho que você vai executar pelo Dashboard. Quando o Codex pede para executar um comando, alterar arquivos ou usar permissões adicionais, o pedido aparece no Dashboard com as opções **Allow** e **Deny**.
+
+## Configuração
+
+Na primeira inicialização, execute `pontia init` e selecione **Codex**. Para instalar ou reparar a integração depois, execute:
+
+```sh
+pontia setup codex
+```
+
+Os dois comandos configuram a inicialização automática, verificam a conexão com o daemon, salvam o Codex home para os dois serviços e instalam o launcher. No Linux, eles também ativam o lingering do usuário. O `setup` preserva o estado de ativação da entrada do Client; use `pontia client enable codex` para habilitar novas Sessions.
+
+<h2 id="codex-launcher">Launcher do Codex</h2>
+
+A configuração do Codex instala `$PONTIA_HOME/bin/codex` e o adiciona ao início do `PATH` nos seus arquivos de inicialização do bash, zsh ou fish. Comandos `codex` interativos em novos shells passam então a se conectar ao daemon gerenciado pelo Pontia, e as threads que eles iniciam, retomam ou bifurcam aparecem como Sessions do Pontia. Outros subcomandos, como `codex exec` ou `codex login`, executam o executável original sem alterações.
+
+Abra um novo terminal, ou execute o comando de ativação exibido após a configuração, para usar o launcher. Se o launcher ou a configuração de PATH gerenciada por ele estiver faltando, execute `pontia setup codex` novamente. Repetir a configuração preserva configurações de shell não relacionadas e não duplica o bloco de PATH gerenciado. O executável original do Codex continua disponível.
+
+## Editar um prompt anterior
+
+Em qualquer um dos Dashboards, use **Edit message** no prompt inicial de um Turn concluído. Ao salvar, é criada uma Session independente com o histórico anterior a esse prompt; em seguida, sua substituição é enviada e a nova Session é aberta. Editar o primeiro prompt começa com um histórico vazio. A Session original continua disponível, e qualquer trabalho que já estiver rodando nela continua.
+
+Se a nova Session for criada, mas a substituição não puder ser enviada, use **Check / recover edit** para enviá-la para essa mesma Session. Mantenha a operação salva enquanto o resultado não estiver confirmado, para que a recuperação não crie outra bifurcação.
+
+Uma bifurcação altera apenas o histórico da conversa; ela não reverte os arquivos do workspace.
+
+<h2 id="manual-setup">Configuração manual</h2>
+
+Para uma inicialização não interativa, crie ou atualize a definição de serviço da sua plataforma abaixo. Use caminhos absolutos para o executável e para o Codex home. Encontre seu executável com `command -v codex`; se ele precisar do Node, inclua o diretório do Node no `PATH` do serviço.
+
+### Linux
+
+Crie `~/.config/systemd/user/` se necessário e salve isto como `pontia-codex.service` dentro dele:
+
+```ini
+[Unit]
+Description=Codex App Server Daemon Startup
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart="/absolute/path/to/codex" app-server daemon start
+Environment="CODEX_HOME=/home/you/.codex"
+
+[Install]
+WantedBy=default.target
+```
+
+Ative e verifique a inicialização automática:
+
+```sh
+systemctl --user daemon-reload
+loginctl enable-linger "$(id -un)"
+systemctl --user enable --now pontia-codex.service
+systemctl --user is-enabled pontia-codex.service
+```
+
+O lingering mantém os serviços do usuário disponíveis após o logout e pode exigir autorização de administrador. Para ver os logs, use `journalctl --user -u pontia-codex.service`.
+
+### macOS
+
+Crie `~/Library/LaunchAgents/` se necessário e salve isto como `dev.pontia.codex-daemon.plist` dentro dele:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.pontia.codex-daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/absolute/path/to/codex</string>
+    <string>app-server</string><string>daemon</string><string>start</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CODEX_HOME</key><string>/Users/you/.codex</string>
+    <key>PATH</key><string>/absolute/path/to/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
+```
+
+Valide e carregue o arquivo no domínio GUI do usuário logado:
+
+```sh
+plutil -lint "$HOME/Library/LaunchAgents/dev.pontia.codex-daemon.plist"
+launchctl enable "gui/$(id -u)/dev.pontia.codex-daemon"
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/dev.pontia.codex-daemon.plist"
+launchctl print "gui/$(id -u)/dev.pontia.codex-daemon"
+```
+
+Para substituir uma definição já carregada, execute `launchctl bootout "gui/$(id -u)/dev.pontia.codex-daemon"` antes do `bootstrap`.
+
+## Verificar o daemon
+
+Use o mesmo Codex home da sua definição de serviço:
+
+```sh
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}" codex app-server daemon version
+```
+
+Um daemon em execução retorna um JSON com `"status": "running"`. Continue com a [inicialização](/docs/initialization#start-the-local-service) para iniciar o Pontia, fazer o Codex home dele corresponder conforme descrito abaixo, habilitar o Codex e se conectar ao Remote Dashboard.
+
+<h2 id="pontia-codex-home">Fazer o Codex home do Pontia corresponder</h2>
+
+Após o primeiro `pontia up`, verifique se a definição de serviço do Pontia salva o mesmo `CODEX_HOME` absoluto que o daemon do Codex. Isso vale tanto para o diretório padrão `~/.codex` quanto para homes personalizados. Adicione ou atualize o valor conforme necessário, mantendo as demais configurações do serviço:
+
+| Plataforma | Definição do Pontia | Alteração | Aplicar |
+| --- | --- | --- | --- |
+| Linux | `~/.config/systemd/user/pontia.service` | Adicione `Environment="CODEX_HOME=/your/path"` em `[Service]` | `pontia up` |
+| macOS | `~/Library/LaunchAgents/dev.pontia.pontiad.plist` | Adicione uma string `CODEX_HOME` a `EnvironmentVariables` | `pontia down` e depois `pontia up` |
+
+No macOS, mantenha a definição do Pontia em XML e insira ou atualize esta entrada dentro de `EnvironmentVariables`, preservando a quebra de linha e o recuo de quatro espaços mostrados:
+
+```xml
+    <key>CODEX_HOME</key>
+    <string>/your/path</string>
+```
+
+Substitua `/your/path` pelo caminho escolhido, escape caracteres XML como `&` e mantenha o layout das entradas ao redor. Uma configuração existente que já corresponde está pronta para uso.
+
+Após uma alteração, recarregue o serviço com o comando da tabela. Verifique o `CODEX_HOME` salvo e confirme que `pontia status` informa um serviço saudável; depois, habilite o Codex. Salvar o caminho na definição de serviço o torna disponível para o processo em segundo plano do Pontia.

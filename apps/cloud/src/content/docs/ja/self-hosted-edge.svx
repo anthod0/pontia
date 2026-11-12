@@ -1,0 +1,105 @@
+<svelte:head>
+	<title>Edge のセルフホスト — Pontia</title>
+	<meta name="description" content="公開 Linux サーバー上でセルフホストの Pontia Edge をデプロイし、運用します。" />
+</svelte:head>
+
+# Edge のセルフホスト
+
+セルフホストの Edge は、ブラウザと Pontia デバイスの間でエンドツーエンド暗号化されたままの Dashboard の通信を中継します。エージェントはデバイス上で動き、Pontia Cloud はログイン、デバイスの所有権、Edge の登録、接続の認可を提供します。
+
+## 要件
+
+次の条件を満たす公開 Linux サーバーを使います。
+
+- x86_64 または ARM64 アーキテクチャ
+- システムサービスマネージャーとしての systemd
+- サーバーがバインドして通信を受信できるパブリック IPv4 アドレス
+- 外向きの HTTPS と DNS のアクセス
+- `curl`、`grep`、`install`、`mktemp`、`mv`、`openssl`、`rm`、`sed`、`sha256sum`、`tar`
+- Ed25519 の検証に対応した OpenSSL
+
+`pontia-edge` は Linux でのみサポートされます。
+
+## ネットワークモードの選択
+
+デフォルトのデプロイでは、公開ポート443で HTTPS と WSS を提供し、HTTP-01 による証明書の検証を使います。初期化時と証明書の更新時には、公開ポート80もサーバーに到達できる必要があります。
+
+ポート80または443が使えない場合は、[Edge 設定](/settings/edges) で代替のデプロイを選択します。代替のデプロイでは、ブラウザで使えるカスタムの HTTPS/WSS ポート(8443を推奨)と、DNS-01 による証明書の検証を使います。選択したポートを、ホストとプロバイダーのファイアウォールで開放してください。
+
+Pontia Cloud は `edge.pontia.dev` 配下の Edge ホスト名を割り当て、その DNS レコードを自動的に設定します。
+
+## Cloud からデプロイする
+
+[Edge 設定を開き](/settings/edges)、求められたらサインインします。次に以下を行います。
+
+1. **デプロイコマンドを生成** を選択します。
+2. デフォルトまたは代替のポートモードを選びます。
+3. ワンタイムコマンドをコピーし、公開 Linux サーバー上で実行します。
+
+このコマンドには有効期間の短いデプロイチケットが含まれます。他人に知られないようにし、Cloud に表示される有効期限までに実行してください。初期化では次の処理を行います。
+
+- 署名済みの `pontia-edge` リリースをダウンロードして検証する
+- サーバーのパブリック IPv4 アドレスを検出し、その管理権を証明する
+- 割り当てられた DNS 名を Pontia Cloud を通じて設定する
+- Let's Encrypt 証明書を取得する
+- `pontia-edge.service` をインストールして起動する
+- Cloud が公開 HTTPS のヘルスエンドポイントを検証するのを待つ
+- 安定版リリースの自動チェックを有効にする
+
+成功した Edge は、[Edge 設定](/settings/edges) の **自分の Edge** に正常なステータスで表示されます。
+
+## 未完了のデプロイを再開する
+
+報告された問題を修正した後、同じサーバー上で初期化を再開します。
+
+```sh
+sudo pontia-edge retry
+```
+
+初期化の状態は、セットアップが成功するまで `/etc/pontia/edge/pending-init.json` に保持されます。retry は、2つ目の登録を作らずに、登録済みの Edge の処理を続行できます。
+
+## Edge の運用
+
+サービスとログを確認します。
+
+```sh
+sudo systemctl status pontia-edge.service
+sudo journalctl -u pontia-edge.service --no-pager -n 200
+```
+
+公開ヘルスエンドポイントは `https://HOST[:PORT]/healthz` で、サービスに到達できる場合は `ok` を返します。
+
+手動で更新します。
+
+```sh
+sudo pontia-edge update
+```
+
+安定版の自動更新を管理します。
+
+```sh
+sudo pontia-edge auto-update status
+sudo pontia-edge auto-update enable
+sudo pontia-edge auto-update disable
+```
+
+自動更新は1時間ごとに、最大10分のランダムな遅延を伴ってチェックします。今後のチェックを無効にしても、すでに進行中の更新は続行されます。
+
+## 保存されるファイル
+
+管理対象のインストールでは次のファイルを使います。
+
+| パス | 用途 |
+| --- | --- |
+| `/usr/local/bin/pontia-edge` | Edge の実行ファイル |
+| `/etc/pontia/edge/config.json` | エンドポイントの設定 |
+| `/etc/pontia/edge/credential` | Edge サービスの認証情報 |
+| `/etc/pontia/edge/tls.pem` | TLS 証明書と鍵 |
+| `/etc/pontia/edge/acme-account.json` | ACME アカウントの状態 |
+| `/etc/systemd/system/pontia-edge.service` | systemd サービスの定義 |
+
+`/etc/pontia/edge` は他人がアクセスできないようにし、サーバーのポリシーに従ってバックアップしてください。
+
+## Edge を削除する
+
+Cloud でセルフホストの Edge を削除すると、その登録と関連するデバイスが完全に削除されます。サーバー上のインストールは別に管理されます。影響を受けるデバイスを移動または無効にしてから、サービスを停止し、サーバーからファイルを削除してください。

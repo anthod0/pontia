@@ -1,0 +1,60 @@
+<svelte:head>
+	<title>Agent Client — Pontia</title>
+	<meta name="description" content="选择和配置 Pontia 支持的编程 Agent 客户端。" />
+</svelte:head>
+
+# Agent Client
+
+Agent Client 将 Pontia 连接到编程 Agent 的原生会话、控制通道和对话历史。Agent 仍在本地运行，使用它自己的凭据、配置、工具和文件系统权限。
+
+Pontia 包含以下 Agent Client：
+
+| Client | 本地要求 | 本地集成 |
+| --- | --- | --- |
+| [pi](/docs/agent-clients/pi) | `pi` 和 `tmux` | Pontia 的 pi 插件 |
+| [Codex](/docs/codex) | 支持 app-server 守护进程的 Codex CLI | 按用户启动的 Codex 守护进程、启动器和 shell PATH |
+| [Claude Agent](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) | Node.js LTS、npm 以及 Claude Code 认证 | 来自 npm 的 `@pontia/claude-client` 包 |
+| ACP Agent | 通过 stdio 使用 Agent Client Protocol 通信的 Agent | 无；安装 Agent 后启用对应条目即可 |
+
+## 在初始化时选择 Client
+
+运行：
+
+```sh
+pontia init
+```
+
+初始化程序会在应用配置之前检查你选择的 Client。pi 默认选中；Codex 和 `claude-agent` 为可选项。选中的 Client 会为新的 Session 启用。
+
+<h2 id="enable-an-acp-agent">启用 ACP Agent</h2>
+
+Pontia 为 Grok Build（`grok agent stdio`）、Kimi CLI（`kimi acp`）和 OpenCode（`opencode acp`）提供了 ACP 条目。安装 Agent 后，在 Dashboard 的 **Settings → Agent Clients** 中启用其条目，或运行：
+
+```sh
+pontia client enable opencode
+```
+
+要添加其他 Agent，请在同一设置页面中使用 **Add custom client**，或在 `$PONTIA_HOME/config.toml` 中定义：
+
+```toml
+[acp.agents.company-agent]
+name = "Company Agent"
+command = "/opt/company-agent/bin/agent"
+args = ["--acp"]
+```
+
+条目也可以不设置 `command` 和 `args`，而是设置 `registry_id`，从 ACP 注册表启动 Agent。该 Agent 必须支持加载和关闭会话；如果缺少该能力，Pontia 会在 Session 启动时报告。
+
+运行 `pontia setup pi`、`pontia setup codex` 或 `pontia setup claude-agent` 来安装或修复本地集成。省略 Client 名称即可交互式选择。Setup 也会启用该 Client。
+
+## 各 Client 的能力不同
+
+Dashboard 会显示所选 Client 支持的控制功能，例如中断、模型切换、历史分支和排队投递。
+
+Pontia Session 在绑定后会与一个客户端原生对话身份持久关联。重新打开同一个原生对话会继续现有的 Session；新的原生对话则属于新的 Session。
+
+## Client 凭据和权限
+
+每个 Client 使用自己的凭据、沙箱和本地权限。在开始集成之前，请登录每个 Client 并确认它能完成预期的工作。
+
+当 Client 缺失、无法启动或不再报告输出时，请参阅[故障排除](/docs/troubleshooting)。

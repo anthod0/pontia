@@ -1,10 +1,11 @@
 import { redirect } from "@sveltejs/kit";
 import { currentLogin, loginReturnTo } from "$lib/server/auth/http";
+import { localizeHref } from "$lib/paraglide/runtime";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async (event) => {
   const returnTo = loginReturnTo(event);
-  if (await currentLogin(event)) redirect(303, returnTo ?? "/settings/account");
+  if (await currentLogin(event)) redirect(303, returnTo ?? localizeHref("/settings/account"));
   return {
     error: event.url.searchParams.get("error"),
     hasCredential: !!event.cookies.get("_at"),

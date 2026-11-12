@@ -1,0 +1,55 @@
+<svelte:head>
+	<title>Linux — Pontia</title>
+	<meta name="description" content="Pontia 在 Linux 上的要求和服务管理。" />
+</svelte:head>
+
+# Linux
+
+Pontia 支持为 GNU 用户空间构建的 x86_64 和 ARM64 Linux 版本。本地控制平面以 systemd 用户服务运行；自托管的 Edge 以 systemd 系统服务运行。
+
+## 本地要求
+
+如果使用推荐的 `npx @pontia/cli init` 安装方式，请安装 Node.js 和 npm。请参阅[快速开始](/docs/getting-started)。
+
+另一种 shell 安装程序需要 `curl`、`grep`、`install`、`mktemp`、`mv`、`openssl`、`rm`、`sed`、`sha256sum`、`tar`、`tr`、`uname` 和 `wc`。OpenSSL 必须支持 Ed25519 验证。
+
+需要一个可正常工作的 systemd 用户管理器。标准安装目录是 `$HOME/.local/bin`，它必须位于你的 shell `PATH` 中，才能直接运行 `pontia` 命令。
+
+## 服务文件
+
+`pontia init` 会安装：
+
+```text
+~/.config/systemd/user/pontia.service
+```
+
+该 unit 记录了 `pontiad` 的绝对路径、`PONTIA_HOME`、Cloud 源地址以及所需的 Agent Client 路径。请通过 Pontia CLI 管理它：
+
+```sh
+pontia up
+pontia status
+pontia down
+```
+
+直接诊断：
+
+```sh
+systemctl --user status pontia.service --no-pager --full
+journalctl --user -u pontia.service --no-pager -n 200
+```
+
+选择 Codex 时，初始化还会安装 `~/.config/systemd/user/pontia-codex.service` 并启用它，同时启用用户 lingering，使守护进程无需活跃的登录 shell 也能运行。
+
+## 桌面和无头系统
+
+目标用户必须能够使用服务管理器。在无头主机上，以该用户身份登录并验证：
+
+```sh
+systemctl --user is-system-running
+```
+
+请以运行 Agent Client 的用户身份运行 `pontia init` 和生命周期命令。Pontia 会使用该用户的主目录、凭据和 systemd 用户服务。
+
+## 自托管 Edge
+
+`pontia-edge` 在 Linux 上运行，初始化和服务管理需要 root 权限。它的 unit 是 `/etc/systemd/system/pontia-edge.service`。请将它与 `pontiad` 分开部署，用于在浏览器和设备之间转发加密连接。

@@ -1,0 +1,111 @@
+<svelte:head>
+	<title>故障排除 — Pontia</title>
+	<meta name="description" content="诊断 Pontia 服务、Dashboard、Agent Client 和远程访问问题。" />
+</svelte:head>
+
+# 故障排除
+
+先查看 Pontia 的诊断报告：
+
+```sh
+pontia doctor
+```
+
+每一行说明一项服务、配置、登录或远程注册检查，并在需要时给出修复建议。如果配置有变更，使用 `pontia up` 重启服务。
+
+## 服务无法启动
+
+检查 `$PONTIA_HOME/config.toml` 中是否有无效的 TOML、未知值、无法访问的路径或已被占用的端口。默认地址为 `127.0.0.1:8080`。
+
+在 Linux 上，检查用户服务：
+
+```sh
+systemctl --user status pontia.service --no-pager --full
+journalctl --user -u pontia.service --no-pager -n 200
+```
+
+在 macOS 上，检查 LaunchAgent：
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.pontiad
+```
+
+`pontia up` 会使用当前的 Pontia 可执行文件刷新服务定义，并重启现有服务。`pontia down` 会停止并禁用 Pontia 服务。Agent Client 会单独管理其原生对话。
+
+## 本地 Dashboard 无法打开
+
+1. 运行 `pontia status`，先解决服务错误。
+2. 使用 <http://127.0.0.1:8080/dashboard>，除非 `bind_addr` 使用了其他端口。
+3. 输入 `$PONTIA_HOME/config.toml` 中的 `external_api_token`。
+4. 如果配置了自定义 Dashboard 归档，检查 `[dashboard].source`。移除该覆盖项即可恢复为与版本匹配的 Dashboard。
+
+请妥善保管 External API token。分享诊断信息的注意事项见[安全](/docs/security)。
+
+## 没有可用的 Workspace
+
+在 [Workspace](https://app.pontia.dev/workspaces) 中检查已配置的根目录。只有当目录存在且位于某个可用根目录内时，才能激活它。如果根目录已移动，请更新 `config.toml` 中的 `[workspace_browser].roots`，重启 Pontia，然后在 Dashboard 中撤销过时的 Workspace 注册。
+
+## pi 无法启动或上报活动
+
+检查：
+
+```sh
+pi --version
+tmux -V
+```
+
+运行 `pontia setup pi` 重新安装插件。查看：
+
+```text
+$PONTIA_HOME/state/pi-hook.log
+```
+
+同时检查自定义的 `[runtime.pi].tui_command` 是否包含无效路径或包装脚本。
+
+## Codex 无法连接
+
+确认你的 Codex 构建支持 app-server 守护进程，然后检查其按用户运行的服务。各平台命令见 [Codex](/docs/codex)。如果可执行文件或 `CODEX_HOME` 发生变化，或者启动器或其 shell PATH 配置缺失，请运行 `pontia setup codex`。
+
+命令、文件更改和权限审批会显示在 Dashboard 中。当 Codex 在等待 Dashboard 不显示的其他类型请求时，Agent 仍可能看起来卡住了。必要时中断该 Turn，然后调整 Codex 策略，或在原生 Codex 界面中回应该请求。
+
+## Claude Agent 无法启动
+
+确认对运行 Pontia 的用户而言，`node --version` 和 `npm --version` 可以正常运行，然后运行 `pontia setup claude-agent` 重新进行依赖检查。如果 SDK 重试时 Dashboard 报告认证失败，请为该用户修复 Claude Code 自身的登录或提供商设置。更新客户端软件包的方法见 [Claude Agent 指南](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md)。
+
+## ACP Agent 无法启动
+
+确认该条目的 `command` 能以 Pontia 服务用户身份运行，并使用 `pontia client show AGENT_ID` 检查其 `effective_config`。该 Agent 必须支持加载和关闭会话，否则 Session 会报告缺少该能力。
+
+## 远程设备离线
+
+在该设备上运行：
+
+```sh
+pontia status
+pontia doctor
+```
+
+检查 `$PONTIA_HOME/auth.json`、`e2e-identity.json` 以及 `config.toml` 中 `[remote]` 的设备 ID。使用 `pontia login` 和 `pontia remote enable` 修复注册，或使用 `pontia remote rotate-key` 替换设备加密身份。
+
+在 [Edge 设置](/settings/edges)中确认所选 Edge 状态正常。对于自托管 Edge，检查：
+
+```sh
+sudo systemctl status pontia-edge.service --no-pager --full
+sudo journalctl -u pontia-edge.service --no-pager -n 200
+```
+
+## Edge 初始化未完成
+
+修复原始命令报告的网络、DNS、端口或证书错误，然后在同一台服务器上继续：
+
+```sh
+sudo pontia-edge retry
+```
+
+`retry` 会使用服务器上保存的初始化状态继续现有部署。
+
+## 更新失败
+
+`pontia update` 会在替换二进制文件之前验证已签名的发布元数据和制品。如果服务重启或健康验证失败，它会恢复之前的二进制文件并尝试恢复服务。请检查平台服务日志，解决启动问题，然后再次运行更新。
+
+如需进一步诊断，请在移除[安全](/docs/security)中列出的敏感值后，分享 `pontia --version` 和 `pontia status` 的输出、操作系统以及相关服务错误。

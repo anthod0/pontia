@@ -4,6 +4,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { deploymentModeCommand } from "$lib/edge-deployment-command";
+  import { m } from "$lib/paraglide/messages";
+  import { getLocale, localizeHref } from "$lib/paraglide/runtime";
   import type { ActionData } from "./$types";
 
   let { form }: { form: ActionData } = $props();
@@ -23,11 +25,11 @@
 </script>
 
 <svelte:head>
-  <title>Edge deployment command — Pontia</title>
+  <title>{m.deploy_title()}</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
-<h1>Deploy a self-hosted edge</h1>
+<h1>{m.edges_deploy_heading()}</h1>
 
   {#if form?.error}
     <p class="auth-error" role="alert">{form.error}</p>
@@ -36,11 +38,11 @@
   {#if form?.deployment}
     <section aria-labelledby="deployment-name">
       <h2 id="deployment-name">{form.deployment.name}</h2>
-      <p>Run this command on your public Linux server.</p>
-      <p>This command expires at {new Date(form.deployment.expiresAt).toLocaleString()}.</p>
+      <p>{m.deploy_run()}</p>
+      <p>{m.deploy_expires({ time: new Date(form.deployment.expiresAt).toLocaleString(getLocale()) })}</p>
       <div id="custom-port-options">
         {#if mode === "custom"}
-          <h3 id="custom-port-label">Custom port</h3>
+          <h3 id="custom-port-label">{m.deploy_custom_port()}</h3>
           <div class="port-field">
             <Input
               id="edge-port"
@@ -60,13 +62,12 @@
         <pre><code>{command}</code></pre>
       {:else}
         <p class="auth-error" role="alert">
-          Enter an integer from 1 to 65535 that is not blocked by browsers or the control plane.
-          Recommended: 8443.
+          {m.deploy_port_invalid()}
         </p>
       {/if}
       <Button type="button" disabled={!command} onclick={copyCommand}>
         {#if command && copiedCommand === command}<CheckIcon />{:else}<CopyIcon />{/if}
-        {command && copiedCommand === command ? "Copied" : "Copy command"}
+        {command && copiedCommand === command ? m.deploy_copied() : m.deploy_copy()}
       </Button>
       <div class="alternative-action">
         <Button
@@ -77,23 +78,21 @@
           aria-controls="custom-port-options"
           onclick={() => (mode = mode === "default" ? "custom" : "default")}
         >
-          {mode === "custom"
-            ? "Restore default deployment"
-            : "Can't use port 80 or 443? Use an alternative deployment"}
+          {mode === "custom" ? m.deploy_restore_default() : m.deploy_use_alternative()}
         </Button>
       </div>
 
       <div class="retry-help">
-        <h3>Initialization incomplete?</h3>
-        <p>After fixing the reported problem, resume it on the same server with:</p>
+        <h3>{m.deploy_retry_heading()}</h3>
+        <p>{m.deploy_retry_text()}</p>
         <pre><code>sudo pontia-edge retry</code></pre>
       </div>
     </section>
   {:else if !form?.error}
-    <p>Generate a deployment command from the edges page to get started.</p>
+    <p>{m.deploy_empty()}</p>
   {/if}
 
-<p class="back-link"><a href="/settings/edges">Back to edges</a></p>
+<p class="back-link"><a href={localizeHref("/settings/edges")}>{m.deploy_back()}</a></p>
 
 <style>
   section {

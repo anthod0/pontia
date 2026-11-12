@@ -1,0 +1,62 @@
+<svelte:head>
+	<title>远程访问 — Pontia</title>
+	<meta name="description" content="连接你的 Pontia 设备并远程控制 Agent 会话。" />
+</svelte:head>
+
+# 远程访问
+
+远程访问让你可以通过 Pontia 网页 Dashboard 监控和控制设备上的 Agent 会话。Agent、开发工具和项目文件仍在该设备上运行和保存。
+
+## 在设置过程中启用远程访问
+
+当 `pontia init` 提示你登录并启用远程访问时，选择接受并完成浏览器授权。继续完成设备注册，将设备连接到 Pontia Cloud。Pontia 会使用远程配置重启本地服务，并打开该设备的 Remote Dashboard。
+
+## 连接现有安装
+
+首先登录：
+
+```sh
+pontia login
+```
+
+Pontia 会打印一个验证地址和一次性代码。在浏览器中打开该地址，使用 Google 或 GitHub 登录，然后批准该代码。CLI 会将得到的凭据保存在你的 Pontia 主目录下。
+
+然后注册当前设备：
+
+```sh
+pontia remote enable
+```
+
+出现提示时，选择一个可用的 Edge 并确认设备名称。Pontia 会生成用于端到端加密访问的设备身份，并在需要时更新正在运行的服务。
+
+如需在没有终端提示的情况下注册，使用 `pontia remote edges` 获取 Edge ID，然后运行 `pontia remote enable --edge EDGE_ID --name "Device name"`。两个选项都必须提供。完整步骤和浏览器授权要求见[非交互式初始化](/docs/initialization#non-interactive-initialization)。
+
+打开 [app.pontia.dev](https://app.pontia.dev) 访问你已注册的设备。
+
+## 检查和管理注册
+
+在设备上运行以下命令，将其本地身份与 Cloud 注册进行比对：
+
+```sh
+pontia doctor
+```
+
+你可以使用 `pontia remote edit` 更改设备的显示名称或 Dashboard URL 标识，使用 `pontia remote rotate-key` 替换其加密身份。Cloud 提供[设备设置](/settings/devices)、[会话设置](/settings/sessions)和[账户设置](/settings/account)。各项操作的影响见[设备与账户管理](/docs/device-management)。
+
+## 安全模型
+
+浏览器和你的设备之间会建立端到端加密的会话。Edge 承载连接并转发密文，Pontia Cloud 负责管理登录、设备注册和访问授权。
+
+Agent 执行和项目文件都保留在你的设备上。协议和凭据详情见[安全](/docs/security)。
+
+你可以选择官方 Edge，也可以[部署自托管 Edge](/docs/self-hosted-edge)。两者都使用 Pontia Cloud 进行授权；自托管让你可以选择密文在哪里转发。
+
+## 禁用远程访问
+
+注销当前设备并禁用其远程访问：
+
+```sh
+pontia remote disable
+```
+
+禁用远程访问后，本地访问仍然可用。连接失败时，请参阅[故障排除](/docs/troubleshooting)。

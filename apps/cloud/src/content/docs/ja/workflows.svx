@@ -1,0 +1,94 @@
+<svelte:head>
+	<title>Workflow — Pontia</title>
+	<meta name="description" content="Pontia で永続的なマルチエージェントの Workflow を実行して監視します。" />
+</svelte:head>
+
+# Workflow
+
+Workflow は、共通の目標に向けて Agent Node を永続的にオーケストレーションするものです。各 Agent Node は新しい Pontia の Session を受け取り、宣言された Handoff の入力を読み込み、Handoff の出力を 1 つ書き込み、割り当てられた作業の準備ができたら明示的に提出します。
+
+段階的な引き継ぎ、永続的な進捗、エージェントごとに分かれたコンテキストが役立つタスクには Workflow を使ってください。明示的な実行計画が不要な探索的な作業には、通常の Session を使ってください。
+
+## 定義を作成する
+
+Workflow の定義には TOML を使います。パスは定義ファイルからの相対パスとして解決されます。
+
+```toml
+title = "Implement search"
+cwd = "."
+
+[[handoffs]]
+name = "requirements.md"
+source = "./requirements.md"
+
+[[nodes]]
+type = "agent"
+phase = "Discovery"
+title = "Research"
+instructions = "Inspect the current search implementation and propose a plan."
+inputs = ["requirements.md"]
+output = "research.md"
+
+[[nodes]]
+type = "agent"
+phase = "Delivery"
+title = "Implement"
+instructions = "Implement and verify the accepted plan."
+inputs = ["research.md"]
+output = "result.md"
+```
+
+`cwd` には既存のディレクトリを設定します。Workflow 内のすべての Agent Client はそこで起動します。New chat からもそのディレクトリを使うには、[Workspace として有効にします](/docs/workspaces)。
+
+各 Node には `type = "agent"` を使います。Node は定義の順に実行されます。各入力には、初期の Handoff か、それより前の Node の出力を指定します。すべての出力には、ディレクトリ部分を含まない一意のファイル名を付けてください。
+
+## 実行して確認する
+
+`pontiad` が正常な状態で Workflow を開始します。
+
+```sh
+pontia workflow run ./workflow.toml
+```
+
+このコマンドは新しい Workflow ID を表示します。[Workflow](https://app.pontia.dev/workflows) には、フェーズ、Agent Node の状態、経過時間、アクティブな各 Node 用に作成された Session が表示されます。
+
+CLI から簡潔なコンテキストを表示します。
+
+```sh
+pontia workflow show wf_...
+```
+
+Workflow が管理する Agent の Session 内では、`PONTIA_WORKFLOW_ID` が現在の対象を指定するため、`pontia workflow show` では ID を省略できます。
+
+## Agent Node を完了する
+
+Pontia が指定した出力ファイルのパスに完全な結果を書き込み、Agent Node の管理対象の `tmux` ペインから提出します。
+
+```sh
+pontia workflow submit
+```
+
+提出に成功すると、Node の出力は準備完了になります。提出前に Turn が完了した場合、Workflow はアイドル状態になり、介入を待ちます。
+
+## 一時停止、再開、再試行
+
+Workflow の詳細ページで、実行中の Workflow を一時停止したり、一時停止中の Workflow を再開したりできます。一時停止すると、対応している場合は処理中の現在の Turn の中断を要求します。中断された現在の Session を再開すると、スケジューリングが進む前に続行の指示が送信されます。
+
+失敗した Workflow が回復可能な場合、**Retry** は同じ Agent Node の会話を続けます。提出済みの以前の Node は完了したままで、既存の Workspace の変更もそのまま残り、未提出の出力はアーカイブされます。回復する Node は既存の変更を確認し、新しい完全な出力を提出します。
+
+## 再計画を要求する
+
+Agent Node が予期しない問題で進められなくなった場合、要求された問題レポートを書き込み、次を実行します。
+
+```sh
+pontia workflow patch request
+```
+
+Pontia は専用の Re-planner の Session を作成します。Re-planner は `pontia workflow show` で状況を確認し、提供された候補の定義を編集し、判断を記録して、次のいずれかで終了します。
+
+```sh
+pontia workflow patch apply
+pontia workflow patch block
+```
+
+Workflow の Patch を適用すると、既存の Node の識別情報と実行履歴を保ったまま、グラフの新しいリビジョンが作成されます。Dashboard では、リビジョンを比較し、Patch のリクエスト、Re-planner の Session、結果、生成されたリビジョンを確認できます。

@@ -1,0 +1,81 @@
+<svelte:head>
+	<title>更新 Pontia — Pontia</title>
+	<meta name="description" content="使用经过验证的稳定版本更新 Pontia 和自托管 Edge。" />
+</svelte:head>
+
+# 更新 Pontia
+
+Pontia 从已签名的稳定版本渠道更新。用以下命令查看已安装的版本：
+
+```sh
+pontia --version
+```
+
+## 更新本地控制平面
+
+以拥有该用户级服务的同一用户身份运行：
+
+```sh
+pontia update
+```
+
+如果正在运行的服务报告有活跃任务、待处理的交互，或待处理、未确认的输入，更新会停止并列出受影响的 Session。完成或处理这些活动后，再次运行 `pontia update`。如果活动检查失败，更新同样会停止，不会替换二进制文件或重启服务。
+
+更新期间请避免启动新任务。此检查不会暂停输入或调度，因此检查之后才开始的活动仍可能被重启中断。
+
+更新程序会：
+
+1. 解析正在运行的安装目录；
+2. 获取更新锁；
+3. 通过 HTTPS 下载稳定版本清单；
+4. 验证其内嵌的 Ed25519 签名；
+5. 验证每个构件的 URL、大小和 SHA-256 摘要；
+6. 在安装目录中暂存用于替换的 `pontia` 和 `pontiad` 二进制文件；
+7. 重启正在运行的托管服务并检查健康状态；
+8. 如果替换或重启失败，恢复之前的二进制文件并尝试恢复服务。
+
+要进行自更新，请将 `pontia` 和 `pontiad` 作为普通文件放在同一目录中，并直接运行已安装的名为 `pontia` 的可执行文件。
+
+Dashboard 默认使用与二进制版本匹配的发布归档，因此除非覆盖了 `[dashboard].source`，更新成功后所提供的 Dashboard 也会切换到该版本。
+
+## 安装特定版本
+
+安装程序接受以 `v` 开头的版本号：
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | PONTIA_VERSION=v0.5.2 sh
+```
+
+安装特定版本或更改安装位置后，运行 `pontia up` 以刷新服务定义并启动该安装。要更新到最新稳定版本，请使用 `pontia update`。
+
+## 更新自托管 Edge
+
+在 Edge 服务器上运行：
+
+```sh
+sudo pontia-edge update
+```
+
+Edge 更新程序会验证同一个已签名的版本渠道，替换托管的 `/usr/local/bin/pontia-edge`，重启正在运行的服务，验证新进程保持稳定，并在失败时回滚。
+
+初始化会启用 Edge 自动更新。用以下命令查看或更改：
+
+```sh
+sudo pontia-edge auto-update status
+sudo pontia-edge auto-update enable
+sudo pontia-edge auto-update disable
+```
+
+定时器每小时检查一次，附带最多十分钟的随机延迟。禁用后将停止后续检查；已在运行的更新会继续完成。
+
+## 更新前后
+
+启用 `run_migrations` 时，Pontia 会在正常启动期间应用内置的本地数据库迁移。更换版本前请备份数据。恢复数据库时，请使用与其 schema 兼容的版本。
+
+更新后，运行：
+
+```sh
+pontia status
+```
+
+对于 Edge，请检查 `systemctl status pontia-edge.service` 及其在 Cloud 中的健康状态标记。如果自动回滚或服务恢复报告错误，请参阅[故障排除](/docs/troubleshooting)。

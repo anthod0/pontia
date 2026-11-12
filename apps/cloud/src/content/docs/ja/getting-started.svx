@@ -1,0 +1,74 @@
+<svelte:head>
+	<title>はじめに — Pontia</title>
+	<meta name="description" content="Pontia をインストールし、ローカルのエージェントクラウドを初期化します。" />
+</svelte:head>
+
+# はじめに
+
+Pontia をインストールしてデバイスを Pontia Cloud に接続し、Remote Dashboard からコーディングエージェントを使い始めましょう。
+
+<h2 id="requirements">要件</h2>
+
+- systemd を備えた Linux、または macOS 13.5 以降。
+- 推奨の `npx` コマンドには、npm を含む Node.js が必要です。Node.js がない場合は、[シェルインストーラー](#install-with-the-shell-script)を使ってください。
+- 少なくとも 1 つのコーディングエージェント: pi、Codex、Claude Code、または ACP エージェント。それぞれに必要なものは [Agent Client](/docs/agent-clients) を参照してください。
+
+## Pontia のインストールと初期化
+
+推奨のセットアップコマンドを実行します。
+
+```sh
+npx @pontia/cli init
+```
+
+Pontia がインストールされ、対話型の初期化が開きます。Pontia がすでにインストールされている場合は、そのインストールを再利用します。`pontia init` を再度実行する必要はありません。
+
+デフォルトのインストール先は `$HOME/.local/bin` です。`pontia` コマンドを直接実行するには、シェルの `PATH` に追加してください。別のディレクトリを使うには、`PONTIA_INSTALL_DIR` を設定します。
+
+npm でのインストールは npm のミラーやプライベートレジストリでも動作し、`curl` や `openssl` は不要です。初期化を開かずにインストールするには、`npx @pontia/cli install` を実行します。
+
+<h3 id="install-with-the-shell-script">シェルスクリプトでインストールする</h3>
+
+Node.js を使わずにインストールしたい場合は、署名済みのリリースインストーラーを使ってください。`curl` と `openssl` が必要です。すべての要件は [Linux](/docs/platforms/linux) または [macOS](/docs/platforms/macos) を参照してください。
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | sh
+"$HOME/.local/bin/pontia" init
+```
+
+これらのコマンドはデフォルトのインストール先を使います。`PONTIA_INSTALL_DIR` を設定した場合は、代わりにそのディレクトリから `pontia init` を実行してください。
+
+## 初期化を完了する
+
+初期化では次のことを行います。
+
+1. 使用する pi、Codex、Claude Agent の連携を選択します。
+2. ローカルの Dashboard 用の認証情報を生成します。
+3. Pontia のバックグラウンドサービスを起動します。
+4. Pontia Cloud にサインインし、Remote Dashboard 用にデバイスを登録します。
+
+初回の初期化では、Pontia はホームディレクトリを Workspace Browser のルートとして使います。初期化を再度実行した場合、既存のルートは保持されます。
+
+サインインとリモートアクセスの有効化を求められたら、承諾してブラウザーでの認可を完了してください。利用可能な Edge を選択し、デバイス名を確認します。セットアップが完了すると、Pontia が Remote Dashboard を開きます。
+
+エージェントやスクリプトの場合は、[初期化](/docs/initialization)に従い、ウィザードのプロンプトに答える代わりに個別のコマンドで Client 連携のインストール、サービスの起動、リモートアクセスの登録を行ってください。
+
+## サービスを確認する
+
+```sh
+pontia status
+```
+
+サービスを停止するには `pontia down`、再び起動するには `pontia up` を使います。
+
+## Pontia をアップデートする
+
+Linux または macOS で、`pontia` と `pontiad` を署名済みの最新安定版にアップデートします。
+
+```sh
+pontia update
+```
+
+管理対象のサービスが動作している場合、Pontia はサービスを再起動し、正常な状態になるまで待ちます。置き換えや再起動に失敗した場合、Pontia は以前のバイナリを復元し、サービスの回復を試みます。
+
+デバイスの Remote Dashboard を開き、[Dashboard ガイド](/docs/dashboard)に従って Workspace を有効にし、最初の Session を開始してください。デバイスの登録がまだ完了していない場合は、先に[リモートアクセスのセットアップ](/docs/remote-access)を完了してください。

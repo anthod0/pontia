@@ -1,0 +1,86 @@
+<svelte:head>
+	<title>Guia do Dashboard — Pontia</title>
+	<meta name="description" content="Crie e controle Sessions de agentes de programação pelo Dashboard do Pontia." />
+</svelte:head>
+
+# Guia do Dashboard
+
+O Dashboard é o lugar principal para criar, acompanhar e controlar Sessions de agentes. O Remote Dashboard hospedado se conecta com segurança aos agentes que rodam no seu dispositivo.
+
+## Abrir o Dashboard
+
+Use [app.pontia.dev](https://app.pontia.dev) e selecione um dispositivo registrado. Veja [Acesso remoto](/docs/remote-access) se o dispositivo ainda não estiver registrado.
+
+### Local Dashboard
+
+O Local Dashboard está disponível em <http://127.0.0.1:8080/dashboard> e usa o `external_api_token` de `$PONTIA_HOME/config.toml`. O acesso a partir de outro dispositivo exige um túnel seguro ou uma configuração de redirecionamento.
+
+## Ativar uma Workspace
+
+Uma Workspace é o diretório de projeto em que um agente roda. Antes de criar uma Session, use [Workspaces](https://app.pontia.dev/workspaces) para navegar por uma das raízes configuradas e ativar o diretório do projeto.
+
+Ative diretórios dentro das raízes configuradas do Workspace Browser. A primeira inicialização usa o seu diretório home como raiz padrão. Veja [Workspaces](/docs/workspaces) para restringir ou alterar as raízes disponíveis.
+
+## Iniciar uma Session
+
+1. Abra [New chat](https://app.pontia.dev/).
+2. Selecione uma Workspace ativa.
+3. Selecione um Agent Client ativado, como pi, Codex, Claude Agent ou um agente ACP.
+4. Descreva a tarefa e envie o prompt.
+
+O Pontia cria uma Session persistente e inicia o Agent Client selecionado no seu dispositivo. A Session continua disponível no Pontia mesmo quando você sai do chat.
+
+## Controlar o trabalho em andamento
+
+A página do chat transmite a conversa e as etapas de trabalho expostas pelo Agent Client. Enquanto usa uma Session, você pode:
+
+- enviar outra mensagem quando o agente estiver ocioso;
+- colocar entradas na fila enquanto um Agent Client compatível estiver ocupado;
+- interromper o Turn atual quando o Client suportar interrupção;
+- responder a pedidos de ferramentas e de permissão, como aprovações de comandos, quando o Client solicitar;
+- tentar de novo ou descartar mensagens do Inbox cuja entrega falhou;
+- usar `/model` para trocar o modelo dos próximos Turns quando o Client suportar troca de modelo;
+- digitar `@` para encontrar arquivos e diretórios na Workspace ativa;
+- anexar arquivos com o botão **+** no compositor, até 1 GiB cada;
+- editar uma mensagem anterior elegível do usuário para ramificar a partir daquele ponto no histórico da conversa nativa.
+
+O Inbox acompanha as mensagens enviadas que aguardam entrega ou que estão na fila de um Agent Client.
+
+## Arquivos compartilhados
+
+Um agente pode compartilhar um arquivo da Session dele executando `pontia send-file PATH`. O arquivo aparece como um card no fim do Turn, onde você pode visualizá-lo ou baixá-lo. Abra **Shared files** no menu do compositor para listar todos os arquivos compartilhados na Session. O Pontia lê o arquivo do dispositivo no momento do download, então um arquivo que foi movido ou excluído deixa de estar disponível.
+
+## Comandos do chat
+
+Digite `/` no compositor para ver os comandos disponíveis no contexto atual:
+
+| Comando | Resultado |
+| --- | --- |
+| `/new` | Inicia uma nova Session, mantendo a Workspace atual quando possível |
+| `/rename` | Renomeia a Session atual |
+| `/model` | Escolhe um modelo para os próximos Turns, quando suportado |
+| `/compact` | Resume o contexto mais antigo enquanto a Session está ociosa, quando suportado |
+| `/exit` | Encerra o controle ativo do Pontia sobre a Session atual |
+
+`/exit` encerra o controle do Pontia sobre a Session. O Agent Client gerencia o ciclo de vida e o armazenamento da conversa nativa dele.
+
+## Atalhos de teclado
+
+As páginas de chat oferecem estes atalhos:
+
+| Atalho | Ação |
+| --- | --- |
+| `Alt+J` / `Alt+K` | Ir para o próximo chat ativo ou para o anterior |
+| `Alt+1` … `Alt+9` | Abrir um chat ativo pela posição na barra lateral |
+| `Alt+N` | Abrir New chat |
+| `Alt+L` | Focar o compositor |
+| `Alt+?` | Mostrar a referência de atalhos |
+| `Ctrl+B` (`Cmd+B` no macOS) | Mostrar ou ocultar a barra lateral |
+
+## Organizar Sessions
+
+Use o menu de ações de uma Session para renomeá-la, fixá-la, arquivá-la ou encerrá-la. A página **Sessions** separa as Sessions ativas, arquivadas e fixadas. Arquivar remove uma Session da lista de ativas sem excluir o estado de controle registrado.
+
+O cabeçalho do chat também mostra metadados disponíveis, como Workspace, branch e status do Git, modelo, uso de contexto e Client. Os campos aparecem apenas quando o Client selecionado os informa.
+
+Para erros de serviço ou de conexão, continue em [Solução de problemas](/docs/troubleshooting).

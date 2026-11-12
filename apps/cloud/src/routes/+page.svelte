@@ -7,12 +7,15 @@
 	import IntegrationProgress from '$lib/components/IntegrationProgress.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import LocaleLinks from '$lib/components/LocaleLinks.svelte';
 	import { reveal } from '$lib/reveal';
+	import { m } from '$lib/paraglide/messages';
+	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 
-	const url = 'https://pontia.dev/';
+	const url = `https://pontia.dev${localizeHref('/')}`;
 	const image = 'https://pontia.dev/og.png';
-	const title = 'Pontia — Run coding agents locally, control them anywhere';
-	const description = 'Open-source remote control for coding agents. Run pi, Codex, Claude Code, and more on your own device, then follow and steer them from any browser.';
+	const title = m.home_title();
+	const description = m.home_description();
 
 	const structuredData = {
 		'@context': 'https://schema.org',
@@ -20,6 +23,7 @@
 		name: 'Pontia',
 		url,
 		description,
+		inLanguage: getLocale(),
 		applicationCategory: 'DeveloperApplication',
 		operatingSystem: 'Linux, macOS',
 		license: 'https://www.apache.org/licenses/LICENSE-2.0',
@@ -31,7 +35,6 @@
 <svelte:head>
 	<title>{title}</title>
 	<meta name="description" content={description} />
-	<link rel="canonical" href={url} />
 	<meta property="og:site_name" content="Pontia" />
 	<meta property="og:title" content={title} />
 	<meta property="og:description" content={description} />
@@ -48,7 +51,9 @@
 	{@html `<script type="application/ld+json">${JSON.stringify(structuredData)}</script>`}
 </svelte:head>
 
-<a class="skip-link" href="#main">Skip to content</a>
+<LocaleLinks />
+
+<a class="skip-link" href="#main">{m.skip_to_content()}</a>
 
 <SiteHeader />
 
@@ -61,11 +66,11 @@
 	<HomeFaq />
 
 	<section class="closing page-width" aria-labelledby="closing-title" {@attach reveal()}>
-		<h2 id="closing-title" class="reveal">Your agents, wherever you are.</h2>
-		<p class="reveal" style="--i: 1">Free and open source.</p>
+		<h2 id="closing-title" class="reveal">{m.home_closing_title()}</h2>
+		<p class="reveal" style="--i: 1">{m.home_closing_text()}</p>
 		<div class="closing-actions reveal" style="--i: 2">
-			<a class="button" href="https://app.pontia.dev">Get started<ArrowRightIcon size={18} /></a>
-			<a class="button button-secondary" href="/docs/getting-started">Setup guide</a>
+			<a class="button" href="https://app.pontia.dev">{m.get_started()}<ArrowRightIcon size={18} /></a>
+			<a class="button button-secondary" href={localizeHref('/docs/getting-started')}>{m.setup_guide()}</a>
 		</div>
 	</section>
 </main>

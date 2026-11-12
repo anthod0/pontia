@@ -60,17 +60,15 @@ async function findPages(directory: string): Promise<string[]> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) files.push(...(await findPages(path)));
-    else if (entry.name === "+page.svx") files.push(path);
+    else if (entry.name.endsWith(".svx")) files.push(path);
   }
   return files.sort();
 }
 
+/** Maps `<slug>.svx` under `sourceRoot` to `<base>/<slug>`, and `index.svx` to `base`. */
 function routeOf(base: string, sourceRoot: string, path: string): string {
-  return `${base}${relative(sourceRoot, dirname(path))
-    .split(sep)
-    .filter(Boolean)
-    .map((part) => `/${part}`)
-    .join("")}`;
+  const slug = relative(sourceRoot, path).slice(0, -".svx".length).split(sep).join("/");
+  return slug === "index" ? base : `${base}/${slug}`;
 }
 
 function collectAnchors(text: string, anchors: Map<string, string>): string {
@@ -84,7 +82,7 @@ function collectAnchors(text: string, anchors: Map<string, string>): string {
 }
 
 async function readDocs(root: string) {
-  const docsRoot = join(root, "src/routes/docs");
+  const docsRoot = join(root, "src/content/docs/en");
   return Promise.all(
     (await findPages(docsRoot)).map(async (path) => {
       const code = protectCode(await readFile(path, "utf8"));
@@ -125,7 +123,7 @@ function frontmatter(source: string, path: string) {
 }
 
 async function readBlog(root: string) {
-  const blogRoot = join(root, "src/routes/blog");
+  const blogRoot = join(root, "src/content/blog/en");
   const posts = await Promise.all(
     (await findPages(blogRoot)).map(async (path) => {
       const post = frontmatter(await readFile(path, "utf8"), path);
@@ -153,7 +151,7 @@ export async function generateLlms(root = cloudRoot): Promise<void> {
   const pages = [...docs, ...blog];
   const byRoute = new Map(pages.map((page) => [page.route, page]));
   const overview = byRoute.get("/docs");
-  if (!overview) throw new Error("Missing docs overview: src/routes/docs/+page.svx");
+  if (!overview) throw new Error("Missing docs overview: src/content/docs/en/index.svx");
 
   const indexPath = join(root, "static/llms.txt");
   let previousIndex = "";

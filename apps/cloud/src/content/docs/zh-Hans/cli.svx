@@ -1,0 +1,102 @@
+<svelte:head>
+	<title>CLI 参考 — Pontia</title>
+	<meta name="description" content="Pontia 本地服务、远程访问、更新和 Workflow 命令参考。" />
+</svelte:head>
+
+# CLI 参考
+
+`pontia` CLI 负责配置本地安装，并将持久的控制平面操作委托给正在运行的 `pontiad` 服务。
+
+使用 `pontia COMMAND --help` 查看你所安装版本的确切选项。
+
+## 设置与生命周期
+
+| 命令 | 用途 |
+| --- | --- |
+| `pontia init` | 选择 Agent Client，创建持久配置，安装集成，启动按用户运行的服务，并提供远程设置 |
+| `pontia setup [CLIENT]` | 安装或修复推荐的本地集成；省略参数时选择 Client；启用所选 Client |
+| `pontia up` | 安装或刷新按用户运行的服务定义，并启动或重启服务 |
+| `pontia status` | 显示数据目录、本地服务健康状态、已登录用户、远程标识和所选 Edge |
+| `pontia doctor` | 说明服务、配置、登录和远程注册检查结果，并给出修复提示 |
+| `pontia down` | 停止并禁用按用户运行的服务 |
+| `pontia update` | 安装最新的已签名稳定版 `pontia` 和 `pontiad` |
+| `pontia --version` | 打印已安装的版本 |
+
+`pontia setup` 接受 `pi`、`codex` 或 `claude-agent`，并应用推荐配置，无需额外的 Client 选项。
+
+交互式设置以及等效的分步命令序列见[初始化](/docs/initialization)。
+
+停止 `pontiad` 会停止观察、输入接收和 Workflow 调度。Agent Client 会单独管理其原生对话的生命周期。
+
+## Agent Client
+
+| 命令 | 用途 |
+| --- | --- |
+| `pontia client list` | 列出每个 Agent Client 条目及其短 ID、名称、类型和启用状态 |
+| `pontia client list --json` | 以 JSON 列出每个条目，包括其 ID、配置覆盖项和生效配置 |
+| `pontia client show CLIENT` | 显示一个条目 |
+| `pontia client set CLIENT --config JSON_FILE` | 用一个 JSON 对象替换该条目的配置覆盖项 |
+| `pontia client enable CLIENT` | 允许新 Session 使用该条目 |
+| `pontia client disable CLIENT` | 禁止新 Session 使用该条目；现有 Session 不受影响 |
+| `pontia client reset CLIENT` | 删除该条目已保存的设置，同时会禁用它 |
+
+`CLIENT` 是短 ID，例如 `pi`、`codex`、`claude-agent` 或某个 ACP Agent ID。当短 ID 有歧义时，使用 `--id ID`，并填入 `pontia client list --json` 中的 ID。
+
+## Agent 工具
+
+`pontia --help` 在 Agent tools 下列出 `send-file` 和 `workflow`。
+
+### 文件
+
+| 命令 | 上下文 | 用途 |
+| --- | --- | --- |
+| `pontia send-file PATH` | 在 Pontia Session 内 | 与该 Session 的用户共享一个文件；文件会出现在 Dashboard 聊天中 |
+
+### Workflow
+
+| 命令 | 上下文 | 用途 |
+| --- | --- | --- |
+| `pontia workflow run FILE` | 任意本地 shell | 解析 TOML 定义，并通过本地 API 启动 Workflow |
+| `pontia workflow show [WORKFLOW_ID]` | 任意本地 shell；在受管理的 Node 内 ID 可省略 | 打印精简的 Workflow、当前 Node、输入、输出和 Patch 上下文 |
+| `pontia workflow submit` | 当前受管理的 Agent Node 窗格 | 声明该 Node 的输出已就绪 |
+| `pontia workflow patch request` | 当前受管理的 Agent Node 窗格 | 报告阻塞性问题并开始重新规划 |
+| `pontia workflow patch apply` | 当前 Re-planner 窗格 | 接受候选定义作为新修订版本 |
+| `pontia workflow patch block` | 当前 Re-planner 窗格 | 结束该 Patch，不应用候选定义 |
+
+窗格范围的命令需在当前 Agent Node 或 Re-planner 的、由 Pontia 管理的 `tmux` 窗格中运行。
+
+## Cloud 登录与远程访问
+
+| 命令 | 用途 |
+| --- | --- |
+| `pontia login` | 完成基于浏览器的设备授权，并保存 CLI 凭据 |
+| `pontia remote edges` | 以由 ID 和名称组成的 JSON 数组列出可用的 Edge |
+| `pontia remote enable` | 注册此设备，交互式选择 Edge，并创建其 E2E 身份 |
+| `pontia remote enable --edge EDGE_ID --name NAME` | 无提示注册；两个选项都必须提供 |
+| `pontia remote edit --name NAME` | 更改设备显示名称 |
+| `pontia remote edit --handle HANDLE` | 更改设备的 Dashboard URL 标识 |
+| `pontia remote rotate-key` | 替换设备的 E2E 身份和密钥版本 |
+| `pontia remote disable` | 注销此设备，并移除其本地远程身份 |
+
+影响 `pontiad` 的远程配置更改会自动重启本地服务。
+
+## 退出状态与错误
+
+当本地服务正在运行且其 HTTP 健康检查通过时，`pontia status` 和 `pontia doctor` 会成功退出。账户和远程结果需要单独查看；Cloud 注册并不能证明设备可从互联网访问。
+
+使用退出状态检查命令是否成功。错误会以 `pontia:` 前缀写入标准错误输出。诊断故障时，请附上脱敏后的错误信息。
+
+## `pontia-edge`
+
+自托管 Edge 有一个单独的、以 root 身份运行的 CLI：
+
+| 命令 | 用途 |
+| --- | --- |
+| `pontia-edge init --edge-id ID --ticket TICKET` | 初始化并注册 Edge；通常使用 Cloud 生成的完整命令 |
+| `pontia-edge retry` | 在同一台服务器上继续未完成的初始化 |
+| `pontia-edge update` | 安装最新的已签名稳定版 Edge |
+| `pontia-edge auto-update enable` | 安装并启用每小时一次的更新检查 |
+| `pontia-edge auto-update disable` | 停用后续检查 |
+| `pontia-edge auto-update status` | 显示定时器计划和上一次更新结果 |
+
+直接使用这些命令前，请参阅[自托管 Edge](/docs/self-hosted-edge)。

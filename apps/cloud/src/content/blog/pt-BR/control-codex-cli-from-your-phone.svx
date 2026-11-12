@@ -1,0 +1,192 @@
+---
+title: "Como usar o Codex CLI pelo celular"
+description: "Acompanhe, direcione e aprove Sessions do Codex CLI pelo celular, no Linux ou macOS. Compara o Pontia, o controle remoto do ChatGPT e o Codex Cloud da OpenAI, e uma configuração feita por você com SSH e tmux."
+published: "2026-11-11"
+---
+
+O Codex CLI roda na máquina que tem seus repositórios, toolchains e credenciais. Tarefas longas muitas vezes param em um pedido de aprovação enquanto você está longe desse terminal. Este artigo compara as formas de acessar uma Session do Codex em execução pelo celular e qual delas combina com cada configuração.
+
+O Pontia é a ferramenta que nós desenvolvemos.
+
+## A resposta curta
+
+| Sua situação | Melhor opção |
+| --- | --- |
+| O Codex roda no Linux ou macOS, inclusive em um servidor headless, e você quer uma interface no celular com botões de aprovação | Pontia |
+| O Codex roda em um Mac ou PC com Windows com o app desktop do ChatGPT | Controle remoto pelo app móvel do ChatGPT |
+| A tarefa pode rodar a partir de um checkout limpo nas máquinas da OpenAI | Codex Cloud |
+| Você prefere montar e manter o acesso remoto por conta própria | SSH ou Mosh, tmux e uma rede privada |
+
+## Opção 1: Pontia
+
+O Pontia é um controle remoto gratuito e de código aberto para agentes de programação rodando na sua própria máquina. Você instala uma vez, faz login e abre [app.pontia.dev](https://app.pontia.dev) no celular. Não há VPN, redirecionamento de portas nem app de terminal para configurar.
+
+O Codex CLI inclui um daemon app-server. O app desktop do ChatGPT também o usa para rodar o Codex em hosts SSH. O serviço local do Pontia, `pontiad`, se conecta a esse daemon e mostra cada thread do Codex como um chat. Pelo celular, você pode:
+
+- iniciar uma Session do Codex em um diretório de projeto;
+- acompanhar mensagens, chamadas de ferramentas e a saída de comandos em tempo real;
+- responder a pedidos de aprovação para comandos, alterações de arquivos e permissões extras com **Allow** ou **Deny**;
+- enviar ou enfileirar mensagens de acompanhamento, interromper um turno e trocar de modelo com `/model`;
+- referenciar arquivos do projeto com `@`.
+
+O Codex roda na sua máquina com suas próprias credenciais, sandbox e política de aprovação. As Sessions persistem, então você pode começar uma tarefa na sua mesa e continuá-la pelo celular. O navegador e a sua máquina estabelecem uma sessão criptografada de ponta a ponta pelo relay do Pontia, que apenas encaminha texto cifrado. Sua máquina se conecta para fora, então não precisa de nenhuma porta de entrada aberta.
+
+O Pontia suporta Linux (x86_64 e ARM64) e macOS 13.5 ou posterior, inclusive servidores headless.
+
+### Configuração
+
+Com Node.js e npm instalados, execute estes comandos na máquina, como o usuário que roda o Codex:
+
+```sh
+codex login --device-auth   # device code flow, works over SSH
+npx @pontia/cli init       # select Codex
+```
+
+O `pontia init` faz o resto:
+
+- configura o daemon do Codex para iniciar automaticamente, com um serviço de usuário do systemd e lingering no Linux, ou um LaunchAgent no macOS;
+- faz seu login com Google ou GitHub por meio de uma URL e um código de uso único, que você pode aprovar pelo celular;
+- registra a máquina em um relay oficial.
+
+Quando terminar, abra [app.pontia.dev](https://app.pontia.dev), escolha a máquina e inicie uma Session.
+
+O launcher opcional do Codex também faz com que as threads que você inicia com `codex` em um terminal apareçam no Dashboard, para que você possa continuá-las pelo celular. Veja [Configuração do Codex](/docs/codex). Usuários avançados podem [rodar o próprio relay](/docs/self-hosted-edge) em vez do oficial.
+
+## Opção 2: controle remoto pelo app móvel do ChatGPT
+
+O controle remoto da própria OpenAI permite que o app móvel do ChatGPT inicie chats em um computador conectado, direcione o trabalho ativo, aprove comandos e revise diffs e a saída do terminal. O trabalho roda no host, com os arquivos, credenciais e configurações de sandbox dele.
+
+O host precisa ser um Mac ou PC com Windows rodando o app desktop do ChatGPT. O [guia de conexões remotas](https://learn.chatgpt.com/docs/remote-connections) da OpenAI diz que a configuração móvel começa por esse app e que não é possível configurá-la pelo Codex CLI ou pela extensão de IDE. Administradores do workspace podem precisar habilitar o Remote Control. Para acessar um servidor Linux dessa forma, o app desktop se conecta ao servidor por SSH, então o host Mac ou Windows também precisa ficar ligado.
+
+Use esta opção se você já trabalha no app desktop do ChatGPT no Mac ou Windows.
+
+## Opção 3: Codex Cloud
+
+O Codex Cloud roda tarefas em máquinas gerenciadas pela OpenAI, então elas continuam enquanto seu computador está em repouso, e você pode iniciá-las e continuá-las pelo app móvel. Uma tarefa na nuvem usa apenas os arquivos e serviços do seu ambiente na nuvem. A [documentação de ambientes](https://learn.chatgpt.com/docs/environments/modes) da OpenAI observa que seus arquivos locais, processos em execução e acesso por VPN não são transferidos para ele.
+
+Use esta opção para trabalhos que podem rodar a partir de um checkout limpo. Ela não serve para tarefas que dependem de um banco de dados local, de uma rede privada, de hardware ou de credenciais que você mantém na sua própria máquina.
+
+## Opção 4: monte você mesmo com SSH e tmux
+
+Você também pode montar o acesso remoto com ferramentas padrão: o tmux mantém o Codex rodando, uma rede privada torna a máquina acessível e um cliente SSH no celular se conecta a ela. Com um hook e o ntfy, o celular também é notificado quando o Codex está esperando.
+
+### 1. Torne a máquina acessível com o Tailscale
+
+Instale o Tailscale no host e faça login:
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4      # note the 100.x.y.z address
+```
+
+Instale o app do Tailscale no celular e faça login com a mesma conta. O host agora pode ser acessado pelo celular nesse endereço, sem nenhuma porta aberta na internet.
+
+Para um host sempre ligado, desative a [expiração de chave](https://tailscale.com/docs/features/access-control/key-expiry) dele no console de administração do Tailscale. Por padrão, as chaves expiram após 180 dias, e o host então sai da rede.
+
+O celular só pode rodar uma VPN por vez, então o app do Tailscale desliga qualquer outro app de VPN ou proxy. Se você precisa de um deles, [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) aborda o Cloudflare Tunnel, que não usa o slot de VPN do celular, e os conflitos de endereço e roteamento entre VPNs.
+
+### 2. Rode o Codex no tmux e mantenha a saída rolável
+
+Por padrão, o Codex desenha sua TUI na tela alternativa do terminal. O tmux não guarda o conteúdo da tela alternativa no histórico, então, depois que você se reconecta, a saída anterior some do scrollback do tmux. Desative isso em `~/.codex/config.toml`:
+
+```toml
+[tui]
+alternate_screen = "never"
+```
+
+Depois inicie o Codex em uma sessão nomeada:
+
+```sh
+tmux new -s codex
+codex
+# detach with Ctrl-b d
+```
+
+Pelo celular, conecte e reanexe:
+
+```sh
+mosh agent@100.x.y.z tmux attach -t codex
+```
+
+O Mosh mantém a sessão ativa quando o celular alterna entre Wi-Fi e dados móveis, ou entra em repouso. Ele precisa do `mosh` instalado no host e de um cliente no celular que o suporte. Sem o Mosh, use `ssh -t agent@100.x.y.z tmux attach -t codex` e reconecte após cada queda. Para rolar, entre no modo de cópia do tmux com `Ctrl-b [` e saia com `q`.
+
+Se o próprio tmux morreu, por exemplo após uma reinicialização, inicie uma nova sessão e continue a última conversa com `codex resume --last`.
+
+### 3. Receba notificações quando o Codex precisar de aprovação
+
+A configuração `notify` do Codex só dispara quando um turno termina. Os [hooks](https://developers.openai.com/codex/hooks) também rodam quando o Codex está prestes a pedir aprovação. Assine um tópico longo e aleatório do [ntfy](https://ntfy.sh/) no app do ntfy no celular, depois salve isto como `~/.codex/hooks/ntfy.sh` e torne-o executável. Ele precisa de `jq` e `curl`.
+
+```sh
+#!/bin/sh
+url=https://ntfy.sh/YOUR_TOPIC
+
+event=$(cat)
+field() { printf '%s' "$event" | jq -r "$1"; }
+project=$(field '.cwd | split("/") | last')
+
+case $(field .hook_event_name) in
+  PermissionRequest)
+    title="Codex needs approval: $project"
+    body=$(field '.tool_input.description // .tool_input.command // .tool_name')
+    ;;
+  Stop)
+    title="Codex finished: $project"
+    body=$(field '(.last_assistant_message // "Turn complete")[0:300]')
+    ;;
+  *) exit 0 ;;
+esac
+
+curl -fsS --max-time 5 -o /dev/null -H "Title: $title" -d "$body" "$url" || true
+```
+
+Registre-o em `~/.codex/config.toml`:
+
+```toml
+[[hooks.PermissionRequest]]
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+```
+
+Abra `/hooks` no Codex e marque os novos hooks como confiáveis. O Codex ignora hooks não confiáveis, e qualquer edição posterior no script ou na entrada exige confiar de novo. O script não imprime nada, então o Codex continua mostrando seu pedido de aprovação normal. Imprimir uma decisão a partir de um hook `PermissionRequest` aprovaria ou negaria o pedido. Remova a entrada `Stop` se uma notificação após cada turno for demais.
+
+[Notificações no celular para Codex e pi](/blog/coding-agent-phone-notifications) explica o payload do hook e como manter comandos e caminhos fora de um servidor de notificações de terceiros.
+
+### O que você obtém no final
+
+A notificação avisa que há uma aprovação esperando. Para respondê-la, você abre o app de SSH, reanexa e pressiona `y` ou `Esc` na TUI do Codex usando o teclado do celular. Você mantém cada peça por conta própria: o Tailscale nos dois dispositivos, as chaves SSH no celular, o tmux e o hook.
+
+## Escolha uma política de aprovação que funcione no celular
+
+Seja qual for a opção escolhida, o celular é um lugar ruim para revisar um comando longo. A política de aprovação do Codex decide com que frequência você será consultado. O [guia de aprovações e segurança](https://learn.chatgpt.com/docs/agent-approvals-security) da OpenAI descreve o preset `Auto`, `--sandbox workspace-write --ask-for-approval on-request`. Com ele, o Codex edita arquivos e roda comandos dentro do workspace sem perguntar, e pergunta antes de escrever fora dele ou usar a rede.
+
+Para torná-lo o padrão em vez de passar flags, defina-o em `~/.codex/config.toml`:
+
+```toml
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+# Directories outside the project that Codex may write without asking,
+# for example a shared build cache.
+writable_roots = ["/home/agent/.cache/pnpm"]
+```
+
+`writable_roots` é opcional. Use-o para caminhos que, de outra forma, disparariam um pedido a cada build, para que os pedidos que chegam ao seu celular continuem raros.
+
+Isso combina com supervisão remota. Edições de rotina seguem adiante, e os pedidos que chegam ao seu celular são os que valem a leitura. Rodar com aprovações desativadas elimina o motivo de acompanhar pelo celular, então reserve isso para máquinas em sandbox ou descartáveis.
+
+## Relacionados
+
+- [Receba uma notificação no celular quando o Codex ou o pi precisar de você](/blog/coding-agent-phone-notifications)
+- [Rode agentes de programação em uma VPS](/blog/run-coding-agents-on-a-vps) para um host Linux sempre ligado
+- [Como usar o agente de programação pi pelo celular](/blog/pi-coding-agent-remote-control)
+- [Como o Pontia funciona](/docs/how-it-works) e [Segurança](/docs/security)

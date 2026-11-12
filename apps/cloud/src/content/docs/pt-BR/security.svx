@@ -1,0 +1,59 @@
+<svelte:head>
+	<title>Segurança — Pontia</title>
+	<meta name="description" content="Entenda os limites de confiança, a criptografia, as credenciais e as permissões locais do Pontia." />
+</svelte:head>
+
+# Segurança
+
+O Pontia mantém a execução dos agentes no seu dispositivo e separa a autorização remota do tráfego criptografado do dispositivo. Proteja seu dispositivo, suas credenciais, o diretório de estado do Pontia, a sessão do navegador e qualquer host de Edge auto-hospedado.
+
+## Limites de confiança
+
+| Componente | Papel de segurança | Acesso aos arquivos do projeto |
+| --- | --- | --- |
+| `pontiad` no seu dispositivo | Autentica requisições locais e remotas e coordena os Agent Clients | Pelas permissões do usuário local e pelas Workspaces configuradas |
+| Agent Client | Executa o trabalho do agente com suas próprias credenciais, ferramentas, sandbox e aprovações | De acordo com as permissões locais desse Client |
+| Pontia Cloud | Autentica usuários, registra a propriedade, registra dispositivos e Edges e autoriza conexões | Sem acesso ao sistema de arquivos do dispositivo |
+| Edge | Admite túneis de dispositivos autorizados e retransmite texto cifrado entre navegador e dispositivo | Sem acesso ao projeto em texto claro |
+| Navegador | Apresenta os dados retornados pelo dispositivo selecionado | Sem acesso direto ao sistema de arquivos |
+
+O Cloud autoriza novas conexões remotas. O tráfego do Dashboard passa pelo Edge, e o dispositivo verifica a autorização do navegador antes de aceitar requisições.
+
+## Acesso remoto com criptografia de ponta a ponta
+
+O navegador cria uma identidade efêmera e obtém uma capability assinada e de curta duração, vinculada à chave desse navegador, ao dispositivo de destino e à versão da chave do dispositivo. O dispositivo valida a capability com a chave de verificação do Pontia Cloud antes de aceitar uma sessão.
+
+O navegador e o dispositivo estabelecem chaves de sessão com HPKE baseado em X25519 e protegem os registros com ChaCha20-Poly1305. IDs de requisição autenticados e um rastreamento de replay limitado impedem que uma requisição criptografada capturada seja executada de novo. Sessões E2E ociosas expiram; streams ativos têm limites separados.
+
+O Edge vê metadados de roteamento e o tamanho e o tempo do tráfego criptografado. As requisições e respostas da API do Dashboard continuam criptografadas entre o navegador e o dispositivo.
+
+## Acesso local
+
+O Local Dashboard e a External API usam o `external_api_token` de `$PONTIA_HOME/config.toml`. O listener padrão aceita apenas loopback. Se você alterar `bind_addr` para um endereço que não seja de loopback, a API autenticada por token fica exposta a essa rede; providencie sua própria rede confiável e proteções de transporte.
+
+O acesso remoto usa uma sessão criptografada separada entre navegador e dispositivo, verificada pelo dispositivo, para autorizar os mesmos recursos atuais da External API.
+
+## Segredos a proteger
+
+Mantenha estes valores e arquivos privados:
+
+- `external_api_token` no `config.toml`;
+- `$PONTIA_HOME/auth.json`;
+- `$PONTIA_HOME/e2e-identity.json`;
+- comandos de implantação de Edges auto-hospedados e estado de inicialização pendente;
+- `/etc/pontia/edge/credential` e material de chave privada TLS;
+- credenciais dos Agent Clients e dos provedores de modelos.
+
+O Pontia cria arquivos de credenciais com permissões restritivas. Proteja os backups deles e remova segredos dos diagnósticos antes de compartilhá-los. Trate como sensível o histórico do shell que contenha credenciais.
+
+## Responder à exposição de credenciais
+
+- Token da API local: gere um substituto no `config.toml`, execute `pontia up` e atualize os navegadores locais confiáveis.
+- Acesso do dispositivo: remova o dispositivo em [Configurações de dispositivos](/settings/devices) para impedir novas conexões remotas. Seu login na CLI e os outros dispositivos registrados continuam disponíveis.
+- Identidade do dispositivo: execute `pontia remote rotate-key`.
+- Dispositivo perdido: remova-o nas Configurações de dispositivos e revogue as sessões de navegador desconhecidas.
+- Credencial ou host do Edge: remova o registro do Edge e os dispositivos associados no Cloud, depois implante de novo e registre novamente os dispositivos em um Edge confiável.
+
+## Dados mantidos no dispositivo
+
+O Pontia armazena registros persistentes do plano de controle, dados limitados de mensagens e associações, arquivos de Workflow e localizadores da timeline nativa em `PONTIA_HOME`. O histórico completo das conversas é armazenado e gerenciado pelo Agent Client. Use as ferramentas de gerenciamento de dados desse Client para gerenciar ou excluir as conversas nativas dele.

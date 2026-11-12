@@ -1,0 +1,122 @@
+<svelte:head>
+	<title>設定 — Pontia</title>
+	<meta name="description" content="Pontia の状態、Dashboard へのアクセス、Workspace、ファイル検索、Agent Client を設定します。" />
+</svelte:head>
+
+# 設定
+
+Pontia は永続的な設定を `$PONTIA_HOME/config.toml` から読み込みます。`PONTIA_HOME` のデフォルトは `$HOME/.pontia` で、`..` による遡りを含まない、ルート以外の絶対パスである必要があります。
+
+永続的なサービス設定を編集したら、次のコマンドで適用します。
+
+```sh
+pontia up
+```
+
+## 基本設定
+
+```toml
+bind_addr = "127.0.0.1:8080"
+external_api_token = "replace-with-a-long-secret"
+run_migrations = true
+default_client_type = "pi"
+
+[runtime.pi]
+tui_command = "pi"
+
+[workspace_browser]
+roots = [
+  { root_id = "projects", label = "Projects", path = "/home/me/projects" }
+]
+```
+
+| キー | 意味 |
+| --- | --- |
+| `bind_addr` | ローカル HTTP の待ち受けアドレス。デフォルトは `127.0.0.1:8080` |
+| `external_api_token` | Local Dashboard と External API が必要とする Bearer トークン |
+| `run_migrations` | `pontiad` が同梱のデータベースマイグレーションを適用するかどうか。デフォルトは `true` |
+| `default_client_type` | デフォルトの Client 識別子。現在サポートされている値は `pi` |
+| `dashboard.source` | Local Dashboard のビルドディレクトリ、または `index.html` をちょうど 1 つ含むリモートの `.tar.gz`、`.tgz`、`.zip` アーカイブ |
+| `runtime.pi.tui_command` | 起動する pi の Session に使う pi の実行ファイルまたはコマンド |
+| `runtime.codex.tui_command` | Codex の Session をネイティブの TUI で開くときに使う Codex の実行ファイル。デフォルトは `codex` |
+| `acp.agents.ID` | ACP エージェントのエントリー。[Agent Client](/docs/agent-clients#enable-an-acp-agent) を参照 |
+| `workspace_browser.roots` | Workspace を有効にするために Dashboard が参照できるディレクトリ |
+
+リリース版での `dashboard.source` のデフォルトは、インストールされている Pontia のバージョンに対応する Dashboard アーカイブです。リモートの Dashboard アーカイブは `$PONTIA_HOME/cache/dashboard` にキャッシュされ、更新に失敗しても既存のキャッシュを配信できます。
+
+## ファイルピッカー
+
+ファイルピッカーは、アクティブな Workspace 内での `@` 候補を提供します。
+
+```toml
+[file_picker]
+enabled = true
+min_query_chars = 0
+max_results = 100
+max_candidates = 100000
+timeout_ms = 1500
+respect_gitignore = true
+respect_ignore_files = true
+respect_git_exclude = true
+include_hidden = false
+follow_symlinks = false
+ignore_globs = [
+  ".git/**",
+  "node_modules/**",
+  "target/**",
+  "dist/**",
+  "build/**",
+  ".svelte-kit/**",
+  ".next/**"
+]
+```
+
+`follow_symlinks = true` を設定すると、アクセス可能なシンボリックリンクの参照先が検索対象に含まれます。表示されているディレクトリツリーの外にある参照先も含まれます。
+
+## アップロードされたファイル
+
+アップロードされたファイルは、アップロード開始時点から数えた保持期間が過ぎると自動的に削除されます。長く必要なファイルは、期限切れになる前に Workspace に保存してください。
+
+```toml
+[uploads]
+incomplete_retention_days = 7
+completed_retention_days = 30
+cleanup_interval_hours = 24
+```
+
+これらはデフォルト値です。3 つの値はすべて正の整数である必要があります。クリーンアップはサービスの起動時、その後は設定した間隔でバックグラウンドで実行され、書き込み中のアップロードはスキップされます。変更は `pontia up` でサービスを再起動して適用します。
+
+## 環境変数による上書き
+
+実行中のプロセスは、次の上書きを受け付けます。
+
+| 変数 | 上書き対象 |
+| --- | --- |
+| `PONTIA_HOME` | 状態と設定のディレクトリ |
+| `PONTIA_EXTERNAL_API_TOKEN` | `external_api_token` |
+| `PONTIA_RUN_MIGRATIONS` | `run_migrations` |
+| `PONTIA_DEFAULT_CLIENT_TYPE` | `default_client_type` |
+| `PONTIA_WORKSPACE_ROOTS` | セミコロン区切りの `root_id|label|path` エントリーで指定する Workspace のルート |
+| `PONTIA_DASHBOARD_SOURCE` | `dashboard.source`。空の値にすると Dashboard の配信が無効になる |
+| `PONTIA_PI_TUI_COMMAND` | `runtime.pi.tui_command`。空の値にすると設定がクリアされる |
+| `PONTIA_AUTH_ORIGIN` | Pontia Cloud の HTTPS オリジン。管理されたデプロイと開発向け |
+
+実行中のプロセスでは、環境変数の値がファイルの値より優先されます。永続的なサービス設定には `config.toml` を使ってください。インストールされたサービスは、`PONTIA_HOME`、`PONTIA_AUTH_ORIGIN`、必要な Agent Client のパスを別に保存します。
+
+真偽値の環境変数には、`1`、`true`、`yes`、`on` と、`0`、`false`、`no`、`off` を使えます。
+
+## 状態ファイル
+
+デフォルトの状態ディレクトリには、機密性が高く永続的なデータが含まれます。
+
+| パス | 用途 |
+| --- | --- |
+| `config.toml` | 永続的なサービス設定とローカル API トークン |
+| `auth.json` | Pontia Cloud の CLI 認証情報 |
+| `e2e-identity.json` | リモートデバイス ID の秘密鍵と鍵のバージョン |
+| `data/pontia-e1.db` | ローカルのコントロールプレーンのデータベース |
+| `workflows/` | Workflow の Handoff、承認済みの定義、Patch ドキュメント |
+| `state/` | ランタイムのソケット、起動ファイル、連携のログ |
+| `cache/dashboard/` | キャッシュされたリモートの Dashboard バンドル |
+
+[セキュリティ](/docs/security)の説明に従って、状態ディレクトリを非公開に保ち、そのバックアップを保護してください。リモートの認証情報のローテーションや取り消しには[デバイス管理](/docs/device-management)を使います。

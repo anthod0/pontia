@@ -8,6 +8,8 @@
   import CircleDashedIcon from 'phosphor-svelte/lib/CircleDashedIcon';
   import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
   import { reveal } from '$lib/reveal';
+  import { m } from '$lib/paraglide/messages';
+  import { localizeHref } from '$lib/paraglide/runtime';
 
   // Editorial estimate, updated manually rather than derived from capability counts.
   const developmentProgress = 70;
@@ -22,13 +24,13 @@
   // Local vector assets live in static/client-logos/.
   // Coverage checked against client-{pi,codex,acp}/src/{spec,adapter}.rs,
   // Codex service/interactions.rs, and pontia-config/src/acp.rs.
-  const features = ['Live conversation', 'Two-way sync', 'Approvals', 'History branching', 'Context management', 'Model switching'];
+  const features = [m.integrations_feature_live, m.integrations_feature_sync, m.integrations_feature_approvals, m.integrations_feature_branching, m.integrations_feature_context, m.integrations_feature_models];
   const states = {
-    supported: { label: 'Supported', icon: CheckIcon },
-    partial: { label: 'Partial', icon: CircleHalfIcon },
-    unsupported: { label: 'Not supported', icon: XIcon },
-    notApplicable: { label: 'N/A', icon: MinusIcon },
-    planning: { label: 'Planning', icon: CircleDashedIcon },
+    supported: { label: m.integrations_status_supported, icon: CheckIcon },
+    partial: { label: m.integrations_status_partial, icon: CircleHalfIcon },
+    unsupported: { label: m.integrations_status_unsupported, icon: XIcon },
+    notApplicable: { label: m.integrations_status_not_applicable, icon: MinusIcon },
+    planning: { label: m.integrations_status_planning, icon: CircleDashedIcon },
   };
   // Not supported is reserved for confirmed technical limitations, not missing work.
   // ACP TUI sync and history branching remain planned investigations; their
@@ -46,21 +48,21 @@
 <section id="progress" class="integrations page-width section-block" aria-labelledby="integrations-title" {@attach reveal(() => (shownProgress = developmentProgress))}>
   <div class="section-intro reveal">
     <div class="section-heading">
-      <h2 id="integrations-title">One Dashboard for every agent.</h2>
-      <p>Five Agent Clients today, with deeper integration landing in each release.</p>
+      <h2 id="integrations-title">{m.integrations_title()}</h2>
+      <p>{m.integrations_intro()}</p>
     </div>
     <div class="development-status">
-      <p id="integration-status"><span>Integration progress</span><span>~{developmentProgress}%</span></p>
-      <Progress value={shownProgress} aria-labelledby="integration-status" aria-valuetext={`Approximately ${developmentProgress}% (estimate)`} />
+      <p id="integration-status"><span>{m.integrations_progress()}</span><span>~{developmentProgress}%</span></p>
+      <Progress value={shownProgress} aria-labelledby="integration-status" aria-valuetext={m.integrations_progress_value({ percent: developmentProgress })} />
     </div>
   </div>
   <div class="coverage-table reveal" style="--i: 1">
     <Table.Root>
-      <Table.Caption class="sr-only">Pontia client integration coverage. Supported indicates implemented integration, not a guarantee for every client configuration.</Table.Caption>
+      <Table.Caption class="sr-only">{m.integrations_caption()}</Table.Caption>
       <Table.Header>
         <Table.Row>
-          <Table.Head class="client-heading">Agent client</Table.Head>
-          {#each features as feature}<Table.Head class="feature-heading">{feature}</Table.Head>{/each}
+          <Table.Head class="client-heading">{m.integrations_client()}</Table.Head>
+          {#each features as feature}<Table.Head class="feature-heading">{feature()}</Table.Head>{/each}
         </Table.Row>
       </Table.Header>
       <Table.Body>
@@ -71,7 +73,7 @@
             </Table.Head>
             {#each client.coverage as status}
               {@const Icon = states[status].icon}
-              <Table.Cell class="coverage-cell"><span class={`coverage-status ${status}`} title={states[status].label}><Icon size={19} weight="regular" aria-hidden="true" /><span class="sr-only">{states[status].label}</span></span></Table.Cell>
+              <Table.Cell class="coverage-cell"><span class={`coverage-status ${status}`} title={states[status].label()}><Icon size={19} weight="regular" aria-hidden="true" /><span class="sr-only">{states[status].label()}</span></span></Table.Cell>
             {/each}
           </Table.Row>
         {/each}
@@ -79,13 +81,13 @@
     </Table.Root>
   </div>
   <div class="section-footer">
-  <ul class="coverage-legend" aria-label="Capability status legend">
+  <ul class="coverage-legend" aria-label={m.integrations_legend()}>
     {#each Object.entries(states) as [status, state]}
       {@const Icon = state.icon}
-      <li><span class={`coverage-status ${status}`}><Icon size={17} weight="regular" aria-hidden="true" /></span><span>{state.label}</span></li>
+      <li><span class={`coverage-status ${status}`}><Icon size={17} weight="regular" aria-hidden="true" /></span><span>{state.label()}</span></li>
     {/each}
   </ul>
-  <a href="/docs/agent-clients">Client integrations<ArrowRightIcon size={12} /></a>
+  <a href={localizeHref('/docs/agent-clients')}>{m.integrations_link()}<ArrowRightIcon size={12} /></a>
   </div>
 </section>
 

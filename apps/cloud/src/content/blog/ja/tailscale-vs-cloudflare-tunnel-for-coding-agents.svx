@@ -1,0 +1,143 @@
+---
+title: "Tailscale と Cloudflare Tunnel の比較: スマートフォンからコーディングエージェントのサーバーに接続する"
+description: ポートを開けずに、自宅サーバーや VPS 上の Codex や pi へスマートフォンから接続する方法です。Tailscale、cloudflared を使う Cloudflare Tunnel、Cloudflare のブラウザー SSH ターミナルを、セットアップ手順と落とし穴 (他の VPN やプロキシとの競合を含む) とともに比較します。
+published: "2026-11-12"
+---
+
+スマートフォンからコーディングエージェントの様子を確認するには、まずエージェントが動いているマシンに接続する手段が必要です。SSH をインターネットに公開する方法でも動きますが、ログイン試行が絶えず届くうえ、パブリック IP が必要になります。キャリアグレード NAT の内側にある自宅マシンには、パブリック IP がない場合があります。Tailscale と Cloudflare Tunnel はどちらの問題も回避します。サーバーが外向きに接続し、パブリックポートで待ち受けるものはありません。
+
+この記事では、サーバー上の tmux で Codex や pi の Session を動かし続け、スマートフォンからアタッチするという用途に絞って、この 2 つを比較します。私たちが開発している Pontia については、最後に簡単に紹介します。
+
+## 結論
+
+| | Tailscale | Cloudflare Tunnel + `cloudflared` | Cloudflare ブラウザー SSH ターミナル |
+| --- | --- | --- | --- |
+| スマートフォンで動かすもの | Tailscale アプリ (VPN) | `cloudflared` を実行できる SSH クライアント | ブラウザー |
+| スマートフォンの VPN 枠を使うか | 使う | 使わない | 使わない |
+| Cloudflare 上のドメインが必要か | 不要 | 必要 | 必要 |
+| Mosh | 動作する | 動作しない (TCP のみ) | 該当なし |
+| ログイン | Tailscale の ID、SSH 鍵、または Tailscale SSH | Cloudflare Access の後に SSH | Cloudflare Access の後に SSH |
+| 無料プラン | Personal プラン、最大 6 ユーザー | Zero Trust 無料プラン、最大 50 ユーザー | Cloudflare Tunnel と同じ |
+
+スマートフォンで別の VPN をすでに使う必要がなければ、Tailscale を選んでください。セットアップが最も短く、ドメインが不要で、3 つの中で Mosh を通せる唯一の方法です。スマートフォンで別の VPN を動かし続ける必要がある場合や、何もインストールせずにブラウザーからサーバーに接続したい場合は、Cloudflare を選んでください。
+
+プランの詳細は、2026 年 11 月 12 日に [Tailscale](https://tailscale.com/pricing) と [Cloudflare Access](https://www.cloudflare.com/sase/products/access) の料金ページで確認しました。
+
+## サーバー側: エージェントを tmux で動かす
+
+3 つの方法はいずれもシェルを提供します。そのシェルが切断されてもエージェントは動き続ける必要があるため、tmux の中で起動します:
+
+```sh
+tmux new -s codex
+codex            # or: pi
+# detach with Ctrl-b d
+```
+
+サーバーからログアウトしたときに tmux が Session ごと終了してしまう場合、原因はたいてい systemd です。[VPS で Codex と pi を動かす](/blog/run-coding-agents-on-a-vps)では、lingering と `KillUserProcesses` について説明しています。
+
+## 方法 1: Tailscale
+
+Tailscale は、サーバーとスマートフォンを tailnet と呼ばれるプライベートな WireGuard ネットワークに参加させ、`100.64.0.0/10` のアドレスを割り当てます。NAT が許せば接続はピアツーピアになり、そうでなければ Tailscale のリレー (DERP) にフォールバックします。
+
+### セットアップ
+
+サーバーで:
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4      # the server's 100.x.y.z address
+```
+
+スマートフォンに Tailscale アプリをインストールし、同じアカウントでサインインします。次に、スマートフォンの SSH クライアントから `100.x.y.z` アドレスまたはマシンの MagicDNS 名に接続します。
+
+Mosh を使うには、サーバーに `mosh` をインストールし、Mosh に対応したスマートフォンのクライアントで接続します。Mosh は SSH でログインした後、60000〜61000 の範囲のポートで UDP に切り替えます。tailnet 経由であれば、この UDP 通信のためにファイアウォールを変更する必要はありません。
+
+### パブリックな SSH ポートを閉じる
+
+Tailscale 経由の SSH が動作したら、パブリックな SSH を完全に閉じることができます。Ubuntu では、Tailscale の [ufw ガイド](https://tailscale.com/docs/how-to/secure-ubuntu-server-with-ufw)の手順で行えます:
+
+```sh
+sudo ufw allow in on tailscale0
+sudo ufw default deny incoming
+sudo ufw delete allow 22/tcp     # only after testing SSH over Tailscale
+sudo ufw enable
+```
+
+この作業の前に、VPS プロバイダーの Web コンソールの場所を確認しておいてください。サーバー上の Tailscale が動かなくなったときに必要になります。
+
+### 落とし穴
+
+- **鍵の有効期限が切れるとサーバーとの接続が切れます。** デバイスの鍵はデフォルトで 180 日後に期限切れになり、そのデバイスへの接続は止まります。SSH を Tailscale 経由のみに制限したサーバーでは、締め出されることになります。管理コンソールでサーバーの[鍵の有効期限を無効化](https://tailscale.com/docs/features/access-control/key-expiry)するか、タグ付きで登録してください。タグ付きのデバイスはデフォルトで有効期限が無効になります。
+- **Tailscale SSH を有効にすると Session が切れることがあります。** `tailscale set --ssh` を実行すると、Tailscale アドレスのポート 22 を Tailscale が引き継ぎます。[Tailscale のドキュメント](https://tailscale.com/docs/features/tailscale-ssh)では、そのアドレスへの既存の SSH 接続がハングすると警告しています。パブリック IP 経由の Session か、プロバイダーのコンソールから実行してください。
+- **Tailscale SSH は再度のサインインを求めます。** デフォルトのポリシーは check モードを使い、12 時間ごとにブラウザーでの再認証を求めます。スマートフォンでは、SSH アプリが URL を表示するので、それを開いて続行します。デバイスの信頼だけに頼る場合は、ルールの `action` を `accept` に変更してください。
+- **`autogroup:nonroot` は範囲が広いです。** Tailscale SSH のルールの宛先を `autogroup:self` からタグに変更すると、`autogroup:nonroot` によって、許可されたすべての送信元が任意の非 root ユーザーとしてログインできるようになります。エージェント用のユーザーを明示的に指定してください。
+- **リレー経由の接続は遅くなります。** `tailscale status` は、各ピアについて `relay` か `direct` を表示します。VPS で `relay` と表示される場合、ポート 41641 の受信 UDP を許可すると直接接続になることがあります。
+
+## 方法 2: cloudflared を使う Cloudflare Tunnel
+
+サーバー上の `cloudflared` は Cloudflare への外向きの接続を開き、`ssh.example.com` のような自分のドメインのホスト名で SSH を公開します。トラフィックがサーバーに届く前に、Cloudflare Access が ID を確認します。この方法には、DNS を Cloudflare で管理しているドメインが必要です。
+
+### セットアップ
+
+1. Cloudflare ダッシュボードで **Networking** > **Tunnels** に移動してトンネルを作成し、表示されたインストールコマンドをサーバーで実行します。
+2. トンネルの **Routes** タブで、ホスト名とサービス `ssh://localhost:22` を指定した **Published application** を追加します。
+3. **Zero Trust** > **Access controls** > **Applications** で、同じホスト名のセルフホストアプリケーションを追加し、自分のメールアドレスを許可する Allow ポリシーを設定します。これがないと、ホスト名を見つけた誰もが SSH サーバーのログイン画面にたどり着けます。
+
+Cloudflare は SSH を WebSocket 内の TCP として運ぶため、クライアント側にも `cloudflared` が必要です。`~/.ssh/config` に次のように記述します:
+
+```sshconfig
+Host ssh.example.com
+  ProxyCommand cloudflared access ssh --hostname %h
+```
+
+初回の接続では、Access のログインのためにブラウザーが開きます。詳細は Cloudflare の[ガイド](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/use-cases/ssh/ssh-cloudflared-authentication/)を参照してください。
+
+スマートフォンでは、`cloudflared` を `ProxyCommand` として実行できる SSH クライアントが必要です。Android の Termux は、`cloudflared` パッケージを使ってこれを実行できます。この方法を選ぶ前に、使う SSH アプリが対応しているか確認してください。
+
+### 落とし穴
+
+- **Mosh は動作しません。** 公開された SSH ルートは TCP のみを運び、Mosh には UDP が必要です。通常の SSH を使い、切断のたびに tmux に再アタッチしてください。
+- **Cloudflare は長時間の接続にこのルートを推奨していません。** Cloudflare の[プロトコルリファレンス](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/routing-to-tunnel/protocols/)では、そうした接続には Cloudflare One Client (WARP) を勧めています。WARP はスマートフォン上の VPN なので、後述の競合が再び生じます。
+- **Access アプリケーションのないルートは公開状態です。** トンネル自体は誰も認証しません。
+
+## 方法 3: Cloudflare のブラウザーレンダリング SSH ターミナル
+
+Cloudflare は同じ SSH アプリケーションをブラウザー内のターミナルとして表示できるため、スマートフォンにはアプリが一切不要です。方法 2 のトンネルと Access アプリケーションを設定した後、Access アプリケーションを編集し、**SSH** を選択した状態で **Allow access through browser-based RDP, SSH, or VNC sessions** をオンにします。
+
+[ブラウザーレンダリングのドキュメント](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/non-http/browser-rendering/)には、見落としやすい制約が記載されています:
+
+- **メールアドレスのプレフィックスが Unix ユーザー名と一致する必要があります。** `jane.doe@example.com` でサインインする場合、サーバーのアカウントは `jane.doe` である必要があります。専用の `agent` ユーザーは、`agent@` で始まるメールアドレスでのみ使えます。
+- **Allow と Block のポリシーのみが機能します。** Bypass と Service Auth のポリシーでは、ブラウザーレンダリングが動作しません。
+- **サーバーに追加の鍵交換アルゴリズムが必要な場合があります。** ブラウザーターミナルは `curve25519-sha256` と ECDH NIST 曲線に対応しています。強化された `sshd_config` で `KexAlgorithms` にこれらのいずれも含めていない場合、接続は失敗します。
+- **デフォルトはパスワードログインです。** サーバーでパスワードを有効にしたくない場合は、[Access の短期証明書](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/non-http/short-lived-certificates-legacy/)を設定してください。これにより `sshd_config` に `TrustedUserCAKeys` のエントリーが追加されます。
+
+## 他の VPN やプロキシと併用する
+
+ほとんどの構成が壊れるのはここです。
+
+**スマートフォンで同時に動かせる VPN は 1 つです。** [Tailscale の FAQ](https://tailscale.com/docs/reference/faq/other-vpns) にあるとおり、iOS と Android で有効にできる VPN は 1 つだけです。Tailscale アプリ、Cloudflare One (WARP) アプリ、仕事用 VPN、商用 VPN、システムの VPN インターフェースを使うプロキシアプリは、すべてこの枠を奪い合います。1 つをオンにすると、ほかはオフになります。スマートフォンで別の VPN が必要な場合は、VPN 枠を使わない方法 2 か 3 を使ってください。
+
+**iOS では、VPN On Demand によって Tailscale がオフになることがあります。** On Demand を有効にできる VPN アプリは 1 つだけです。別の VPN に接続すると、手動で再接続するまで Tailscale の On Demand は無効になります。
+
+**アドレス範囲が重なります。** Tailscale は `100.64.0.0/10` を使います。Cloudflare WARP はデバイスのアドレスを `100.96.0.0/12` から割り当てますが、これはその範囲の内側にあります。キャリアグレード NAT の範囲を使う他の VPN も同じように競合します。両方を動かしているノート PC では、2 つが `100.x` アドレスへのルートを奪い合います。
+
+**フルトンネルの VPN は Tailscale の通信を落とします。** 多くの VPN は、自身のトンネル外の通信をブロックするファイアウォールルールを導入します。Tailscale は 2 つの回避策を挙げています。他の VPN で `100.64.0.0/10` と `fd7a:115c:a1e0::/48` を除外するスプリットトンネルを設定する方法と、Tailscale をユーザースペースネットワーキングモードで動かす方法です。Tailscale の exit node を使う場合、exit node 自体がデフォルトルートを取るため、スプリットトンネルは役に立ちません。
+
+**ノート PC 上の TUN モードのプロキシは、ルーティングと DNS を乗っ取ります。** TUN モードの Clash、mihomo などのツールは、tailnet の通信を捕捉することがあります ([tailscale#18351](https://github.com/tailscale/tailscale/issues/18351))。原因を絞り込むには、`100.x` アドレスと MagicDNS 名で接続を比べてください:
+
+- どちらも動作しない場合は、プロキシの TUN ルート除外に `100.64.0.0/10` を追加します。たとえば mihomo では `route-exclude-address` を使います。
+- IP では動作するが名前では失敗する場合、プロキシが DNS に応答しています。これは fake-IP モードでよく起こります。tailnet の `ts.net` ドメインを fake-IP から除外し、そのクエリを Tailscale のリゾルバーである `100.100.100.100` に送ってください。それまでの間は、IP で接続すれば常に動作します。
+- デフォルトルートを持つツールは 1 つだけにしてください。TUN プロキシが有効な間は、Tailscale の exit node を選択しないでください。
+
+## どの方法でも解決しないこと
+
+どの方法でも手に入るのはシェルです。スマートフォンのキーボードでフルスクリーンの TUI を操作し、何が起きたかを知るために tmux をさかのぼってスクロールする必要があります。エージェントが待機していることにも、自分で見に行くまで気づけません。最後の点は、[Codex と pi のスマートフォン通知](/blog/coding-agent-phone-notifications)で、フックと ntfy を使って解決できます。
+
+[Pontia](/docs/how-it-works) は別のアプローチを取ります。サーバー上の `pontiad` がリレーに外向きに接続し、スマートフォンのブラウザーで Codex と pi の Session をチャットとして使えます。Codex の承認はボタンで行えます。スマートフォンには VPN もアプリもドメインも不要で、リレーはエンドツーエンドで暗号化された通信だけを転送します。上記のどの方法とも併用できるので、そのほかの用途には引き続き SSH を使えます。
+
+## 関連記事
+
+- [VPS で Codex と pi を動かす](/blog/run-coding-agents-on-a-vps)
+- [スマートフォンから Codex CLI を使う方法](/blog/control-codex-cli-from-your-phone)
+- [スマートフォンから pi コーディングエージェントを使う方法](/blog/pi-coding-agent-remote-control)

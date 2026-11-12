@@ -1,0 +1,35 @@
+<svelte:head>
+	<title>Workspace — Pontia</title>
+	<meta name="description" content="在 Pontia 中配置项目目录和文件发现。" />
+</svelte:head>
+
+# Workspace
+
+Workspace 是 Agent 运行时所在的项目目录。一个 Workspace 可以关联多个 Session。
+
+## Workspace Browser 根目录
+
+根目录是由管理员配置、允许 Dashboard 浏览的目录。根目录在 `$PONTIA_HOME/config.toml` 中设置：
+
+```toml
+[workspace_browser]
+roots = [
+  { root_id = "projects", label = "Projects", path = "/home/me/projects" }
+]
+```
+
+每个 `root_id` 必须唯一。Pontia 使用该路径时，它必须是一个已存在的绝对目录。首次初始化时，Pontia 会将用户的主目录配置为根目录；之后运行 `pontia init` 会保留现有的根目录。
+
+根目录决定 Dashboard 可以浏览哪些目录。Agent Client 的文件系统访问由其沙箱和本地进程权限控制。
+
+## 激活 Workspace
+
+在 [Workspaces](https://app.pontia.dev/workspaces) 中选择一个根目录，浏览到项目并激活该目录。已激活的 Workspace 会出现在 New chat 中，并可关联多个 Session。
+
+重命名 Workspace 不会移动其目录。停用或撤销 Workspace 会将其从新的选择中移除，但会保留项目文件。如果目录被移到所有已配置的根目录之外或已不存在，Dashboard 会将该注册标记为不可用，以便你撤销它。
+
+## 文件提及
+
+在已激活的 Workspace 中，在输入框中输入 `@` 即可搜索文件和目录。文件选择器的行为可以配置，包括忽略的文件、隐藏条目、符号链接遍历、结果数量上限和超时。请参阅[配置](/docs/configuration)。
+
+文件提及会将 Agent Client 指向你本地 Workspace 中的相关上下文。

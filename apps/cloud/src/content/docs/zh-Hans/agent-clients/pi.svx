@@ -1,0 +1,69 @@
+<svelte:head>
+	<title>pi Agent Client — Pontia</title>
+	<meta name="description" content="安装并使用 Pontia 的 pi Agent Client 集成。" />
+</svelte:head>
+
+# pi Agent Client
+
+pi 集成将真实的、基于 `tmux` 的 pi Session 连接到 Pontia。你可以在原生 TUI 和 Dashboard 中使用同一个底层对话。
+
+## 要求
+
+在运行 Pontia 初始化之前，安装以下命令：
+
+- `pi`
+- `tmux`
+
+确认你的用户可以使用它们：
+
+```sh
+pi --version
+tmux -V
+```
+
+在启动 Session 之前，先在 pi 中配置你的模型提供商凭据。
+
+## 安装集成
+
+运行以下命令时选择 **pi**：
+
+```sh
+pontia init
+```
+
+之后要安装或修复，运行 `pontia setup pi`。该命令也会启用 pi Client。
+
+这两个设置命令都会验证 `pi --version` 并运行：
+
+```sh
+pi install npm:@pontia/pi-client-plugin
+```
+
+该插件会把 pi 的原生生命周期和对话信息报告给 `pontiad`，并接受来自 Pontia 的受支持控制操作。
+
+## pi Session 的运行方式
+
+Pontia 在所选 Workspace 中的托管 `tmux` 窗格内启动 pi。对于当前的 Workflow Agent Node，请在托管窗格中运行 `pontia workflow submit` 等 Workflow 命令。
+
+对话历史从 pi 的原生数据中读取。请保留这些数据，以便通过 Pontia 浏览和恢复对话。
+
+## 覆盖 pi 命令
+
+默认的 TUI 命令是 `pi`。要使用其他可执行文件或包装脚本，在 `$PONTIA_HOME/config.toml` 中设置：
+
+```toml
+[runtime.pi]
+tui_command = "/absolute/path/to/pi"
+```
+
+如需仅对单个命令生效的覆盖，使用 `PONTIA_PI_TUI_COMMAND`。如需持久的服务设置，更新 `config.toml` 并运行 `pontia up`。
+
+## 诊断集成
+
+Pontia 的 pi hook 日志位于：
+
+```text
+$PONTIA_HOME/state/pi-hook.log
+```
+
+还要确认 `pontia status` 报告服务正常，并且 pi 插件仍已安装。服务日志和常见恢复步骤请参见[故障排除](/docs/troubleshooting)。

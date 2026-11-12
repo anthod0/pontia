@@ -1,0 +1,86 @@
+<svelte:head>
+	<title>Dashboard 指南 — Pontia</title>
+	<meta name="description" content="在 Pontia Dashboard 中创建和控制编程 Agent 的 Session。" />
+</svelte:head>
+
+# Dashboard 指南
+
+Dashboard 是创建、查看和控制 Agent Session 的主要入口。托管的 Remote Dashboard 会安全地连接到运行在你设备上的 Agent。
+
+## 打开 Dashboard
+
+访问 [app.pontia.dev](https://app.pontia.dev) 并选择一台已注册的设备。如果设备尚未注册，请参阅[远程访问](/docs/remote-access)。
+
+### Local Dashboard
+
+Local Dashboard 的地址是 <http://127.0.0.1:8080/dashboard>，使用 `$PONTIA_HOME/config.toml` 中的 `external_api_token`。从其他设备访问需要配置安全隧道或端口转发。
+
+## 激活 Workspace
+
+Workspace 是 Agent 运行时所在的项目目录。创建 Session 之前，请在 [Workspaces](https://app.pontia.dev/workspaces) 中浏览某个已配置的根目录，并激活项目目录。
+
+可以激活位于已配置的 Workspace Browser 根目录下的目录。首次初始化时，默认根目录是你的主目录。如需限制或更改可用的根目录，请参阅 [Workspace](/docs/workspaces)。
+
+## 启动 Session
+
+1. 打开 [New chat](https://app.pontia.dev/)。
+2. 选择一个已激活的 Workspace。
+3. 选择一个已启用的 Agent Client，例如 pi、Codex、Claude Agent 或某个 ACP Agent。
+4. 描述任务并提交提示词。
+
+Pontia 会创建一个持久的 Session，并在你的设备上启动所选的 Agent Client。即使你离开聊天页面，该 Session 仍会保留在 Pontia 中。
+
+## 控制进行中的工作
+
+聊天页面会实时显示 Agent Client 提供的对话内容和工作步骤。使用 Session 时，你可以：
+
+- 在 Agent 空闲时发送新消息；
+- 在受支持的 Agent Client 忙碌时排队输入；
+- 在 Client 支持中断时中断当前 Turn；
+- 在 Client 请求时回应工具和权限请求，例如命令审批；
+- 重试或忽略投递失败的 Inbox 消息；
+- 在 Client 支持切换模型时，使用 `/model` 更改后续 Turn 使用的模型；
+- 输入 `@` 查找当前 Workspace 中的文件和目录；
+- 使用输入框中的 **+** 按钮附加文件，每个文件最大 1 GiB；
+- 编辑符合条件的较早用户消息，从该位置在原生对话历史中创建分支。
+
+Inbox 会跟踪已提交但等待投递的消息，以及被 Agent Client 排队的消息。
+
+## 共享文件
+
+Agent 可以运行 `pontia send-file PATH` 从其 Session 中共享文件。文件会以卡片形式显示在 Turn 末尾，你可以预览或下载。在输入框菜单中打开 **Shared files**，可以列出该 Session 中共享的所有文件。Pontia 会在你下载时从设备读取文件，因此已移动或删除的文件将无法再获取。
+
+## 聊天命令
+
+在输入框中输入 `/`，查看当前上下文中可用的命令：
+
+| 命令 | 结果 |
+| --- | --- |
+| `/new` | 启动新的 Session，并尽可能保留当前 Workspace |
+| `/rename` | 重命名当前 Session |
+| `/model` | 为后续 Turn 选择模型（如果支持） |
+| `/compact` | 在 Session 空闲时总结较早的上下文（如果支持） |
+| `/exit` | 结束 Pontia 对当前 Session 的主动控制 |
+
+`/exit` 会结束 Pontia 对该 Session 的控制。原生对话的生命周期和存储由 Agent Client 管理。
+
+## 键盘快捷键
+
+聊天页面提供以下快捷键：
+
+| 快捷键 | 操作 |
+| --- | --- |
+| `Alt+J` / `Alt+K` | 切换到下一个或上一个活跃聊天 |
+| `Alt+1` … `Alt+9` | 按侧边栏位置打开活跃聊天 |
+| `Alt+N` | 打开 New chat |
+| `Alt+L` | 聚焦输入框 |
+| `Alt+?` | 显示快捷键参考 |
+| `Ctrl+B`（macOS 上为 `Cmd+B`） | 显示或隐藏侧边栏 |
+
+## 整理 Session
+
+使用 Session 的操作菜单可以重命名、置顶、归档或结束它。**Sessions** 页面将活跃、已归档和已置顶的 Session 分开显示。归档会将 Session 从活跃列表中移除，但不会删除其已记录的控制状态。
+
+聊天标题栏还会显示可用的元数据，例如 Workspace、Git 分支和状态、模型、上下文用量以及 Client。只有当所选 Client 报告这些字段时，它们才会显示。
+
+如果遇到服务或连接错误，请继续参阅[故障排除](/docs/troubleshooting)。

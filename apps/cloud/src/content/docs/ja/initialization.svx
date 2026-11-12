@@ -1,0 +1,180 @@
+<svelte:head>
+	<title>初期化 — Pontia</title>
+	<meta name="description" content="Pontia を対話形式で初期化するか、エージェントが 1 つずつ実行できるコマンドでクライアント、ローカルサービス、リモートアクセスをセットアップします。" />
+</svelte:head>
+
+# 初期化
+
+デバイスを初期化して Pontia Cloud に接続し、Remote Dashboard を開いてエージェントとの作業を始めます。ガイド付きのセットアップには対話型ウィザードを選び、エージェントやスクリプトが各ステップを明示的に実行する必要がある場合は個別のコマンドを使ってください。
+
+[インストール要件](/docs/getting-started#requirements)を確認し、使いたい Agent Client をインストールしてください。セットアップは、それらのクライアントを実行する OS ユーザーで行います。ローカルサービスの管理には、systemd のユーザーサービスマネージャーが動作している Linux、または macOS 13.5 以降が必要です。
+
+## 対話形式の初期化
+
+Node.js と npm がインストールされた状態で、次を実行します:
+
+```sh
+npx @pontia/cli init
+```
+
+必要に応じて Pontia がインストールされ、ウィザードが起動します。Pontia がすでに `PATH` 上にある場合は、`pontia init` を直接実行することもできます。
+
+ウィザードでは次のことができます:
+
+1. インストールする Client 連携を選択します: pi、Codex、Claude Agent、またはその任意の組み合わせ。Codex にはデーモンの起動設定と[ランチャー](/docs/codex#codex-launcher)が含まれます。
+2. セットアップ内容を確認して承認します。
+3. ローカル API トークンを作成または保持し、Pontia サービスを起動して、選択した Client を有効にします。
+4. Pontia Cloud にサインインし、リモートアクセス用にデバイスを登録します。
+
+サインインとリモートアクセスの有効化を求められたら、承認してブラウザーでの認可を完了してください。利用可能な Edge を選択し、デバイス名を確認します。セットアップが成功すると、Pontia は Remote Dashboard を開きます。[Dashboard ガイド](/docs/dashboard)に従って、最初の Session を開始してください。
+
+既存の設定と Workspace Browser のルートは保持されます。ルートが設定されていない場合、Workspace Browser はホームディレクトリをデフォルトにします。
+
+## 後から Client を設定または修復する
+
+`pontia setup` を実行して Client を選択するか、直接指定します:
+
+```sh
+pontia setup pi
+pontia setup codex
+pontia setup claude-agent
+```
+
+各コマンドは推奨のローカル設定を適用し、インストールを確認します。既存の有効な設定は再利用され、不足している連携ファイルは復元されます。Pontia サービスの起動後、選択した Client が有効になります。
+
+選択した Client のランタイムパスは、Pontia サービス用に保存されます。環境変数で明示したパスは、保存されたパスより優先されます。設定が変わるとサービスが再起動します。Codex の場合は、その後で新しいターミナルを開くか、表示されたシェルの有効化コマンドを実行してください。
+
+<h2 id="non-interactive-initialization">非対話形式の初期化</h2>
+
+プラットフォーム向けのリンク先の手順も含め、次のステップを順番に実行してください。各ステップには、コマンドと、次に進む前に確認すべき結果が含まれています。
+
+Client の認証と Cloud へのログインには、ユーザーによる認可が必要な場合があります。求められたら認可を完了し、セットアップを続けてください。
+
+### 1. インストールを準備する
+
+有効にする Client (pi、Codex、Claude Agent、またはその組み合わせ)、デバイスの表示名、参照するプロジェクトディレクトリを決めます。すべてのステップを同じ OS ユーザーで実行してください。ACP エージェントは、[Agent Client](/docs/agent-clients#enable-an-acp-agent) の説明に従って有効にします。
+
+1. `npx @pontia/cli install` で `pontia` と `pontiad` をインストールして `$HOME/.local/bin` を `PATH` に追加するか、対話型の初期化を実行せずに[シェルインストーラー](/docs/getting-started#install-with-the-shell-script)を使います。不足している Client ツールについては、公式の [pi クイックスタート](https://pi.dev/docs/latest/quickstart)、[tmux インストールガイド](https://github.com/tmux/tmux/wiki/Installing)、[Codex CLI のインストール](https://learn.chatgpt.com/docs/codex/cli)に従ってください。インストールするのは選択した Client とその前提条件だけにし、動作しているインストールは再利用します。
+2. すべてのコマンドで使う絶対パスの `PONTIA_HOME` を 1 つ決めます。既存のインストールの設定と認証情報は保持してください。デフォルトは `~/.pontia` です。
+3. Codex の場合は、認証済みの既存のホームを選びます。設定済みの `CODEX_HOME`、またはデフォルトの `~/.codex` です。Codex の認証、そのデーモン、Pontia で同じディレクトリを使ってください。
+
+デフォルトのパスを使う場合、またはシェルですでに設定されているパスを保持する場合:
+
+```sh
+export PONTIA_HOME="${PONTIA_HOME:-$HOME/.pontia}"
+pontia --version
+```
+
+Codex を使う場合は、次も設定します:
+
+```sh
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+```
+
+セットアップに使うすべてのシェルで、これらの環境変数の値を使ってください。以下の例では、実際のパスと ID に置き換えてください。
+
+### 2. Client 連携をインストールして確認する
+
+ここで、選択した Client の連携をインストールして有効にします。
+
+選択した Client のコマンドだけを実行してください:
+
+```sh
+pontia setup pi
+pontia setup codex
+pontia setup claude-agent
+```
+
+pi には、インストール済みの `pi` が必要です。セットアップで `@pontia/pi-client-plugin` がインストールされます。Codex には、デーモンに対応した CLI のインストールが必要です。セットアップで自動起動が設定され、接続が確認され、ランチャーとシェルの PATH がインストールされます。Claude Agent には Node.js LTS が必要です。セットアップでは、ホストがなければデフォルトのホストをインストールし、既存のホストまたは明示的に選択したホストを確認します。
+
+これらのコマンドはランタイムパスを保存し、Pontia サービスを設定して、選択した Client を有効にします。Codex の場合は、新しいターミナルを開くか、表示された有効化コマンドを実行してください。認証は、各 Client 独自のログイン手順で完了してください。セットアップはサインインを行わず、モデルの認証情報、サンドボックス設定、承認ポリシーも変更しません。
+
+<h3 id="start-the-local-service">3. ローカルサービスを設定して起動する</h3>
+
+待ち受けアドレス、Workspace Browser のルート、Client の実行ファイルの設定を `$PONTIA_HOME/config.toml` にマージし、残したい既存の設定は保持してください。利用できるオプションは[設定](/docs/configuration)を参照してください。
+
+すべてのコマンドで同じ絶対パスの `PONTIA_HOME` を使います。永続的なサービス設定は `config.toml` に保存してください。
+
+```sh
+pontia up
+pontia status
+```
+
+`pontia up` は `config.toml` の API トークンを作成または保持し、ユーザーごとのサービスをインストールまたは更新して、正常になるまで待機し、Local Dashboard の URL を表示します。サービスがすでに動作している場合は再起動します。表示される URL にはローカル API トークンが含まれるため、他人に知られないようにしてください。
+
+### 4. Client の設定を合わせる
+
+次に、利用可能な Client エントリーを一覧表示します:
+
+```sh
+pontia client list --json
+```
+
+結果は `agent_clients` 配列を含む JSON です。選択した各エントリーを `client_type` で見つけ、その `effective_config` を確認します。`tui_command` が Pontia サービスから利用できる実行ファイルを指していることを確認してください。
+
+実行ファイルを上書きする必要がある場合は、既存の値を保持したまま、目的の `config_overrides` を含む JSON ファイルを作成します。例:
+
+```json
+{"tui_command": "/absolute/path/to/client"}
+```
+
+一覧のエントリーの `id` に適用します:
+
+```sh
+pontia client set --id <CLIENT_ID> --config <JSON_FILE>
+```
+
+ファイルには元の pi または Codex の実行ファイルのパスを指定し、`effective_config` に変更が反映されていることを確認してください。
+
+もう一度 `pontia client list` を実行し、選択した各エントリーが `enabled` になっていることを確認します。ステップ 7 では、Remote Dashboard から Session を開始して、これらの Client を確認します。
+
+### 5. Pontia Cloud にサインインする
+
+Pontia Cloud へのデバイス登録を認可するため、サインインします:
+
+```sh
+pontia login
+```
+
+表示された確認用 URL を開き、サインインして、ワンタイムコードを承認します。認可が成功するとコマンドが完了します。エージェントがセットアップを実行する場合は、承認を待つ間に URL とコードをあなたに共有できます。
+
+有効な既存の Cloud ログインは再利用できます。次のステップの `pontia remote edges` でアクセスを確認できます。`auth.json` に保存された認証情報は、他人に知られないようにしてください。
+
+### 6. プロンプトなしでデバイスを登録する
+
+ログイン中のユーザーが利用できる Edge を一覧表示します:
+
+```sh
+pontia remote edges
+```
+
+このコマンドは、`id` と `name` フィールドを持つオブジェクトの JSON 配列を出力します。利用可能な Edge を選び、その ID とデバイス名を渡します:
+
+```sh
+pontia remote enable --edge <EDGE_ID> --name "Development workstation"
+pontia doctor
+```
+
+`<EDGE_ID>` を一覧の ID に置き換え、非対話形式で登録するには `--edge` と `--name` の両方を指定してください。
+
+登録によってデバイスの ID が作成され、動作中のローカルサービスが更新されます。登録済みのデバイスは、既存の名前と Edge を保持します。名前を変更するには、`pontia remote edit --name "New name"` を使います。
+
+### 7. Cloud に接続したデバイスを確認する
+
+次を実行します:
+
+```sh
+pontia status
+pontia client list
+pontia doctor
+```
+
+次の結果を確認してください:
+
+- ローカルサービスが動作しており、HTTP ヘルスが正常である。
+- 選択したすべての Client エントリーが有効になっている。
+- 診断レポートで、登録済みのデバイスと、一致するローカル暗号化 ID が確認できる。
+
+`pontia doctor` に表示される Remote Dashboard の URL を開きます。[Dashboard ガイド](/docs/dashboard)に従って Workspace を有効にし、選択した各 Client で Session を開始してください。Session が成功すれば、デバイスに到達でき、Client を使う準備ができていることが確認できます。
+
+エージェントによるセットアップの場合は、最後に、設定した Client、サービスの状態、デバイス名、Remote Dashboard の URL、確認結果をまとめてください。ブラウザーでの確認が残っている場合は、あなたが完了できるよう、URL と上記の手順を含めてください。困ったときは、[リモートアクセス](/docs/remote-access)と[トラブルシューティング](/docs/troubleshooting)を参照してください。

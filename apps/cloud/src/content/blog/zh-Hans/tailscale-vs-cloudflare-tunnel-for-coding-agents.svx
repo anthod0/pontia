@@ -1,0 +1,143 @@
+---
+title: "Tailscale 与 Cloudflare Tunnel 对比：用手机访问运行编程 Agent 的服务器"
+description: 如何在不开放端口的情况下，用手机访问家庭服务器或 VPS 上的 Codex 或 pi。对比 Tailscale、使用 cloudflared 的 Cloudflare Tunnel 和 Cloudflare 浏览器 SSH 终端，包括配置步骤和常见陷阱，以及与其他 VPN 和代理的冲突。
+published: "2026-11-12"
+---
+
+要在手机上查看编程 Agent，首先需要能访问它所运行的机器。把 SSH 开放到公网可行，但会招来源源不断的登录尝试，而且依赖公网 IP，而位于运营商 NAT 之后的家用机器可能没有公网 IP。Tailscale 和 Cloudflare Tunnel 能避免这两个问题：服务器主动向外连接，没有任何服务监听公网端口。
+
+本文针对一个具体任务对比这两者：在服务器上用 tmux 保持 Codex 或 pi 的 Session，并从手机连上去。我们开发的工具 Pontia 在文末简要介绍。
+
+## 简短结论
+
+| | Tailscale | Cloudflare Tunnel + `cloudflared` | Cloudflare 浏览器 SSH 终端 |
+| --- | --- | --- | --- |
+| 手机上运行什么 | Tailscale 应用，它是一个 VPN | 能运行 `cloudflared` 的 SSH 客户端 | 浏览器 |
+| 占用手机的 VPN 位置 | 是 | 否 | 否 |
+| 需要托管在 Cloudflare 上的域名 | 否 | 是 | 是 |
+| Mosh | 可用 | 不可用（仅 TCP） | 不适用 |
+| 登录 | Tailscale 身份、SSH 密钥或 Tailscale SSH | Cloudflare Access，然后 SSH | Cloudflare Access，然后 SSH |
+| 免费套餐 | Personal 套餐，最多 6 个用户 | Zero Trust 免费套餐，最多 50 个用户 | 与 Cloudflare Tunnel 相同 |
+
+如果手机上不需要同时使用其他 VPN，选择 Tailscale。它的配置最简单，不需要域名，并且是三者中唯一支持 Mosh 的。如果手机必须保持另一个 VPN 运行，或者你想在不安装任何东西的情况下从浏览器访问服务器，选择 Cloudflare。
+
+套餐详情已于 2026 年 11 月 12 日对照 [Tailscale](https://tailscale.com/pricing) 和 [Cloudflare Access](https://www.cloudflare.com/sase/products/access) 的价格页面核实。
+
+## 在服务器上：把 Agent 放在 tmux 中
+
+三种方案提供的都是 shell。shell 断开时 Agent 必须继续运行，所以要在 tmux 中启动它：
+
+```sh
+tmux new -s codex
+codex            # or: pi
+# detach with Ctrl-b d
+```
+
+如果服务器在你退出登录后连同 tmux 一起结束了会话，原因通常是 systemd。[在 VPS 上运行 Codex 和 pi](/blog/run-coding-agents-on-a-vps) 介绍了 lingering 和 `KillUserProcesses`。
+
+## 方案 1：Tailscale
+
+Tailscale 把服务器和手机放进一个私有 WireGuard 网络（称为 tailnet），地址位于 `100.64.0.0/10`。在 NAT 允许时连接是点对点的，否则回退到 Tailscale 的中继（DERP）。
+
+### 配置
+
+在服务器上：
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4      # the server's 100.x.y.z address
+```
+
+在手机上安装 Tailscale 应用并用同一账户登录。然后用手机 SSH 客户端连接 `100.x.y.z` 地址或机器的 MagicDNS 名称。
+
+要使用 Mosh，在服务器上安装 `mosh`，并用支持 Mosh 的手机客户端连接。Mosh 先通过 SSH 登录，然后切换到 60000 到 61000 之间某个端口上的 UDP。在 tailnet 中，这些 UDP 流量不需要修改防火墙。
+
+### 关闭公网 SSH 端口
+
+通过 Tailscale 的 SSH 正常工作后，就可以完全关闭公网 SSH。Tailscale 的 [ufw 指南](https://tailscale.com/docs/how-to/secure-ubuntu-server-with-ufw) 在 Ubuntu 上是这样做的：
+
+```sh
+sudo ufw allow in on tailscale0
+sudo ufw default deny incoming
+sudo ufw delete allow 22/tcp     # only after testing SSH over Tailscale
+sudo ufw enable
+```
+
+操作前先找到 VPS 提供商的 Web 控制台。如果服务器上的 Tailscale 哪天停止工作，你会需要它。
+
+### 陷阱
+
+- **密钥过期会断开服务器。** 设备密钥默认 180 天后过期，之后到该设备的连接会中断。如果服务器已限制为只能通过 Tailscale SSH 访问，你就会被锁在外面。在管理控制台中为该服务器[禁用密钥过期](https://tailscale.com/docs/features/access-control/key-expiry)，或者用 tag 注册它，tag 默认禁用过期。
+- **启用 Tailscale SSH 可能断开当前会话。** `tailscale set --ssh` 会让 Tailscale 接管 Tailscale 地址上的 22 端口，[Tailscale 文档](https://tailscale.com/docs/features/tailscale-ssh)提醒，到该地址的现有 SSH 连接会挂起。请在通过公网 IP 的会话或提供商控制台中运行它。
+- **Tailscale SSH 会要求重新登录。** 默认策略使用 check 模式，每 12 小时需要在浏览器中重新认证一次。在手机上，SSH 应用会打印一个 URL，打开它即可继续。如果你只依赖设备信任，把规则的 `action` 改为 `accept`。
+- **`autogroup:nonroot` 范围很宽。** 如果把 Tailscale SSH 规则的目标从 `autogroup:self` 改为 tag，`autogroup:nonroot` 会允许每个被允许的来源以任意非 root 用户登录。请显式列出 Agent 使用的用户。
+- **中继连接更慢。** `tailscale status` 会为每个对等节点显示 `relay` 或 `direct`。如果在 VPS 上看到 `relay`，允许 41641 端口的入站 UDP 可以让连接变为直连。
+
+## 方案 2：使用 cloudflared 的 Cloudflare Tunnel
+
+服务器上的 `cloudflared` 向 Cloudflare 建立出站连接，并把 SSH 发布到你域名下的某个主机名，例如 `ssh.example.com`。在任何流量到达服务器之前，Cloudflare Access 会检查你的身份。此方法需要一个 DNS 托管在 Cloudflare 上的域名。
+
+### 配置
+
+1. 在 Cloudflare 控制台中进入 **Networking** > **Tunnels**，创建一个 tunnel，并在服务器上运行它显示的安装命令。
+2. 在 tunnel 的 **Routes** 标签页中，添加一个 **Published application**，填写你的主机名和服务 `ssh://localhost:22`。
+3. 在 **Zero Trust** > **Access controls** > **Applications** 中为同一主机名添加一个 self-hosted 应用，并为你的邮箱地址设置 Allow 策略。没有它，任何找到该主机名的人都能到达你 SSH 服务器的登录界面。
+
+客户端需要 `cloudflared`，因为 Cloudflare 把 SSH 作为 TCP 封装在 WebSocket 中传输。在 `~/.ssh/config` 中：
+
+```sshconfig
+Host ssh.example.com
+  ProxyCommand cloudflared access ssh --hostname %h
+```
+
+首次连接会打开浏览器进行 Access 登录。Cloudflare 的[指南](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/use-cases/ssh/ssh-cloudflared-authentication/)介绍了详细内容。
+
+在手机上，这需要一个能把 `cloudflared` 作为 `ProxyCommand` 运行的 SSH 客户端。Android 上的 Termux 可以通过其 `cloudflared` 包做到。选择此方案前，请确认你的 SSH 应用支持这一点。
+
+### 陷阱
+
+- **Mosh 不可用。** 发布的 SSH 路由只承载 TCP，而 Mosh 需要 UDP。请使用普通 SSH，每次断开后重新连接 tmux。
+- **Cloudflare 不建议将此路由用于长连接。** 其[协议参考](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/routing-to-tunnel/protocols/)建议这类场景使用 Cloudflare One Client（WARP）。WARP 是手机上的 VPN，会重新带来下文的冲突。
+- **没有 Access 应用的路由是公开的。** tunnel 本身不对任何人做认证。
+
+## 方案 3：Cloudflare 浏览器渲染的 SSH 终端
+
+Cloudflare 可以把同一个 SSH 应用渲染成浏览器中的终端，这样手机完全不需要安装应用。完成方案 2 中的 tunnel 和 Access 应用配置后，编辑 Access 应用，打开 **Allow access through browser-based RDP, SSH, or VNC sessions** 并选择 **SSH**。
+
+[浏览器渲染文档](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/non-http/browser-rendering/)列出了一些容易忽略的限制：
+
+- **邮箱前缀必须与 Unix 用户名一致。** 如果你以 `jane.doe@example.com` 登录，服务器账户必须是 `jane.doe`。专用的 `agent` 用户只适用于以 `agent@` 开头的邮箱地址。
+- **只有 Allow 和 Block 策略有效。** Bypass 和 Service Auth 策略会破坏浏览器渲染。
+- **服务器可能需要额外的密钥交换算法。** 浏览器终端支持 `curve25519-sha256` 和 ECDH NIST 曲线。如果加固过的 `sshd_config` 设置的 `KexAlgorithms` 不包含其中任何一个，连接就会失败。
+- **默认使用密码登录。** 为避免在服务器上启用密码，请配置 [Access 短期证书](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/non-http/short-lived-certificates-legacy/)，它会在 `sshd_config` 中添加一条 `TrustedUserCAKeys` 配置。
+
+## 与其他 VPN 或代理同时使用
+
+大多数配置都在这里出问题。
+
+**手机一次只能运行一个 VPN。** 正如 [Tailscale 的 FAQ](https://tailscale.com/docs/reference/faq/other-vpns) 所述，iOS 和 Android 只允许一个活动 VPN。Tailscale 应用、Cloudflare One（WARP）应用、工作 VPN、商业 VPN 以及使用系统 VPN 接口的代理应用都在争夺这个位置。打开一个就会关闭其他的。如果手机上需要另一个 VPN，请使用方案 2 或 3，它们不占用 VPN 位置。
+
+**在 iOS 上，VPN On Demand 可能关闭 Tailscale。** 只有一个 VPN 应用可以启用 On Demand。连接另一个 VPN 会为 Tailscale 禁用 On Demand，直到你手动重新连接。
+
+**地址范围重叠。** Tailscale 使用 `100.64.0.0/10`。Cloudflare WARP 从 `100.96.0.0/12` 分配设备地址，而该范围位于前者之内。其他使用运营商级 NAT 地址范围的 VPN 也会以同样方式冲突。在同时运行两者的笔记本电脑上，它们会争夺到 `100.x` 地址的路由。
+
+**全隧道 VPN 会丢弃 Tailscale 流量。** 许多 VPN 会安装防火墙规则，阻止隧道外的流量。Tailscale 建议两种解决办法：在另一个 VPN 中配置分流，排除 `100.64.0.0/10` 和 `fd7a:115c:a1e0::/48`；或者以用户态网络模式运行 Tailscale。如果你使用 Tailscale 出口节点，分流没有帮助，因为出口节点本身会占用默认路由。
+
+**笔记本电脑上的 TUN 模式代理会接管路由和 DNS。** Clash、mihomo 等工具在 TUN 模式下可能捕获 tailnet 流量（[tailscale#18351](https://github.com/tailscale/tailscale/issues/18351)）。要缩小原因范围，比较 `100.x` 地址和 MagicDNS 名称：
+
+- 如果两者都不通，把 `100.64.0.0/10` 加入代理的 TUN 路由排除列表，例如 mihomo 中的 `route-exclude-address`。
+- 如果 IP 可用但名称失败，说明是代理在应答 DNS。这在 fake-IP 模式下很常见。把你 tailnet 的 `ts.net` 域名从 fake-IP 中排除，并把它的查询发往 Tailscale 的解析器 `100.100.100.100`。在此期间，通过 IP 连接始终可用。
+- 只让一个工具掌管默认路由。TUN 代理处于活动状态时，不要选择 Tailscale 出口节点。
+
+## 这些方案都没有解决的问题
+
+每个方案提供的都是 shell。你仍然要在手机键盘上操作全屏 TUI，在 tmux 中往回滚动查看发生了什么，而且只有在主动查看时才知道 Agent 在等待。[Codex 和 pi 的手机通知](/blog/coding-agent-phone-notifications)用 hook 和 ntfy 解决了最后这一点。
+
+[Pontia](/docs/how-it-works) 采用了不同的方式。服务器上的 `pontiad` 向外连接到中继，你在手机浏览器中以聊天的形式使用 Codex 和 pi 的 Session，并通过按钮处理 Codex 审批。手机不需要 VPN、应用或域名，中继只转发端到端加密的流量。它可以与上述任一方案同时运行，因此 SSH 仍可用于其他所有事情。
+
+## 相关文章
+
+- [在 VPS 上运行 Codex 和 pi](/blog/run-coding-agents-on-a-vps)
+- [如何在手机上使用 Codex CLI](/blog/control-codex-cli-from-your-phone)
+- [如何在手机上使用 pi 编程 Agent](/blog/pi-coding-agent-remote-control)

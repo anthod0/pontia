@@ -1,0 +1,111 @@
+<svelte:head>
+	<title>Solução de problemas — Pontia</title>
+	<meta name="description" content="Diagnostique problemas do serviço do Pontia, do Dashboard, dos Agent Clients e do acesso remoto." />
+</svelte:head>
+
+# Solução de problemas
+
+Comece pelo relatório de diagnóstico do Pontia:
+
+```sh
+pontia doctor
+```
+
+Cada linha explica uma verificação de serviço, configuração, login ou registro remoto e sugere um reparo quando necessário. Se a configuração mudou, reinicie o serviço com `pontia up`.
+
+## O serviço não inicia
+
+Valide `$PONTIA_HOME/config.toml` em busca de TOML inválido, valores desconhecidos, caminhos inacessíveis ou uma porta já em uso. O endereço padrão é `127.0.0.1:8080`.
+
+No Linux, inspecione o serviço de usuário:
+
+```sh
+systemctl --user status pontia.service --no-pager --full
+journalctl --user -u pontia.service --no-pager -n 200
+```
+
+No macOS, inspecione o LaunchAgent:
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.pontiad
+```
+
+`pontia up` atualiza a definição do serviço usando o executável atual do Pontia e reinicia um serviço existente. `pontia down` para e desativa o serviço do Pontia. Os Agent Clients gerenciam suas conversas nativas separadamente.
+
+## O Dashboard local não abre
+
+1. Execute `pontia status` e resolva primeiro os erros do serviço.
+2. Use <http://127.0.0.1:8080/dashboard>, a menos que `bind_addr` use outra porta.
+3. Informe o `external_api_token` de `$PONTIA_HOME/config.toml`.
+4. Se um arquivo personalizado do Dashboard estiver configurado, verifique `[dashboard].source`. Remova essa sobrescrita para voltar ao Dashboard correspondente à release.
+
+Mantenha o token da External API privado. Veja [Segurança](/docs/security) para orientações sobre como compartilhar diagnósticos.
+
+## Nenhuma Workspace está disponível
+
+Confira as raízes configuradas em [Workspaces](https://app.pontia.dev/workspaces). Um diretório só pode ser ativado quando existe e está dentro de uma raiz disponível. Se uma raiz foi movida, atualize `[workspace_browser].roots` em `config.toml`, reinicie o Pontia e depois revogue os registros de Workspace obsoletos pelo Dashboard.
+
+## O pi não inicia ou não reporta atividade
+
+Verifique:
+
+```sh
+pi --version
+tmux -V
+```
+
+Execute `pontia setup pi` para reinstalar o plugin. Inspecione:
+
+```text
+$PONTIA_HOME/state/pi-hook.log
+```
+
+Confira também se um `[runtime.pi].tui_command` personalizado tem um caminho ou wrapper inválido.
+
+## O Codex não conecta
+
+Confirme que sua build do Codex suporta o daemon app-server e depois inspecione o serviço por usuário dele. Veja [Codex](/docs/codex) para os comandos de cada plataforma. Execute `pontia setup codex` se o executável ou o `CODEX_HOME` mudou, ou se o launcher ou a configuração de PATH do shell dele estiver ausente.
+
+Aprovações de comandos, alterações de arquivos e permissões aparecem no Dashboard. Um agente ainda pode parecer travado quando o Codex aguarda outro tipo de solicitação que o Dashboard não mostra. Interrompa o Turn se necessário e então ajuste a política do Codex ou responda à solicitação na interface nativa do Codex.
+
+## O Claude Agent não inicia
+
+Confira se `node --version` e `npm --version` funcionam para o usuário que executa o Pontia e depois execute `pontia setup claude-agent` para refazer a verificação de dependências. Se o Dashboard relatar uma falha de autenticação enquanto o SDK tenta novamente, corrija o login ou as configurações de provedor do próprio Claude Code para esse usuário. Veja o [guia do Claude Agent](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) para atualizar o pacote do cliente.
+
+## Um agente ACP não inicia
+
+Confirme que o `command` da entrada roda para o usuário do serviço do Pontia e inspecione o `effective_config` dela com `pontia client show AGENT_ID`. O agente precisa suportar carregar e fechar sessões; caso contrário, a Session relata o recurso ausente.
+
+## Um dispositivo remoto está offline
+
+No dispositivo:
+
+```sh
+pontia status
+pontia doctor
+```
+
+Confira `$PONTIA_HOME/auth.json`, `e2e-identity.json` e o ID do dispositivo em `[remote]` no `config.toml`. Use `pontia login` e `pontia remote enable` para reparar o registro, ou `pontia remote rotate-key` para substituir a identidade de criptografia do dispositivo.
+
+Verifique se o Edge selecionado está saudável em [Configurações de Edges](/settings/edges). Para um Edge auto-hospedado, verifique:
+
+```sh
+sudo systemctl status pontia-edge.service --no-pager --full
+sudo journalctl -u pontia-edge.service --no-pager -n 200
+```
+
+## A inicialização do Edge está incompleta
+
+Corrija o erro de rede, DNS, porta ou certificado relatado pelo comando original e então retome no mesmo servidor:
+
+```sh
+sudo pontia-edge retry
+```
+
+`retry` usa o estado de inicialização salvo no servidor para continuar a implantação existente.
+
+## Uma atualização falha
+
+`pontia update` verifica os metadados e artefatos assinados da release antes de substituir os binários. Se a reinicialização do serviço ou a verificação de saúde falhar, ele restaura os binários anteriores e tenta recuperar o serviço. Inspecione os logs do serviço da plataforma, resolva o problema de inicialização e execute a atualização novamente.
+
+Para um diagnóstico mais detalhado, compartilhe a saída de `pontia --version` e `pontia status`, o sistema operacional e os erros relevantes do serviço, depois de remover os valores sensíveis listados em [Segurança](/docs/security).

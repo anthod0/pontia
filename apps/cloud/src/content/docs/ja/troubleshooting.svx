@@ -1,0 +1,111 @@
+<svelte:head>
+	<title>トラブルシューティング — Pontia</title>
+	<meta name="description" content="Pontia のサービス、Dashboard、Agent Client、リモートアクセスの問題を診断します。" />
+</svelte:head>
+
+# トラブルシューティング
+
+まず Pontia の診断レポートを確認します:
+
+```sh
+pontia doctor
+```
+
+各行は、サービス、設定、ログイン、リモート登録のチェックを説明し、必要に応じて修復方法を示します。設定を変更した場合は、`pontia up` でサービスを再起動してください。
+
+## サービスが起動しない
+
+`$PONTIA_HOME/config.toml` に、不正な TOML、不明な値、アクセスできないパス、使用中のポートがないか確認してください。デフォルトのアドレスは `127.0.0.1:8080` です。
+
+Linux では、ユーザーサービスを確認します:
+
+```sh
+systemctl --user status pontia.service --no-pager --full
+journalctl --user -u pontia.service --no-pager -n 200
+```
+
+macOS では、LaunchAgent を確認します:
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.pontiad
+```
+
+`pontia up` は現在の Pontia 実行ファイルを使ってサービス定義を更新し、既存のサービスを再起動します。`pontia down` は Pontia サービスを停止して無効にします。Agent Client は、ネイティブの会話を別途管理します。
+
+## Local Dashboard が開かない
+
+1. `pontia status` を実行し、まずサービスのエラーを解決します。
+2. `bind_addr` で別のポートを使っていない限り、<http://127.0.0.1:8080/dashboard> を使います。
+3. `$PONTIA_HOME/config.toml` の `external_api_token` を入力します。
+4. カスタムの Dashboard アーカイブを設定している場合は、`[dashboard].source` を確認します。その上書きを削除すると、リリースに対応した Dashboard に戻ります。
+
+External API トークンは他人に知られないようにしてください。診断情報を共有する際の注意点は[セキュリティ](/docs/security)を参照してください。
+
+## 利用できる Workspace がない
+
+[Workspace](https://app.pontia.dev/workspaces) で設定済みのルートを確認してください。ディレクトリを有効にできるのは、そのディレクトリが存在し、利用可能なルートの内側にある場合だけです。ルートを移動した場合は、`config.toml` の `[workspace_browser].roots` を更新して Pontia を再起動し、Dashboard から古い Workspace の登録を取り消してください。
+
+## pi が起動しない、またはアクティビティを報告しない
+
+次を確認します:
+
+```sh
+pi --version
+tmux -V
+```
+
+`pontia setup pi` を実行してプラグインを再インストールします。次のログを確認してください:
+
+```text
+$PONTIA_HOME/state/pi-hook.log
+```
+
+カスタムの `[runtime.pi].tui_command` に、不正なパスやラッパーがないかも確認してください。
+
+## Codex に接続できない
+
+使っている Codex のビルドが app-server デーモンに対応していることを確認し、そのユーザーごとのサービスを確認します。プラットフォームごとのコマンドは [Codex](/docs/codex) を参照してください。実行ファイルや `CODEX_HOME` が変わった場合、またはランチャーやそのシェルの PATH 設定がない場合は、`pontia setup codex` を実行してください。
+
+コマンド、ファイル変更、権限の承認は Dashboard に表示されます。Dashboard に表示されない種類のリクエストを Codex が待っている場合、エージェントが止まっているように見えることがあります。必要に応じて Turn を中断し、Codex のポリシーを調整するか、ネイティブの Codex インターフェースでリクエストに応答してください。
+
+## Claude Agent が起動しない
+
+Pontia を実行するユーザーで `node --version` と `npm --version` が動作することを確認し、`pontia setup claude-agent` を実行して依存関係のチェックをやり直してください。SDK の再試行中に Dashboard が認証エラーを報告する場合は、そのユーザーの Claude Code 自体のログインまたはプロバイダー設定を修正してください。クライアントパッケージの更新については、[Claude Agent ガイド](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md)を参照してください。
+
+## ACP エージェントが起動しない
+
+エントリーの `command` が Pontia のサービスユーザーで実行できることを確認し、`pontia client show AGENT_ID` でその `effective_config` を確認してください。エージェントは Session の読み込みとクローズに対応している必要があります。対応していない場合、Session は不足している機能を報告します。
+
+## リモートのデバイスがオフラインになっている
+
+デバイスで次を実行します:
+
+```sh
+pontia status
+pontia doctor
+```
+
+`$PONTIA_HOME/auth.json`、`e2e-identity.json`、`config.toml` の `[remote]` のデバイス ID を確認してください。登録を修復するには `pontia login` と `pontia remote enable` を、デバイスの暗号化 ID を置き換えるには `pontia remote rotate-key` を使います。
+
+[Edge 設定](/settings/edges)で、選択した Edge が正常であることを確認してください。セルフホストの Edge の場合は、次を確認します:
+
+```sh
+sudo systemctl status pontia-edge.service --no-pager --full
+sudo journalctl -u pontia-edge.service --no-pager -n 200
+```
+
+## Edge の初期化が完了していない
+
+元のコマンドが報告したネットワーク、DNS、ポート、証明書のエラーを修正してから、同じサーバーで再開します:
+
+```sh
+sudo pontia-edge retry
+```
+
+`retry` は、サーバーに保存された初期化の状態を使って既存のデプロイを続行します。
+
+## アップデートに失敗する
+
+`pontia update` は、バイナリを置き換える前に、署名済みのリリースメタデータと成果物を検証します。サービスの再起動やヘルスチェックに失敗した場合は、以前のバイナリを復元し、サービスの回復を試みます。プラットフォームのサービスログを確認し、起動の問題を解決してから、もう一度アップデートを実行してください。
+
+さらに診断が必要な場合は、[セキュリティ](/docs/security)に記載された機密値を取り除いたうえで、`pontia --version` と `pontia status` の出力、OS、関連するサービスのエラーを共有してください。

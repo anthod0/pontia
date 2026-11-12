@@ -1,0 +1,59 @@
+<svelte:head>
+	<title>安全 — Pontia</title>
+	<meta name="description" content="了解 Pontia 的信任边界、加密、凭据和本地权限。" />
+</svelte:head>
+
+# 安全
+
+Pontia 让 Agent 在你的设备上执行，并将远程授权与加密的设备流量分开。请保护好你的设备、凭据、Pontia 状态目录、浏览器会话以及任何自托管的 Edge 主机。
+
+## 信任边界
+
+| 组件 | 安全职责 | 项目文件访问 |
+| --- | --- | --- |
+| 你设备上的 `pontiad` | 认证本地和远程请求，并协调 Agent Client | 通过本地用户的权限和已配置的 Workspace |
+| Agent Client | 使用自己的凭据、工具、沙箱和审批机制执行 Agent 工作 | 取决于该 Client 的本地权限 |
+| Pontia Cloud | 认证用户、记录归属关系、注册设备和 Edge，并授权连接 | 无法访问设备文件系统 |
+| Edge | 接纳已授权的设备隧道，并转发浏览器与设备之间的密文 | 无法访问明文项目内容 |
+| 浏览器 | 展示所选设备返回的数据 | 无法直接访问文件系统 |
+
+Cloud 负责授权新的远程连接。Dashboard 流量经过 Edge 传输，设备在接受请求前会验证浏览器授权。
+
+## 端到端加密的远程访问
+
+浏览器会创建一个临时身份，并获取一个短期有效的签名凭证，该凭证绑定到该浏览器密钥、目标设备和设备密钥版本。设备在接受会话之前，会使用 Pontia Cloud 验证密钥校验该凭证。
+
+浏览器和设备使用基于 X25519 的 HPKE 建立会话密钥，并使用 ChaCha20-Poly1305 保护记录。经过认证的请求 ID 和有界的重放跟踪可以防止被截获的加密请求再次执行。空闲的 E2E 会话会过期；活跃数据流另有单独的限制。
+
+Edge 能看到路由元数据以及加密流量的大小和时间。Dashboard API 的请求和响应在浏览器与设备之间始终保持加密。
+
+## 本地访问
+
+Local Dashboard 和 External API 使用 `$PONTIA_HOME/config.toml` 中的 `external_api_token`。默认监听器仅限回环地址。如果将 `bind_addr` 改为非回环地址，就会把经过 token 认证的 API 暴露到该网络中；请自行提供可信的网络和传输保护。
+
+远程访问使用单独的、由设备验证的加密浏览器/设备会话，来授权同样的现有 External API 功能。
+
+## 需要保护的机密
+
+请妥善保管以下值和文件：
+
+- `config.toml` 中的 `external_api_token`；
+- `$PONTIA_HOME/auth.json`；
+- `$PONTIA_HOME/e2e-identity.json`；
+- 自托管 Edge 的部署命令和待完成的初始化状态；
+- `/etc/pontia/edge/credential` 和 TLS 私钥材料；
+- Agent Client 和模型提供商的凭据。
+
+Pontia 创建凭据文件时会设置严格的权限。请保护好这些文件的备份，并在分享诊断信息前移除其中的机密。包含凭据的 shell 历史记录也应视为敏感信息。
+
+## 应对凭据泄露
+
+- 本地 API token：在 `config.toml` 中生成新的 token，运行 `pontia up`，并更新受信任的本地浏览器。
+- 设备访问：通过[设备设置](/settings/devices)移除该设备，以阻止新的远程连接。你的 CLI 登录和其他已注册设备仍可使用。
+- 设备身份：运行 `pontia remote rotate-key`。
+- 设备丢失：通过设备设置移除该设备，并撤销不认识的浏览器会话。
+- Edge 凭据或主机：在 Cloud 中移除该 Edge 注册及其关联的设备，然后在可信的 Edge 上重新部署并重新注册设备。
+
+## 保留在设备上的数据
+
+Pontia 在 `PONTIA_HOME` 下存储持久的控制平面记录、有限的消息和关联数据、Workflow 文件以及原生时间线定位信息。完整的对话历史由 Agent Client 存储和管理。请使用该 Client 的数据管理工具来管理或删除其原生对话。

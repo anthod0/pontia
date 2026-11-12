@@ -1,0 +1,157 @@
+---
+title: "Receba uma notificação no celular quando o Codex ou o pi precisar de você"
+description: "Envie uma notificação ao seu celular quando o Codex CLI pedir aprovação ou terminar um turno, e quando o pi estiver aguardando entrada. Hooks do Codex e uma extensão do pi testados, que enviam pelo ntfy, com os detalhes de privacidade e confiança que costumam confundir."
+published: "2026-11-12"
+---
+
+Um agente de programação deixado rodando em um servidor costuma passar mais tempo esperando por você do que trabalhando. O Codex para em um pedido de aprovação, o pi termina e espera a próxima mensagem, e você só descobre na próxima vez que olhar o terminal. Este artigo configura notificações push no celular para os dois agentes, usando hooks do Codex, uma pequena extensão do pi e o [ntfy](https://ntfy.sh/).
+
+Os scripts abaixo foram testados com o Codex CLI 0.167.1 e o pi 1.5.2 no Linux. Eles funcionam da mesma forma no macOS.
+
+## Por que as notificações integradas não chegam ao celular
+
+O Codex tem dois recursos de notificação, e nenhum cobre este caso:
+
+- **Notificações da TUI** (`[tui] notifications` em `config.toml`) enviam uma notificação de desktop ou tocam o sino do terminal. Elas vão para o terminal conectado ao Codex, então uma sessão tmux desanexada não produz nada que você consiga ver.
+- **`notify`** executa um programa de sua escolha, mas o [guia de configuração avançada](https://developers.openai.com/codex/config-advanced) da OpenAI afirma que atualmente ele só dispara para `agent-turn-complete`. Ele não avisa que há uma aprovação pendente, que é o evento que mais importa.
+
+Os [hooks](https://developers.openai.com/codex/hooks) do Codex cobrem os dois eventos. `PermissionRequest` roda quando o Codex está prestes a pedir aprovação, e `Stop` roda quando um turno termina. O pi não tem aprovações. A API de extensões dele tem um evento `agent_settled` que dispara quando o pi termina todo o trabalho automático e fica aguardando entrada.
+
+## Configure o ntfy
+
+O ntfy entrega HTTP POSTs como notificações push. Instale o app para [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy) ou [iOS](https://apps.apple.com/us/app/ntfy/id1625396347) e assine um tópico.
+
+No servidor público ntfy.sh não há cadastro, então [o nome do tópico funciona como senha](https://docs.ntfy.sh/publish/): qualquer pessoa que o conheça pode ler e enviar mensagens. Gere um nome longo e aleatório:
+
+```sh
+echo "agents-$(openssl rand -hex 12)"
+```
+
+Teste a partir do servidor:
+
+```sh
+curl -d "Test from $(hostname)" https://ntfy.sh/YOUR_TOPIC
+```
+
+No Android, ative a **entrega instantânea** para o tópico. Sem ela, a documentação do ntfy avisa que as mensagens podem chegar com bastante atraso enquanto o celular está no modo soneca.
+
+## Codex: notificar sobre pedidos de aprovação e turnos concluídos
+
+Salve este script como `~/.codex/hooks/ntfy.sh` e torne-o executável com `chmod +x`. Ele precisa de `jq` e `curl`.
+
+```sh
+#!/bin/sh
+# Codex hook: push a phone notification through ntfy.
+url=https://ntfy.sh/YOUR_TOPIC
+
+event=$(cat)
+field() { printf '%s' "$event" | jq -r "$1"; }
+project=$(field '.cwd | split("/") | last')
+
+case $(field .hook_event_name) in
+  PermissionRequest)
+    title="Codex needs approval: $project"
+    body=$(field '.tool_input.description // .tool_input.command // .tool_name')
+    priority=high
+    ;;
+  Stop)
+    title="Codex finished: $project"
+    body=$(field '(.last_assistant_message // "Turn complete")[0:300]')
+    priority=default
+    ;;
+  *) exit 0 ;;
+esac
+
+curl -fsS --max-time 5 -o /dev/null \
+  -H "Title: $title" -H "Priority: $priority" -d "$body" "$url" || true
+```
+
+Registre-o para os dois eventos em `~/.codex/config.toml`:
+
+```toml
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+
+[[hooks.PermissionRequest]]
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+```
+
+Inicie o `codex` e execute `/hooks`. O Codex ignora um hook novo ou alterado até que você o revise e confie nele, e registra a confiança vinculada ao hash do hook. **Editar o script ou a entrada de configuração depois significa confiar nele de novo**, caso contrário as notificações param sem nenhum erro no celular.
+
+O JSON que o Codex passa pelo stdin tem esta forma para um pedido de aprovação:
+
+```json
+{
+  "hook_event_name": "PermissionRequest",
+  "cwd": "/home/agent/projects/api",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "touch /tmp/created.txt",
+    "description": "Allow creating /tmp/created.txt? The sandbox is read-only."
+  }
+}
+```
+
+Eventos `Stop` trazem `last_assistant_message` em vez de `tool_input`. Ambos incluem `session_id` e `turn_id`.
+
+### Detalhes importantes
+
+- **O hook precisa ficar em silêncio.** Um hook `PermissionRequest` pode aprovar ou negar o pedido imprimindo uma decisão. O script não imprime nada e sai com 0, então o Codex mostra seu pedido de aprovação normal. `curl -o /dev/null` mantém a resposta do ntfy fora do stdout, e `|| true` impede que uma falha de rede apareça como erro do hook.
+- **Defina um timeout curto.** Os hooks rodam de forma síncrona e têm timeout padrão de 600 segundos. Se o ntfy estiver inacessível, um timeout longo seguraria o próprio pedido de aprovação.
+- **Você só é avisado sobre pedidos que precisam de você.** `PermissionRequest` não roda para comandos que o sandbox já permite. Com o sandbox `workspace-write` e aprovações `on-request`, isso significa gravações fora do workspace e acesso à rede, que são os pedidos que vale a pena ler.
+- **`Stop` dispara a cada turno,** incluindo respostas curtas em uma sessão interativa. Se isso for barulhento demais, registre apenas `PermissionRequest`.
+- **Os hooks pertencem ao Codex, não à TUI.** Eles também rodam com `codex exec`.
+
+## pi: notificar quando o pi estiver aguardando entrada
+
+Salve isto como `~/.pi/agent/extensions/ntfy.ts`. O pi carrega extensões desse diretório automaticamente, e `/reload` aplica as alterações sem reiniciar.
+
+```ts
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { basename } from "node:path";
+
+const url = "https://ntfy.sh/YOUR_TOPIC";
+
+export default function (pi: ExtensionAPI) {
+  pi.on("agent_settled", async (event, ctx) => {
+    if (event.aborted) return; // you pressed Escape, so you are already there
+    await fetch(url, {
+      method: "POST",
+      headers: { Title: `pi: ${basename(ctx.cwd)}` },
+      body: "Waiting for input",
+    }).catch(() => {});
+  });
+}
+```
+
+Use `agent_settled`, não `agent_end`. A [documentação de extensões](https://pi.dev/docs/latest/extensions) do pi explica que `agent_end` dispara após cada execução de baixo nível, e o pi pode depois tentar de novo, compactar e tentar de novo, ou continuar com mensagens na fila. Uma notificação em `agent_end` pode chegar enquanto o pi ainda está trabalhando.
+
+Como o pi não pausa para aprovação, uma notificação só pode dizer que uma execução terminou. Para impedir um comando antes que ele rode, veja o [guia de segurança](https://pi.dev/docs/latest/security) do pi.
+
+## Mantenha segredos fora das notificações
+
+Descrições de aprovação, comandos e a última mensagem do assistente podem conter caminhos de arquivos, nomes de host ou tokens que acabaram em uma linha de comando. No ntfy.sh, eles passam por um servidor de terceiros e chegam a qualquer pessoa que tenha o nome do tópico.
+
+Se isso importa para o seu trabalho, escolha uma destas opções:
+
+- envie apenas o nome do projeto, substituindo `body` por uma string fixa como `"Waiting"`;
+- [auto-hospede o ntfy](https://docs.ntfy.sh/install/) e exija [tokens de acesso](https://docs.ntfy.sh/config/#access-control) para publicar e ler.
+
+## Quando notificações não bastam
+
+Uma notificação diz que um agente precisa de você. Você ainda precisa de uma forma de responder. Via SSH pelo celular, você se conecta ao tmux, rola para trás para encontrar o prompt e digita em uma TUI em tela cheia. [Acesse um servidor de agente de programação pelo celular](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) aborda a parte de rede dessa configuração.
+
+O [Pontia](/docs/how-it-works), a ferramenta que nós desenvolvemos, mostra os pedidos de aprovação do Codex em um navegador no celular com os botões **Allow** e **Deny** e transmite as sessões do pi como chats.
+
+## Relacionados
+
+- [Como usar o Codex CLI pelo celular](/blog/control-codex-cli-from-your-phone)
+- [Como usar o agente de programação pi pelo celular](/blog/pi-coding-agent-remote-control)
+- [Executando Codex e pi em uma VPS](/blog/run-coding-agents-on-a-vps)

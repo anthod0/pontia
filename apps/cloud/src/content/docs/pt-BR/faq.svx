@@ -1,0 +1,36 @@
+<svelte:head>
+	<title>FAQ — Pontia</title>
+	<meta name="description" content="Respostas para perguntas comuns sobre Sessions, dados, acesso remoto e operação do Pontia." />
+</svelte:head>
+
+# Perguntas frequentes
+
+## Os agentes rodam no Pontia Cloud?
+
+Não. Agent Clients, ferramentas, credenciais e arquivos de projeto ficam no seu dispositivo. O Pontia Cloud coordena a identidade e a autorização remota; um Edge repassa o tráfego criptografado.
+
+## Uma Workspace é um sandbox do sistema operacional?
+
+Não. As raízes de Workspace limitam o que o navegador do Pontia expõe para ativação e descoberta de arquivos. O Agent Client continua com as permissões e a política de sandbox do seu processo local.
+
+## Como acesso meu dispositivo remotamente?
+
+Entre no Pontia Cloud, registre seu dispositivo e abra o Remote Dashboard dele em [app.pontia.dev](https://app.pontia.dev). Siga [Inicialização](/docs/initialization) para a configuração completa.
+
+## O Pontia pode ler meus prompts ou dados de projeto?
+
+O Pontia tem três componentes de runtime:
+
+- **Pontia Cloud** gerencia usuários, autenticação, registro de dispositivos e autorização de acesso. O tráfego do Dashboard flui entre o navegador e o dispositivo por meio de um Edge.
+- **pontiad** roda no seu dispositivo, coordena os Agent Clients e entrega prompts e dados dos agentes ao seu Dashboard.
+- **Pontia Edge** repassa o tráfego, que permanece criptografado de ponta a ponta entre o navegador e o `pontiad`.
+
+Seus prompts e dados de projeto permanecem no seu dispositivo.
+
+## Do que devo fazer backup?
+
+Faça backup dos arquivos de projeto, do `$PONTIA_HOME` e dos dados nativos de conversa dos seus Agent Clients. Use um destino criptografado e confiável para o `$PONTIA_HOME`, que contém credenciais, além do estado de controle e dos arquivos de Workflow. Siga as instruções de backup de cada Client para os dados de conversa.
+
+## O Pontia suporta Windows?
+
+Não. O plano de controle local suporta Linux e macOS 13.5 ou posterior. O Edge auto-hospedado suporta apenas Linux.

@@ -1,0 +1,180 @@
+<svelte:head>
+	<title>Inicialização — Pontia</title>
+	<meta name="description" content="Inicialize o Pontia de forma interativa, ou configure os clientes, o serviço local e o acesso remoto com comandos que um agente pode executar um de cada vez." />
+</svelte:head>
+
+# Inicialização
+
+Inicialize seu dispositivo, conecte-o ao Pontia Cloud e abra o Remote Dashboard para começar a trabalhar com seus agentes. Escolha o assistente interativo para uma configuração guiada, ou use comandos separados quando um agente ou script precisar executar cada etapa explicitamente.
+
+Confira os [requisitos de instalação](/docs/getting-started#requirements) e instale os Agent Clients que você quer usar. Execute a configuração como o usuário do sistema operacional que vai executar esses clientes. O gerenciamento do serviço local exige Linux com um gerenciador de serviços de usuário do systemd em execução, ou macOS 13.5 ou posterior.
+
+## Inicialização interativa
+
+Com Node.js e npm instalados, execute:
+
+```sh
+npx @pontia/cli init
+```
+
+Isso instala o Pontia, se necessário, e inicia o assistente. Se o Pontia já estiver no seu `PATH`, você também pode executar `pontia init` diretamente.
+
+O assistente permite:
+
+1. Selecionar as integrações de Client a instalar: pi, Codex, Claude Agent ou qualquer combinação. O Codex inclui a inicialização do daemon e o [launcher](/docs/codex#codex-launcher).
+2. Revisar e confirmar a configuração.
+3. Criar ou manter o token da API local, iniciar o serviço do Pontia e habilitar os Clients selecionados.
+4. Entrar no Pontia Cloud e registrar o dispositivo para acesso remoto.
+
+Quando for solicitado que você entre e ative o acesso remoto, aceite e conclua a autorização no navegador. Selecione um Edge disponível e confirme o nome do dispositivo. O Pontia abre o Remote Dashboard quando a configuração termina com sucesso. Siga o [guia do Dashboard](/docs/dashboard) para iniciar sua primeira Session.
+
+A configuração existente e as raízes do Workspace Browser são mantidas. Sem raízes configuradas, o Workspace Browser usa seu diretório pessoal por padrão.
+
+## Configurar ou reparar um Client depois
+
+Execute `pontia setup` para selecionar Clients, ou especifique um diretamente:
+
+```sh
+pontia setup pi
+pontia setup codex
+pontia setup claude-agent
+```
+
+Cada comando aplica a configuração local recomendada e verifica a instalação. Uma configuração válida existente é reaproveitada, e arquivos de integração ausentes são restaurados. Depois que o serviço do Pontia inicia, os Clients selecionados são habilitados.
+
+Os caminhos de runtime dos Clients selecionados são salvos para o serviço do Pontia. Caminhos definidos explicitamente no ambiente têm precedência sobre os caminhos salvos. O serviço reinicia quando sua configuração muda. Para o Codex, abra um novo terminal ou execute depois o comando de ativação do shell exibido.
+
+<h2 id="non-interactive-initialization">Inicialização não interativa</h2>
+
+Siga estas etapas em ordem, incluindo as instruções vinculadas para a sua plataforma. Cada etapa inclui comandos e os resultados a verificar antes de continuar.
+
+A autenticação dos Clients e o login no Cloud podem exigir autorização do usuário. Conclua a autorização quando solicitado e então continue a configuração.
+
+### 1. Prepare a instalação
+
+Escolha os Clients a habilitar (pi, Codex, Claude Agent ou uma combinação), o nome de exibição do dispositivo e os diretórios de projeto a navegar. Execute todas as etapas como o mesmo usuário do sistema operacional. Habilite agentes ACP como descrito em [Agent Clients](/docs/agent-clients#enable-an-acp-agent).
+
+1. Instale `pontia` e `pontiad` com `npx @pontia/cli install` e adicione `$HOME/.local/bin` ao seu `PATH`, ou use o [instalador via shell](/docs/getting-started#install-with-the-shell-script) sem executar o inicializador interativo. Para ferramentas de Client ausentes, siga o [quickstart do pi](https://pi.dev/docs/latest/quickstart), o [guia de instalação do tmux](https://github.com/tmux/tmux/wiki/Installing) ou a [instalação do Codex CLI](https://learn.chatgpt.com/docs/codex/cli) oficiais. Instale apenas os Clients selecionados e seus pré-requisitos; reaproveite instalações que já funcionam.
+2. Selecione um único `PONTIA_HOME` absoluto para todos os comandos. Preserve a configuração e as credenciais de uma instalação existente. O padrão é `~/.pontia`.
+3. Para o Codex, selecione o diretório home já autenticado: o `CODEX_HOME` configurado, ou `~/.codex` por padrão. Use esse mesmo diretório para a autenticação do Codex, seu daemon e o Pontia.
+
+Para os caminhos padrão, ou para manter caminhos já definidos no shell:
+
+```sh
+export PONTIA_HOME="${PONTIA_HOME:-$HOME/.pontia}"
+pontia --version
+```
+
+Se for usar o Codex, defina também:
+
+```sh
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+```
+
+Use esses valores de ambiente em todos os shells usados na configuração. Substitua pelos seus caminhos e IDs reais nos exemplos abaixo.
+
+### 2. Instale e verifique as integrações de Client
+
+Instale e habilite aqui as integrações dos Clients selecionados.
+
+Execute apenas os comandos dos Clients selecionados:
+
+```sh
+pontia setup pi
+pontia setup codex
+pontia setup claude-agent
+```
+
+O pi exige um `pi` instalado; a configuração dele instala o `@pontia/pi-client-plugin`. O Codex exige um CLI instalado com suporte a daemon; a configuração dele ativa a inicialização automática, verifica a conexão e instala o launcher e o PATH do shell. O Claude Agent exige Node.js LTS; a configuração instala o host padrão quando ausente e verifica um host existente ou selecionado explicitamente.
+
+Esses comandos salvam os caminhos de runtime, configuram o serviço do Pontia e habilitam os Clients selecionados. Para o Codex, abra um novo terminal ou execute o comando de ativação exibido. Conclua a autenticação usando o fluxo de login de cada Client; a configuração não faz login nem altera credenciais de modelo, configurações de sandbox ou política de aprovação.
+
+<h3 id="start-the-local-service">3. Configure e inicie o serviço local</h3>
+
+Mescle seu endereço de escuta, as raízes do Workspace Browser e as configurações de executáveis dos Clients em `$PONTIA_HOME/config.toml`, mantendo as configurações existentes que você quer preservar. Veja [Configuração](/docs/configuration) para as opções disponíveis.
+
+Use o mesmo `PONTIA_HOME` absoluto em todos os comandos. Guarde as configurações persistentes do serviço em `config.toml`.
+
+```sh
+pontia up
+pontia status
+```
+
+`pontia up` cria ou mantém o token da API em `config.toml`, instala ou atualiza o serviço por usuário, aguarda até que ele fique saudável e exibe a URL do Local Dashboard. Ele reinicia o serviço se já estiver em execução. A URL exibida contém o token da API local; mantenha-a privada.
+
+### 4. Ajuste as configurações dos Clients
+
+Agora liste as entradas de Client disponíveis:
+
+```sh
+pontia client list --json
+```
+
+O resultado é um JSON com um array `agent_clients`. Localize cada entrada selecionada pelo `client_type` e verifique o `effective_config`. Confira se `tui_command` aponta para um executável disponível para o serviço do Pontia.
+
+Se precisar sobrescrever o executável, escreva um arquivo JSON com os `config_overrides` desejados, preservando os valores existentes. Por exemplo:
+
+```json
+{"tui_command": "/absolute/path/to/client"}
+```
+
+Aplique-o ao `id` da entrada obtido na lista:
+
+```sh
+pontia client set --id <CLIENT_ID> --config <JSON_FILE>
+```
+
+Use no arquivo o caminho do executável original do pi ou do Codex e depois confira se o `effective_config` reflete a mudança.
+
+Execute `pontia client list` novamente para confirmar que cada entrada selecionada aparece como `enabled`. A etapa 7 verifica esses Clients iniciando Sessions pelo Remote Dashboard.
+
+### 5. Entre no Pontia Cloud
+
+Entre para autorizar o registro do dispositivo no Pontia Cloud:
+
+```sh
+pontia login
+```
+
+Abra a URL de verificação exibida, entre e aprove o código de uso único. O comando termina quando a autorização é concluída. Quando um agente executa a configuração, ele pode compartilhar a URL e o código com você enquanto aguarda a aprovação.
+
+Você pode reaproveitar um login válido existente no Cloud; `pontia remote edges` na próxima etapa confirma o acesso. Mantenha privada a credencial salva em `auth.json`.
+
+### 6. Registre o dispositivo sem prompts
+
+Liste os Edges disponíveis para o usuário conectado:
+
+```sh
+pontia remote edges
+```
+
+O comando gera um array JSON de objetos com os campos `id` e `name`. Escolha um Edge disponível e passe o ID dele junto com o nome do seu dispositivo:
+
+```sh
+pontia remote enable --edge <EDGE_ID> --name "Development workstation"
+pontia doctor
+```
+
+Substitua `<EDGE_ID>` por um ID da lista e informe tanto `--edge` quanto `--name` para o registro não interativo.
+
+O registro cria a identidade do dispositivo e atualiza o serviço local em execução. Um dispositivo já registrado mantém o nome e o Edge existentes. Para renomeá-lo, use `pontia remote edit --name "New name"`.
+
+### 7. Verifique o dispositivo conectado ao Cloud
+
+Execute:
+
+```sh
+pontia status
+pontia client list
+pontia doctor
+```
+
+Confirme os seguintes resultados:
+
+- O serviço local está em execução e a saúde HTTP está saudável.
+- Todas as entradas de Client selecionadas estão habilitadas.
+- O relatório de diagnóstico confirma um dispositivo registrado e uma identidade de criptografia local correspondente.
+
+Abra a URL do Remote Dashboard informada por `pontia doctor`. Siga o [guia do Dashboard](/docs/dashboard) para ativar uma Workspace e iniciar uma Session com cada Client selecionado. Uma Session bem-sucedida confirma que o dispositivo está acessível e que o Client está pronto para uso.
+
+Na configuração assistida por agente, termine com um resumo dos Clients configurados, da saúde do serviço, do nome do dispositivo, da URL do Remote Dashboard e dos resultados da verificação. Se faltar a verificação no navegador, inclua a URL e as etapas acima para que você possa concluí-la. Veja [Acesso remoto](/docs/remote-access) e [Solução de problemas](/docs/troubleshooting) para obter ajuda.

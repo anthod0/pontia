@@ -1,0 +1,37 @@
+<svelte:head>
+	<title>Documentação — Pontia</title>
+	<meta name="description" content="Instale o Pontia e transforme seu dispositivo em uma nuvem de agentes que você controla de qualquer lugar." />
+</svelte:head>
+
+# Documentação do Pontia
+
+O Pontia transforma seu dispositivo em uma nuvem de agentes. Os agentes de programação rodam com as ferramentas e os arquivos de projeto do seu dispositivo enquanto você acompanha e controla as Sessions deles pelo Remote Dashboard hospedado. Um Dashboard local também está disponível para acesso direto ao `pontiad`.
+
+## Comece aqui
+
+- [Primeiros passos](/docs/getting-started) — instale o Pontia e prepare seus Agent Clients.
+- [Inicialização](/docs/initialization) — use o assistente interativo ou inicialize passo a passo com comandos não interativos.
+- [Acesso remoto](/docs/remote-access) — registre um dispositivo e conecte-se pelo Dashboard hospedado.
+- [Guia do Dashboard](/docs/dashboard) — ative uma Workspace, inicie uma Session e controle o trabalho dos agentes.
+- [Como o Pontia funciona](/docs/how-it-works) — entenda a execução local e os limites entre seu dispositivo, o Pontia Cloud e o Edge.
+
+## Acesso remoto e segurança
+
+- [Gerenciamento de dispositivos e contas](/docs/device-management) — renomeie, rotacione, remova e revogue recursos de acesso remoto.
+- [Auto-hospedar um Edge](/docs/self-hosted-edge) — implante e opere um relay criptografado em um servidor Linux público.
+- [Segurança](/docs/security) — revise os limites de confiança, a criptografia E2E, as credenciais e a resposta a incidentes.
+
+## Usar o Pontia
+
+- [Agent Clients](/docs/agent-clients) — configure pi, Codex, Claude Agent e agentes ACP e entenda as diferenças de recursos entre eles.
+- [Workspaces](/docs/workspaces) — configure diretórios de projeto e a descoberta de arquivos.
+- [Workflows](/docs/workflows) — execute trabalho de agentes durável e em etapas, com Handoffs explícitos e novo planejamento.
+
+## Referência
+
+- [Configuração](/docs/configuration) e [referência da CLI](/docs/cli)
+- [Atualizar o Pontia](/docs/updating)
+- Notas de plataforma para [Linux](/docs/platforms/linux) e [macOS](/docs/platforms/macos)
+- [Solução de problemas](/docs/troubleshooting) e [FAQ](/docs/faq)
+
+A execução dos agentes continua no seu dispositivo. O tráfego do Remote Dashboard é criptografado de ponta a ponta entre o navegador e o dispositivo; um Edge fornece conectividade sem receber o tráfego de negócio em texto claro.

@@ -9,7 +9,7 @@ async function withCloud(run: (root: string) => Promise<void>) {
   const testRoot = await mkdtemp(join(resolve(tmpdir()), "pontia-llms-"));
   try {
     await putPage(testRoot, "", "Overview", "Overview summary", "");
-    await mkdir(join(testRoot, "src/routes/blog"), { recursive: true });
+    await mkdir(join(testRoot, "src/content/blog/en"), { recursive: true });
     await run(testRoot);
   } finally {
     if (
@@ -25,7 +25,7 @@ async function withCloud(run: (root: string) => Promise<void>) {
 }
 
 async function putPage(root: string, route: string, title: string, summary: string, body: string) {
-  const path = join(root, "src/routes/docs", route, "+page.svx");
+  const path = join(root, "src/content/docs/en", `${route || "index"}.svx`);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(
     path,
@@ -34,7 +34,7 @@ async function putPage(root: string, route: string, title: string, summary: stri
 }
 
 async function putPost(root: string, slug: string, title: string, published: string, body: string) {
-  const path = join(root, "src/routes/blog", slug, "+page.svx");
+  const path = join(root, "src/content/blog/en", `${slug}.svx`);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(
     path,
@@ -48,7 +48,7 @@ test("indexes every nested subpage without generating docs.md", async () => {
   await withCloud(async (root) => {
     await putPage(root, "getting-started", "Setup", "Install &amp; configure", "Start here.");
     await putPage(root, "agent-clients/pi", "Client", "Client setup", "Client instructions.");
-    await writeFile(join(root, "src/routes/docs/+layout.svelte"), "not documentation");
+    await writeFile(join(root, "src/content/docs/en/notes.txt"), "not documentation");
 
     await generateLlms(root);
 
@@ -148,15 +148,18 @@ test("retires renamed and removed generated pages without touching unrelated sta
     await putPage(root, "old", "Page", "Summary", "Content.");
     await generateLlms(root);
     await writeFile(join(root, "static/docs/manual.md"), "Hand-maintained asset");
-    await rename(join(root, "src/routes/docs/old"), join(root, "src/routes/docs/new"));
+    await rename(
+      join(root, "src/content/docs/en/old.svx"),
+      join(root, "src/content/docs/en/new.svx"),
+    );
 
     await generateLlms(root);
 
     expect((await readdir(join(root, "static/docs"))).sort()).toEqual(["manual.md", "new.md"]);
     expect(await output(root, "llms.txt")).toContain("https://pontia.dev/docs/new.md");
     await rename(
-      join(root, "src/routes/docs/new/+page.svx"),
-      join(root, "src/routes/docs/new/page.backup"),
+      join(root, "src/content/docs/en/new.svx"),
+      join(root, "src/content/docs/en/new.backup"),
     );
     await generateLlms(root);
     expect(await readdir(join(root, "static/docs"))).toEqual(["manual.md"]);
@@ -167,23 +170,20 @@ test("retires renamed and removed generated pages without touching unrelated sta
 
 test("exports the actual documentation with intact fenced examples and resolvable Markdown links", async () => {
   await withCloud(async (root) => {
-    const docs = fileURLToPath(new URL("../src/routes/docs/", import.meta.url));
-    await cp(docs, join(root, "src/routes/docs"), { recursive: true });
+    const docs = fileURLToPath(new URL("../src/content/docs/en/", import.meta.url));
+    await cp(docs, join(root, "src/content/docs/en"), { recursive: true });
     await generateLlms(root);
     const index = await output(root, "llms.txt");
     const pages = [...index.matchAll(/\]\(https:\/\/pontia.dev(\/docs\/[^)]+\.md)\)/g)].map(
       (match) => match[1],
     );
-    const sources = (await readdir(docs, { recursive: true })).filter((path) =>
-      path.endsWith(`${sep}+page.svx`),
+    const sources = (await readdir(docs, { recursive: true })).filter(
+      (path) => path.endsWith(".svx") && path !== "index.svx",
     );
     expect(pages).toHaveLength(sources.length);
     for (const page of pages) {
       const markdown = await output(root, page);
-      const source = await readFile(
-        join(docs, page.slice("/docs/".length, -3), "+page.svx"),
-        "utf8",
-      );
+      const source = await readFile(join(docs, `${page.slice("/docs/".length, -3)}.svx`), "utf8");
       for (const block of source.matchAll(/^```[^\n]*\n[\s\S]*?^```/gm)) {
         expect(markdown).toContain(block[0]);
       }
@@ -238,7 +238,7 @@ test("indexes blog posts newest first and links them with the documentation", as
       "[the guide](https://pontia.dev/blog/new-post.md)",
     );
 
-    await rm(join(root, "src/routes/blog/old-post"), { recursive: true });
+    await rm(join(root, "src/content/blog/en/old-post.svx"));
     await generateLlms(root);
     expect(await readdir(join(root, "static/blog"))).toEqual(["new-post.md"]);
   });
@@ -247,8 +247,8 @@ test("indexes blog posts newest first and links them with the documentation", as
 test("exports the actual blog posts with intact fenced examples and resolvable links", async () => {
   await withCloud(async (root) => {
     for (const section of ["docs", "blog"]) {
-      const source = fileURLToPath(new URL(`../src/routes/${section}/`, import.meta.url));
-      await cp(source, join(root, "src/routes", section), { recursive: true });
+      const source = fileURLToPath(new URL(`../src/content/${section}/en/`, import.meta.url));
+      await cp(source, join(root, "src/content", section, "en"), { recursive: true });
     }
     await generateLlms(root);
     const index = await output(root, "llms.txt");
@@ -256,10 +256,8 @@ test("exports the actual blog posts with intact fenced examples and resolvable l
     const posts = [...blog.matchAll(/\]\(https:\/\/pontia.dev(\/blog\/[^)]+\.md)\)/g)].map(
       (match) => match[1],
     );
-    const blogRoot = fileURLToPath(new URL("../src/routes/blog/", import.meta.url));
-    const sources = (await readdir(blogRoot, { recursive: true })).filter((path) =>
-      path.endsWith(`${sep}+page.svx`),
-    );
+    const blogRoot = fileURLToPath(new URL("../src/content/blog/en/", import.meta.url));
+    const sources = (await readdir(blogRoot)).filter((path) => path.endsWith(".svx"));
     expect(posts).toHaveLength(sources.length);
     const linked = [...index.matchAll(/\]\(https:\/\/pontia.dev(\/[^)]+\.md)\)/g)].map(
       (match) => match[1],
@@ -269,7 +267,7 @@ test("exports the actual blog posts with intact fenced examples and resolvable l
       expect(markdown).toStartWith("# ");
       expect(markdown).not.toStartWith("---");
       const source = await readFile(
-        join(blogRoot, post.slice("/blog/".length, -3), "+page.svx"),
+        join(blogRoot, `${post.slice("/blog/".length, -3)}.svx`),
         "utf8",
       );
       for (const block of source.matchAll(/^```[^\n]*\n[\s\S]*?^```/gm)) {

@@ -1,0 +1,81 @@
+<svelte:head>
+	<title>Atualizar o Pontia — Pontia</title>
+	<meta name="description" content="Atualize o Pontia e os Edges auto-hospedados usando releases estáveis verificadas." />
+</svelte:head>
+
+# Atualizar o Pontia
+
+O Pontia é atualizado a partir do canal de releases estáveis assinadas. Verifique a versão instalada com:
+
+```sh
+pontia --version
+```
+
+## Atualizar o plano de controle local
+
+Execute com o mesmo usuário dono do serviço por usuário:
+
+```sh
+pontia update
+```
+
+Se o serviço em execução informar tarefas ativas, interações pendentes ou entradas pendentes ou não confirmadas, a atualização para e lista as Sessions afetadas. Conclua ou resolva essas atividades e execute `pontia update` de novo. Se a verificação de atividade falhar, a atualização também para sem substituir os binários nem reiniciar o serviço.
+
+Evite iniciar novas tarefas durante a atualização. Essa verificação não pausa entradas nem agendamentos, então atividades iniciadas depois da verificação ainda podem ser interrompidas pela reinicialização.
+
+O atualizador:
+
+1. identifica o diretório da instalação em execução;
+2. obtém um lock de atualização;
+3. baixa o manifesto da release estável via HTTPS;
+4. verifica a assinatura Ed25519 embutida nele;
+5. verifica a URL, o tamanho e o digest SHA-256 de cada artefato;
+6. prepara os binários `pontia` e `pontiad` substitutos no diretório de instalação;
+7. reinicia um serviço gerenciado em execução e verifica a saúde dele;
+8. restaura os binários anteriores e tenta recuperar o serviço se a substituição ou a reinicialização falhar.
+
+Para autoatualizações, mantenha `pontia` e `pontiad` como arquivos regulares no mesmo diretório e execute diretamente o executável instalado chamado `pontia`.
+
+Por padrão, o Dashboard usa o arquivo de release correspondente à versão do binário, então uma atualização bem-sucedida também leva o Dashboard servido para essa versão, a menos que `[dashboard].source` seja sobrescrito.
+
+## Instalar uma release específica
+
+O instalador aceita uma release que comece com `v`:
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | PONTIA_VERSION=v0.5.2 sh
+```
+
+Depois de instalar uma release específica ou mudar o local da instalação, execute `pontia up` para atualizar a definição do serviço e iniciar essa instalação. Use `pontia update` para atualizar para a release estável mais recente.
+
+## Atualizar um Edge auto-hospedado
+
+Execute no servidor do Edge:
+
+```sh
+sudo pontia-edge update
+```
+
+O atualizador do Edge verifica o mesmo canal de releases assinadas, substitui o `/usr/local/bin/pontia-edge` gerenciado, reinicia um serviço ativo, verifica se o novo processo permanece estável e reverte em caso de falha.
+
+A inicialização ativa as atualizações automáticas do Edge. Verifique ou altere essa configuração com:
+
+```sh
+sudo pontia-edge auto-update status
+sudo pontia-edge auto-update enable
+sudo pontia-edge auto-update disable
+```
+
+O timer verifica a cada hora, com até dez minutos de atraso aleatório. Desativá-lo interrompe as verificações futuras; uma atualização já em execução continua até o fim.
+
+## Antes e depois de atualizar
+
+O Pontia aplica as migrações do banco de dados local incluídas durante a inicialização normal quando `run_migrations` está ativado. Faça backup dos seus dados antes de trocar de release. Ao restaurar um banco de dados, use uma release compatível com o schema dele.
+
+Depois de uma atualização, execute:
+
+```sh
+pontia status
+```
+
+Para um Edge, verifique `systemctl status pontia-edge.service` e o indicador de saúde dele no Cloud. Consulte [Solução de problemas](/docs/troubleshooting) se a reversão automática ou a recuperação do serviço relatar um erro.

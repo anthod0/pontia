@@ -1,0 +1,60 @@
+<svelte:head>
+	<title>Agent Client — Pontia</title>
+	<meta name="description" content="Pontia が対応するコーディングエージェントのクライアントを選択して設定します。" />
+</svelte:head>
+
+# Agent Client
+
+Agent Client は、Pontia をコーディングエージェントのネイティブの Session、制御チャネル、会話履歴に接続します。エージェントは引き続き、独自の認証情報、設定、ツール、ファイルシステムの権限でローカルに動作します。
+
+Pontia には次の Agent Client が含まれています。
+
+| Client | ローカルの要件 | ローカルの連携 |
+| --- | --- | --- |
+| [pi](/docs/agent-clients/pi) | `pi` と `tmux` | Pontia の pi プラグイン |
+| [Codex](/docs/codex) | app-server デーモンに対応した Codex CLI | ユーザーごとの Codex デーモンの起動、ランチャー、シェルの PATH |
+| [Claude Agent](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) | Node.js LTS、npm、Claude Code の認証 | npm の `@pontia/claude-client` パッケージ |
+| ACP エージェント | stdio 経由で Agent Client Protocol を話すエージェント | なし。エージェントをインストールした後にエントリを有効にします |
+
+## 初期化時に Client を選択する
+
+次を実行します。
+
+```sh
+pontia init
+```
+
+初期化ツールは、設定を適用する前に選択した Client を確認します。pi はデフォルトで選択されており、Codex と `claude-agent` は任意です。選択した Client は新しい Session で有効になります。
+
+<h2 id="enable-an-acp-agent">ACP エージェントを有効にする</h2>
+
+Pontia は、Grok Build（`grok agent stdio`）、Kimi CLI（`kimi acp`）、OpenCode（`opencode acp`）の ACP エントリを提供しています。エージェントをインストールし、Dashboard の **Settings → Agent Clients** でそのエントリを有効にするか、次を実行します。
+
+```sh
+pontia client enable opencode
+```
+
+別のエージェントを追加するには、同じ設定ページの **Add custom client** を使うか、`$PONTIA_HOME/config.toml` で定義します。
+
+```toml
+[acp.agents.company-agent]
+name = "Company Agent"
+command = "/opt/company-agent/bin/agent"
+args = ["--acp"]
+```
+
+`command` と `args` の代わりに、エントリで `registry_id` を設定して ACP レジストリからエージェントを起動することもできます。エージェントは Session の読み込みと終了に対応している必要があります。ケイパビリティが不足している場合、Pontia は Session の開始時に報告します。
+
+ローカルの連携をインストールまたは修復するには、`pontia setup pi`、`pontia setup codex`、`pontia setup claude-agent` を実行します。Client を省略すると対話形式で選択できます。セットアップでは Client も有効になります。
+
+## Client によってケイパビリティは異なる
+
+Dashboard には、中断、モデルの変更、履歴の分岐、キューに入れた配信など、選択した Client が対応している操作が表示されます。
+
+Pontia の Session は、バインド後、クライアントネイティブの会話 ID のひとつと永続的に関連付けられます。同じネイティブの会話を再び開くと既存の Session が続き、新しいネイティブの会話は新しい Session に属します。
+
+## Client の認証情報と権限
+
+各 Client は、独自の認証情報、サンドボックス、ローカルの権限を使用します。連携を始める前に、各 Client にサインインし、目的の作業を実行できることを確認してください。
+
+Client が見つからない、起動できない、出力を報告しなくなった場合は、[トラブルシューティング](/docs/troubleshooting)を参照してください。

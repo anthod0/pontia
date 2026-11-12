@@ -1,0 +1,192 @@
+---
+title: "如何在手机上使用 Codex CLI"
+description: 在手机上跟进、引导和批准运行在 Linux 或 macOS 上的 Codex CLI Session。对比 Pontia、OpenAI 的 ChatGPT 远程控制和 Codex Cloud，以及自己搭建的 SSH 加 tmux 方案。
+published: "2026-11-11"
+---
+
+Codex CLI 运行在存放你的仓库、工具链和凭据的机器上。长任务经常在你离开终端时停在审批提示上。本文对比从手机访问正在运行的 Codex Session 的几种方式，以及各自适合的场景。
+
+Pontia 是我们开发的工具。
+
+## 简短回答
+
+| 你的情况 | 最佳选择 |
+| --- | --- |
+| Codex 运行在 Linux 或 macOS 上（包括无头服务器），你想要带审批按钮的手机界面 | Pontia |
+| Codex 运行在装有 ChatGPT 桌面应用的 Mac 或 Windows PC 上 | ChatGPT 移动端远程控制 |
+| 任务可以在 OpenAI 机器上的干净检出中运行 | Codex Cloud |
+| 你更愿意自己搭建和维护远程访问 | SSH 或 Mosh、tmux 和私有网络 |
+
+## 方案 1：Pontia
+
+Pontia 是一个免费、开源的远程控制工具，用于控制运行在你自己机器上的编程 Agent。只需安装一次并登录，然后在手机上打开 [app.pontia.dev](https://app.pontia.dev)。无需设置 VPN、端口转发或终端应用。
+
+Codex CLI 自带一个 app-server 守护进程。ChatGPT 桌面应用也使用它在 SSH 主机上运行 Codex。Pontia 的本地服务 `pontiad` 连接到这个守护进程，并把每个 Codex 线程显示为一个聊天。在手机上你可以：
+
+- 在项目目录中启动 Codex Session；
+- 实时跟进流式输出的消息、工具调用和命令输出；
+- 用 **Allow** 或 **Deny** 回应命令、文件修改和额外权限的审批请求；
+- 发送或排队后续消息、中断当前轮次，并用 `/model` 切换模型；
+- 用 `@` 引用项目文件。
+
+Codex 在你的机器上运行，使用它自己的凭据、沙箱和审批策略。Session 会持久保留，所以你可以在工位上开始任务，再在手机上继续。浏览器和你的机器通过 Pontia 的中继建立端到端加密的 Session，中继只转发密文。你的机器主动向外连接，因此不需要开放入站端口。
+
+Pontia 支持 Linux（x86_64 和 ARM64）以及 macOS 13.5 或更高版本，包括无头服务器。
+
+### 设置
+
+在已安装 Node.js 和 npm 的机器上，以运行 Codex 的用户身份运行以下命令：
+
+```sh
+codex login --device-auth   # device code flow, works over SSH
+npx @pontia/cli init       # select Codex
+```
+
+`pontia init` 会完成其余工作：
+
+- 配置 Codex 守护进程自动启动，在 Linux 上使用 systemd 用户服务和 lingering，在 macOS 上使用 LaunchAgent；
+- 通过 URL 和一次性代码让你使用 Google 或 GitHub 登录，你可以在手机上批准；
+- 将机器注册到官方中继。
+
+完成后，打开 [app.pontia.dev](https://app.pontia.dev)，选择机器并启动 Session。
+
+可选的 Codex 启动器还能让你在终端中用 `codex` 启动的线程出现在 Dashboard 中，这样你可以在手机上继续它们。参见 [Codex 设置](/docs/codex)。高级用户可以[运行自己的中继](/docs/self-hosted-edge)来代替官方中继。
+
+## 方案 2：ChatGPT 移动端远程控制
+
+OpenAI 自己的远程控制功能让 ChatGPT 移动应用可以在已连接的电脑上开始聊天、引导进行中的工作、批准命令，并查看 diff 和终端输出。工作在主机上运行，使用主机的文件、凭据和沙箱设置。
+
+主机必须是运行 ChatGPT 桌面应用的 Mac 或 Windows PC。OpenAI 的 [Remote connections 指南](https://learn.chatgpt.com/docs/remote-connections)说明，移动端设置要从该应用开始，无法从 Codex CLI 或 IDE 扩展中设置。Workspace 管理员可能需要启用 Remote Control。若要通过这种方式访问 Linux 服务器，桌面应用需通过 SSH 连接服务器，因此 Mac 或 Windows 主机也必须保持唤醒。
+
+如果你已经在 Mac 或 Windows 上使用 ChatGPT 桌面应用，就选这个。
+
+## 方案 3：Codex Cloud
+
+Codex Cloud 在 OpenAI 管理的机器上运行任务，因此你的电脑休眠时任务也会继续，你还可以在移动应用中启动和继续任务。云端任务只能使用其云环境中的文件和服务。OpenAI 的[环境文档](https://learn.chatgpt.com/docs/environments/modes)指出，你的本地文件、运行中的进程和 VPN 访问不会被转移过去。
+
+适用于可以在干净检出中运行的工作。它不适合依赖本地数据库、私有网络、硬件或保存在你自己机器上的凭据的任务。
+
+## 方案 4：用 SSH 和 tmux 自己搭建
+
+你也可以用标准工具搭建远程访问：tmux 让 Codex 保持运行，私有网络让机器可以被访问，手机上的 SSH 客户端负责连接。再加上一个 hook 和 ntfy，Codex 等待时手机也能收到通知。
+
+### 1. 用 Tailscale 让机器可被访问
+
+在主机上安装 Tailscale 并登录：
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4      # note the 100.x.y.z address
+```
+
+在手机上安装 Tailscale 应用，并用同一个账户登录。现在手机可以通过该地址访问主机，而无需在互联网上开放任何端口。
+
+对于常驻主机，请在 Tailscale 管理控制台中为它禁用[密钥过期](https://tailscale.com/docs/features/access-control/key-expiry)。密钥默认 180 天后过期，届时主机会掉出网络。
+
+手机同一时间只能运行一个 VPN，因此 Tailscale 应用会关闭其他 VPN 或代理应用。如果你需要用到它们，[Tailscale 与 Cloudflare Tunnel 对比](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)介绍了不占用手机 VPN 槽位的 Cloudflare Tunnel，以及多个 VPN 之间的地址和路由冲突。
+
+### 2. 在 tmux 中运行 Codex，并保持输出可滚动
+
+Codex 默认在终端的备用屏幕上绘制 TUI。tmux 不会把备用屏幕的内容保存到历史中，所以重新连接后，之前的输出会从 tmux 回滚记录中消失。在 `~/.codex/config.toml` 中关闭它：
+
+```toml
+[tui]
+alternate_screen = "never"
+```
+
+然后在一个命名 Session 中启动 Codex：
+
+```sh
+tmux new -s codex
+codex
+# detach with Ctrl-b d
+```
+
+在手机上连接并重新附加：
+
+```sh
+mosh agent@100.x.y.z tmux attach -t codex
+```
+
+手机在 Wi-Fi 和移动数据之间切换或休眠时，Mosh 能保持 Session 存活。它需要主机上安装 `mosh`，以及支持 Mosh 的手机客户端。不用 Mosh 的话，使用 `ssh -t agent@100.x.y.z tmux attach -t codex`，每次断开后重新连接。要滚动查看，用 `Ctrl-b [` 进入 tmux 复制模式，用 `q` 退出。
+
+如果 tmux 本身挂了（例如重启之后），新建一个 Session，用 `codex resume --last` 继续上一次对话。
+
+### 3. 在 Codex 需要审批时收到通知
+
+Codex 的 `notify` 设置只在一个轮次结束时触发。[Hooks](https://developers.openai.com/codex/hooks) 还会在 Codex 即将请求审批时运行。在 ntfy 手机应用中订阅一个足够长的随机 [ntfy](https://ntfy.sh/) 主题，然后把下面的脚本保存为 `~/.codex/hooks/ntfy.sh` 并设为可执行。它需要 `jq` 和 `curl`。
+
+```sh
+#!/bin/sh
+url=https://ntfy.sh/YOUR_TOPIC
+
+event=$(cat)
+field() { printf '%s' "$event" | jq -r "$1"; }
+project=$(field '.cwd | split("/") | last')
+
+case $(field .hook_event_name) in
+  PermissionRequest)
+    title="Codex needs approval: $project"
+    body=$(field '.tool_input.description // .tool_input.command // .tool_name')
+    ;;
+  Stop)
+    title="Codex finished: $project"
+    body=$(field '(.last_assistant_message // "Turn complete")[0:300]')
+    ;;
+  *) exit 0 ;;
+esac
+
+curl -fsS --max-time 5 -o /dev/null -H "Title: $title" -d "$body" "$url" || true
+```
+
+在 `~/.codex/config.toml` 中注册它：
+
+```toml
+[[hooks.PermissionRequest]]
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+```
+
+在 Codex 中打开 `/hooks` 并信任新的 hook。Codex 会跳过未受信任的 hook，之后对脚本或条目的任何修改都需要重新信任。脚本不输出任何内容，所以 Codex 仍会显示正常的审批提示。如果从 `PermissionRequest` hook 中输出一个决定，就会直接批准或拒绝该请求。如果每个轮次后都通知太多，删掉 `Stop` 条目即可。
+
+[Codex 和 pi 的手机通知](/blog/coding-agent-phone-notifications)解释了 hook 的负载内容，以及如何避免把命令和路径发送到第三方通知服务器。
+
+### 最终效果
+
+通知会告诉你有审批在等待。要回应它，你需要打开 SSH 应用、重新附加，然后在手机键盘上于 Codex 的 TUI 中按 `y` 或 `Esc`。每个组件都要你自己维护：两台设备上的 Tailscale、手机上的 SSH 密钥、tmux 和 hook。
+
+## 选择适合手机的审批策略
+
+无论选择哪种方案，手机都不适合审阅长命令。Codex 的审批策略决定你被询问的频率。OpenAI 的[审批与安全指南](https://learn.chatgpt.com/docs/agent-approvals-security)介绍了 `Auto` 预设，即 `--sandbox workspace-write --ask-for-approval on-request`。使用它时，Codex 在 workspace 内编辑文件和运行命令无需询问，在 workspace 外写入或使用网络之前会先询问。
+
+若要把它设为默认值而不是每次传参，在 `~/.codex/config.toml` 中设置：
+
+```toml
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+# Directories outside the project that Codex may write without asking,
+# for example a shared build cache.
+writable_roots = ["/home/agent/.cache/pnpm"]
+```
+
+`writable_roots` 是可选的。把它用于那些否则每次构建都会触发请求的路径，这样到达手机的请求就会很少。
+
+这很适合远程监督。常规编辑会直接进行，到达手机的请求都是值得阅读的。禁用审批运行就失去了在手机上盯着的理由，所以只在沙箱化或一次性的机器上这样做。
+
+## 相关内容
+
+- [在 Codex 或 pi 需要你时收到手机通知](/blog/coding-agent-phone-notifications)
+- [在 VPS 上运行编程 Agent](/blog/run-coding-agents-on-a-vps)，适用于常驻的 Linux 主机
+- [如何在手机上使用 pi 编程 Agent](/blog/pi-coding-agent-remote-control)
+- [Pontia 的工作原理](/docs/how-it-works)和[安全](/docs/security)

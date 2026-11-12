@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import AuthLayout from '$lib/components/AuthLayout.svelte';
+	import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
+	import { m } from '$lib/paraglide/messages';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 	const providerName = $derived(
@@ -9,32 +11,32 @@
 </script>
 
 <svelte:head
-	><title>Choose your account — Pontia</title><meta
+	><title>{m.conflict_title()}</title><meta
 		name="robots"
 		content="noindex"
 	/></svelte:head
 >
 
 <AuthLayout>
-	<h1>This email is already registered.</h1>
+	<h1>{m.conflict_heading()}</h1>
 	<p>
-		<strong>{data.email}</strong> is already associated with a verified
-		{providerName} account. Verify that account to use both sign-in methods with the
-		same Pontia account, or create a separate account.
+		<ParaglideMessage message={m.conflict_text} inputs={{ email: data.email, provider: providerName }}>
+			{#snippet email({ children })}<strong>{@render children?.()}</strong>{/snippet}
+		</ParaglideMessage>
 	</p>
 	<div class="choices">
 		<form method="POST" action="/api/auth/pending/bind">
 			<Button type="submit" class="button"
-				>Connect to existing account</Button
+				>{m.conflict_connect()}</Button
 			>
 		</form>
 		<form method="POST" action="/api/auth/pending/create">
 			<Button type="submit" class="button button-secondary"
-				>Create a separate account</Button
+				>{m.conflict_create()}</Button
 			>
 		</form>
 	</div>
-	<p class="hint">This choice expires in five minutes.</p>
+	<p class="hint">{m.conflict_expires()}</p>
 </AuthLayout>
 
 <style>

@@ -1,0 +1,55 @@
+<svelte:head>
+	<title>Linux — Pontia</title>
+	<meta name="description" content="Pontia の Linux での要件とサービス管理について説明します。" />
+</svelte:head>
+
+# Linux
+
+Pontia は、GNU ユーザー空間向けにビルドされた x86_64 および ARM64 の Linux リリースに対応しています。ローカルのコントロールプレーンは systemd のユーザーサービスとして動作し、セルフホストの Edge は systemd のシステムサービスとして動作します。
+
+## ローカルの要件
+
+推奨される `npx @pontia/cli init` によるセットアップでは、Node.js と npm をインストールしてください。[はじめに](/docs/getting-started)を参照してください。
+
+代替のシェルインストーラーには、`curl`、`grep`、`install`、`mktemp`、`mv`、`openssl`、`rm`、`sed`、`sha256sum`、`tar`、`tr`、`uname`、`wc` が必要です。OpenSSL は Ed25519 の検証に対応している必要があります。
+
+正常に動作する systemd のユーザーマネージャーが必要です。標準のインストール先は `$HOME/.local/bin` です。`pontia` コマンドを直接実行するには、このディレクトリがシェルの `PATH` に含まれている必要があります。
+
+## サービスファイル
+
+`pontia init` は次をインストールします。
+
+```text
+~/.config/systemd/user/pontia.service
+```
+
+このユニットには、`pontiad` の絶対パス、`PONTIA_HOME`、Cloud のオリジン、必要な Agent Client のパスが記録されます。Pontia CLI で管理します。
+
+```sh
+pontia up
+pontia status
+pontia down
+```
+
+直接診断するには次を実行します。
+
+```sh
+systemctl --user status pontia.service --no-pager --full
+journalctl --user -u pontia.service --no-pager -n 200
+```
+
+Codex を選択した場合、初期化では `~/.config/systemd/user/pontia-codex.service` もインストールして有効にし、ログインシェルがなくてもデーモンが動作できるようにユーザーの lingering を有効にします。
+
+## デスクトップとヘッドレスのシステム
+
+サービスマネージャーは対象のユーザーで利用できる必要があります。ヘッドレスのホストでは、そのユーザーでログインして次を確認してください。
+
+```sh
+systemctl --user is-system-running
+```
+
+`pontia init` とライフサイクルのコマンドは、Agent Client を実行するユーザーで実行してください。Pontia は、そのユーザーのホームディレクトリ、認証情報、systemd のユーザーサービスを使用します。
+
+## セルフホストの Edge
+
+`pontia-edge` は Linux で動作し、初期化とサービス管理には root が必要です。ユニットは `/etc/systemd/system/pontia-edge.service` です。ブラウザーとデバイス間の暗号化された接続を中継するため、`pontiad` とは別にデプロイしてください。

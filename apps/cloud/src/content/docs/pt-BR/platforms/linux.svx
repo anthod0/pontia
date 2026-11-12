@@ -1,0 +1,55 @@
+<svelte:head>
+	<title>Linux — Pontia</title>
+	<meta name="description" content="Requisitos do Linux e gerenciamento de serviços do Pontia." />
+</svelte:head>
+
+# Linux
+
+O Pontia suporta versões Linux x86_64 e ARM64 compiladas para userspace GNU. O plano de controle local roda como um serviço de usuário do systemd; um Edge auto-hospedado roda como um serviço de sistema do systemd.
+
+## Requisitos locais
+
+Para a configuração recomendada com `npx @pontia/cli init`, instale o Node.js com npm. Veja [Primeiros passos](/docs/getting-started).
+
+O instalador alternativo em shell exige `curl`, `grep`, `install`, `mktemp`, `mv`, `openssl`, `rm`, `sed`, `sha256sum`, `tar`, `tr`, `uname` e `wc`. O OpenSSL precisa suportar verificação Ed25519.
+
+É necessário um gerenciador de usuário do systemd funcionando. O diretório de instalação padrão é `$HOME/.local/bin`, que precisa estar no `PATH` do seu shell para executar comandos `pontia` diretamente.
+
+## Arquivos de serviço
+
+O `pontia init` instala:
+
+```text
+~/.config/systemd/user/pontia.service
+```
+
+A unit registra o caminho absoluto do `pontiad`, o `PONTIA_HOME`, a origem do Cloud e os caminhos necessários dos Agent Clients. Gerencie-a pela CLI do Pontia:
+
+```sh
+pontia up
+pontia status
+pontia down
+```
+
+Para diagnóstico direto:
+
+```sh
+systemctl --user status pontia.service --no-pager --full
+journalctl --user -u pontia.service --no-pager -n 200
+```
+
+Quando o Codex é selecionado, a inicialização também instala `~/.config/systemd/user/pontia-codex.service`, ativa esse serviço e ativa o lingering do usuário para que o daemon possa rodar sem um shell de login ativo.
+
+## Sistemas desktop e headless
+
+O gerenciador de serviços precisa estar disponível para o usuário de destino. Em um host headless, entre como esse usuário e verifique:
+
+```sh
+systemctl --user is-system-running
+```
+
+Execute o `pontia init` e os comandos de ciclo de vida como o usuário que roda seus Agent Clients. O Pontia usa o diretório home, as credenciais e o serviço de usuário do systemd desse usuário.
+
+## Edge auto-hospedado
+
+O `pontia-edge` roda no Linux e exige root para inicialização e gerenciamento do serviço. A unit dele é `/etc/systemd/system/pontia-edge.service`. Implante-o separadamente do `pontiad` para retransmitir conexões criptografadas entre navegadores e dispositivos.

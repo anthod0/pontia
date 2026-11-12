@@ -1,0 +1,192 @@
+---
+title: "スマートフォンから Codex CLI を使う方法"
+description: Linux や macOS で動く Codex CLI の Session を、スマートフォンから確認、指示、承認する方法です。Pontia、OpenAI の ChatGPT リモートコントロールと Codex Cloud、SSH と tmux を使った自作構成を比較します。
+published: "2026-11-11"
+---
+
+Codex CLI は、リポジトリ、ツールチェーン、認証情報があるマシンで動作します。長いタスクは、そのターミナルから離れている間に承認プロンプトで止まってしまうことがよくあります。この記事では、実行中の Codex Session にスマートフォンからアクセスする方法を比較し、どの構成にどれが合うかを説明します。
+
+Pontia は私たちが開発しているツールです。
+
+## 結論
+
+| 状況 | 最適な選択肢 |
+| --- | --- |
+| Codex をヘッドレスサーバーを含む Linux または macOS で実行していて、承認ボタン付きのスマートフォン UI が欲しい | Pontia |
+| Codex を ChatGPT デスクトップアプリのある Mac または Windows PC で実行している | ChatGPT モバイルのリモートコントロール |
+| タスクを OpenAI のマシン上のクリーンなチェックアウトから実行できる | Codex Cloud |
+| リモートアクセスを自分で組み立てて保守したい | SSH または Mosh、tmux、プライベートネットワーク |
+
+## 選択肢 1: Pontia
+
+Pontia は、自分のマシンで動くコーディングエージェント向けの、無料でオープンソースのリモートコントロールです。一度インストールしてサインインし、スマートフォンで [app.pontia.dev](https://app.pontia.dev) を開くだけです。VPN、ポートフォワーディング、ターミナルアプリの設定は不要です。
+
+Codex CLI には app-server デーモンが含まれています。ChatGPT デスクトップアプリも、SSH ホスト上で Codex を実行するためにこのデーモンを使います。Pontia のローカルサービス `pontiad` はこのデーモンに接続し、Codex の各スレッドをチャットとして表示します。スマートフォンからは次の操作ができます。
+
+- プロジェクトディレクトリで Codex Session を開始する。
+- メッセージ、ツール呼び出し、コマンド出力をストリーミングで確認する。
+- コマンド、ファイル変更、追加権限の承認リクエストに **Allow** または **Deny** で応答する。
+- フォローアップメッセージを送信またはキューに追加し、ターンを中断し、`/model` でモデルを切り替える。
+- `@` でプロジェクトファイルを参照する。
+
+Codex は、独自の認証情報、サンドボックス、承認ポリシーを使ってあなたのマシンで動作します。Session は保持されるので、デスクでタスクを開始してスマートフォンから続けられます。ブラウザーとマシンは Pontia のリレーを通じてエンドツーエンドで暗号化された Session を確立し、リレーは暗号文を転送するだけです。マシンからは外向きに接続するので、受信用のポートを開く必要はありません。
+
+Pontia は Linux（x86_64 および ARM64）と macOS 13.5 以降に対応しており、ヘッドレスサーバーでも動作します。
+
+### セットアップ
+
+Node.js と npm をインストールした状態で、Codex を実行するユーザーとしてマシン上で次のコマンドを実行します。
+
+```sh
+codex login --device-auth   # device code flow, works over SSH
+npx @pontia/cli init       # select Codex
+```
+
+残りは `pontia init` が行います。
+
+- Codex デーモンが自動起動するよう設定します。Linux では systemd ユーザーサービスと lingering、macOS では LaunchAgent を使います。
+- URL とワンタイムコードを使って Google または GitHub でサインインします。承認はスマートフォンから行えます。
+- マシンを公式のリレーに登録します。
+
+完了したら [app.pontia.dev](https://app.pontia.dev) を開き、マシンを選んで Session を開始します。
+
+オプションの Codex ランチャーを使うと、ターミナルで `codex` から開始したスレッドも Dashboard に表示され、スマートフォンから続けられます。[Codex のセットアップ](/docs/codex)を参照してください。上級者は、公式のリレーの代わりに[自分のリレーを運用](/docs/self-hosted-edge)することもできます。
+
+## 選択肢 2: ChatGPT モバイルのリモートコントロール
+
+OpenAI 純正のリモートコントロールでは、ChatGPT モバイルアプリから、接続したコンピューターでチャットを開始し、進行中の作業に指示を出し、コマンドを承認し、差分とターミナル出力を確認できます。作業はホスト上で、そのファイル、認証情報、サンドボックス設定を使って実行されます。
+
+ホストは、ChatGPT デスクトップアプリを実行している Mac または Windows PC である必要があります。OpenAI の [Remote connections ガイド](https://learn.chatgpt.com/docs/remote-connections)には、モバイルのセットアップはこのアプリから始めること、Codex CLI や IDE 拡張機能からはセットアップできないことが記載されています。ワークスペースの管理者が Remote Control を有効にする必要がある場合もあります。この方法で Linux サーバーにアクセスするには、デスクトップアプリから SSH でサーバーに接続するので、Mac または Windows のホストもスリープさせずにおく必要があります。
+
+すでに Mac や Windows の ChatGPT デスクトップアプリで作業している場合は、この方法を使ってください。
+
+## 選択肢 3: Codex Cloud
+
+Codex Cloud は OpenAI が管理するマシンでタスクを実行するので、コンピューターがスリープしている間もタスクは続き、モバイルアプリから開始や継続ができます。クラウドタスクが使えるのは、クラウド環境内のファイルとサービスだけです。OpenAI の[環境に関するドキュメント](https://learn.chatgpt.com/docs/environments/modes)には、ローカルファイル、実行中のプロセス、VPN アクセスは引き継がれないと記載されています。
+
+クリーンなチェックアウトから実行できる作業に使ってください。ローカルのデータベース、プライベートネットワーク、ハードウェア、自分のマシンに置いている認証情報に依存するタスクには向きません。
+
+## 選択肢 4: SSH と tmux で自作する
+
+標準的なツールでリモートアクセスを組み立てることもできます。tmux で Codex を動かし続け、プライベートネットワークでマシンに到達できるようにし、スマートフォンの SSH クライアントで接続します。フックと ntfy を組み合わせれば、Codex が待機しているときにスマートフォンに通知することもできます。
+
+### 1. Tailscale でマシンに到達できるようにする
+
+ホストに Tailscale をインストールしてサインインします。
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4      # note the 100.x.y.z address
+```
+
+スマートフォンに Tailscale アプリをインストールし、同じアカウントでサインインします。これで、インターネットにポートを開くことなく、スマートフォンからそのアドレスでホストに到達できます。
+
+常時稼働のホストでは、Tailscale の管理コンソールでそのホストの[キーの有効期限](https://tailscale.com/docs/features/access-control/key-expiry)を無効にしてください。キーはデフォルトで 180 日後に期限切れになり、ホストがネットワークから外れてしまいます。
+
+スマートフォンでは一度に 1 つの VPN しか実行できないため、Tailscale アプリは他の VPN やプロキシアプリをオフにします。それらのいずれかが必要な場合は、[Tailscale と Cloudflare Tunnel の比較](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)を参照してください。スマートフォンの VPN 枠を使わない Cloudflare Tunnel と、VPN 同士のアドレスやルーティングの競合について説明しています。
+
+### 2. tmux で Codex を実行し、出力をスクロールできるようにする
+
+Codex はデフォルトで、ターミナルの代替スクリーンに TUI を描画します。tmux は代替スクリーンの内容を履歴に残さないため、再アタッチすると以前の出力は tmux のスクロールバックから消えています。`~/.codex/config.toml` でこれを無効にします。
+
+```toml
+[tui]
+alternate_screen = "never"
+```
+
+次に、名前付きセッションで Codex を起動します。
+
+```sh
+tmux new -s codex
+codex
+# detach with Ctrl-b d
+```
+
+スマートフォンから接続して再アタッチします。
+
+```sh
+mosh agent@100.x.y.z tmux attach -t codex
+```
+
+Mosh を使うと、スマートフォンが Wi-Fi とモバイルデータを切り替えたりスリープしたりしてもセッションが維持されます。ホストに `mosh` がインストールされていること、スマートフォンのクライアントが Mosh に対応していることが必要です。Mosh を使わない場合は `ssh -t agent@100.x.y.z tmux attach -t codex` を使い、切断のたびに再接続します。スクロールするには `Ctrl-b [` で tmux のコピーモードに入り、`q` で抜けます。
+
+再起動後などで tmux 自体が終了していた場合は、新しいセッションを開始し、`codex resume --last` で前回の会話を続けます。
+
+### 3. Codex が承認を必要としたときに通知を受け取る
+
+Codex の `notify` 設定は、ターンが終了したときにしか発火しません。[フック](https://developers.openai.com/codex/hooks)は、Codex が承認を求めようとするときにも実行されます。ntfy のスマートフォンアプリで長くランダムな [ntfy](https://ntfy.sh/) トピックを購読し、次のスクリプトを `~/.codex/hooks/ntfy.sh` として保存して実行可能にします。`jq` と `curl` が必要です。
+
+```sh
+#!/bin/sh
+url=https://ntfy.sh/YOUR_TOPIC
+
+event=$(cat)
+field() { printf '%s' "$event" | jq -r "$1"; }
+project=$(field '.cwd | split("/") | last')
+
+case $(field .hook_event_name) in
+  PermissionRequest)
+    title="Codex needs approval: $project"
+    body=$(field '.tool_input.description // .tool_input.command // .tool_name')
+    ;;
+  Stop)
+    title="Codex finished: $project"
+    body=$(field '(.last_assistant_message // "Turn complete")[0:300]')
+    ;;
+  *) exit 0 ;;
+esac
+
+curl -fsS --max-time 5 -o /dev/null -H "Title: $title" -d "$body" "$url" || true
+```
+
+`~/.codex/config.toml` に登録します。
+
+```toml
+[[hooks.PermissionRequest]]
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+```
+
+Codex で `/hooks` を開き、新しいフックを信頼します。Codex は信頼されていないフックをスキップし、スクリプトやエントリーを後で編集した場合は再度信頼する必要があります。このスクリプトは何も出力しないので、Codex は通常の承認プロンプトを表示し続けます。`PermissionRequest` フックから決定を出力すると、代わりにそのリクエストが承認または拒否されます。ターンごとの通知が多すぎる場合は `Stop` のエントリーを削除してください。
+
+[Codex と pi のスマートフォン通知](/blog/coding-agent-phone-notifications)では、フックのペイロードと、コマンドやパスをサードパーティの通知サーバーに送らない方法を説明しています。
+
+### 最終的な構成
+
+通知で承認待ちであることはわかります。応答するには、SSH アプリを開いて再アタッチし、スマートフォンのキーボードで Codex の TUI に `y` または `Esc` を入力します。両方のデバイスの Tailscale、スマートフォンの SSH キー、tmux、フックと、各部品は自分で保守します。
+
+## スマートフォンに合った承認ポリシーを選ぶ
+
+どの選択肢でも、スマートフォンは長いコマンドを確認するのに向いていません。どのくらいの頻度で確認を求められるかは、Codex の承認ポリシーで決まります。OpenAI の[承認とセキュリティのガイド](https://learn.chatgpt.com/docs/agent-approvals-security)では、`Auto` プリセット `--sandbox workspace-write --ask-for-approval on-request` について説明しています。この設定では、Codex はワークスペース内でのファイル編集やコマンド実行を確認なしで行い、ワークスペース外への書き込みやネットワークの使用の前には確認を求めます。
+
+フラグを渡す代わりにデフォルトにするには、`~/.codex/config.toml` で設定します。
+
+```toml
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+# Directories outside the project that Codex may write without asking,
+# for example a shared build cache.
+writable_roots = ["/home/agent/.cache/pnpm"]
+```
+
+`writable_roots` は任意です。そのままではビルドのたびにリクエストが発生するパスに使うと、スマートフォンに届くリクエストを少なく保てます。
+
+これはリモートでの監督に適しています。定型的な編集はそのまま進み、スマートフォンに届くのは読む価値のあるリクエストだけになります。承認を無効にして実行すると、そもそもスマートフォンから見守る理由がなくなるので、それはサンドボックス化されたマシンや使い捨てのマシンに限ってください。
+
+## 関連記事
+
+- [Codex や pi が対応を必要としたときにスマートフォンに通知を受け取る](/blog/coding-agent-phone-notifications)
+- [VPS でコーディングエージェントを実行する](/blog/run-coding-agents-on-a-vps)（常時稼働の Linux ホスト向け）
+- [スマートフォンから pi コーディングエージェントを使う方法](/blog/pi-coding-agent-remote-control)
+- [Pontia の仕組み](/docs/how-it-works)と[セキュリティ](/docs/security)

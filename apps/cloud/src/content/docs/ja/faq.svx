@@ -1,0 +1,36 @@
+<svelte:head>
+	<title>FAQ — Pontia</title>
+	<meta name="description" content="Pontia の Session、データ、リモートアクセス、運用に関するよくある質問への回答です。" />
+</svelte:head>
+
+# よくある質問
+
+## エージェントは Pontia Cloud で実行されますか？
+
+いいえ。Agent Client、ツール、認証情報、プロジェクトファイルはデバイス上に残ります。Pontia Cloud は ID とリモートでの認可を調整し、Edge は暗号化された通信を中継します。
+
+## Workspace はオペレーティングシステムのサンドボックスですか？
+
+いいえ。Workspace のルートは、Pontia のブラウザーが有効化やファイル検索のために公開する範囲を制限するものです。Agent Client は、ローカルのプロセスとしての権限とサンドボックスポリシーをそのまま持ちます。
+
+## デバイスにリモートからアクセスするには？
+
+Pontia Cloud にサインインしてデバイスを登録し、[app.pontia.dev](https://app.pontia.dev) でそのデバイスの Remote Dashboard を開きます。セットアップ全体の手順は[初期化](/docs/initialization)を参照してください。
+
+## Pontia はプロンプトやプロジェクトのデータを読めますか？
+
+Pontia には 3 つのランタイムコンポーネントがあります。
+
+- **Pontia Cloud** は、ユーザー、認証、デバイス登録、アクセスの認可を管理します。Dashboard の通信は、Edge を経由してブラウザーとデバイスの間を流れます。
+- **pontiad** はデバイス上で動作し、Agent Client を調整して、プロンプトとエージェントのデータを Dashboard に提供します。
+- **Pontia Edge** は、ブラウザーと `pontiad` の間でエンドツーエンドで暗号化されたままの通信を中継します。
+
+プロンプトとプロジェクトのデータはデバイス上に残ります。
+
+## 何をバックアップすべきですか？
+
+プロジェクトファイル、`$PONTIA_HOME`、Agent Client のネイティブの会話データをバックアップしてください。`$PONTIA_HOME` には、制御状態や Workflow ファイルに加えて認証情報も含まれるため、信頼できる暗号化された保存先を使ってください。会話データについては、各 Client のバックアップ手順に従ってください。
+
+## Pontia は Windows に対応していますか？
+
+いいえ。ローカルのコントロールプレーンは Linux と macOS 13.5 以降に対応しています。セルフホストの Edge は Linux のみに対応しています。

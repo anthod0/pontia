@@ -1,0 +1,102 @@
+<svelte:head>
+	<title>CLI リファレンス — Pontia</title>
+	<meta name="description" content="Pontia のローカルサービス、リモートアクセス、アップデート、Workflow のコマンドのリファレンスです。" />
+</svelte:head>
+
+# CLI リファレンス
+
+`pontia` CLI はローカルのインストールを設定し、永続的なコントロールプレーンの操作は動作中の `pontiad` サービスに委ねます。
+
+インストールしたバージョンの正確なオプションは、`pontia COMMAND --help` で確認してください。
+
+## セットアップとライフサイクル
+
+| コマンド | 用途 |
+| --- | --- |
+| `pontia init` | Agent Client を選択し、永続的な設定を作成し、連携をインストールし、ユーザー単位のサービスを起動して、リモート設定を提案します |
+| `pontia setup [CLIENT]` | 推奨されるローカル連携をインストールまたは修復します。省略時は Client を選択し、選択した Client を有効にします |
+| `pontia up` | ユーザー単位のサービス定義をインストールまたは更新し、サービスを起動または再起動します |
+| `pontia status` | データディレクトリ、ローカルサービスの状態、サインイン中のユーザー、リモートハンドル、選択中の Edge を表示します |
+| `pontia doctor` | サービス、設定、ログイン、リモート登録のチェック結果を修復のヒントとともに説明します |
+| `pontia down` | ユーザー単位のサービスを停止して無効にします |
+| `pontia update` | 署名済みの最新安定版 `pontia` と `pontiad` をインストールします |
+| `pontia --version` | インストール済みのバージョンを表示します |
+
+`pontia setup` は `pi`、`codex`、`claude-agent` を受け付け、追加の Client オプションなしで推奨設定を適用します。
+
+対話式のセットアップと、それに相当するコマンドを順に実行する手順は [初期化](/docs/initialization) を参照してください。
+
+`pontiad` を停止すると、監視、入力の受信、Workflow のスケジューリングが停止します。Agent Client のネイティブな会話のライフサイクルは、各 Agent Client が別途管理します。
+
+## Agent Client
+
+| コマンド | 用途 |
+| --- | --- |
+| `pontia client list` | すべての Agent Client エントリを、短縮 ID、名前、種類、有効状態とともに一覧表示します |
+| `pontia client list --json` | すべてのエントリを、ID、設定のオーバーライド、実効設定を含む JSON で一覧表示します |
+| `pontia client show CLIENT` | 1 つのエントリを表示します |
+| `pontia client set CLIENT --config JSON_FILE` | エントリの設定オーバーライドを JSON オブジェクトで置き換えます |
+| `pontia client enable CLIENT` | 新しい Session でそのエントリを使えるようにします |
+| `pontia client disable CLIENT` | 新しい Session でそのエントリを使えないようにします。既存の Session は変わりません |
+| `pontia client reset CLIENT` | エントリの保存済み設定を削除します。これによりエントリも無効になります |
+
+`CLIENT` は `pi`、`codex`、`claude-agent`、または ACP エージェント ID などの短縮 ID です。短縮 ID があいまいな場合は、`pontia client list --json` で得た ID を `--id ID` で指定してください。
+
+## エージェントツール
+
+`pontia --help` では、`send-file` と `workflow` が Agent tools の下に表示されます。
+
+### ファイル
+
+| コマンド | 実行場所 | 用途 |
+| --- | --- | --- |
+| `pontia send-file PATH` | Pontia Session 内 | 1 つのファイルを Session のユーザーと共有します。ファイルは Dashboard のチャットに表示されます |
+
+### Workflow
+
+| コマンド | 実行場所 | 用途 |
+| --- | --- | --- |
+| `pontia workflow run FILE` | 任意のローカルシェル | TOML 定義を解析し、ローカル API 経由で Workflow を開始します |
+| `pontia workflow show [WORKFLOW_ID]` | 任意のローカルシェル。管理対象 Node 内では ID は省略可能 | Workflow、現在の Node、入力、出力、Patch のコンテキストを簡潔に表示します |
+| `pontia workflow submit` | 現在の管理対象 Agent Node のペイン | Node の出力の準備ができたことを宣言します |
+| `pontia workflow patch request` | 現在の管理対象 Agent Node のペイン | 進行を妨げる問題を報告し、再計画を開始します |
+| `pontia workflow patch apply` | 現在の Re-planner のペイン | 候補の定義を新しいリビジョンとして採用します |
+| `pontia workflow patch block` | 現在の Re-planner のペイン | 候補の定義を適用せずに Patch を終了します |
+
+ペインに限定されたコマンドは、現在の Agent Node または Re-planner の、Pontia が管理する `tmux` ペインで実行してください。
+
+## クラウドへのログインとリモートアクセス
+
+| コマンド | 用途 |
+| --- | --- |
+| `pontia login` | ブラウザーでのデバイス認可を完了し、CLI の認証情報を保存します |
+| `pontia remote edges` | 利用可能な Edge を ID と名前の JSON 配列で一覧表示します |
+| `pontia remote enable` | このデバイスを登録し、対話式で Edge を選択して、E2E アイデンティティを作成します |
+| `pontia remote enable --edge EDGE_ID --name NAME` | プロンプトなしで登録します。両方のオプションが必須です |
+| `pontia remote edit --name NAME` | デバイスの表示名を変更します |
+| `pontia remote edit --handle HANDLE` | デバイスの Dashboard URL のハンドルを変更します |
+| `pontia remote rotate-key` | デバイスの E2E アイデンティティと鍵のバージョンを置き換えます |
+| `pontia remote disable` | このデバイスの登録を解除し、ローカルのリモートアイデンティティを削除します |
+
+`pontiad` に影響するリモート設定を変更すると、ローカルサービスは自動的に再起動します。
+
+## 終了ステータスとエラー
+
+`pontia status` と `pontia doctor` は、ローカルサービスが動作していて HTTP ヘルスチェックに合格すると正常終了します。アカウントとリモートの結果は別に確認してください。クラウドに登録されていても、デバイスにインターネットから到達できるとは限りません。
+
+コマンドの成否は終了ステータスで確認してください。エラーは `pontia:` という接頭辞付きで標準エラー出力に書き込まれます。障害を診断するときは、秘匿情報を伏せたエラーを含めてください。
+
+## `pontia-edge`
+
+セルフホストの Edge には、root で操作する別の CLI があります。
+
+| コマンド | 用途 |
+| --- | --- |
+| `pontia-edge init --edge-id ID --ticket TICKET` | Edge を初期化して登録します。通常は Cloud が生成したコマンド全体を使います |
+| `pontia-edge retry` | 同じサーバーで未完了の初期化を再開します |
+| `pontia-edge update` | 署名済みの最新安定版 Edge をインストールします |
+| `pontia-edge auto-update enable` | 1 時間ごとの更新チェックをインストールして有効にします |
+| `pontia-edge auto-update disable` | 今後のチェックを無効にします |
+| `pontia-edge auto-update status` | タイマーのスケジュールと最後の更新結果を表示します |
+
+これらのコマンドを直接使う前に、[Edge をセルフホストする](/docs/self-hosted-edge) を参照してください。

@@ -1,0 +1,157 @@
+---
+title: "Codex や pi があなたを必要としたときにスマートフォンに通知する"
+description: "Codex CLI が承認を求めたときや Turn を終えたとき、pi が入力を待っているときに、スマートフォンへプッシュ通知を送ります。ntfy 経由で送信する検証済みの Codex フックと pi 拡張機能に加え、つまずきやすいプライバシーと信頼の注意点も紹介します。"
+published: "2026-11-12"
+---
+
+サーバー上で動かしたままのコーディングエージェントは、作業している時間よりもあなたを待っている時間のほうが長くなりがちです。Codex は承認のプロンプトで止まり、pi は作業を終えて次のメッセージを待ちます。それに気づくのは、次にターミナルを見たときです。この記事では、Codex フック、小さな pi 拡張機能、[ntfy](https://ntfy.sh/) を使って、両方のエージェントからスマートフォンへのプッシュ通知を設定します。
+
+以下のスクリプトは、Linux 上の Codex CLI 0.167.1 と pi 1.5.2 でテストしました。macOS でも同じように動作します。
+
+## 組み込みの通知がスマートフォンに届かない理由
+
+Codex には通知機能が 2 つありますが、どちらもこのケースには対応していません。
+
+- **TUI 通知**（`config.toml` の `[tui] notifications`）は、デスクトップ通知を送るか、ターミナルのベルを鳴らします。通知先は Codex に接続されたターミナルなので、デタッチした tmux セッションでは何も見えません。
+- **`notify`** は任意のプログラムを実行しますが、OpenAI の[高度な設定ガイド](https://developers.openai.com/codex/config-advanced)によると、現在は `agent-turn-complete` でのみ発火します。最も知りたいイベントである、承認待ちは通知されません。
+
+Codex の[フック](https://developers.openai.com/codex/hooks)は両方のイベントに対応しています。`PermissionRequest` は Codex が承認を求める直前に、`Stop` は Turn の終了時に実行されます。pi には承認がありません。pi の拡張機能 API には `agent_settled` イベントがあり、pi がすべての自動処理を終えて入力を待つ状態になったときに一度発火します。
+
+## ntfy を設定する
+
+ntfy は HTTP POST をプッシュ通知として配信します。[Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy) または [iOS](https://apps.apple.com/us/app/ntfy/id1625396347) のアプリをインストールし、トピックを購読します。
+
+公開の ntfy.sh サーバーにはアカウント登録がないため、[トピック名がパスワードの役割を果たします](https://docs.ntfy.sh/publish/)。トピック名を知っていれば誰でもメッセージを読み書きできます。長いランダムな名前を生成してください。
+
+```sh
+echo "agents-$(openssl rand -hex 12)"
+```
+
+サーバーからテストします。
+
+```sh
+curl -d "Test from $(hostname)" https://ntfy.sh/YOUR_TOPIC
+```
+
+Android では、トピックの **instant delivery** をオンにしてください。オフのままだと、スマートフォンが Doze モードの間はメッセージの到着が大きく遅れることがあると ntfy のドキュメントで警告されています。
+
+## Codex: 承認リクエストと Turn の完了を通知する
+
+次のスクリプトを `~/.codex/hooks/ntfy.sh` として保存し、`chmod +x` で実行可能にします。`jq` と `curl` が必要です。
+
+```sh
+#!/bin/sh
+# Codex hook: push a phone notification through ntfy.
+url=https://ntfy.sh/YOUR_TOPIC
+
+event=$(cat)
+field() { printf '%s' "$event" | jq -r "$1"; }
+project=$(field '.cwd | split("/") | last')
+
+case $(field .hook_event_name) in
+  PermissionRequest)
+    title="Codex needs approval: $project"
+    body=$(field '.tool_input.description // .tool_input.command // .tool_name')
+    priority=high
+    ;;
+  Stop)
+    title="Codex finished: $project"
+    body=$(field '(.last_assistant_message // "Turn complete")[0:300]')
+    priority=default
+    ;;
+  *) exit 0 ;;
+esac
+
+curl -fsS --max-time 5 -o /dev/null \
+  -H "Title: $title" -H "Priority: $priority" -d "$body" "$url" || true
+```
+
+`~/.codex/config.toml` で両方のイベントに登録します。
+
+```toml
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+
+[[hooks.PermissionRequest]]
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "~/.codex/hooks/ntfy.sh"
+timeout = 10
+```
+
+`codex` を起動して `/hooks` を実行します。Codex は、新規または変更されたフックを、あなたが確認して信頼するまでスキップします。信頼はフックのハッシュに対して記録されます。**後でスクリプトや設定エントリを編集した場合は、再度信頼する必要があります。** そうしないと、スマートフォンには何のエラーも表示されないまま通知が止まります。
+
+承認リクエストの場合、Codex が stdin に渡す JSON は次のようになります。
+
+```json
+{
+  "hook_event_name": "PermissionRequest",
+  "cwd": "/home/agent/projects/api",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "touch /tmp/created.txt",
+    "description": "Allow creating /tmp/created.txt? The sandbox is read-only."
+  }
+}
+```
+
+`Stop` イベントには、`tool_input` の代わりに `last_assistant_message` が含まれます。どちらにも `session_id` と `turn_id` が含まれます。
+
+### 重要な注意点
+
+- **フックは何も出力してはいけません。** `PermissionRequest` フックは、判定を出力することでリクエストを承認または拒否できます。このスクリプトは何も出力せずに終了コード 0 で終わるため、Codex は通常の承認プロンプトを表示します。`curl -o /dev/null` は ntfy のレスポンスを stdout に出さないようにし、`|| true` はネットワークの障害がフックのエラーとして表示されないようにします。
+- **タイムアウトは短く設定してください。** フックは同期的に実行され、デフォルトのタイムアウトは 600 秒です。ntfy に到達できない場合、長いタイムアウトだと承認プロンプト自体が遅れます。
+- **通知されるのは、あなたの対応が必要なリクエストだけです。** サンドボックスがすでに許可しているコマンドでは `PermissionRequest` は実行されません。`workspace-write` サンドボックスと `on-request` の承認を組み合わせた場合、対象は Workspace 外への書き込みとネットワークアクセスになり、どちらも目を通す価値のあるリクエストです。
+- **`Stop` はすべての Turn で発火します。** 対話型のセッションでの短い返答も含まれます。通知が多すぎる場合は、`PermissionRequest` だけを登録してください。
+- **フックは TUI ではなく Codex に属します。** `codex exec` でも実行されます。
+
+## pi: pi が入力を待っているときに通知する
+
+次のコードを `~/.pi/agent/extensions/ntfy.ts` として保存します。pi はこのディレクトリから拡張機能を自動で読み込み、`/reload` を使えば再起動せずに変更を反映できます。
+
+```ts
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { basename } from "node:path";
+
+const url = "https://ntfy.sh/YOUR_TOPIC";
+
+export default function (pi: ExtensionAPI) {
+  pi.on("agent_settled", async (event, ctx) => {
+    if (event.aborted) return; // you pressed Escape, so you are already there
+    await fetch(url, {
+      method: "POST",
+      headers: { Title: `pi: ${basename(ctx.cwd)}` },
+      body: "Waiting for input",
+    }).catch(() => {});
+  });
+}
+```
+
+`agent_end` ではなく `agent_settled` を使ってください。pi の[拡張機能のドキュメント](https://pi.dev/docs/latest/extensions)によると、`agent_end` は低レベルの実行のたびに発火し、その後 pi は再試行したり、コンパクトして再試行したり、キューに入ったメッセージで処理を続けたりすることがあります。`agent_end` で通知すると、pi がまだ作業している間に通知が届くことがあります。
+
+pi は承認のために一時停止しないため、通知で伝えられるのは実行が終わったことだけです。コマンドを実行前に止める方法については、pi の[セキュリティガイド](https://pi.dev/docs/latest/security)を参照してください。
+
+## 通知にシークレットを含めない
+
+承認の説明、コマンド、最後のアシスタントメッセージには、コマンドラインに含まれたファイルパス、ホスト名、トークンが入っていることがあります。ntfy.sh では、これらがサードパーティのサーバーを経由し、トピック名を知っている誰にでも届きます。
+
+作業上それが問題になる場合は、次のいずれかを選んでください。
+
+- `body` を `"Waiting"` のような固定の文字列に置き換えて、プロジェクト名だけを送る。
+- [ntfy をセルフホスト](https://docs.ntfy.sh/install/)し、公開と読み取りに[アクセストークン](https://docs.ntfy.sh/config/#access-control)を必須にする。
+
+## 通知だけでは足りない場合
+
+通知はエージェントがあなたを必要としていることを伝えますが、応答する手段は別に必要です。スマートフォンから SSH で接続する場合、tmux にアタッチし、スクロールしてプロンプトを探し、全画面の TUI に入力することになります。その構成のネットワーク面については、[スマートフォンからコーディングエージェントのサーバーにアクセスする](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)で説明しています。
+
+私たちが開発しているツールである [Pontia](/docs/how-it-works) は、Codex の承認リクエストを **Allow** と **Deny** のボタン付きでスマートフォンのブラウザーに表示し、pi のセッションをチャットとしてストリーミング表示します。
+
+## 関連記事
+
+- [スマートフォンから Codex CLI を使う方法](/blog/control-codex-cli-from-your-phone)
+- [スマートフォンから pi コーディングエージェントを使う方法](/blog/pi-coding-agent-remote-control)
+- [VPS で Codex と pi を実行する](/blog/run-coding-agents-on-a-vps)

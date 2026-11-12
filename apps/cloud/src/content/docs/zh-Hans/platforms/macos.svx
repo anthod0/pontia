@@ -1,0 +1,67 @@
+<svelte:head>
+	<title>macOS — Pontia</title>
+	<meta name="description" content="Pontia 的 macOS 要求和 LaunchAgent 管理。" />
+</svelte:head>
+
+# macOS
+
+Pontia 支持 Intel 和 Apple Silicon 上的 macOS 13.5 及更高版本。本地控制平面和 Codex 守护进程使用用户级 LaunchAgent。如需自托管 Edge，请使用 [Linux 服务器](/docs/self-hosted-edge)。
+
+## 安装要求
+
+对于推荐的 `npx @pontia/cli init` 安装方式，请安装 Node.js 和 npm。参见[快速开始](/docs/getting-started)。
+
+另一种 shell 安装程序需要 `curl`、`grep`、`install`、`mktemp`、`mv`、`openssl`、`rm`、`sed`、`shasum`、`tar`、`tr`、`uname` 和 `wc`。
+
+系统自带的 `openssl` 可能不提供所需的 Ed25519 命令。安装程序会自动检查 Homebrew 的标准 `openssl@3` 路径：
+
+```text
+/opt/homebrew/opt/openssl@3/bin/openssl
+/usr/local/opt/openssl@3/bin/openssl
+```
+
+你可以通过 `PONTIA_OPENSSL` 让安装程序使用其他兼容的可执行文件。
+
+默认的二进制目录是 `$HOME/.local/bin`。将它添加到 shell 的 `PATH` 中，即可直接运行 `pontia` 命令。
+
+## LaunchAgent
+
+初始化会将 Pontia 服务定义安装到：
+
+```text
+~/Library/LaunchAgents/dev.pontia.pontiad.plist
+```
+
+用以下命令管理它：
+
+```sh
+pontia up
+pontia status
+pontia down
+```
+
+直接诊断：
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.pontiad
+```
+
+选择 Codex 时，Pontia 还会安装：
+
+```text
+~/Library/LaunchAgents/dev.pontia.codex-daemon.plist
+```
+
+用以下命令检查它：
+
+```sh
+launchctl print gui/$(id -u)/dev.pontia.codex-daemon
+```
+
+LaunchAgent 定义中保存了可执行文件的绝对路径和受控的可执行文件搜索路径。移动 Client 或其主目录后，运行 `pontia setup CLIENT`，并传入任何自定义运行时路径。
+
+## 更新
+
+`pontia update` 在替换之前会使用 `/usr/sbin/lsof` 验证正在运行的 CLI 就是已安装的文件。请将 `pontia` 和 `pontiad` 作为普通文件放在一起，并直接运行已安装的 `pontia`。
+
+请以运行 Agent Client 的用户身份执行初始化和生命周期命令。Pontia 会使用该用户的主目录、凭据和 GUI LaunchAgent 域。

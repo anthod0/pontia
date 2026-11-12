@@ -4,7 +4,10 @@ import { sveltekit } from "@sveltejs/kit/vite";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { mdsvex } from "mdsvex";
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { generateLlms } from "./scripts/generate-llms";
+import { localePrefixes } from "./src/lib/locales";
+import { rehypeLocalizeLinks } from "./scripts/rehype-localize-links";
 import { rehypeTableScroll } from "./scripts/rehype-table-scroll";
 
 export default defineConfig({
@@ -16,6 +19,7 @@ export default defineConfig({
         await generateLlms();
       },
     },
+    paraglideVitePlugin({ project: "./project.inlang", outputStructure: "message-modules" }),
     tailwindcss(),
     sveltekit({
       extensions: [".svelte", ".svx"],
@@ -28,7 +32,7 @@ export default defineConfig({
           },
           layoutPropForwarding: "runes",
           highlight: { alias: { sh: "bash" } },
-          rehypePlugins: [rehypeTableScroll],
+          rehypePlugins: [rehypeTableScroll, rehypeLocalizeLinks],
         }),
       ],
       compilerOptions: {
@@ -37,6 +41,10 @@ export default defineConfig({
           filename.split(/[/\\]/).includes("node_modules") ? undefined : true,
       },
       adapter: adapter(),
+      // Localized pages are found by crawling from each locale's home page.
+      prerender: {
+        entries: ["*", ...Object.values(localePrefixes).map((prefix) => `/${prefix}` as const)],
+      },
       csrf: {
         trustedOrigins: ["https://app.pontia.dev"],
       },

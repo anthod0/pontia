@@ -1,0 +1,166 @@
+---
+title: "Como usar o pi coding agent pelo celular"
+description: "Acompanhe e direcione sessões do pi coding agent pelo celular mantendo a TUI nativa do pi. Compara o Pontia com a alternativa faça-você-mesmo de SSH e tmux e com o pi no Termux, além da configuração de teclas do tmux e notas de segurança."
+published: "2026-11-11"
+---
+
+O [pi](https://pi.dev) é um agente de programação minimalista para terminal. As sessões dele rodam em um terminal na sua máquina, então uma tarefa longa é fácil de iniciar e difícil de acompanhar quando você sai da mesa. Este artigo mostra as formas de acessar uma sessão do pi pelo celular ou por outro computador.
+
+O Pontia é a ferramenta que nós desenvolvemos.
+
+## A resposta curta
+
+O pi não tem um cliente remoto ou móvel oficial.
+
+| Sua situação | Melhor opção |
+| --- | --- |
+| Você quer acompanhar, direcionar e continuar sessões do pi pelo navegador do celular e manter a TUI | Pontia |
+| Você prefere montar e manter o acesso remoto por conta própria | SSH ou Mosh, tmux e uma rede privada |
+| Você quer programar no próprio celular, sem outra máquina | pi no Termux no Android |
+
+## Opção 1: Pontia
+
+O Pontia é um controle remoto gratuito e de código aberto para agentes de programação que rodam na sua própria máquina. Você instala uma vez, faz login e abre [app.pontia.dev](https://app.pontia.dev) no celular. Não há VPN, redirecionamento de portas nem app de terminal para configurar.
+
+O Pontia mantém a TUI nativa do pi. Quando você inicia uma sessão pelo Dashboard, o Pontia abre o pi em um painel do tmux no projeto escolhido. Um plugin do pi envia a conversa para o Dashboard e aceita os comandos dele. Pelo celular, você pode:
+
+- iniciar uma sessão do pi em um diretório de projeto e acompanhar as respostas e a saída das ferramentas em tempo real;
+- enviar mensagens, enfileirá-las enquanto o pi trabalha ou interromper o turno atual;
+- editar uma mensagem anterior para ramificar a conversa a partir daquele ponto;
+- trocar o modelo com `/model`, compactar com `/compact` e ver o uso estimado de contexto;
+- referenciar arquivos com `@`.
+
+A sessão é um processo real do pi, então você também pode se conectar a ela por um terminal a qualquer momento. Mensagens da TUI e do Dashboard vão para a mesma conversa, e o histórico fica nos próprios arquivos de sessão do pi:
+
+```sh
+tmux ls                       # Pontia sessions start with pontia_
+tmux attach -t SESSION_NAME
+```
+
+O pi continua rodando na sua máquina com as próprias credenciais de provedor e a própria configuração. O navegador e a sua máquina estabelecem uma sessão criptografada de ponta a ponta por meio do relay do Pontia, que apenas encaminha texto cifrado. A sua máquina se conecta para fora, então não precisa de nenhuma porta de entrada aberta.
+
+O Pontia oferece suporte ao Linux e ao macOS 13.5 ou posterior, incluindo servidores headless. Além de sessões individuais, os [Workflows](/docs/workflows) executam uma tarefa grande como uma sequência de sessões do pi, cada uma com um contexto novo e arquivos de handoff explícitos.
+
+### Configuração
+
+Instale o `pi` e o `tmux` e configure o seu provedor de modelos no pi (`/login` e `/model`). Com o Node.js e o npm instalados, execute:
+
+```sh
+npx @pontia/cli init   # pi is selected by default
+```
+
+O `pontia init` instala o plugin do pi, inicia o serviço do Pontia, faz o seu login com Google ou GitHub e registra a máquina em um relay oficial. Em uma máquina headless, o login exibe uma URL e um código de uso único que você pode aprovar pelo celular. Quando terminar, abra [app.pontia.dev](https://app.pontia.dev), escolha a máquina e inicie uma sessão.
+
+A [referência do Agent Client pi](/docs/agent-clients/pi) cobre comandos personalizados do pi e diagnósticos. Usuários avançados podem [rodar o próprio relay](/docs/self-hosted-edge) em vez do oficial.
+
+## Opção 2: Monte você mesmo com SSH e tmux
+
+Você também pode montar o acesso remoto com ferramentas padrão: o tmux mantém o pi rodando, uma rede privada torna a máquina acessível e um cliente SSH no celular se conecta a ela. Uma pequena extensão do pi pode notificar o celular quando o pi estiver esperando uma entrada.
+
+### 1. Torne a máquina acessível com o Tailscale
+
+Instale o Tailscale no host e faça login:
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+tailscale ip -4      # note the 100.x.y.z address
+```
+
+Instale o app do Tailscale no celular e faça login com a mesma conta. Para um host sempre ligado, desative a [expiração de chaves](https://tailscale.com/docs/features/access-control/key-expiry) no console de administração, porque as chaves expiram após 180 dias por padrão.
+
+O celular só consegue rodar uma VPN por vez, então o app do Tailscale desliga qualquer outro app de VPN ou proxy. [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) aborda o Cloudflare Tunnel, que não ocupa o espaço de VPN do celular, e os conflitos de roteamento entre VPNs.
+
+### 2. Rode o pi no tmux
+
+Primeiro, adicione ao `~/.tmux.conf` a configuração de extended keys da seção sobre tmux mais abaixo. Depois:
+
+```sh
+tmux new -s pi
+pi
+# detach with Ctrl-b d
+```
+
+Pelo celular, conecte e reanexe:
+
+```sh
+mosh agent@100.x.y.z tmux attach -t pi
+```
+
+O Mosh mantém a sessão viva quando o celular troca de rede ou entra em repouso. Ele precisa do `mosh` no host e de um cliente no celular que o suporte. Sem o Mosh, use `ssh -t agent@100.x.y.z tmux attach -t pi`.
+
+Se o próprio tmux morreu, por exemplo após uma reinicialização, `pi --continue` no diretório do projeto retoma a sessão mais recente.
+
+### 3. Role e direcione pelo teclado do celular
+
+O pi roda em modo tela cheia por padrão. Ele mantém o editor fixo e rola o histórico por conta própria, com `PageUp` e `PageDown`, então a saída do pi não vai para o scrollback do tmux. Teclados de celular raramente têm essas teclas. Você tem duas escolhas:
+
+- Mudar o pi para o modo regular, que escreve no scrollback normal do terminal. Defina `"tuiMode": "regular"` em `~/.pi/agent/settings.json` ou inicie o pi com `--tui-mode regular`. Aí você rola com o modo de cópia do tmux, `Ctrl-b [`.
+- Ficar no modo tela cheia e usar um app SSH no celular com uma fileira extra de teclas que inclua `PageUp` e `PageDown`.
+
+As teclas de que você mais precisa enquanto o pi trabalha:
+
+| Ação | Tecla |
+| --- | --- |
+| Parar a tarefa atual | `Escape` |
+| Enviar uma mensagem que direciona a tarefa atual | `Enter` enquanto o pi trabalha |
+| Enfileirar uma mensagem para depois da tarefa | `Alt+Enter` |
+| Trazer as mensagens enfileiradas de volta ao editor | `Alt+Up` |
+
+Uma mensagem enviada com `Enter` durante uma tarefa é entregue depois que a resposta atual e as chamadas de ferramenta dela terminam. Para remapear teclas, coloque-as em `~/.pi/agent/keybindings.json` e execute `/reload`. A [referência de atalhos](https://pi.dev/docs/latest/keybindings) do pi lista os nomes das ações.
+
+### 4. Receba uma notificação quando o pi estiver esperando
+
+Assine um tópico longo e aleatório do [ntfy](https://ntfy.sh/) no app do ntfy no celular. Depois, salve isto como `~/.pi/agent/extensions/ntfy.ts`. O pi carrega o arquivo automaticamente, e `/reload` aplica as alterações.
+
+```ts
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { basename } from "node:path";
+
+const url = "https://ntfy.sh/YOUR_TOPIC";
+
+export default function (pi: ExtensionAPI) {
+  pi.on("agent_settled", async (event, ctx) => {
+    if (event.aborted) return; // you pressed Escape, so you are already there
+    await fetch(url, {
+      method: "POST",
+      headers: { Title: `pi: ${basename(ctx.cwd)}` },
+      body: "Waiting for input",
+    }).catch(() => {});
+  });
+}
+```
+
+Use `agent_settled` em vez de `agent_end`. O pi pode tentar de novo, compactar ou continuar com mensagens enfileiradas depois de `agent_end`, então uma notificação enviada ali pode chegar enquanto o pi ainda está trabalhando. [Notificações no celular para Codex e pi](/blog/coding-agent-phone-notifications) aborda privacidade e ntfy auto-hospedado.
+
+### O resultado
+
+Você mantém cada peça por conta própria: o Tailscale nos dois dispositivos, as chaves SSH no celular, o tmux e a extensão. No celular, você usa a TUI completa do pi em um teclado pequeno.
+
+## Opção 3: Rode o pi no próprio celular
+
+O pi roda no Android por meio do [Termux](https://termux.dev/). Você instala o Node.js e o pi com `npm` e trabalha em uma pasta no celular. Isso serve para pequenas edições e scripts. Os arquivos do projeto, o toolchain e os builds ficam no celular, então essa opção não dá acesso ao trabalho na sua máquina principal.
+
+## Faça as teclas do pi funcionarem dentro do tmux
+
+Por padrão, o tmux pode informar `Shift+Enter`, `Ctrl+Enter` e `Enter` como a mesma tecla, então `Shift+Enter` envia o seu prompt em vez de inserir uma nova linha. Isso afeta você sempre que usa a TUI do pi dentro do tmux, inclusive nas sessões do Pontia às quais você se conecta. O [guia de tmux](https://pi.dev/docs/latest/tmux) do pi recomenda este `~/.tmux.conf` para o tmux 3.5 ou mais recente:
+
+```tmux
+set -g extended-keys on
+set -g extended-keys-format csi-u
+```
+
+Do tmux 3.2 ao 3.4, use apenas `set -g extended-keys on`. A configuração se aplica ao servidor do tmux, então reinicie o tmux antes de testar.
+
+## O controle remoto não torna o pi mais seguro
+
+O pi não para e pede aprovação antes de cada chamada de ferramenta. O [guia de segurança](https://pi.dev/docs/latest/security) dele afirma que o pi age com as permissões da conta que o iniciou e que acompanhar o histórico não cria uma barreira de segurança. Isso vale para todas as opções aqui. Acompanhar pelo celular permite interromper uma execução que deu errado, mas não impede um comando isolado antes que ele rode.
+
+Se você deixar o pi trabalhando sem supervisão, limite o que ele pode alcançar. Use uma conta de usuário dedicada, um contêiner ou VM e credenciais de curta duração restritas à tarefa. O guia do pi sobre [execução em um ambiente isolado](https://pi.dev/docs/latest/containerization) cobre as opções.
+
+## Relacionados
+
+- [Receba uma notificação no celular quando o Codex ou o pi precisar de você](/blog/coding-agent-phone-notifications)
+- [Rode agentes de programação em uma VPS](/blog/run-coding-agents-on-a-vps) para manter o pi em um servidor sempre ligado
+- [Como usar o Codex CLI pelo celular](/blog/control-codex-cli-from-your-phone)
+- [Como o Pontia funciona](/docs/how-it-works)

@@ -1,32 +1,34 @@
 <script lang="ts">
 	import PlusIcon from 'phosphor-svelte/lib/PlusIcon';
 	import { reveal } from '$lib/reveal';
+	import { m } from '$lib/paraglide/messages';
+	import { localizeHref } from '$lib/paraglide/runtime';
 
 	// `answer` is plain text for structured data; `links` render after it on the page.
 	const faqs: { question: string; answer: string; links?: { href: string; label: string }[] }[] = [
 		{
-			question: 'Do my agents run in Pontia Cloud?',
-			answer: 'No. Agent Clients, tools, credentials, and project files stay on your device. Pontia Cloud handles sign-in, device registration, and connection authorization.',
-			links: [{ href: '/docs/how-it-works', label: 'How Pontia works' }]
+			question: m.faq_cloud_question(),
+			answer: m.faq_cloud_answer(),
+			links: [{ href: '/docs/how-it-works', label: m.how_pontia_works() }]
 		},
 		{
-			question: 'Can Pontia read my prompts or code?',
-			answer: 'Dashboard traffic is encrypted end to end between your browser and your device. The Edge relays ciphertext, and Pontia Cloud is not in the traffic path.',
-			links: [{ href: '/docs/security', label: 'Security' }]
+			question: m.faq_privacy_question(),
+			answer: m.faq_privacy_answer(),
+			links: [{ href: '/docs/security', label: m.faq_security_link() }]
 		},
 		{
-			question: 'Which coding agents does Pontia support?',
-			answer: 'Pontia integrates with pi, Codex, Claude Code, Grok Build, and OpenCode. Each agent keeps its own login, models, and sandbox, and the available controls depend on the client.',
-			links: [{ href: '/docs/agent-clients', label: 'Agent Clients' }]
+			question: m.faq_agents_question(),
+			answer: m.faq_agents_answer(),
+			links: [{ href: '/docs/agent-clients', label: m.agent_clients() }]
 		},
 		{
-			question: 'Which platforms are supported?',
-			answer: 'Pontia runs on x86_64 and ARM64 Linux and on macOS 11 or later. The Dashboard works in modern desktop and mobile browsers and can be installed to a phone home screen.',
-			links: [{ href: '/docs/getting-started', label: 'Getting started' }]
+			question: m.faq_platforms_question(),
+			answer: m.faq_platforms_answer(),
+			links: [{ href: '/docs/getting-started', label: m.faq_getting_started_link() }]
 		},
 		{
-			question: 'How much does Pontia cost?',
-			answer: 'The hosted service currently has no usage fee. You keep paying your model providers directly through your own agent accounts.'
+			question: m.faq_cost_question(),
+			answer: m.faq_cost_answer()
 		}
 	];
 
@@ -48,9 +50,9 @@
 <section id="faq" class="faq page-width section-block" aria-labelledby="faq-title" {@attach reveal()}>
 	<div class="section-intro reveal">
 		<div class="section-heading">
-			<h2 id="faq-title">Questions, answered.</h2>
+			<h2 id="faq-title">{m.faq_title()}</h2>
 		</div>
-		<a class="faq-more" href="/docs/faq">Full FAQ <span aria-hidden="true">↗</span></a>
+		<a class="faq-more" href={localizeHref('/docs/faq')}>{m.faq_more()} <span aria-hidden="true">↗</span></a>
 	</div>
 	<div class="faq-list">
 		{#each faqs as faq, index}
@@ -58,7 +60,7 @@
 				<summary><h3>{faq.question}</h3><PlusIcon size={16} aria-hidden="true" /></summary>
 				<p>
 					{faq.answer}
-					{#each faq.links ?? [] as link}<a href={link.href}>{link.label}</a>{/each}
+					{#each faq.links ?? [] as link}<a href={localizeHref(link.href)}>{link.label}</a>{/each}
 				</p>
 			</details>
 		{/each}
