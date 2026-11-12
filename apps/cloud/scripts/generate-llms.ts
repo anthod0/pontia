@@ -2,8 +2,9 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { siteOrigin as origin } from "../src/lib/site";
+
 const cloudRoot = fileURLToPath(new URL("../", import.meta.url));
-const origin = "https://pontia.dev";
 
 function decodeEntities(text: string): string {
   const entities: Record<string, string> = {

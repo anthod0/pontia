@@ -1,6 +1,6 @@
-import { englishOnlyPages, localePrefixes } from "../src/lib/locales";
+import { englishOnlyPages, localeInfo } from "../src/lib/locales";
 
-const translated = Object.entries(localePrefixes);
+const translated = Object.entries(localeInfo).filter(([, { prefix }]) => prefix);
 const englishOnly = `/:page(${englishOnlyPages.map((page) => page.slice(1)).join("|")})`;
 
 export default {
@@ -12,16 +12,20 @@ export default {
   urlPatterns: [
     {
       pattern: "/",
-      localized: [["en", "/"], ...translated.map(([locale, prefix]) => [locale, `/${prefix}`])],
+      localized: [["en", "/"], ...translated.map(([locale, { prefix }]) => [locale, `/${prefix}`])],
     },
     {
       pattern: englishOnly,
       localized: [["en", englishOnly], ...translated.map(([locale]) => [locale, englishOnly])],
     },
     {
+      pattern: "/api/:path(.*)?",
+      localized: Object.keys(localeInfo).map((locale) => [locale, "/api/:path(.*)?"]),
+    },
+    {
       pattern: "/:path(.*)?",
       localized: [
-        ...translated.map(([locale, prefix]) => [locale, `/${prefix}/:path(.*)?`]),
+        ...translated.map(([locale, { prefix }]) => [locale, `/${prefix}/:path(.*)?`]),
         ["en", "/:path(.*)?"],
       ],
     },

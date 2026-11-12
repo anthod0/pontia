@@ -79,6 +79,8 @@
 	{/each}
 {/snippet}
 
+<LocaleLinks />
+
 <a class="skip-link" href="#docs-content">{m.skip_to_content()}</a>
 
 <SiteHeader />
@@ -101,8 +103,6 @@
 	</div>
 	<main id="docs-content" class="docs-content article-content">{@render children()}</main>
 </div>
-
-<LocaleLinks />
 
 <style>
 	.docs-shell { display: grid; grid-template-columns: 210px minmax(0, 720px); gap: 64px; padding-block: 64px 96px; }

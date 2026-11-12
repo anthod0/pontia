@@ -6,7 +6,7 @@ import { defineConfig } from "vite";
 import { mdsvex } from "mdsvex";
 import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { generateLlms } from "./scripts/generate-llms";
-import { localePrefixes } from "./src/lib/locales";
+import { localeInfo } from "./src/lib/locales";
 import { rehypeLocalizeLinks } from "./scripts/rehype-localize-links";
 import { rehypeTableScroll } from "./scripts/rehype-table-scroll";
 
@@ -19,7 +19,7 @@ export default defineConfig({
         await generateLlms();
       },
     },
-    paraglideVitePlugin({ project: "./project.inlang", outputStructure: "message-modules" }),
+    paraglideVitePlugin({ project: "./project.inlang" }),
     tailwindcss(),
     sveltekit({
       extensions: [".svelte", ".svx"],
@@ -43,7 +43,7 @@ export default defineConfig({
       adapter: adapter(),
       // Localized pages are found by crawling from each locale's home page.
       prerender: {
-        entries: ["*", ...Object.values(localePrefixes).map((prefix) => `/${prefix}` as const)],
+        entries: ["*", ...Object.values(localeInfo).map(({ prefix }) => `/${prefix}` as const)],
       },
       csrf: {
         trustedOrigins: ["https://app.pontia.dev"],

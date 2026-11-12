@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { siteOrigin } from '$lib/site';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import LocaleLinks from '$lib/components/LocaleLinks.svelte';
@@ -8,7 +9,7 @@
 
 	let { data } = $props();
 
-	const url = `https://pontia.dev${localizeHref('/blog')}`;
+	const url = `${siteOrigin}${localizeHref('/blog')}`;
 	const title = m.blog_title();
 	const description = m.blog_description();
 </script>
@@ -21,13 +22,13 @@
 	<meta property="og:description" content={description} />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content={url} />
-	<meta property="og:image" content="https://pontia.dev/og.png" />
+	<meta property="og:image" content={`${siteOrigin}/og.png`} />
 	<meta property="og:image:width" content="1200" />
 	<meta property="og:image:height" content="630" />
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={description} />
-	<meta name="twitter:image" content="https://pontia.dev/og.png" />
+	<meta name="twitter:image" content={`${siteOrigin}/og.png`} />
 </svelte:head>
 
 <LocaleLinks />

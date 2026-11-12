@@ -3,7 +3,7 @@
 	import TranslateIcon from 'phosphor-svelte/lib/TranslateIcon';
 	import { page } from '$app/state';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import { localeNames, hreflangs } from '$lib/locales';
+	import { localeInfo } from '$lib/locales';
 	import { m } from '$lib/paraglide/messages';
 	import { deLocalizeHref, getLocale, locales, localizeHref } from '$lib/paraglide/runtime';
 
@@ -22,12 +22,12 @@
 					<a
 						{...props}
 						href={localizeHref(path, { locale })}
-						hreflang={hreflangs[locale]}
-						lang={hreflangs[locale]}
+						hreflang={locale}
+						lang={locale}
 						aria-current={locale === getLocale() ? 'true' : undefined}
 						data-sveltekit-reload
 					>
-						<span class="flex-1">{localeNames[locale]}</span>
+						<span class="flex-1">{localeInfo[locale].name}</span>
 						{#if locale === getLocale()}<CheckIcon />{/if}
 					</a>
 				{/snippet}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { siteOrigin } from '$lib/site';
 	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import FeatureSection from '$lib/components/FeatureSection.svelte';
@@ -12,8 +13,8 @@
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 
-	const url = `https://pontia.dev${localizeHref('/')}`;
-	const image = 'https://pontia.dev/og.png';
+	const url = `${siteOrigin}${localizeHref('/')}`;
+	const image = `${siteOrigin}/og.png`;
 	const title = m.home_title();
 	const description = m.home_description();
 

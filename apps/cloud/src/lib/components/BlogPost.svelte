@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { siteOrigin } from '$lib/site';
 	import { onMount, type Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
@@ -15,9 +16,9 @@
 	let { title, description, published, updated, children }: BlogPostMetadata & { children: Snippet } =
 		$props();
 
-	const url = $derived(`https://pontia.dev${page.url.pathname}`);
-	const image = 'https://pontia.dev/og.png';
-	const pontia = { '@type': 'Organization', name: 'Pontia', url: 'https://pontia.dev/' };
+	const url = $derived(`${siteOrigin}${page.url.pathname}`);
+	const image = `${siteOrigin}/og.png`;
+	const pontia = { '@type': 'Organization', name: 'Pontia', url: `${siteOrigin}/` };
 	const structuredData = $derived({
 		'@context': 'https://schema.org',
 		'@type': 'Article',
@@ -30,7 +31,7 @@
 		url,
 		mainEntityOfPage: url,
 		author: pontia,
-		publisher: { ...pontia, logo: { '@type': 'ImageObject', url: 'https://pontia.dev/logo.svg' } }
+		publisher: { ...pontia, logo: { '@type': 'ImageObject', url: `${siteOrigin}/logo.svg` } }
 	});
 
 	let article: HTMLElement;

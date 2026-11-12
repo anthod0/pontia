@@ -1,5 +1,6 @@
 import type { BlogPost, BlogPostMetadata } from "$lib/blog";
 import type { Locale } from "$lib/paraglide/runtime";
+import { parseContentPath } from "$lib/content-path";
 
 const modules = import.meta.glob<BlogPostMetadata>("/src/content/blog/*/*.svx", {
   eager: true,
@@ -10,7 +11,7 @@ const modules = import.meta.glob<BlogPostMetadata>("/src/content/blog/*/*.svx", 
 export function posts(locale: Locale): BlogPost[] {
   return Object.entries(modules)
     .flatMap(([path, metadata]) => {
-      const [, postLocale, slug] = path.match(/^\/src\/content\/blog\/([^/]+)\/(.+)\.svx$/)!;
+      const { locale: postLocale, slug } = parseContentPath(path)!;
       return postLocale === locale ? [{ ...metadata, slug }] : [];
     })
     .sort((a, b) => b.published.localeCompare(a.published));
