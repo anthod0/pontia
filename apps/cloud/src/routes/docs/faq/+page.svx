@@ -33,4 +33,4 @@ Back up project files, `$PONTIA_HOME`, and your Agent Clients' native conversati
 
 ## Does Pontia support Windows?
 
-No. The local control plane supports Linux and macOS 11 or later. Self-hosted Edge supports Linux only.
+No. The local control plane supports Linux and macOS 13.5 or later. Self-hosted Edge supports Linux only.

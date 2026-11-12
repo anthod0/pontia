@@ -5,7 +5,7 @@
 
 # macOS
 
-Pontia supports macOS 11 and later on Intel and Apple Silicon. The local control plane and Codex daemon use per-user LaunchAgents. For a self-hosted Edge, use a [Linux server](/docs/self-hosted-edge).
+Pontia supports macOS 13.5 and later on Intel and Apple Silicon. The local control plane and Codex daemon use per-user LaunchAgents. For a self-hosted Edge, use a [Linux server](/docs/self-hosted-edge).
 
 ## Install requirements
 

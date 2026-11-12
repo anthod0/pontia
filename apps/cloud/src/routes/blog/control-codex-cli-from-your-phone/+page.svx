@@ -31,7 +31,7 @@ Codex CLI includes an app-server daemon. The ChatGPT desktop app also uses it, t
 
 Codex runs on your machine with its own credentials, sandbox, and approval policy. Sessions persist, so you can start a task at your desk and continue it from your phone. The browser and your machine set up an end-to-end encrypted session through Pontia's relay, which only forwards ciphertext. Your machine connects out, so it needs no open inbound port.
 
-Pontia supports Linux (x86_64 and ARM64) and macOS 11 or later, including headless servers.
+Pontia supports Linux (x86_64 and ARM64) and macOS 13.5 or later, including headless servers.
 
 ### Setup
 

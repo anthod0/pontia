@@ -39,7 +39,7 @@ tmux attach -t SESSION_NAME
 
 pi keeps running on your machine with its own provider credentials and configuration. The browser and your machine set up an end-to-end encrypted session through Pontia's relay, which only forwards ciphertext. Your machine connects out, so it needs no open inbound port.
 
-Pontia supports Linux and macOS 11 or later, including headless servers. Beyond single sessions, [Workflows](/docs/workflows) run a large task as a sequence of pi sessions, each with a fresh context and explicit handoff files.
+Pontia supports Linux and macOS 13.5 or later, including headless servers. Beyond single sessions, [Workflows](/docs/workflows) run a large task as a sequence of pi sessions, each with a fresh context and explicit handoff files.
 
 ### Setup
 
