@@ -36,7 +36,7 @@
   "hero_title_second": "Sua nuvem de agentes.",
   "hero_description": "Saia da sua mesa, não dos seus agentes. Acompanhe, aprove e direcione cada Session, de qualquer lugar.",
   "hero_copy_failed": "Não foi possível copiar. Selecione o comando para copiá-lo.",
-  "hero_requirements": "Linux e macOS · Node.js + npm",
+  "hero_requirements": "Linux e macOS",
   "hero_demo_caption": "Demonstração interativa do Dashboard com dados de exemplo. Selecione uma Session ou troque de dispositivo para explorar.",
   "features_title": "Controle seus agentes de qualquer lugar.",
   "features_intro": "Comece o trabalho no seu dispositivo. Acompanhe e intervenha de qualquer navegador.",

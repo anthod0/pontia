@@ -7,10 +7,10 @@
 
 	const clients = [
 		{ name: 'pi', logo: '/client-logos/pi.svg' },
-		{ name: 'Codex', logo: '/client-logos/codex.svg' },
+		{ name: 'Codex', logo: '/client-logos/codex.svg', monochrome: true },
 		{ name: 'Claude Code', logo: '/client-logos/claude-code.svg' },
 		{ name: 'Grok Build', logo: '/client-logos/grok-build.svg' },
-		{ name: 'OpenCode', logo: '/client-logos/opencode.svg' }
+		{ name: 'OpenCode', logo: '/client-logos/opencode.svg', darkLogo: '/client-logos/opencode-dark.svg' }
 	];
 	const terminalLines = ['Reading 4 files', 'Editing src/shortcuts.ts', 'Running bun test'];
 </script>
@@ -30,7 +30,7 @@
 				<div class="marquee">
 					{#each [0, 1] as copy}
 						<ul class:duplicate={copy === 1}>
-							{#each clients as client}<li><img src={client.logo} alt="" width="24" height="24" loading="lazy" />{client.name}</li>{/each}
+							{#each clients as client}<li><img class:monochrome={client.monochrome} class:light-logo={client.darkLogo} src={client.logo} alt="" width="24" height="24" loading="lazy" />{#if client.darkLogo}<img class="dark-logo" src={client.darkLogo} alt="" width="24" height="24" loading="lazy" />{/if}{client.name}</li>{/each}
 						</ul>
 					{/each}
 				</div>
@@ -101,10 +101,10 @@
 	.section-link:hover, .card-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 	.bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
-	.card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); transition: border-color 0.25s, box-shadow 0.25s, translate 0.25s; }
+	.card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); transition: border-color 0.25s, translate 0.25s; }
 	/* Keep the reveal transition alongside the hover transitions. */
-	.bento :global(.card.reveal) { transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out), border-color 0.25s, box-shadow 0.25s, translate 0.25s; transition-delay: calc(var(--i, 0) * 90ms), calc(var(--i, 0) * 90ms), 0s, 0s, 0s; }
-	.card:hover { border-color: var(--border-strong); box-shadow: 0 18px 40px -24px rgb(60 56 54 / 28%); translate: 0 -2px; }
+	.bento :global(.card.reveal) { transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out), border-color 0.25s, translate 0.25s; transition-delay: calc(var(--i, 0) * 90ms), calc(var(--i, 0) * 90ms), 0s, 0s; }
+	.card:hover { border-color: var(--border-strong); translate: 0 -2px; }
 	.wide { grid-column: span 4; }
 	.narrow { grid-column: span 2; }
 	.visual { position: relative; display: grid; place-items: center; height: 200px; overflow: hidden; border-bottom: 1px solid var(--border); background: radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 16px 16px, var(--background); }
@@ -158,6 +158,11 @@
 	.card:hover .marquee ul { animation-play-state: paused; }
 	.marquee li { display: flex; align-items: center; gap: 10px; padding: 12px 18px 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 14px; font-weight: 500; color: var(--heading); white-space: nowrap; box-shadow: 0 6px 16px -12px rgb(60 56 54 / 30%); }
 	.marquee img { width: 24px; height: 24px; object-fit: contain; }
+	.marquee img.dark-logo { display: none; }
+	:global(.dark) .marquee img.light-logo { display: none; }
+	:global(.dark) .marquee img.dark-logo { display: block; }
+	/* Black monochrome logos are inverted to stay visible on dark surfaces. */
+	:global(.dark) .marquee img.monochrome { filter: invert(1); }
 
 
 	/* On every wire, one dot leaves each end at once and they cross midway. */

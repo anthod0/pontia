@@ -36,7 +36,7 @@
   "hero_title_second": "你的 Agent 云。",
   "hero_description": "离开工位，Agent 不停工。随时随地查看、批准和引导每个 Session。",
   "hero_copy_failed": "无法复制。请选中命令手动复制。",
-  "hero_requirements": "Linux 和 macOS · Node.js + npm",
+  "hero_requirements": "Linux 和 macOS",
   "hero_demo_caption": "使用示例数据的交互式 Dashboard 演示。选择一个 Session 或切换设备来体验。",
   "features_title": "随时随地控制你的 Agent。",
   "features_intro": "在你的设备上开始工作，在任意浏览器中跟进和介入。",

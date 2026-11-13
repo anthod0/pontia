@@ -36,7 +36,7 @@
   "hero_title_second": "あなたのエージェントクラウドに。",
   "hero_description": "デスクを離れても、エージェントは手放さない。すべての Session を、どこからでも確認、承認、指示できます。",
   "hero_copy_failed": "コピーできませんでした。コマンドを選択してコピーしてください。",
-  "hero_requirements": "Linux と macOS · Node.js + npm",
+  "hero_requirements": "Linux と macOS",
   "hero_demo_caption": "サンプルデータを使った Dashboard のインタラクティブなデモです。Session を選択するか、デバイスを切り替えてお試しください。",
   "features_title": "どこからでもエージェントを操作。",
   "features_intro": "作業はデバイスで開始し、任意のブラウザーから確認して介入できます。",

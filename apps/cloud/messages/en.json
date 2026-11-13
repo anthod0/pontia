@@ -36,7 +36,7 @@
   "hero_title_second": "Your agent cloud.",
   "hero_description": "Leave your desk, not your agents. Check in, approve, and steer every session, everywhere.",
   "hero_copy_failed": "Could not copy. Select the command to copy it.",
-  "hero_requirements": "Linux and macOS · Node.js + npm",
+  "hero_requirements": "Linux and macOS",
   "hero_demo_caption": "Interactive Dashboard demo with sample data. Select a session or switch devices to explore.",
   "features_title": "Control your agents from anywhere.",
   "features_intro": "Start work on your device. Follow it and step in from any browser.",

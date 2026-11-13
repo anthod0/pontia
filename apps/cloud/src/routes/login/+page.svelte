@@ -1,6 +1,5 @@
 <script lang="ts">
-	import GithubLogoIcon from 'phosphor-svelte/lib/GithubLogoIcon';
-	import GoogleLogoIcon from 'phosphor-svelte/lib/GoogleLogoIcon';
+	import AuthProviderIcon from '$lib/components/AuthProviderIcon.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { authError } from '$lib/auth-errors';
 	import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
@@ -72,12 +71,12 @@
 			<div class="providers">
 				<form method="POST" action={`/api/auth/google/login${returnToQuery}`}>
 					<Button type="submit" class="button button-secondary provider"
-						><GoogleLogoIcon size={20} />{m.continue_with_google()}</Button
+						><AuthProviderIcon provider="google" />{m.continue_with_google()}</Button
 					>
 				</form>
 				<form method="POST" action={`/api/auth/github/login${returnToQuery}`}>
 					<Button type="submit" class="button button-secondary provider"
-						><GithubLogoIcon size={20} />{m.continue_with_github()}</Button
+						><AuthProviderIcon provider="github" />{m.continue_with_github()}</Button
 					>
 				</form>
 			</div>
