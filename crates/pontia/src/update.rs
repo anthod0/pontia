@@ -5,7 +5,10 @@ use std::path::PathBuf;
 
 pub struct PreparedUpdate(pontia_update::PreparedUpdate);
 
-pub async fn prepare() -> Result<Option<PreparedUpdate>, String> {
+pub async fn prepare(config: Option<&AppConfig>) -> Result<Option<PreparedUpdate>, String> {
+    if let Some(config) = config {
+        ensure_no_active_execution(config).await?;
+    }
     pontia_update::prepare(
         "pontia",
         &["pontia", "pontiad"],
@@ -91,7 +94,10 @@ mod tests {
     use std::collections::HashMap;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    async fn check(status: u16, body: &'static str) -> Result<(), String> {
+    async fn check_server(
+        status: u16,
+        body: &'static str,
+    ) -> (AppConfig, tempfile::TempDir, tokio::task::JoinHandle<()>) {
         let root = tempfile::tempdir().unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let mut config = pontia_clients::config_from_vars(&HashMap::from([(
@@ -119,9 +125,26 @@ mod tests {
             );
             stream.write_all(response.as_bytes()).await.unwrap();
         });
+        (config, root, server)
+    }
+
+    async fn check(status: u16, body: &'static str) -> Result<(), String> {
+        let (config, _root, server) = check_server(status, body).await;
         let result = ensure_no_active_execution(&config).await;
         server.await.unwrap();
         result
+    }
+
+    #[tokio::test]
+    async fn active_execution_refuses_update_before_release_preparation() {
+        let (config, _root, server) = check_server(
+            200,
+            r#"{"data":{"blockers":[{"session_id":"session-a","reason":"active"}]}}"#,
+        )
+        .await;
+        let error = prepare(Some(&config)).await.err().unwrap();
+        server.await.unwrap();
+        assert!(error.contains("session-a"));
     }
 
     #[tokio::test]

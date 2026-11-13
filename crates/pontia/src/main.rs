@@ -226,9 +226,6 @@ async fn execute(command: Command) -> Result<bool, String> {
 }
 
 async fn run_update() -> Result<bool, String> {
-    let Some(update) = update::prepare().await? else {
-        return Ok(true);
-    };
     #[cfg(target_os = "linux")]
     {
         let runner = ProcessCommandRunner;
@@ -239,14 +236,16 @@ async fn run_update() -> Result<bool, String> {
         );
         // Resolve the installed service's configuration, not the invoking shell's PONTIA_HOME.
         let config = if Path::new("/run/systemd/system").is_dir() {
-            let config = update_service_config(&manager, &user_home()?, false)?;
-            if config.is_some() && manager.running_executable()? != update.daemon_path() {
-                return Err("the running service belongs to another Pontia installation; run its sibling pontia update instead".into());
-            }
-            config
+            update_service_config(&manager, &user_home()?, false)?
         } else {
             None
         };
+        let Some(update) = update::prepare(config.as_ref()).await? else {
+            return Ok(true);
+        };
+        if config.is_some() && manager.running_executable()? != update.daemon_path() {
+            return Err("the running service belongs to another Pontia installation; run its sibling pontia update instead".into());
+        }
         if config.is_none() {
             update.ensure_no_unmanaged_daemon()?;
         }
@@ -270,6 +269,9 @@ async fn run_update() -> Result<bool, String> {
         // A loaded KeepAlive job can restart while its process is temporarily absent,
         // so keep treating stopped or failed loaded jobs as managed during replacement.
         let config = update_service_config(&manager, &user_home()?, true)?;
+        let Some(update) = update::prepare(config.as_ref()).await? else {
+            return Ok(true);
+        };
         if config.is_some() && manager.running_executable()? != update.daemon_path() {
             return Err("the running service belongs to another Pontia installation; run its sibling pontia update instead".into());
         }
@@ -291,7 +293,6 @@ async fn run_update() -> Result<bool, String> {
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
-        let _ = update;
         Err("pontia update supports only Linux and macOS".into())
     }
 }
