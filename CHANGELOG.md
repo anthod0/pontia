@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8] - 2026-11-13
+
+### Changed
+
+- The Dashboard now asks search engines not to index its pages.
+- Updated the Codex and OpenCode icons in the Dashboard and on the Cloud site, with an OpenCode icon for the dark theme.
+
+### Fixed
+
+- Pontia now detects device connections that stop responding without closing, instead of leaving them open.
+- Signing in from a translated Cloud page, including Account settings, now returns to the page in the same language.
+- Chinese and Japanese pages on the Cloud site now use fonts suited to those languages.
+
 ## [0.7.7] - 2026-11-13
 
 ### Added
