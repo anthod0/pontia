@@ -1,5 +1,4 @@
 import tailwindcss from "@tailwindcss/vite";
-import adapter from "@sveltejs/adapter-cloudflare";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
@@ -9,6 +8,7 @@ import { generateLlms } from "./scripts/generate-llms";
 import { localeInfo } from "./src/lib/locales";
 import { rehypeLocalizeLinks } from "./scripts/rehype-localize-links";
 import { rehypeTableScroll } from "./scripts/rehype-table-scroll";
+import { localeAdapter } from "./scripts/locale-adapter";
 
 export default defineConfig({
   plugins: [
@@ -40,7 +40,7 @@ export default defineConfig({
         runes: ({ filename }) =>
           filename.split(/[/\\]/).includes("node_modules") ? undefined : true,
       },
-      adapter: adapter(),
+      adapter: localeAdapter(),
       // Localized pages are found by crawling from each locale's home page.
       prerender: {
         entries: ["*", ...Object.values(localeInfo).map(({ prefix }) => `/${prefix}` as const)],

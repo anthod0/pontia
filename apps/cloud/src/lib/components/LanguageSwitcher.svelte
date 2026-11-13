@@ -3,7 +3,7 @@
 	import TranslateIcon from 'phosphor-svelte/lib/TranslateIcon';
 	import { page } from '$app/state';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import { localeInfo } from '$lib/locales';
+	import { languageCookie, localeInfo } from '$lib/locales';
 	import { m } from '$lib/paraglide/messages';
 	import { deLocalizeHref, getLocale, locales, localizeHref } from '$lib/paraglide/runtime';
 
@@ -22,6 +22,9 @@
 					<a
 						{...props}
 						href={localizeHref(path, { locale })}
+						onclick={() => {
+							document.cookie = `${languageCookie.name}=${locale}; Path=/; Max-Age=${languageCookie.maxAge}; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
+						}}
 						hreflang={locale}
 						lang={locale}
 						aria-current={locale === getLocale() ? 'true' : undefined}

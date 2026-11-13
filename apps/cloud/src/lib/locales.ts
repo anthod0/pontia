@@ -7,3 +7,5 @@ export const localeInfo = {
 
 /** Pages that exist only in English and keep the same URL in every locale. */
 export const englishOnlyPages = ["/privacy", "/terms"] as const;
+
+export const languageCookie = { name: "lang", maxAge: 60 * 60 * 24 * 365 } as const;
