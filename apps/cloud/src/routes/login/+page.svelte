@@ -4,12 +4,12 @@
 	import { authError } from '$lib/auth-errors';
 	import { ParaglideMessage } from '@inlang/paraglide-js-svelte';
 	import { m } from '$lib/paraglide/messages';
-	import { localizeHref } from '$lib/paraglide/runtime';
+	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 	const message = $derived(authError(data.error));
 	const returnToQuery = $derived(
-		data.returnTo ? `?return_to=${encodeURIComponent(data.returnTo)}` : ''
+		`?locale=${getLocale()}&return_to=${encodeURIComponent(data.returnTo)}`
 	);
 
 	const sessions = [
@@ -81,7 +81,7 @@
 				</form>
 			</div>
 			{#if data.hasCredential}
-				<form method="POST" action="/api/auth/logout" class="sign-out">
+				<form method="POST" action={`/api/auth/logout?locale=${getLocale()}`} class="sign-out">
 					<Button type="submit" variant="link">{m.login_sign_out_current()}</Button>
 				</form>
 			{/if}

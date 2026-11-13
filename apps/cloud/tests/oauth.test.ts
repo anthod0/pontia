@@ -19,7 +19,13 @@ let fetchSpy: ReturnType<typeof mockProvider> | undefined;
 test("both providers use S256 PKCE, state, and the matching verifier in token exchange", async () => {
   for (const provider of ["google", "github"] as const) {
     const callback = `https://example.com/api/auth/${provider}/callback`;
-    const started = await beginOAuth(config, provider, callback, { kind: "login" }, now);
+    const started = await beginOAuth(
+      config,
+      provider,
+      callback,
+      { kind: "login", locale: "en" },
+      now,
+    );
     const url = new URL(started.url);
     const oauth = await readOAuth(
       config,
@@ -66,12 +72,13 @@ test("OAuth cookies reject state, provider, callback, expiry and signature misma
     config,
     "google",
     callback,
-    { kind: "bind", loginId: "login-id", userId: "user-id" },
+    { kind: "bind", locale: "en", loginId: "login-id", userId: "user-id" },
     now,
   );
   const state = new URL(started.url).searchParams.get("state")!;
   expect((await readOAuth(config, started.cookie, "google", state, callback, now)).intent).toEqual({
     kind: "bind",
+    locale: "en",
     loginId: "login-id",
     userId: "user-id",
   });
@@ -89,7 +96,7 @@ test("OAuth cookies reject state, provider, callback, expiry and signature misma
   ).rejects.toThrow("invalid_oauth");
   const parts = started.cookie.split(".");
   parts[1] = base64url.encode(
-    JSON.stringify({ ...decodeJwt(started.cookie), intent: { kind: "login" } }),
+    JSON.stringify({ ...decodeJwt(started.cookie), intent: { kind: "login", locale: "en" } }),
   );
   await expect(readOAuth(config, parts.join("."), "google", state, callback, now)).rejects.toThrow(
     "invalid_oauth",
@@ -103,7 +110,7 @@ test("pending binding state carries only its JTI and cannot outlive pending stat
     config,
     "google",
     callback,
-    { kind: "pending_bind", pendingJti: "pending-jti" },
+    { kind: "pending_bind", locale: "en", pendingJti: "pending-jti" },
     now,
     pendingExpiry,
   );
@@ -111,13 +118,20 @@ test("pending binding state carries only its JTI and cannot outlive pending stat
   const state = new URL(started.url).searchParams.get("state")!;
   expect((await readOAuth(config, started.cookie, "google", state, callback, now)).intent).toEqual({
     kind: "pending_bind",
+    locale: "en",
     pendingJti: "pending-jti",
   });
 });
 
 test("provider failures and missing subjects cannot establish identity", async () => {
   const callback = "https://example.com/api/auth/google/callback";
-  const started = await beginOAuth(config, "google", callback, { kind: "login" }, now);
+  const started = await beginOAuth(
+    config,
+    "google",
+    callback,
+    { kind: "login", locale: "en" },
+    now,
+  );
   const oauth = await readOAuth(
     config,
     started.cookie,

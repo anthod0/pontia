@@ -1,5 +1,6 @@
 import { error, isRedirect, redirect, type Cookies, type RequestEvent } from "@sveltejs/kit";
 import { eq } from "drizzle-orm";
+import { baseLocale, isLocale, localizeHref } from "$lib/paraglide/runtime";
 import { database, type Database } from "../db";
 import { authSessions } from "../db/schema";
 import {
@@ -72,6 +73,12 @@ export function loginReturnTo(event: RequestEvent) {
   const destination = normalizeLoginReturnTo(value, origin(event));
   if (!destination) error(400, "Invalid sign-in destination");
   return destination;
+}
+
+function authLocale(event: RequestEvent) {
+  const locale = event.url.searchParams.get("locale") ?? baseLocale;
+  if (!isLocale(locale)) error(400, "Invalid language");
+  return locale;
 }
 
 function sameOriginPost(event: RequestEvent) {
@@ -153,13 +160,18 @@ async function establishBrowserLogin(
 
 export async function startLogin(event: RequestEvent) {
   sameOriginPost(event);
+  const locale = authLocale(event);
   clearPendingAccount(event.cookies);
   const selected = provider(event);
   const result = await beginOAuth(
     environment(event),
     selected,
     `${origin(event)}/api/auth/${selected}/callback`,
-    { kind: "login", returnTo: loginReturnTo(event) },
+    {
+      kind: "login",
+      locale,
+      returnTo: loginReturnTo(event) ?? localizeHref("/settings/account", { locale }),
+    },
   );
   event.cookies.set(OAUTH_COOKIE, result.cookie, {
     ...cookieOptions,
@@ -170,13 +182,15 @@ export async function startLogin(event: RequestEvent) {
 
 export async function startBinding(event: RequestEvent) {
   sameOriginPost(event);
+  const locale = authLocale(event);
   const selected = provider(event);
   const claims = await currentLogin(event);
   const env = environment(event);
   if (!claims || !(await activeLogin(database(env.DB), claims.sub, claims.user_id)))
-    redirect(303, "/login?error=invalid_credentials");
+    redirect(303, localizeHref("/login?error=invalid_credentials", { locale }));
   const result = await beginOAuth(env, selected, `${origin(event)}/api/auth/${selected}/callback`, {
     kind: "bind",
+    locale,
     loginId: claims.sub,
     userId: claims.user_id,
   });
@@ -199,6 +213,7 @@ export async function pendingAccountSummary(event: RequestEvent) {
 
 export async function startPendingBinding(event: RequestEvent) {
   sameOriginPost(event);
+  const locale = authLocale(event);
   const token = event.cookies.get(PENDING_ACCOUNT_COOKIE);
   try {
     if (!token) throw new AuthError("invalid_oauth");
@@ -211,7 +226,7 @@ export async function startPendingBinding(event: RequestEvent) {
       env,
       target.provider,
       `${origin(event)}/api/auth/${target.provider}/callback`,
-      { kind: "pending_bind", pendingJti: pending.jti },
+      { kind: "pending_bind", locale, pendingJti: pending.jti },
       new Date(),
       pending.exp,
     );
@@ -224,12 +239,13 @@ export async function startPendingBinding(event: RequestEvent) {
     if (isRedirect(cause)) throw cause;
     clearPendingAccount(event.cookies);
     if (!(cause instanceof AuthError)) throw cause;
-    redirect(303, `/login?error=${cause.code}`);
+    redirect(303, localizeHref(`/login?error=${cause.code}`, { locale }));
   }
 }
 
 export async function createIndependentAccount(event: RequestEvent) {
   sameOriginPost(event);
+  const locale = authLocale(event);
   const token = event.cookies.get(PENDING_ACCOUNT_COOKIE);
   try {
     if (!token) throw new AuthError("invalid_oauth");
@@ -239,11 +255,11 @@ export async function createIndependentAccount(event: RequestEvent) {
     const loginId = await completeIndependentAccount(db, pending.profile);
     await establishBrowserLogin(event, db, loginId, env.JWT_SECRET);
     clearPendingAccount(event.cookies);
-    redirect(303, pending.returnTo ?? "/settings/account");
+    redirect(303, pending.returnTo ?? localizeHref("/settings/account", { locale }));
   } catch (cause) {
     clearPendingAccount(event.cookies);
     if (!(cause instanceof AuthError)) throw cause;
-    redirect(303, `/login?error=${cause.code}`);
+    redirect(303, localizeHref(`/login?error=${cause.code}`, { locale }));
   }
 }
 
@@ -263,7 +279,10 @@ export async function callback(event: RequestEvent) {
       event.url.searchParams.get("state") ?? "",
       callbackUri,
     );
-    destination = oauth.intent.kind === "bind" ? "/settings/account" : "/login";
+    const { locale } = oauth.intent;
+    destination = localizeHref(oauth.intent.kind === "bind" ? "/settings/account" : "/login", {
+      locale,
+    });
     const code = event.url.searchParams.get("code");
     if (!code || event.url.searchParams.has("error")) throw new AuthError("invalid_oauth");
     const db = database(env.DB);
@@ -292,7 +311,7 @@ export async function callback(event: RequestEvent) {
       );
       await establishBrowserLogin(event, db, loginId, env.JWT_SECRET);
       clearPendingAccount(event.cookies);
-      destination = pending.returnTo ?? "/settings/account";
+      destination = pending.returnTo ?? localizeHref("/settings/account", { locale });
     } else {
       const profile = await exchangeAccount(env, oauth, code);
       if (!(await accountForProfile(db, profile))) {
@@ -308,12 +327,12 @@ export async function callback(event: RequestEvent) {
             ...cookieOptions,
             maxAge: PENDING_ACCOUNT_SECONDS,
           });
-          redirect(303, "/auth/account-conflict");
+          redirect(303, localizeHref("/auth/account-conflict", { locale }));
         }
       }
       const loginId = await login(db, profile);
       await establishBrowserLogin(event, db, loginId, env.JWT_SECRET);
-      destination = oauth.intent.returnTo ?? "/settings/account";
+      destination = oauth.intent.returnTo ?? localizeHref("/settings/account", { locale });
     }
   } catch (cause) {
     if (isRedirect(cause)) throw cause;
@@ -326,6 +345,7 @@ export async function callback(event: RequestEvent) {
 
 export async function endLogin(event: RequestEvent) {
   sameOriginPost(event);
+  const locale = authLocale(event);
   const token = event.cookies.get(LOGIN_COOKIE);
   const refreshToken = event.cookies.get(REFRESH_COOKIE);
   try {
@@ -344,5 +364,5 @@ export async function endLogin(event: RequestEvent) {
   } finally {
     clearCookies(event.cookies);
   }
-  redirect(303, "/login");
+  redirect(303, localizeHref("/login", { locale }));
 }

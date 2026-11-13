@@ -7,8 +7,7 @@ export default {
   outdir: "./src/lib/paraglide",
   outputStructure: "message-modules",
   strategy: ["url", "baseLocale"],
-  // API requests carry no locale in the URL; sign-in redirects use the locale of the page that started them.
-  routeStrategies: [{ match: "/api/:path(.*)", strategy: ["cookie", "baseLocale"] }],
+  routeStrategies: [{ match: "/api/:path(.*)", strategy: ["baseLocale"] }],
   urlPatterns: [
     {
       pattern: "/",

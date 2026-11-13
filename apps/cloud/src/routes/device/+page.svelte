@@ -4,12 +4,13 @@
 	import { Input } from '$lib/components/ui/input';
 	import AuthLayout from '$lib/components/AuthLayout.svelte';
 	import { m } from '$lib/paraglide/messages';
+	import { getLocale, localizeHref } from '$lib/paraglide/runtime';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	let userCode = $derived(data.userCode);
 	const returnTo = $derived(
-		`/device${data.userCode ? `?user_code=${encodeURIComponent(data.userCode)}` : ''}`
+		localizeHref(`/device${data.userCode ? `?user_code=${encodeURIComponent(data.userCode)}` : ''}`)
 	);
 	const resultMessage = $derived(
 		data.result === 'approved'
@@ -55,7 +56,7 @@
 		<div class="providers">
 			<form
 				method="POST"
-				action={`/api/auth/google/login?return_to=${encodeURIComponent(returnTo)}`}
+				action={`/api/auth/google/login?locale=${getLocale()}&return_to=${encodeURIComponent(returnTo)}`}
 			>
 				<Button type="submit" class="button button-secondary"
 					><AuthProviderIcon provider="google" />{m.continue_with_google()}</Button
@@ -63,7 +64,7 @@
 			</form>
 			<form
 				method="POST"
-				action={`/api/auth/github/login?return_to=${encodeURIComponent(returnTo)}`}
+				action={`/api/auth/github/login?locale=${getLocale()}&return_to=${encodeURIComponent(returnTo)}`}
 			>
 				<Button type="submit" class="button button-secondary"
 					><AuthProviderIcon provider="github" />{m.continue_with_github()}</Button

@@ -1,3 +1,5 @@
+import { deLocalizeUrl } from "$lib/paraglide/runtime";
+
 export const PUBLIC_DASHBOARD_ORIGIN = "https://app.pontia.dev";
 
 const RELATIVE_BASE = "https://cloud.invalid";
@@ -10,7 +12,10 @@ export function normalizeLoginReturnTo(value: string, cloudOrigin = RELATIVE_BAS
     return null;
   }
   if (destination.username || destination.password) return null;
-  if (destination.origin === cloudOrigin && destination.pathname === "/device") {
+  if (
+    destination.origin === cloudOrigin &&
+    ["/device", "/settings/account"].includes(deLocalizeUrl(destination).pathname)
+  ) {
     return `${destination.pathname}${destination.search}`;
   }
   if (destination.origin === PUBLIC_DASHBOARD_ORIGIN) {

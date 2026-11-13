@@ -1,4 +1,5 @@
 import { base64url, jwtVerify, SignJWT } from "jose";
+import { isLocale, type Locale } from "$lib/paraglide/runtime";
 import { signingKey } from "./jwt";
 import { AuthError, type AccountProfile, type Provider } from "./types";
 
@@ -10,10 +11,11 @@ export interface OAuthConfig {
   OAUTH_COOKIE_SECRET: string;
 }
 
-type OAuthIntent =
+type OAuthIntent = { locale: Locale } & (
   | { kind: "login"; returnTo?: string }
   | { kind: "bind"; loginId: string; userId: string }
-  | { kind: "pending_bind"; pendingJti: string };
+  | { kind: "pending_bind"; pendingJti: string }
+);
 interface OAuthState {
   provider: Provider;
   state: string;
@@ -105,6 +107,7 @@ export async function readOAuth(
       typeof payload.verifier !== "string" ||
       !/^[A-Za-z0-9_-]{43}$/.test(payload.verifier) ||
       !intent ||
+      !isLocale(intent.locale) ||
       (intent.kind !== "login" && intent.kind !== "bind" && intent.kind !== "pending_bind") ||
       (intent.kind === "login" &&
         intent.returnTo !== undefined &&

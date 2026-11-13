@@ -4,7 +4,7 @@
   import { Button } from "$lib/components/ui/button";
   import { authError } from "$lib/auth-errors";
   import { m } from "$lib/paraglide/messages";
-  import { localizeHref } from "$lib/paraglide/runtime";
+  import { getLocale, localizeHref } from "$lib/paraglide/runtime";
   import type { ActionData, PageData } from "./$types";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -94,7 +94,7 @@
             <Button type="submit" class="button button-secondary">{m.account_unlink()}</Button>
           </form>
         {:else}
-          <form method="POST" action={`/api/auth/${provider.id}/bind`}>
+          <form method="POST" action={`/api/auth/${provider.id}/bind?locale=${getLocale()}`}>
             <Button type="submit" class="button button-secondary">{m.account_link()}</Button>
           </form>
         {/if}
@@ -103,7 +103,7 @@
   </ul>
 </section>
 
-<form method="POST" action="/api/auth/logout" class="sign-out-form">
+<form method="POST" action={`/api/auth/logout?locale=${getLocale()}`} class="sign-out-form">
   <Button type="submit" class="button">{m.sign_out()}</Button>
 </form>
 

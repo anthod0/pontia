@@ -465,3 +465,178 @@ test("expired JWT can still log out and remove its D1 login record", async () =>
   expect(await activeLogin(database.db, id)).toBeUndefined();
   expect(client.cookies.has("_at")).toBe(false);
 });
+
+test.each([
+  ["en", ""],
+  ["zh-Hans", "/zh"],
+  ["ja", "/ja"],
+  ["pt-BR", "/pt-br"],
+] as const)("login, linking, failures and logout retain %s", async (locale, prefix) => {
+  providerResponses();
+  const client = browser();
+  const account = `${prefix}/settings/account`;
+  const authUrl = new URL(
+    await location(
+      startLogin(
+        client.event(
+          `/api/auth/google/login?locale=${locale}&return_to=${encodeURIComponent(account)}`,
+        ),
+      ),
+    ),
+  );
+  expect(authUrl.searchParams.get("redirect_uri")).toBe(
+    `${config.AUTH_ORIGIN}/api/auth/google/callback`,
+  );
+  expect(
+    await location(
+      callback(
+        client.event(
+          `/api/auth/google/callback?code=code&state=${authUrl.searchParams.get("state")}`,
+          "GET",
+        ),
+      ),
+    ),
+  ).toBe(account);
+  const bindUrl = new URL(
+    await location(startBinding(client.event(`/api/auth/github/bind?locale=${locale}`))),
+  );
+  expect(
+    await location(
+      callback(
+        client.event(
+          `/api/auth/github/callback?code=code&state=${bindUrl.searchParams.get("state")}`,
+          "GET",
+        ),
+      ),
+    ),
+  ).toBe(account);
+  expect(await location(endLogin(client.event(`/api/auth/logout?locale=${locale}`)))).toBe(
+    `${prefix}/login`,
+  );
+  const cancelled = new URL(
+    await location(startLogin(client.event(`/api/auth/google/login?locale=${locale}`))),
+  );
+  expect(
+    await location(
+      callback(
+        client.event(
+          `/api/auth/google/callback?error=access_denied&state=${cancelled.searchParams.get("state")}`,
+          "GET",
+        ),
+      ),
+    ),
+  ).toBe(`${prefix}/login?error=invalid_oauth`);
+  expect(await location(startBinding(client.event(`/api/auth/github/bind?locale=${locale}`)))).toBe(
+    `${prefix}/login?error=invalid_credentials`,
+  );
+  expect(
+    await location(startPendingBinding(client.event(`/api/auth/pending/bind?locale=${locale}`))),
+  ).toBe(`${prefix}/login?error=invalid_oauth`);
+  expect(
+    await location(
+      createIndependentAccount(client.event(`/api/auth/pending/create?locale=${locale}`)),
+    ),
+  ).toBe(`${prefix}/login?error=invalid_oauth`);
+});
+
+test.each(["bind", "create"])(
+  "localized account conflict preserves device destination on %s",
+  async (choice) => {
+    await login(database.db, {
+      provider: "google",
+      providerSubject: "google-subject",
+      email: "same@example.com",
+      emailVerified: true,
+      displayName: "Original",
+      avatarUrl: null,
+    });
+    verifiedConflictResponses("google-subject");
+    const client = browser();
+    const returnTo = "/ja/device?user_code=BCDF-GHJK";
+    const authUrl = new URL(
+      await location(
+        startLogin(
+          client.event(
+            `/api/auth/github/login?locale=ja&return_to=${encodeURIComponent(returnTo)}`,
+          ),
+        ),
+      ),
+    );
+    expect(
+      await location(
+        callback(
+          client.event(
+            `/api/auth/github/callback?code=code&state=${authUrl.searchParams.get("state")}`,
+            "GET",
+          ),
+        ),
+      ),
+    ).toBe("/ja/auth/account-conflict");
+    let destination;
+    if (choice === "create") {
+      destination = await location(
+        createIndependentAccount(client.event("/api/auth/pending/create?locale=ja")),
+      );
+    } else {
+      const binding = new URL(
+        await location(startPendingBinding(client.event("/api/auth/pending/bind?locale=ja"))),
+      );
+      destination = await location(
+        callback(
+          client.event(
+            `/api/auth/google/callback?code=code&state=${binding.searchParams.get("state")}`,
+            "GET",
+          ),
+        ),
+      );
+    }
+    expect(destination).toBe(returnTo);
+    expect(client.cookies.has("_at")).toBe(true);
+  },
+);
+
+test("a localized login preserves an external Dashboard destination exactly", async () => {
+  providerResponses();
+  const client = browser();
+  const returnTo = "https://app.pontia.dev/office-mac/workspaces?view=recent#active";
+  const authUrl = new URL(
+    await location(
+      startLogin(
+        client.event(
+          `/api/auth/google/login?locale=pt-BR&return_to=${encodeURIComponent(returnTo)}`,
+        ),
+      ),
+    ),
+  );
+  expect(
+    await location(
+      callback(
+        client.event(
+          `/api/auth/google/callback?code=code&state=${authUrl.searchParams.get("state")}`,
+          "GET",
+        ),
+      ),
+    ),
+  ).toBe(returnTo);
+});
+
+test("login rejects unknown languages and invalid localized destinations", async () => {
+  const client = browser();
+  await expect(startLogin(client.event("/api/auth/google/login?locale=fr"))).rejects.toMatchObject({
+    status: 400,
+  });
+  for (const returnTo of [
+    "/fr/device",
+    "/zh/settings/edges",
+    "https://attacker.example/zh/device",
+    "//attacker.example/zh/settings/account",
+  ]) {
+    await expect(
+      startLogin(
+        client.event(
+          `/api/auth/google/login?locale=zh-Hans&return_to=${encodeURIComponent(returnTo)}`,
+        ),
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  }
+});
