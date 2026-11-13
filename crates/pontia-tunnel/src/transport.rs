@@ -42,6 +42,8 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const RESPONSE_HEAD_TIMEOUT: Duration = Duration::from_secs(30);
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_BODY_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(15);
+const KEEP_ALIVE_TIMEOUT: Duration = Duration::from_secs(10);
 
 type DeviceSocket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
@@ -483,8 +485,8 @@ fn configure_client(builder: &mut hyper::client::conn::http2::Builder<TokioExecu
         .max_frame_size(protocol::MAX_FRAME_BYTES)
         .max_header_list_size(protocol::MAX_HEADER_LIST_BYTES)
         .max_send_buf_size(protocol::MAX_WRITER_BUFFER_BYTES)
-        .keep_alive_interval(Some(Duration::from_secs(15)))
-        .keep_alive_timeout(Duration::from_secs(10))
+        .keep_alive_interval(Some(KEEP_ALIVE_INTERVAL))
+        .keep_alive_timeout(KEEP_ALIVE_TIMEOUT)
         .keep_alive_while_idle(true);
 }
 
@@ -496,7 +498,9 @@ fn configure_server(builder: &mut hyper::server::conn::http2::Builder<TokioExecu
         .max_frame_size(protocol::MAX_FRAME_BYTES)
         .max_header_list_size(protocol::MAX_HEADER_LIST_BYTES)
         .max_concurrent_streams(protocol::MAX_CONCURRENT_STREAMS as u32)
-        .max_send_buf_size(protocol::MAX_WRITER_BUFFER_BYTES);
+        .max_send_buf_size(protocol::MAX_WRITER_BUFFER_BYTES)
+        .keep_alive_interval(Some(KEEP_ALIVE_INTERVAL))
+        .keep_alive_timeout(KEEP_ALIVE_TIMEOUT);
 }
 
 fn edge_bridge(
