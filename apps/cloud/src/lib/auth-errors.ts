@@ -8,5 +8,6 @@ const messages: Record<string, () => string> = {
 };
 
 export function authError(code: string | null) {
-  return code ? (messages[code] ?? m.auth_error_unknown)() : null;
+  if (!code) return null;
+  return (Object.hasOwn(messages, code) ? messages[code] : m.auth_error_unknown)();
 }

@@ -1,5 +1,8 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "close": "关闭",
+  "features_browser": "浏览器",
+  "features_device": "设备",
   "skip_to_content": "跳到主要内容",
   "skip_to_settings": "跳到设置",
   "home_link_label": "Pontia 首页",

@@ -74,6 +74,18 @@
   -webkit-font-smoothing: antialiased;
 }
 
+:root:lang(zh-Hans) {
+  --font-sans:
+    "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC",
+    sans-serif;
+}
+
+:root:lang(ja) {
+  --font-sans:
+    "IBM Plex Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", "Noto Sans CJK JP",
+    "Noto Sans JP", sans-serif;
+}
+
 .dark {
   color-scheme: dark;
   --background: #282828;

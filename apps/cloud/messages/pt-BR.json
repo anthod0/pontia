@@ -1,5 +1,8 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "close": "Fechar",
+  "features_browser": "Navegador",
+  "features_device": "Dispositivo",
   "skip_to_content": "Pular para o conteúdo",
   "skip_to_settings": "Pular para as configurações",
   "home_link_label": "Página inicial do Pontia",

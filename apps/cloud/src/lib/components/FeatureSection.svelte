@@ -77,14 +77,14 @@
 		<article class="card wide reveal" style="--i: 2">
 			<div class="visual relay-visual" aria-hidden="true">
 				<div class="relay">
-					<div class="node"><span class="node-name">Browser</span></div>
+					<div class="node"><span class="node-name">{m.features_browser()}</span></div>
 					<div class="wire to-edge"><span class="packet"></span><span class="packet back"></span></div>
 					<div class="node edge">
 						<span class="node-name"><LockSimpleIcon size={12} weight="bold" />Edge</span>
 						<span class="cipher"><span>9f2a c41e 77b0 e3d9 1a6c 58f2 0bd4 9f2a c41e 77b0 e3d9 1a6c 58f2 0bd4</span></span>
 					</div>
 					<div class="wire from-edge"><span class="packet"></span><span class="packet back"></span></div>
-					<div class="node"><span class="node-name">Device</span></div>
+					<div class="node"><span class="node-name">{m.features_device()}</span></div>
 				</div>
 			</div>
 			<div class="card-copy">

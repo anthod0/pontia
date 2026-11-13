@@ -2,6 +2,7 @@
 	import { Dialog as DialogPrimitive } from "bits-ui";
 	import XIcon from 'phosphor-svelte/lib/X';
 	import { Button } from "$lib/components/ui/button/index.js";
+	import { m } from "$lib/paraglide/messages";
 	import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
 	import * as Dialog from "./index.js";
 	import DialogPortal from "./dialog-portal.svelte";
@@ -39,7 +40,7 @@
 				{#snippet child({ props })}
 					<Button variant="ghost" class="absolute top-2 right-2" size="icon-sm" {...props}>
 						<XIcon  />
-						<span class="sr-only">Close</span>
+						<span class="sr-only">{m.close()}</span>
 					</Button>
 				{/snippet}
 			</DialogPrimitive.Close>

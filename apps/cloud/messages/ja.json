@@ -1,5 +1,8 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "close": "閉じる",
+  "features_browser": "ブラウザ",
+  "features_device": "デバイス",
   "skip_to_content": "コンテンツへスキップ",
   "skip_to_settings": "設定へスキップ",
   "home_link_label": "Pontia ホーム",

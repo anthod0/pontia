@@ -1,5 +1,8 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "close": "Close",
+  "features_browser": "Browser",
+  "features_device": "Device",
   "skip_to_content": "Skip to content",
   "skip_to_settings": "Skip to settings",
   "home_link_label": "Pontia home",
