@@ -167,4 +167,4 @@ mv -f "$staged_pontiad" "$INSTALL_DIR/pontiad"
 staged_pontiad=""
 
 printf 'Installed pontia and pontiad to %s\n' "$INSTALL_DIR"
-printf 'Claude Agent requires Node.js LTS. Select claude-agent during pontia init to check its dependencies.\n'
+printf 'Claude Code requires Node.js LTS. Select claude-agent during pontia init to check its dependencies.\n'

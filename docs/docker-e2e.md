@@ -54,7 +54,7 @@ Open the printed Dashboard URL in the container browser. Sign in and register a 
 
 ## 4. Validate real Agent calls
 
-Pi, Codex, and Claude Agent are installed and enabled automatically, and existing test credentials are imported into the device. If a client needs authentication, use its own login flow inside the device container:
+Pi, Codex, and Claude Code are installed and enabled automatically, and existing test credentials are imported into the device. If a client needs authentication, use its own login flow inside the device container:
 
 ```bash
 ./scripts/docker-e2e compose exec device bash
@@ -68,7 +68,7 @@ tmux new -s e2e
 
 For OpenRouter, set `OPENROUTER_API_KEY=your-openrouter-api-key` in `docker/e2e/.local/cloud.dev.vars` before `up`. Replace the `xxx` placeholder; startup stops while it is still present. Each fresh run uses this key for Claude's OpenRouter connection. Keep this file private (`chmod 600`); no Claude subscription login is required. See [OpenRouter's Claude Code guide](https://openrouter.ai/docs/cookbook/coding-agents/claude-code-integration).
 
-Claude Agent uses the container's Claude Code authentication. For account login, run `claude auth login` inside the device and open its login URL in the container browser. `down` saves the refreshed login for the next run, without retaining Claude conversations.
+Pontia uses the container's Claude Code authentication. For account login, run `claude auth login` inside the device and open its login URL in the container browser. `down` saves the refreshed login for the next run, without retaining Claude conversations.
 
 An API key or compatible gateway can be used without a Claude subscription. Before starting a fresh run, create `docker/e2e/.local/auth/device/claude-settings.json` with Claude's native settings format and restrict its permissions with `chmod 600`. For a direct Anthropic API key:
 
@@ -82,9 +82,9 @@ An API key or compatible gateway can be used without a Claude subscription. Befo
 
 For a gateway, add `ANTHROPIC_BASE_URL` and use the credential variable required by that gateway: `ANTHROPIC_AUTH_TOKEN` for a bearer token or `ANTHROPIC_API_KEY` for an `x-api-key` header. Set `model` in the same settings file if the gateway requires a particular model ID. See [Claude's gateway configuration guide](https://code.claude.com/docs/en/llm-gateway-connect).
 
-The private settings file is imported into the container for both the CLI and Claude Agent. It is excluded from Git and image builds. Edit this host file for changes that should apply to future runs; settings and approvals changed inside a run are discarded. Do not copy your everyday Claude configuration or put real credentials in this guide, shell arguments, or validation evidence.
+The private settings file applies to Claude Code both in the terminal and through Pontia. It is excluded from Git and image builds. Edit this host file for changes that should apply to future runs; settings and approvals changed inside a run are discarded. Do not copy your everyday Claude configuration or put real credentials in this guide, shell arguments, or validation evidence.
 
-Check authentication with `./scripts/docker-e2e compose exec device claude auth status`. This checks the configured authentication source; only a completed model task proves the credential and provider work. Select **Claude Agent** when creating the Dashboard Session, then verify file creation, tool approval, exit, history, and resume. Real model tasks use the configured provider's quota or billing.
+Check authentication with `./scripts/docker-e2e compose exec device claude auth status`. This checks the configured authentication source; only a completed model task proves the credential and provider work. Select **Claude Code** when creating the Dashboard Session, then verify file creation, tool approval, exit, history, and resume. Real model tasks use the configured provider's quota or billing.
 
 ### Complete the user flow
 
@@ -138,4 +138,4 @@ If you have a complete validation script, use this command to manage startup and
 
 This environment validates the complete local application flow on Linux, using real providers for OAuth and model calls. Finish each run within 24 hours.
 
-Pi, Codex, and Claude Agent are available for validation. Claude requires a test login or API configuration. Report only the clients and user flows actually validated.
+Pi, Codex, and Claude Code are available for validation. Claude requires a test login or API configuration. Report only the clients and user flows actually validated.

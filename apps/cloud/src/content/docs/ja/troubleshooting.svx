@@ -68,9 +68,9 @@ $PONTIA_HOME/state/pi-hook.log
 
 コマンド、ファイル変更、権限の承認は Dashboard に表示されます。Dashboard に表示されない種類のリクエストを Codex が待っている場合、エージェントが止まっているように見えることがあります。必要に応じて Turn を中断し、Codex のポリシーを調整するか、ネイティブの Codex インターフェースでリクエストに応答してください。
 
-## Claude Agent が起動しない
+## Claude Code が起動しない
 
-Pontia を実行するユーザーで `node --version` と `npm --version` が動作することを確認し、`pontia setup claude-agent` を実行して依存関係のチェックをやり直してください。SDK の再試行中に Dashboard が認証エラーを報告する場合は、そのユーザーの Claude Code 自体のログインまたはプロバイダー設定を修正してください。クライアントパッケージの更新については、[Claude Agent ガイド](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md)を参照してください。
+Pontia を実行するユーザーで `node --version` と `npm --version` が動作することを確認し、`pontia setup claude` を実行して依存関係のチェックをやり直してください。SDK の再試行中に Dashboard が認証エラーを報告する場合は、そのユーザーの Claude Code 自体のログインまたはプロバイダー設定を修正してください。クライアントパッケージの更新については、[Claude Code ガイド](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md)を参照してください。
 
 ## ACP エージェントが起動しない
 

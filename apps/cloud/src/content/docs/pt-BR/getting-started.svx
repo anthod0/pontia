@@ -42,7 +42,7 @@ Esses comandos usam o diretório de instalação padrão. Se você definiu `PONT
 
 O inicializador permite:
 
-1. Selecionar as integrações de Pi, Codex e Claude Agent que você quer.
+1. Selecionar as integrações de Pi, Codex e Claude Code que você quer.
 2. Gerar a credencial do dashboard local.
 3. Iniciar o serviço em segundo plano do Pontia.
 4. Entrar no Pontia Cloud e registrar seu dispositivo para o Remote Dashboard.

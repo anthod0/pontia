@@ -18,7 +18,7 @@ use tokio::{io::AsyncWriteExt, process::Command, sync::OnceCell};
 
 fn source_unavailable() -> Error {
     Error::CapabilityUnavailable(
-        "source_unavailable: Claude Agent native history is missing or unreadable".into(),
+        "source_unavailable: Claude Code native history is missing or unreadable".into(),
     )
 }
 
@@ -63,7 +63,7 @@ pub(crate) async fn read_sdk(
         {
             return Err(Error::Conflict {
                 code: "timeline_source_identity_mismatch",
-                message: "Claude Agent history identity mismatch".into(),
+                message: "Claude Code history identity mismatch".into(),
             });
         }
         Ok(messages)
@@ -220,7 +220,7 @@ impl NativeHistory for History {
             // The Turn timeline cannot claim that such a conversation is empty.
             if ranges.is_empty() {
                 return Err(Error::CapabilityUnavailable(
-                    "Claude Agent history has no confirmed Turn association".into(),
+                    "Claude Code history has no confirmed Turn association".into(),
                 )
                 .into());
             }

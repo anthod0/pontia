@@ -21,7 +21,7 @@ Isso instala o Pontia, se necessário, e inicia o assistente. Se o Pontia já es
 
 O assistente permite:
 
-1. Selecionar as integrações de Client a instalar: Pi, Codex, Claude Agent ou qualquer combinação. O Codex inclui a inicialização do daemon e o [launcher](/docs/codex#codex-launcher).
+1. Selecionar as integrações de Client a instalar: Pi, Codex, Claude Code ou qualquer combinação. O Codex inclui a inicialização do daemon e o [launcher](/docs/codex#codex-launcher).
 2. Revisar e confirmar a configuração.
 3. Criar ou manter o token da API local, iniciar o serviço do Pontia e habilitar os Clients selecionados.
 4. Entrar no Pontia Cloud e registrar o dispositivo para acesso remoto.
@@ -39,7 +39,7 @@ Execute `pontia setup` para selecionar Clients, ou especifique um diretamente:
 ```sh
 pontia setup pi
 pontia setup codex
-pontia setup claude-agent
+pontia setup claude
 ```
 
 Cada comando aplica a configuração local recomendada e verifica a instalação. Uma configuração válida existente é reaproveitada, e arquivos de integração ausentes são restaurados. Depois que o serviço do Pontia inicia, os Clients selecionados são habilitados.
@@ -54,7 +54,7 @@ A autenticação dos Clients e o login no Cloud podem exigir autorização do us
 
 ### 1. Prepare a instalação
 
-Escolha os Clients a habilitar (Pi, Codex, Claude Agent ou uma combinação), o nome de exibição do dispositivo e os diretórios de projeto a navegar. Execute todas as etapas como o mesmo usuário do sistema operacional. Habilite agentes ACP como descrito em [Agent Clients](/docs/agent-clients#enable-an-acp-agent).
+Escolha os Clients a habilitar (Pi, Codex, Claude Code ou uma combinação), o nome de exibição do dispositivo e os diretórios de projeto a navegar. Execute todas as etapas como o mesmo usuário do sistema operacional. Habilite agentes ACP como descrito em [Agent Clients](/docs/agent-clients#enable-an-acp-agent).
 
 1. Instale `pontia` e `pontiad` com `npx @pontia/cli install` e adicione `$HOME/.local/bin` ao seu `PATH`, ou use o [instalador via shell](/docs/getting-started#install-with-the-shell-script) sem executar o inicializador interativo. Para ferramentas de Client ausentes, siga o [quickstart do Pi](https://pi.dev/docs/latest/quickstart), o [guia de instalação do tmux](https://github.com/tmux/tmux/wiki/Installing) ou a [instalação do Codex CLI](https://learn.chatgpt.com/docs/codex/cli) oficiais. Instale apenas os Clients selecionados e seus pré-requisitos; reaproveite instalações que já funcionam.
 2. Selecione um único `PONTIA_HOME` absoluto para todos os comandos. Preserve a configuração e as credenciais de uma instalação existente. O padrão é `~/.pontia`.
@@ -84,10 +84,10 @@ Execute apenas os comandos dos Clients selecionados:
 ```sh
 pontia setup pi
 pontia setup codex
-pontia setup claude-agent
+pontia setup claude
 ```
 
-O Pi exige um `pi` instalado; a configuração dele instala o `@pontia/pi-client-plugin`. O Codex exige um CLI instalado com suporte a daemon; a configuração dele ativa a inicialização automática, verifica a conexão e instala o launcher e o PATH do shell. O Claude Agent exige Node.js LTS; a configuração instala o host padrão quando ausente e verifica um host existente ou selecionado explicitamente.
+O Pi exige um `pi` instalado; a configuração dele instala o `@pontia/pi-client-plugin`. O Codex exige um CLI instalado com suporte a daemon; a configuração dele ativa a inicialização automática, verifica a conexão e instala o launcher e o PATH do shell. O Claude Code exige Node.js LTS; a configuração instala o host padrão quando ausente e verifica um host existente ou selecionado explicitamente.
 
 Esses comandos salvam os caminhos de runtime, configuram o serviço do Pontia e habilitam os Clients selecionados. Para o Codex, abra um novo terminal ou execute o comando de ativação exibido. Conclua a autenticação usando o fluxo de login de cada Client; a configuração não faz login nem altera credenciais de modelo, configurações de sandbox ou política de aprovação.
 

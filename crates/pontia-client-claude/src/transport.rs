@@ -32,13 +32,13 @@ pub(crate) async fn frame(reader: &mut (impl AsyncBufRead + Unpin)) -> Result<Va
         let chunk = reader.fill_buf().await?;
         if chunk.is_empty() {
             return Err(Error::ControlUnknown(
-                "Claude Agent control connection closed".into(),
+                "Claude Code control connection closed".into(),
             ));
         }
         let end = chunk.iter().position(|byte| *byte == b'\n');
         let count = end.map_or(chunk.len(), |index| index + 1);
         if bytes.len() + count > MAX_FRAME {
-            return Err(Error::Domain("Claude Agent frame too large".into()));
+            return Err(Error::Domain("Claude Code frame too large".into()));
         }
         bytes.extend_from_slice(&chunk[..count]);
         reader.consume(count);
@@ -111,7 +111,7 @@ impl Connection {
                     })
                     .unwrap_or("HOST_START_FAILED");
                 return Err(Error::Domain(format!(
-                    "Claude Agent host did not start ({code})"
+                    "Claude Code host did not start ({code})"
                 )));
             }
             let mut stream = UnixStream::connect(&socket).await?;
@@ -124,21 +124,19 @@ impl Connection {
                 || attached["high_water"] != 0
                 || !attached["unavailable"].is_null()
             {
-                return Err(Error::Domain(
-                    "Claude Agent host attachment rejected".into(),
-                ));
+                return Err(Error::Domain("Claude Code host attachment rejected".into()));
             }
             let host_id = attached["host_id"]
                 .as_str()
                 .filter(|id| !id.is_empty())
-                .ok_or_else(|| Error::Domain("Claude Agent host identity missing".into()))?
+                .ok_or_else(|| Error::Domain("Claude Code host identity missing".into()))?
                 .to_owned();
             Ok((reader, write, host_id))
         };
         let (mut reader, writer, host_id) = tokio::time::timeout(CONTROL_TIMEOUT, setup)
             .await
             .map_err(|_| {
-            Error::CapabilityUnavailable("Claude Agent host startup timed out".into())
+            Error::CapabilityUnavailable("Claude Code host startup timed out".into())
         })??;
         let (stop, mut stopping) = watch::channel(false);
         let (exit, exited) = watch::channel(false);
@@ -158,7 +156,7 @@ impl Connection {
                     loop {
                         let value = frame(&mut reader).await?;
                         if value["host_id"] != connection_task.host_id {
-                            return Err(Error::Domain("Claude Agent host identity changed".into()));
+                            return Err(Error::Domain("Claude Code host identity changed".into()));
                         }
                         match value["type"].as_str() {
                             Some("response") => {
@@ -171,13 +169,13 @@ impl Connection {
                             }
                             Some("event") => {
                                 if value["sequence"].as_u64() != Some(sequence + 1) {
-                                    return Err(Error::Domain("Claude Agent fact gap".into()));
+                                    return Err(Error::Domain("Claude Code fact gap".into()));
                                 }
                                 peer.event(&events, &connection_task.host_id, &value["event"])
                                     .await?;
                                 sequence += 1;
                             }
-                            _ => return Err(Error::Domain("Claude Agent invalid frame".into())),
+                            _ => return Err(Error::Domain("Claude Code invalid frame".into())),
                         }
                     }
                 }
@@ -196,7 +194,7 @@ impl Connection {
                     )
                     .await
                 {
-                    tracing::warn!(%error, "Claude Agent runtime exit report failed");
+                    tracing::warn!(%error, "Claude Code runtime exit report failed");
                 }
             };
             let stopped = tokio::select! {
@@ -221,14 +219,14 @@ impl Connection {
         // Allocate IDs under the writer lock: the host's high-water mark follows wire order.
         let mut writer = tokio::time::timeout(CONTROL_TIMEOUT, self.writer.lock())
             .await
-            .map_err(|_| Error::ControlUnknown("Claude Agent writer unavailable".into()))?;
+            .map_err(|_| Error::ControlUnknown("Claude Code writer unavailable".into()))?;
         let id = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         request["id"] = json!(id);
         request["host_id"] = json!(self.host_id);
         let bytes = format!("{request}\n");
         if bytes.len() > MAX_FRAME {
             return Err(Error::Domain(
-                "Claude Agent input exceeds host frame limit".into(),
+                "Claude Code input exceeds host frame limit".into(),
             ));
         }
         let (send, receive) = oneshot::channel();
@@ -237,25 +235,25 @@ impl Connection {
             writer
                 .write_all(bytes.as_bytes())
                 .await
-                .map_err(|_| Error::ControlUnknown("Claude Agent write unconfirmed".into()))?;
+                .map_err(|_| Error::ControlUnknown("Claude Code write unconfirmed".into()))?;
             drop(writer);
             let response = receive
                 .await
-                .map_err(|_| Error::ControlUnknown("Claude Agent receipt lost".into()))?;
+                .map_err(|_| Error::ControlUnknown("Claude Code receipt lost".into()))?;
             match response["status"].as_str() {
                 Some("accepted") => Ok(response),
                 Some("rejected") if response["reason"] == "input_busy" => Err(Error::Conflict {
                     code: "input_busy",
-                    message: "Claude Agent input is still active".into(),
+                    message: "Claude Code input is still active".into(),
                 }),
                 Some("rejected") => Err(Error::StateConflict(
-                    "Claude Agent rejected control request".into(),
+                    "Claude Code rejected control request".into(),
                 )),
                 Some("unsupported") => Err(Error::CapabilityUnavailable(
-                    "Claude Agent operation unsupported".into(),
+                    "Claude Code operation unsupported".into(),
                 )),
                 _ => Err(Error::ControlUnknown(
-                    "Claude Agent operation unconfirmed".into(),
+                    "Claude Code operation unconfirmed".into(),
                 )),
             }
         };
@@ -263,7 +261,7 @@ impl Connection {
             .await
             .unwrap_or_else(|_| {
                 Err(Error::ControlUnknown(
-                    "Claude Agent receipt timed out".into(),
+                    "Claude Code receipt timed out".into(),
                 ))
             });
         self.pending.lock().await.remove(&id);
@@ -274,8 +272,8 @@ impl Connection {
         let mut exited = self.exited.clone();
         tokio::time::timeout(CONTROL_TIMEOUT, exited.wait_for(|exited| *exited))
             .await
-            .map_err(|_| Error::ControlUnknown("Claude Agent host exit unconfirmed".into()))?
-            .map_err(|_| Error::ControlUnknown("Claude Agent host observation lost".into()))?;
+            .map_err(|_| Error::ControlUnknown("Claude Code host exit unconfirmed".into()))?
+            .map_err(|_| Error::ControlUnknown("Claude Code host observation lost".into()))?;
         Ok(())
     }
     pub fn stop(&self) {

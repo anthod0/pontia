@@ -61,7 +61,7 @@ impl ClientConfiguration for Configuration {
         vec!["default".into()]
     }
     fn presentation(&self, _: &str, _: &Value) -> (String, String) {
-        ("Claude Agent".into(), "claude-agent".into())
+        ("Claude Code".into(), "claude-agent".into())
     }
     fn key(&self, _: &Value) -> Result<String> {
         Ok("default".into())
@@ -85,10 +85,10 @@ struct Adapter {
     context: Arc<OnceLock<(SqlitePool, PathBuf)>>,
 }
 fn unsupported() -> Error {
-    Error::CapabilityUnavailable("This Claude Agent capability is not implemented".into())
+    Error::CapabilityUnavailable("This Claude Code capability is not implemented".into())
 }
 fn unavailable() -> Error {
-    Error::CapabilityUnavailable("Claude Agent host is unavailable".into())
+    Error::CapabilityUnavailable("Claude Code host is unavailable".into())
 }
 impl Adapter {
     fn script(&self, root: &Path) -> Result<PathBuf> {
@@ -96,7 +96,7 @@ impl Adapter {
             std::path::absolute(self.host.clone().unwrap_or_else(|| setup::host_path(root)))?;
         if !script.is_file() {
             return Err(Error::CapabilityUnavailable(
-                "Claude Agent client is not installed; run pontia init and select claude-agent"
+                "Claude Code client is not installed; run pontia init and select claude-agent"
                     .into(),
             ));
         }
@@ -130,7 +130,7 @@ impl ClientSession for Adapter {
         Box::pin(async {
             Ok(Some(vec![SessionCreationOption {
                 id: "claude-agent".into(),
-                name: "Claude Agent".into(),
+                name: "Claude Code".into(),
                 client_type: "claude-agent".into(),
                 metadata: json!({}),
             }]))
@@ -151,7 +151,7 @@ impl ClientSession for Adapter {
             let cwd = request
                 .workspace
                 .map(PathBuf::from)
-                .ok_or_else(|| Error::Domain("Claude Agent requires a Workspace".into()))?;
+                .ok_or_else(|| Error::Domain("Claude Code requires a Workspace".into()))?;
             let runtime = request.runtime_id.ok_or_else(unavailable)?;
             let config_dir = request
                 .environment
@@ -201,7 +201,7 @@ impl ClientSession for Adapter {
                 if state.input.is_some() {
                     return Err(Error::Conflict {
                         code: "input_busy",
-                        message: "Claude Agent input is still active".into(),
+                        message: "Claude Code input is still active".into(),
                     });
                 }
                 state.input = Some(Input {
@@ -275,7 +275,7 @@ impl ClientSession for Adapter {
             peer.connection()?.wait_exit().await?;
             if !peer.state.lock().await.closed {
                 return Err(Error::ControlUnknown(
-                    "Claude Agent SDK close not confirmed".into(),
+                    "Claude Code execution closure not confirmed".into(),
                 ));
             }
             Ok(ClientExitOutcome::Confirmed {
@@ -330,9 +330,9 @@ impl ClientSession for Adapter {
                         .or_else(|| state.retry_reason.clone());
                     let model_reason =
                         if state.unavailable.is_some() || state.closed || state.closing {
-                            Some("Claude Agent host is unavailable".into())
+                            Some("Claude Code host is unavailable".into())
                         } else if state.native.is_none() {
-                            Some("Claude Agent is initializing".into())
+                            Some("Claude Code is initializing".into())
                         } else {
                             None
                         };
@@ -340,7 +340,7 @@ impl ClientSession for Adapter {
                 }
                 Err(_) => (
                     Some("host_unavailable".into()),
-                    Some("Claude Agent host is unavailable".into()),
+                    Some("Claude Code host is unavailable".into()),
                 ),
             };
             Ok(ClientSessionDetails {

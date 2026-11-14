@@ -138,18 +138,18 @@ pub(crate) async fn resolve(peer: &Peer, id: &str, option: &str) -> Result<()> {
             .map(|_| ())
     })
     .await
-    .map_err(|_| Error::ControlUnknown("Claude Agent approval observer stopped".into()))?
+    .map_err(|_| Error::ControlUnknown("Claude Code approval observer stopped".into()))?
 }
 
 pub(crate) async fn expire_all(peer: &Peer, state: &mut State) {
     for (id, _) in std::mem::take(&mut state.permissions) {
         if let Err(error) = peer.interactions.expire(&peer.session, &id).await {
-            tracing::warn!(session=%peer.session, %error, "Claude Agent approval expiration failed");
+            tracing::warn!(session=%peer.session, %error, "Claude Code approval expiration failed");
         }
     }
     // Losing the host/control channel is not an SDK unblock or a Turn result.
 }
 
 fn expired() -> Error {
-    Error::CapabilityUnavailable("Claude Agent approval expired".into())
+    Error::CapabilityUnavailable("Claude Code approval expired".into())
 }

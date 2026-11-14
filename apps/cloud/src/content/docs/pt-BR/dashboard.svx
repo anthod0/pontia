@@ -25,7 +25,7 @@ Ative diretórios dentro das raízes configuradas do Workspace Browser. A primei
 
 1. Abra [New chat](https://app.pontia.dev/).
 2. Selecione uma Workspace ativa.
-3. Selecione um Agent Client ativado, como Pi, Codex, Claude Agent ou um agente ACP.
+3. Selecione um Agent Client ativado, como Pi, Codex, Claude Code ou um agente ACP.
 4. Descreva a tarefa e envie o prompt.
 
 O Pontia cria uma Session persistente e inicia o Agent Client selecionado no seu dispositivo. A Session continua disponível no Pontia mesmo quando você sai do chat.

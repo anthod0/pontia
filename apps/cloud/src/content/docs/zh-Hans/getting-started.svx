@@ -42,7 +42,7 @@ curl -fsSL https://get.pontia.dev/install.sh | sh
 
 初始化程序可以让你：
 
-1. 选择所需的 Pi、Codex 和 Claude Agent 集成。
+1. 选择所需的 Pi、Codex 和 Claude Code 集成。
 2. 生成本地 Dashboard 凭据。
 3. 启动 Pontia 后台服务。
 4. 登录 Pontia Cloud，并为 Remote Dashboard 注册你的设备。

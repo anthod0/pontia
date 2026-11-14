@@ -23,7 +23,7 @@ Use `pontia COMMAND --help` para ver as opções exatas da versão instalada.
 | `pontia --version` | Exibir a versão instalada |
 | `pontia completions SHELL` | Exibir o script de autocompletar de um shell |
 
-`pontia setup` aceita `pi`, `codex` ou `claude-agent` e aplica a configuração recomendada sem opções adicionais de Client.
+`pontia setup` aceita `pi`, `codex` ou `claude` e aplica a configuração recomendada sem opções adicionais de Client.
 
 Veja [Inicialização](/docs/initialization) para a configuração interativa e a sequência equivalente de comandos passo a passo.
 

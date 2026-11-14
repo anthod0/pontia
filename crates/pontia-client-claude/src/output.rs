@@ -108,5 +108,5 @@ fn accept(input: &mut Input, outcome: LiveOutputPublishOutcome) -> Result<()> {
     }
 }
 fn invalidated() -> Error {
-    Error::CapabilityUnavailable("Claude Agent live output is unavailable".into())
+    Error::CapabilityUnavailable("Claude Code live output is unavailable".into())
 }

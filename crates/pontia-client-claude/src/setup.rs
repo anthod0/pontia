@@ -36,7 +36,7 @@ impl ClientIntegration for Integration {
         false
     }
     fn skipped_summary(&self) -> Vec<String> {
-        vec!["Skip Claude Agent".into()]
+        vec!["Skip Claude Code".into()]
     }
     fn service_path_variables(&self) -> &'static [&'static str] {
         &[
@@ -72,7 +72,7 @@ impl ClientIntegration for Integration {
             || !config.is_absolute()
             || !root.is_absolute()
         {
-            return Err("Claude Agent host and configuration paths must be absolute".into());
+            return Err("Claude Code host and configuration paths must be absolute".into());
         }
         Ok(Box::new(Prepared {
             node,
@@ -85,7 +85,7 @@ impl ClientIntegration for Integration {
 
 impl PreparedClientIntegration for Prepared {
     fn summary(&self) -> Vec<String> {
-        vec!["Configure the Claude Agent integration".into()]
+        vec!["Configure the Claude Code integration".into()]
     }
     fn preflight(&self, runner: &dyn CommandRunner) -> Result<(), String> {
         if let Some(host) = &self.host {
@@ -96,7 +96,7 @@ impl PreparedClientIntegration for Prepared {
             return Ok(());
         }
         if runner.run_status("npm", &["--version".into()])? != 0 {
-            return Err("Install Node.js LTS and npm before setting up Claude Agent".into());
+            return Err("Install Node.js LTS and npm before setting up Claude Code".into());
         }
         Ok(())
     }
@@ -141,7 +141,7 @@ impl PreparedClientIntegration for Prepared {
         )?;
         if code != 0 {
             return Err(format!(
-                "Claude Agent client installation failed with exit code {code}"
+                "Claude Code client installation failed with exit code {code}"
             ));
         }
         self.check_host(&stage.path().join(HOST_SCRIPT), runner)?;
@@ -149,7 +149,7 @@ impl PreparedClientIntegration for Prepared {
         Ok(())
     }
     fn completion(&self) -> &'static str {
-        "Configured Claude Agent"
+        "Configured Claude Code"
     }
     fn service_environment_paths(&self) -> Vec<(String, PathBuf)> {
         let mut paths = vec![
@@ -166,7 +166,7 @@ impl PreparedClientIntegration for Prepared {
 impl Prepared {
     fn check_host(&self, host: &Path, runner: &dyn CommandRunner) -> Result<(), String> {
         if !host.is_file() {
-            return Err("Claude Agent client is missing; run pontia setup claude-agent".into());
+            return Err("Claude Code client is missing; run pontia setup claude".into());
         }
         let code = runner.run_status(
             self.node.to_str().ok_or("Node path is not UTF-8")?,
@@ -176,7 +176,7 @@ impl Prepared {
             ],
         )?;
         if code != 0 {
-            return Err("Claude Agent dependency check failed; check Node.js LTS and the @pontia/claude-client installation".into());
+            return Err("Claude Code dependency check failed; check Node.js LTS and the @pontia/claude-client installation".into());
         }
         Ok(())
     }

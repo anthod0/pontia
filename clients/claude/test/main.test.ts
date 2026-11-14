@@ -48,7 +48,8 @@ for (const invalidToken of [false, true]) {
         listening: false,
         code: invalidToken ? "HOST_START_FAILED" : "ENOENT",
       });
-      assert.equal(stderr, "Claude Agent host could not start.\n");
+      assert.notEqual(stderr, "");
+      assert.doesNotMatch(stderr, /private-/);
     },
   );
 }

@@ -68,9 +68,9 @@ Confirme que sua build do Codex suporta o daemon app-server e depois inspecione 
 
 Aprovações de comandos, alterações de arquivos e permissões aparecem no Dashboard. Um agente ainda pode parecer travado quando o Codex aguarda outro tipo de solicitação que o Dashboard não mostra. Interrompa o Turn se necessário e então ajuste a política do Codex ou responda à solicitação na interface nativa do Codex.
 
-## O Claude Agent não inicia
+## O Claude Code não inicia
 
-Confira se `node --version` e `npm --version` funcionam para o usuário que executa o Pontia e depois execute `pontia setup claude-agent` para refazer a verificação de dependências. Se o Dashboard relatar uma falha de autenticação enquanto o SDK tenta novamente, corrija o login ou as configurações de provedor do próprio Claude Code para esse usuário. Veja o [guia do Claude Agent](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) para atualizar o pacote do cliente.
+Confira se `node --version` e `npm --version` funcionam para o usuário que executa o Pontia e depois execute `pontia setup claude` para refazer a verificação de dependências. Se o Dashboard relatar uma falha de autenticação enquanto o SDK tenta novamente, corrija o login ou as configurações de provedor do próprio Claude Code para esse usuário. Veja o [guia do Claude Code](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) para atualizar o pacote do cliente.
 
 ## Um agente ACP não inicia
 

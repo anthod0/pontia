@@ -23,7 +23,7 @@ O Pontia transforma seu dispositivo em uma nuvem de agentes. Os agentes de progr
 
 ## Usar o Pontia
 
-- [Agent Clients](/docs/agent-clients) — configure Pi, Codex, Claude Agent e agentes ACP e entenda as diferenças de recursos entre eles.
+- [Agent Clients](/docs/agent-clients) — configure Pi, Codex, Claude Code e agentes ACP e entenda as diferenças de recursos entre eles.
 - [Workspaces](/docs/workspaces) — configure diretórios de projeto e a descoberta de arquivos.
 - [Workflows](/docs/workflows) — execute trabalho de agentes durável e em etapas, com Handoffs explícitos e novo planejamento.
 

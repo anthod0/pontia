@@ -22,7 +22,7 @@ impl Adapter {
             && (!previous.state.lock().await.closed || !*previous.connection()?.exited.borrow())
         {
             return Err(Error::CapabilityUnavailable(
-                "Claude Agent previous execution has not confirmed closure".into(),
+                "Claude Code previous execution has not confirmed closure".into(),
             ));
         }
         // Runtime exit alone proves only host exit. Require the persisted SDK
@@ -37,7 +37,7 @@ impl Adapter {
             || payload["runtime_id"].as_str() != target.runtime_id.as_deref()
         {
             return Err(Error::CapabilityUnavailable(
-                "Claude Agent previous execution state is unknown".into(),
+                "Claude Code previous execution state is unknown".into(),
             ));
         }
         let binding = AgentBindingService::new(events.db())

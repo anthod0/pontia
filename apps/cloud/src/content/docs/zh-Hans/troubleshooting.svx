@@ -68,9 +68,9 @@ $PONTIA_HOME/state/pi-hook.log
 
 命令、文件更改和权限审批会显示在 Dashboard 中。当 Codex 在等待 Dashboard 不显示的其他类型请求时，Agent 仍可能看起来卡住了。必要时中断该 Turn，然后调整 Codex 策略，或在原生 Codex 界面中回应该请求。
 
-## Claude Agent 无法启动
+## Claude Code 无法启动
 
-确认对运行 Pontia 的用户而言，`node --version` 和 `npm --version` 可以正常运行，然后运行 `pontia setup claude-agent` 重新进行依赖检查。如果 SDK 重试时 Dashboard 报告认证失败，请为该用户修复 Claude Code 自身的登录或提供商设置。更新客户端软件包的方法见 [Claude Agent 指南](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md)。
+确认对运行 Pontia 的用户而言，`node --version` 和 `npm --version` 可以正常运行，然后运行 `pontia setup claude` 重新进行依赖检查。如果 SDK 重试时 Dashboard 报告认证失败，请为该用户修复 Claude Code 自身的登录或提供商设置。更新客户端软件包的方法见 [Claude Code 指南](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md)。
 
 ## ACP Agent 无法启动
 

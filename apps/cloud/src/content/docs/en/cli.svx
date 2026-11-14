@@ -23,7 +23,7 @@ Use `pontia COMMAND --help` for the exact options in your installed version.
 | `pontia --version` | Print the installed version |
 | `pontia completions SHELL` | Print the completion script for a shell |
 
-`pontia setup` accepts `pi`, `codex`, or `claude-agent` and applies the recommended configuration without additional Client options.
+`pontia setup` accepts `pi`, `codex`, or `claude` and applies the recommended configuration without additional Client options.
 
 See [Initialization](/docs/initialization) for interactive setup and the equivalent step-by-step command sequence.
 

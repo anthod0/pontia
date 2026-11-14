@@ -78,7 +78,7 @@ const models: SessionModel[] = [
 const creationOptions: SessionCreationOption[] = [
   { id: "pi", name: "Pi", client_type: "pi", metadata: {} },
   { id: "codex", name: "Codex", client_type: "codex", metadata: {} },
-  { id: "claude-agent", name: "Claude Agent", client_type: "claude-agent", metadata: {} },
+  { id: "claude-agent", name: "Claude Code", client_type: "claude-agent", metadata: {} },
   {
     id: '["acp","grok"]',
     name: "Grok Build",
@@ -740,7 +740,7 @@ export function createSampleData(): MockData {
     agentClients: [
       agentClient("pi", "pi", "Pi", "pi"),
       agentClient("codex", "codex", "Codex", "codex"),
-      agentClient("claude-agent", "claude-agent", "Claude Agent", "claude"),
+      agentClient("claude-agent", "claude-agent", "Claude Code", "claude"),
       agentClient("acp", "grok", "Grok Build", "grok"),
     ],
     creationOptions,

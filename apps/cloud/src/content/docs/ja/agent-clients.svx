@@ -13,7 +13,7 @@ Pontia には次の Agent Client が含まれています。
 | --- | --- | --- |
 | [Pi](/docs/agent-clients/pi) | `pi` と `tmux` | Pontia の Pi プラグイン |
 | [Codex](/docs/codex) | app-server デーモンに対応した Codex CLI | ユーザーごとの Codex デーモンの起動、ランチャー、シェルの PATH |
-| [Claude Agent](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) | Node.js LTS、npm、Claude Code の認証 | npm の `@pontia/claude-client` パッケージ |
+| [Claude Code](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) | Node.js LTS、npm、Claude Code の認証 | npm の `@pontia/claude-client` パッケージ |
 | ACP エージェント | stdio 経由で Agent Client Protocol を話すエージェント | なし。エージェントをインストールした後にエントリを有効にします |
 
 ## 初期化時に Client を選択する
@@ -45,7 +45,7 @@ args = ["--acp"]
 
 `command` と `args` の代わりに、エントリで `registry_id` を設定して ACP レジストリからエージェントを起動することもできます。エージェントは Session の読み込みと終了に対応している必要があります。ケイパビリティが不足している場合、Pontia は Session の開始時に報告します。
 
-ローカルの連携をインストールまたは修復するには、`pontia setup pi`、`pontia setup codex`、`pontia setup claude-agent` を実行します。Client を省略すると対話形式で選択できます。セットアップでは Client も有効になります。
+ローカルの連携をインストールまたは修復するには、`pontia setup pi`、`pontia setup codex`、`pontia setup claude` を実行します。Client を省略すると対話形式で選択できます。セットアップでは Client も有効になります。
 
 ## Client によってケイパビリティは異なる
 

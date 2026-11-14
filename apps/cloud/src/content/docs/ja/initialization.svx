@@ -21,7 +21,7 @@ npx @pontia/cli init
 
 ウィザードでは次のことができます:
 
-1. インストールする Client 連携を選択します: Pi、Codex、Claude Agent、またはその任意の組み合わせ。Codex にはデーモンの起動設定と[ランチャー](/docs/codex#codex-launcher)が含まれます。
+1. インストールする Client 連携を選択します: Pi、Codex、Claude Code、またはその任意の組み合わせ。Codex にはデーモンの起動設定と[ランチャー](/docs/codex#codex-launcher)が含まれます。
 2. セットアップ内容を確認して承認します。
 3. ローカル API トークンを作成または保持し、Pontia サービスを起動して、選択した Client を有効にします。
 4. Pontia Cloud にサインインし、リモートアクセス用にデバイスを登録します。
@@ -39,7 +39,7 @@ npx @pontia/cli init
 ```sh
 pontia setup pi
 pontia setup codex
-pontia setup claude-agent
+pontia setup claude
 ```
 
 各コマンドは推奨のローカル設定を適用し、インストールを確認します。既存の有効な設定は再利用され、不足している連携ファイルは復元されます。Pontia サービスの起動後、選択した Client が有効になります。
@@ -54,7 +54,7 @@ Client の認証と Cloud へのログインには、ユーザーによる認可
 
 ### 1. インストールを準備する
 
-有効にする Client (Pi、Codex、Claude Agent、またはその組み合わせ)、デバイスの表示名、参照するプロジェクトディレクトリを決めます。すべてのステップを同じ OS ユーザーで実行してください。ACP エージェントは、[Agent Client](/docs/agent-clients#enable-an-acp-agent) の説明に従って有効にします。
+有効にする Client (Pi、Codex、Claude Code、またはその組み合わせ)、デバイスの表示名、参照するプロジェクトディレクトリを決めます。すべてのステップを同じ OS ユーザーで実行してください。ACP エージェントは、[Agent Client](/docs/agent-clients#enable-an-acp-agent) の説明に従って有効にします。
 
 1. `npx @pontia/cli install` で `pontia` と `pontiad` をインストールして `$HOME/.local/bin` を `PATH` に追加するか、対話型の初期化を実行せずに[シェルインストーラー](/docs/getting-started#install-with-the-shell-script)を使います。不足している Client ツールについては、公式の [Pi クイックスタート](https://pi.dev/docs/latest/quickstart)、[tmux インストールガイド](https://github.com/tmux/tmux/wiki/Installing)、[Codex CLI のインストール](https://learn.chatgpt.com/docs/codex/cli)に従ってください。インストールするのは選択した Client とその前提条件だけにし、動作しているインストールは再利用します。
 2. すべてのコマンドで使う絶対パスの `PONTIA_HOME` を 1 つ決めます。既存のインストールの設定と認証情報は保持してください。デフォルトは `~/.pontia` です。
@@ -84,10 +84,10 @@ export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 ```sh
 pontia setup pi
 pontia setup codex
-pontia setup claude-agent
+pontia setup claude
 ```
 
-Pi には、インストール済みの `pi` が必要です。セットアップで `@pontia/pi-client-plugin` がインストールされます。Codex には、デーモンに対応した CLI のインストールが必要です。セットアップで自動起動が設定され、接続が確認され、ランチャーとシェルの PATH がインストールされます。Claude Agent には Node.js LTS が必要です。セットアップでは、ホストがなければデフォルトのホストをインストールし、既存のホストまたは明示的に選択したホストを確認します。
+Pi には、インストール済みの `pi` が必要です。セットアップで `@pontia/pi-client-plugin` がインストールされます。Codex には、デーモンに対応した CLI のインストールが必要です。セットアップで自動起動が設定され、接続が確認され、ランチャーとシェルの PATH がインストールされます。Claude Code には Node.js LTS が必要です。セットアップでは、ホストがなければデフォルトのホストをインストールし、既存のホストまたは明示的に選択したホストを確認します。
 
 これらのコマンドはランタイムパスを保存し、Pontia サービスを設定して、選択した Client を有効にします。Codex の場合は、新しいターミナルを開くか、表示された有効化コマンドを実行してください。認証は、各 Client 独自のログイン手順で完了してください。セットアップはサインインを行わず、モデルの認証情報、サンドボックス設定、承認ポリシーも変更しません。
 

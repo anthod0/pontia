@@ -43,7 +43,7 @@ Pontia 将 Agent 执行与远程访问分开。编程 Agent 运行在你的设�
 
 ## 本地控制平面
 
-`pontiad` 服务运行在你的设备上。它协调 Agent Session，与受支持的 Agent Client（例如 Pi、Codex、Claude Agent 和 ACP Agent）通信，并提供 Local Dashboard 和 API。
+`pontiad` 服务运行在你的设备上。它协调 Agent Session，与受支持的 Agent Client（例如 Pi、Codex、Claude Code 和 ACP Agent）通信，并提供 Local Dashboard 和 API。
 
 Agent Client 使用你设备上安装的文件和工具执行命令。
 

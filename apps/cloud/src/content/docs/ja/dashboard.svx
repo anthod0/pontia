@@ -25,7 +25,7 @@ Workspace は、エージェントが動作するプロジェクトディレク�
 
 1. [New chat](https://app.pontia.dev/) を開きます。
 2. 有効な Workspace を選択します。
-3. Pi、Codex、Claude Agent、ACP エージェントなど、有効な Agent Client を選択します。
+3. Pi、Codex、Claude Code、ACP エージェントなど、有効な Agent Client を選択します。
 4. 作業内容を記述してプロンプトを送信します。
 
 Pontia は永続的な Session を作成し、選択した Agent Client をデバイス上で起動します。チャットから別のページに移動しても、Session は Pontia 上に残ります。

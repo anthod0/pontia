@@ -42,7 +42,7 @@ These commands use the default installation directory. If you set `PONTIA_INSTAL
 
 The initializer lets you:
 
-1. Select the Pi, Codex, and Claude Agent integrations you want.
+1. Select the Pi, Codex, and Claude Code integrations you want.
 2. Generate the local dashboard credential.
 3. Start the Pontia background service.
 4. Sign in to Pontia Cloud and register your device for the Remote Dashboard.

@@ -23,7 +23,7 @@
 | `pontia --version` | インストール済みのバージョンを表示します |
 | `pontia completions SHELL` | シェル用の補完スクリプトを出力します |
 
-`pontia setup` は `pi`、`codex`、`claude-agent` を受け付け、追加の Client オプションなしで推奨設定を適用します。
+`pontia setup` は `pi`、`codex`、`claude` を受け付け、追加の Client オプションなしで推奨設定を適用します。
 
 対話式のセットアップと、それに相当するコマンドを順に実行する手順は [初期化](/docs/initialization) を参照してください。
 

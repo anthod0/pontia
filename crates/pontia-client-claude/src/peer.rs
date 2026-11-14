@@ -79,7 +79,7 @@ impl Peer {
     pub fn connection(&self) -> Result<&Arc<Connection>> {
         self.connection
             .get()
-            .ok_or_else(|| Error::CapabilityUnavailable("Claude Agent host is unavailable".into()))
+            .ok_or_else(|| Error::CapabilityUnavailable("Claude Code host is unavailable".into()))
     }
     pub async fn runtime_event(
         &self,
@@ -158,7 +158,7 @@ impl Peer {
                 // Keep only the host's bounded diagnostics, never SDK payloads or credentials.
                 state.unavailable = Some(field(event, "reason")?.into());
                 crate::interactions::expire_all(self, &mut state).await;
-                tracing::warn!(session = %self.session, reason = ?state.unavailable, result = ?event.get("result"), "Claude Agent execution unavailable");
+                tracing::warn!(session = %self.session, reason = ?state.unavailable, result = ?event.get("result"), "Claude Code execution unavailable");
             }
             Some("retry") => {
                 state.retry_reason = match event["reason"].as_str() {
@@ -218,5 +218,5 @@ pub(crate) fn field<'a>(value: &'a Value, name: &str) -> Result<&'a str> {
         .ok_or_else(invalid)
 }
 fn invalid() -> Error {
-    Error::Domain("Claude Agent fact is invalid or unassociated".into())
+    Error::Domain("Claude Code fact is invalid or unassociated".into())
 }

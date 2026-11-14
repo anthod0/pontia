@@ -42,7 +42,7 @@ curl -fsSL https://get.pontia.dev/install.sh | sh
 
 初期化では次のことを行います。
 
-1. 使用する Pi、Codex、Claude Agent の連携を選択します。
+1. 使用する Pi、Codex、Claude Code の連携を選択します。
 2. ローカルの Dashboard 用の認証情報を生成します。
 3. Pontia のバックグラウンドサービスを起動します。
 4. Pontia Cloud にサインインし、Remote Dashboard 用にデバイスを登録します。

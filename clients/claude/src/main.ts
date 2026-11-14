@@ -41,6 +41,6 @@ main().catch((error: unknown) => {
         : "HOST_START_FAILED";
     process.stdout.write(JSON.stringify({ listening: false, code }) + "\n");
   }
-  process.stderr.write("Claude Agent host could not start.\n");
+  process.stderr.write("Claude Code host could not start.\n");
   process.exitCode = 1;
 });

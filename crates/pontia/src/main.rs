@@ -14,7 +14,10 @@ use std::{
     time::Duration,
 };
 
-use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, builder::StyledStr};
+use clap::{
+    CommandFactory, FromArgMatches, Parser, Subcommand,
+    builder::{StyledStr, TypedValueParser},
+};
 use dialoguer::Confirm;
 use pontia::{
     init::{self, InitPlatform},
@@ -191,11 +194,19 @@ fn cli_command() -> clap::Command {
     }
     let clients: Vec<&'static str> = pontia_clients::integrations()
         .iter()
-        .map(|client| client.client_type())
+        .map(|client| match client.client_type() {
+            "claude-agent" => "claude",
+            name => name,
+        })
         .collect();
     command = command.mut_subcommand("setup", |setup| {
         setup.mut_arg("client", |arg| {
-            arg.value_parser(clap::builder::PossibleValuesParser::new(clients))
+            arg.value_parser(
+                clap::builder::PossibleValuesParser::new(clients).map(|name| match name.as_str() {
+                    "claude" => "claude-agent".into(),
+                    _ => name,
+                }),
+            )
         })
     });
     command.help_template(template)
@@ -954,6 +965,19 @@ mod tests {
     }
 
     #[test]
+    fn setup_client_names_select_the_registered_integrations() {
+        for (name, expected) in [("claude", "claude-agent"), ("codex", "codex"), ("pi", "pi")] {
+            let matches = cli_command()
+                .try_get_matches_from(["pontia", "setup", name])
+                .unwrap();
+            let cli = Cli::from_arg_matches(&matches).unwrap();
+            assert!(
+                matches!(cli.command, Command::Setup { client: Some(client) } if client == expected)
+            );
+        }
+    }
+
+    #[test]
     fn completions_cover_hidden_agent_tools_and_setup_clients() {
         let mut script = Vec::new();
         clap_complete::generate(
@@ -963,7 +987,7 @@ mod tests {
             &mut script,
         );
         let script = String::from_utf8(script).unwrap();
-        for word in AGENT_TOOLS.iter().chain(&["claude-agent"]) {
+        for word in AGENT_TOOLS.iter().chain(&["claude"]) {
             assert!(script.contains(word), "{word}");
         }
     }

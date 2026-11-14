@@ -23,7 +23,7 @@
 | `pontia --version` | 打印已安装的版本 |
 | `pontia completions SHELL` | 打印指定 shell 的补全脚本 |
 
-`pontia setup` 接受 `pi`、`codex` 或 `claude-agent`，并应用推荐配置，无需额外的 Client 选项。
+`pontia setup` 接受 `pi`、`codex` 或 `claude`，并应用推荐配置，无需额外的 Client 选项。
 
 交互式设置以及等效的分步命令序列见[初始化](/docs/initialization)。
 
