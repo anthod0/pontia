@@ -264,6 +264,48 @@ async fn replay_preserves_turn_identity_and_state_without_ordinals() {
 }
 
 #[tokio::test]
+async fn client_title_replaces_first_turn_title_after_projection_reload() {
+    for turn_event in [EventType::TurnCreated, EventType::TurnStarted] {
+        let service = service().await;
+        service
+            .ingest_reported_event(event("created", EventType::SessionCreated, "s", None))
+            .await
+            .unwrap();
+        let mut input = event("input", turn_event, "s", Some("t"));
+        input.payload = json!({"input":{"summary":"Investigate session naming"}});
+        service.ingest_reported_event(input).await.unwrap();
+        assert_eq!(
+            service
+                .get_session("s")
+                .await
+                .unwrap()
+                .unwrap()
+                .title
+                .as_deref(),
+            Some("Investigate session naming")
+        );
+
+        let mut update = event("title", EventType::SessionTitleUpdated, "s", None);
+        update.source = EventSource::AgentAdapter;
+        update.payload = json!({"title":"Fix automatic session titles"});
+        service.ingest_reported_event(update).await.unwrap();
+        let actual = service.get_session("s").await.unwrap().unwrap();
+        assert_eq!(
+            actual.title.as_deref(),
+            Some("Fix automatic session titles")
+        );
+
+        let mut replay = ProjectionState::default();
+        for fact in service.list_events("s").await.unwrap() {
+            replay.apply(&fact).unwrap();
+        }
+        let replayed = replay.session("s").unwrap();
+        assert_eq!(actual.title, replayed.title);
+        assert_eq!(actual.metadata, replayed.metadata);
+    }
+}
+
+#[tokio::test]
 async fn client_titles_respect_manual_names_and_match_history_replay() {
     // (created title, created title_source, [(source, reported title, expected title)])
     type Update = (EventSource, Option<&'static str>, Option<&'static str>);

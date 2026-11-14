@@ -29,6 +29,22 @@ fn reducer_derives_missing_session_title_from_first_turn_input() {
         projection.session("sess_1").unwrap().title.as_deref(),
         Some("inspect TUI-created task titles")
     );
+
+    projection
+        .apply(&DomainEvent::new(
+            "evt_client_title".to_string(),
+            "sess_1".to_string(),
+            None,
+            EventSource::AgentAdapter,
+            "pi".to_string(),
+            EventType::SessionTitleUpdated,
+            json!({"title": "Inspect task titles"}),
+        ))
+        .unwrap();
+    assert_eq!(
+        projection.session("sess_1").unwrap().title.as_deref(),
+        Some("Inspect task titles")
+    );
 }
 
 #[test]

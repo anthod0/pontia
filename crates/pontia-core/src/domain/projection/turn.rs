@@ -189,6 +189,10 @@ impl ProjectionState {
             && let Some(title) = title_from_turn_input(&event.payload)
         {
             session.title = Some(title);
+            if !session.metadata.is_object() {
+                session.metadata = json!({});
+            }
+            session.metadata["title_source"] = json!("input");
         }
 
         if session.state == SessionState::Exited
