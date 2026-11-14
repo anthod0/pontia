@@ -35,6 +35,24 @@ def response(request, result):
     send({"id": request["id"], "result": result})
 
 
+def model_config():
+    if not os.environ.get("ACP_MODELS"):
+        return {}
+    current = root / "model.txt"
+    values = [
+        {"value": "fast", "name": "Fast", "description": "Fast model"},
+        {"value": "deep", "name": "Deep"},
+    ]
+    if os.environ.get("ACP_MODELS") == "grouped":
+        values = [{"group": "provider", "name": "Provider", "options": values}]
+    return {"configOptions": [
+        {"id": "behavior", "name": "Mode", "category": "mode", "type": "select",
+         "currentValue": "ask", "options": [{"value": "ask", "name": "Ask"}]},
+        {"id": "llm-selector", "name": "Model", "category": "model", "type": "select",
+         "currentValue": current.read_text() if current.exists() else "fast", "options": values},
+    ]}
+
+
 def wait_for(name):
     while not (root / name).exists():
         time.sleep(0.005)
@@ -131,7 +149,7 @@ for line in sys.stdin:
     elif method == "session/new":
         if os.environ.get("ACP_HOLD_NEW") == "1":
             wait_for("release-new")
-        response(request, {"sessionId": native_id})
+        response(request, {"sessionId": native_id, **model_config()})
     elif method == "session/load":
         gate = os.environ.get("ACP_LOAD_GATE")
         if gate and (root / gate).exists():
@@ -156,13 +174,26 @@ for line in sys.stdin:
                     send({"method": "session/update", "params": {"sessionId": native, "update": update}})
         if (root / "orphan-replay").exists():
             send({"method": "session/update", "params": {"sessionId": native_id, "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "orphan answer"}}}})
-        response(request, {})
+        response(request, {} if os.environ.get("ACP_MODELS") == "new-only" else model_config())
         if os.environ.get("ACP_PAUSE_INPUT_AFTER_LOAD") == "1":
             (root / "input-paused").touch()
             wait_for("resume-input")
         if os.environ.get("ACP_BREAK_INPUT") == "1":
             sys.stdin.read(1)
             os._exit(0)
+    elif method == "session/set_config_option":
+        params = request["params"]
+        if (os.environ.get("ACP_REJECT_MODEL") == "1" or params["sessionId"] != native_id
+                or params["configId"] != "llm-selector" or params["value"] not in ["fast", "deep"]):
+            send({"id": request["id"], "error": {"code": -32602, "message": "Model rejected"}})
+            continue
+        (root / "model.txt").write_text(os.environ.get("ACP_MODEL_OVERRIDE", params["value"]))
+        response(request, model_config())
+        if os.environ.get("ACP_MODEL_AFTER_SET") == "1":
+            (root / "model.txt").write_text("fast")
+            send({"method": "session/update", "params": {"sessionId": native_id,
+                  "update": {"sessionUpdate": "config_option_update", **model_config()}}})
+            send({"id": "model-barrier", "method": "_fixture_barrier", "params": {}})
     elif method == "session/prompt":
         remember({"sessionUpdate": "user_message_chunk", "content": request["params"]["prompt"][0]})
         if active is not None:

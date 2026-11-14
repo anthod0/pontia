@@ -46,6 +46,7 @@ pub(crate) struct SessionState {
     reconnect_needed: bool,
     pub native: Option<SessionId>,
     pub capabilities: Option<pontia_core::client_capabilities::AgentClientCapabilities>,
+    pub models: Option<crate::models::Models>,
     pub active: Option<Prompt>,
     pub closing: bool,
     pub permissions: HashMap<String, crate::interactions::Permission>,
@@ -70,6 +71,8 @@ impl SessionState {
                 capabilities.interrupt = self.active.is_some();
                 capabilities.timeline = self.history_error.is_none() && self.replay.is_none();
                 capabilities.accept_task = self.replay.is_none() && !self.blocked;
+                capabilities.list_models = self.models.is_some();
+                capabilities.set_model = self.models.is_some() && self.replay.is_none();
                 capabilities
             });
     }
@@ -84,6 +87,8 @@ pub(crate) struct Peer {
     pub runtime: String,
     pub stop: watch::Sender<bool>,
     pub done: watch::Receiver<bool>,
+    events: EventIngestService,
+    session: String,
 }
 
 pub(crate) fn protocol_error(error: agent_client_protocol::Error) -> Error {
@@ -221,6 +226,7 @@ impl Peer {
             reconnect_needed: false,
             native: None,
             capabilities: None,
+            models: None,
             active: None,
             closing: false,
             permissions: HashMap::new(),
@@ -247,6 +253,8 @@ impl Peer {
             crate::interactions::PermissionEvents::new(events.clone(), &session, runtime);
         let permission_facts = permission_events.clone();
         let permission_log_session = session.clone();
+        let model_events = events.clone();
+        let model_session = session.clone();
         tokio::spawn(async move {
             {
                 let io = agent_client_protocol::Client
@@ -363,6 +371,8 @@ impl Peer {
             runtime: runtime.into(),
             stop,
             done: completion,
+            events: model_events,
+            session: model_session,
         }))
     }
 
@@ -440,9 +450,18 @@ impl Peer {
         let native = match existing {
             Some(id) => SessionId::new(id.to_owned()),
             None => {
-                self.call(NewSessionRequest::new(cwd.to_path_buf()))
-                    .await?
-                    .session_id
+                let response = self.call(NewSessionRequest::new(cwd.to_path_buf())).await?;
+                if let Some(options) = response.config_options {
+                    crate::models::replace(
+                        &mut *self.state.lock().await,
+                        &self.events,
+                        &self.session,
+                        &self.runtime,
+                        options,
+                    )
+                    .await?;
+                }
+                response.session_id
             }
         };
         if native.to_string().is_empty() {
@@ -500,6 +519,9 @@ impl Peer {
             .prepare_request(LoadSessionRequest::new(native, cwd));
         let key = serde_json::to_string(request.id())?;
         let shared = self.state.clone();
+        let events = self.events.clone();
+        let session = self.session.clone();
+        let runtime = self.runtime.clone();
         let (send, receive) = oneshot::channel();
         // Completion belongs to the connection, not to the HTTP/read future.
         // Dropping a reader cannot strand replay or let late history become live output.
@@ -510,6 +532,19 @@ impl Peer {
                     Err(crate::history::unavailable())
                 } else {
                     let replay = state.replay.take().unwrap_or_default();
+                    let result = match result {
+                        Ok(response) => {
+                            if let Some(options) = response.config_options {
+                                crate::models::replace(
+                                    &mut state, &events, &session, &runtime, options,
+                                )
+                                .await
+                            } else {
+                                Ok(())
+                            }
+                        }
+                        Err(error) => Err(protocol_error(error)),
+                    };
                     if let Err(error) = result {
                         state.history_error = Some(format!("ACP session/load failed: {error}"));
                     } else if state.history_error.is_none()
@@ -626,6 +661,13 @@ async fn update(
                 Some("ACP replay returned a different native Session identity".into());
         }
         return Ok(());
+    }
+    if let SessionUpdate::ConfigOptionUpdate(config) = notification.update {
+        if state.closing {
+            return Ok(());
+        }
+        return crate::models::replace(&mut state, events, session, runtime, config.config_options)
+            .await;
     }
     // Retain field presence: schema serialization omits empty collections and
     // JSON null, which are meaningful replacement/return values for live tools.

@@ -5,6 +5,7 @@ mod history;
 pub mod identity;
 mod interactions;
 mod live_output;
+mod models;
 mod peer;
 pub mod registry;
 mod spec;

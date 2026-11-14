@@ -17,6 +17,9 @@ mod configuration;
 #[path = "control_loop/live_output.rs"]
 mod live_output;
 
+#[path = "control_loop/models.rs"]
+mod models;
+
 #[path = "control_loop/permission_blocking.rs"]
 mod permission_blocking;
 

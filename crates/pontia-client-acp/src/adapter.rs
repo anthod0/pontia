@@ -572,9 +572,7 @@ impl ClientSession for AcpAdapter {
             });
             Ok(ClientSessionDetails {
                 data: json!({"agent_id":agent_id,"name":name,"agent_info":agent_info}),
-                model_control_unavailable_reason: Some(
-                    "ACP model control is not implemented".into(),
-                ),
+                model_control_unavailable_reason: None,
             })
         })
     }
@@ -606,18 +604,38 @@ impl ClientSession for AcpAdapter {
     }
     fn list_models<'a>(
         &'a self,
-        _events: EventIngestService,
-        _target: &'a ControlTarget,
+        events: EventIngestService,
+        target: &'a ControlTarget,
     ) -> ClientOperation<'a, Vec<SessionModel>> {
-        Box::pin(async { Err(unsupported()) })
+        Box::pin(async move {
+            let peer = self.peer(&target.session_id).await?;
+            let state = peer.state.lock().await;
+            target.validate(&events.db()).await?;
+            if !state
+                .capabilities
+                .as_ref()
+                .is_some_and(|caps| caps.list_models)
+            {
+                return Err(unavailable());
+            }
+            Ok(state
+                .models
+                .as_ref()
+                .ok_or_else(unavailable)?
+                .options
+                .clone())
+        })
     }
     fn set_model<'a>(
         &'a self,
-        _events: EventIngestService,
-        _target: &'a ControlTarget,
-        _model: &'a str,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        model: &'a str,
     ) -> ClientOperation<'a, ()> {
-        Box::pin(async { Err(unsupported()) })
+        Box::pin(async move {
+            let peer = self.peer(&target.session_id).await?;
+            peer.set_model(events, target, model).await
+        })
     }
 }
 

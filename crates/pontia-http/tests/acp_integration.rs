@@ -301,6 +301,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
         env: BTreeMap::from([
             ("ACP_FIXTURE_ROOT".into(), root.path().display().to_string()),
             ("ACP_PERMISSION".into(), "1".into()),
+            ("ACP_MODELS".into(), "grouped".into()),
             ("PRIVATE_SECRET".into(), "never-expose".into()),
         ]),
     };
@@ -344,6 +345,18 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     assert_eq!(detail["session"]["acp"]["agent_info"]["name"], "fixture");
     assert_eq!(detail["session"]["capabilities"]["timeline"], true);
     assert_eq!(detail["session"]["capabilities"]["topology"], false);
+    let models = get(&app, &format!("{path}/models")).await;
+    assert_eq!(models["current_model"], "fast");
+    assert_eq!(models["models"][1]["id"], "deep");
+    let (status, body) = call(
+        &app,
+        "PATCH",
+        &format!("{path}/model"),
+        json!({"model":"deep", "runtime_id":models["runtime_id"]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    assert_eq!(get(&app, &path).await["session"]["model"], "deep");
     let (status, result) = call(
         &app,
         "POST",
