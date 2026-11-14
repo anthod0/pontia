@@ -30,8 +30,8 @@
 
 	<div class="hero-copy page-width">
 		<h1 id="hero-title">
-			<span class="line enter" style="--d: 1">{m.hero_title_first()}</span>
-			<span class="line accent enter" style="--d: 2">{m.hero_title_second()}</span>
+			<span class="line enter" style="--d: 1">Your device.</span>
+			<span class="line accent enter" style="--d: 2">Your agent cloud.</span>
 		</h1>
 		<p class="hero-description enter" style="--d: 3">{m.hero_description()}</p>
 

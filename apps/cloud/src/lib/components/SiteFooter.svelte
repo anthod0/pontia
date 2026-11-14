@@ -11,7 +11,7 @@
     <img src="/logo.svg" alt="" />
     <span>Pontia</span>
   </a>
-  <p>{m.tagline()}</p>
+  <p>Your device. Your agent cloud.</p>
   <nav aria-label={m.footer_navigation()}>
     <a href={repository}>GitHub<ArrowUpRightIcon size={12} /></a>
     <a href={localizeHref("/docs")}>{m.footer_documentation()}</a>
