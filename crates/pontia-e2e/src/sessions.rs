@@ -16,7 +16,7 @@ use crate::{
     DeviceIdentity, Direction, Error, Id, RecordDecoder, RecordEncoder, RequestContext, Result,
 };
 
-pub const IDLE_SECONDS: u64 = 4 * 60 * 60;
+pub const IDLE_SECONDS: u64 = 3 * 60 * 60;
 pub const MAX_SESSIONS: usize = 64;
 pub const MAX_STREAMS: usize = 64;
 pub const MAX_REQUESTS: usize = 65_536;

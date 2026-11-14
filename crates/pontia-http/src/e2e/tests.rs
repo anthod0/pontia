@@ -569,7 +569,7 @@ async fn slow_response_consumer_does_not_prebuffer_the_business_body() {
 }
 
 #[tokio::test]
-async fn active_stream_survives_four_hours_and_is_reaped_four_hours_after_cancellation() {
+async fn active_stream_survives_idle_timeout_and_expires_three_hours_after_activity() {
     use std::sync::atomic::{AtomicU64, Ordering};
     let clock = Arc::new(AtomicU64::new(0));
     let monotonic = clock.clone();
@@ -591,7 +591,7 @@ async fn active_stream_survives_four_hours_and_is_reaped_four_hours_after_cancel
         .handle(outer(REQUESTS_PATH, Body::from(encrypted.wire)))
         .await;
     assert_eq!(response.status(), StatusCode::OK);
-    clock.store(pontia_e2e::IDLE_SECONDS * 2, Ordering::Relaxed);
+    clock.store(6 * 60 * 60, Ordering::Relaxed);
     ingress.reap();
     let encrypted = encrypted_request(&session, Method::GET, "/api/v1/stream", &[]);
     let another = ingress
@@ -600,7 +600,7 @@ async fn active_stream_survives_four_hours_and_is_reaped_four_hours_after_cancel
     assert_eq!(another.status(), StatusCode::OK);
     drop(response);
     drop(another);
-    clock.store(pontia_e2e::IDLE_SECONDS * 3 - 1, Ordering::Relaxed);
+    clock.store(9 * 60 * 60 - 1, Ordering::Relaxed);
     ingress.reap();
     // A valid authenticated stream at the boundary is still usable, and resets idle time on drop.
     let encrypted = encrypted_request(&session, Method::GET, "/api/v1/stream", &[]);
@@ -609,7 +609,7 @@ async fn active_stream_survives_four_hours_and_is_reaped_four_hours_after_cancel
         .await;
     assert_eq!(response.status(), StatusCode::OK);
     drop(response);
-    clock.store(pontia_e2e::IDLE_SECONDS * 4 - 1, Ordering::Relaxed);
+    clock.store(12 * 60 * 60 - 1, Ordering::Relaxed);
     ingress.reap();
     let encrypted = encrypted_request(&session, Method::GET, "/api/v1/stream", &[]);
     assert_eq!(
