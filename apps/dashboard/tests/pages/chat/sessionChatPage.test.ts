@@ -252,6 +252,13 @@ test.each(["busy", "waiting_for_interaction"])(
     mocks.pathParams = { sessionId: "session-1" };
     window.history.pushState({}, "", "/dashboard/chat/session-1");
 
+    mocks.submitInboxMessage.mockResolvedValueOnce(
+      inboxMessage({
+        message_id: "message-queued",
+        session_id: "session-1",
+        input: { summary: "Queue this follow-up" },
+      }),
+    );
     render(SessionChatPage);
 
     const input = await screen.findByPlaceholderText("Follow up…");
@@ -267,7 +274,7 @@ test.each(["busy", "waiting_for_interaction"])(
       }),
     );
     expect(mocks.interruptSession).not.toHaveBeenCalled();
-    expect(screen.queryByText("Queue this follow-up")).not.toBeInTheDocument();
+    expect(await screen.findByText("Queue this follow-up")).toBeInTheDocument();
 
     await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
     for (const listener of mocks.dashboardEventListeners) {
@@ -305,7 +312,7 @@ test.each(["busy", "waiting_for_interaction"])(
         status: "ready",
       }),
     );
-    expect(await screen.findByText("Queue this follow-up")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("Queue this follow-up")).toHaveLength(1));
   },
 );
 
@@ -2354,89 +2361,94 @@ test("hides the floating scroll-down button at the bottom", async () => {
   expect(screen.queryByRole("button", { name: /scroll to bottom/i })).not.toBeInTheDocument();
 });
 
-test("scrolls once when the submitted user message mounts, not again on acceptance or transcript updates", async () => {
-  const user = userEvent.setup();
-  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-  const selected = session({ session_id: "session-2", state: "idle" });
-  Object.defineProperty(document.documentElement, "scrollHeight", {
-    configurable: true,
-    value: 4096,
-  });
-  window.history.pushState({}, "", "/dashboard/chat/session-2");
-  mocks.pathParams = { sessionId: "session-2" };
-  mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-  let accept!: (message: ReturnType<typeof inboxMessage>) => void;
-  mocks.submitInboxMessage.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        accept = resolve;
+test.each(["idle", "busy"])(
+  "scrolls to the submitted message before acknowledgement while %s",
+  async (state) => {
+    const user = userEvent.setup();
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const selected = session({ session_id: "session-2", state });
+    Object.defineProperty(document.documentElement, "scrollHeight", {
+      configurable: true,
+      value: 4096,
+    });
+    window.history.pushState({}, "", "/dashboard/chat/session-2");
+    mocks.pathParams = { sessionId: "session-2" };
+    mocks.loadedSessions = [selected];
+    mocks.sessions.set([selected]);
+    mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+    let accept!: (message: ReturnType<typeof inboxMessage>) => void;
+    mocks.submitInboxMessage.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          accept = resolve;
+        }),
+    );
+
+    render(SessionChatPage);
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-chat-initial-scroll-pending="false"]'),
+      ).toBeInTheDocument(),
+    );
+    const followUpInput = screen.getByPlaceholderText("Follow up…");
+    await user.type(followUpInput, "continue this session");
+    scrollTo.mockClear();
+    scrollTo.mockImplementation(() => {
+      expect(
+        screen.getByText("continue this session").closest('[data-chat-role="user"]'),
+      ).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 4096 });
+    accept(
+      inboxMessage({
+        session_id: "session-2",
+        turn_id: "turn-2",
+        input: { summary: "continue this session" },
       }),
-  );
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^send$/i })).not.toHaveAttribute(
+        "aria-busy",
+        "true",
+      ),
+    );
+    expect(scrollTo).toHaveBeenCalledTimes(1);
 
-  render(SessionChatPage);
-  await waitFor(() =>
-    expect(
-      document.querySelector('[data-chat-initial-scroll-pending="false"]'),
-    ).toBeInTheDocument(),
-  );
-  const followUpInput = screen.getByPlaceholderText("Follow up…");
-  await user.type(followUpInput, "continue this session");
-  scrollTo.mockClear();
-  scrollTo.mockImplementation(() => {
-    expect(
-      screen.getByText("continue this session").closest('[data-chat-role="user"]'),
-    ).toBeInTheDocument();
-  });
-  await user.click(screen.getByRole("button", { name: /send/i }));
-
-  await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
-  expect(scrollTo).toHaveBeenCalledWith({ top: 4096 });
-  accept(
-    inboxMessage({
+    const submittedTurn = turn({
       session_id: "session-2",
       turn_id: "turn-2",
       input: { summary: "continue this session" },
-    }),
-  );
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: /^send$/i })).not.toHaveAttribute(
-      "aria-busy",
-      "true",
-    ),
-  );
-  expect(scrollTo).toHaveBeenCalledTimes(1);
-
-  const submittedTurn = turn({
-    session_id: "session-2",
-    turn_id: "turn-2",
-    input: { summary: "continue this session" },
-  });
-  mocks.timelineState.set(
-    timelineStateValue({
-      sessionId: "session-2",
-      items: timelineItemsFromTurns([submittedTurn]),
-      latestTurnId: "turn-2",
-      status: "ready",
-    }),
-  );
-  await waitFor(() =>
-    expect(document.querySelector('[data-chat-message-id="turn-2:user"]')).toBeInTheDocument(),
-  );
-  mocks.timelineState.set(
-    timelineStateValue({
-      sessionId: "session-2",
-      items: timelineItemsFromTurns([{ ...submittedTurn, output: { summary: "Updated reply." } }]),
-      latestTurnId: "turn-2",
-      status: "ready",
-    }),
-  );
-  await screen.findByText("Updated reply.");
-  await new Promise(requestAnimationFrame);
-  expect(scrollTo).toHaveBeenCalledTimes(1);
-  scrollTo.mockRestore();
-});
+    });
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId: "session-2",
+        items: timelineItemsFromTurns([submittedTurn]),
+        latestTurnId: "turn-2",
+        status: "ready",
+      }),
+    );
+    await waitFor(() =>
+      expect(document.querySelector('[data-chat-message-id="turn-2:user"]')).toBeInTheDocument(),
+    );
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId: "session-2",
+        items: timelineItemsFromTurns([
+          { ...submittedTurn, output: { summary: "Updated reply." } },
+        ]),
+        latestTurnId: "turn-2",
+        status: "ready",
+      }),
+    );
+    await screen.findByText("Updated reply.");
+    await new Promise(requestAnimationFrame);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    scrollTo.mockRestore();
+  },
+);
 
 test("scrolls once for each queued submission, not on unrelated assistant updates", async () => {
   const user = userEvent.setup();
@@ -2460,7 +2472,23 @@ test("scrolls once for each queued submission, not on unrelated assistant update
     inboxMessages: [],
     events: [],
   });
-  mocks.submitInboxMessage.mockResolvedValue(undefined);
+  mocks.submitInboxMessage
+    .mockResolvedValueOnce(
+      inboxMessage({
+        session_id: "session-2",
+        message_id: "queued-1",
+        turn_id: "turn-2",
+        input: { summary: "continue this session" },
+      }),
+    )
+    .mockResolvedValueOnce(
+      inboxMessage({
+        session_id: "session-2",
+        message_id: "queued-2",
+        turn_id: "turn-3",
+        input: { summary: "another queued question" },
+      }),
+    );
 
   render(SessionChatPage);
   await waitFor(() =>
@@ -2473,10 +2501,12 @@ test("scrolls once for each queued submission, not on unrelated assistant update
   scrollTo.mockClear();
   await user.click(screen.getByRole("button", { name: /send/i }));
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalled());
-  expect(screen.getAllByText("continue this session")).toHaveLength(1);
+  expect(screen.getAllByText("continue this session")).toHaveLength(2);
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
   await user.type(followUpInput, "another queued question");
   await user.click(screen.getByRole("button", { name: /send/i }));
   await waitFor(() => expect(mocks.submitInboxMessage).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(2));
   mocks.timelineState.set(
     timelineStateValue({
       sessionId: "session-2",
@@ -2489,7 +2519,7 @@ test("scrolls once for each queued submission, not on unrelated assistant update
   );
   await screen.findByText("Still working.");
   await new Promise(requestAnimationFrame);
-  expect(scrollTo).not.toHaveBeenCalled();
+  expect(scrollTo).toHaveBeenCalledTimes(2);
 
   mocks.timelineState.set(
     timelineStateValue({
@@ -2507,7 +2537,7 @@ test("scrolls once for each queued submission, not on unrelated assistant update
     }),
   );
   await waitFor(() => expect(screen.getAllByText("continue this session")).toHaveLength(2));
-  await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+  expect(scrollTo).toHaveBeenCalledTimes(2);
   expect(scrollTo).toHaveBeenCalledWith({ top: 4096 });
   mocks.timelineState.set(
     timelineStateValue({
@@ -2615,6 +2645,20 @@ test("keeps the sent user message in the chat between turn start and its native 
   scrollTo.mockClear();
   await user.click(screen.getByRole("button", { name: /^send$/i }));
   await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+
+  testDevice.inboxQueries.syncInboxSubmissions("session-2", [
+    inboxMessage({
+      message_id: "message-sent",
+      session_id: "session-2",
+      state: "dispatched",
+      turn_id: null,
+      input: { summary: "keep me visible" },
+    }),
+  ]);
+  await tick();
+  expect(
+    screen.getByText("keep me visible").closest('[data-chat-role="user"]'),
+  ).toBeInTheDocument();
 
   for (const listener of mocks.dashboardEventListeners) {
     listener({

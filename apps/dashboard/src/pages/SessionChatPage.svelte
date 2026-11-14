@@ -977,7 +977,7 @@
         input: message,
         delivery_policy: clientDeliveryPolicy(selectedSession),
         metadata: { source: 'dashboard_chat' },
-      })
+      }, { showInChat: true })
       return true
     } catch (error) {
       pendingPromptScrolls = pendingPromptScrolls.filter((request) => request !== scrollRequest)

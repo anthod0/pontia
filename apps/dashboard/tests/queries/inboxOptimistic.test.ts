@@ -132,12 +132,64 @@ test("keeps a dispatched submission until its native user message loads", () => 
   expect(optimisticInboxSubmissions("session-1")).toEqual([]);
 });
 
+test.each([false, true])(
+  "keeps a dispatched submission without a Turn when receipt is pending: %s",
+  (receiptPending) => {
+    seed(submission({ acceptedMessage: receiptPending ? null : acceptedInboxMessage() }));
+
+    syncInboxSubmissions("session-1", [acceptedInboxMessage({ state: "dispatched" })]);
+    expect(inboxSubmissionMessages([], optimisticInboxSubmissions("session-1"))).toMatchObject([
+      { content: "follow up", status: "pending" },
+    ]);
+
+    syncInboxSubmissions("session-1", [
+      acceptedInboxMessage({ state: "dispatched", turn_id: "turn-1" }),
+    ]);
+    expect(inboxSubmissionMessages([], optimisticInboxSubmissions("session-1"))).toMatchObject([
+      { content: "follow up", turnId: "turn-1" },
+    ]);
+
+    reconcileInboxSubmissions("session-1", [nativeUserMessage]);
+    expect(
+      inboxSubmissionMessages([nativeUserMessage], optimisticInboxSubmissions("session-1")),
+    ).toEqual([nativeUserMessage]);
+  },
+);
+
+test("an event without a Turn does not remove a submission before its receipt arrives", () => {
+  seed(submission({ acceptedMessage: null }));
+  const event = turnStarted("message-1", "turn-1");
+  if (event.kind === "session_event") event.event.turn_id = null;
+  reconcileInboxSubmissionForDashboardEvent(event);
+  testDevice.inboxQueries.confirmInboxSubmission("session-1", "message-1", acceptedInboxMessage());
+
+  expect(inboxSubmissionMessages([], optimisticInboxSubmissions("session-1"))).toMatchObject([
+    { content: "follow up", status: "pending" },
+  ]);
+});
+
 test("removes a submission whose Inbox message ends without a Turn", () => {
   seed(submission());
 
   syncInboxSubmissions("session-1", [acceptedInboxMessage({ state: "cancelled" })]);
 
   expect(optimisticInboxSubmissions("session-1")).toEqual([]);
+});
+
+test("an earlier user message in the same Turn does not replace a submitted follow-up", () => {
+  seed(submission({ dispatchedTurnId: "turn-1" }));
+  const earlier = { ...nativeUserMessage, id: "earlier-user", content: "original question" };
+  reconcileInboxSubmissions("session-1", [earlier]);
+  expect(
+    inboxSubmissionMessages([earlier], optimisticInboxSubmissions("session-1")).map(
+      (message) => message.content,
+    ),
+  ).toEqual(["original question", "follow up"]);
+
+  reconcileInboxSubmissions("session-1", [earlier, nativeUserMessage]);
+  expect(
+    inboxSubmissionMessages([earlier, nativeUserMessage], optimisticInboxSubmissions("session-1")),
+  ).toEqual([earlier, nativeUserMessage]);
 });
 
 test("does not invent a chat Turn for queued or branch-targeted submissions", () => {

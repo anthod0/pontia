@@ -98,3 +98,67 @@ test("a message sent to a busy Session is listed in the Inbox queue", async () =
 
   expect(inbox.queuedInboxMessages([message])).toEqual([message]);
 });
+
+test("a chat submission to a busy Session appears before its receipt and keeps queue actions", async () => {
+  await seedSession("busy");
+  const device = (await import("../deviceFixture")).testDevice;
+  let accept!: () => void;
+  api.submitInboxMessage.mockImplementation(
+    (_session, _input, id: string) =>
+      new Promise((resolve) => {
+        accept = () => resolve(pending(id));
+      }),
+  );
+
+  const submitting = device.sessions.submitInboxMessage(
+    "session",
+    { input: "hello" },
+    { showInChat: true },
+  );
+  await vi.waitFor(() =>
+    expect(
+      device.inboxQueries.inboxSubmissionMessages(
+        [],
+        device.inboxQueries.optimisticInboxSubmissions("session"),
+      ),
+    ).toMatchObject([{ role: "user", content: "hello" }]),
+  );
+  accept();
+  const message = await submitting;
+  expect(device.inboxQueries.queuedInboxMessages([message])).toEqual([message]);
+});
+
+test("a delayed Inbox snapshot cannot overwrite an acknowledged submission", async () => {
+  await seedSession("busy");
+  const device = (await import("../deviceFixture")).testDevice;
+  device.sessionQueries.setSessionDetail({
+    session: { session_id: "session", state: "busy" } as SessionView,
+    turns: [],
+    inboxMessages: [],
+    events: [],
+  });
+  device.sessions.selectSession("session");
+  const unsubscribe = device.sessions.sessionDetail.subscribe(() => {});
+  let finishOldSnapshot!: (messages: InboxMessageView[]) => void;
+  api.listInboxMessages.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishOldSnapshot = resolve;
+      }),
+  );
+  api.submitInboxMessage.mockImplementation(async (_session, _input, id: string) => pending(id));
+
+  try {
+    const loading = device.sessions.loadSessionDetail("session");
+    const message = await device.sessions.submitInboxMessage("session", { input: "hello" });
+    expect(get(device.sessions.sessionDetail)?.inboxMessages).toEqual([message]);
+    api.listInboxMessages.mockResolvedValueOnce([message]);
+    finishOldSnapshot([]);
+    await loading;
+
+    expect(get(device.sessions.sessionDetail)?.inboxMessages).toEqual([message]);
+  } finally {
+    unsubscribe();
+    device.sessions.selectSession(null);
+  }
+});

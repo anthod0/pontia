@@ -18,7 +18,7 @@ import type {
   SubmitInboxMessageInput,
 } from "../api/types";
 
-import type { SessionChatMessage } from "$lib/session-chat/sessionChat";
+import { userPromptForDisplay, type SessionChatMessage } from "$lib/session-chat/sessionChat";
 
 import { readable } from "svelte/store";
 import { SubmissionUnconfirmedError, type UnconfirmedSubmission } from "../stores/inboxRecovery";
@@ -163,7 +163,7 @@ export function createInboxQueries(device: DeviceRuntime) {
   ): void {
     const consumed = consumedInboxMessageIds.has(message.message_id);
     const dispatchedTurnId = consumedInboxMessageIds.get(message.message_id) ?? message.turn_id;
-    if (message.branch_target_turn_id || (consumed && !dispatchedTurnId)) {
+    if (message.branch_target_turn_id) {
       failInboxSubmission(sessionId, localId);
       return;
     }
@@ -217,8 +217,9 @@ export function createInboxQueries(device: DeviceRuntime) {
           submission.localId !== messageId
         )
           return [submission];
-        const dispatchedTurnId = turnId ?? submission.acceptedMessage?.turn_id ?? null;
-        return dispatchedTurnId ? [{ ...submission, dispatchedTurnId }] : [];
+        const dispatchedTurnId =
+          turnId ?? submission.dispatchedTurnId ?? submission.acceptedMessage?.turn_id ?? null;
+        return [{ ...submission, dispatchedTurnId }];
       }),
     );
   }
@@ -227,16 +228,17 @@ export function createInboxQueries(device: DeviceRuntime) {
     const messagesById = new Map(messages.map((message) => [message.message_id, message]));
     setOptimisticInboxSubmissions(sessionId, (submissions) =>
       submissions.flatMap((submission) => {
-        const messageId = submission.acceptedMessage?.message_id;
-        const latest = messageId ? messagesById.get(messageId) : undefined;
+        const messageId = submission.acceptedMessage?.message_id ?? submission.localId;
+        const latest = messagesById.get(messageId);
         if (!latest) return [submission];
-        if (latest.state === "pending" || latest.state === "dispatching")
-          return [{ ...submission, acceptedMessage: latest }];
-        const dispatchedTurnId =
-          latest.state === "dispatched" ? (submission.dispatchedTurnId ?? latest.turn_id) : null;
-        return dispatchedTurnId
-          ? [{ ...submission, acceptedMessage: latest, dispatchedTurnId }]
-          : [];
+        if (["cancelled", "superseded", "failed", "dismissed"].includes(latest.state)) return [];
+        return [
+          {
+            ...submission,
+            acceptedMessage: latest,
+            dispatchedTurnId: submission.dispatchedTurnId ?? latest.turn_id,
+          },
+        ];
       }),
     );
   }
@@ -296,7 +298,10 @@ export function createInboxQueries(device: DeviceRuntime) {
       if (!turnId || submission.branchTargetTurnId) continue;
       const matchIndex = loadedMessages.findIndex(
         (message, index) =>
-          !matchedLoadedIndexes.has(index) && message.role === "user" && message.turnId === turnId,
+          !matchedLoadedIndexes.has(index) &&
+          message.role === "user" &&
+          message.turnId === turnId &&
+          message.content.trim() === userPromptForDisplay(submission.input).trim(),
       );
       if (matchIndex < 0) continue;
       matchedLoadedIndexes.add(matchIndex);
@@ -363,9 +368,7 @@ export function createInboxQueries(device: DeviceRuntime) {
   async function invalidateAfterInboxMutation(sessionId: string): Promise<void> {
     await Promise.all([
       device.sessionOverview.invalidateSessionOverview(),
-      device.queryClient.invalidateQueries({
-        queryKey: device.sessionQueries.sessionKeys.detail(sessionId),
-      }),
+      device.sessionQueries.invalidateSessionDetail(sessionId),
     ]);
   }
 
@@ -379,7 +382,8 @@ export function createInboxQueries(device: DeviceRuntime) {
       const visible =
         showInChat ??
         (!submission.input.branch_target_turn_id && !isExecutingSessionState(session?.state));
-      if (visible) rememberChatShownInboxMessage(submission.messageId);
+      if (visible && !isExecutingSessionState(session?.state))
+        rememberChatShownInboxMessage(submission.messageId);
       return { localId: beginInboxSubmission(submission, visible) };
     },
     onError: (
