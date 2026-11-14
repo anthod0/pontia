@@ -68,6 +68,32 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn closing_an_empty_tui_does_not_create_a_session() {
+    let f = Fixture::new().await;
+    let mut cli = f.client().await;
+    rpc(&mut cli, "thread/start", json!({})).await;
+    cli.close(None).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while let Some(Ok(_)) = cli.next().await {}
+    })
+    .await
+    .unwrap();
+    // A subsequent adoption waits for the close observation to be processed.
+    let mut barrier = f.client().await;
+    let response = rpc(&mut barrier, "thread/fork", json!({})).await;
+    let session = f
+        .session(response["result"]["thread"]["id"].as_str().unwrap(), "idle")
+        .await;
+    f.runtimes(&session, 1, 0).await;
+    let sessions: Vec<String> = sqlx::query_scalar("SELECT session_id FROM sessions")
+        .fetch_all(&f.app.db())
+        .await
+        .unwrap();
+    assert_eq!(sessions, [session]);
+    f.stop().await;
+}
+
+#[tokio::test]
 async fn last_proxy_unsubscribes_management_without_stopping_native_work() {
     let f = Fixture::new().await;
     let mut first = f.client().await;
@@ -168,7 +194,10 @@ async fn thread_switch_and_normal_close_end_only_the_connections_remaining_assoc
     let mut cli = f.client().await;
     let first = rpc(&mut cli, "thread/start", json!({})).await;
     let a = first["result"]["thread"]["id"].as_str().unwrap();
-    let session_a = f.session(a, "idle").await;
+    rpc(&mut cli, "turn/start", json!({"threadId":a})).await;
+    let session_a = f.session(a, "busy").await;
+    f.complete(a).await;
+    f.session(a, "idle").await;
     let second = rpc(&mut cli, "thread/fork", json!({})).await;
     let b = second["result"]["thread"]["id"].as_str().unwrap();
     let session_b = f.session(b, "idle").await;

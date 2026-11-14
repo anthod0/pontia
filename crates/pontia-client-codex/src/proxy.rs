@@ -157,8 +157,11 @@ async fn relay(
     let daemon = DaemonIdentity::capture(upstream.get_ref())?;
     let mut pending = HashMap::<String, PendingRequest>::new();
     let mut runtimes = HashMap::<String, String>::new();
+    let mut pending_starts =
+        HashMap::<String, (ObservedEvent, tokio::sync::oneshot::Receiver<()>)>::new();
     enum PreparedFrame {
         Request(Message, String, Box<PendingRequest>),
+        Input(Message),
         Response(Message),
     }
     let mut preparation = JoinSet::<Result<PreparedFrame>>::new();
@@ -168,6 +171,9 @@ async fn relay(
                 match completed.unwrap().map_err(protocol::protocol_error)?? {
                     PreparedFrame::Request(frame, id, request) => {
                         pending.insert(id, *request);
+                        upstream.send(frame).await.map_err(protocol::protocol_error)?;
+                    }
+                    PreparedFrame::Input(frame) => {
                         upstream.send(frame).await.map_err(protocol::protocol_error)?;
                     }
                     PreparedFrame::Response(frame) => {
@@ -194,6 +200,16 @@ async fn relay(
                             let prepared = open::prepare(&state, operation, &mut value["params"]).await?;
                             let pending = PendingRequest::Open(operation, value["params"].clone(), prepared);
                             Ok(PreparedFrame::Request(Message::text(value.to_string()), id.to_string(), Box::new(pending)))
+                        });
+                        continue;
+                    } else if value["method"] == "turn/start"
+                        && let Some(thread) = value["params"]["threadId"].as_str()
+                        && let Some((event, ready)) = pending_starts.remove(thread) {
+                        observations.send(Observation { daemon: daemon.clone(), event }).await
+                            .map_err(|_| protocol::protocol_error("proxy observation stopped"))?;
+                        preparation.spawn(async move {
+                            ready.await.map_err(|_| protocol::protocol_error("Codex proxy Session binding failed"))?;
+                            Ok(PreparedFrame::Input(frame))
                         });
                         continue;
                     } else if value["method"] == "thread/unsubscribe"
@@ -223,6 +239,12 @@ async fn relay(
                                     let reservation = prepared.as_ref().map(|prepared| open::Reservation { session: prepared.session.clone(), bound });
                                     let event = ObservedEvent::ThreadOpened { runtime_id, operation, result: Box::new(result.clone()), params,
                                         profile_binding: prepared.as_ref().and_then(|prepared| prepared.profile_binding.clone()), reservation };
+                                    // Keep the reserved tool environment identity, but create the Session only on input.
+                                    if operation == ThreadOperation::Start && prepared.is_some() {
+                                        pending_starts.insert(thread.into(), (event, ready));
+                                        downstream.send(frame).await.map_err(protocol::protocol_error)?;
+                                        continue;
+                                    }
                                     observations.send(Observation { daemon: daemon.clone(), event }).await
                                         .map_err(|_| protocol::protocol_error("proxy observation stopped"))?;
                                     preparation.spawn(async move {
@@ -237,6 +259,7 @@ async fn relay(
                                 None
                             }
                             (PendingRequest::Unsubscribe(thread), Some(result)) if unsubscribe_confirmed(result) => {
+                                pending_starts.remove(&thread);
                                 runtimes.get(&thread).map(|runtime_id| ObservedEvent::ThreadUnsubscribed { thread, runtime_id: runtime_id.clone() })
                             }
                             _ => None,

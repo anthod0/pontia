@@ -18,14 +18,14 @@ async fn first_input_resume_and_fork_have_the_bound_session_environment() {
     )
     .await;
     let native = started["result"]["thread"]["id"].as_str().unwrap();
-    // No wait for the asynchronous observer: the identity must exist when the reply arrives.
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    // The binding must exist before the first input reaches the native server.
     let session = AgentBindingService::new(f.app.db())
         .binding_for_client_session("codex", native)
         .await
         .unwrap()
         .unwrap()
         .session_id;
-    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
     let config = f.threads.lock().await[native].config.clone();
     assert_eq!(
         config["shell_environment_policy"]["set"],
@@ -66,7 +66,6 @@ async fn opening_a_thread_does_not_block_another_threads_input_or_output() {
     let mut cli = f.client().await;
     let opened = rpc(&mut cli, "thread/start", json!({})).await;
     let native = opened["result"]["thread"]["id"].as_str().unwrap();
-    f.session(native, "idle").await;
     let permit = f.config_gate.acquire().await.unwrap();
     cli.send(Message::text(
         json!({"id":2,"method":"thread/start","params":{}}).to_string(),

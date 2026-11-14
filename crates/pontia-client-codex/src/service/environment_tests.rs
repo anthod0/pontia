@@ -37,31 +37,47 @@ async fn proxy_call(
     .unwrap()
 }
 
-async fn proxy_probe(
-    wire: &mut crate::runtime::protocol::Socket,
-    native: &str,
-    session: Option<&str>,
-) {
+async fn proxy_probe(wire: &mut crate::runtime::protocol::Socket, native: &str) -> Option<String> {
     // Read the entire stream, including notifications preceding the turn/start reply.
     wire.send(Message::text(json!({"id":1,"method":"turn/start","params":{"threadId":native,"input":[{"type":"text","text":"Read the environment."}]}}).to_string())).await.unwrap();
     tokio::time::timeout(Duration::from_secs(30), async {
         let mut command = None;
         loop {
-            let Message::Text(text) = wire.next().await.unwrap().unwrap() else { continue };
+            let Message::Text(text) = wire.next().await.unwrap().unwrap() else {
+                continue;
+            };
             let event: Value = serde_json::from_str(&text).unwrap();
             assert!(event.get("error").is_none(), "{event}");
-            if event["method"] == "item/completed" && event["params"]["item"]["type"] == "commandExecution" {
+            if event["method"] == "item/completed"
+                && event["params"]["item"]["type"] == "commandExecution"
+            {
                 let item = &event["params"]["item"];
                 assert_eq!(item["exitCode"], 0, "{item}");
-                command = Some(serde_json::from_str::<Value>(item["aggregatedOutput"].as_str().unwrap().trim()).unwrap_or_else(|error| panic!("{error}: {item}")));
+                command = Some(
+                    serde_json::from_str::<Value>(
+                        item["aggregatedOutput"].as_str().unwrap().trim(),
+                    )
+                    .unwrap_or_else(|error| panic!("{error}: {item}")),
+                );
             }
             if event["method"] == "turn/completed" {
                 assert_eq!(event["params"]["turn"]["status"], "completed", "{event}");
-                assert_eq!(command.unwrap(), json!({"PONTIA_SESSION_ID":session,"PROBE_KEEP":"request","PROBE_NATIVE":"native","PROBE_DROP":null}));
-                break;
+                let mut command = command.unwrap();
+                let session = command
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("PONTIA_SESSION_ID")
+                    .unwrap();
+                assert_eq!(
+                    command,
+                    json!({"PROBE_KEEP":"request","PROBE_NATIVE":"native","PROBE_DROP":null})
+                );
+                return session.as_str().map(str::to_owned);
             }
         }
-    }).await.unwrap();
+    })
+    .await
+    .unwrap()
 }
 
 #[tokio::test]
@@ -150,20 +166,29 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
         )
         .await;
         let native = started["thread"]["id"].as_str().unwrap();
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+            .fetch_one(&app.db())
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+        let observed_session = proxy_probe(&mut cli, native).await;
         let session = pontia_agent_control::AgentBindingService::new(app.db())
             .binding_for_client_session("codex", native)
             .await
             .unwrap()
             .unwrap()
             .session_id;
-        proxy_probe(&mut cli, native, Some(&session)).await;
+        assert_eq!(observed_session.as_deref(), Some(session.as_str()));
         proxy_call(
             &mut cli,
             "thread/resume",
             json!({"threadId":native,"config":config}),
         )
         .await;
-        proxy_probe(&mut cli, native, Some(&session)).await;
+        assert_eq!(
+            proxy_probe(&mut cli, native).await.as_deref(),
+            Some(session.as_str())
+        );
         let fork = proxy_call(
             &mut cli,
             "thread/fork",
@@ -178,8 +203,14 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
             .unwrap()
             .session_id;
         assert_ne!(session, child_session);
-        proxy_probe(&mut cli, child, Some(&child_session)).await;
-        proxy_probe(&mut cli, native, Some(&session)).await;
+        assert_eq!(
+            proxy_probe(&mut cli, child).await.as_deref(),
+            Some(child_session.as_str())
+        );
+        assert_eq!(
+            proxy_probe(&mut cli, native).await.as_deref(),
+            Some(session.as_str())
+        );
         let mut external = crate::runtime::protocol::open(&root.path().join("app-server.sock"))
             .await
             .unwrap();
@@ -191,7 +222,7 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
         )
         .await;
         let external_native = external_thread["thread"]["id"].as_str().unwrap();
-        proxy_probe(&mut external, external_native, None).await;
+        assert_eq!(proxy_probe(&mut external, external_native).await, None);
         // Codex applies config overrides on cold resume; a live rejoin retains its settings.
         proxy_call(
             &mut external,
@@ -211,7 +242,10 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
             .unwrap()
             .unwrap()
             .session_id;
-        proxy_probe(&mut cli, external_native, Some(&adopted)).await;
+        assert_eq!(
+            proxy_probe(&mut cli, external_native).await.as_deref(),
+            Some(adopted.as_str())
+        );
         shutdown.send(true).unwrap();
         proxy_task.await.unwrap();
         observer.abort();

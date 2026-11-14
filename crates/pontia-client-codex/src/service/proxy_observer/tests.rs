@@ -299,9 +299,13 @@ async fn cli_start_and_first_input_join_existing_turn_observation() {
     let mut cli = f.client().await;
     let response = rpc(&mut cli, "thread/start", json!({})).await;
     let native = response["result"]["thread"]["id"].as_str().unwrap();
-    let session = f.session(native, "idle").await;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+        .fetch_one(&f.app.db())
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
     rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
-    assert_eq!(f.session(native, "busy").await, session);
+    let session = f.session(native, "busy").await;
     let turn_id: String = sqlx::query_scalar("SELECT turn_id FROM turns WHERE session_id=?")
         .bind(&session)
         .fetch_one(&f.app.db())
@@ -343,8 +347,36 @@ async fn cli_start_and_first_input_join_existing_turn_observation() {
             .await
             .unwrap();
     assert_eq!(turns, vec![("completed".into(), "from CLI".into())]);
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    assert_eq!(f.session(native, "busy").await, session);
+    f.complete(native).await;
+    f.session(native, "idle").await;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+        .fetch_one(&f.app.db())
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
     drop(cli);
     assert_eq!(f.session(native, "idle").await, session);
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn input_adopts_only_its_thread_after_switching_from_an_empty_thread() {
+    let f = Fixture::new().await;
+    let mut cli = f.client().await;
+    let empty = rpc(&mut cli, "thread/start", json!({})).await;
+    let empty = empty["result"]["thread"]["id"].as_str().unwrap();
+    rpc(&mut cli, "thread/unsubscribe", json!({"threadId":empty})).await;
+    let active = rpc(&mut cli, "thread/start", json!({})).await;
+    let active = active["result"]["thread"]["id"].as_str().unwrap();
+    rpc(&mut cli, "turn/start", json!({"threadId":active})).await;
+    f.session(active, "busy").await;
+    let native: Vec<String> = sqlx::query_scalar("SELECT client_session_key FROM agent_bindings")
+        .fetch_all(&f.app.db())
+        .await
+        .unwrap();
+    assert_eq!(native, [active]);
     f.stop().await;
 }
 
@@ -354,7 +386,10 @@ async fn fork_creates_a_distinct_session_and_concurrent_resume_reuses_identity()
     let mut cli = f.client().await;
     let response = rpc(&mut cli, "thread/start", json!({})).await;
     let native = response["result"]["thread"]["id"].as_str().unwrap();
-    let original = f.session(native, "idle").await;
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    let original = f.session(native, "busy").await;
+    f.complete(native).await;
+    f.session(native, "idle").await;
     let fork = rpc(&mut cli, "thread/fork", json!({"threadId":native})).await;
     let branch = fork["result"]["thread"]["id"].as_str().unwrap();
     let session = f.session(branch, "idle").await;
@@ -381,7 +416,6 @@ async fn dashboard_fork_excludes_the_target_and_preserves_running_source() {
     let mut cli = f.client().await;
     let response = rpc(&mut cli, "thread/start", json!({})).await;
     let native = response["result"]["thread"]["id"].as_str().unwrap();
-    let source = f.session(native, "idle").await;
     for _ in 0..2 {
         rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
         f.session(native, "busy").await;
@@ -389,7 +423,7 @@ async fn dashboard_fork_excludes_the_target_and_preserves_running_source() {
         f.session(native, "idle").await;
     }
     rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
-    f.session(native, "busy").await;
+    let source = f.session(native, "busy").await;
     let target: String = sqlx::query_scalar(
         "SELECT turn_id FROM native_turn_bindings WHERE session_id=? AND client_turn_id='turn-1'",
     )
@@ -468,13 +502,13 @@ async fn cli_fork_inherits_history_and_resume_keeps_its_boundary() {
     let mut cli = f.client().await;
     let response = rpc(&mut cli, "thread/start", json!({})).await;
     let native = response["result"]["thread"]["id"].as_str().unwrap();
-    let source = f.session(native, "idle").await;
     for _ in 0..2 {
         rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
         f.session(native, "busy").await;
         f.complete(native).await;
         f.session(native, "idle").await;
     }
+    let source = f.session(native, "idle").await;
     let fork = rpc(
         &mut cli,
         "thread/fork",
@@ -507,9 +541,8 @@ async fn first_turn_fork_is_empty_and_active_turn_is_rejected() {
     let mut cli = f.client().await;
     let response = rpc(&mut cli, "thread/start", json!({})).await;
     let native = response["result"]["thread"]["id"].as_str().unwrap();
-    let source = f.session(native, "idle").await;
     rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
-    f.session(native, "busy").await;
+    let source = f.session(native, "busy").await;
     let target: String = sqlx::query_scalar("SELECT turn_id FROM turns WHERE session_id=?")
         .bind(&source)
         .fetch_one(&f.app.db())
@@ -552,9 +585,8 @@ async fn attachment_retry_reuses_the_confirmed_native_fork_after_command_service
     let mut cli = f.client().await;
     let response = rpc(&mut cli, "thread/start", json!({})).await;
     let native = response["result"]["thread"]["id"].as_str().unwrap();
-    let source = f.session(native, "idle").await;
     rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
-    f.session(native, "busy").await;
+    let source = f.session(native, "busy").await;
     f.complete(native).await;
     f.session(native, "idle").await;
     let target: String = sqlx::query_scalar("SELECT turn_id FROM turns WHERE session_id=?")
@@ -618,9 +650,8 @@ async fn native_rejection_and_lost_receipt_do_not_repeat_forks() {
         let mut cli = f.client().await;
         let response = rpc(&mut cli, "thread/start", json!({})).await;
         let native = response["result"]["thread"]["id"].as_str().unwrap();
-        let source = f.session(native, "idle").await;
         rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
-        f.session(native, "busy").await;
+        let source = f.session(native, "busy").await;
         f.complete(native).await;
         f.session(native, "idle").await;
         let target: String = sqlx::query_scalar("SELECT turn_id FROM turns WHERE session_id=?")
@@ -671,8 +702,9 @@ async fn rejected_and_ephemeral_threads_are_not_adopted() {
     );
     rpc(&mut cli, "thread/start", json!({"ephemeral":true})).await;
     let response = rpc(&mut cli, "thread/start", json!({})).await;
-    f.session(response["result"]["thread"]["id"].as_str().unwrap(), "idle")
-        .await;
+    let native = response["result"]["thread"]["id"].as_str().unwrap();
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    f.session(native, "busy").await;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
         .fetch_one(&f.app.db())
         .await
@@ -789,7 +821,8 @@ async fn native_start_pins_profile_and_resume_preserves_it_without_profile_queri
     )
     .await;
     let native = response["result"]["thread"]["id"].as_str().unwrap();
-    let session = f.session(native, "idle").await;
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    let session = f.session(native, "busy").await;
     assert_eq!(
         f.threads.lock().await[native].developer_instructions,
         "native-user-marker\n\nnative-creation-marker"
@@ -807,8 +840,6 @@ async fn native_start_pins_profile_and_resume_preserves_it_without_profile_queri
         binding.native_developer_instructions.as_deref(),
         Some("native-user-marker")
     );
-    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
-    f.session(native, "busy").await;
     f.complete(native).await;
     f.session(native, "idle").await;
     sqlx::query("DROP TABLE execution_profiles")
