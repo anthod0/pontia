@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.10] - 2026-11-14
+
+### Fixed
+
+- The Public Dashboard keeps its encrypted connection to a device when you reload the page.
+- Session titles set by the Client now replace titles taken from the first message.
+
 ## [0.7.9] - 2026-11-14
 
 ### Added
