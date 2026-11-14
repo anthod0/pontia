@@ -480,7 +480,7 @@ beforeEach(() => {
   mocks.loadSessionDetail.mockReset().mockResolvedValue(null);
   mocks.listWorkspaces.mockReset().mockImplementation(async () => mocks.workspaces.get());
   mocks.listSessionCreationOptions.mockReset().mockResolvedValue([
-    { id: "pi", name: "pi", client_type: "pi", metadata: {} },
+    { id: "pi", name: "Pi", client_type: "pi", metadata: {} },
     { id: "codex", name: "codex", client_type: "codex", metadata: {} },
   ]);
   mocks.loadSessionTimeline.mockReset();

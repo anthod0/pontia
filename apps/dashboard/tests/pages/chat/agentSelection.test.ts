@@ -10,7 +10,7 @@ test("submits the selected configured agent's opaque metadata through ordinary S
   const user = userEvent.setup();
   const metadata = { acp_agent_id: "company:代理", custom: { preserved: true } };
   mocks.listSessionCreationOptions.mockResolvedValue([
-    { id: "pi", name: "pi", client_type: "pi", metadata: {} },
+    { id: "pi", name: "Pi", client_type: "pi", metadata: {} },
     { id: "opaque-choice", name: "Company Agent", client_type: "acp", metadata },
   ]);
   mocks.createSession.mockResolvedValue({ session: session(), initial_turn: turn() });

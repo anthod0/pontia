@@ -3,6 +3,7 @@ import { dashboardClient as codex } from "../../../crates/pontia-client-codex/da
 import { dashboardClient as acp } from "../../../crates/pontia-client-acp/dashboard";
 import { dashboardClient as claude } from "../../../crates/pontia-client-claude/dashboard";
 import type { SessionView } from "./api/types";
+import { clientDisplayName } from "./lib/clientName";
 
 const clients = [pi, codex, acp, claude];
 export const customClientEntries = clients.flatMap((client) =>
@@ -16,7 +17,7 @@ export const defaultClientType = defaultClient.clientType;
 export function clientSessionLabel(session: SessionView): string {
   return (
     clients.find((client) => client.clientType === session.client_type)?.sessionLabel?.(session) ??
-    session.client_type
+    clientDisplayName(session.client_type)
   );
 }
 

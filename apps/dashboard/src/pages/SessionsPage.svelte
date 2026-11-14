@@ -3,6 +3,7 @@
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { navigate } from '$lib/navigation'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
+  import { clientDisplayName } from '$lib/clientName'
   import { sessionStateDotClass } from '$lib/sessionState'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -40,7 +41,7 @@
         <div class="flex min-w-0 items-start justify-between gap-3">
           <div class="min-w-0 space-y-1">
             <div class="truncate font-medium">{sessionChatTitle(session)}</div>
-            <div class="truncate text-sm text-muted-foreground">{session.client_type} · Updated {new Date(session.updated_at).toLocaleString()}</div>
+            <div class="truncate text-sm text-muted-foreground">{clientDisplayName(session.client_type)} · Updated {new Date(session.updated_at).toLocaleString()}</div>
           </div>
           {#if session.state !== 'exited'}
             <Badge variant="secondary" class="shrink-0 gap-1.5">

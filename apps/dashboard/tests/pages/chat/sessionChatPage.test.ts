@@ -1024,9 +1024,9 @@ test("shows workspace git status in the selected chat composer summary", async (
   composer.focus();
   await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith("workspace-1"));
   const sessionDetailsButton = await screen.findByRole("button", {
-    name: "Session details: project · pi · main · dirty",
+    name: "Session details: project · Pi · main · dirty",
   });
-  for (const value of ["project", "main", "↑1", "↓2", "+3", "~4", "?5", "!6", "pi"]) {
+  for (const value of ["project", "main", "↑1", "↓2", "+3", "~4", "?5", "!6", "Pi"]) {
     expect(within(sessionDetailsButton).getByText(value)).toBeInTheDocument();
   }
 });
@@ -2021,10 +2021,10 @@ test("renders an existing session title in the top bar and metadata above the pr
     within(screen.getByRole("banner")).getByRole("heading", { name: /second · reviewer/i }),
   ).toBeInTheDocument();
   const sessionDetailsButton = screen.getByRole("button", {
-    name: /Session details: pontia · pi · coder@1 · second/i,
+    name: /Session details: pontia · Pi · coder@1 · second/i,
   });
   await userEvent.click(sessionDetailsButton);
-  const clientBadge = screen.getAllByLabelText("Client: pi")[0];
+  const clientBadge = screen.getAllByLabelText("Client: Pi")[0];
   const profileBadge = screen.getAllByLabelText("Profile: coder@1")[0];
   expect(clientBadge).toBeInTheDocument();
   expect(profileBadge).toBeInTheDocument();

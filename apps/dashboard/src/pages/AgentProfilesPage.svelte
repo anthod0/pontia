@@ -1,6 +1,7 @@
 <script lang="ts">
   import { useDeviceRuntime } from '../device/context';
   import { defaultClientType } from '../clients'
+  import { clientDisplayName } from '$lib/clientName'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import CopySimpleIcon from 'phosphor-svelte/lib/CopySimpleIcon'
@@ -385,7 +386,7 @@
               <div class="mt-2 flex flex-wrap gap-1">
                 <Badge>{profile.agent_kind}</Badge>
                 {#each profile.supported_client_types as client}
-                  <Badge variant="secondary">{client}</Badge>
+                  <Badge variant="secondary">{clientDisplayName(client)}</Badge>
                 {/each}
               </div>
             </button>
@@ -454,7 +455,7 @@
             <Card.Header><Card.Title>Client support</Card.Title><Card.Description>Client-specific behavior stays behind adapter/runtime capability boundaries.</Card.Description></Card.Header>
             <Card.Content class="flex flex-wrap gap-2">
               {#each selectedVersionProfile.supported_client_types as client}
-                <Badge>{client}</Badge>
+                <Badge>{clientDisplayName(client)}</Badge>
               {:else}
                 <span class="text-sm text-muted-foreground">No supported client types listed.</span>
               {/each}

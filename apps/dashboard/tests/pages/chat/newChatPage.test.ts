@@ -185,7 +185,7 @@ test("offers Pi and Codex and requires a task before submission", async () => {
   render(NewChatPage);
 
   const clientSelector = await screen.findByLabelText("Agent client");
-  expect(clientSelector).toHaveTextContent("pi");
+  expect(clientSelector).toHaveTextContent("Pi");
   await userEvent.click(clientSelector);
   expect(await screen.findByText("codex")).toBeInTheDocument();
   await userEvent.keyboard("{Escape}");

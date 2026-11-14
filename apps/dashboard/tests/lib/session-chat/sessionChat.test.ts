@@ -79,7 +79,7 @@ test("falls back to an untitled client session label when no display metadata ex
     sessionChatTitle(
       session({ client_type: "pi", title: null, handle: null, role: null, description: null }),
     ),
-  ).toBe("Untitled pi session");
+  ).toBe("Untitled Pi session");
 });
 
 test("generates a compact title from the initial prompt", () => {

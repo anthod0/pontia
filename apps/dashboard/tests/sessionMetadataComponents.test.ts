@@ -112,7 +112,7 @@ describe("session metadata component boundaries", () => {
     ).toHaveTextContent("pontia");
     expect(within(dialog).getByLabelText("Git: Git status: main, dirty")).toHaveTextContent("main");
     expect(within(dialog).getByLabelText(/Usage: Context usage: 33%/)).toHaveTextContent("33%");
-    expect(within(dialog).getByLabelText("Client: pi")).toHaveTextContent("pi");
+    expect(within(dialog).getByLabelText("Client: Pi")).toHaveTextContent("Pi");
     expect(within(dialog).getByLabelText("Profile: coder@1")).toHaveTextContent("coder@1");
     expect(within(dialog).getByLabelText("Handle: main")).toHaveTextContent("main");
   });
