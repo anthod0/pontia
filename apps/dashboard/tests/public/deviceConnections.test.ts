@@ -97,8 +97,7 @@ test.each(["focus", "manual"])(
     else manager.retry("office-mac");
     await settle();
     expect(device().state).toBe("online");
-    fixture.streams.get("office-mac")!.close();
-    await settle();
+    fixture.connectionFailures.get("office-mac")!(new Error("device unavailable"));
     expect(device().state).toBe("offline");
     const count = fixture.connect.mock.calls.length;
     await vi.advanceTimersByTimeAsync(4999);
@@ -107,6 +106,23 @@ test.each(["focus", "manual"])(
     expect(device().state).toBe("online");
   },
 );
+
+test("a closed event stream reconnects in place without taking the device offline", async () => {
+  await manager.refreshDevices();
+  await settle();
+  const runtime = device().runtime!;
+  const stream = fixture.streams.get("office-mac")!;
+  runtime.chatDraft.setChatDraft("keep this draft");
+  stream.close();
+  await settle();
+  expect(device().state).toBe("online");
+  expect(device().runtime).toBe(runtime);
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(fixture.streams.get("office-mac")).not.toBe(stream);
+  expect(get(runtime.connection.sseStatus)).toBe("open");
+  expect(get(runtime.chatDraft.chatDraft)).toBe("keep this draft");
+  expect(fixture.connect).toHaveBeenCalledTimes(2);
+});
 
 test("refresh adds devices and cancels removed devices, including pending connections and retries", async () => {
   let finish!: () => void;

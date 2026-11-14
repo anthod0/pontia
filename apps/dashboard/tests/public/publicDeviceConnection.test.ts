@@ -528,6 +528,9 @@ function successfulConnectionFetch() {
 }
 
 test("a network interruption preserves the session for the replacement connection", async () => {
+  const failed = vi.fn();
+  remote.dispose();
+  remote = createRemoteConnection({ handle, deviceId, edgeId: deviceId }, deviceId, failed);
   const fetchMock = successfulConnectionFetch()
     .mockRejectedValueOnce(new TypeError("Failed to fetch"))
     .mockResolvedValueOnce(new Response("ciphertext"));
@@ -536,6 +539,7 @@ test("a network interruption preserves the session for the replacement connectio
   await expect(
     remote.e2eFetch("/api/v1/sessions", { method: "POST", body: "action" }),
   ).rejects.toThrow();
+  expect(failed).not.toHaveBeenCalled();
   remote.dispose();
   remote = createRemoteConnection({ handle, deviceId, edgeId: deviceId }, deviceId);
   expect(await (await remote.e2eFetch("/api/v1/workspaces")).text()).toBe("ok");

@@ -321,8 +321,8 @@ export function createRemoteConnection(
         signal: requestSignal,
       });
     } catch (error) {
+      // A network error leaves the E2E session valid; callers retry over the same session.
       request.free();
-      if (!signal.aborted && session === active) onConnectionFailure?.(error);
       throw error;
     }
     if (response.status === 401) {

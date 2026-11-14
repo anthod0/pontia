@@ -12,6 +12,7 @@
   import AppSidebar from '../../components/layout/AppSidebar.svelte';
   import TopBar from '../../components/layout/TopBar.svelte';
   import ChatShortcuts from '../../components/chat/ChatShortcuts.svelte';
+  import ConnectionNotice from '../../components/layout/ConnectionNotice.svelte';
   import NewChatPage from '../../pages/NewChatPage.svelte';
   import NewChatLayout from '../../components/chat/NewChatLayout.svelte';
   import NewChatComposerPlaceholder from '../../components/chat/NewChatComposerPlaceholder.svelte';
@@ -183,7 +184,7 @@
       {/snippet}
     </AppSidebar>
     {#if device}
-      {#key device}<DeviceProvider {device}><ChatShortcuts newChatHandle={activeHandle} /></DeviceProvider>{/key}
+      {#key device}<DeviceProvider {device}><ChatShortcuts newChatHandle={activeHandle} /><ConnectionNotice /></DeviceProvider>{/key}
     {/if}
   {/snippet}
   {#snippet topbar()}

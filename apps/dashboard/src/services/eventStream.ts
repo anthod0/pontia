@@ -111,7 +111,7 @@ export function createEvents(device: DeviceRuntime) {
     device.connection.reconnectCount.set(0);
     device.connection.lastConnectionError.set(null);
     device.connection.streamedSessionId.set("dashboard");
-    if (!onDisconnected) attachLifecycleListeners();
+    attachLifecycleListeners();
     void connect(generation);
   }
 
@@ -181,10 +181,6 @@ export function createEvents(device: DeviceRuntime) {
 
   function scheduleReconnect(streamGeneration: number): void {
     if (!started || streamGeneration !== generation) return;
-    if (onDisconnected) {
-      onDisconnected();
-      return;
-    }
     device.connection.reconnectCount.update((count) => count + 1);
     const delay = Math.min(1000 + get(device.connection.reconnectCount) * 500, 5000);
     device.connection.sseStatus.set("reconnecting");
