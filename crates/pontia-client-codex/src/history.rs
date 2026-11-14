@@ -16,7 +16,7 @@ use pontia_agent_control::client_contract::{
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     path::Path,
     sync::Arc,
 };
@@ -137,6 +137,55 @@ impl CodexHistory {
         }
         Ok(map)
     }
+
+    async fn supplement_message_times(
+        &self,
+        selection: SessionTimelineSelection,
+        items: &mut [TurnTimelineItem],
+    ) -> std::result::Result<(), TurnTimelineReadError> {
+        let is_message =
+            |item: &TurnTimelineItem| matches!(item.item.kind.as_str(), "user" | "assistant");
+        if self.binding.client_session_file.is_none()
+            || !items
+                .iter()
+                .any(|item| is_message(item) && item.item.occurred_at.is_none())
+        {
+            return Ok(());
+        }
+        let file_history = Self::new(self.binding.clone(), self.pool.clone());
+        let source = match file_history.snapshot(Some(HistorySource::File)).await {
+            Ok(Snapshot::File(source, _)) => source,
+            Ok(Snapshot::Native(_)) => unreachable!("file history was explicitly selected"),
+            Err(Error::CapabilityUnavailable(_)) => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        let records = CodexRollout.read_session_timeline(SessionTimelineReadRequest {
+            source: source.clone(),
+            selection,
+        })?;
+        let mut timestamps = HashMap::new();
+        for entry in records.into_iter().filter(is_message) {
+            timestamps
+                .entry((entry.turn_id, entry.item.kind, entry.item.content_preview))
+                .or_insert_with(VecDeque::new)
+                .push_back(entry.item.occurred_at);
+        }
+        for entry in items.iter_mut().filter(|entry| is_message(entry)) {
+            let key = (
+                entry.turn_id.clone(),
+                entry.item.kind.clone(),
+                entry.item.content_preview.clone(),
+            );
+            let timestamp = timestamps
+                .get_mut(&key)
+                .and_then(VecDeque::pop_front)
+                .flatten();
+            if entry.item.occurred_at.is_none() {
+                entry.item.occurred_at = timestamp;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl NativeHistory for CodexHistory {
@@ -182,7 +231,9 @@ impl NativeHistory for CodexHistory {
             let map = self.associations(&selection.turns)?;
             match self.snapshot(None).await? {
                 Snapshot::Native(turns) => {
-                    items::timeline(turns, &map, &selection.selected_turn_ids).map_err(Into::into)
+                    let mut items = items::timeline(turns, &map, &selection.selected_turn_ids)?;
+                    self.supplement_message_times(selection, &mut items).await?;
+                    Ok(items)
                 }
                 Snapshot::File(source, _) => {
                     CodexRollout.read_session_timeline(SessionTimelineReadRequest {

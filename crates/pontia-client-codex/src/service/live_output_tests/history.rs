@@ -22,6 +22,103 @@ async fn page(
 }
 
 #[tokio::test]
+async fn native_history_preserves_item_times_without_substituting_turn_times() {
+    let mut native = turn(json!([
+        {"type":"agentMessage","id":"answer","text":"done","startedAtMs":1794614401123_i64,"completedAtMs":1794614402456_i64},
+        {"type":"agentMessage","id":"untimed","text":"older message","startedAtMs":null,"completedAtMs":null},
+        {"type":"reasoning","id":"thinking","summary":["working"],"startedAtMs":1794614403789_i64}
+    ]));
+    native["startedAt"] = json!(1794614400);
+    native["items"][0]["startedAtMs"] = json!(1794614400123_i64);
+    native["items"][0]["completedAtMs"] = Value::Null;
+    let f = Fixture::new(native, vec![]).await;
+
+    let result = page(&f, None, None, 20).await;
+    assert_eq!(result.history_source, Some(HistorySource::Native));
+    assert_eq!(
+        result
+            .items
+            .iter()
+            .map(|entry| entry.item.occurred_at.as_deref())
+            .collect::<Vec<_>>(),
+        [
+            Some("2026-11-14T00:00:00.123Z"),
+            Some("2026-11-14T00:00:02.456Z"),
+            None,
+            Some("2026-11-14T00:00:03.789Z"),
+        ]
+    );
+    f.shutdown().await;
+}
+
+#[tokio::test]
+async fn native_history_fills_missing_message_times_from_matching_rollout_messages() {
+    let f = Fixture::new(
+        turn(json!([
+            {"type":"agentMessage","id":"first","text":"same reply","completedAtMs":1794614402999_i64},
+            {"type":"agentMessage","id":"second","text":"same reply"},
+            {"type":"agentMessage","id":"native-only","text":"not yet in rollout"}
+        ])),
+        vec![],
+    ).await;
+    let path = f.root.path().join("rollout.jsonl");
+    let records = [
+        json!({"type":"session_meta","payload":{"id":"thread"}}),
+        json!({"type":"turn_context","payload":{"turn_id":"another-turn"}}),
+        json!({"timestamp":"2026-11-13T00:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"text":"hello"}]}}),
+        json!({"type":"turn_context","payload":{"turn_id":"native-turn"}}),
+        json!({"timestamp":"2026-11-14T00:00:00.123Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"text":"hello"}]}}),
+        json!({"timestamp":"2026-11-14T00:00:01.111Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"text":"file-only reply"}]}}),
+        json!({"timestamp":"2026-11-14T00:00:02.222Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"text":"same reply"}]}}),
+        json!({"timestamp":"2026-11-14T00:00:03.333Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"text":"same reply"}]}}),
+    ];
+    std::fs::write(
+        &path,
+        records
+            .iter()
+            .map(|record| format!("{record}\n"))
+            .collect::<String>(),
+    )
+    .unwrap();
+    sqlx::query("UPDATE agent_bindings SET client_session_file=? WHERE session_id=?")
+        .bind(path.to_str().unwrap())
+        .bind(&f.session)
+        .execute(&f.app.db())
+        .await
+        .unwrap();
+
+    let result = page(&f, None, None, 20).await;
+    assert_eq!(result.history_source, Some(HistorySource::Native));
+    assert_eq!(
+        result
+            .items
+            .iter()
+            .map(|entry| (
+                entry.item.content_preview.as_str(),
+                entry.item.occurred_at.as_deref()
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("hello", Some("2026-11-14T00:00:00.123Z")),
+            ("same reply", Some("2026-11-14T00:00:02.999Z")),
+            ("same reply", Some("2026-11-14T00:00:03.333Z")),
+            ("not yet in rollout", None),
+        ]
+    );
+
+    std::fs::remove_file(&path).unwrap();
+    let unavailable = page(&f, None, None, 20).await;
+    assert_eq!(unavailable.history_source, Some(HistorySource::Native));
+    assert_eq!(unavailable.items.len(), 4);
+    assert!(unavailable.items[0].item.occurred_at.is_none());
+    assert_eq!(
+        unavailable.items[1].item.occurred_at.as_deref(),
+        Some("2026-11-14T00:00:02.999Z")
+    );
+    f.shutdown().await;
+}
+
+#[tokio::test]
 async fn native_history_pages_exclude_reverted_execution_records_and_keep_the_session() {
     let f = Fixture::new(
         turn(json!([{"type":"agentMessage","id":"answer","text":"first"}])),

@@ -2,6 +2,7 @@ use pontia_agent_control::client_contract::raw_transcripts::{TimelineItem, TurnT
 use pontia_core::{Error, Result};
 use serde_json::Value;
 use std::collections::HashMap;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub(super) fn timeline(
     turns: &[Value],
@@ -62,7 +63,22 @@ pub(super) fn timeline(
                     role: role.into(),
                     title: (role == "tool").then(|| raw_kind.into()),
                     status: item["status"].as_str().map(str::to_owned),
-                    occurred_at: None,
+                    occurred_at: item["completedAtMs"]
+                        .as_i64()
+                        .or_else(|| item["startedAtMs"].as_i64())
+                        .map(|millis| {
+                            OffsetDateTime::from_unix_timestamp_nanos(
+                                i128::from(millis) * 1_000_000,
+                            )
+                            .map_err(|error| {
+                                Error::Domain(format!("Invalid Codex item timestamp: {error}"))
+                            })?
+                            .format(&Rfc3339)
+                            .map_err(|error| {
+                                Error::Domain(format!("Invalid Codex item timestamp: {error}"))
+                            })
+                        })
+                        .transpose()?,
                     content_preview: content,
                     call_id: (role == "tool").then(|| id.into()),
                     managed_tool_use: None,
