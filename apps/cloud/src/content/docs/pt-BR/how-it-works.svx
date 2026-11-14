@@ -43,7 +43,7 @@ O Pontia separa a execução dos agentes do acesso remoto. Os agentes de program
 
 ## O plano de controle local
 
-O serviço `pontiad` roda no seu dispositivo. Ele coordena as sessões dos agentes, se comunica com os agent clients compatíveis, como pi, Codex, Claude Agent e agentes ACP, e serve o Local Dashboard e a API.
+O serviço `pontiad` roda no seu dispositivo. Ele coordena as sessões dos agentes, se comunica com os agent clients compatíveis, como Pi, Codex, Claude Agent e agentes ACP, e serve o Local Dashboard e a API.
 
 O agent client executa comandos usando os arquivos e as ferramentas instalados no seu dispositivo.
 

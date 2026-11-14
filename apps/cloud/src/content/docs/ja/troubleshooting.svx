@@ -45,7 +45,7 @@ External API トークンは他人に知られないようにしてください�
 
 [Workspace](https://app.pontia.dev/workspaces) で設定済みのルートを確認してください。ディレクトリを有効にできるのは、そのディレクトリが存在し、利用可能なルートの内側にある場合だけです。ルートを移動した場合は、`config.toml` の `[workspace_browser].roots` を更新して Pontia を再起動し、Dashboard から古い Workspace の登録を取り消してください。
 
-## pi が起動しない、またはアクティビティを報告しない
+## Pi が起動しない、またはアクティビティを報告しない
 
 次を確認します:
 

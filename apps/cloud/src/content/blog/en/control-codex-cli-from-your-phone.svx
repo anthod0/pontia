@@ -158,7 +158,7 @@ timeout = 10
 
 Open `/hooks` in Codex and trust the new hooks. Codex skips untrusted hooks, and any later edit to the script or the entry needs trusting again. The script prints nothing, so Codex still shows its normal approval prompt. Printing a decision from a `PermissionRequest` hook would approve or deny the request instead. Drop the `Stop` entry if a notification after every turn is too much.
 
-[Phone notifications for Codex and pi](/blog/coding-agent-phone-notifications) explains the hook payload and how to keep commands and paths out of a third-party notification server.
+[Phone notifications for Codex and Pi](/blog/coding-agent-phone-notifications) explains the hook payload and how to keep commands and paths out of a third-party notification server.
 
 ### What you end up with
 
@@ -186,7 +186,7 @@ That suits remote supervision. Routine edits proceed, and the requests that reac
 
 ## Related
 
-- [Get a phone notification when Codex or pi needs you](/blog/coding-agent-phone-notifications)
+- [Get a phone notification when Codex or Pi needs you](/blog/coding-agent-phone-notifications)
 - [Run coding agents on a VPS](/blog/run-coding-agents-on-a-vps) for an always-on Linux host
-- [How to use pi coding agent from your phone](/blog/pi-coding-agent-remote-control)
+- [How to use Pi coding agent from your phone](/blog/pi-coding-agent-remote-control)
 - [How Pontia works](/docs/how-it-works) and [Security](/docs/security)

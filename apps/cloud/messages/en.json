@@ -30,7 +30,7 @@
   "continue_with_github": "Continue with GitHub",
 
   "home_title": "Pontia — Run coding agents locally, control them anywhere",
-  "home_description": "Open-source remote control for coding agents. Run pi, Codex, Claude Code, and more on your own device, then follow and steer them from any browser.",
+  "home_description": "Open-source remote control for coding agents. Run Pi, Codex, Claude Code, and more on your own device, then follow and steer them from any browser.",
   "home_closing_title": "Your agents, wherever you are.",
   "home_closing_text": "Free and open source.",
   "hero_description": "Leave your desk, not your agents. Check in, approve, and steer every session, everywhere.",
@@ -87,7 +87,7 @@
   "faq_privacy_answer": "Dashboard traffic is encrypted end to end between your browser and your device. The Edge relays ciphertext, and Pontia Cloud is not in the traffic path.",
   "faq_security_link": "Security",
   "faq_agents_question": "Which coding agents does Pontia support?",
-  "faq_agents_answer": "Pontia integrates with pi, Codex, Claude Code, Grok Build, and OpenCode. Each agent keeps its own login, models, and sandbox, and the available controls depend on the client.",
+  "faq_agents_answer": "Pontia integrates with Pi, Codex, Claude Code, Grok Build, and OpenCode. Each agent keeps its own login, models, and sandbox, and the available controls depend on the client.",
   "faq_platforms_question": "Which platforms are supported?",
   "faq_platforms_answer": "Pontia runs on x86_64 and ARM64 Linux and on macOS 11 or later. The Dashboard works in modern desktop and mobile browsers and can be installed to a phone home screen.",
   "faq_getting_started_link": "Getting started",
@@ -270,7 +270,7 @@
 
   "blog_title": "Blog — Pontia",
   "blog_heading": "Blog",
-  "blog_description": "Guides for running coding agents such as Codex and pi on your own machines and controlling them from a browser.",
+  "blog_description": "Guides for running coding agents such as Codex and Pi on your own machines and controlling them from a browser.",
   "blog_updated": "Updated {date}",
   "blog_cta": "Pontia is free and open source. Install it on Linux or macOS in a few minutes.",
 

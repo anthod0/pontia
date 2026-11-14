@@ -1,5 +1,5 @@
 ---
-title: "Codex、Claude Code、pi のリモートコントロール: Happy、T3 Code、Pontia などを比較"
+title: "Codex、Claude Code、Pi のリモートコントロール: Happy、T3 Code、Pontia などを比較"
 description: "スマートフォンからコーディングエージェントを操作するための Claude Code Remote Control、ChatGPT アプリの Codex、Happy、T3 Code、Conductor、Pontia、SSH と tmux を比較します。対応エージェント、ホストマシン、セットアップ、Clash や sing-box、社内 VPN 経由の接続、アナリティクス、費用を取り上げます。"
 published: "2026-11-12"
 ---
@@ -12,7 +12,7 @@ Pontia は私たちが開発しているツールです。他のツールに関�
 
 - **Claude Code だけを使う場合:** Claude Code Remote Control を使ってください。組み込みの機能で、claude.ai のサブスクリプション以外にセットアップは不要です。
 - **ChatGPT デスクトップアプリを入れた Mac または Windows PC で Codex を使う場合:** ChatGPT アプリの Codex を使ってください。
-- **Linux サーバーや Mac で Codex や pi を使う場合、特に Clash、sing-box、社内 VPN を使っている場合:** Pontia を使ってください。コマンドひとつでセットアップでき、ネットワーク接続は外向きの HTTPS だけです。
+- **Linux サーバーや Mac で Codex や Pi を使う場合、特に Clash、sing-box、社内 VPN を使っている場合:** Pontia を使ってください。コマンドひとつでセットアップでき、ネットワーク接続は外向きの HTTPS だけです。
 - **多くの種類のエージェントを、プッシュ通知付きのネイティブアプリで使う場合:** T3 Code または Happy を使ってください。
 - **間に企業を挟みたくない場合:** プライベートネットワーク経由で SSH または Mosh と tmux を使ってください。
 
@@ -34,7 +34,7 @@ Pontia は私たちが開発しているツールです。他のツールに関�
 | [Happy](https://happy.engineering/welcome/) | Claude、GPT、Grok のモデル向けの Happy 独自のハーネス。代替のハーネスとして Claude Code、Codex、OpenCode、ACP エージェント | macOS、Windows、Linux、リモートサーバー | Happy Desktop、iOS と Android の Happy | Happy のリレー。エンドツーエンドで暗号化され、セルフホスト可能 | 無料、MIT。音声は有料 |
 | [T3 Code](https://github.com/pingdotgg/t3code) | Claude Code、Codex、Cursor、Grok Build、OpenCode、Antigravity、Pi など | macOS、Windows、Linux、サーバー | デスクトップアプリ、iOS、Android、Web アプリ | Cloudflare トンネル経由の T3 Connect、または LAN や Tailscale のアドレスへの直接接続 | 無料、MIT。T3 Connect は 3 台まで無料 |
 | [Conductor](https://www.conductor.build/docs/reference/remote-control) | Claude Code、Codex、Cursor、OpenCode | Mac、または Conductor のクラウドサンドボックス | ローカルの Workspace 向けの実験的な iOS アプリ | Conductor のリレー。エンドツーエンドで暗号化 | Conductor のサイトを参照 |
-| [Pontia](/docs/how-it-works) | Codex と pi | Linux（x86_64、ARM64）と macOS 13.5 以降。ヘッドレスのサーバーを含む | 任意のブラウザーで app.pontia.dev。スマートフォンとデスクトップにアプリとしてインストール可能 | HTTPS 経由の Edge リレー。エンドツーエンドで暗号化され、セルフホスト可能 | 無料、Apache 2.0 |
+| [Pontia](/docs/how-it-works) | Codex と Pi | Linux（x86_64、ARM64）と macOS 13.5 以降。ヘッドレスのサーバーを含む | 任意のブラウザーで app.pontia.dev。スマートフォンとデスクトップにアプリとしてインストール可能 | HTTPS 経由の Edge リレー。エンドツーエンドで暗号化され、セルフホスト可能 | 無料、Apache 2.0 |
 | SSH + tmux | ターミナルで動くあらゆるエージェント | SSH で接続できるあらゆるマシン | 任意の SSH アプリ | なし、または Tailscale などのプライベートネットワーク | 無料 |
 
 ## どれが合うか
@@ -43,7 +43,7 @@ Pontia は私たちが開発しているツールです。他のツールに関�
 | --- | --- |
 | 新しく何もインストールせずにスマートフォンで Claude Code を使う | Claude Code Remote Control |
 | スマートフォンで Codex を使い、すでに Mac や Windows で ChatGPT デスクトップアプリを使っている | ChatGPT アプリの Codex |
-| Linux サーバーや Mac で Codex や pi を使い、ドメイン、トンネル、VPN なしにコマンドひとつでセットアップする | Pontia |
+| Linux サーバーや Mac で Codex や Pi を使い、ドメイン、トンネル、VPN なしにコマンドひとつでセットアップする | Pontia |
 | ホストやスマートフォンで Clash、sing-box、社内 VPN を使っていても動くリモート | Pontia |
 | 多くのエージェントを、プッシュ通知付きのネイティブのデスクトップアプリとスマートフォンアプリで使う | T3 Code |
 | 会話の途中でモデルを切り替えられるひとつのハーネスと、チーム用サーバー | Happy |
@@ -84,7 +84,7 @@ OpenAI のガイドによると、セットアップはデスクトップアプ�
 
 ## Pontia
 
-Pontia は、自分の Linux または macOS マシンで Codex と pi を実行し、各セッションを [app.pontia.dev](https://app.pontia.dev) にチャットとして表示します。Dashboard は、スマートフォンやデスクトップのブラウザーからアプリとしてインストールできます。
+Pontia は、自分の Linux または macOS マシンで Codex と Pi を実行し、各セッションを [app.pontia.dev](https://app.pontia.dev) にチャットとして表示します。Dashboard は、スマートフォンやデスクトップのブラウザーからアプリとしてインストールできます。
 
 Node.js と npm をインストールした状態で、エージェントを実行するユーザーとして次のコマンドを実行します。
 
@@ -95,18 +95,18 @@ npx @pontia/cli init
 `pontia init` は、SSH 経由でも使える URL とワンタイムコードでサインインし、マシンを公式の Edge に登録し、Linux での systemd の lingering を含め、エージェントのバックグラウンドサービスをセットアップします。ドメイン、トンネル、VPN、ポートフォワーディングの設定は不要です。
 
 - **Codex** は app-server デーモン経由で動作します。コマンド、ファイルの変更、追加の権限に対する承認リクエストは、**Allow** と **Deny** のボタン付きで表示されます。ランチャーにより、ターミナルで `codex` から始めたスレッドが Dashboard に表示されるため、スマートフォンから続きを操作できます。[スマートフォンから Codex を使う](/blog/control-codex-cli-from-your-phone)を参照してください。
-- **pi** は、Pontia が管理する tmux ペイン内のネイティブの TUI で動作するため、マシン上で同じセッションにアタッチできます。[スマートフォンから pi を使う](/blog/pi-coding-agent-remote-control)を参照してください。
+- **Pi** は、Pontia が管理する tmux ペイン内のネイティブの TUI で動作するため、マシン上で同じセッションにアタッチできます。[スマートフォンから Pi を使う](/blog/pi-coding-agent-remote-control)を参照してください。
 
 各エージェントは、独自の認証情報、サンドボックス、承認ポリシーを保持します。マシンは HTTPS で外向きに接続するだけで、ポートを開ける必要はありません。ブラウザーとマシンは通信をエンドツーエンドで暗号化します。公式の Edge を使うことも、[自分で運用する](/docs/self-hosted-edge)こともできます。Pontia はプロダクトアナリティクスを送信しません。
 
-Pontia はプッシュ通知を送りません。[Codex と pi のスマートフォン通知](/blog/coding-agent-phone-notifications)では、ntfy にプッシュするフックを紹介しています。
+Pontia はプッシュ通知を送りません。[Codex と Pi のスマートフォン通知](/blog/coding-agent-phone-notifications)では、ntfy にプッシュするフックを紹介しています。
 
 ## SSH、Mosh、tmux
 
 エージェントを tmux で実行し、ホストとスマートフォンを Tailscale などのプライベートネットワークに参加させ、SSH アプリからアタッチします。間には何も入らず、ターミナルで動くあらゆるエージェントが使えます。その代わり、小さな画面で tmux の履歴をスクロールし、スマートフォンのキーボードでプロンプトに答え、通知は自分で設定することになります。
 
 - [Tailscale と Cloudflare Tunnel の比較](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)では、ポートを開けずにホストに到達する方法を説明しています。
-- [VPS で Codex と pi を実行する](/blog/run-coding-agents-on-a-vps)では、ログアウト後もエージェントを動かし続ける方法を説明しています。
+- [VPS で Codex と Pi を実行する](/blog/run-coding-agents-on-a-vps)では、ログアウト後もエージェントを動かし続ける方法を説明しています。
 
 ## Clash、sing-box、社内 VPN 経由の接続
 
@@ -161,5 +161,5 @@ sing-box では、TUN inbound でスニッフィングを有効にしたうえ�
 
 - [コーディングエージェントのリモートはエンドツーエンドで暗号化されていますか？](/blog/self-hosted-relay-for-coding-agents)
 - [スマートフォンから Codex CLI を使う方法](/blog/control-codex-cli-from-your-phone)
-- [スマートフォンから pi コーディングエージェントを使う方法](/blog/pi-coding-agent-remote-control)
+- [スマートフォンから Pi コーディングエージェントを使う方法](/blog/pi-coding-agent-remote-control)
 - [Pontia の仕組み](/docs/how-it-works)

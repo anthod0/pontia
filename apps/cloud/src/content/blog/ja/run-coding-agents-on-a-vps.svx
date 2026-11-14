@@ -1,12 +1,12 @@
 ---
-title: "VPS で Codex と pi を実行する: 常時稼働のコーディングエージェントのためのセットアップチェックリスト"
-description: Codex や pi のような長時間動くコーディングエージェント向けに Linux VPS をセットアップし、スマートフォンからアクセスする方法です。ユーザーアカウント、systemd の lingering、ヘッドレスでのサインイン、Session の永続化、ポートを開かないリモートアクセスを扱います。
+title: "VPS で Codex と Pi を実行する: 常時稼働のコーディングエージェントのためのセットアップチェックリスト"
+description: Codex や Pi のような長時間動くコーディングエージェント向けに Linux VPS をセットアップし、スマートフォンからアクセスする方法です。ユーザーアカウント、systemd の lingering、ヘッドレスでのサインイン、Session の永続化、ポートを開かないリモートアクセスを扱います。
 published: "2026-11-11"
 ---
 
 ノートパソコン上のコーディングエージェントは、蓋を閉じると止まります。常時稼働の Linux サーバーに移せば、長いリファクタリングやテスト実行もリポジトリやビルドツールのそばで夜通し続き、どのデバイスからでも様子を確認できます。
 
-サーバーは VPS である必要はありません。自宅のマシンや余っているミニ PC でも同じように使えます。このチェックリストでは、ヘッドレスホストでつまずきやすい点を扱います。どのアカウントでエージェントを実行するか、ログアウト後もプロセスを動かし続ける方法、ブラウザーなしでのサインイン、スマートフォンから Session にアクセスする方法です。例では Codex CLI と pi を使います。
+サーバーは VPS である必要はありません。自宅のマシンや余っているミニ PC でも同じように使えます。このチェックリストでは、ヘッドレスホストでつまずきやすい点を扱います。どのアカウントでエージェントを実行するか、ログアウト後もプロセスを動かし続ける方法、ブラウザーなしでのサインイン、スマートフォンから Session にアクセスする方法です。例では Codex CLI と Pi を使います。
 
 ## 結論
 
@@ -20,7 +20,7 @@ Pontia はログアウト後も Session を動かし続け、エンドツーエ�
 
 ## 1. 専用の非 root ユーザーでエージェントを実行する
 
-エージェントは、それを実行するアカウントの権限で動作します。Codex には OS が強制するサンドボックスと承認ポリシーがあります。pi にはデフォルトでどちらもありません。pi の[セキュリティガイド](https://pi.dev/docs/latest/security)には、pi はユーザーの権限で動作し、ツール呼び出しのたびに確認を求めることはないと記載されています。いずれにしても、アカウントが外側の境界になります。
+エージェントは、それを実行するアカウントの権限で動作します。Codex には OS が強制するサンドボックスと承認ポリシーがあります。Pi にはデフォルトでどちらもありません。Pi の[セキュリティガイド](https://pi.dev/docs/latest/security)には、Pi はユーザーの権限で動作し、ツール呼び出しのたびに確認を求めることはないと記載されています。いずれにしても、アカウントが外側の境界になります。
 
 ```sh
 sudo adduser agent
@@ -38,7 +38,7 @@ sudo adduser agent
 codex login --device-auth
 ```
 
-Codex が URL とコードを表示するので、スマートフォンかノートパソコンで開きます。pi の場合は、プロバイダーの API キーを環境変数に設定するか、`pi` の中で `/login` を実行します。プロバイダーの一覧は [pi のクイックスタート](https://pi.dev/docs/latest/quickstart)にあります。
+Codex が URL とコードを表示するので、スマートフォンかノートパソコンで開きます。Pi の場合は、プロバイダーの API キーを環境変数に設定するか、`pi` の中で `/login` を実行します。プロバイダーの一覧は [Pi のクイックスタート](https://pi.dev/docs/latest/quickstart)にあります。
 
 ## 3. ログアウト後もサービスを動かし続ける
 
@@ -49,7 +49,7 @@ sudo loginctl enable-linger agent   # from an admin account
 systemctl --user is-system-running  # as agent, over SSH
 ```
 
-`is-system-running` は `running` を出力するはずです。無関係なユニットが失敗している場合は `degraded` になります。Codex を選択すると、`pontia init` が lingering を有効にします。pi だけを使う構成では、上のコマンドを自分で実行してください。
+`is-system-running` は `running` を出力するはずです。無関係なユニットが失敗している場合は `degraded` になります。Codex を選択すると、`pontia init` が lingering を有効にします。Pi だけを使う構成では、上のコマンドを自分で実行してください。
 
 ## 4. Pontia をインストールする
 
@@ -59,19 +59,19 @@ Node.js と npm をインストールした状態で、エージェント用の�
 npx @pontia/cli init
 ```
 
-pi、Codex、またはその両方を選択します。初期化処理では次のことを行います。
+Pi、Codex、またはその両方を選択します。初期化処理では次のことを行います。
 
 - Pontia を systemd ユーザーサービスとしてインストールします。
 - Codex の場合は、Codex の app-server デーモンを起動するサービスをインストールします。
-- pi の場合は、Pontia の pi プラグインをインストールします。
+- Pi の場合は、Pontia の Pi プラグインをインストールします。
 - URL とワンタイムコードを使って Google または GitHub でサインインします。承認はスマートフォンから行います。
 - サーバーを公式のリレーに登録します。
 
-完了したら、スマートフォンで [app.pontia.dev](https://app.pontia.dev) を開いてサーバーを選択します。そこから Codex や pi の Session を開始、確認、中断、継続でき、Codex の承認リクエストに **Allow** または **Deny** で応答できます。
+完了したら、スマートフォンで [app.pontia.dev](https://app.pontia.dev) を開いてサーバーを選択します。そこから Codex や Pi の Session を開始、確認、中断、継続でき、Codex の承認リクエストに **Allow** または **Deny** で応答できます。
 
 サーバーはリレーに外向きに接続し、リレーはブラウザーとサーバーの間で暗号文を転送するだけです。ポートを開いたり、VPN を設定したり、リバースプロキシを置いたりする必要はありません。上級者は[自分のリレーを運用](/docs/self-hosted-edge)することもできます。
 
-Dashboard から開始した pi の Session は Pontia サービスの外の tmux で動作するので、Pontia を再起動やアップデートしても停止しません。SSH でログインして `tmux attach -t SESSION_NAME` でアタッチすることもできます。名前は `pontia_` で始まります。
+Dashboard から開始した Pi の Session は Pontia サービスの外の tmux で動作するので、Pontia を再起動やアップデートしても停止しません。SSH でログインして `tmux attach -t SESSION_NAME` でアタッチすることもできます。名前は `pontia_` で始まります。
 
 セットアップの確認と保守には次のコマンドを使います。
 
@@ -153,7 +153,7 @@ sshd をリロードする前に、`sudo sshd -T | grep -E 'passwordauthenticati
 
 スマートフォンで別の VPN も実行する必要がある場合、Tailscale は同時に実行できません。[Tailscale と Cloudflare Tunnel の比較](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)では、スマートフォンに VPN がなくても使える Cloudflare Tunnel と、VPN やプロキシ同士のルーティングの競合について説明しています。
 
-**通知。** Codex のフックと pi の拡張機能を使うと、エージェントが対応を必要としたときに通知を送れます。[Codex と pi のスマートフォン通知](/blog/coding-agent-phone-notifications)に両方のスクリプトがあります。
+**通知。** Codex のフックと Pi の拡張機能を使うと、エージェントが対応を必要としたときに通知を送れます。[Codex と Pi のスマートフォン通知](/blog/coding-agent-phone-notifications)に両方のスクリプトがあります。
 
 これらはすべて自分で保守することになり、スマートフォンでは小さなキーボードで全画面の TUI を操作することになります。
 
@@ -165,14 +165,14 @@ sshd をリロードする前に、`sudo sshd -T | grep -E 'passwordauthenticati
 | `systemctl --user` が "Failed to connect to bus" で失敗する | `su` でユーザーを切り替えている。そのユーザーとして SSH でログインする |
 | エージェントがシェルでは動くがサービスからは動かない | サービスの `PATH` に、エージェントや Node.js を含むディレクトリがない |
 | サービス内の Codex がシェルとは異なる認証情報を使う | サービスとシェルで `CODEX_HOME` の値が異なる |
-| pi で `Shift+Enter` が改行ではなく送信になる | tmux の extended keys がオフになっている。pi の [tmux ガイド](https://pi.dev/docs/latest/tmux)を参照 |
+| Pi で `Shift+Enter` が改行ではなく送信になる | tmux の extended keys がオフになっている。Pi の [tmux ガイド](https://pi.dev/docs/latest/tmux)を参照 |
 | lingering を有効にしてもログアウトすると tmux セッションが終了する | `/etc/systemd/logind.conf` の `KillUserProcesses=yes` がログインセッションのスコープを終了させている。上記のユーザーサービスとして tmux を実行する |
 | 数か月後に Tailscale 経由の SSH が動かなくなる | サーバーの Tailscale キーが期限切れになった。サーバーではキーの有効期限を無効にする |
 
 ## 関連記事
 
 - [コーディングエージェントのサーバーにアクセスするための Tailscale と Cloudflare Tunnel の比較](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
-- [Codex や pi が対応を必要としたときにスマートフォンに通知を受け取る](/blog/coding-agent-phone-notifications)
+- [Codex や Pi が対応を必要としたときにスマートフォンに通知を受け取る](/blog/coding-agent-phone-notifications)
 - [スマートフォンから Codex CLI を使う方法](/blog/control-codex-cli-from-your-phone)
-- [スマートフォンから pi コーディングエージェントを使う方法](/blog/pi-coding-agent-remote-control)
+- [スマートフォンから Pi コーディングエージェントを使う方法](/blog/pi-coding-agent-remote-control)
 - [Linux プラットフォームに関する注意事項](/docs/platforms/linux)と[セキュリティ](/docs/security)

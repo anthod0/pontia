@@ -11,7 +11,7 @@ Pontia には次の Agent Client が含まれています。
 
 | Client | ローカルの要件 | ローカルの連携 |
 | --- | --- | --- |
-| [pi](/docs/agent-clients/pi) | `pi` と `tmux` | Pontia の pi プラグイン |
+| [Pi](/docs/agent-clients/pi) | `pi` と `tmux` | Pontia の Pi プラグイン |
 | [Codex](/docs/codex) | app-server デーモンに対応した Codex CLI | ユーザーごとの Codex デーモンの起動、ランチャー、シェルの PATH |
 | [Claude Agent](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) | Node.js LTS、npm、Claude Code の認証 | npm の `@pontia/claude-client` パッケージ |
 | ACP エージェント | stdio 経由で Agent Client Protocol を話すエージェント | なし。エージェントをインストールした後にエントリを有効にします |
@@ -24,7 +24,7 @@ Pontia には次の Agent Client が含まれています。
 pontia init
 ```
 
-初期化ツールは、設定を適用する前に選択した Client を確認します。pi はデフォルトで選択されており、Codex と `claude-agent` は任意です。選択した Client は新しい Session で有効になります。
+初期化ツールは、設定を適用する前に選択した Client を確認します。Pi はデフォルトで選択されており、Codex と `claude-agent` は任意です。選択した Client は新しい Session で有効になります。
 
 <h2 id="enable-an-acp-agent">ACP エージェントを有効にする</h2>
 

@@ -21,7 +21,7 @@ npx @pontia/cli init
 
 向导可以让你：
 
-1. 选择要安装的 Client 集成：pi、Codex、Claude Agent 或其任意组合。Codex 包括其守护进程启动和[启动器](/docs/codex#codex-launcher)。
+1. 选择要安装的 Client 集成：Pi、Codex、Claude Agent 或其任意组合。Codex 包括其守护进程启动和[启动器](/docs/codex#codex-launcher)。
 2. 检查并确认设置。
 3. 创建或保留本地 API token，启动 Pontia 服务，并启用所选 Client。
 4. 登录 Pontia Cloud，并为远程访问注册设备。
@@ -54,9 +54,9 @@ Client 认证和 Cloud 登录可能需要用户授权。出现提示时完成授
 
 ### 1. 准备安装
 
-选择要启用的 Client（pi、Codex、Claude Agent 或其组合）、设备显示名称以及要浏览的项目目录。所有步骤都以同一个操作系统用户身份运行。按照 [Agent Client](/docs/agent-clients#enable-an-acp-agent) 中的说明启用 ACP Agent。
+选择要启用的 Client（Pi、Codex、Claude Agent 或其组合）、设备显示名称以及要浏览的项目目录。所有步骤都以同一个操作系统用户身份运行。按照 [Agent Client](/docs/agent-clients#enable-an-acp-agent) 中的说明启用 ACP Agent。
 
-1. 使用 `npx @pontia/cli install` 安装 `pontia` 和 `pontiad`，并将 `$HOME/.local/bin` 添加到 `PATH`；或者使用 [shell 安装脚本](/docs/getting-started#install-with-the-shell-script)，但不运行交互式初始化程序。对于缺失的 Client 工具，请参考官方的 [pi 快速开始](https://pi.dev/docs/latest/quickstart)、[tmux 安装指南](https://github.com/tmux/tmux/wiki/Installing)或 [Codex CLI 安装](https://learn.chatgpt.com/docs/codex/cli)。只安装所选 Client 及其前置依赖；复用已能正常工作的安装。
+1. 使用 `npx @pontia/cli install` 安装 `pontia` 和 `pontiad`，并将 `$HOME/.local/bin` 添加到 `PATH`；或者使用 [shell 安装脚本](/docs/getting-started#install-with-the-shell-script)，但不运行交互式初始化程序。对于缺失的 Client 工具，请参考官方的 [Pi 快速开始](https://pi.dev/docs/latest/quickstart)、[tmux 安装指南](https://github.com/tmux/tmux/wiki/Installing)或 [Codex CLI 安装](https://learn.chatgpt.com/docs/codex/cli)。只安装所选 Client 及其前置依赖；复用已能正常工作的安装。
 2. 为所有命令选定一个绝对路径的 `PONTIA_HOME`。保留现有安装的配置和凭据。默认值为 `~/.pontia`。
 3. 对于 Codex，选择其已认证的现有主目录：已配置的 `CODEX_HOME`，默认为 `~/.codex`。Codex 认证、其守护进程和 Pontia 都使用同一个目录。
 
@@ -87,7 +87,7 @@ pontia setup codex
 pontia setup claude-agent
 ```
 
-pi 需要已安装 `pi`；其设置会安装 `@pontia/pi-client-plugin`。Codex 需要已安装支持守护进程的 CLI；其设置会配置自动启动、验证连接，并安装启动器和 shell PATH。Claude Agent 需要 Node.js LTS；设置会在缺失时安装默认 host，并检查现有或显式选择的 host。
+Pi 需要已安装 `pi`；其设置会安装 `@pontia/pi-client-plugin`。Codex 需要已安装支持守护进程的 CLI；其设置会配置自动启动、验证连接，并安装启动器和 shell PATH。Claude Agent 需要 Node.js LTS；设置会在缺失时安装默认 host，并检查现有或显式选择的 host。
 
 这些命令会保存运行时路径、配置 Pontia 服务并启用所选 Client。对于 Codex，请打开新终端或运行打印出的激活命令。使用每个 Client 自己的登录流程完成认证；设置不会登录，也不会更改模型凭据、沙箱设置或审批策略。
 
@@ -126,7 +126,7 @@ pontia client list --json
 pontia client set --id <CLIENT_ID> --config <JSON_FILE>
 ```
 
-在文件中使用原始的 pi 或 Codex 可执行文件路径，然后检查 `effective_config` 是否反映了该更改。
+在文件中使用原始的 Pi 或 Codex 可执行文件路径，然后检查 `effective_config` 是否反映了该更改。
 
 再次运行 `pontia client list`，确认每个所选条目都显示 `enabled`。第 7 步会通过从 Remote Dashboard 启动 Session 来验证这些 Client。
 

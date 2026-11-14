@@ -45,7 +45,7 @@ launchctl print gui/$(id -u)/dev.pontia.pontiad
 
 在 [Workspace](https://app.pontia.dev/workspaces) 中检查已配置的根目录。只有当目录存在且位于某个可用根目录内时，才能激活它。如果根目录已移动，请更新 `config.toml` 中的 `[workspace_browser].roots`，重启 Pontia，然后在 Dashboard 中撤销过时的 Workspace 注册。
 
-## pi 无法启动或上报活动
+## Pi 无法启动或上报活动
 
 检查：
 

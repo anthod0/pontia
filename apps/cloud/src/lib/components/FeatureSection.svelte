@@ -6,7 +6,7 @@
 	import { localizeHref } from '$lib/paraglide/runtime';
 
 	const clients = [
-		{ name: 'pi', logo: '/client-logos/pi.svg' },
+		{ name: 'Pi', logo: '/client-logos/pi.svg' },
 		{ name: 'Codex', logo: '/client-logos/codex.svg', monochrome: true },
 		{ name: 'Claude Code', logo: '/client-logos/claude-code.svg' },
 		{ name: 'Grok Build', logo: '/client-logos/grok-build.svg' },

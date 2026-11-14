@@ -1,12 +1,12 @@
 ---
-title: "Rodando Codex e pi em uma VPS: checklist de configuração para agentes de programação sempre ligados"
-description: "Como configurar uma VPS Linux para agentes de programação de longa duração, como Codex e pi, e acessá-los pelo celular, abordando contas de usuário, lingering do systemd, login headless, persistência de sessões e acesso remoto sem portas abertas."
+title: "Rodando Codex e Pi em uma VPS: checklist de configuração para agentes de programação sempre ligados"
+description: "Como configurar uma VPS Linux para agentes de programação de longa duração, como Codex e Pi, e acessá-los pelo celular, abordando contas de usuário, lingering do systemd, login headless, persistência de sessões e acesso remoto sem portas abertas."
 published: "2026-11-11"
 ---
 
 Um agente de programação em um notebook para quando a tampa é fechada. Mova-o para um servidor Linux sempre ligado, e uma refatoração longa ou uma execução de testes continua durante a noite, ao lado do repositório e das ferramentas de build, e você pode acompanhá-la de qualquer dispositivo.
 
-O servidor não precisa ser uma VPS. Uma máquina em casa ou um mini PC sobrando funciona da mesma forma. Este checklist aborda as partes que costumam dar errado em um host headless: qual conta roda o agente, como manter os processos vivos após o logout, como fazer login sem navegador e como acessar as sessões pelo celular. Os exemplos usam o Codex CLI e o pi.
+O servidor não precisa ser uma VPS. Uma máquina em casa ou um mini PC sobrando funciona da mesma forma. Este checklist aborda as partes que costumam dar errado em um host headless: qual conta roda o agente, como manter os processos vivos após o logout, como fazer login sem navegador e como acessar as sessões pelo celular. Os exemplos usam o Codex CLI e o Pi.
 
 ## A resposta curta
 
@@ -20,7 +20,7 @@ O restante deste artigo explica cada passo e como montar as mesmas peças por co
 
 ## 1. Rode os agentes como um usuário dedicado sem privilégios de root
 
-Um agente age com as permissões da conta que o executa. O Codex tem um sandbox imposto pelo sistema operacional e uma política de aprovação. O pi não tem nenhum dos dois por padrão: seu [guia de segurança](https://pi.dev/docs/latest/security) diz que ele age com as permissões do seu usuário e não pergunta antes de cada chamada de ferramenta. De qualquer forma, a conta é sua barreira externa.
+Um agente age com as permissões da conta que o executa. O Codex tem um sandbox imposto pelo sistema operacional e uma política de aprovação. O Pi não tem nenhum dos dois por padrão: seu [guia de segurança](https://pi.dev/docs/latest/security) diz que ele age com as permissões do seu usuário e não pergunta antes de cada chamada de ferramenta. De qualquer forma, a conta é sua barreira externa.
 
 ```sh
 sudo adduser agent
@@ -38,7 +38,7 @@ O servidor não tem navegador, então use fluxos com código de dispositivo onde
 codex login --device-auth
 ```
 
-O Codex imprime uma URL e um código que você abre no celular ou no notebook. Para o pi, defina a chave de API do seu provedor como variável de ambiente, ou execute `/login` dentro do `pi`. O [quickstart do pi](https://pi.dev/docs/latest/quickstart) lista os provedores.
+O Codex imprime uma URL e um código que você abre no celular ou no notebook. Para o Pi, defina a chave de API do seu provedor como variável de ambiente, ou execute `/login` dentro do `pi`. O [quickstart do Pi](https://pi.dev/docs/latest/quickstart) lista os provedores.
 
 ## 3. Mantenha os serviços rodando após o logout
 
@@ -49,7 +49,7 @@ sudo loginctl enable-linger agent   # from an admin account
 systemctl --user is-system-running  # as agent, over SSH
 ```
 
-`is-system-running` deve imprimir `running`, ou `degraded` se alguma unidade não relacionada falhou. Quando você seleciona o Codex, o `pontia init` ativa o lingering para você. Em uma configuração só com pi, execute o comando acima você mesmo.
+`is-system-running` deve imprimir `running`, ou `degraded` se alguma unidade não relacionada falhou. Quando você seleciona o Codex, o `pontia init` ativa o lingering para você. Em uma configuração só com Pi, execute o comando acima você mesmo.
 
 ## 4. Instale o Pontia
 
@@ -59,19 +59,19 @@ Com Node.js e npm instalados, execute como o usuário do agente:
 npx @pontia/cli init
 ```
 
-Selecione pi, Codex ou ambos. O inicializador:
+Selecione Pi, Codex ou ambos. O inicializador:
 
 - instala o Pontia como um serviço de usuário do systemd;
 - para o Codex, instala um serviço que inicia o daemon app-server do Codex;
-- para o pi, instala o plugin do Pontia para o pi;
+- para o Pi, instala o plugin do Pontia para o Pi;
 - faz seu login com Google ou GitHub por meio de uma URL e um código de uso único, que você aprova pelo celular;
 - registra o servidor em um relay oficial.
 
-Quando terminar, abra [app.pontia.dev](https://app.pontia.dev) no celular e selecione o servidor. A partir dali, você inicia, acompanha, interrompe e continua sessões do Codex ou do pi, e responde a pedidos de aprovação do Codex com **Allow** ou **Deny**.
+Quando terminar, abra [app.pontia.dev](https://app.pontia.dev) no celular e selecione o servidor. A partir dali, você inicia, acompanha, interrompe e continua sessões do Codex ou do Pi, e responde a pedidos de aprovação do Codex com **Allow** ou **Deny**.
 
 O servidor se conecta para fora até o relay, e o relay encaminha apenas texto cifrado entre o seu navegador e o servidor. Você não abre portas, não configura VPN nem coloca um proxy reverso na frente de nada. Usuários avançados podem [rodar o próprio relay](/docs/self-hosted-edge).
 
-As sessões do pi iniciadas pelo Dashboard rodam no tmux, fora do serviço do Pontia, então reiniciar ou atualizar o Pontia não as interrompe. Você ainda pode entrar por SSH e se anexar a uma delas com `tmux attach -t SESSION_NAME`. Os nomes começam com `pontia_`.
+As sessões do Pi iniciadas pelo Dashboard rodam no tmux, fora do serviço do Pontia, então reiniciar ou atualizar o Pontia não as interrompe. Você ainda pode entrar por SSH e se anexar a uma delas com `tmux attach -t SESSION_NAME`. Os nomes começam com `pontia_`.
 
 Para verificar e manter a configuração:
 
@@ -153,7 +153,7 @@ Execute `sudo sshd -T | grep -E 'passwordauthentication|permitrootlogin'` para c
 
 Se o seu celular também precisa rodar outra VPN, o Tailscale não pode rodar ao mesmo tempo. [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) aborda o Cloudflare Tunnel, que funciona sem VPN no celular, e os conflitos de roteamento entre VPNs e proxies.
 
-**Notificações.** Hooks do Codex e uma extensão do pi podem enviar uma notificação quando um agente precisa de você. [Notificações no celular para Codex e pi](/blog/coding-agent-phone-notifications) tem os dois scripts.
+**Notificações.** Hooks do Codex e uma extensão do Pi podem enviar uma notificação quando um agente precisa de você. [Notificações no celular para Codex e Pi](/blog/coding-agent-phone-notifications) tem os dois scripts.
 
 Você mantém cada uma dessas peças por conta própria e, no celular, opera uma TUI em tela cheia com um teclado pequeno.
 
@@ -165,14 +165,14 @@ Você mantém cada uma dessas peças por conta própria e, no celular, opera uma
 | `systemctl --user` falha com "Failed to connect to bus" | Você trocou de usuário com `su`. Faça login por SSH como esse usuário |
 | O agente funciona no seu shell, mas não a partir de um serviço | O `PATH` do serviço não inclui o diretório que contém o agente ou o Node.js |
 | O Codex em um serviço usa credenciais diferentes das do seu shell | O serviço e o seu shell usam valores diferentes de `CODEX_HOME` |
-| `Shift+Enter` envia em vez de adicionar uma nova linha no pi | As extended keys do tmux estão desativadas. Veja o [guia de tmux](https://pi.dev/docs/latest/tmux) do pi |
+| `Shift+Enter` envia em vez de adicionar uma nova linha no Pi | As extended keys do tmux estão desativadas. Veja o [guia de tmux](https://pi.dev/docs/latest/tmux) do Pi |
 | As sessões do tmux morrem quando você faz logout, mesmo com lingering | `KillUserProcesses=yes` em `/etc/systemd/logind.conf` encerra o escopo da sessão de login. Rode o tmux como o serviço de usuário acima |
 | O SSH pelo Tailscale para de funcionar meses depois | A chave do Tailscale do servidor expirou. Desative a expiração de chave para servidores |
 
 ## Relacionados
 
 - [Tailscale vs Cloudflare Tunnel para acessar um servidor de agentes de programação](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
-- [Receba uma notificação no celular quando o Codex ou o pi precisar de você](/blog/coding-agent-phone-notifications)
+- [Receba uma notificação no celular quando o Codex ou o Pi precisar de você](/blog/coding-agent-phone-notifications)
 - [Como usar o Codex CLI pelo celular](/blog/control-codex-cli-from-your-phone)
-- [Como usar o agente de programação pi pelo celular](/blog/pi-coding-agent-remote-control)
+- [Como usar o agente de programação Pi pelo celular](/blog/pi-coding-agent-remote-control)
 - [Notas da plataforma Linux](/docs/platforms/linux) e [Segurança](/docs/security)

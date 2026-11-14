@@ -1,12 +1,12 @@
 ---
 title: "Tailscale 与 Cloudflare Tunnel 对比：用手机访问运行编程 Agent 的服务器"
-description: 如何在不开放端口的情况下，用手机访问家庭服务器或 VPS 上的 Codex 或 pi。对比 Tailscale、使用 cloudflared 的 Cloudflare Tunnel 和 Cloudflare 浏览器 SSH 终端，包括配置步骤和常见陷阱，以及与其他 VPN 和代理的冲突。
+description: 如何在不开放端口的情况下，用手机访问家庭服务器或 VPS 上的 Codex 或 Pi。对比 Tailscale、使用 cloudflared 的 Cloudflare Tunnel 和 Cloudflare 浏览器 SSH 终端，包括配置步骤和常见陷阱，以及与其他 VPN 和代理的冲突。
 published: "2026-11-12"
 ---
 
 要在手机上查看编程 Agent，首先需要能访问它所运行的机器。把 SSH 开放到公网可行，但会招来源源不断的登录尝试，而且依赖公网 IP，而位于运营商 NAT 之后的家用机器可能没有公网 IP。Tailscale 和 Cloudflare Tunnel 能避免这两个问题：服务器主动向外连接，没有任何服务监听公网端口。
 
-本文针对一个具体任务对比这两者：在服务器上用 tmux 保持 Codex 或 pi 的 Session，并从手机连上去。我们开发的工具 Pontia 在文末简要介绍。
+本文针对一个具体任务对比这两者：在服务器上用 tmux 保持 Codex 或 Pi 的 Session，并从手机连上去。我们开发的工具 Pontia 在文末简要介绍。
 
 ## 简短结论
 
@@ -33,7 +33,7 @@ codex            # or: pi
 # detach with Ctrl-b d
 ```
 
-如果服务器在你退出登录后连同 tmux 一起结束了会话，原因通常是 systemd。[在 VPS 上运行 Codex 和 pi](/blog/run-coding-agents-on-a-vps) 介绍了 lingering 和 `KillUserProcesses`。
+如果服务器在你退出登录后连同 tmux 一起结束了会话，原因通常是 systemd。[在 VPS 上运行 Codex 和 Pi](/blog/run-coding-agents-on-a-vps) 介绍了 lingering 和 `KillUserProcesses`。
 
 ## 方案 1：Tailscale
 
@@ -132,12 +132,12 @@ Cloudflare 可以把同一个 SSH 应用渲染成浏览器中的终端，这样�
 
 ## 这些方案都没有解决的问题
 
-每个方案提供的都是 shell。你仍然要在手机键盘上操作全屏 TUI，在 tmux 中往回滚动查看发生了什么，而且只有在主动查看时才知道 Agent 在等待。[Codex 和 pi 的手机通知](/blog/coding-agent-phone-notifications)用 hook 和 ntfy 解决了最后这一点。
+每个方案提供的都是 shell。你仍然要在手机键盘上操作全屏 TUI，在 tmux 中往回滚动查看发生了什么，而且只有在主动查看时才知道 Agent 在等待。[Codex 和 Pi 的手机通知](/blog/coding-agent-phone-notifications)用 hook 和 ntfy 解决了最后这一点。
 
-[Pontia](/docs/how-it-works) 采用了不同的方式。服务器上的 `pontiad` 向外连接到中继，你在手机浏览器中以聊天的形式使用 Codex 和 pi 的 Session，并通过按钮处理 Codex 审批。手机不需要 VPN、应用或域名，中继只转发端到端加密的流量。它可以与上述任一方案同时运行，因此 SSH 仍可用于其他所有事情。
+[Pontia](/docs/how-it-works) 采用了不同的方式。服务器上的 `pontiad` 向外连接到中继，你在手机浏览器中以聊天的形式使用 Codex 和 Pi 的 Session，并通过按钮处理 Codex 审批。手机不需要 VPN、应用或域名，中继只转发端到端加密的流量。它可以与上述任一方案同时运行，因此 SSH 仍可用于其他所有事情。
 
 ## 相关文章
 
-- [在 VPS 上运行 Codex 和 pi](/blog/run-coding-agents-on-a-vps)
+- [在 VPS 上运行 Codex 和 Pi](/blog/run-coding-agents-on-a-vps)
 - [如何在手机上使用 Codex CLI](/blog/control-codex-cli-from-your-phone)
-- [如何在手机上使用 pi 编程 Agent](/blog/pi-coding-agent-remote-control)
+- [如何在手机上使用 Pi 编程 Agent](/blog/pi-coding-agent-remote-control)

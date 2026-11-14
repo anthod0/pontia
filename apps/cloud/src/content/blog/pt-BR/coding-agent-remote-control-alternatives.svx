@@ -1,5 +1,5 @@
 ---
-title: "Controle remoto para Codex, Claude Code e pi: Happy, T3 Code, Pontia e outros comparados"
+title: "Controle remoto para Codex, Claude Code e Pi: Happy, T3 Code, Pontia e outros comparados"
 description: Compare Claude Code Remote Control, Codex no app do ChatGPT, Happy, T3 Code, Conductor, Pontia e SSH com tmux para controlar agentes de programação pelo celular. Aborda agentes suportados, máquinas host, configuração, conexão através de Clash, sing-box ou uma VPN corporativa, analytics e custo.
 published: "2026-11-12"
 ---
@@ -12,7 +12,7 @@ O Pontia é a ferramenta que desenvolvemos. As informações sobre as outras fer
 
 - **Só Claude Code:** use o Claude Code Remote Control. Ele é nativo e não exige configuração além de uma assinatura do claude.ai.
 - **Codex em um Mac ou PC com Windows com o app de desktop do ChatGPT:** use o Codex no app do ChatGPT.
-- **Codex ou pi em um servidor Linux ou um Mac, principalmente atrás de Clash, sing-box ou uma VPN corporativa:** use o Pontia. Um comando faz a configuração, e a única conexão de rede dele é HTTPS de saída.
+- **Codex ou Pi em um servidor Linux ou um Mac, principalmente atrás de Clash, sing-box ou uma VPN corporativa:** use o Pontia. Um comando faz a configuração, e a única conexão de rede dele é HTTPS de saída.
 - **Vários agentes diferentes em apps nativos com notificações push:** use o T3 Code ou o Happy.
 - **Nenhuma empresa no meio:** use SSH ou Mosh com tmux em uma rede privada.
 
@@ -34,7 +34,7 @@ As ferramentas se dividem em quatro grupos, e o grupo decide mais do que qualque
 | [Happy](https://happy.engineering/welcome/) | Harness próprio do Happy para modelos Claude, GPT e Grok. Claude Code, Codex, OpenCode e agentes ACP como harnesses alternativos | macOS, Windows, Linux e servidores remotos | Happy Desktop, Happy para iOS e Android | Relay do Happy, criptografado de ponta a ponta, auto-hospedável | Gratuito, MIT. Voz é paga |
 | [T3 Code](https://github.com/pingdotgg/t3code) | Claude Code, Codex, Cursor, Grok Build, OpenCode, Antigravity, Pi e outros | macOS, Windows, Linux e servidores | App de desktop, iOS, Android e um app web | T3 Connect por um túnel da Cloudflare, ou um endereço direto na LAN ou no Tailscale | Gratuito, MIT. T3 Connect é gratuito para 3 máquinas |
 | [Conductor](https://www.conductor.build/docs/reference/remote-control) | Claude Code, Codex, Cursor, OpenCode | Mac, ou os sandboxes na nuvem do Conductor | App para iOS, experimental, para workspaces locais | Relay do Conductor, criptografado de ponta a ponta | Veja o site do Conductor |
-| [Pontia](/docs/how-it-works) | Codex e pi | Linux (x86_64, ARM64) e macOS 13.5+, incluindo servidores headless | app.pontia.dev em qualquer navegador, instalável como app no celular e no desktop | Um relay Edge via HTTPS, criptografado de ponta a ponta, auto-hospedável | Gratuito, Apache 2.0 |
+| [Pontia](/docs/how-it-works) | Codex e Pi | Linux (x86_64, ARM64) e macOS 13.5+, incluindo servidores headless | app.pontia.dev em qualquer navegador, instalável como app no celular e no desktop | Um relay Edge via HTTPS, criptografado de ponta a ponta, auto-hospedável | Gratuito, Apache 2.0 |
 | SSH + tmux | Qualquer agente de terminal | Qualquer máquina acessível por SSH | Qualquer app de SSH | Nada, ou uma rede privada como o Tailscale | Gratuito |
 
 ## Qual se encaixa
@@ -43,7 +43,7 @@ As ferramentas se dividem em quatro grupos, e o grupo decide mais do que qualque
 | --- | --- |
 | Claude Code no celular sem instalar nada novo | Claude Code Remote Control |
 | Codex no celular, e você já usa o app de desktop do ChatGPT no Mac ou Windows | Codex no app do ChatGPT |
-| Codex ou pi em um servidor Linux ou Mac, configurado com um comando e sem domínio, túnel ou VPN | Pontia |
+| Codex ou Pi em um servidor Linux ou Mac, configurado com um comando e sem domínio, túnel ou VPN | Pontia |
 | Um controle remoto que continua funcionando quando o host ou o celular roda Clash, sing-box ou uma VPN corporativa | Pontia |
 | Vários agentes em apps nativos de desktop e celular, com notificações push | T3 Code |
 | Um harness que troca de modelo no meio da conversa, mais um servidor para equipes | Happy |
@@ -84,7 +84,7 @@ O [Conductor](https://www.conductor.build/) executa agentes Claude Code, Codex, 
 
 ## Pontia
 
-O Pontia executa Codex e pi na sua própria máquina Linux ou macOS e mostra cada Session como um chat em [app.pontia.dev](https://app.pontia.dev). O Dashboard pode ser instalado como app pelo navegador no celular ou no desktop.
+O Pontia executa Codex e Pi na sua própria máquina Linux ou macOS e mostra cada Session como um chat em [app.pontia.dev](https://app.pontia.dev). O Dashboard pode ser instalado como app pelo navegador no celular ou no desktop.
 
 Com Node.js e npm instalados, execute este comando como o usuário que roda os agentes:
 
@@ -95,18 +95,18 @@ npx @pontia/cli init
 O `pontia init` faz seu login por meio de uma URL e um código de uso único, o que funciona por SSH, registra a máquina em um Edge oficial e configura os serviços em segundo plano dos agentes, incluindo o lingering do systemd no Linux. Não há domínio, túnel, VPN nem redirecionamento de portas para configurar.
 
 - **Codex** roda pelo daemon app-server. Pedidos de aprovação para comandos, alterações de arquivos e permissões extras aparecem com os botões **Allow** e **Deny**. Um launcher faz as threads que você inicia com `codex` em um terminal aparecerem no Dashboard, para que você possa continuá-las pelo celular. Veja [Codex pelo celular](/blog/control-codex-cli-from-your-phone).
-- **pi** roda na TUI nativa dentro de um painel do tmux gerenciado pelo Pontia, então você pode se conectar à mesma Session na própria máquina. Veja [pi pelo celular](/blog/pi-coding-agent-remote-control).
+- **Pi** roda na TUI nativa dentro de um painel do tmux gerenciado pelo Pontia, então você pode se conectar à mesma Session na própria máquina. Veja [Pi pelo celular](/blog/pi-coding-agent-remote-control).
 
 Cada agente mantém suas próprias credenciais, sandbox e política de aprovação. A máquina se conecta para fora apenas por HTTPS e não precisa de nenhuma porta aberta. O navegador e a máquina criptografam o tráfego de ponta a ponta. Você pode usar um Edge oficial ou [rodar o seu próprio](/docs/self-hosted-edge). O Pontia não envia analytics de produto.
 
-O Pontia não envia notificações push. [Notificações no celular para Codex e pi](/blog/coding-agent-phone-notifications) mostra hooks que enviam para o ntfy.
+O Pontia não envia notificações push. [Notificações no celular para Codex e Pi](/blog/coding-agent-phone-notifications) mostra hooks que enviam para o ntfy.
 
 ## SSH, Mosh e tmux
 
 Rode o agente no tmux, coloque o host e o celular em uma rede privada como o Tailscale e conecte-se por um app de SSH. Não há nada no meio, e qualquer agente de terminal funciona. Em troca, você rola o histórico do tmux em uma tela pequena, responde pedidos em um teclado de celular e configura as notificações por conta própria.
 
 - [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) mostra como acessar o host sem portas abertas.
-- [Rodando Codex e pi em uma VPS](/blog/run-coding-agents-on-a-vps) mostra como manter os agentes vivos depois do logout.
+- [Rodando Codex e Pi em uma VPS](/blog/run-coding-agents-on-a-vps) mostra como manter os agentes vivos depois do logout.
 
 ## Conectando através de Clash, sing-box ou uma VPN corporativa
 
@@ -161,5 +161,5 @@ Use a saída do seu proxy em vez de `DIRECT` se for mais fácil alcançar o Edge
 
 - [O controle remoto do seu agente de programação é criptografado de ponta a ponta?](/blog/self-hosted-relay-for-coding-agents)
 - [Como usar o Codex CLI pelo celular](/blog/control-codex-cli-from-your-phone)
-- [Como usar o agente de programação pi pelo celular](/blog/pi-coding-agent-remote-control)
+- [Como usar o agente de programação Pi pelo celular](/blog/pi-coding-agent-remote-control)
 - [Como o Pontia funciona](/docs/how-it-works)

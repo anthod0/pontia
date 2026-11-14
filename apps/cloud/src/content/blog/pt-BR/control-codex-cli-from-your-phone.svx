@@ -158,7 +158,7 @@ timeout = 10
 
 Abra `/hooks` no Codex e marque os novos hooks como confiáveis. O Codex ignora hooks não confiáveis, e qualquer edição posterior no script ou na entrada exige confiar de novo. O script não imprime nada, então o Codex continua mostrando seu pedido de aprovação normal. Imprimir uma decisão a partir de um hook `PermissionRequest` aprovaria ou negaria o pedido. Remova a entrada `Stop` se uma notificação após cada turno for demais.
 
-[Notificações no celular para Codex e pi](/blog/coding-agent-phone-notifications) explica o payload do hook e como manter comandos e caminhos fora de um servidor de notificações de terceiros.
+[Notificações no celular para Codex e Pi](/blog/coding-agent-phone-notifications) explica o payload do hook e como manter comandos e caminhos fora de um servidor de notificações de terceiros.
 
 ### O que você obtém no final
 
@@ -186,7 +186,7 @@ Isso combina com supervisão remota. Edições de rotina seguem adiante, e os pe
 
 ## Relacionados
 
-- [Receba uma notificação no celular quando o Codex ou o pi precisar de você](/blog/coding-agent-phone-notifications)
+- [Receba uma notificação no celular quando o Codex ou o Pi precisar de você](/blog/coding-agent-phone-notifications)
 - [Rode agentes de programação em uma VPS](/blog/run-coding-agents-on-a-vps) para um host Linux sempre ligado
-- [Como usar o agente de programação pi pelo celular](/blog/pi-coding-agent-remote-control)
+- [Como usar o agente de programação Pi pelo celular](/blog/pi-coding-agent-remote-control)
 - [Como o Pontia funciona](/docs/how-it-works) e [Segurança](/docs/security)

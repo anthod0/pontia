@@ -1,12 +1,12 @@
 ---
 title: "Tailscale vs Cloudflare Tunnel: como acessar um servidor de agente de programação pelo celular"
-description: "Como acessar o Codex ou o pi em um servidor doméstico ou VPS pelo celular sem abrir portas. Compara Tailscale, Cloudflare Tunnel com cloudflared e o terminal SSH no navegador da Cloudflare, com passos de configuração e armadilhas, incluindo conflitos com outras VPNs e proxies."
+description: "Como acessar o Codex ou o Pi em um servidor doméstico ou VPS pelo celular sem abrir portas. Compara Tailscale, Cloudflare Tunnel com cloudflared e o terminal SSH no navegador da Cloudflare, com passos de configuração e armadilhas, incluindo conflitos com outras VPNs e proxies."
 published: "2026-11-12"
 ---
 
 Para acompanhar um agente de programação pelo celular, primeiro você precisa de uma forma de alcançar a máquina em que ele roda. Expor o SSH à internet funciona, mas atrai tentativas de login constantes e depende de um IP público, que uma máquina doméstica atrás de CGNAT da operadora pode não ter. O Tailscale e o Cloudflare Tunnel evitam os dois problemas: o servidor abre a conexão para fora, e nada escuta em uma porta pública.
 
-Este artigo compara os dois para uma tarefa: manter uma Session do Codex ou do pi no tmux em um servidor e se conectar a ela pelo celular. O Pontia, a ferramenta que desenvolvemos, é abordado brevemente no final.
+Este artigo compara os dois para uma tarefa: manter uma Session do Codex ou do Pi no tmux em um servidor e se conectar a ela pelo celular. O Pontia, a ferramenta que desenvolvemos, é abordado brevemente no final.
 
 ## A resposta curta
 
@@ -33,7 +33,7 @@ codex            # or: pi
 # detach with Ctrl-b d
 ```
 
-Se o servidor encerra sua sessão e o tmux morre junto, a causa geralmente é o systemd. [Executando Codex e pi em uma VPS](/blog/run-coding-agents-on-a-vps) aborda o lingering e o `KillUserProcesses`.
+Se o servidor encerra sua sessão e o tmux morre junto, a causa geralmente é o systemd. [Executando Codex e Pi em uma VPS](/blog/run-coding-agents-on-a-vps) aborda o lingering e o `KillUserProcesses`.
 
 ## Opção 1: Tailscale
 
@@ -132,12 +132,12 @@ A [documentação de renderização no navegador](https://developers.cloudflare.
 
 ## O que nenhuma delas resolve
 
-Cada opção dá a você um shell. Você ainda opera uma TUI de tela cheia com o teclado do celular, rola o histórico do tmux para descobrir o que aconteceu e só fica sabendo que um agente está esperando quando olha. [Notificações no celular para Codex e pi](/blog/coding-agent-phone-notifications) resolve essa última parte com hooks e ntfy.
+Cada opção dá a você um shell. Você ainda opera uma TUI de tela cheia com o teclado do celular, rola o histórico do tmux para descobrir o que aconteceu e só fica sabendo que um agente está esperando quando olha. [Notificações no celular para Codex e Pi](/blog/coding-agent-phone-notifications) resolve essa última parte com hooks e ntfy.
 
-O [Pontia](/docs/how-it-works) segue outra abordagem. O `pontiad` no servidor abre uma conexão de saída para um relay, e você usa as Sessions do Codex e do pi como chats em um navegador no celular, com botões para as aprovações do Codex. O celular não precisa de VPN, app nem domínio, e o relay encaminha apenas tráfego criptografado de ponta a ponta. Ele pode rodar junto com qualquer uma das opções acima, então o SSH continua disponível para todo o resto.
+O [Pontia](/docs/how-it-works) segue outra abordagem. O `pontiad` no servidor abre uma conexão de saída para um relay, e você usa as Sessions do Codex e do Pi como chats em um navegador no celular, com botões para as aprovações do Codex. O celular não precisa de VPN, app nem domínio, e o relay encaminha apenas tráfego criptografado de ponta a ponta. Ele pode rodar junto com qualquer uma das opções acima, então o SSH continua disponível para todo o resto.
 
 ## Relacionados
 
-- [Executando Codex e pi em uma VPS](/blog/run-coding-agents-on-a-vps)
+- [Executando Codex e Pi em uma VPS](/blog/run-coding-agents-on-a-vps)
 - [Como usar o Codex CLI pelo celular](/blog/control-codex-cli-from-your-phone)
-- [Como usar o agente de programação pi pelo celular](/blog/pi-coding-agent-remote-control)
+- [Como usar o agente de programação Pi pelo celular](/blog/pi-coding-agent-remote-control)

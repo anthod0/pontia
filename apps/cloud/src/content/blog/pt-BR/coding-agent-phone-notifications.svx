@@ -1,12 +1,12 @@
 ---
-title: "Receba uma notificação no celular quando o Codex ou o pi precisar de você"
-description: "Envie uma notificação ao seu celular quando o Codex CLI pedir aprovação ou terminar um turno, e quando o pi estiver aguardando entrada. Hooks do Codex e uma extensão do pi testados, que enviam pelo ntfy, com os detalhes de privacidade e confiança que costumam confundir."
+title: "Receba uma notificação no celular quando o Codex ou o Pi precisar de você"
+description: "Envie uma notificação ao seu celular quando o Codex CLI pedir aprovação ou terminar um turno, e quando o Pi estiver aguardando entrada. Hooks do Codex e uma extensão do Pi testados, que enviam pelo ntfy, com os detalhes de privacidade e confiança que costumam confundir."
 published: "2026-11-12"
 ---
 
-Um agente de programação deixado rodando em um servidor costuma passar mais tempo esperando por você do que trabalhando. O Codex para em um pedido de aprovação, o pi termina e espera a próxima mensagem, e você só descobre na próxima vez que olhar o terminal. Este artigo configura notificações push no celular para os dois agentes, usando hooks do Codex, uma pequena extensão do pi e o [ntfy](https://ntfy.sh/).
+Um agente de programação deixado rodando em um servidor costuma passar mais tempo esperando por você do que trabalhando. O Codex para em um pedido de aprovação, o Pi termina e espera a próxima mensagem, e você só descobre na próxima vez que olhar o terminal. Este artigo configura notificações push no celular para os dois agentes, usando hooks do Codex, uma pequena extensão do Pi e o [ntfy](https://ntfy.sh/).
 
-Os scripts abaixo foram testados com o Codex CLI 0.167.1 e o pi 1.5.2 no Linux. Eles funcionam da mesma forma no macOS.
+Os scripts abaixo foram testados com o Codex CLI 0.167.1 e o Pi 1.5.2 no Linux. Eles funcionam da mesma forma no macOS.
 
 ## Por que as notificações integradas não chegam ao celular
 
@@ -15,7 +15,7 @@ O Codex tem dois recursos de notificação, e nenhum cobre este caso:
 - **Notificações da TUI** (`[tui] notifications` em `config.toml`) enviam uma notificação de desktop ou tocam o sino do terminal. Elas vão para o terminal conectado ao Codex, então uma sessão tmux desanexada não produz nada que você consiga ver.
 - **`notify`** executa um programa de sua escolha, mas o [guia de configuração avançada](https://developers.openai.com/codex/config-advanced) da OpenAI afirma que atualmente ele só dispara para `agent-turn-complete`. Ele não avisa que há uma aprovação pendente, que é o evento que mais importa.
 
-Os [hooks](https://developers.openai.com/codex/hooks) do Codex cobrem os dois eventos. `PermissionRequest` roda quando o Codex está prestes a pedir aprovação, e `Stop` roda quando um turno termina. O pi não tem aprovações. A API de extensões dele tem um evento `agent_settled` que dispara quando o pi termina todo o trabalho automático e fica aguardando entrada.
+Os [hooks](https://developers.openai.com/codex/hooks) do Codex cobrem os dois eventos. `PermissionRequest` roda quando o Codex está prestes a pedir aprovação, e `Stop` roda quando um turno termina. O Pi não tem aprovações. A API de extensões dele tem um evento `agent_settled` que dispara quando o Pi termina todo o trabalho automático e fica aguardando entrada.
 
 ## Configure o ntfy
 
@@ -109,9 +109,9 @@ Eventos `Stop` trazem `last_assistant_message` em vez de `tool_input`. Ambos inc
 - **`Stop` dispara a cada turno,** incluindo respostas curtas em uma sessão interativa. Se isso for barulhento demais, registre apenas `PermissionRequest`.
 - **Os hooks pertencem ao Codex, não à TUI.** Eles também rodam com `codex exec`.
 
-## pi: notificar quando o pi estiver aguardando entrada
+## Pi: notificar quando o Pi estiver aguardando entrada
 
-Salve isto como `~/.pi/agent/extensions/ntfy.ts`. O pi carrega extensões desse diretório automaticamente, e `/reload` aplica as alterações sem reiniciar.
+Salve isto como `~/.pi/agent/extensions/ntfy.ts`. O Pi carrega extensões desse diretório automaticamente, e `/reload` aplica as alterações sem reiniciar.
 
 ```ts
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -124,16 +124,16 @@ export default function (pi: ExtensionAPI) {
     if (event.aborted) return; // you pressed Escape, so you are already there
     await fetch(url, {
       method: "POST",
-      headers: { Title: `pi: ${basename(ctx.cwd)}` },
+      headers: { Title: `Pi: ${basename(ctx.cwd)}` },
       body: "Waiting for input",
     }).catch(() => {});
   });
 }
 ```
 
-Use `agent_settled`, não `agent_end`. A [documentação de extensões](https://pi.dev/docs/latest/extensions) do pi explica que `agent_end` dispara após cada execução de baixo nível, e o pi pode depois tentar de novo, compactar e tentar de novo, ou continuar com mensagens na fila. Uma notificação em `agent_end` pode chegar enquanto o pi ainda está trabalhando.
+Use `agent_settled`, não `agent_end`. A [documentação de extensões](https://pi.dev/docs/latest/extensions) do Pi explica que `agent_end` dispara após cada execução de baixo nível, e o Pi pode depois tentar de novo, compactar e tentar de novo, ou continuar com mensagens na fila. Uma notificação em `agent_end` pode chegar enquanto o Pi ainda está trabalhando.
 
-Como o pi não pausa para aprovação, uma notificação só pode dizer que uma execução terminou. Para impedir um comando antes que ele rode, veja o [guia de segurança](https://pi.dev/docs/latest/security) do pi.
+Como o Pi não pausa para aprovação, uma notificação só pode dizer que uma execução terminou. Para impedir um comando antes que ele rode, veja o [guia de segurança](https://pi.dev/docs/latest/security) do Pi.
 
 ## Mantenha segredos fora das notificações
 
@@ -148,10 +148,10 @@ Se isso importa para o seu trabalho, escolha uma destas opções:
 
 Uma notificação diz que um agente precisa de você. Você ainda precisa de uma forma de responder. Via SSH pelo celular, você se conecta ao tmux, rola para trás para encontrar o prompt e digita em uma TUI em tela cheia. [Acesse um servidor de agente de programação pelo celular](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) aborda a parte de rede dessa configuração.
 
-O [Pontia](/docs/how-it-works), a ferramenta que nós desenvolvemos, mostra os pedidos de aprovação do Codex em um navegador no celular com os botões **Allow** e **Deny** e transmite as sessões do pi como chats.
+O [Pontia](/docs/how-it-works), a ferramenta que nós desenvolvemos, mostra os pedidos de aprovação do Codex em um navegador no celular com os botões **Allow** e **Deny** e transmite as sessões do Pi como chats.
 
 ## Relacionados
 
 - [Como usar o Codex CLI pelo celular](/blog/control-codex-cli-from-your-phone)
-- [Como usar o agente de programação pi pelo celular](/blog/pi-coding-agent-remote-control)
-- [Executando Codex e pi em uma VPS](/blog/run-coding-agents-on-a-vps)
+- [Como usar o agente de programação Pi pelo celular](/blog/pi-coding-agent-remote-control)
+- [Executando Codex e Pi em uma VPS](/blog/run-coding-agents-on-a-vps)

@@ -45,7 +45,7 @@ Mantenha o token da External API privado. Veja [Segurança](/docs/security) para
 
 Confira as raízes configuradas em [Workspaces](https://app.pontia.dev/workspaces). Um diretório só pode ser ativado quando existe e está dentro de uma raiz disponível. Se uma raiz foi movida, atualize `[workspace_browser].roots` em `config.toml`, reinicie o Pontia e depois revogue os registros de Workspace obsoletos pelo Dashboard.
 
-## O pi não inicia ou não reporta atividade
+## O Pi não inicia ou não reporta atividade
 
 Verifique:
 

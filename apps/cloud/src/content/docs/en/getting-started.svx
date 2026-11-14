@@ -11,7 +11,7 @@ Install Pontia, connect your device to Pontia Cloud, and start using your coding
 
 - Linux with systemd, or macOS 13.5 or later.
 - Node.js with npm for the recommended `npx` command. Without Node.js, use the [shell installer](#install-with-the-shell-script).
-- At least one coding agent: pi, Codex, Claude Code, or an ACP agent. See [Agent Clients](/docs/agent-clients) for what each one needs.
+- At least one coding agent: Pi, Codex, Claude Code, or an ACP agent. See [Agent Clients](/docs/agent-clients) for what each one needs.
 
 ## Install and initialize Pontia
 
@@ -42,7 +42,7 @@ These commands use the default installation directory. If you set `PONTIA_INSTAL
 
 The initializer lets you:
 
-1. Select the pi, Codex, and Claude Agent integrations you want.
+1. Select the Pi, Codex, and Claude Agent integrations you want.
 2. Generate the local dashboard credential.
 3. Start the Pontia background service.
 4. Sign in to Pontia Cloud and register your device for the Remote Dashboard.

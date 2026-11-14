@@ -1,6 +1,6 @@
 ---
 title: "コーディングエージェントのリモート操作はエンドツーエンド暗号化されているか? リレー、鍵サービス、アプリから見えるもの"
-description: "スマートフォンから Claude Code、Codex、pi を操作するとき、Anthropic、OpenAI、T3 Connect、Cloudflare、Happy、Tailscale、Pontia から何が見えるのかを解説します。エンドツーエンド暗号化が何を守るのか、誰が鍵を配布するのか、リレーのセルフホストがどんな場合に役立つのかを説明します。"
+description: "スマートフォンから Claude Code、Codex、Pi を操作するとき、Anthropic、OpenAI、T3 Connect、Cloudflare、Happy、Tailscale、Pontia から何が見えるのかを解説します。エンドツーエンド暗号化が何を守るのか、誰が鍵を配布するのか、リレーのセルフホストがどんな場合に役立つのかを説明します。"
 published: "2026-11-12"
 ---
 
@@ -112,6 +112,6 @@ systemd を備えた公開 Linux サーバー、パブリック IPv4 アドレ�
 
 ## 関連記事
 
-- [Codex、Claude Code、pi のリモート操作: 選択肢の比較](/blog/coding-agent-remote-control-alternatives)
+- [Codex、Claude Code、Pi のリモート操作: 選択肢の比較](/blog/coding-agent-remote-control-alternatives)
 - [Tailscale と Cloudflare Tunnel の比較](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
 - [セキュリティ](/docs/security) と [Edge のセルフホスト](/docs/self-hosted-edge)

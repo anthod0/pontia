@@ -1,12 +1,12 @@
 ---
-title: "Running Codex and pi on a VPS: a setup checklist for always-on coding agents"
-description: How to set up a Linux VPS for long-running coding agents like Codex and pi and reach them from your phone, covering user accounts, systemd lingering, headless sign-in, session persistence, and remote access without open ports.
+title: "Running Codex and Pi on a VPS: a setup checklist for always-on coding agents"
+description: How to set up a Linux VPS for long-running coding agents like Codex and Pi and reach them from your phone, covering user accounts, systemd lingering, headless sign-in, session persistence, and remote access without open ports.
 published: "2026-11-11"
 ---
 
 A coding agent on a laptop stops when the lid closes. Move it to an always-on Linux server and a long refactor or test run keeps going overnight, next to the repository and build tools, and you can check on it from any device.
 
-The server does not have to be a VPS. A home machine or a spare mini PC works the same way. This checklist covers the parts that usually go wrong on a headless host: which account runs the agent, keeping processes alive after logout, signing in without a browser, and reaching sessions from a phone. The examples use Codex CLI and pi.
+The server does not have to be a VPS. A home machine or a spare mini PC works the same way. This checklist covers the parts that usually go wrong on a headless host: which account runs the agent, keeping processes alive after logout, signing in without a browser, and reaching sessions from a phone. The examples use Codex CLI and Pi.
 
 ## The short answer
 
@@ -20,7 +20,7 @@ The rest of this article explains each step, and how to build the same pieces yo
 
 ## 1. Run agents as a dedicated non-root user
 
-An agent acts with the permissions of the account that runs it. Codex has an OS-enforced sandbox and an approval policy. pi has neither by default: its [security guide](https://pi.dev/docs/latest/security) states that it acts with its user's permissions and does not ask before each tool call. Either way, the account is your outer boundary.
+An agent acts with the permissions of the account that runs it. Codex has an OS-enforced sandbox and an approval policy. Pi has neither by default: its [security guide](https://pi.dev/docs/latest/security) states that it acts with its user's permissions and does not ask before each tool call. Either way, the account is your outer boundary.
 
 ```sh
 sudo adduser agent
@@ -38,7 +38,7 @@ The server has no browser, so use device-code flows where they exist:
 codex login --device-auth
 ```
 
-Codex prints a URL and a code that you open on your phone or laptop. For pi, set your provider's API key as an environment variable, or run `/login` inside `pi`. The [pi quickstart](https://pi.dev/docs/latest/quickstart) lists the providers.
+Codex prints a URL and a code that you open on your phone or laptop. For Pi, set your provider's API key as an environment variable, or run `/login` inside `pi`. The [Pi quickstart](https://pi.dev/docs/latest/quickstart) lists the providers.
 
 ## 3. Keep services running after logout
 
@@ -49,7 +49,7 @@ sudo loginctl enable-linger agent   # from an admin account
 systemctl --user is-system-running  # as agent, over SSH
 ```
 
-`is-system-running` should print `running`, or `degraded` if an unrelated unit failed. When you select Codex, `pontia init` enables lingering for you. For a pi-only setup, run the command above yourself.
+`is-system-running` should print `running`, or `degraded` if an unrelated unit failed. When you select Codex, `pontia init` enables lingering for you. For a Pi-only setup, run the command above yourself.
 
 ## 4. Install Pontia
 
@@ -59,19 +59,19 @@ With Node.js and npm installed, run as the agent user:
 npx @pontia/cli init
 ```
 
-Select pi, Codex, or both. The initializer:
+Select Pi, Codex, or both. The initializer:
 
 - installs Pontia as a systemd user service;
 - for Codex, installs a service that starts the Codex app-server daemon;
-- for pi, installs the Pontia pi plugin;
+- for Pi, installs the Pontia Pi plugin;
 - signs you in with Google or GitHub through a URL and one-time code, which you approve from your phone;
 - registers the server with an official relay.
 
-When it finishes, open [app.pontia.dev](https://app.pontia.dev) on your phone and select the server. From there you start, follow, interrupt, and continue Codex or pi sessions, and answer Codex approval requests with **Allow** or **Deny**.
+When it finishes, open [app.pontia.dev](https://app.pontia.dev) on your phone and select the server. From there you start, follow, interrupt, and continue Codex or Pi sessions, and answer Codex approval requests with **Allow** or **Deny**.
 
 The server connects out to the relay, and the relay forwards only ciphertext between your browser and the server. You do not open ports, configure a VPN, or put a reverse proxy in front of anything. Advanced users can [run their own relay](/docs/self-hosted-edge).
 
-pi sessions started from the Dashboard run in tmux, outside the Pontia service, so restarting or updating Pontia does not stop them. You can still SSH in and attach to one with `tmux attach -t SESSION_NAME`. The names start with `pontia_`.
+Pi sessions started from the Dashboard run in tmux, outside the Pontia service, so restarting or updating Pontia does not stop them. You can still SSH in and attach to one with `tmux attach -t SESSION_NAME`. The names start with `pontia_`.
 
 To check and maintain the setup:
 
@@ -153,7 +153,7 @@ Run `sudo sshd -T | grep -E 'passwordauthentication|permitrootlogin'` to confirm
 
 If your phone must also run another VPN, Tailscale cannot run at the same time. [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents) covers Cloudflare Tunnel, which works without a VPN on the phone, and the routing conflicts between VPNs and proxies.
 
-**Notifications.** Codex hooks and a pi extension can push a notification when an agent needs you. [Phone notifications for Codex and pi](/blog/coding-agent-phone-notifications) has both scripts.
+**Notifications.** Codex hooks and a Pi extension can push a notification when an agent needs you. [Phone notifications for Codex and Pi](/blog/coding-agent-phone-notifications) has both scripts.
 
 You maintain each of these yourself, and on the phone you operate a full-screen TUI on a small keyboard.
 
@@ -165,14 +165,14 @@ You maintain each of these yourself, and on the phone you operate a full-screen 
 | `systemctl --user` fails with "Failed to connect to bus" | You switched users with `su`. Log in over SSH as that user |
 | Agent works in your shell but not from a service | The service's `PATH` lacks the directory that contains the agent or Node.js |
 | Codex in a service uses different credentials than your shell | The service and your shell use different `CODEX_HOME` values |
-| `Shift+Enter` submits instead of adding a new line in pi | tmux extended keys are off. See pi's [tmux guide](https://pi.dev/docs/latest/tmux) |
+| `Shift+Enter` submits instead of adding a new line in Pi | tmux extended keys are off. See Pi's [tmux guide](https://pi.dev/docs/latest/tmux) |
 | tmux sessions die when you log out, even with lingering | `KillUserProcesses=yes` in `/etc/systemd/logind.conf` kills the login session scope. Run tmux as the user service above |
 | SSH over Tailscale stops working months later | The server's Tailscale key expired. Disable key expiry for servers |
 
 ## Related
 
 - [Tailscale vs Cloudflare Tunnel for reaching a coding agent server](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
-- [Get a phone notification when Codex or pi needs you](/blog/coding-agent-phone-notifications)
+- [Get a phone notification when Codex or Pi needs you](/blog/coding-agent-phone-notifications)
 - [How to use Codex CLI from your phone](/blog/control-codex-cli-from-your-phone)
-- [How to use pi coding agent from your phone](/blog/pi-coding-agent-remote-control)
+- [How to use Pi coding agent from your phone](/blog/pi-coding-agent-remote-control)
 - [Linux platform notes](/docs/platforms/linux) and [Security](/docs/security)

@@ -1,12 +1,12 @@
 ---
 title: "Tailscale vs Cloudflare Tunnel: reaching a coding agent server from your phone"
-description: How to reach Codex or pi on a home server or VPS from a phone without opening ports. Compares Tailscale, Cloudflare Tunnel with cloudflared, and Cloudflare's browser SSH terminal, with setup steps and the pitfalls, including conflicts with other VPNs and proxies.
+description: How to reach Codex or Pi on a home server or VPS from a phone without opening ports. Compares Tailscale, Cloudflare Tunnel with cloudflared, and Cloudflare's browser SSH terminal, with setup steps and the pitfalls, including conflicts with other VPNs and proxies.
 published: "2026-11-12"
 ---
 
 To check on a coding agent from a phone, you first need a way to reach the machine it runs on. Opening SSH to the internet works, but it invites constant login attempts and depends on a public IP, which a home machine behind carrier NAT may not have. Tailscale and Cloudflare Tunnel avoid both problems: the server connects out, and nothing listens on a public port.
 
-This article compares the two for one job: keeping a Codex or pi session in tmux on a server and attaching to it from a phone. Pontia, the tool we build, is covered briefly at the end.
+This article compares the two for one job: keeping a Codex or Pi session in tmux on a server and attaching to it from a phone. Pontia, the tool we build, is covered briefly at the end.
 
 ## The short answer
 
@@ -33,7 +33,7 @@ codex            # or: pi
 # detach with Ctrl-b d
 ```
 
-If the server logs you out and tmux dies with your session, the cause is usually systemd. [Running Codex and pi on a VPS](/blog/run-coding-agents-on-a-vps) covers lingering and `KillUserProcesses`.
+If the server logs you out and tmux dies with your session, the cause is usually systemd. [Running Codex and Pi on a VPS](/blog/run-coding-agents-on-a-vps) covers lingering and `KillUserProcesses`.
 
 ## Option 1: Tailscale
 
@@ -132,12 +132,12 @@ This is where most setups break.
 
 ## What none of these solve
 
-Each option gives you a shell. You still operate a full-screen TUI on a phone keyboard, scroll back through tmux to find out what happened, and learn that an agent is waiting only when you look. [Phone notifications for Codex and pi](/blog/coding-agent-phone-notifications) fixes the last part with hooks and ntfy.
+Each option gives you a shell. You still operate a full-screen TUI on a phone keyboard, scroll back through tmux to find out what happened, and learn that an agent is waiting only when you look. [Phone notifications for Codex and Pi](/blog/coding-agent-phone-notifications) fixes the last part with hooks and ntfy.
 
-[Pontia](/docs/how-it-works) takes a different approach. `pontiad` on the server connects out to a relay, and you use Codex and pi sessions as chats in a phone browser, with buttons for Codex approvals. The phone needs no VPN, no app, and no domain, and the relay forwards only end-to-end encrypted traffic. It can run alongside any of the options above, so SSH stays available for everything else.
+[Pontia](/docs/how-it-works) takes a different approach. `pontiad` on the server connects out to a relay, and you use Codex and Pi sessions as chats in a phone browser, with buttons for Codex approvals. The phone needs no VPN, no app, and no domain, and the relay forwards only end-to-end encrypted traffic. It can run alongside any of the options above, so SSH stays available for everything else.
 
 ## Related
 
-- [Running Codex and pi on a VPS](/blog/run-coding-agents-on-a-vps)
+- [Running Codex and Pi on a VPS](/blog/run-coding-agents-on-a-vps)
 - [How to use Codex CLI from your phone](/blog/control-codex-cli-from-your-phone)
-- [How to use pi coding agent from your phone](/blog/pi-coding-agent-remote-control)
+- [How to use Pi coding agent from your phone](/blog/pi-coding-agent-remote-control)

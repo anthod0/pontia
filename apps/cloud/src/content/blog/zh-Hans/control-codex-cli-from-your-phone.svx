@@ -158,7 +158,7 @@ timeout = 10
 
 在 Codex 中打开 `/hooks` 并信任新的 hook。Codex 会跳过未受信任的 hook，之后对脚本或条目的任何修改都需要重新信任。脚本不输出任何内容，所以 Codex 仍会显示正常的审批提示。如果从 `PermissionRequest` hook 中输出一个决定，就会直接批准或拒绝该请求。如果每个轮次后都通知太多，删掉 `Stop` 条目即可。
 
-[Codex 和 pi 的手机通知](/blog/coding-agent-phone-notifications)解释了 hook 的负载内容，以及如何避免把命令和路径发送到第三方通知服务器。
+[Codex 和 Pi 的手机通知](/blog/coding-agent-phone-notifications)解释了 hook 的负载内容，以及如何避免把命令和路径发送到第三方通知服务器。
 
 ### 最终效果
 
@@ -186,7 +186,7 @@ writable_roots = ["/home/agent/.cache/pnpm"]
 
 ## 相关内容
 
-- [在 Codex 或 pi 需要你时收到手机通知](/blog/coding-agent-phone-notifications)
+- [在 Codex 或 Pi 需要你时收到手机通知](/blog/coding-agent-phone-notifications)
 - [在 VPS 上运行编程 Agent](/blog/run-coding-agents-on-a-vps)，适用于常驻的 Linux 主机
-- [如何在手机上使用 pi 编程 Agent](/blog/pi-coding-agent-remote-control)
+- [如何在手机上使用 Pi 编程 Agent](/blog/pi-coding-agent-remote-control)
 - [Pontia 的工作原理](/docs/how-it-works)和[安全](/docs/security)

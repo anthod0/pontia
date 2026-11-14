@@ -1,5 +1,5 @@
 ---
-title: "Codex、Claude Code 和 pi 的远程控制：Happy、T3 Code、Pontia 等工具对比"
+title: "Codex、Claude Code 和 Pi 的远程控制：Happy、T3 Code、Pontia 等工具对比"
 description: 对比 Claude Code Remote Control、ChatGPT 应用中的 Codex、Happy、T3 Code、Conductor、Pontia 以及 SSH 加 tmux，看看如何在手机上控制编程 Agent。内容涵盖支持的 Agent、主机、安装设置、通过 Clash、sing-box 或公司 VPN 连接、数据分析和费用。
 published: "2026-11-12"
 ---
@@ -12,7 +12,7 @@ Pontia 是我们开发的工具。其他工具的信息来自它们各自的文�
 
 - **只用 Claude Code：** 使用 Claude Code Remote Control。它是内置功能，除了 claude.ai 订阅之外无需任何设置。
 - **在装有 ChatGPT 桌面应用的 Mac 或 Windows PC 上使用 Codex：** 使用 ChatGPT 应用中的 Codex。
-- **在 Linux 服务器或 Mac 上使用 Codex 或 pi，尤其是在 Clash、sing-box 或公司 VPN 环境下：** 使用 Pontia。一条命令即可完成设置，它唯一的网络连接是出站 HTTPS。
+- **在 Linux 服务器或 Mac 上使用 Codex 或 Pi，尤其是在 Clash、sing-box 或公司 VPN 环境下：** 使用 Pontia。一条命令即可完成设置，它唯一的网络连接是出站 HTTPS。
 - **在带推送通知的原生应用中使用多种不同的 Agent：** 使用 T3 Code 或 Happy。
 - **中间不经过任何公司：** 通过私有网络使用 SSH 或 Mosh 加 tmux。
 
@@ -34,7 +34,7 @@ Pontia 是我们开发的工具。其他工具的信息来自它们各自的文�
 | [Happy](https://happy.engineering/welcome/) | Happy 自己的 harness，用于 Claude、GPT 和 Grok 模型。可改用 Claude Code、Codex、OpenCode 和 ACP Agent 作为 harness | macOS、Windows、Linux 和远程服务器 | Happy Desktop、iOS 和 Android 版 Happy | Happy 的中继，端到端加密，可自托管 | 免费，MIT。语音功能收费 |
 | [T3 Code](https://github.com/pingdotgg/t3code) | Claude Code、Codex、Cursor、Grok Build、OpenCode、Antigravity、Pi 等 | macOS、Windows、Linux 和服务器 | 桌面应用、iOS、Android 和 Web 应用 | 通过 Cloudflare 隧道的 T3 Connect，或直接使用局域网或 Tailscale 地址 | 免费，MIT。T3 Connect 对 3 台机器免费 |
 | [Conductor](https://www.conductor.build/docs/reference/remote-control) | Claude Code、Codex、Cursor、OpenCode | Mac，或 Conductor 的云端沙箱 | iOS 应用（实验性），用于本地 workspace | Conductor 的中继，端到端加密 | 见 Conductor 网站 |
-| [Pontia](/docs/how-it-works) | Codex 和 pi | Linux（x86_64、ARM64）和 macOS 13.5+，包括无头服务器 | 任意浏览器中的 app.pontia.dev，可在手机和桌面上安装为应用 | 基于 HTTPS 的 Edge 中继，端到端加密，可自托管 | 免费，Apache 2.0 |
+| [Pontia](/docs/how-it-works) | Codex 和 Pi | Linux（x86_64、ARM64）和 macOS 13.5+，包括无头服务器 | 任意浏览器中的 app.pontia.dev，可在手机和桌面上安装为应用 | 基于 HTTPS 的 Edge 中继，端到端加密，可自托管 | 免费，Apache 2.0 |
 | SSH + tmux | 任何终端 Agent | 任何可以 SSH 登录的机器 | 任何 SSH 应用 | 没有，或者是 Tailscale 等私有网络 | 免费 |
 
 ## 哪个适合你
@@ -43,7 +43,7 @@ Pontia 是我们开发的工具。其他工具的信息来自它们各自的文�
 | --- | --- |
 | 在手机上使用 Claude Code，无需安装任何新东西 | Claude Code Remote Control |
 | 在手机上使用 Codex，并且你已经在 Mac 或 Windows 上使用 ChatGPT 桌面应用 | ChatGPT 应用中的 Codex |
-| 在 Linux 服务器或 Mac 上使用 Codex 或 pi，一条命令完成设置，无需域名、隧道或 VPN | Pontia |
+| 在 Linux 服务器或 Mac 上使用 Codex 或 Pi，一条命令完成设置，无需域名、隧道或 VPN | Pontia |
 | 在主机或手机运行 Clash、sing-box 或公司 VPN 时仍能正常工作的远程方案 | Pontia |
 | 在原生桌面和手机应用中使用多种 Agent，并支持推送通知 | T3 Code |
 | 一个能在对话中途切换模型的 harness，外加团队服务器 | Happy |
@@ -84,7 +84,7 @@ OpenAI 的指南指出，设置必须从桌面应用开始，无法从 Codex CLI
 
 ## Pontia
 
-Pontia 在你自己的 Linux 或 macOS 机器上运行 Codex 和 pi，并在 [app.pontia.dev](https://app.pontia.dev) 上将每个会话显示为聊天。Dashboard 可以从手机或桌面浏览器安装为应用。
+Pontia 在你自己的 Linux 或 macOS 机器上运行 Codex 和 Pi，并在 [app.pontia.dev](https://app.pontia.dev) 上将每个会话显示为聊天。Dashboard 可以从手机或桌面浏览器安装为应用。
 
 安装 Node.js 和 npm 后，以运行 Agent 的用户身份运行以下命令：
 
@@ -95,18 +95,18 @@ npx @pontia/cli init
 `pontia init` 通过一个 URL 和一次性代码让你登录（在 SSH 上同样可用），将机器注册到官方 Edge，并设置 Agent 的后台服务，包括 Linux 上的 systemd lingering。无需配置域名、隧道、VPN 或端口转发。
 
 - **Codex** 通过其 app-server 守护进程运行。命令、文件更改和额外权限的审批请求会附带 **Allow** 和 **Deny** 按钮显示。启动器会让你在终端中用 `codex` 启动的线程出现在 Dashboard 中，这样你就可以在手机上继续。请参阅[在手机上使用 Codex](/blog/control-codex-cli-from-your-phone)。
-- **pi** 在 Pontia 管理的 tmux 窗格中以原生 TUI 运行，因此你可以在机器上连接到同一个会话。请参阅[在手机上使用 pi](/blog/pi-coding-agent-remote-control)。
+- **Pi** 在 Pontia 管理的 tmux 窗格中以原生 TUI 运行，因此你可以在机器上连接到同一个会话。请参阅[在手机上使用 Pi](/blog/pi-coding-agent-remote-control)。
 
 每个 Agent 保留自己的凭据、沙箱和审批策略。机器只通过 HTTPS 向外连接，不需要开放任何端口。浏览器和机器之间的流量是端到端加密的。你可以使用官方 Edge，也可以[自己运行](/docs/self-hosted-edge)。Pontia 不发送任何产品分析数据。
 
-Pontia 不发送推送通知。[Codex 和 pi 的手机通知](/blog/coding-agent-phone-notifications)介绍了如何用 hooks 推送到 ntfy。
+Pontia 不发送推送通知。[Codex 和 Pi 的手机通知](/blog/coding-agent-phone-notifications)介绍了如何用 hooks 推送到 ntfy。
 
 ## SSH、Mosh 和 tmux
 
 在 tmux 中运行 Agent，将主机和手机置于 Tailscale 等私有网络中，然后通过 SSH 应用连接。中间没有任何其他东西，所有终端 Agent 都能使用。代价是你需要在小屏幕上滚动 tmux 历史、用手机键盘回应提示，并自己设置通知。
 
 - [Tailscale 与 Cloudflare Tunnel 对比](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)介绍了如何在不开放端口的情况下访问主机。
-- [在 VPS 上运行 Codex 和 pi](/blog/run-coding-agents-on-a-vps)介绍了如何在退出登录后让 Agent 保持运行。
+- [在 VPS 上运行 Codex 和 Pi](/blog/run-coding-agents-on-a-vps)介绍了如何在退出登录后让 Agent 保持运行。
 
 ## 通过 Clash、sing-box 或公司 VPN 连接
 
@@ -161,5 +161,5 @@ rules:
 
 - [你的编程 Agent 远程方案是端到端加密的吗？](/blog/self-hosted-relay-for-coding-agents)
 - [如何在手机上使用 Codex CLI](/blog/control-codex-cli-from-your-phone)
-- [如何在手机上使用 pi 编程 Agent](/blog/pi-coding-agent-remote-control)
+- [如何在手机上使用 Pi 编程 Agent](/blog/pi-coding-agent-remote-control)
 - [Pontia 的工作原理](/docs/how-it-works)

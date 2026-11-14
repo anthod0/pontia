@@ -37,7 +37,7 @@ roots = [
 | `run_migrations` | `pontiad` 是否应用其内置的数据库迁移；默认为 `true` |
 | `default_client_type` | 默认 Client 标识符；当前支持的值为 `pi` |
 | `dashboard.source` | 本地 Dashboard 构建目录，或仅包含一个 `index.html` 的远程 `.tar.gz`、`.tgz` 或 `.zip` 归档 |
-| `runtime.pi.tui_command` | 启动 pi Session 时使用的 pi 可执行文件或命令 |
+| `runtime.pi.tui_command` | 启动 Pi Session 时使用的 Pi 可执行文件或命令 |
 | `runtime.codex.tui_command` | 在原生 TUI 中打开 Codex Session 时使用的 Codex 可执行文件；默认为 `codex` |
 | `acp.agents.ID` | 一个 ACP agent 条目；参见 [Agent Client](/docs/agent-clients#enable-an-acp-agent) |
 | `workspace_browser.roots` | Dashboard 可浏览以激活 Workspace 的目录 |

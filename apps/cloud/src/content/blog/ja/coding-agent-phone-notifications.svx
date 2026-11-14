@@ -1,12 +1,12 @@
 ---
-title: "Codex や pi があなたを必要としたときにスマートフォンに通知する"
-description: "Codex CLI が承認を求めたときや Turn を終えたとき、pi が入力を待っているときに、スマートフォンへプッシュ通知を送ります。ntfy 経由で送信する検証済みの Codex フックと pi 拡張機能に加え、つまずきやすいプライバシーと信頼の注意点も紹介します。"
+title: "Codex や Pi があなたを必要としたときにスマートフォンに通知する"
+description: "Codex CLI が承認を求めたときや Turn を終えたとき、Pi が入力を待っているときに、スマートフォンへプッシュ通知を送ります。ntfy 経由で送信する検証済みの Codex フックと Pi 拡張機能に加え、つまずきやすいプライバシーと信頼の注意点も紹介します。"
 published: "2026-11-12"
 ---
 
-サーバー上で動かしたままのコーディングエージェントは、作業している時間よりもあなたを待っている時間のほうが長くなりがちです。Codex は承認のプロンプトで止まり、pi は作業を終えて次のメッセージを待ちます。それに気づくのは、次にターミナルを見たときです。この記事では、Codex フック、小さな pi 拡張機能、[ntfy](https://ntfy.sh/) を使って、両方のエージェントからスマートフォンへのプッシュ通知を設定します。
+サーバー上で動かしたままのコーディングエージェントは、作業している時間よりもあなたを待っている時間のほうが長くなりがちです。Codex は承認のプロンプトで止まり、Pi は作業を終えて次のメッセージを待ちます。それに気づくのは、次にターミナルを見たときです。この記事では、Codex フック、小さな Pi 拡張機能、[ntfy](https://ntfy.sh/) を使って、両方のエージェントからスマートフォンへのプッシュ通知を設定します。
 
-以下のスクリプトは、Linux 上の Codex CLI 0.167.1 と pi 1.5.2 でテストしました。macOS でも同じように動作します。
+以下のスクリプトは、Linux 上の Codex CLI 0.167.1 と Pi 1.5.2 でテストしました。macOS でも同じように動作します。
 
 ## 組み込みの通知がスマートフォンに届かない理由
 
@@ -15,7 +15,7 @@ Codex には通知機能が 2 つありますが、どちらもこのケース�
 - **TUI 通知**（`config.toml` の `[tui] notifications`）は、デスクトップ通知を送るか、ターミナルのベルを鳴らします。通知先は Codex に接続されたターミナルなので、デタッチした tmux セッションでは何も見えません。
 - **`notify`** は任意のプログラムを実行しますが、OpenAI の[高度な設定ガイド](https://developers.openai.com/codex/config-advanced)によると、現在は `agent-turn-complete` でのみ発火します。最も知りたいイベントである、承認待ちは通知されません。
 
-Codex の[フック](https://developers.openai.com/codex/hooks)は両方のイベントに対応しています。`PermissionRequest` は Codex が承認を求める直前に、`Stop` は Turn の終了時に実行されます。pi には承認がありません。pi の拡張機能 API には `agent_settled` イベントがあり、pi がすべての自動処理を終えて入力を待つ状態になったときに一度発火します。
+Codex の[フック](https://developers.openai.com/codex/hooks)は両方のイベントに対応しています。`PermissionRequest` は Codex が承認を求める直前に、`Stop` は Turn の終了時に実行されます。Pi には承認がありません。Pi の拡張機能 API には `agent_settled` イベントがあり、Pi がすべての自動処理を終えて入力を待つ状態になったときに一度発火します。
 
 ## ntfy を設定する
 
@@ -109,9 +109,9 @@ timeout = 10
 - **`Stop` はすべての Turn で発火します。** 対話型のセッションでの短い返答も含まれます。通知が多すぎる場合は、`PermissionRequest` だけを登録してください。
 - **フックは TUI ではなく Codex に属します。** `codex exec` でも実行されます。
 
-## pi: pi が入力を待っているときに通知する
+## Pi: Pi が入力を待っているときに通知する
 
-次のコードを `~/.pi/agent/extensions/ntfy.ts` として保存します。pi はこのディレクトリから拡張機能を自動で読み込み、`/reload` を使えば再起動せずに変更を反映できます。
+次のコードを `~/.pi/agent/extensions/ntfy.ts` として保存します。Pi はこのディレクトリから拡張機能を自動で読み込み、`/reload` を使えば再起動せずに変更を反映できます。
 
 ```ts
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -124,16 +124,16 @@ export default function (pi: ExtensionAPI) {
     if (event.aborted) return; // you pressed Escape, so you are already there
     await fetch(url, {
       method: "POST",
-      headers: { Title: `pi: ${basename(ctx.cwd)}` },
+      headers: { Title: `Pi: ${basename(ctx.cwd)}` },
       body: "Waiting for input",
     }).catch(() => {});
   });
 }
 ```
 
-`agent_end` ではなく `agent_settled` を使ってください。pi の[拡張機能のドキュメント](https://pi.dev/docs/latest/extensions)によると、`agent_end` は低レベルの実行のたびに発火し、その後 pi は再試行したり、コンパクトして再試行したり、キューに入ったメッセージで処理を続けたりすることがあります。`agent_end` で通知すると、pi がまだ作業している間に通知が届くことがあります。
+`agent_end` ではなく `agent_settled` を使ってください。Pi の[拡張機能のドキュメント](https://pi.dev/docs/latest/extensions)によると、`agent_end` は低レベルの実行のたびに発火し、その後 Pi は再試行したり、コンパクトして再試行したり、キューに入ったメッセージで処理を続けたりすることがあります。`agent_end` で通知すると、Pi がまだ作業している間に通知が届くことがあります。
 
-pi は承認のために一時停止しないため、通知で伝えられるのは実行が終わったことだけです。コマンドを実行前に止める方法については、pi の[セキュリティガイド](https://pi.dev/docs/latest/security)を参照してください。
+Pi は承認のために一時停止しないため、通知で伝えられるのは実行が終わったことだけです。コマンドを実行前に止める方法については、Pi の[セキュリティガイド](https://pi.dev/docs/latest/security)を参照してください。
 
 ## 通知にシークレットを含めない
 
@@ -148,10 +148,10 @@ pi は承認のために一時停止しないため、通知で伝えられる�
 
 通知はエージェントがあなたを必要としていることを伝えますが、応答する手段は別に必要です。スマートフォンから SSH で接続する場合、tmux にアタッチし、スクロールしてプロンプトを探し、全画面の TUI に入力することになります。その構成のネットワーク面については、[スマートフォンからコーディングエージェントのサーバーにアクセスする](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)で説明しています。
 
-私たちが開発しているツールである [Pontia](/docs/how-it-works) は、Codex の承認リクエストを **Allow** と **Deny** のボタン付きでスマートフォンのブラウザーに表示し、pi のセッションをチャットとしてストリーミング表示します。
+私たちが開発しているツールである [Pontia](/docs/how-it-works) は、Codex の承認リクエストを **Allow** と **Deny** のボタン付きでスマートフォンのブラウザーに表示し、Pi のセッションをチャットとしてストリーミング表示します。
 
 ## 関連記事
 
 - [スマートフォンから Codex CLI を使う方法](/blog/control-codex-cli-from-your-phone)
-- [スマートフォンから pi コーディングエージェントを使う方法](/blog/pi-coding-agent-remote-control)
-- [VPS で Codex と pi を実行する](/blog/run-coding-agents-on-a-vps)
+- [スマートフォンから Pi コーディングエージェントを使う方法](/blog/pi-coding-agent-remote-control)
+- [VPS で Codex と Pi を実行する](/blog/run-coding-agents-on-a-vps)

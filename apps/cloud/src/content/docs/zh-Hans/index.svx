@@ -23,7 +23,7 @@ Pontia 把你的设备变成 Agent 云。编程 Agent 使用你设备上的工�
 
 ## 使用 Pontia
 
-- [Agent Client](/docs/agent-clients) — 配置 pi、Codex、Claude Agent 和 ACP agent，并了解它们的功能差异。
+- [Agent Client](/docs/agent-clients) — 配置 Pi、Codex、Claude Agent 和 ACP agent，并了解它们的功能差异。
 - [Workspace](/docs/workspaces) — 配置项目目录和文件发现。
 - [Workflow](/docs/workflows) — 运行持久、分阶段的 Agent 工作，使用明确的 Handoff 和重新规划。
 

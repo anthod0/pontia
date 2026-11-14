@@ -15,7 +15,7 @@
 	const sessions = [
 		{ title: 'Add keyboard shortcuts', client: 'codex', state: 'idle', label: 'Ready' },
 		{ title: 'Fix flaky upload test', client: 'claude', state: 'busy', label: 'Working' },
-		{ title: 'Review migration plan', client: 'pi', state: 'waiting', label: 'Needs approval' }
+		{ title: 'Review migration plan', client: 'Pi', state: 'waiting', label: 'Needs approval' }
 	];
 </script>
 

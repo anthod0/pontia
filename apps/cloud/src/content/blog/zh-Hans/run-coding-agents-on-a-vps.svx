@@ -1,12 +1,12 @@
 ---
-title: "在 VPS 上运行 Codex 和 pi：常驻编程 Agent 的设置清单"
-description: 如何为长时间运行的 Codex、pi 等编程 Agent 设置 Linux VPS 并在手机上访问它们，涵盖用户账户、systemd lingering、无头登录、Session 持久化，以及无需开放端口的远程访问。
+title: "在 VPS 上运行 Codex 和 Pi：常驻编程 Agent 的设置清单"
+description: 如何为长时间运行的 Codex、Pi 等编程 Agent 设置 Linux VPS 并在手机上访问它们，涵盖用户账户、systemd lingering、无头登录、Session 持久化，以及无需开放端口的远程访问。
 published: "2026-11-11"
 ---
 
 笔记本上的编程 Agent 会在合上盖子时停止。把它移到一台常驻的 Linux 服务器上，长时间的重构或测试就能整夜运行，紧挨着仓库和构建工具，而你可以在任何设备上查看进度。
 
-服务器不一定是 VPS。家里的机器或闲置的迷你主机也一样可用。这份清单涵盖无头主机上最容易出问题的部分：用哪个账户运行 Agent、注销后保持进程存活、没有浏览器时如何登录，以及从手机访问 Session。示例使用 Codex CLI 和 pi。
+服务器不一定是 VPS。家里的机器或闲置的迷你主机也一样可用。这份清单涵盖无头主机上最容易出问题的部分：用哪个账户运行 Agent、注销后保持进程存活、没有浏览器时如何登录，以及从手机访问 Session。示例使用 Codex CLI 和 Pi。
 
 ## 简短回答
 
@@ -20,7 +20,7 @@ Pontia 在你注销后保持 Session 运行，并通过端到端加密的中继�
 
 ## 1. 用专用的非 root 用户运行 Agent
 
-Agent 以运行它的账户的权限执行操作。Codex 有操作系统强制的沙箱和审批策略。pi 默认两者都没有：它的[安全指南](https://pi.dev/docs/latest/security)说明，它以其用户的权限执行操作，并且不会在每次工具调用前询问。无论哪种情况，账户都是你最外层的边界。
+Agent 以运行它的账户的权限执行操作。Codex 有操作系统强制的沙箱和审批策略。Pi 默认两者都没有：它的[安全指南](https://pi.dev/docs/latest/security)说明，它以其用户的权限执行操作，并且不会在每次工具调用前询问。无论哪种情况，账户都是你最外层的边界。
 
 ```sh
 sudo adduser agent
@@ -38,7 +38,7 @@ sudo adduser agent
 codex login --device-auth
 ```
 
-Codex 会输出一个 URL 和一个代码，你在手机或笔记本上打开即可。对于 pi，把提供商的 API key 设置为环境变量，或在 `pi` 中运行 `/login`。[pi 快速开始](https://pi.dev/docs/latest/quickstart)列出了支持的提供商。
+Codex 会输出一个 URL 和一个代码，你在手机或笔记本上打开即可。对于 Pi，把提供商的 API key 设置为环境变量，或在 `pi` 中运行 `/login`。[Pi 快速开始](https://pi.dev/docs/latest/quickstart)列出了支持的提供商。
 
 ## 3. 注销后保持服务运行
 
@@ -49,7 +49,7 @@ sudo loginctl enable-linger agent   # from an admin account
 systemctl --user is-system-running  # as agent, over SSH
 ```
 
-`is-system-running` 应输出 `running`，如果有无关的单元失败则输出 `degraded`。选择 Codex 时，`pontia init` 会为你启用 lingering。仅使用 pi 的设置需要你自己运行上面的命令。
+`is-system-running` 应输出 `running`，如果有无关的单元失败则输出 `degraded`。选择 Codex 时，`pontia init` 会为你启用 lingering。仅使用 Pi 的设置需要你自己运行上面的命令。
 
 ## 4. 安装 Pontia
 
@@ -59,19 +59,19 @@ systemctl --user is-system-running  # as agent, over SSH
 npx @pontia/cli init
 ```
 
-选择 pi、Codex 或两者。初始化程序会：
+选择 Pi、Codex 或两者。初始化程序会：
 
 - 将 Pontia 安装为 systemd 用户服务；
 - 对于 Codex，安装一个启动 Codex app-server 守护进程的服务；
-- 对于 pi，安装 Pontia pi 插件；
+- 对于 Pi，安装 Pontia Pi 插件；
 - 通过 URL 和一次性代码让你使用 Google 或 GitHub 登录，你在手机上批准即可；
 - 将服务器注册到官方中继。
 
-完成后，在手机上打开 [app.pontia.dev](https://app.pontia.dev) 并选择该服务器。你可以在这里启动、跟进、中断和继续 Codex 或 pi Session，并用 **Allow** 或 **Deny** 回应 Codex 的审批请求。
+完成后，在手机上打开 [app.pontia.dev](https://app.pontia.dev) 并选择该服务器。你可以在这里启动、跟进、中断和继续 Codex 或 Pi Session，并用 **Allow** 或 **Deny** 回应 Codex 的审批请求。
 
 服务器主动向外连接到中继，中继只在你的浏览器和服务器之间转发密文。你无需开放端口、配置 VPN 或在任何服务前面放置反向代理。高级用户可以[运行自己的中继](/docs/self-hosted-edge)。
 
-从 Dashboard 启动的 pi Session 在 tmux 中运行，独立于 Pontia 服务，因此重启或更新 Pontia 不会停止它们。你仍然可以 SSH 登录，用 `tmux attach -t SESSION_NAME` 附加到其中一个。名称以 `pontia_` 开头。
+从 Dashboard 启动的 Pi Session 在 tmux 中运行，独立于 Pontia 服务，因此重启或更新 Pontia 不会停止它们。你仍然可以 SSH 登录，用 `tmux attach -t SESSION_NAME` 附加到其中一个。名称以 `pontia_` 开头。
 
 检查和维护设置：
 
@@ -153,7 +153,7 @@ PermitRootLogin no
 
 如果你的手机还必须运行另一个 VPN，Tailscale 就无法同时运行。[Tailscale 与 Cloudflare Tunnel 对比](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)介绍了无需在手机上使用 VPN 的 Cloudflare Tunnel，以及 VPN 和代理之间的路由冲突。
 
-**通知。** Codex hook 和 pi 扩展可以在 Agent 需要你时推送通知。[Codex 和 pi 的手机通知](/blog/coding-agent-phone-notifications)提供了这两个脚本。
+**通知。** Codex hook 和 Pi 扩展可以在 Agent 需要你时推送通知。[Codex 和 Pi 的手机通知](/blog/coding-agent-phone-notifications)提供了这两个脚本。
 
 这些都需要你自己维护，而且在手机上你要用小键盘操作全屏 TUI。
 
@@ -165,14 +165,14 @@ PermitRootLogin no
 | `systemctl --user` 失败并提示 "Failed to connect to bus" | 你用 `su` 切换了用户。请以该用户身份通过 SSH 登录 |
 | Agent 在你的 shell 中可用，但在服务中不可用 | 服务的 `PATH` 缺少包含 Agent 或 Node.js 的目录 |
 | 服务中的 Codex 使用的凭据与你的 shell 不同 | 服务和你的 shell 使用了不同的 `CODEX_HOME` 值 |
-| 在 pi 中 `Shift+Enter` 直接提交而不是换行 | tmux 的扩展按键未开启。参见 pi 的 [tmux 指南](https://pi.dev/docs/latest/tmux) |
+| 在 Pi 中 `Shift+Enter` 直接提交而不是换行 | tmux 的扩展按键未开启。参见 Pi 的 [tmux 指南](https://pi.dev/docs/latest/tmux) |
 | 即使启用了 lingering，注销时 tmux Session 仍被终止 | `/etc/systemd/logind.conf` 中的 `KillUserProcesses=yes` 会终止登录会话 scope。按上文把 tmux 作为用户服务运行 |
 | 几个月后通过 Tailscale 的 SSH 失效 | 服务器的 Tailscale 密钥已过期。为服务器禁用密钥过期 |
 
 ## 相关内容
 
 - [Tailscale 与 Cloudflare Tunnel：访问编程 Agent 服务器的对比](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
-- [在 Codex 或 pi 需要你时收到手机通知](/blog/coding-agent-phone-notifications)
+- [在 Codex 或 Pi 需要你时收到手机通知](/blog/coding-agent-phone-notifications)
 - [如何在手机上使用 Codex CLI](/blog/control-codex-cli-from-your-phone)
-- [如何在手机上使用 pi 编程 Agent](/blog/pi-coding-agent-remote-control)
+- [如何在手机上使用 Pi 编程 Agent](/blog/pi-coding-agent-remote-control)
 - [Linux 平台说明](/docs/platforms/linux)和[安全](/docs/security)

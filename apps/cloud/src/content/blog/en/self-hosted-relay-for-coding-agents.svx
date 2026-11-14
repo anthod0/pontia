@@ -1,6 +1,6 @@
 ---
 title: "Is your coding agent remote end-to-end encrypted? What the relay, key service, and app can see"
-description: What Anthropic, OpenAI, T3 Connect, Cloudflare, Happy, Tailscale, and Pontia can see when you control Claude Code, Codex, or pi from your phone. Explains what end-to-end encryption protects, who hands out the keys, and when self-hosting the relay helps.
+description: What Anthropic, OpenAI, T3 Connect, Cloudflare, Happy, Tailscale, and Pontia can see when you control Claude Code, Codex, or Pi from your phone. Explains what end-to-end encryption protects, who hands out the keys, and when self-hosting the relay helps.
 published: "2026-11-12"
 ---
 
@@ -112,6 +112,6 @@ You need a public Linux server with systemd, a public IPv4 address, and either p
 
 ## Related
 
-- [Remote control for Codex, Claude Code, and pi: the options compared](/blog/coding-agent-remote-control-alternatives)
+- [Remote control for Codex, Claude Code, and Pi: the options compared](/blog/coding-agent-remote-control-alternatives)
 - [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
 - [Security](/docs/security) and [Self-host an Edge](/docs/self-hosted-edge)

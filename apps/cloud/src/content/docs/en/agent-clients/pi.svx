@@ -1,11 +1,11 @@
 <svelte:head>
-	<title>pi Agent Client — Pontia</title>
-	<meta name="description" content="Install and use the pi Agent Client integration with Pontia." />
+	<title>Pi Agent Client — Pontia</title>
+	<meta name="description" content="Install and use the Pi Agent Client integration with Pontia." />
 </svelte:head>
 
-# pi Agent Client
+# Pi Agent Client
 
-The pi integration connects real, `tmux`-backed pi sessions to Pontia. You can use the native TUI and the Dashboard with the same underlying conversation.
+The Pi integration connects real, `tmux`-backed Pi sessions to Pontia. You can use the native TUI and the Dashboard with the same underlying conversation.
 
 ## Requirements
 
@@ -21,17 +21,17 @@ pi --version
 tmux -V
 ```
 
-Configure your model-provider credentials in pi before starting Sessions.
+Configure your model-provider credentials in Pi before starting Sessions.
 
 ## Install the integration
 
-Select **pi** when running:
+Select **Pi** when running:
 
 ```sh
 pontia init
 ```
 
-For later installation or repair, run `pontia setup pi`. This also enables the pi Client.
+For later installation or repair, run `pontia setup pi`. This also enables the Pi Client.
 
 Both setup commands verify `pi --version` and run:
 
@@ -39,15 +39,15 @@ Both setup commands verify `pi --version` and run:
 pi install npm:@pontia/pi-client-plugin
 ```
 
-The plugin reports native pi lifecycle and conversation facts to `pontiad` and accepts supported controls from Pontia.
+The plugin reports native Pi lifecycle and conversation facts to `pontiad` and accepts supported controls from Pontia.
 
-## How pi Sessions run
+## How Pi Sessions run
 
-Pontia launches pi inside a managed `tmux` pane in the selected Workspace. Run Workflow commands such as `pontia workflow submit` in the managed pane for the current Workflow Agent Node.
+Pontia launches Pi inside a managed `tmux` pane in the selected Workspace. Run Workflow commands such as `pontia workflow submit` in the managed pane for the current Workflow Agent Node.
 
-Conversation history is read from pi's native data. Keep that data available to browse and resume conversations through Pontia.
+Conversation history is read from Pi's native data. Keep that data available to browse and resume conversations through Pontia.
 
-## Override the pi command
+## Override the Pi command
 
 The default TUI command is `pi`. To use another executable or wrapper, set it in `$PONTIA_HOME/config.toml`:
 
@@ -60,10 +60,10 @@ For a command-scoped override, use `PONTIA_PI_TUI_COMMAND`. For a persistent ser
 
 ## Diagnose the integration
 
-Pontia's pi hook log is:
+Pontia's Pi hook log is:
 
 ```text
 $PONTIA_HOME/state/pi-hook.log
 ```
 
-Also verify that `pontia status` reports a healthy service and that the pi plugin remains installed. See [Troubleshooting](/docs/troubleshooting) for service logs and common recovery steps.
+Also verify that `pontia status` reports a healthy service and that the Pi plugin remains installed. See [Troubleshooting](/docs/troubleshooting) for service logs and common recovery steps.

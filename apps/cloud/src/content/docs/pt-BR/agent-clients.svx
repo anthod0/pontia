@@ -11,7 +11,7 @@ O Pontia inclui estes Agent Clients:
 
 | Cliente | Requisito local | Integração local |
 | --- | --- | --- |
-| [pi](/docs/agent-clients/pi) | `pi` e `tmux` | Plugin do pi do Pontia |
+| [Pi](/docs/agent-clients/pi) | `pi` e `tmux` | Plugin do Pi do Pontia |
 | [Codex](/docs/codex) | Um Codex CLI com suporte ao daemon app-server | Inicialização do daemon do Codex por usuário, launcher e PATH do shell |
 | [Claude Agent](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) | Node.js LTS, npm e autenticação do Claude Code | O pacote `@pontia/claude-client` do npm |
 | Agentes ACP | Um agente que fala o Agent Client Protocol via stdio | Nenhuma; ative a entrada depois de instalar o agente |
@@ -24,7 +24,7 @@ Execute:
 pontia init
 ```
 
-O inicializador verifica os Clients selecionados antes de aplicar a configuração. O pi vem selecionado por padrão; Codex e `claude-agent` são opcionais. Os Clients selecionados ficam ativados para novas Sessions.
+O inicializador verifica os Clients selecionados antes de aplicar a configuração. O Pi vem selecionado por padrão; Codex e `claude-agent` são opcionais. Os Clients selecionados ficam ativados para novas Sessions.
 
 <h2 id="enable-an-acp-agent">Ativar um agente ACP</h2>
 

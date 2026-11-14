@@ -37,7 +37,7 @@ roots = [
 | `run_migrations` | `pontiad` が同梱のデータベースマイグレーションを適用するかどうか。デフォルトは `true` |
 | `default_client_type` | デフォルトの Client 識別子。現在サポートされている値は `pi` |
 | `dashboard.source` | Local Dashboard のビルドディレクトリ、または `index.html` をちょうど 1 つ含むリモートの `.tar.gz`、`.tgz`、`.zip` アーカイブ |
-| `runtime.pi.tui_command` | 起動する pi の Session に使う pi の実行ファイルまたはコマンド |
+| `runtime.pi.tui_command` | 起動する Pi の Session に使う Pi の実行ファイルまたはコマンド |
 | `runtime.codex.tui_command` | Codex の Session をネイティブの TUI で開くときに使う Codex の実行ファイル。デフォルトは `codex` |
 | `acp.agents.ID` | ACP エージェントのエントリー。[Agent Client](/docs/agent-clients#enable-an-acp-agent) を参照 |
 | `workspace_browser.roots` | Workspace を有効にするために Dashboard が参照できるディレクトリ |

@@ -45,7 +45,7 @@ Keep the External API token private. See [Security](/docs/security) for guidance
 
 Check the configured roots in [Workspaces](https://app.pontia.dev/workspaces). A directory can be activated only when it exists and is inside an available root. If a root moved, update `[workspace_browser].roots` in `config.toml`, restart Pontia, then revoke stale Workspace registrations from the Dashboard.
 
-## pi cannot start or report activity
+## Pi cannot start or report activity
 
 Verify:
 

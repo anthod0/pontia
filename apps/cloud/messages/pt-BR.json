@@ -30,7 +30,7 @@
   "continue_with_github": "Continuar com GitHub",
 
   "home_title": "Pontia — Execute agentes de programação localmente e controle-os de qualquer lugar",
-  "home_description": "Controle remoto de código aberto para agentes de programação. Execute pi, Codex, Claude Code e outros no seu próprio dispositivo e acompanhe e direcione-os de qualquer navegador.",
+  "home_description": "Controle remoto de código aberto para agentes de programação. Execute Pi, Codex, Claude Code e outros no seu próprio dispositivo e acompanhe e direcione-os de qualquer navegador.",
   "home_closing_title": "Seus agentes, onde quer que você esteja.",
   "home_closing_text": "Gratuito e de código aberto.",
   "hero_description": "Saia da sua mesa, não dos seus agentes. Acompanhe, aprove e direcione cada Session, de qualquer lugar.",
@@ -87,7 +87,7 @@
   "faq_privacy_answer": "O tráfego do Dashboard é criptografado de ponta a ponta entre o seu navegador e o seu dispositivo. O Edge retransmite texto cifrado, e o Pontia Cloud não fica no caminho do tráfego.",
   "faq_security_link": "Segurança",
   "faq_agents_question": "Quais agentes de programação o Pontia suporta?",
-  "faq_agents_answer": "O Pontia se integra com pi, Codex, Claude Code, Grok Build e OpenCode. Cada agente mantém seu próprio login, modelos e sandbox, e os controles disponíveis dependem do cliente.",
+  "faq_agents_answer": "O Pontia se integra com Pi, Codex, Claude Code, Grok Build e OpenCode. Cada agente mantém seu próprio login, modelos e sandbox, e os controles disponíveis dependem do cliente.",
   "faq_platforms_question": "Quais plataformas são suportadas?",
   "faq_platforms_answer": "O Pontia roda em Linux x86_64 e ARM64 e no macOS 11 ou posterior. O Dashboard funciona em navegadores modernos de desktop e celular e pode ser instalado na tela inicial do celular.",
   "faq_getting_started_link": "Primeiros passos",
@@ -270,7 +270,7 @@
 
   "blog_title": "Blog — Pontia",
   "blog_heading": "Blog",
-  "blog_description": "Guias para executar agentes de programação como Codex e pi nas suas próprias máquinas e controlá-los pelo navegador.",
+  "blog_description": "Guias para executar agentes de programação como Codex e Pi nas suas próprias máquinas e controlá-los pelo navegador.",
   "blog_updated": "Atualizado em {date}",
   "blog_cta": "O Pontia é gratuito e de código aberto. Instale no Linux ou macOS em poucos minutos.",
 

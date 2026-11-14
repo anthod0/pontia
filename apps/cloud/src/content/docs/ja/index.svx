@@ -23,7 +23,7 @@ Pontia はデバイスをエージェントクラウドに変えます。コー�
 
 ## Pontia の使い方
 
-- [Agent Client](/docs/agent-clients) — pi、Codex、Claude Agent、ACP エージェントを設定し、機能の違いを理解します。
+- [Agent Client](/docs/agent-clients) — Pi、Codex、Claude Agent、ACP エージェントを設定し、機能の違いを理解します。
 - [Workspace](/docs/workspaces) — プロジェクトディレクトリとファイル検出を設定します。
 - [Workflow](/docs/workflows) — 明示的な Handoff と再計画を使って、永続的で段階的なエージェントの作業を実行します。
 

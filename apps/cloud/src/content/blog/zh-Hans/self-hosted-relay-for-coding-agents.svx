@@ -1,6 +1,6 @@
 ---
 title: "你的 coding agent 远程控制是端到端加密的吗？中继、密钥服务和应用能看到什么"
-description: 当你用手机控制 Claude Code、Codex 或 pi 时，Anthropic、OpenAI、T3 Connect、Cloudflare、Happy、Tailscale 和 Pontia 分别能看到什么。本文说明端到端加密保护了什么、谁在分发密钥，以及自托管中继在什么时候有用。
+description: 当你用手机控制 Claude Code、Codex 或 Pi 时，Anthropic、OpenAI、T3 Connect、Cloudflare、Happy、Tailscale 和 Pontia 分别能看到什么。本文说明端到端加密保护了什么、谁在分发密钥，以及自托管中继在什么时候有用。
 published: "2026-11-12"
 ---
 
@@ -112,6 +112,6 @@ Happy 的自托管服务器走得更远：它把账户记录和加密的会话�
 
 ## 相关文章
 
-- [Codex、Claude Code 和 pi 的远程控制：方案对比](/blog/coding-agent-remote-control-alternatives)
+- [Codex、Claude Code 和 Pi 的远程控制：方案对比](/blog/coding-agent-remote-control-alternatives)
 - [Tailscale 与 Cloudflare Tunnel 对比](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
 - [安全](/docs/security)和[自托管 Edge](/docs/self-hosted-edge)

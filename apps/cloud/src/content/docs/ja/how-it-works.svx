@@ -43,7 +43,7 @@ Pontia は、エージェントの実行とリモートアクセスを分離し�
 
 ## ローカルのコントロールプレーン
 
-`pontiad` サービスはデバイス上で動きます。エージェントの Session を調整し、pi、Codex、Claude Agent、ACP エージェントなどのサポートされた Agent Client と通信し、Local Dashboard と API を提供します。
+`pontiad` サービスはデバイス上で動きます。エージェントの Session を調整し、Pi、Codex、Claude Agent、ACP エージェントなどのサポートされた Agent Client と通信し、Local Dashboard と API を提供します。
 
 Agent Client は、デバイスにインストールされたファイルとツールを使ってコマンドを実行します。
 

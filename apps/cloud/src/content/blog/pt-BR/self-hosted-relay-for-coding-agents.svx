@@ -1,6 +1,6 @@
 ---
 title: "O controle remoto do seu agente de programação é criptografado de ponta a ponta? O que o relay, o serviço de chaves e o app podem ver"
-description: "O que Anthropic, OpenAI, T3 Connect, Cloudflare, Happy, Tailscale e Pontia podem ver quando você controla o Claude Code, o Codex ou o pi pelo celular. Explica o que a criptografia de ponta a ponta protege, quem distribui as chaves e quando auto-hospedar o relay ajuda."
+description: "O que Anthropic, OpenAI, T3 Connect, Cloudflare, Happy, Tailscale e Pontia podem ver quando você controla o Claude Code, o Codex ou o Pi pelo celular. Explica o que a criptografia de ponta a ponta protege, quem distribui as chaves e quando auto-hospedar o relay ajuda."
 published: "2026-11-12"
 ---
 
@@ -112,6 +112,6 @@ Você precisa de um servidor Linux público com systemd, um endereço IPv4 públ
 
 ## Relacionados
 
-- [Controle remoto para Codex, Claude Code e pi: as opções comparadas](/blog/coding-agent-remote-control-alternatives)
+- [Controle remoto para Codex, Claude Code e Pi: as opções comparadas](/blog/coding-agent-remote-control-alternatives)
 - [Tailscale vs Cloudflare Tunnel](/blog/tailscale-vs-cloudflare-tunnel-for-coding-agents)
 - [Segurança](/docs/security) e [Auto-hospedar um Edge](/docs/self-hosted-edge)
