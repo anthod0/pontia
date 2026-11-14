@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.11] - 2026-11-15
+
+### Added
+
+- `pontia completions <shell>` prints shell completion scripts, including Client names for `pontia setup`.
+- The mobile Dashboard has a new chat button in the top bar.
+
+### Changed
+
+- Claude Code is set up with `pontia setup claude`.
+
+### Fixed
+
+- The Public Dashboard reconnects to device event streams without showing the device as offline.
+- Restored chats scroll to the latest message after the Session loads.
+- Submitted chat messages stay visible while the transcript loads.
+- Codex tool calls display correctly in the Dashboard.
+
 ## [0.7.10] - 2026-11-14
 
 ### Fixed
