@@ -39,18 +39,18 @@ fn reserved_dot_ids_are_rejected_in_configuration_and_session_selection() {
 #[test]
 fn partial_overrides_inherit_and_arrays_replace_without_affecting_other_peers() {
     let configuration = AcpConfiguration::new(BTreeMap::from([(
-        "kimi".into(),
+        "grok".into(),
         json!({"env":{"A":"file", "B":"keep"},"name":"File name"}),
     )]));
     let value = configuration
-        .resolve("kimi", &json!({"args":[],"env":{"A":"db"}}))
+        .resolve("grok", &json!({"args":[],"env":{"A":"db"}}))
         .unwrap();
-    assert_eq!(value["command"], "kimi");
+    assert_eq!(value["command"], "grok");
     assert_eq!(value["name"], "File name");
     assert_eq!(value["args"], json!([]));
     assert_eq!(value["env"], json!({"A":"db","B":"keep"}));
     assert_eq!(
-        configuration.resolve("kimi", &json!({"env":{}})).unwrap()["env"],
+        configuration.resolve("grok", &json!({"env":{}})).unwrap()["env"],
         json!({"A":"file","B":"keep"})
     );
     assert_eq!(
@@ -58,34 +58,34 @@ fn partial_overrides_inherit_and_arrays_replace_without_affecting_other_peers() 
         json!(["acp"])
     );
     assert_eq!(
-        configuration.resolve("kimi", &json!({})).unwrap()["args"],
-        json!(["acp"])
+        configuration.resolve("grok", &json!({})).unwrap()["args"],
+        json!(["agent", "stdio"])
     );
 }
 
 #[test]
 fn explicit_clear_switches_launch_source_and_removes_inherited_environment() {
     let configuration = AcpConfiguration::new(BTreeMap::from([(
-        "kimi".into(),
+        "grok".into(),
         json!({"env":{"A":"file", "B":"keep"}}),
     )]));
     assert!(
         configuration
-            .resolve("kimi", &json!({"registry_id":"registry-kimi"}))
+            .resolve("grok", &json!({"registry_id":"registry-grok"}))
             .is_err()
     );
     let value = configuration
         .resolve(
-            "kimi",
-            &json!({"command":null,"args":null,"registry_id":"registry-kimi","env":{"A":null}}),
+            "grok",
+            &json!({"command":null,"args":null,"registry_id":"registry-grok","env":{"A":null}}),
         )
         .unwrap();
     let effective: AcpAgentConfig = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(value["command"], json!(null));
-    assert_eq!(effective.registry_id.as_deref(), Some("registry-kimi"));
+    assert_eq!(effective.registry_id.as_deref(), Some("registry-grok"));
     assert!(effective.command.is_empty());
     assert_eq!(effective.env, BTreeMap::from([("B".into(), "keep".into())]));
-    let value = configuration.resolve("kimi", &json!({"env":null})).unwrap();
+    let value = configuration.resolve("grok", &json!({"env":null})).unwrap();
     assert!(
         serde_json::from_value::<AcpAgentConfig>(value)
             .unwrap()

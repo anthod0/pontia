@@ -26,17 +26,17 @@ async fn fresh_and_existing_databases_enforce_client_identity_and_setting_constr
         run_migrations(&pool).await.unwrap();
         let repository = SqliteAgentClientRepository::new(pool.clone());
         assert!(repository.list().await.unwrap().is_empty());
-        for peer in ["kimi", "company"] {
+        for peer in ["grok", "company"] {
             repository.save("acp", peer, None, None).await.unwrap();
         }
         assert_eq!(repository.list().await.unwrap().len(), 2);
-        let kimi = repository.get("acp", "kimi").await.unwrap().unwrap();
-        assert!(kimi.enabled);
-        assert_eq!(kimi.config_overrides, "{}");
-        assert!(!kimi.created_at.is_empty());
-        assert_eq!(kimi.created_at, kimi.updated_at);
+        let grok = repository.get("acp", "grok").await.unwrap().unwrap();
+        assert!(grok.enabled);
+        assert_eq!(grok.config_overrides, "{}");
+        assert!(!grok.created_at.is_empty());
+        assert_eq!(grok.created_at, grok.updated_at);
         assert!(
-            sqlx::query("INSERT INTO agent_clients(client_type,client_key) VALUES ('acp','kimi')")
+            sqlx::query("INSERT INTO agent_clients(client_type,client_key) VALUES ('acp','grok')")
                 .execute(&pool)
                 .await
                 .is_err()

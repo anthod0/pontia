@@ -34,7 +34,7 @@ const peer = (key: string): AgentClientView => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
-  api.listAgentClients.mockResolvedValue([peer("kimi"), peer("opencode")]);
+  api.listAgentClients.mockResolvedValue([peer("grok"), peer("opencode")]);
 });
 
 test("editing a flat peer saves only its database overrides, never the effective configuration", async () => {
@@ -63,7 +63,7 @@ test("disable preserves the edited override draft and reset removes the entire s
   const user = userEvent.setup();
   api.patchAgentClient.mockImplementation(async (target, patch) => ({ ...target, ...patch }));
   render(AgentClientsPage);
-  await user.click(await screen.findByRole("button", { name: /kimi/ }));
+  await user.click(await screen.findByRole("button", { name: /grok/ }));
   const editor = screen.getByLabelText("Database overrides (JSON)");
   await user.clear(editor);
   await user.click(editor);
@@ -71,7 +71,7 @@ test("disable preserves the edited override draft and reset removes the entire s
   await user.click(screen.getByRole("switch", { name: "Enabled" }));
   await waitFor(() =>
     expect(api.patchAgentClient).toHaveBeenCalledWith(
-      expect.objectContaining({ client_key: "kimi" }),
+      expect.objectContaining({ client_key: "grok" }),
       { enabled: false },
     ),
   );
@@ -81,7 +81,7 @@ test("disable preserves the edited override draft and reset removes the entire s
   await user.click(within(dialog).getByRole("button", { name: "Restore inheritance" }));
   await waitFor(() =>
     expect(api.resetAgentClient).toHaveBeenCalledWith(
-      expect.objectContaining({ client_key: "kimi" }),
+      expect.objectContaining({ client_key: "grok" }),
     ),
   );
 });
@@ -89,7 +89,7 @@ test("disable preserves the edited override draft and reset removes the entire s
 test("invalid JSON and failed saves keep the user draft without modifying another peer", async () => {
   const user = userEvent.setup();
   render(AgentClientsPage);
-  await user.click(await screen.findByRole("button", { name: /kimi/ }));
+  await user.click(await screen.findByRole("button", { name: /grok/ }));
   const editor = screen.getByLabelText("Database overrides (JSON)");
   await user.clear(editor);
   await user.click(editor);
@@ -109,7 +109,7 @@ test("invalid JSON and failed saves keep the user draft without modifying anothe
 test("reserved dot IDs are rejected before a custom client request is sent", async () => {
   const user = userEvent.setup();
   render(AgentClientsPage);
-  await screen.findByRole("button", { name: /kimi/ });
+  await screen.findByRole("button", { name: /grok/ });
   await user.click(screen.getByRole("button", { name: "Add custom client" }));
   const key = screen.getByLabelText("ACP Agent ID");
   for (const id of [".", ".."]) {
@@ -126,7 +126,7 @@ test("custom clients use their stable key rather than their display name", async
   const user = userEvent.setup();
   api.patchAgentClient.mockResolvedValue(peer("company-agent"));
   render(AgentClientsPage);
-  await screen.findByRole("button", { name: /kimi/ });
+  await screen.findByRole("button", { name: /grok/ });
   await user.click(screen.getByRole("button", { name: "Add custom client" }));
   await user.type(screen.getByLabelText("ACP Agent ID"), "company-agent");
   const editor = screen.getByLabelText("Database overrides (JSON)");

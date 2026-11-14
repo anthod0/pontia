@@ -5,7 +5,6 @@
   import codex from '../../assets/client-icons/codex.svg?raw'
   import claude from '../../assets/client-icons/claude.svg?raw'
   import grok from '../../assets/client-icons/grok.svg?raw'
-  import kimi from '../../assets/client-icons/kimi.svg?raw'
   import opencode from '../../assets/client-icons/opencode.svg?raw'
   import opencodeDark from '../../assets/client-icons/opencode-dark.svg?raw'
 
@@ -18,7 +17,7 @@
   let { clientType, acpAgentId, class: className }: Props = $props()
 
   const clientIcons: Record<string, string> = { pi, codex, 'claude-agent': claude }
-  const acpAgentIcons: Record<string, string> = { grok, kimi, opencode }
+  const acpAgentIcons: Record<string, string> = { grok, opencode }
 
   const icon = $derived.by(() => {
     if (!clientType) return undefined

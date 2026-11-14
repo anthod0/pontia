@@ -28,7 +28,7 @@ pontia init
 
 <h2 id="enable-an-acp-agent">启用 ACP Agent</h2>
 
-Pontia 为 Grok Build（`grok agent stdio`）、Kimi CLI（`kimi acp`）和 OpenCode（`opencode acp`）提供了 ACP 条目。安装 Agent 后，在 Dashboard 的 **Settings → Agent Clients** 中启用其条目，或运行：
+Pontia 为 Grok Build（`grok agent stdio`）和 OpenCode（`opencode acp`）提供了 ACP 条目。安装 Agent 后，在 Dashboard 的 **Settings → Agent Clients** 中启用其条目，或运行：
 
 ```sh
 pontia client enable opencode

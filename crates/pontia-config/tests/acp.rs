@@ -26,8 +26,8 @@ command = "agent"
 args = ["--acp", "argument with spaces", "${LITERAL}"]
 [acp.agents.company.env]
 TOKEN = "${FROM_ENV}"
-[acp.agents.kimi]
-name = "Renamed Kimi"
+[acp.agents.grok]
+name = "Renamed Grok"
 "#,
     )
     .unwrap();
@@ -37,7 +37,7 @@ name = "Renamed Kimi"
         json!(["--acp", "argument with spaces", "${LITERAL}"])
     );
     assert_eq!(file["company"]["env"]["TOKEN"], "${FROM_ENV}");
-    assert_eq!(file["kimi"], json!({"name":"Renamed Kimi"}));
+    assert_eq!(file["grok"], json!({"name":"Renamed Grok"}));
 }
 
 #[test]

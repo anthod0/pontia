@@ -28,7 +28,7 @@ pontia init
 
 <h2 id="enable-an-acp-agent">ACP エージェントを有効にする</h2>
 
-Pontia は、Grok Build（`grok agent stdio`）、Kimi CLI（`kimi acp`）、OpenCode（`opencode acp`）の ACP エントリを提供しています。エージェントをインストールし、Dashboard の **Settings → Agent Clients** でそのエントリを有効にするか、次を実行します。
+Pontia は、Grok Build（`grok agent stdio`）と OpenCode（`opencode acp`）の ACP エントリを提供しています。エージェントをインストールし、Dashboard の **Settings → Agent Clients** でそのエントリを有効にするか、次を実行します。
 
 ```sh
 pontia client enable opencode

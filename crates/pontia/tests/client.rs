@@ -125,8 +125,8 @@ fn run(
 
 #[test]
 fn list_prints_a_table_by_default_and_full_entries_with_json() {
-    let mut disabled = entry("acp", "kimi", "opaque-kimi", "kimi");
-    disabled["name"] = json!("Kimi CLI");
+    let mut disabled = entry("acp", "grok", "opaque-grok", "grok");
+    disabled["name"] = json!("Grok Build");
     disabled["enabled"] = json!(false);
     let entries = vec![entry("pi", "default", "opaque-pi", "pi"), disabled];
 
@@ -136,7 +136,7 @@ fn list_prints_a_table_by_default_and_full_entries_with_json() {
         String::from_utf8(output.stdout).unwrap(),
         "CLIENT  NAME                   TYPE  STATUS\n\
          pi      Editable display name  pi    enabled\n\
-         kimi    Kimi CLI               acp   disabled\n"
+         grok    Grok Build             acp   disabled\n"
     );
 
     let output = run(&["list", "--json"], entries.clone(), None);
@@ -149,11 +149,11 @@ fn list_prints_a_table_by_default_and_full_entries_with_json() {
 
 #[test]
 fn single_short_selector_and_opaque_ids_locate_without_display_names() {
-    for selector in [vec!["show", "kimi"], vec!["show", "--id", "opaque-key"]] {
+    for selector in [vec!["show", "grok"], vec!["show", "--id", "opaque-key"]] {
         let output = run(
             &selector,
-            vec![entry("acp", "kimi", "opaque-key", "kimi")],
-            Some(("GET", "/api/v1/agent-clients/acp/kimi", None)),
+            vec![entry("acp", "grok", "opaque-key", "grok")],
+            Some(("GET", "/api/v1/agent-clients/acp/grok", None)),
         );
         assert!(
             output.status.success(),

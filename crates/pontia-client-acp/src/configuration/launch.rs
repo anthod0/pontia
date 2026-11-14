@@ -59,7 +59,6 @@ impl Default for AcpConfig {
         Self {
             agents: [
                 ("grok", "Grok Build", "grok", vec!["agent", "stdio"]),
-                ("kimi", "Kimi CLI", "kimi", vec!["acp"]),
                 ("opencode", "OpenCode", "opencode", vec!["acp"]),
             ]
             .into_iter()

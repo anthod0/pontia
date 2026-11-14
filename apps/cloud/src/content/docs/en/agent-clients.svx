@@ -28,7 +28,7 @@ The initializer checks your selected Clients before applying the configuration. 
 
 <h2 id="enable-an-acp-agent">Enable an ACP agent</h2>
 
-Pontia provides ACP entries for Grok Build (`grok agent stdio`), Kimi CLI (`kimi acp`), and OpenCode (`opencode acp`). Install the agent, then enable its entry in the Dashboard under **Settings → Agent Clients**, or run:
+Pontia provides ACP entries for Grok Build (`grok agent stdio`) and OpenCode (`opencode acp`). Install the agent, then enable its entry in the Dashboard under **Settings → Agent Clients**, or run:
 
 ```sh
 pontia client enable opencode

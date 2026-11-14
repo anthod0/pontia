@@ -167,11 +167,18 @@ async fn defaults_files_and_database_entries_share_stable_flat_identity() {
         })
         .collect();
     assert!(identities.windows(2).all(|pair| pair[0] < pair[1]));
+    assert_eq!(
+        identities
+            .iter()
+            .filter(|(client_type, _)| *client_type == "acp")
+            .map(|(_, key)| *key)
+            .collect::<Vec<_>>(),
+        vec!["file-peer", "grok", "opencode"]
+    );
     for identity in [
         ("pi", "default"),
         ("codex", "default"),
         ("acp", "file-peer"),
-        ("acp", "kimi"),
     ] {
         assert!(identities.contains(&identity));
     }
