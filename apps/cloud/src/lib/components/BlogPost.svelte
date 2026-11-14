@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { siteOrigin } from '$lib/site';
+	import { author, siteOrigin } from '$lib/site';
 	import { onMount, type Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon';
@@ -30,7 +30,7 @@
 		image,
 		url,
 		mainEntityOfPage: url,
-		author: pontia,
+		author,
 		publisher: { ...pontia, logo: { '@type': 'ImageObject', url: `${siteOrigin}/logo.svg` } }
 	});
 
@@ -52,6 +52,7 @@
 	<meta property="article:published_time" content={published} />
 	<meta property="article:modified_time" content={updated ?? published} />
 	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:creator" content="@anthod0" />
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={description} />
 	<meta name="twitter:image" content={image} />

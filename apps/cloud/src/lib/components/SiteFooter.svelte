@@ -13,12 +13,10 @@
   </a>
   <p>Your device. Your agent cloud.</p>
   <nav aria-label={m.footer_navigation()}>
-    <a href={repository}>GitHub<ArrowUpRightIcon size={12} /></a>
-    <a href={localizeHref("/docs")}>{m.footer_documentation()}</a>
-    <a href="/llms.txt" target="_blank">llms.txt</a>
-    <a href={localizeHref("/blog")}>{m.nav_blog()}</a>
+    <a href={repository} target="_blank" rel="noopener">GitHub<ArrowUpRightIcon size={12} /></a>
+    <a href="https://x.com/anthod0" target="_blank" rel="noopener">X<ArrowUpRightIcon size={12} /></a>
+    <a href="/llms.txt" target="_blank">llms.txt<ArrowUpRightIcon size={12} /></a>
     <a href="/privacy">{m.footer_privacy()}</a>
     <a href="/terms">{m.footer_terms()}</a>
-    <a href={`${repository}/blob/main/LICENSE`}>Apache 2.0</a>
   </nav>
 </footer>

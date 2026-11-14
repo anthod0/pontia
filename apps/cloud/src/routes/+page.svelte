@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { siteOrigin } from '$lib/site';
+	import { author, siteOrigin } from '$lib/site';
 	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import FeatureSection from '$lib/components/FeatureSection.svelte';
@@ -29,6 +29,7 @@
 		operatingSystem: 'Linux, macOS',
 		license: 'https://www.apache.org/licenses/LICENSE-2.0',
 		codeRepository: 'https://github.com/anthod0/pontia',
+		author,
 		offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }
 	};
 </script>
@@ -46,6 +47,7 @@
 	<meta property="og:image:height" content="630" />
 	<meta property="og:image:alt" content={title} />
 	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:creator" content="@anthod0" />
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={description} />
 	<meta name="twitter:image" content={image} />

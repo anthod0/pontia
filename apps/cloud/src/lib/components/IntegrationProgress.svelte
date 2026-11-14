@@ -12,7 +12,7 @@
   import { localizeHref } from '$lib/paraglide/runtime';
 
   // Editorial estimate, updated manually rather than derived from capability counts.
-  const developmentProgress = 70;
+  const developmentProgress = 75;
   // The bar fills from zero when the section scrolls into view.
   let shownProgress = $state(0);
 
@@ -22,7 +22,7 @@
   // https://opencode.ai/brand. The OpenAI symbol used for Codex comes from
   // anomalyco/opencode: packages/ui/src/assets/icons/provider/openai.svg.
   // Local vector assets live in static/client-logos/.
-  // Coverage checked against client-{pi,codex,acp}/src/{spec,adapter}.rs,
+  // Coverage checked against client-{pi,codex,claude,acp}/src/{spec,adapter}.rs,
   // Codex service/interactions.rs, and pontia-config/src/acp.rs.
   const features = [m.integrations_feature_live, m.integrations_feature_sync, m.integrations_feature_approvals, m.integrations_feature_branching, m.integrations_feature_context, m.integrations_feature_models];
   const states = {
@@ -33,15 +33,15 @@
     planning: { label: m.integrations_status_planning, icon: CircleDashedIcon },
   };
   // Not supported is reserved for confirmed technical limitations, not missing work.
-  // ACP TUI sync and history branching remain planned investigations; their
-  // feasibility and scope depend on the individual agent, not ACP alone.
+  // ACP history branching remains a planned investigation; its feasibility and
+  // scope depend on the individual agent, not ACP alone.
   type Coverage = keyof typeof states;
   const clients: { name: string; logo: string; monochrome?: boolean; darkLogo?: string; coverage: Coverage[] }[] = [
     { name: 'Pi', logo: '/client-logos/pi.svg', coverage: ['supported', 'supported', 'notApplicable', 'supported', 'supported', 'supported'] },
     { name: 'Codex', logo: '/client-logos/codex.svg', monochrome: true, coverage: ['supported', 'supported', 'supported', 'supported', 'supported', 'supported'] },
-    { name: 'Claude Code', logo: '/client-logos/claude-code.svg', coverage: ['supported', 'planning', 'supported', 'planning', 'planning', 'planning'] },
-    { name: 'Grok Build', logo: '/client-logos/grok-build.svg', coverage: ['supported', 'planning', 'supported', 'planning', 'planning', 'planning'] },
-    { name: 'OpenCode', logo: '/client-logos/opencode.svg', darkLogo: '/client-logos/opencode-dark.svg', coverage: ['supported', 'planning', 'supported', 'planning', 'planning', 'planning'] },
+    { name: 'Claude Code', logo: '/client-logos/claude-code.svg', coverage: ['supported', 'planning', 'supported', 'planning', 'planning', 'supported'] },
+    { name: 'Grok Build', logo: '/client-logos/grok-build.svg', coverage: ['supported', 'unsupported', 'supported', 'planning', 'planning', 'supported'] },
+    { name: 'OpenCode', logo: '/client-logos/opencode.svg', darkLogo: '/client-logos/opencode-dark.svg', coverage: ['supported', 'unsupported', 'supported', 'planning', 'planning', 'supported'] },
   ];
 </script>
 
