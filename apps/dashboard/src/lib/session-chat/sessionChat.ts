@@ -304,6 +304,8 @@ export function managedToolUseTitle(toolUse: ManagedToolUse): string {
       return "Write file";
     case "bash":
       return "Run command";
+    case "file_changes":
+      return "Change files";
   }
 }
 
@@ -318,6 +320,8 @@ export function managedToolUseContent(toolUse: ManagedToolUse): string {
       return input.path;
     case "bash":
       return input.command;
+    case "file_changes":
+      return input.changes.map((change) => change.path).join("\n");
   }
 }
 

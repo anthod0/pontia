@@ -12,12 +12,13 @@ pub(super) struct ToolCall {
 
 impl ToolCall {
     pub fn into_item(self) -> LiveOutputItem {
+        let managed_tool_use = crate::tool_use::from_call(&self.name, &self.arguments);
         LiveOutputItem::ToolCall {
             item_id: self.id.clone(),
             call_id: self.id,
             tool_name: self.name,
             arguments: self.arguments,
-            managed_tool_use: None,
+            managed_tool_use: managed_tool_use.map(Box::new),
             status: None,
             output: None,
             result: None,
@@ -25,12 +26,13 @@ impl ToolCall {
     }
 
     pub fn into_update(self) -> LiveOutputUpdate {
+        let managed_tool_use = crate::tool_use::from_call(&self.name, &self.arguments);
         LiveOutputUpdate::ToolCall {
             item_id: self.id.clone(),
             call_id: self.id,
             tool_name: self.name,
             arguments: self.arguments,
-            managed_tool_use: None,
+            managed_tool_use,
         }
     }
 }

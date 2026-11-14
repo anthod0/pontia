@@ -353,3 +353,54 @@ async fn a_later_unload_is_not_cleared_by_a_delayed_revert_notification() {
     );
     f.shutdown().await;
 }
+
+#[tokio::test]
+async fn native_history_keeps_commands_and_multi_file_changes_with_their_results() {
+    let f = Fixture::new(turn(json!([
+        {"type":"commandExecution","id":"command","command":"printf hello","status":"completed","exitCode":1,"aggregatedOutput":"command failed"},
+        {"type":"fileChange","id":"files","status":"completed","changes":[
+            {"path":"a.txt","kind":{"type":"add"},"diff":"hello"},
+            {"path":"b.txt","kind":{"type":"delete"},"diff":"old"}
+        ]},
+        {"type":"mcpToolCall","id":"custom","server":"custom","tool":"unknown","arguments":{"key":1},"result":{"value":2}}
+    ])), vec![]).await;
+    let result = page(&f, None, None, 20).await;
+    let items: Vec<_> = result.items.iter().map(|entry| &entry.item).collect();
+    let command = items
+        .iter()
+        .find(|item| item.call_id.as_deref() == Some("command") && item.kind == "tool_call")
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&command.managed_tool_use).unwrap(),
+        json!({"tool_name":"commandExecution","input":{"type":"bash","command":"printf hello"}})
+    );
+    let output = items
+        .iter()
+        .find(|item| item.call_id == command.call_id && item.kind == "tool_result")
+        .unwrap();
+    assert_eq!(output.content_preview, "command failed");
+    assert_eq!(output.status.as_deref(), Some("error"));
+    assert_ne!(output.item_id, command.item_id);
+    let files = items
+        .iter()
+        .find(|item| item.call_id.as_deref() == Some("files"))
+        .unwrap();
+    assert_eq!(files.kind, "tool_call");
+    assert_eq!(
+        serde_json::to_value(&files.managed_tool_use).unwrap(),
+        json!({"tool_name":"fileChange","input":{"type":"file_changes","changes":[
+            {"path":"a.txt","operation":"add","diff":"hello"},
+            {"path":"b.txt","operation":"delete","diff":"old"}
+        ]}})
+    );
+    let custom = items
+        .iter()
+        .find(|item| item.call_id.as_deref() == Some("custom"))
+        .unwrap();
+    assert!(custom.managed_tool_use.is_none());
+    assert_eq!(
+        serde_json::from_str::<Value>(&custom.content_preview).unwrap()["result"],
+        json!({"value":2})
+    );
+    f.shutdown().await;
+}

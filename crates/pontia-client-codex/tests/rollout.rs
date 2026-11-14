@@ -531,3 +531,90 @@ fn session_without_turns_recovers_markers_offline_and_never_treats_failed_starts
                 && entry.item.content_preview.is_empty())
     );
 }
+
+#[test]
+fn rollout_normalizes_native_tools_and_retains_order_and_failure_output() {
+    for file_kind in ["FileChange", "patch_apply_end"] {
+        let patch = json!({"type":file_kind,"id":"patch","call_id":"patch","status":"failed","stderr":"permission denied","changes":{
+            "a.txt":{"type":"add","content":"new"},
+            "b.txt":{"type":"update","unified_diff":"-old\n+new","move_path":"c.txt"},
+            "d.txt":{"type":"delete","content":"removed"}
+        }});
+        let patch_record = if file_kind == "FileChange" {
+            json!({"type":"event_msg","payload":{"type":"item_completed","item":patch}})
+        } else {
+            let mut patch = patch;
+            patch.as_object_mut().unwrap().remove("id");
+            json!({"type":"event_msg","payload":patch})
+        };
+        let (_root, source) = fixture(&[
+            context("a"),
+            item(
+                json!({"type":"function_call","name":"exec_command","call_id":"direct","arguments":"{\"cmd\":\"pwd\"}"}),
+            ),
+            item(json!({"type":"function_call_output","call_id":"direct","output":"/workspace"})),
+            json!({"type":"event_msg","payload":{"type":"item_completed","item":{
+                "type":"CommandExecution","id":"nested","command":["/bin/bash","-lc","printf 'hello world'"],
+                "status":"completed","exit_code":1,"aggregated_output":"failed once","stdout":"failed once","stderr":""
+            }}}),
+            patch_record,
+        ]);
+        let items = CodexRollout
+            .read_session_timeline(SessionTimelineReadRequest {
+                selection: SessionTimelineSelection {
+                    turns: vec![SessionTimelineTurn {
+                        turn_id: "a".into(),
+                        head_cursor: Some(
+                            CodexRollout
+                                .capture_boundary(TimelineBoundaryCaptureRequest {
+                                    source: source.clone(),
+                                    kind: TimelineBoundaryCaptureKind::Head,
+                                    native_entry_anchor: Some("a".into()),
+                                    allow_missing_native_entry_anchor: false,
+                                })
+                                .unwrap()
+                                .cursor,
+                        ),
+                        tail_cursor: None,
+                    }],
+                    selected_turn_ids: vec!["a".into()],
+                },
+                source,
+            })
+            .unwrap();
+        assert_eq!(
+            items
+                .iter()
+                .map(|entry| (entry.item.kind.as_str(), entry.item.call_id.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("tool_call", Some("direct")),
+                ("tool_result", Some("direct")),
+                ("tool_call", Some("nested")),
+                ("tool_result", Some("nested")),
+                ("tool_call", Some("patch")),
+                ("tool_result", Some("patch")),
+            ]
+        );
+        assert_eq!(
+            serde_json::to_value(&items[0].item.managed_tool_use).unwrap(),
+            json!({"tool_name":"exec_command","input":{"type":"bash","command":"pwd"}})
+        );
+        assert_eq!(
+            serde_json::to_value(&items[2].item.managed_tool_use).unwrap(),
+            json!({"tool_name":"CommandExecution","input":{"type":"bash","command":"/bin/bash -lc 'printf '\\''hello world'\\'''"}})
+        );
+        assert_eq!(items[3].item.content_preview, "failed once");
+        assert_eq!(items[3].item.status.as_deref(), Some("error"));
+        assert_eq!(
+            serde_json::to_value(&items[4].item.managed_tool_use).unwrap(),
+            json!({"tool_name":file_kind,"input":{"type":"file_changes","changes":[
+                {"path":"a.txt","operation":"add","diff":"new"},
+                {"path":"b.txt","operation":"update","move_path":"c.txt","diff":"-old\n+new"},
+                {"path":"d.txt","operation":"delete","diff":"removed"}
+            ]}})
+        );
+        assert_eq!(items[5].item.content_preview, "permission denied");
+        assert_eq!(items[5].item.status.as_deref(), Some("error"));
+    }
+}

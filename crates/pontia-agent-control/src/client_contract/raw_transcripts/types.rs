@@ -156,4 +156,25 @@ pub enum ManagedToolUseInput {
         #[serde(skip_serializing_if = "Option::is_none")]
         timeout: Option<u64>,
     },
+    FileChanges {
+        changes: Vec<ManagedFileChange>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ManagedFileChange {
+    pub path: String,
+    pub operation: ManagedFileOperation,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub move_path: Option<String>,
+    pub diff: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedFileOperation {
+    Add,
+    Update,
+    Delete,
 }

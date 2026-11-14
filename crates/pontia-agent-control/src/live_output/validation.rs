@@ -1,4 +1,4 @@
-use crate::client_contract::raw_transcripts::{ManagedToolUse, ManagedToolUseInput};
+use crate::client_contract::raw_transcripts::ManagedToolUse;
 use pontia_core::error::{Error, Result};
 use serde_json::Value;
 
@@ -198,16 +198,9 @@ pub(super) fn validate_tool_call(
     managed_tool_use: Option<&ManagedToolUse>,
 ) -> Result<usize> {
     if let Some(managed_tool_use) = managed_tool_use {
-        let input_matches_tool = matches!(
-            (tool_name, &managed_tool_use.input),
-            ("read", ManagedToolUseInput::Read { .. })
-                | ("edit", ManagedToolUseInput::Edit { .. })
-                | ("write", ManagedToolUseInput::Write { .. })
-                | ("bash", ManagedToolUseInput::Bash { .. })
-        );
-        if managed_tool_use.tool_name != tool_name || !input_matches_tool {
+        if managed_tool_use.tool_name != tool_name {
             return Err(Error::Domain(
-                "managed tool use must match tool_name and input type".into(),
+                "managed tool use must match tool_name".into(),
             ));
         }
     }

@@ -6,20 +6,22 @@
   import FileMagnifyingGlassIcon from 'phosphor-svelte/lib/FileMagnifyingGlassIcon'
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import { cn } from '$lib/utils.js'
+  import type { ManagedFileChange } from '../../../api/types'
 
   interface Props {
-    operation: 'read' | 'write' | 'edit'
+    operation: 'read' | 'write' | 'edit' | 'change'
     files: string[]
+    changes?: ManagedFileChange[]
     results?: { file: string; content: string; error: boolean }[]
     connected?: boolean
     children?: Snippet
   }
 
-  let { operation, files, results = [], connected = false, children }: Props = $props()
+  let { operation, files, changes = [], results = [], connected = false, children }: Props = $props()
   let open = $state(false)
 
   const Icon = $derived(operation === 'read' ? FileMagnifyingGlassIcon : operation === 'write' ? FilePlusIcon : FileTextIcon)
-  const label = $derived(`${operation === 'read' ? 'Read' : operation === 'write' ? 'Write' : 'Edit'} ${files.length} ${files.length === 1 ? 'file' : 'files'}`)
+  const label = $derived(`${operation === 'read' ? 'Read' : operation === 'write' ? 'Write' : operation === 'change' ? 'Change' : 'Edit'} ${files.length} ${files.length === 1 ? 'file' : 'files'}`)
 </script>
 
 <Collapsible.Root bind:open class="relative min-w-0">
@@ -39,11 +41,24 @@
   {/if}
 
   <Collapsible.Content>
-    <ul class="mb-2 ml-9 space-y-1 py-1 text-sm leading-5 text-muted-foreground">
-      {#each files as file (file)}
-        <li class="break-words">{file}</li>
+    {#if changes.length}
+      {#each changes as change, index (`${change.path}:${index}`)}
+        <div class="mb-2 ml-9 min-w-0 text-sm text-muted-foreground">
+          <div class="break-words py-1">
+            {change.operation === 'add' ? 'Add' : change.operation === 'delete' ? 'Delete' : 'Update'} {change.path}{change.move_path ? ` → ${change.move_path}` : ''}
+          </div>
+          {#if change.diff}
+            <pre class="max-w-full overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-xs leading-relaxed">{change.diff}</pre>
+          {/if}
+        </div>
       {/each}
-    </ul>
+    {:else}
+      <ul class="mb-2 ml-9 space-y-1 py-1 text-sm leading-5 text-muted-foreground">
+        {#each files as file (file)}
+          <li class="break-words">{file}</li>
+        {/each}
+      </ul>
+    {/if}
     {#each results as result, index (`${result.file}:${index}`)}
       <div class="mb-2 ml-9 max-w-[calc(100%_-_2.25rem)] overflow-x-auto">
         <div class="px-2 text-xs text-muted-foreground">{result.file}</div>

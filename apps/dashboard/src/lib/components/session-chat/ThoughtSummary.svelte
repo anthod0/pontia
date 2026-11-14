@@ -107,6 +107,12 @@
                 <ThoughtExecution {step} />
               {/if}
             </ThoughtCommandStep>
+          {:else if step.kind === 'tool_call' && step.managedToolUse?.input.type === 'file_changes'}
+            <ThoughtFileStep operation="change" files={[...new Set(step.managedToolUse.input.changes.map((change) => change.path))]} changes={step.managedToolUse.input.changes} results={step.result && !step.executionStatus ? [{ file: '', content: step.result.content, error: step.result.status === 'error' }] : []} connected={hasConnectorAfter(index)}>
+              {#if step.executionStatus}
+                <ThoughtExecution {step} />
+              {/if}
+            </ThoughtFileStep>
           {:else if step.kind === 'file_group'}
             <ThoughtFileStep operation={step.operation} files={step.files} results={step.results} connected={hasConnectorAfter(index)}>
               {#each step.steps as fileStep (fileStep.id)}

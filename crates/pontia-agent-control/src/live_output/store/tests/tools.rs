@@ -194,3 +194,23 @@ fn producer_bounds_utf8_content_and_can_still_publish_end_state() {
     assert_eq!(value[0]["result"]["truncated"], true);
     assert_eq!(value[0]["status"]["outcome"], "interrupted");
 }
+
+#[test]
+fn presentation_accepts_native_names_but_rejects_a_different_call_identity() {
+    let store = store();
+    store.publish_batch(batch(2, json!([{
+        "type":"tool_call","item_id":"native","call_id":"native","tool_name":"commandExecution",
+        "arguments":{"command":"pwd"},
+        "managed_tool_use":{"tool_name":"commandExecution","input":{"type":"bash","command":"pwd"}}
+    }]))).unwrap();
+    assert_eq!(
+        items(&store)[2]["managed_tool_use"],
+        json!({"tool_name":"commandExecution","input":{"type":"bash","command":"pwd"}})
+    );
+    assert!(store.publish_batch(batch(3, json!([{
+        "type":"tool_call","item_id":"mismatch","call_id":"mismatch","tool_name":"commandExecution",
+        "arguments":{"command":"pwd"},
+        "managed_tool_use":{"tool_name":"another-tool","input":{"type":"bash","command":"pwd"}}
+    }]))).is_err());
+    assert_eq!(items(&store).as_array().unwrap().len(), 3);
+}

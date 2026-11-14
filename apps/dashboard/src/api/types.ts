@@ -465,7 +465,15 @@ export type ManagedToolUseInput =
   | { type: "read"; path: string; start_line?: number | null; end_line?: number | null }
   | { type: "edit"; path: string; edits_count: number }
   | { type: "write"; path: string }
-  | { type: "bash"; command: string; timeout?: number | null };
+  | { type: "bash"; command: string; timeout?: number | null }
+  | { type: "file_changes"; changes: ManagedFileChange[] };
+
+export interface ManagedFileChange {
+  path: string;
+  operation: "add" | "update" | "delete";
+  move_path?: string | null;
+  diff: string;
+}
 
 export interface ManagedToolUse {
   tool_name: string;

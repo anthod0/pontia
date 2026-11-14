@@ -372,3 +372,47 @@ test.each(["exec finished successfully", '{"count":9007199254740993,"count":2}\n
     expect(output).toBeVisible();
   },
 );
+
+test("multi-file calls reveal all changes and keep execution output through updates", async () => {
+  const user = userEvent.setup();
+  const call = step({
+    id: "patch",
+    kind: "tool_call",
+    title: "Change files",
+    content: "a.txt\nb.txt\nd.txt",
+    managedToolUse: {
+      tool_name: "fileChange",
+      input: {
+        type: "file_changes",
+        changes: [
+          { path: "a.txt", operation: "add", diff: "new content" },
+          { path: "b.txt", operation: "update", move_path: "c.txt", diff: "-before\n+after" },
+          { path: "d.txt", operation: "delete", diff: "removed content" },
+        ],
+      },
+    },
+    executionStatus: "running",
+  });
+  const { rerender } = render(ThoughtSummary, { props: { steps: [call], active: true } });
+  await user.click(screen.getByRole("button", { name: "Show agent work steps" }));
+  expect(screen.getByText("new content")).not.toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Show Change 3 files details" }));
+  for (const content of ["new content", "-before +after", "removed content"]) {
+    expect(screen.getByText(content)).toBeVisible();
+  }
+  expect(screen.getByRole("status")).toBeVisible();
+  await rerender({
+    steps: [
+      {
+        ...call,
+        executionStatus: "failed",
+        result: { content: "permission denied", status: "error", occurredAt: null },
+      },
+    ],
+    active: false,
+  });
+  expect(screen.getByText("permission denied")).toBeVisible();
+  expect(screen.getByText("-before +after")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Hide Change 3 files details" }));
+  await waitFor(() => expect(screen.getByText("permission denied")).not.toBeVisible());
+});

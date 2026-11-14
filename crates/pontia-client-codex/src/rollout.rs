@@ -249,25 +249,30 @@ impl TurnTimelineReader for CodexRollout {
                 }
                 if record["type"] != "response_item" {
                     if let Some((kind, payload)) = native_detail(record) {
-                        output.push(TurnTimelineItem {
-                            turn_id: Some(range.turn_id.clone()),
-                            item: TimelineItem {
-                                item_id: format!("codex:{thread}:{item_offset}"),
-                                kind: "tool_result".into(),
-                                raw_kind: Some(kind.into()),
-                                role: "tool".into(),
-                                title: Some(kind.into()),
-                                status: if kind == "error" {
-                                    Some("error".into())
-                                } else {
-                                    payload["status"].as_str().map(str::to_string)
-                                },
-                                occurred_at: record["timestamp"].as_str().map(str::to_string),
-                                content_preview: payload.to_string(),
-                                call_id: None,
-                                managed_tool_use: None,
+                        let entry = TimelineItem {
+                            item_id: format!("codex:{thread}:{item_offset}"),
+                            kind: "tool_result".into(),
+                            raw_kind: Some(kind.into()),
+                            role: "tool".into(),
+                            title: Some(kind.into()),
+                            status: if kind == "error" {
+                                Some("error".into())
+                            } else {
+                                payload["status"].as_str().map(str::to_string)
                             },
-                        });
+                            occurred_at: record["timestamp"].as_str().map(str::to_string),
+                            content_preview: payload.to_string(),
+                            call_id: None,
+                            managed_tool_use: None,
+                        };
+                        output.extend(
+                            crate::tool_use::native_timeline(payload, entry)
+                                .into_iter()
+                                .map(|item| TurnTimelineItem {
+                                    turn_id: Some(range.turn_id.clone()),
+                                    item,
+                                }),
+                        );
                     }
                     continue;
                 }
@@ -300,12 +305,19 @@ impl TurnTimelineReader for CodexRollout {
                 }
                 let mut title = None;
                 let mut call_id = None;
+                let mut managed_tool_use = None;
                 let (kind, role, content) = match raw_kind {
                     "message" => (role, role, render_content(&payload["content"])),
                     "reasoning" => ("thinking", "assistant", render_content(&payload["summary"])),
                     "function_call" | "custom_tool_call" => {
                         let name = payload["name"].as_str().unwrap_or("Tool");
                         title = Some(name.to_string());
+                        if let Some(arguments) = payload["arguments"]
+                            .as_str()
+                            .and_then(|text| serde_json::from_str::<Value>(text).ok())
+                        {
+                            managed_tool_use = crate::tool_use::from_call(name, &arguments);
+                        }
                         if let Some(id) = payload["call_id"].as_str() {
                             call_id = Some(id.to_string());
                             calls.insert(id.into(), payload.clone());
@@ -361,7 +373,7 @@ impl TurnTimelineReader for CodexRollout {
                         occurred_at: record["timestamp"].as_str().map(str::to_string),
                         content_preview: content,
                         call_id,
-                        managed_tool_use: None,
+                        managed_tool_use,
                     },
                 });
             }

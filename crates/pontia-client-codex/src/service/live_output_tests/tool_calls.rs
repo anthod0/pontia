@@ -1,5 +1,5 @@
 use super::*;
-// Invocation assertions exclude independently tested execution fields.
+// Raw invocation assertions exclude independently tested presentation and execution fields.
 fn calls_and_text(snapshot: &LiveOutputSnapshot) -> Vec<LiveOutputItem> {
     snapshot
         .items
@@ -10,12 +10,14 @@ fn calls_and_text(snapshot: &LiveOutputSnapshot) -> Vec<LiveOutputItem> {
                 status,
                 output,
                 result,
+                managed_tool_use,
                 ..
             } = &mut item
             {
                 *status = None;
                 *output = None;
                 *result = None;
+                *managed_tool_use = None;
             }
             item
         })
@@ -453,4 +455,56 @@ async fn unsupported_outputs_and_incomplete_calls_do_not_block_text_or_later_dis
         ]
     );
     fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn live_and_recovered_calls_include_client_independent_presentation() {
+    let native = json!([
+        {"type":"commandExecution","id":"command","command":"printf hello","status":"completed","exitCode":0,"aggregatedOutput":"hello"},
+        {"type":"fileChange","id":"files","status":"completed","changes":[
+            {"path":"new.txt","kind":{"type":"add"},"diff":"new content"},
+            {"path":"old.txt","kind":{"type":"update","move_path":"renamed.txt"},"diff":"-before\n+after"},
+            {"path":"removed.txt","kind":{"type":"delete"},"diff":"removed content"}
+        ]},
+        {"type":"mcpToolCall","id":"custom","server":"custom","tool":"commandExecution","arguments":{"command":"opaque"}}
+    ]);
+    let expected = json!([
+        {"tool_name":"commandExecution","input":{"type":"bash","command":"printf hello"}},
+        {"tool_name":"fileChange","input":{"type":"file_changes","changes":[
+            {"path":"new.txt","operation":"add","diff":"new content"},
+            {"path":"old.txt","operation":"update","move_path":"renamed.txt","diff":"-before\n+after"},
+            {"path":"removed.txt","operation":"delete","diff":"removed content"}
+        ]}},
+        null
+    ]);
+    for recover in [false, true] {
+        let f = Fixture::new(
+            turn(if recover { native.clone() } else { json!([]) }),
+            vec![],
+        )
+        .await;
+        if !recover {
+            for item in native.as_array().unwrap() {
+                f.notify(item_notification("item/started", item.clone()))
+                    .await;
+            }
+        }
+        let snapshot = f.wait_snapshot(|s| s.items.len() == 3).await;
+        let items = serde_json::to_value(snapshot.items).unwrap();
+        assert_eq!(
+            Value::Array(
+                items
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|item| item["managed_tool_use"].clone())
+                    .collect()
+            ),
+            expected
+        );
+        assert_eq!(items[0]["tool_name"], "commandExecution");
+        assert_eq!(items[0]["arguments"], json!({"command":"printf hello"}));
+        assert_eq!(items[1]["arguments"]["changes"], native[1]["changes"]);
+        f.shutdown().await;
+    }
 }

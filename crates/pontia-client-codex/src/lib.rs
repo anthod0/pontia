@@ -8,6 +8,7 @@ pub mod runtime;
 mod service;
 pub mod setup;
 mod spec;
+mod tool_use;
 
 pub use adapter::registration;
 pub use service::{CodexObserver, CodexService};

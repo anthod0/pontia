@@ -54,22 +54,18 @@ pub(super) fn timeline(
                 "contextCompaction" => ("context_compaction", "system", String::new()),
                 _ => ("tool_result", "tool", item.to_string()),
             };
-            output.push(TurnTimelineItem {
-                turn_id: owner.cloned(),
-                item: TimelineItem {
-                    item_id: format!("codex:{native}:{id}"),
-                    kind: kind.into(),
-                    raw_kind: Some(raw_kind.into()),
-                    role: role.into(),
-                    title: (role == "tool").then(|| raw_kind.into()),
-                    status: item["status"].as_str().map(str::to_owned),
-                    occurred_at: item["completedAtMs"]
-                        .as_i64()
-                        .or_else(|| item["startedAtMs"].as_i64())
-                        .map(|millis| {
-                            OffsetDateTime::from_unix_timestamp_nanos(
-                                i128::from(millis) * 1_000_000,
-                            )
+            let entry = TimelineItem {
+                item_id: format!("codex:{native}:{id}"),
+                kind: kind.into(),
+                raw_kind: Some(raw_kind.into()),
+                role: role.into(),
+                title: (role == "tool").then(|| raw_kind.into()),
+                status: item["status"].as_str().map(str::to_owned),
+                occurred_at: item["completedAtMs"]
+                    .as_i64()
+                    .or_else(|| item["startedAtMs"].as_i64())
+                    .map(|millis| {
+                        OffsetDateTime::from_unix_timestamp_nanos(i128::from(millis) * 1_000_000)
                             .map_err(|error| {
                                 Error::Domain(format!("Invalid Codex item timestamp: {error}"))
                             })?
@@ -77,13 +73,20 @@ pub(super) fn timeline(
                             .map_err(|error| {
                                 Error::Domain(format!("Invalid Codex item timestamp: {error}"))
                             })
-                        })
-                        .transpose()?,
-                    content_preview: content,
-                    call_id: (role == "tool").then(|| id.into()),
-                    managed_tool_use: None,
-                },
-            });
+                    })
+                    .transpose()?,
+                content_preview: content,
+                call_id: (role == "tool").then(|| id.into()),
+                managed_tool_use: None,
+            };
+            output.extend(
+                crate::tool_use::native_timeline(item, entry)
+                    .into_iter()
+                    .map(|item| TurnTimelineItem {
+                        turn_id: owner.cloned(),
+                        item,
+                    }),
+            );
         }
     }
     Ok(output)
