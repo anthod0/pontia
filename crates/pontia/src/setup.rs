@@ -83,7 +83,7 @@ where
     R: BufRead,
     W: Write,
     P: SetupPlatform,
-    S: FnOnce(&mut R, &mut W, &[Arc<dyn ClientIntegration>]) -> Result<Vec<usize>, String>,
+    S: FnOnce(&mut R, &mut W, &[Arc<dyn ClientIntegration>], &[bool]) -> Result<Vec<usize>, String>,
 {
     let integrations = platform.integrations();
     let selected = match client {
@@ -93,7 +93,15 @@ where
                 .position(|client| client.client_type() == name)
                 .ok_or_else(|| format!("unsupported Agent Client: {name}"))?,
         ],
-        None => select(input, output, &integrations)?,
+        None => select(
+            input,
+            output,
+            &integrations,
+            &integrations
+                .iter()
+                .map(|client| client.selected_by_default())
+                .collect::<Vec<_>>(),
+        )?,
     };
     if selected.is_empty() {
         return Ok(());

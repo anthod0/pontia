@@ -193,3 +193,43 @@ fn repairs_a_missing_default_host_in_an_existing_installation_without_removing_o
     setup.install(&runner, &NoDefinitions).unwrap();
     assert_eq!(runner.downloads.load(Ordering::SeqCst), 2);
 }
+
+#[test]
+fn repairs_a_default_host_that_fails_its_dependency_check() {
+    struct HealthRunner(Installer);
+    impl CommandRunner for HealthRunner {
+        fn run(&self, program: &str, args: &[String]) -> Result<CommandOutput, String> {
+            if args.last().is_some_and(|arg| arg == "preflight")
+                && std::fs::read_to_string(&args[0]).unwrap() == "broken"
+            {
+                return Ok(CommandOutput {
+                    code: 1,
+                    stdout: String::new(),
+                    stderr: String::new(),
+                });
+            }
+            self.0.run(program, args)
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let runner = HealthRunner(Installer {
+        install_code: 0,
+        dependency_code: 0,
+        downloads: AtomicUsize::new(0),
+    });
+    let integration = pontia_client_claude::setup::integration();
+    let setup = integration
+        .prepare(&HashMap::new(), root.path(), &runner)
+        .unwrap();
+    setup.preflight(&runner).unwrap();
+    setup.install(&runner, &NoDefinitions).unwrap();
+    let host = root
+        .path()
+        .join(".pontia/clients/claude-client/node_modules/@pontia/claude-client/dist/src/main.js");
+    std::fs::write(&host, "broken").unwrap();
+    setup.preflight(&runner).unwrap();
+    setup.install(&runner, &NoDefinitions).unwrap();
+    setup.install(&runner, &NoDefinitions).unwrap();
+    assert_eq!(std::fs::read_to_string(host).unwrap(), "fixture");
+    assert_eq!(runner.0.downloads.load(Ordering::SeqCst), 2);
+}

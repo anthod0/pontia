@@ -172,14 +172,20 @@ impl<R: CommandRunner> ServiceManager for SystemdManager<'_, R> {
     fn apply(
         &self,
         _definition_path: &Path,
-        _definition_changed: bool,
+        definition_changed: bool,
         restart_running: bool,
-        _previous: ServiceStatus,
+        previous: ServiceStatus,
     ) -> Result<(), String> {
-        self.require_systemctl(&["daemon-reload"])?;
-        self.require_systemctl(&["enable", "--now", SYSTEMD_SERVICE_NAME])?;
+        if definition_changed || !previous.loaded {
+            self.require_systemctl(&["daemon-reload"])?;
+        }
+        if previous.enabled != EnabledState::Enabled {
+            self.require_systemctl(&["enable", SYSTEMD_SERVICE_NAME])?;
+        }
         if restart_running {
             self.require_systemctl(&["restart", SYSTEMD_SERVICE_NAME])?;
+        } else if previous.run_state != RunState::Running {
+            self.require_systemctl(&["start", SYSTEMD_SERVICE_NAME])?;
         }
         Ok(())
     }
@@ -391,7 +397,9 @@ impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {
         previous: ServiceStatus,
     ) -> Result<(), String> {
         let target = self.target();
-        self.require_launchctl(vec!["enable".to_string(), target.clone()])?;
+        if previous.enabled != EnabledState::Enabled {
+            self.require_launchctl(vec!["enable".to_string(), target.clone()])?;
+        }
         if definition_changed && previous.loaded {
             self.require_launchctl(vec!["bootout".to_string(), target.clone()])?;
         }

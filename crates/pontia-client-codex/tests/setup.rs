@@ -68,6 +68,7 @@ impl CommandRunner for FakeRunner {
 struct FakeStore {
     installs: RefCell<Vec<(PathBuf, String)>>,
     error: Option<&'static str>,
+    unchanged: bool,
 }
 
 impl DefinitionStore for FakeStore {
@@ -79,7 +80,8 @@ impl DefinitionStore for FakeStore {
         self.installs
             .borrow_mut()
             .push((path.to_path_buf(), contents.to_string()));
-        self.error.map_or(Ok(true), |error| Err(error.to_string()))
+        self.error
+            .map_or(Ok(!self.unchanged), |error| Err(error.to_string()))
     }
 }
 
@@ -413,4 +415,115 @@ fn renders_codex_oneshot_user_service() {
         "[Unit]\nDescription=Codex App Server Daemon Startup\nAfter=network.target\n\n[Service]\nType=oneshot\nKillMode=process\nExecStart=\"/home/alice/Codex App/bin/codex\" app-server daemon start\nEnvironment=\"CODEX_HOME=/home/alice/.codex%%dev\"\n\n[Install]\nWantedBy=default.target\n"
     );
     assert!(!rendered.contains("RemainAfterExit"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn unchanged_healthy_codex_service_is_only_checked() {
+    let root = tempfile::tempdir().unwrap();
+    let setup = CodexSetup {
+        executable: PathBuf::from("/opt/codex"),
+        home: root.path().into(),
+        service_user: ServiceUserIdentity::SystemdUsername("alice".into()),
+        service_path: root.path().join("codex.service"),
+        executable_search_path: Vec::new(),
+    };
+    let runner = FakeRunner::with_outputs(vec![
+        output(0, "enabled\n", ""),
+        output(0, "yes\n", ""),
+        output(0, r#"{"status":"running"}"#, ""),
+        output(0, "enabled\n", ""),
+        output(0, "yes\n", ""),
+    ]);
+    let store = FakeStore {
+        unchanged: true,
+        ..Default::default()
+    };
+    initialize(&setup, &runner, &store, &FakeProbe::default()).unwrap();
+    assert!(runner.calls.borrow().iter().all(|call| {
+        call.args
+            .iter()
+            .any(|arg| ["is-enabled", "show-user", "version"].contains(&arg.as_str()))
+    }));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn unchanged_healthy_launch_agent_is_not_reloaded() {
+    let root = tempfile::tempdir().unwrap();
+    let setup = CodexSetup {
+        executable: PathBuf::from("/opt/codex"),
+        home: root.path().into(),
+        service_user: ServiceUserIdentity::LaunchdUid(501),
+        service_path: root.path().join("codex.plist"),
+        executable_search_path: Vec::new(),
+    };
+    let runner = FakeRunner::with_outputs(vec![
+        output(0, "state = exited", ""),
+        output(0, "disabled services = {}", ""),
+        output(0, r#"{"status":"running"}"#, ""),
+        output(0, "state = exited", ""),
+        output(0, "disabled services = {}", ""),
+    ]);
+    let store = FakeStore {
+        unchanged: true,
+        ..Default::default()
+    };
+    initialize(&setup, &runner, &store, &FakeProbe::default()).unwrap();
+    assert!(runner.calls.borrow().iter().all(|call| {
+        call.args
+            .iter()
+            .any(|arg| ["print", "print-disabled", "version"].contains(&arg.as_str()))
+    }));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn unchanged_definition_with_an_unavailable_daemon_is_started_and_verified_again() {
+    struct RecoveringProbe(std::cell::Cell<bool>);
+    impl CodexDaemonProbe for RecoveringProbe {
+        fn probe(&self, _: &Path) -> Result<(), String> {
+            if self.0.replace(true) {
+                Ok(())
+            } else {
+                Err("daemon unavailable".into())
+            }
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let setup = CodexSetup {
+        executable: PathBuf::from("/opt/codex"),
+        home: root.path().into(),
+        service_user: ServiceUserIdentity::SystemdUsername("alice".into()),
+        service_path: root.path().join("codex.service"),
+        executable_search_path: Vec::new(),
+    };
+    let runner = FakeRunner::with_outputs(vec![
+        output(0, "enabled\n", ""),
+        output(0, "yes\n", ""),
+        output(0, "", ""),
+        output(0, "", ""),
+        output(0, "", ""),
+        output(0, r#"{"status":"running"}"#, ""),
+        output(0, "enabled\n", ""),
+        output(0, "yes\n", ""),
+    ]);
+    let store = FakeStore {
+        unchanged: true,
+        ..Default::default()
+    };
+    initialize(
+        &setup,
+        &runner,
+        &store,
+        &RecoveringProbe(std::cell::Cell::new(false)),
+    )
+    .unwrap();
+    assert!(
+        runner
+            .calls
+            .borrow()
+            .iter()
+            .any(|call| call.args == ["--user", "enable", "--now", "pontia-codex.service"])
+    );
 }

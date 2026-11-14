@@ -101,6 +101,7 @@ struct FakePlatform {
     install_error: Option<&'static str>,
     dashboard_ready: bool,
     enable_error: bool,
+    settings_error: bool,
     enabled: RefCell<Vec<(String, String)>>,
     persisted_paths: Vec<(String, PathBuf)>,
 }
@@ -112,6 +113,7 @@ impl Default for FakePlatform {
             install_error: None,
             dashboard_ready: true,
             enable_error: false,
+            settings_error: false,
             enabled: RefCell::new(Vec::new()),
             persisted_paths: Vec::new(),
         }
@@ -184,6 +186,16 @@ impl pontia::setup::SetupPlatform for FakePlatform {
 }
 
 impl InitPlatform for FakePlatform {
+    fn enabled_clients(
+        &self,
+        _: &AppConfig,
+    ) -> Result<std::collections::HashSet<(String, String)>, String> {
+        if self.settings_error {
+            return Err("client settings unavailable".into());
+        }
+        Ok(self.enabled.borrow().iter().cloned().collect())
+    }
+
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String> {
         self.events
             .borrow_mut()
@@ -841,4 +853,152 @@ fn setup_reuses_persisted_paths() {
             root.path().join("chosen-codex").display().to_string(),
         );
     }
+}
+
+#[test]
+fn rerun_defaults_to_saved_enabled_clients_and_does_not_enable_skipped_clients() {
+    let root = tempfile::tempdir().unwrap();
+    let vars = vars(root.path(), &root.path().join("pontia"));
+    let platform = FakePlatform::default();
+    run(
+        &mut Cursor::new("codex\ny\n"),
+        &mut Vec::new(),
+        &vars,
+        &platform,
+    )
+    .unwrap();
+    platform.events.borrow_mut().clear();
+    run(&mut Cursor::new("\ny\n"), &mut Vec::new(), &vars, &platform).unwrap();
+    assert!(
+        platform
+            .events
+            .borrow()
+            .iter()
+            .any(|event| event.starts_with("initialize-codex:"))
+    );
+    assert!(
+        !platform
+            .events
+            .borrow()
+            .iter()
+            .any(|event| event == "install-pi")
+    );
+    assert_eq!(
+        *platform.enabled.borrow(),
+        vec![("codex".into(), "default".into())]
+    );
+    platform.events.borrow_mut().clear();
+    run(
+        &mut Cursor::new("none\ny\n"),
+        &mut Vec::new(),
+        &vars,
+        &platform,
+    )
+    .unwrap();
+    assert!(
+        !platform
+            .events
+            .borrow()
+            .iter()
+            .any(|event| event.starts_with("initialize-codex:"))
+    );
+    assert_eq!(
+        *platform.enabled.borrow(),
+        vec![("codex".into(), "default".into())]
+    );
+}
+
+#[test]
+fn rerun_with_all_clients_disabled_does_not_restore_product_defaults() {
+    let root = tempfile::tempdir().unwrap();
+    let vars = vars(root.path(), &root.path().join("pontia"));
+    let platform = FakePlatform::default();
+    run(
+        &mut Cursor::new("none\ny\n"),
+        &mut Vec::new(),
+        &vars,
+        &platform,
+    )
+    .unwrap();
+    platform.events.borrow_mut().clear();
+    run(&mut Cursor::new("\ny\n"), &mut Vec::new(), &vars, &platform).unwrap();
+    assert!(platform.enabled.borrow().is_empty());
+    assert!(
+        !platform
+            .events
+            .borrow()
+            .iter()
+            .any(|event| event == "install-pi")
+    );
+    run(
+        &mut Cursor::new("pi\ny\n"),
+        &mut Vec::new(),
+        &vars,
+        &platform,
+    )
+    .unwrap();
+    assert_eq!(
+        *platform.enabled.borrow(),
+        vec![("pi".into(), "default".into())]
+    );
+}
+
+#[test]
+fn missing_token_in_an_existing_installation_keeps_saved_selection() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("pontia");
+    fs::create_dir_all(home.join("data")).unwrap();
+    let platform = FakePlatform::default();
+    platform
+        .enabled
+        .borrow_mut()
+        .push(("codex".into(), "default".into()));
+    run(
+        &mut Cursor::new("\ny\n"),
+        &mut Vec::new(),
+        &vars(root.path(), &home),
+        &platform,
+    )
+    .unwrap();
+    assert!(home.join("config.toml").is_file());
+    assert!(
+        !platform
+            .events
+            .borrow()
+            .iter()
+            .any(|event| event == "install-pi")
+    );
+    assert!(
+        platform
+            .events
+            .borrow()
+            .iter()
+            .any(|event| event.starts_with("initialize-codex:"))
+    );
+    assert_eq!(platform.enabled.borrow().len(), 1);
+}
+
+#[test]
+fn failed_settings_read_does_not_fall_back_to_recommended_clients() {
+    let root = tempfile::tempdir().unwrap();
+    let vars = vars(root.path(), &root.path().join("pontia"));
+    let mut platform = FakePlatform::default();
+    run(
+        &mut Cursor::new("none\ny\n"),
+        &mut Vec::new(),
+        &vars,
+        &platform,
+    )
+    .unwrap();
+    platform.events.borrow_mut().clear();
+    platform.settings_error = true;
+    assert!(run(&mut Cursor::new("\ny\n"), &mut Vec::new(), &vars, &platform).is_err());
+    assert!(platform.enabled.borrow().is_empty());
+    assert!(
+        !platform
+            .events
+            .borrow()
+            .iter()
+            .any(|event| event == "install-pi")
+    );
 }

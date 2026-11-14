@@ -30,6 +30,8 @@ When prompted to sign in and enable remote access, accept and complete the brows
 
 Existing configuration and Workspace Browser roots are retained. Without configured roots, the Workspace Browser defaults to your home directory.
 
+Run `pontia init` again to check and repair your installation. The first run selects recommended Clients; later runs default to your enabled Clients. Newly selected Clients are configured and enabled. Unchecking a Client skips it for this run and keeps its settings and installation. Healthy integrations are reused. On an existing installation, Pontia checks and starts its service before the Client selection; cancelling Client setup leaves that service available.
+
 ## Configure or repair a Client later
 
 Run `pontia setup` to select Clients, or specify one directly:

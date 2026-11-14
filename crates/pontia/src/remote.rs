@@ -19,7 +19,7 @@ use pontia::{private_file, terminal};
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 const REMOTE_HELP: &str = "\
-Requires 'pontia login'. enable, rotate-key, and disable restart a running service.
+Requires 'pontia login'. Changes to remote access restart a running service.
 
 Example:
   pontia remote enable --edge <EDGE_ID> --name \"Workstation\"
@@ -93,7 +93,7 @@ pub(crate) async fn run(
         RemoteCommandKind::Edges => edges(vars).await.map(|_| ServiceRestart::NotRequired),
         RemoteCommandKind::Enable(args) => enable_with_args(vars, args)
             .await
-            .map(|_| ServiceRestart::Required),
+            .map(|access| access.restart),
         RemoteCommandKind::Edit(args) => {
             edit(vars, args).await.map(|_| ServiceRestart::NotRequired)
         }
@@ -129,6 +129,7 @@ pub(crate) struct Device {
 
 pub(crate) struct RemoteAccess {
     pub(crate) device_handle: String,
+    pub(crate) restart: ServiceRestart,
 }
 
 #[derive(Serialize)]
@@ -213,11 +214,11 @@ async fn enable_with_args(
         let identity_path = home.join("e2e-identity.json");
         if stored_identity_matches(&identity_path, &device)? {
             print_registered(&device, true);
-            return remote_access(device);
+            return remote_access(device, ServiceRestart::NotRequired);
         }
         let device = rotate_registered_identity(&api, &identity_path, device, &e2e_config).await?;
         print_registered(&device, true);
-        return remote_access(device);
+        return remote_access(device, ServiceRestart::Required);
     }
 
     let edges = api.fetch_edges().await?;
@@ -276,7 +277,7 @@ async fn enable_with_args(
     };
     write_identity(&home.join("e2e-identity.json"), &stored)?;
     print_registered(&device, false);
-    remote_access(device)
+    remote_access(device, ServiceRestart::Required)
 }
 
 pub(crate) enum RegistrationStatus {
@@ -1024,12 +1025,13 @@ fn valid_device_handle(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_-".contains(&byte))
 }
 
-fn remote_access(device: Device) -> Result<RemoteAccess, String> {
+fn remote_access(device: Device, restart: ServiceRestart) -> Result<RemoteAccess, String> {
     if !valid_device_handle(&device.handle) {
         return Err(uncertain_result());
     }
     Ok(RemoteAccess {
         device_handle: device.handle,
+        restart,
     })
 }
 

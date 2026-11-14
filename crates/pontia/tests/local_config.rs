@@ -32,7 +32,13 @@ fn fresh_preparation_persists_only_a_secure_token_and_reuses_it() {
         config.workspace_browser.roots[0].path,
         root.path().to_str().unwrap()
     );
+    let modified = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(123456);
+    fs::File::open(&path)
+        .unwrap()
+        .set_modified(modified)
+        .unwrap();
     let again = prepare(&vars, |_| panic!("existing token must be reused")).unwrap();
+    assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), modified);
     assert_eq!(again.external_api_token, config.external_api_token);
     assert_eq!(fs::read_to_string(&path).unwrap(), original);
     #[cfg(unix)]

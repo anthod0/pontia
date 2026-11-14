@@ -285,7 +285,7 @@ where
     S: DefinitionStore + ?Sized,
     P: CodexDaemonProbe + ?Sized,
 {
-    install_and_start_service(setup, runner, definitions)?;
+    install_and_start_service(setup, runner, definitions, probe)?;
 
     let environment = codex_environment(&setup.home)?;
     let program = utf8_path(&setup.executable, "Codex executable")?;
@@ -337,19 +337,24 @@ fn codex_service_path(user_home: &Path) -> PathBuf {
 }
 
 #[cfg(target_os = "linux")]
-fn install_and_start_service<R, S>(
+fn install_and_start_service<R, S, P>(
     setup: &CodexSetup,
     runner: &R,
     definitions: &S,
+    probe: &P,
 ) -> Result<(), String>
 where
     R: CommandRunner + ?Sized,
     S: DefinitionStore + ?Sized,
+    P: CodexDaemonProbe + ?Sized,
 {
     let definition = render_codex_systemd(&setup.executable, &setup.home)?;
-    definitions
+    let changed = definitions
         .install(&setup.service_path, &definition)
         .map_err(|error| format!("Codex service definition installation failed: {error}"))?;
+    if !changed && verify_service(setup, runner).is_ok() && probe.probe(&setup.home).is_ok() {
+        return Ok(());
+    }
     require_systemctl(runner, &["daemon-reload"], "Codex service reload")?;
     require_plain(
         runner,
@@ -365,23 +370,28 @@ where
 }
 
 #[cfg(target_os = "macos")]
-fn install_and_start_service<R, S>(
+fn install_and_start_service<R, S, P>(
     setup: &CodexSetup,
     runner: &R,
     definitions: &S,
+    probe: &P,
 ) -> Result<(), String>
 where
     R: CommandRunner + ?Sized,
     S: DefinitionStore + ?Sized,
+    P: CodexDaemonProbe + ?Sized,
 {
     let definition = render_codex_launchd_with_search_path(
         &setup.executable,
         &setup.home,
         &setup.executable_search_path,
     )?;
-    definitions
+    let changed = definitions
         .install(&setup.service_path, &definition)
         .map_err(|error| format!("Codex service definition installation failed: {error}"))?;
+    if !changed && verify_service(setup, runner).is_ok() && probe.probe(&setup.home).is_ok() {
+        return Ok(());
+    }
     let domain = format!("gui/{}", setup.launchd_uid()?);
     let target = format!("{domain}/{CODEX_LAUNCHD_LABEL}");
     let bootout_args = ["bootout".to_string(), target.clone()];
@@ -410,14 +420,16 @@ where
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn install_and_start_service<R, S>(
+fn install_and_start_service<R, S, P>(
     _setup: &CodexSetup,
     _runner: &R,
     _definitions: &S,
+    _probe: &P,
 ) -> Result<(), String>
 where
     R: CommandRunner + ?Sized,
     S: DefinitionStore + ?Sized,
+    P: CodexDaemonProbe + ?Sized,
 {
     Err("Codex automatic startup is supported only on Linux and macOS".into())
 }

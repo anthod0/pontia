@@ -30,6 +30,8 @@ npx @pontia/cli init
 
 现有配置和 Workspace Browser 根目录会被保留。未配置根目录时，Workspace Browser 默认使用你的主目录。
 
+可以重复运行 `pontia init` 来检查和修复安装。首次执行默认选择推荐的 Client，之后默认选择已启用的 Client。新勾选的 Client 会被配置并启用；取消勾选只跳过本次处理，保留其设置和安装。正常的集成会直接复用。对于已有安装，Pontia 会在选择 Client 前检查并启动服务；取消 Client 设置后，该服务仍保持可用。
+
 ## 之后配置或修复 Client
 
 运行 `pontia setup` 选择 Client，或直接指定一个：

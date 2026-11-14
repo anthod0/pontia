@@ -288,7 +288,7 @@ async fn enabling_an_existing_device_preserves_its_registration_and_identity() {
         .unwrap();
     let path = cloud.root.path().join("e2e-identity.json");
     let identity = fs::read(&path).unwrap();
-    cloud
+    let restart = cloud
         .run(&[
             "enable",
             "--edge",
@@ -298,6 +298,7 @@ async fn enabling_an_existing_device_preserves_its_registration_and_identity() {
         ])
         .await
         .unwrap();
+    assert!(matches!(restart, ServiceRestart::NotRequired));
     assert_eq!(fs::read(path).unwrap(), identity);
     let state = cloud.state.lock().unwrap();
     assert_eq!(state.registrations.len(), 1);

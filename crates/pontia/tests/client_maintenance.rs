@@ -9,6 +9,15 @@ struct Platform {
     fail: bool,
 }
 impl CommandRunner for Platform {
+    fn run_with_env(
+        &self,
+        program: &str,
+        args: &[String],
+        _: &[(String, String)],
+    ) -> Result<CommandOutput, String> {
+        self.run(program, args)
+    }
+
     fn run(&self, program: &str, args: &[String]) -> Result<CommandOutput, String> {
         self.commands
             .borrow_mut()
@@ -52,6 +61,7 @@ fn only_explicitly_enabled_integrations_maintain_artifacts_not_client_binaries()
                 calls,
                 vec![
                     ("pi".into(), vec!["--version".into()]),
+                    ("pi".into(), vec!["list".into()]),
                     (
                         "pi".into(),
                         vec!["install".into(), "npm:@pontia/pi-client-plugin".into()]

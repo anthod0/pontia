@@ -19,6 +19,10 @@ pub struct InitOutcome {
 
 pub trait InitPlatform: crate::setup::SetupPlatform {
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String>;
+    fn enabled_clients(
+        &self,
+        config: &pontia_config::AppConfig,
+    ) -> Result<HashSet<(String, String)>, String>;
 }
 
 pub fn run<R: BufRead, W: Write, P: InitPlatform>(
@@ -56,9 +60,9 @@ where
     R: BufRead,
     W: Write,
     P: InitPlatform,
-    S: FnOnce(&mut R, &mut W, &[Arc<dyn ClientIntegration>]) -> Result<Vec<usize>, String>,
+    S: FnOnce(&mut R, &mut W, &[Arc<dyn ClientIntegration>], &[bool]) -> Result<Vec<usize>, String>,
 {
-    let existing = local_config::load(vars)?;
+    let mut existing = local_config::load(vars)?;
     if existing.bind_addr.port() == 0 {
         return Err(
             "bind_addr port 0 is not supported by pontia init; configure a concrete service port"
@@ -67,7 +71,6 @@ where
     }
     let user_home = validated_user_home(vars)?;
     let config_path = existing.pontia_home.join("config.toml");
-    let initial_roots = &existing.workspace_browser.roots;
 
     writeln!(
         output,
@@ -77,7 +80,39 @@ where
     )
     .map_err(io_error)?;
     let integrations = platform.integrations();
-    let selected = select_agents(input, output, &integrations)?;
+    let enabled =
+        if existing.external_api_token.is_some() || existing.pontia_home.join("data").is_dir() {
+            writeln!(
+                output,
+                "Checking the Pontia service to read saved client settings..."
+            )
+            .map_err(io_error)?;
+            platform.preflight()?;
+            let config_changed = if existing.external_api_token.is_none() {
+                let token = local_config::generate_token(|bytes| platform.fill_random(bytes))?;
+                let changed = local_config::persist_token(&existing, &token)?;
+                existing = local_config::load(vars)?;
+                changed
+            } else {
+                false
+            };
+            platform.start_service(&existing, config_changed, &[])?;
+            Some(platform.enabled_clients(&existing)?)
+        } else {
+            None
+        };
+    let defaults = integrations
+        .iter()
+        .map(|client| {
+            enabled.as_ref().map_or_else(
+                || client.selected_by_default(),
+                |enabled| {
+                    enabled.contains(&(client.client_type().into(), client.client_key().into()))
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    let selected = select_agents(input, output, &integrations, &defaults)?;
     let vars = crate::setup::integration_vars(vars, &user_home, platform)?;
     let prepared = integrations
         .iter()
@@ -134,7 +169,10 @@ where
         }
     }
     let settings = [
-        format!("Workspace Browser roots: {}", initial_roots.len()),
+        format!(
+            "Workspace Browser roots: {}",
+            existing.workspace_browser.roots.len()
+        ),
         format!(
             "External API token: {}",
             if existing.external_api_token.is_some() {
@@ -155,7 +193,12 @@ where
     {
         "" | "y" | "yes" => {}
         "n" | "no" => {
-            writeln!(output, "Setup cancelled. Nothing was changed.").map_err(io_error)?;
+            let message = if enabled.is_some() {
+                "Client setup cancelled. The Pontia service remains available."
+            } else {
+                "Setup cancelled. Nothing was changed."
+            };
+            writeln!(output, "{message}").map_err(io_error)?;
             return Ok(None);
         }
         answer => return Err(format!("expected yes or no, got {answer:?}")),
@@ -186,7 +229,11 @@ where
     writeln!(
         output,
         "{}",
-        terminal::success(format!("Saved configuration to {}", config_path.display()))
+        terminal::success(if config_changed {
+            format!("Saved configuration to {}", config_path.display())
+        } else {
+            format!("Configuration unchanged: {}", config_path.display())
+        })
     )
     .map_err(io_error)?;
 
@@ -196,14 +243,14 @@ where
         .flat_map(|(_, setup)| setup.service_environment_paths())
         .collect::<Vec<_>>();
     platform.start_service(&config, config_changed, &environment_paths)?;
-    writeln!(
-        output,
-        "{}",
-        terminal::success("Started the Pontia service")
-    )
-    .map_err(io_error)?;
+    writeln!(output, "{}", terminal::success("Pontia service is ready")).map_err(io_error)?;
     // Business settings belong to the running service, not the initialization CLI.
     for (client, _) in &installed {
+        if enabled.as_ref().is_some_and(|enabled| {
+            enabled.contains(&(client.client_type().into(), client.client_key().into()))
+        }) {
+            continue;
+        }
         match platform.enable_client(&config, client.client_type(), client.client_key()) {
             Ok(()) => writeln!(
                 output,
@@ -240,17 +287,19 @@ pub(crate) fn line_agent_selection<R: BufRead, W: Write>(
     input: &mut R,
     output: &mut W,
     clients: &[Arc<dyn ClientIntegration>],
+    defaults: &[bool],
 ) -> Result<Vec<usize>, String> {
-    writeln!(output, "{}", terminal::heading("Agent Clients to connect:")).map_err(io_error)?;
-    for client in clients {
+    writeln!(
+        output,
+        "{}",
+        terminal::heading("Agent Clients to configure or check this time:")
+    )
+    .map_err(io_error)?;
+    for (client, selected) in clients.iter().zip(defaults) {
         writeln!(
             output,
             "  [{}] {}",
-            if client.selected_by_default() {
-                "x"
-            } else {
-                " "
-            },
+            if *selected { "x" } else { " " },
             client.client_type()
         )
         .map_err(io_error)?;
@@ -277,10 +326,10 @@ pub(crate) fn line_agent_selection<R: BufRead, W: Write>(
     let answer = read_answer(input, output)?;
     let answer = answer.trim();
     if answer.is_empty() {
-        return Ok(clients
+        return Ok(defaults
             .iter()
             .enumerate()
-            .filter_map(|(index, client)| client.selected_by_default().then_some(index))
+            .filter_map(|(index, selected)| selected.then_some(index))
             .collect());
     }
     if answer == "none" {
@@ -305,22 +354,18 @@ pub(crate) fn interactive_agent_selection<R: BufRead, W: Write>(
     _input: &mut R,
     output: &mut W,
     clients: &[Arc<dyn ClientIntegration>],
+    defaults: &[bool],
 ) -> Result<Vec<usize>, String> {
     output.flush().map_err(io_error)?;
     MultiSelect::with_theme(&terminal::theme())
-        .with_prompt("Agent Clients to connect (Space to toggle, Enter to confirm)")
+        .with_prompt("Clients to configure or check this time (Space to toggle, Enter to confirm)")
         .items(
             clients
                 .iter()
                 .map(|client| client.client_type())
                 .collect::<Vec<_>>(),
         )
-        .defaults(
-            &clients
-                .iter()
-                .map(|client| client.selected_by_default())
-                .collect::<Vec<_>>(),
-        )
+        .defaults(defaults)
         .interact_on(&Term::stdout())
         .map_err(|error| format!("Agent Client selection failed: {error}"))
 }

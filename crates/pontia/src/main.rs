@@ -44,7 +44,8 @@ For documentation, see https://pontia.dev/llms.txt";
 const AGENT_TOOLS: [&str; 2] = ["send-file", "workflow"];
 
 const INIT_HELP: &str = "\
-Prompts on the terminal. Rerunning keeps the existing API token and Workspace roots.
+Prompts on the terminal. Rerunning checks the service and defaults to enabled clients.
+Keeps the existing API token and Workspace roots. Unselected clients are left unchanged.
 Use 'pontia setup [CLIENT]' to install or repair one integration later.
 
 For setup without prompts, see https://pontia.dev/docs/initialization.md#non-interactive-initialization";
@@ -97,7 +98,7 @@ enum Command {
     Init,
     /// Install or repair local Agent Client integrations
     #[command(
-        after_help = "Select clients when omitted. Applies recommended configuration without changing client enablement.\nRun 'pontia init' for first-time initialization."
+        after_help = "Select clients when omitted. Configures and enables selected clients.\nRun 'pontia init' to initialize or check the whole installation."
     )]
     Setup {
         /// Agent Client to configure (pi, codex, claude-agent)
@@ -573,6 +574,28 @@ impl SetupPlatform for RealInitPlatform {
 }
 
 impl InitPlatform for RealInitPlatform {
+    fn enabled_clients(
+        &self,
+        config: &AppConfig,
+    ) -> Result<std::collections::HashSet<(String, String)>, String> {
+        let config = config.clone();
+        std::thread::spawn(move || {
+            tokio::runtime::Runtime::new()
+                .map_err(|error| error.to_string())?
+                .block_on(async {
+                    Ok(pontia::client::ClientApi::new(&config)?
+                        .list()
+                        .await?
+                        .into_iter()
+                        .filter(|client| client.enabled)
+                        .map(|client| (client.client_type, client.client_key))
+                        .collect())
+                })
+        })
+        .join()
+        .map_err(|_| "Client settings request panicked".to_string())?
+    }
+
     fn dashboard_available(&self, addr: SocketAddr) -> Result<bool, String> {
         dashboard_available(addr)
     }
@@ -737,7 +760,9 @@ async fn enable_remote_access(vars: &HashMap<String, String>) -> Result<String, 
         println!("{}", terminal::success("Already signed in to Pontia Cloud"));
     }
     let access = remote::enable(vars).await?;
-    restart_service_for_remote_config()?;
+    if matches!(access.restart, remote::ServiceRestart::Required) {
+        restart_service_for_remote_config()?;
+    }
     remote_dashboard_url(&access.device_handle)
 }
 

@@ -100,7 +100,9 @@ impl ShimSetup {
             .transpose()?;
         if let Some(previous) = previous {
             for path in previous.paths {
-                edit_shell(&path, None)?;
+                if !self.shells.paths.contains(&path) {
+                    edit_shell(&path, None)?;
+                }
             }
         }
         let shells = &self.shells;
@@ -108,9 +110,17 @@ impl ShimSetup {
         fs::create_dir_all(&bin).map_err(|e| e.to_string())?;
         let remote = format!("unix://{}", crate::proxy::socket_path(&self.root).display());
         let script = include_str!("shim.sh").replace("__PONTIA_REMOTE__", &quote(&remote));
-        fs::write(&launcher, script).map_err(|e| e.to_string())?;
-        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755))
-            .map_err(|e| e.to_string())?;
+        write_changed(&launcher, &script)?;
+        if fs::metadata(&launcher)
+            .map_err(|e| e.to_string())?
+            .permissions()
+            .mode()
+            & 0o777
+            != 0o755
+        {
+            fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755))
+                .map_err(|e| e.to_string())?;
+        }
         let bin = quote(absolute_utf8_path(&bin, "launcher directory")?);
         let executable = quote(absolute_utf8_path(&launcher, "launcher")?);
         let block = if shells.fish {
@@ -126,11 +136,10 @@ impl ShimSetup {
             edit_shell(path, Some(&block))?;
         }
         fs::create_dir_all(manifest.parent().unwrap()).map_err(|e| e.to_string())?;
-        fs::write(
+        write_changed(
             &manifest,
-            serde_json::to_vec(shells).map_err(|e| e.to_string())?,
+            &serde_json::to_string(shells).map_err(|e| e.to_string())?,
         )
-        .map_err(|e| e.to_string())
     }
 }
 
@@ -187,6 +196,13 @@ fn read_optional(path: &Path) -> Result<Option<String>, String> {
     }
 }
 
+fn write_changed(path: &Path, text: &str) -> Result<(), String> {
+    if read_optional(path)?.as_deref() != Some(text) {
+        fs::write(path, text).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn edit_shell(path: &Path, block: Option<&str>) -> Result<(), String> {
     let original = read_optional(path)?.unwrap_or_default();
     let mut text = original.clone();
@@ -197,6 +213,13 @@ fn edit_shell(path: &Path, block: Option<&str>) -> Result<(), String> {
             + start
             + END.len();
         let end = end + usize::from(text[end..].starts_with('\n'));
+        if let Some(block) = block {
+            if &text[start..end] == block {
+                return Ok(());
+            }
+            text.replace_range(start..end, block);
+            return write_changed(path, &text);
+        }
         text.replace_range(start..end, "");
     }
     if let Some(block) = block {

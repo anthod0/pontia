@@ -43,6 +43,20 @@ pub fn persist_token(config: &AppConfig, token: &str) -> Result<bool, String> {
         document["external_api_token"] = toml_edit::value(token);
     }
     let updated = document.to_string();
+    if updated == original {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = fs::metadata(&path)
+                .map_err(|error| error.to_string())?
+                .permissions();
+            if permissions.mode() & 0o777 != 0o600 {
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+        return Ok(false);
+    }
     private_file::atomic_write(&path, updated.as_bytes())?;
     Ok(updated != original)
 }

@@ -92,8 +92,8 @@ impl PreparedClientIntegration for Prepared {
             return self.check_host(host, runner);
         }
         let host = host_path(&self.root);
-        if host.is_file() {
-            return self.check_host(&host, runner);
+        if self.check_host(&host, runner).is_ok() {
+            return Ok(());
         }
         if runner.run_status("npm", &["--version".into()])? != 0 {
             return Err("Install Node.js LTS and npm before setting up Claude Agent".into());
@@ -101,9 +101,25 @@ impl PreparedClientIntegration for Prepared {
         Ok(())
     }
     fn install(&self, runner: &dyn CommandRunner, _: &dyn DefinitionStore) -> Result<(), String> {
-        if self.host.is_some() || host_path(&self.root).is_file() {
+        if let Some(host) = &self.host {
+            return self.check_host(host, runner);
+        }
+        if self.check_host(&host_path(&self.root), runner).is_ok() {
             return Ok(());
         }
+        let manifest_path = self
+            .root
+            .join("clients/claude-client/node_modules/@pontia/claude-client/package.json");
+        let manifest = match std::fs::read_to_string(&manifest_path) {
+            Ok(text) => serde_json::from_str::<serde_json::Value>(&text).ok(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.to_string()),
+        };
+        let package = manifest
+            .as_ref()
+            .and_then(|manifest| manifest["version"].as_str())
+            .map(|version| format!("@pontia/claude-client@{version}"))
+            .unwrap_or_else(|| "@pontia/claude-client".into());
         let parent = self.root.join("clients");
         std::fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
         let stage = tempfile::tempdir_in(&parent).map_err(|e| e.to_string())?;
@@ -120,7 +136,7 @@ impl PreparedClientIntegration for Prepared {
                 "--omit=dev".into(),
                 "--no-audit".into(),
                 "--no-fund".into(),
-                "@pontia/claude-client".into(),
+                package,
             ],
         )?;
         if code != 0 {

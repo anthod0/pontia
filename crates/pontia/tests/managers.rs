@@ -114,7 +114,7 @@ fn systemd_failure_diagnostic_includes_the_service_status_output() {
 }
 
 #[test]
-fn systemd_reloads_enables_and_restarts_changed_running_service() {
+fn systemd_reloads_and_restarts_changed_running_service() {
     let runner = FakeRunner::with_outputs(vec![
         output(0, "", ""),
         output(0, "", ""),
@@ -141,13 +141,6 @@ fn systemd_reloads_enables_and_restarts_changed_running_service() {
             (
                 "systemctl".to_string(),
                 vec!["--user", "daemon-reload"]
-                    .into_iter()
-                    .map(String::from)
-                    .collect()
-            ),
-            (
-                "systemctl".to_string(),
-                vec!["--user", "enable", "--now", "pontia.service"]
                     .into_iter()
                     .map(String::from)
                     .collect()
@@ -314,13 +307,6 @@ fn launchd_replaces_changed_loaded_definition() {
         vec![
             (
                 "launchctl".to_string(),
-                vec!["enable", "gui/501/dev.pontia.pontiad"]
-                    .into_iter()
-                    .map(String::from)
-                    .collect()
-            ),
-            (
-                "launchctl".to_string(),
                 vec!["bootout", "gui/501/dev.pontia.pontiad"]
                     .into_iter()
                     .map(String::from)
@@ -361,22 +347,13 @@ fn launchd_restarts_loaded_service_when_lifecycle_requests_it() {
 
     assert_eq!(
         runner.calls.into_inner(),
-        vec![
-            (
-                "launchctl".to_string(),
-                vec!["enable", "gui/501/dev.pontia.pontiad"]
-                    .into_iter()
-                    .map(String::from)
-                    .collect()
-            ),
-            (
-                "launchctl".to_string(),
-                vec!["kickstart", "-k", "gui/501/dev.pontia.pontiad"]
-                    .into_iter()
-                    .map(String::from)
-                    .collect()
-            ),
-        ]
+        vec![(
+            "launchctl".to_string(),
+            vec!["kickstart", "-k", "gui/501/dev.pontia.pontiad"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        ),]
     );
 }
 
@@ -591,4 +568,45 @@ fn client_setup_replaces_selected_paths_and_retains_other_clients_on_both_platfo
         );
         assert_eq!(paths["CLAUDE_CONFIG_DIR"], Path::new("/srv/claude/config"));
     }
+}
+
+#[test]
+fn applying_unchanged_healthy_services_does_not_run_mutating_commands() {
+    let runner = FakeRunner::default();
+    let status = ServiceStatus {
+        enabled: EnabledState::Enabled,
+        loaded: true,
+        run_state: RunState::Running,
+    };
+    SystemdManager::new(&runner)
+        .apply(Path::new("/service"), false, false, status)
+        .unwrap();
+    LaunchdManager::new(&runner, 501)
+        .apply(Path::new("/service"), false, false, status)
+        .unwrap();
+    assert!(runner.calls.borrow().is_empty());
+}
+
+#[test]
+fn systemd_starts_a_stopped_enabled_service_without_reloading_or_enabling_it() {
+    let runner = FakeRunner::with_outputs(vec![output(0, "", "")]);
+    SystemdManager::new(&runner)
+        .apply(
+            Path::new("/service"),
+            false,
+            false,
+            ServiceStatus {
+                enabled: EnabledState::Enabled,
+                loaded: true,
+                run_state: RunState::Stopped,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        runner.calls.borrow().as_slice(),
+        &[(
+            "systemctl".into(),
+            vec!["--user".into(), "start".into(), "pontia.service".into()]
+        )]
+    );
 }

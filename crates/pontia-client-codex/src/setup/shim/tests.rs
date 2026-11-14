@@ -130,7 +130,22 @@ fn repeated_setup_repairs_missing_launcher_and_path_preserving_shell_content() {
     fs::write(&rc, original).unwrap();
     let setup = fixture.enable();
     let once = fs::read_to_string(&rc).unwrap();
+    let files = [
+        rc.clone(),
+        fixture.root.join("bin/codex"),
+        fixture.root.join("state/codex-shim.json"),
+    ];
+    let modified = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(123456);
+    for path in &files {
+        fs::File::open(path)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+    }
     setup.install().unwrap();
+    for path in &files {
+        assert_eq!(fs::metadata(path).unwrap().modified().unwrap(), modified);
+    }
     assert_eq!(fs::read_to_string(&rc).unwrap(), once);
     let resolve = || {
         Command::new("/bin/bash")

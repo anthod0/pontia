@@ -30,6 +30,8 @@ Quando for solicitado que você entre e ative o acesso remoto, aceite e conclua 
 
 A configuração existente e as raízes do Workspace Browser são mantidas. Sem raízes configuradas, o Workspace Browser usa seu diretório pessoal por padrão.
 
+Execute `pontia init` novamente para verificar e reparar a instalação. Na primeira execução, os Clients recomendados são selecionados; nas seguintes, a seleção inicial inclui os Clients habilitados. Novos Clients selecionados são configurados e habilitados. Desmarcar um Client apenas o ignora nesta execução, preservando suas configurações e instalação. Integrações em bom estado são reutilizadas. Em uma instalação existente, o Pontia verifica e inicia o serviço antes da seleção de Clients; cancelar a configuração dos Clients mantém esse serviço disponível.
+
 ## Configurar ou reparar um Client depois
 
 Execute `pontia setup` para selecionar Clients, ou especifique um diretamente:
