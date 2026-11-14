@@ -68,6 +68,11 @@ To install a specific release, see https://pontia.dev/docs/updating.md";
 
 const DOWN_HELP: &str = "Configuration and state are kept; run 'pontia up' to start again.";
 
+const COMPLETIONS_HELP: &str = "\
+bash: add 'source <(pontia completions bash)' to ~/.bashrc
+zsh:  add 'source <(pontia completions zsh)' to ~/.zshrc
+fish: pontia completions fish > ~/.config/fish/completions/pontia.fish";
+
 const STATUS_HELP: &str = "\
 Exits 0 only when the service is running and HTTP is healthy.
 
@@ -101,7 +106,7 @@ enum Command {
         after_help = "Select clients when omitted. Configures and enables selected clients.\nRun 'pontia init' to initialize or check the whole installation."
     )]
     Setup {
-        /// Agent Client to configure (pi, codex, claude-agent)
+        /// Agent Client to configure
         client: Option<String>,
     },
     /// Manage Agent Client settings through the Pontia service
@@ -125,6 +130,12 @@ enum Command {
     Status,
     /// Check service, configuration, login, and remote access
     Doctor,
+    /// Print a shell completion script
+    #[command(after_help = COMPLETIONS_HELP)]
+    Completions {
+        /// Shell to generate the script for
+        shell: clap_complete::Shell,
+    },
     /// Run and interact with Workflows
     Workflow(workflow::WorkflowCommand),
 }
@@ -178,6 +189,15 @@ fn cli_command() -> clap::Command {
     for name in AGENT_TOOLS {
         command = command.mut_subcommand(name, |tool| tool.hide(true));
     }
+    let clients: Vec<&'static str> = pontia_clients::integrations()
+        .iter()
+        .map(|client| client.client_type())
+        .collect();
+    command = command.mut_subcommand("setup", |setup| {
+        setup.mut_arg("client", |arg| {
+            arg.value_parser(clap::builder::PossibleValuesParser::new(clients))
+        })
+    });
     command.help_template(template)
 }
 
@@ -224,6 +244,10 @@ async fn execute(command: Command) -> Result<bool, String> {
         Command::Down => run_lifecycle(LifecycleCommand::Down),
         Command::Status => run_diagnostics(false).await,
         Command::Doctor => run_diagnostics(true).await,
+        Command::Completions { shell } => {
+            clap_complete::generate(shell, &mut cli_command(), "pontia", &mut std::io::stdout());
+            Ok(true)
+        }
     }
 }
 
@@ -927,6 +951,21 @@ mod tests {
     #[test]
     fn cli_command_is_valid() {
         cli_command().debug_assert();
+    }
+
+    #[test]
+    fn completions_cover_hidden_agent_tools_and_setup_clients() {
+        let mut script = Vec::new();
+        clap_complete::generate(
+            clap_complete::Shell::Bash,
+            &mut cli_command(),
+            "pontia",
+            &mut script,
+        );
+        let script = String::from_utf8(script).unwrap();
+        for word in AGENT_TOOLS.iter().chain(&["claude-agent"]) {
+            assert!(script.contains(word), "{word}");
+        }
     }
 
     #[test]

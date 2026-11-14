@@ -21,12 +21,37 @@
 | `pontia down` | 停止并禁用按用户运行的服务 |
 | `pontia update` | 安装最新的已签名稳定版 `pontia` 和 `pontiad` |
 | `pontia --version` | 打印已安装的版本 |
+| `pontia completions SHELL` | 打印指定 shell 的补全脚本 |
 
 `pontia setup` 接受 `pi`、`codex` 或 `claude-agent`，并应用推荐配置，无需额外的 Client 选项。
 
 交互式设置以及等效的分步命令序列见[初始化](/docs/initialization)。
 
 停止 `pontiad` 会停止观察、输入接收和 Workflow 调度。Agent Client 会单独管理其原生对话的生命周期。
+
+## Shell 补全
+
+`pontia completions` 支持 `bash`、`zsh`、`fish`、`elvish` 和 `powershell`。将对应 shell 的配置加入其配置文件，然后打开新终端：
+
+```sh
+# bash: ~/.bashrc
+source <(pontia completions bash)
+
+# zsh: ~/.zshrc, after compinit
+source <(pontia completions zsh)
+
+# fish: run once
+mkdir -p ~/.config/fish/completions
+pontia completions fish > ~/.config/fish/completions/pontia.fish
+
+# elvish: ~/.config/elvish/rc.elv
+eval (pontia completions elvish | slurp)
+```
+
+```powershell
+# PowerShell: $PROFILE
+pontia completions powershell | Out-String | Invoke-Expression
+```
 
 ## Agent Client
 

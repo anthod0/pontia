@@ -21,12 +21,37 @@ Use `pontia COMMAND --help` for the exact options in your installed version.
 | `pontia down` | Stop and disable the per-user service |
 | `pontia update` | Install the latest signed stable `pontia` and `pontiad` release |
 | `pontia --version` | Print the installed version |
+| `pontia completions SHELL` | Print the completion script for a shell |
 
 `pontia setup` accepts `pi`, `codex`, or `claude-agent` and applies the recommended configuration without additional Client options.
 
 See [Initialization](/docs/initialization) for interactive setup and the equivalent step-by-step command sequence.
 
 Stopping `pontiad` stops observation, input reception, and Workflow scheduling. Agent Clients manage the lifecycle of their native conversations separately.
+
+## Shell completion
+
+`pontia completions` supports `bash`, `zsh`, `fish`, `elvish`, and `powershell`. Add the line for your shell to its configuration file, then open a new terminal:
+
+```sh
+# bash: ~/.bashrc
+source <(pontia completions bash)
+
+# zsh: ~/.zshrc, after compinit
+source <(pontia completions zsh)
+
+# fish: run once
+mkdir -p ~/.config/fish/completions
+pontia completions fish > ~/.config/fish/completions/pontia.fish
+
+# elvish: ~/.config/elvish/rc.elv
+eval (pontia completions elvish | slurp)
+```
+
+```powershell
+# PowerShell: $PROFILE
+pontia completions powershell | Out-String | Invoke-Expression
+```
 
 ## Agent Clients
 

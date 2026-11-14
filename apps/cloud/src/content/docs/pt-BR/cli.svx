@@ -21,12 +21,37 @@ Use `pontia COMMAND --help` para ver as opções exatas da versão instalada.
 | `pontia down` | Parar e desativar o serviço por usuário |
 | `pontia update` | Instalar a release estável assinada mais recente de `pontia` e `pontiad` |
 | `pontia --version` | Exibir a versão instalada |
+| `pontia completions SHELL` | Exibir o script de autocompletar de um shell |
 
 `pontia setup` aceita `pi`, `codex` ou `claude-agent` e aplica a configuração recomendada sem opções adicionais de Client.
 
 Veja [Inicialização](/docs/initialization) para a configuração interativa e a sequência equivalente de comandos passo a passo.
 
 Parar o `pontiad` interrompe a observação, o recebimento de entradas e o agendamento de Workflows. Os Agent Clients gerenciam o ciclo de vida das suas conversas nativas separadamente.
+
+## Autocompletar no shell
+
+`pontia completions` oferece suporte a `bash`, `zsh`, `fish`, `elvish` e `powershell`. Adicione a linha do seu shell ao arquivo de configuração dele e abra um novo terminal:
+
+```sh
+# bash: ~/.bashrc
+source <(pontia completions bash)
+
+# zsh: ~/.zshrc, after compinit
+source <(pontia completions zsh)
+
+# fish: run once
+mkdir -p ~/.config/fish/completions
+pontia completions fish > ~/.config/fish/completions/pontia.fish
+
+# elvish: ~/.config/elvish/rc.elv
+eval (pontia completions elvish | slurp)
+```
+
+```powershell
+# PowerShell: $PROFILE
+pontia completions powershell | Out-String | Invoke-Expression
+```
 
 ## Agent Clients
 
