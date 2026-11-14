@@ -14,7 +14,7 @@
   import ChatShortcuts from '../../components/chat/ChatShortcuts.svelte';
   import NewChatPage from '../../pages/NewChatPage.svelte';
   import NewChatLayout from '../../components/chat/NewChatLayout.svelte';
-  import NewChatLoading from '../../components/chat/NewChatLoading.svelte';
+  import NewChatComposerPlaceholder from '../../components/chat/NewChatComposerPlaceholder.svelte';
   import { Skeleton } from '$lib/components/ui/skeleton/index.js';
   import * as Sidebar from '$lib/components/ui/sidebar/index.js';
   import DeviceProvider from '../../device/DeviceProvider.svelte';
@@ -149,7 +149,7 @@
           </div>
         {:else if dashboardState === 'connecting'}
           <Sidebar.Group class="group-data-[collapsible=icon]:hidden">
-            <Sidebar.GroupLabel role="status">{$loading ? 'Loading devices…' : 'Connecting…'}</Sidebar.GroupLabel>
+            {#if !$loading}<Sidebar.GroupLabel role="status">Connecting…</Sidebar.GroupLabel>{/if}
             <Sidebar.GroupContent>
               <Sidebar.MenuSkeleton />
               <Sidebar.MenuSkeleton />
@@ -185,8 +185,12 @@
       </div>
     {:else if dashboardState === 'connecting' && (!checkingDevices || activeHandle)}
       {#if currentPath === '/'}
-        <NewChatLayout>
-          <NewChatLoading message={$loading ? 'Loading devices…' : `Connecting to ${active?.name ?? activeHandle}…`} {deviceSelector} />
+        <NewChatLayout status={{
+          mood: 'loading',
+          title: $loading ? 'Loading devices…' : `Connecting to ${active?.name ?? activeHandle}…`,
+          description: 'This usually takes a few seconds.',
+        }}>
+          <NewChatComposerPlaceholder {deviceSelector} />
         </NewChatLayout>
       {:else}
         <div class="space-y-4 py-4" role="status" aria-label="Loading device content">
@@ -195,6 +199,15 @@
           <Skeleton class="h-40 w-full" />
         </div>
       {/if}
+    {:else if active?.state === 'offline' && currentPath === '/'}
+      <NewChatLayout status={{
+        mood: 'offline',
+        title: `${active.name} is offline`,
+        description: 'Make sure Pontia is running on this device, then try again.',
+      }}>
+        {#snippet action()}<Button variant="outline" onclick={retry}>Try again</Button>{/snippet}
+        <NewChatComposerPlaceholder {deviceSelector} />
+      </NewChatLayout>
     {:else if activeHandle}
       <RemoteDashboardPage
         handle={activeHandle} state={dashboardState} onRetry={retry}

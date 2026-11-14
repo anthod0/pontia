@@ -6,7 +6,7 @@
   import { toast } from 'svelte-sonner'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
   import NewChatLayout from '../components/chat/NewChatLayout.svelte'
-  import NewChatLoading from '../components/chat/NewChatLoading.svelte'
+  import NewChatComposerPlaceholder from '../components/chat/NewChatComposerPlaceholder.svelte'
   import WorkspaceOnboarding from '../components/workspaces/WorkspaceOnboarding.svelte'
   import { isTransientNetworkError } from '../api/client'
   import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
@@ -190,9 +190,9 @@
 {#if workspaceOnboardingActive && !workspaceSetupLoading}
   <WorkspaceOnboarding canContinue={workspaces.length > 0} onContinue={completeWorkspaceOnboarding} />
 {:else}
-  <NewChatLayout>
+  <NewChatLayout status={workspaceSetupLoading ? { mood: 'loading', title: 'Loading workspaces…', description: 'This usually takes a few seconds.' } : undefined}>
     {#if workspaceSetupLoading}
-      <NewChatLoading message="Loading workspaces…" {deviceSelector} />
+      <NewChatComposerPlaceholder {deviceSelector} />
     {:else}
       <NewChatPanel
         bind:prompt={$chatDraft}
