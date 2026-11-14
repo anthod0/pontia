@@ -1,5 +1,6 @@
 <script lang="ts">
-  import NotFoundPage from '../pages/NotFoundPage.svelte';
+  import { page } from '$app/state';
+  import ErrorPage from '../pages/ErrorPage.svelte';
 </script>
 
-<NotFoundPage />
+<ErrorPage status={page.status} message={page.error?.message} />
