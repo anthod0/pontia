@@ -7,7 +7,7 @@
   import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
   import { Button } from '$lib/components/ui/button/index.js';
   import { dashboardRelativePath, navigate } from '$lib/navigation';
-  import RemoteDashboardPage from '../../components/devices/RemoteDashboardPage.svelte';
+  import DeviceStatus, { type DeviceStatusView } from '../../components/devices/DeviceStatus.svelte';
   import AppShell from '../../components/layout/AppShell.svelte';
   import AppSidebar from '../../components/layout/AppSidebar.svelte';
   import TopBar from '../../components/layout/TopBar.svelte';
@@ -15,7 +15,6 @@
   import NewChatPage from '../../pages/NewChatPage.svelte';
   import NewChatLayout from '../../components/chat/NewChatLayout.svelte';
   import NewChatComposerPlaceholder from '../../components/chat/NewChatComposerPlaceholder.svelte';
-  import { Skeleton } from '$lib/components/ui/skeleton/index.js';
   import * as Sidebar from '$lib/components/ui/sidebar/index.js';
   import DeviceProvider from '../../device/DeviceProvider.svelte';
   import { createDeviceConnections, type ConnectedDevice } from './deviceConnections';
@@ -52,6 +51,26 @@
   const dashboardState = $derived(active?.state === 'online' ? 'available'
     : $signInRequired || active?.state === 'offline' || moduleError || (!$loading && !active)
       ? 'unavailable' : 'connecting');
+
+  // Connection progress or failure for the device the page is waiting on.
+  const deviceStatus = $derived.by((): DeviceStatusView | null => {
+    if (dashboardState === 'connecting' && (!checkingDevices || activeHandle)) return {
+      mood: 'loading',
+      title: $loading ? 'Loading devices…' : `Connecting to ${active?.name ?? activeHandle}…`,
+      description: 'This usually takes a few seconds.',
+    };
+    if (dashboardState !== 'unavailable' || !activeHandle) return null;
+    if (active?.state === 'offline') return {
+      mood: 'offline',
+      title: `${active.name} is offline`,
+      description: 'Make sure Pontia is running on this device, then try again.',
+    };
+    return {
+      mood: 'offline',
+      title: `${active?.name ?? activeHandle} is unavailable`,
+      description: $error ?? moduleError ?? 'Pontia could not connect to this device.',
+    };
+  });
 
   provideDeviceList({
     devices: () => $devices,
@@ -121,6 +140,10 @@
   if (document.visibilityState === 'visible') connections?.focus();
 }} />
 
+{#snippet statusAction()}
+  {#if deviceStatus?.mood === 'offline'}<Button variant="outline" onclick={retry}>Try again</Button>{/if}
+{/snippet}
+
 {#snippet deviceSelector(disabled: boolean)}
   {#if $devices.length > 1}
     <ComposerDeviceSelect devices={$devices} selected={active} onSelect={selectDevice} {disabled} />
@@ -183,36 +206,19 @@
         <p class="text-sm text-muted-foreground">Redirecting to sign in…</p>
         <Button size="sm" variant="outline" href={signInUrl}>Sign in</Button>
       </div>
-    {:else if dashboardState === 'connecting' && (!checkingDevices || activeHandle)}
+    {:else if deviceStatus}
       {#if currentPath === '/'}
-        <NewChatLayout status={{
-          mood: 'loading',
-          title: $loading ? 'Loading devices…' : `Connecting to ${active?.name ?? activeHandle}…`,
-          description: 'This usually takes a few seconds.',
-        }}>
+        <NewChatLayout status={deviceStatus}>
+          {#snippet action()}{@render statusAction()}{/snippet}
           <NewChatComposerPlaceholder {deviceSelector} />
         </NewChatLayout>
       {:else}
-        <div class="space-y-4 py-4" role="status" aria-label="Loading device content">
-          <Skeleton class="h-6 w-48" />
-          <Skeleton class="h-24 w-full" />
-          <Skeleton class="h-40 w-full" />
+        <div class="flex min-h-[calc(100svh-5rem)] items-center justify-center py-12">
+          <DeviceStatus status={deviceStatus}>
+            {#snippet action()}{@render statusAction()}{/snippet}
+          </DeviceStatus>
         </div>
       {/if}
-    {:else if active?.state === 'offline' && currentPath === '/'}
-      <NewChatLayout status={{
-        mood: 'offline',
-        title: `${active.name} is offline`,
-        description: 'Make sure Pontia is running on this device, then try again.',
-      }}>
-        {#snippet action()}<Button variant="outline" onclick={retry}>Try again</Button>{/snippet}
-        <NewChatComposerPlaceholder {deviceSelector} />
-      </NewChatLayout>
-    {:else if activeHandle}
-      <RemoteDashboardPage
-        handle={activeHandle} state={dashboardState} onRetry={retry}
-        unavailableMessage={$error ?? moduleError}
-      />
     {:else if $error ?? moduleError}
       <div role="alert" class="flex items-center gap-3 py-4 text-sm">
         <span>{$error ?? moduleError}</span>
