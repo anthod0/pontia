@@ -1337,6 +1337,61 @@ test("restores a cached selected chat and refreshes it without rebuilding histor
   resolveRefresh?.();
 });
 
+test("scrolls a restored chat to the bottom after its session detail arrives", async () => {
+  const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const selected = session({ session_id: "session-cached", state: "idle" });
+  window.history.pushState({}, "", "/dashboard/chat/session-cached");
+  mocks.pathParams = { sessionId: "session-cached" };
+  mocks.loadedSessions = [selected];
+  mocks.sessions.set([selected]);
+  let conversationRendered = false;
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    get: () => (conversationRendered ? 4096 : 900),
+  });
+  let resolveDetail: (() => void) | null = null;
+  mocks.loadSessionDetail.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveDetail = () => {
+          mocks.sessionDetail.set({
+            session: selected,
+            turns: [turn({ session_id: "session-cached" })],
+            inboxMessages: [],
+            events: [],
+          });
+          conversationRendered = true;
+          resolve(null);
+        };
+      }),
+  );
+  mocks.restoreSessionTimeline.mockImplementation(async (sessionId: string) => {
+    mocks.timelineState.set(
+      timelineStateValue({
+        sessionId,
+        items: timelineItemsFromTurns([turn({ session_id: sessionId })]),
+        latestTurnId: "turn-1",
+        status: "ready",
+      }),
+    );
+    return true;
+  });
+
+  try {
+    render(SessionChatPage);
+
+    await waitFor(() => expect(mocks.restoreSessionTimeline).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(scrollTo).not.toHaveBeenCalledWith({ top: 4096 });
+    resolveDetail?.();
+
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 4096 }));
+  } finally {
+    scrollTo.mockRestore();
+    delete (document.documentElement as HTMLElement & { scrollHeight?: number }).scrollHeight;
+  }
+});
+
 test("rebuilds a restored chat when session detail topology disagrees with the cache", async () => {
   const listed = session({
     session_id: "session-cached",

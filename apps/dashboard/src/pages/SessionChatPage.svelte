@@ -711,7 +711,11 @@
     const cached = get(timelineState)
     initialChatScrollPending = false
     transcriptResolving = false
-    void scrollChatToBottomAfterLayout()
+    // The conversation renders only once the Session detail is selected.
+    const conversationRendered = currentSelectedSession() ? Promise.resolve() : detailPromise
+    void conversationRendered.then(() => {
+      if (sessionLoadIsCurrent(sessionId, generation)) return scrollChatToBottomAfterLayout()
+    })
     if (cached.historySource) {
       await rebuildTimeline(sessionId, generation, cached.mode === 'tree')
     } else {
