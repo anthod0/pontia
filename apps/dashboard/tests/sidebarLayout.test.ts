@@ -615,6 +615,17 @@ test("top bar trigger closes and reopens the sidebar", async () => {
   expect(onOpenChange.mock.calls).toEqual([[false], [true]]);
 });
 
+test("top bar new chat button opens a new chat", async () => {
+  window.history.pushState({}, "", "/dashboard/chat/session-active");
+  render(TopBarHost);
+
+  await fireEvent.click(
+    within(screen.getByRole("banner")).getByRole("button", { name: "New Chat" }),
+  );
+
+  expect(mocks.navigate).toHaveBeenCalledWith("/");
+});
+
 test("top bar session title opens the rename dialog", async () => {
   mocks.sessions.set([
     {

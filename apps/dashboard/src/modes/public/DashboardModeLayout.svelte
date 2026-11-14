@@ -97,6 +97,10 @@
     void navigate(handle && path.startsWith('/settings/') ? path : '/', undefined, { scope: `/${target}` });
   }
 
+  function openNewChat(): void {
+    void navigate('/', undefined, { scope: activeHandle ? `/${activeHandle}` : '' });
+  }
+
   async function start(): Promise<void> {
     if (loadingModule) return;
     loadingModule = true;
@@ -153,7 +157,7 @@
 
 <AppShell>
   {#snippet sidebar()}
-    <AppSidebar onNewChat={() => void navigate('/', undefined, { scope: activeHandle ? `/${activeHandle}` : '' })}
+    <AppSidebar onNewChat={openNewChat}
       settingsDisabled={!activeHandle}
       onSettings={() => { if (activeHandle) void navigate('/settings/common', undefined, { scope: `/${activeHandle}` }) }}>
       {#snippet deviceSwitcher()}
@@ -189,7 +193,7 @@
   {/snippet}
   {#snippet topbar()}
     {#if device}
-      {#key device}<DeviceProvider {device}><TopBar /></DeviceProvider>{/key}
+      {#key device}<DeviceProvider {device}><TopBar onNewChat={openNewChat} /></DeviceProvider>{/key}
     {:else}
       <header class={['flex items-center px-3', currentPath === '/' || currentPath.startsWith('/chat/') ? 'h-12' : 'h-8']}><Sidebar.Trigger class="md:hidden" /></header>
     {/if}

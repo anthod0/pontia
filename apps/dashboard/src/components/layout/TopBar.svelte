@@ -1,6 +1,9 @@
 <script lang="ts">
   import { useDeviceRuntime } from '../../device/context';
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
+  import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
+  import { Button } from '$lib/components/ui/button/index.js'
+  import { navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
@@ -11,6 +14,8 @@
   const device = useDeviceRuntime();
   const { sessionDetail, sessionDetailError, updateSessionTitle } = device.sessions;
   const { createSessionOverviewQuery } = device.sessionOverview;
+
+  let { onNewChat = () => void navigate('/') }: { onNewChat?: () => void } = $props()
 
   let currentPath = $state(dashboardRelativePath())
   const overviewQuery = createSessionOverviewQuery()
@@ -80,6 +85,9 @@
   {:else}
   <div class={groupClass}>
     <Sidebar.Trigger class="md:hidden" />
+    <Button variant="ghost" size="icon-sm" class="md:hidden" aria-label="New Chat" onclick={onNewChat}>
+      <NotePencilIcon />
+    </Button>
     {#if title}
       <h1 class="mx-1 hidden min-w-0 max-w-80 md:block">
         <button
