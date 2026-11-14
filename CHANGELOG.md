@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9] - 2026-11-14
+
+### Added
+
+- Claude and ACP Sessions can switch models in the same conversation with `/model` in the message composer.
+
+### Changed
+
+- Running `pontia init` again now checks and repairs the installation. Later runs default to the enabled Clients, keep the settings of unchecked Clients, and reuse healthy integrations.
+- `pontia init`, login, and device registration output is easier to read.
+- The Dashboard shows the Pontia mascot with loading and offline states on every page while a device connects or is offline.
+- The Cloud site remembers the selected language and opens pages in that language.
+- The Cloud site slogan is shown in English for all languages.
+
+### Removed
+
+- Removed the built-in Kimi CLI ACP entry.
+
+### Fixed
+
+- `pontia update` now checks for active tasks before downloading a release.
+- Opening and closing the Codex TUI without sending a message no longer creates a Session.
+- Codex sessions started through Pontia now open in the directory where `codex` was launched.
+- Codex history messages now keep their timestamps.
+- The Codex daemon keeps running after its autostart unit exits.
+- Messages sent to a resuming Session are now delivered once the Session is ready.
+- On the Dashboard's new chat page, you can switch to another device while the current device is still connecting.
+- The Dashboard error page now shows a centered "Page not found" message for missing pages and the actual error for other failures.
+
 ## [0.7.8] - 2026-11-13
 
 ### Changed
