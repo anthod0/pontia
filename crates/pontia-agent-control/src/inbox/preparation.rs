@@ -88,12 +88,23 @@ impl InboxCommandService {
         if !matches!(message.state.as_str(), "resuming" | "pending") {
             return Ok(());
         }
+        let session = self
+            .queries
+            .get_session_control(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Session {session_id} not found")))?;
+        let prepares_on_input = self
+            .clients
+            .for_client(&session.client_type)?
+            .prepares_on_input();
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let available: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions s JOIN session_runtimes r ON r.session_id=s.session_id WHERE s.session_id=? AND s.state='idle' AND r.runtime_id=? AND r.state='running')")
-            .bind(session_id).bind(required_runtime_id).fetch_one(&mut *tx).await?;
+        // Some clients initialize their native conversation only after the first input.
+        let available: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions s JOIN session_runtimes r ON r.session_id=s.session_id WHERE s.session_id=? AND (s.state='idle' OR (? AND s.state='starting')) AND r.runtime_id=? AND (r.state='running' OR (? AND r.state='starting')))")
+            .bind(session_id).bind(prepares_on_input).bind(required_runtime_id).bind(prepares_on_input).fetch_one(&mut *tx).await?;
         if !available {
             return Err(Error::StateConflict(
-                "Input release requires an idle Session and the expected running Runtime".into(),
+                "Input release requires a Session and the expected Runtime ready to accept input"
+                    .into(),
             ));
         }
         // Never turn an in-flight or uncertain delivery back into pending.

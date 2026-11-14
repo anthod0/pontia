@@ -28,7 +28,7 @@ pub(crate) enum ObservedEvent {
     ThreadOpened {
         runtime_id: String,
         operation: ThreadOperation,
-        result: Value,
+        result: Box<Value>,
         params: Value,
         profile_binding: Option<Value>,
         reservation: Option<open::Reservation>,
@@ -158,7 +158,7 @@ async fn relay(
     let mut pending = HashMap::<String, PendingRequest>::new();
     let mut runtimes = HashMap::<String, String>::new();
     enum PreparedFrame {
-        Request(Message, String, PendingRequest),
+        Request(Message, String, Box<PendingRequest>),
         Response(Message),
     }
     let mut preparation = JoinSet::<Result<PreparedFrame>>::new();
@@ -167,7 +167,7 @@ async fn relay(
             completed = preparation.join_next(), if !preparation.is_empty() => {
                 match completed.unwrap().map_err(protocol::protocol_error)?? {
                     PreparedFrame::Request(frame, id, request) => {
-                        pending.insert(id, request);
+                        pending.insert(id, *request);
                         upstream.send(frame).await.map_err(protocol::protocol_error)?;
                     }
                     PreparedFrame::Response(frame) => {
@@ -193,7 +193,7 @@ async fn relay(
                         preparation.spawn(async move {
                             let prepared = open::prepare(&state, operation, &mut value["params"]).await?;
                             let pending = PendingRequest::Open(operation, value["params"].clone(), prepared);
-                            Ok(PreparedFrame::Request(Message::text(value.to_string()), id.to_string(), pending))
+                            Ok(PreparedFrame::Request(Message::text(value.to_string()), id.to_string(), Box::new(pending)))
                         });
                         continue;
                     } else if value["method"] == "thread/unsubscribe"
@@ -221,7 +221,7 @@ async fn relay(
                                     let runtime_id = runtimes.entry(thread.into()).or_insert_with(|| pontia_core::ids::new_runtime_id().to_string()).clone();
                                     let (bound, ready) = tokio::sync::oneshot::channel();
                                     let reservation = prepared.as_ref().map(|prepared| open::Reservation { session: prepared.session.clone(), bound });
-                                    let event = ObservedEvent::ThreadOpened { runtime_id, operation, result: result.clone(), params,
+                                    let event = ObservedEvent::ThreadOpened { runtime_id, operation, result: Box::new(result.clone()), params,
                                         profile_binding: prepared.as_ref().and_then(|prepared| prepared.profile_binding.clone()), reservation };
                                     observations.send(Observation { daemon: daemon.clone(), event }).await
                                         .map_err(|_| protocol::protocol_error("proxy observation stopped"))?;

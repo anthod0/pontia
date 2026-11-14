@@ -407,6 +407,77 @@ impl Harness {
 }
 
 #[tokio::test]
+async fn resumed_input_is_held_and_released_once_only_to_the_expected_runtime() {
+    let h = Harness::new().await;
+    let session = h.create("before resume").await;
+    h.gate(&session, 1, "start");
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    let inbox = h.app.inbox_commands();
+    let prepared = inbox
+        .prepare_message_once(
+            &h.app.session_commands(),
+            "prepared",
+            &session,
+            "after resume".into(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(prepared.data["inbox_message"]["state"], "resuming");
+    h.wait_session(&session, "starting").await;
+    let (runtime, state): (String, String) =
+        sqlx::query_as("SELECT runtime_id,state FROM session_runtimes WHERE session_id=?")
+            .bind(&session)
+            .fetch_one(&h.app.db())
+            .await
+            .unwrap();
+    assert_eq!(state, "starting");
+    inbox.drain_inbox(&session).await.unwrap();
+    assert!(matches!(
+        inbox
+            .release_prepared_message(&session, "prepared", "wrong-runtime")
+            .await,
+        Err(pontia_core::Error::StateConflict(_))
+    ));
+    assert_eq!(
+        inbox
+            .get_message(&session, "prepared")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "resuming"
+    );
+    h.wait_inputs(&session, 1).await;
+    let (first, second) = tokio::join!(
+        inbox.release_prepared_message(&session, "prepared", &runtime),
+        inbox.release_prepared_message(&session, "prepared", &runtime),
+    );
+    first.unwrap();
+    second.unwrap();
+    h.wait_inputs(&session, 2).await;
+    assert_eq!(
+        inbox
+            .get_message(&session, "prepared")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "dispatched"
+    );
+    h.gate(&session, 2, "start");
+    h.gate(&session, 2, "finish");
+    h.wait_states(&session, &["completed", "completed"]).await;
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn exited_sessions_read_and_resume_their_own_history_in_a_shared_workspace() {
     let h = Harness::new().await;
     let a = h.create("alpha history").await;

@@ -814,7 +814,7 @@ async fn submission_identity_still_enforces_session_and_retry_associations() {
 }
 
 #[tokio::test]
-async fn conditional_input_release_rejects_a_busy_session_without_delivering() {
+async fn conditional_input_release_rejects_unready_sessions_and_runtimes_without_delivering() {
     let (_root, state, channel) = connected_inbox().await;
     let inbox = state.inbox_commands();
     inbox
@@ -827,27 +827,44 @@ async fn conditional_input_release_rejects_a_busy_session_without_delivering() {
         )
         .await
         .unwrap();
-    sqlx::query("UPDATE sessions SET state='busy' WHERE session_id='session'")
+    for (session_state, runtime_state) in [
+        ("busy", "running"),
+        ("starting", "starting"),
+        ("idle", "starting"),
+        ("idle", "exited"),
+    ] {
+        sqlx::query("UPDATE sessions SET state=? WHERE session_id='session'")
+            .bind(session_state)
+            .execute(&state.db())
+            .await
+            .unwrap();
+        sqlx::query("UPDATE session_runtimes SET state=? WHERE session_id='session'")
+            .bind(runtime_state)
+            .execute(&state.db())
+            .await
+            .unwrap();
+        assert!(matches!(
+            inbox
+                .release_prepared_message("session", "prepared", "runtime")
+                .await,
+            Err(Error::StateConflict(_))
+        ));
+        assert!(channel.input.lock().unwrap().is_empty());
+        assert_eq!(
+            inbox
+                .get_message("session", "prepared")
+                .await
+                .unwrap()
+                .unwrap()
+                .state,
+            "resuming"
+        );
+    }
+    sqlx::query("UPDATE sessions SET state='idle' WHERE session_id='session'")
         .execute(&state.db())
         .await
         .unwrap();
-    assert!(matches!(
-        inbox
-            .release_prepared_message("session", "prepared", "runtime")
-            .await,
-        Err(Error::StateConflict(_))
-    ));
-    assert!(channel.input.lock().unwrap().is_empty());
-    assert_eq!(
-        inbox
-            .get_message("session", "prepared")
-            .await
-            .unwrap()
-            .unwrap()
-            .state,
-        "resuming"
-    );
-    sqlx::query("UPDATE sessions SET state='idle' WHERE session_id='session'")
+    sqlx::query("UPDATE session_runtimes SET state='running' WHERE session_id='session'")
         .execute(&state.db())
         .await
         .unwrap();

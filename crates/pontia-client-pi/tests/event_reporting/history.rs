@@ -210,8 +210,12 @@ async fn crash_recovery_preserves_facts_and_supports_updates_refresh_pagination_
     );
     // Recreate the persisted pre-fix shape: the crash has no tail and all later
     // starts carry Unknown. Keep the original lifecycle events for replay.
+    let mut tx = fixture.state.db().begin().await.unwrap();
+    sqlx::query("DELETE FROM domain_event_positions WHERE event_id IN (SELECT event_id FROM events WHERE event_type='turn.timeline_boundary_recovered' OR (event_type='turn.topology_recovered' AND turn_id > ?))")
+        .bind(&crashed).execute(&mut *tx).await.unwrap();
     sqlx::query("DELETE FROM events WHERE event_type='turn.timeline_boundary_recovered' OR (event_type='turn.topology_recovered' AND turn_id > ?)")
-        .bind(&crashed).execute(&fixture.state.db()).await.unwrap();
+        .bind(&crashed).execute(&mut *tx).await.unwrap();
+    tx.commit().await.unwrap();
     let mut legacy = ProjectionState::default();
     for event in service.list_events("session").await.unwrap() {
         legacy.apply(&event).unwrap();
