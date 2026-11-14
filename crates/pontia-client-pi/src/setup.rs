@@ -15,7 +15,7 @@ impl ClientIntegration for PiIntegration {
         true
     }
     fn skipped_summary(&self) -> Vec<String> {
-        vec!["pi integration: skip".into()]
+        vec!["Skip pi".into()]
     }
     fn prepare(
         &self,
@@ -29,7 +29,7 @@ impl ClientIntegration for PiIntegration {
 
 impl PreparedClientIntegration for PiIntegration {
     fn summary(&self) -> Vec<String> {
-        vec!["pi integration: install".into()]
+        vec!["Install the pi integration".into()]
     }
     fn preflight(&self, runner: &dyn CommandRunner) -> Result<(), String> {
         let code = runner

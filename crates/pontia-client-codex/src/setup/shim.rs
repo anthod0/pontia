@@ -55,7 +55,7 @@ impl ShimSetup {
     }
 
     pub(super) fn summary(&self) -> String {
-        format!("Codex launcher: {}", self.root.join("bin/codex").display())
+        format!("Launcher: {}", self.root.join("bin/codex").display())
     }
 
     pub(super) fn activation_command(&self) -> String {

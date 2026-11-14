@@ -7,7 +7,7 @@ use std::{
 
 use dialoguer::{MultiSelect, console::Term};
 
-use crate::{lifecycle::local_health_addr, local_config};
+use crate::{lifecycle::local_health_addr, local_config, terminal};
 use pontia_agent_control::client_contract::ClientIntegration;
 use std::sync::Arc;
 
@@ -69,7 +69,13 @@ where
     let config_path = existing.pontia_home.join("config.toml");
     let initial_roots = &existing.workspace_browser.roots;
 
-    writeln!(output, "Pontia initialization\n").map_err(io_error)?;
+    writeln!(
+        output,
+        "{}\n{}\n",
+        terminal::heading("Pontia setup"),
+        terminal::dim("Connect your coding agents and start the Pontia background service.")
+    )
+    .map_err(io_error)?;
     let integrations = platform.integrations();
     let selected = select_agents(input, output, &integrations)?;
     let vars = crate::setup::integration_vars(vars, &user_home, platform)?;
@@ -108,33 +114,40 @@ where
     if !ignored_overrides.is_empty() {
         writeln!(
             output,
-            "Warning: command-scoped overrides are not persisted to the Pontia service and will not be used by initialization: {}",
-            ignored_overrides.join(", ")
+            "{}",
+            terminal::warning(format!(
+                "These environment overrides apply only to this command and are not saved for the Pontia service: {}",
+                ignored_overrides.join(", ")
+            ))
         )
         .map_err(io_error)?;
     }
 
-    writeln!(output, "\nInitialization summary:").map_err(io_error)?;
+    writeln!(output, "\n{}", terminal::heading("Pontia will:")).map_err(io_error)?;
     for (client, setup) in integrations.iter().zip(&prepared) {
-        let summary = setup
-            .as_ref()
-            .map_or_else(|| client.skipped_summary(), |setup| setup.summary());
-        for line in summary {
-            writeln!(output, "  {line}").map_err(io_error)?;
+        let lines = match setup {
+            Some(setup) => terminal::summary_lines(&setup.summary(), false),
+            None => terminal::summary_lines(&client.skipped_summary(), true),
+        };
+        for line in lines {
+            writeln!(output, "{line}").map_err(io_error)?;
         }
     }
-    writeln!(output, "  Workspace Browser roots: {}", initial_roots.len()).map_err(io_error)?;
-    writeln!(
-        output,
-        "  External API token: {}",
-        if existing.external_api_token.is_some() {
-            "keep existing"
-        } else {
-            "generate"
-        }
-    )
-    .map_err(io_error)?;
-    write!(output, "Continue? [Y/n]: ").map_err(io_error)?;
+    let settings = [
+        format!("Workspace Browser roots: {}", initial_roots.len()),
+        format!(
+            "External API token: {}",
+            if existing.external_api_token.is_some() {
+                "keep existing"
+            } else {
+                "generate"
+            }
+        ),
+    ];
+    for line in settings {
+        writeln!(output, "  • {line}").map_err(io_error)?;
+    }
+    write!(output, "\n{}", terminal::question("Continue?", "[Y/n]")).map_err(io_error)?;
     match read_answer(input, output)?
         .trim()
         .to_ascii_lowercase()
@@ -142,7 +155,7 @@ where
     {
         "" | "y" | "yes" => {}
         "n" | "no" => {
-            writeln!(output, "Initialization cancelled.").map_err(io_error)?;
+            writeln!(output, "Setup cancelled. Nothing was changed.").map_err(io_error)?;
             return Ok(None);
         }
         answer => return Err(format!("expected yes or no, got {answer:?}")),
@@ -152,6 +165,7 @@ where
     for setup in prepared.iter().flatten() {
         setup.preflight(platform.command_runner())?;
     }
+    writeln!(output).map_err(io_error)?;
     let mut installed = Vec::new();
     let mut install_errors = Vec::new();
     for (client, setup) in integrations.iter().zip(&prepared) {
@@ -159,7 +173,7 @@ where
         match setup.install(platform.command_runner(), platform.definition_store()) {
             Ok(()) => {
                 installed.push((client, setup));
-                writeln!(output, "✓ {}", setup.completion()).map_err(io_error)?;
+                writeln!(output, "{}", terminal::success(setup.completion())).map_err(io_error)?;
             }
             Err(error) => install_errors.push(error),
         }
@@ -169,7 +183,12 @@ where
     }
 
     let config_changed = local_config::persist_token(&existing, &token)?;
-    writeln!(output, "✓ Wrote {}", config_path.display()).map_err(io_error)?;
+    writeln!(
+        output,
+        "{}",
+        terminal::success(format!("Saved configuration to {}", config_path.display()))
+    )
+    .map_err(io_error)?;
 
     let config = local_config::load(&vars)?;
     let environment_paths = installed
@@ -177,11 +196,21 @@ where
         .flat_map(|(_, setup)| setup.service_environment_paths())
         .collect::<Vec<_>>();
     platform.start_service(&config, config_changed, &environment_paths)?;
-    writeln!(output, "✓ Started Pontia service").map_err(io_error)?;
+    writeln!(
+        output,
+        "{}",
+        terminal::success("Started the Pontia service")
+    )
+    .map_err(io_error)?;
     // Business settings belong to the running service, not the initialization CLI.
     for (client, _) in &installed {
         match platform.enable_client(&config, client.client_type(), client.client_key()) {
-            Ok(()) => writeln!(output, "✓ Enabled {}", client.client_type()).map_err(io_error)?,
+            Ok(()) => writeln!(
+                output,
+                "{}",
+                terminal::success(format!("Enabled {}", client.client_type()))
+            )
+            .map_err(io_error)?,
             Err(error) => install_errors.push(format!(
                 "Failed to enable {}: {error}",
                 client.client_type()
@@ -212,7 +241,7 @@ pub(crate) fn line_agent_selection<R: BufRead, W: Write>(
     output: &mut W,
     clients: &[Arc<dyn ClientIntegration>],
 ) -> Result<Vec<usize>, String> {
-    writeln!(output, "Select Agent Clients:").map_err(io_error)?;
+    writeln!(output, "{}", terminal::heading("Agent Clients to connect:")).map_err(io_error)?;
     for client in clients {
         writeln!(
             output,
@@ -238,7 +267,11 @@ pub(crate) fn line_agent_selection<R: BufRead, W: Write>(
         .join(", ");
     write!(
         output,
-        "Press Enter to keep the defaults, or type a selection ({choices}): "
+        "{}",
+        terminal::question(
+            "Press Enter to keep the defaults, or type a selection",
+            &format!("({choices})")
+        )
     )
     .map_err(io_error)?;
     let answer = read_answer(input, output)?;
@@ -274,8 +307,8 @@ pub(crate) fn interactive_agent_selection<R: BufRead, W: Write>(
     clients: &[Arc<dyn ClientIntegration>],
 ) -> Result<Vec<usize>, String> {
     output.flush().map_err(io_error)?;
-    MultiSelect::new()
-        .with_prompt("Select Agent Clients (Space to toggle, Enter to confirm)")
+    MultiSelect::with_theme(&terminal::theme())
+        .with_prompt("Agent Clients to connect (Space to toggle, Enter to confirm)")
         .items(
             clients
                 .iter()

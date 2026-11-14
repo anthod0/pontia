@@ -36,7 +36,7 @@ impl ClientIntegration for Integration {
         false
     }
     fn skipped_summary(&self) -> Vec<String> {
-        vec!["Claude Agent integration: skip".into()]
+        vec!["Skip Claude Agent".into()]
     }
     fn service_path_variables(&self) -> &'static [&'static str] {
         &[
@@ -85,7 +85,7 @@ impl ClientIntegration for Integration {
 
 impl PreparedClientIntegration for Prepared {
     fn summary(&self) -> Vec<String> {
-        vec!["Claude Agent integration: configure".into()]
+        vec!["Configure the Claude Agent integration".into()]
     }
     fn preflight(&self, runner: &dyn CommandRunner) -> Result<(), String> {
         if let Some(host) = &self.host {

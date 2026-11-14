@@ -22,6 +22,7 @@ use pontia::{
     manager::ProcessCommandRunner,
     runtime_io::{FileDefinitionStore, HttpHealthProbe},
     setup::{self, SetupPlatform},
+    terminal,
 };
 use pontia_agent_control::client_contract::ClientIntegration;
 use pontia_config::AppConfig;
@@ -670,19 +671,26 @@ async fn run_init() -> Result<bool, String> {
         return Ok(true);
     };
 
-    let enable_remote = Confirm::new()
-        .with_prompt("Sign in and enable remote access?")
+    println!();
+    let enable_remote = Confirm::with_theme(&terminal::theme())
+        .with_prompt("Sign in to Pontia Cloud to use this device from anywhere?")
         .default(true)
         .interact()
         .map_err(|error| format!("failed to read the remote access selection: {error}"))?;
 
     let result = if !enable_remote {
         println!(
-            "Remote access skipped. Run `pontia login` and `pontia remote enable` later to enable it."
+            "\n{}",
+            terminal::dim(format!(
+                "Remote access skipped. To enable it later, run {} and then {}.",
+                terminal::command("pontia login"),
+                terminal::command("pontia remote enable")
+            ))
         );
         open_dashboard("Local Dashboard", &outcome.local_dashboard_url);
         Ok(true)
     } else {
+        println!();
         match enable_remote_access(&vars).await {
             Ok(url) => {
                 open_dashboard("Remote Dashboard", &url);
@@ -690,7 +698,15 @@ async fn run_init() -> Result<bool, String> {
             }
             Err(error) => {
                 println!(
-                    "Remote access setup did not complete. Local initialization is complete; retry with `pontia login` and `pontia remote enable`."
+                    "\n{}",
+                    terminal::warning(
+                        "Remote access setup did not finish. The local setup is complete."
+                    )
+                );
+                println!(
+                    "  Retry with {} and then {}.",
+                    terminal::command("pontia login"),
+                    terminal::command("pontia remote enable")
                 );
                 open_dashboard("Local Dashboard", &outcome.local_dashboard_url);
                 Err(error)
@@ -698,8 +714,16 @@ async fn run_init() -> Result<bool, String> {
         }
     };
     for next_steps in outcome.next_steps {
-        println!("\n{next_steps}");
+        println!("\n{}", terminal::heading("Next step"));
+        println!("{}", terminal::indent(&next_steps));
     }
+    println!(
+        "\n{}",
+        terminal::dim(format!(
+            "Pontia keeps running in the background. Run {} to stop it.",
+            terminal::command("pontia down")
+        ))
+    );
     result
 }
 
@@ -710,7 +734,7 @@ async fn enable_remote_access(vars: &HashMap<String, String>) -> Result<String, 
         })
         .await?;
     } else {
-        println!("Using the existing Pontia cloud login.");
+        println!("{}", terminal::success("Already signed in to Pontia Cloud"));
     }
     let access = remote::enable(vars).await?;
     restart_service_for_remote_config()?;
@@ -727,11 +751,18 @@ fn remote_dashboard_url(device_handle: &str) -> Result<String, String> {
 }
 
 fn open_dashboard(label: &str, url: &str) {
-    println!("{label}:\n\n{}\n", dialoguer::console::style(url).cyan());
+    println!(
+        "\n{}",
+        terminal::heading(format!("Pontia is ready. Open the {label}:"))
+    );
+    println!("\n  {}\n", terminal::link(url));
     if open_browser(url).is_ok() {
-        println!("✓ Dashboard opened. `pontia down` stops the local service.");
+        println!("{}", terminal::success("Opened in your browser"));
     } else {
-        println!("Browser not opened; use the URL above. `pontia down` stops the local service.");
+        println!(
+            "{}",
+            terminal::dim("Could not open a browser. Copy the URL above into your browser.")
+        );
     }
 }
 

@@ -5,7 +5,7 @@ use std::{
 };
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use pontia::private_file;
+use pontia::{private_file, terminal};
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use tokio::time::{Instant, sleep};
@@ -92,13 +92,16 @@ where
         .map_err(|_| "the login service returned an invalid authorization response".to_string())?;
     let verification_url = validate_authorization(&authorization, origin)?;
 
-    println!("Open this address on a device with a browser:");
-    println!("{verification_url}");
+    println!("{}", terminal::heading("Sign in to Pontia Cloud"));
+    println!("  1. Open this URL in a browser on any device:");
+    println!("     {}", terminal::link(&verification_url));
+    println!("  2. Enter this code:");
+    println!("     {}", terminal::heading(&authorization.user_code));
     println!();
-    println!("Enter this code:");
-    println!("{}", authorization.user_code);
-    println!();
-    println!("Waiting for approval...");
+    println!(
+        "{}",
+        terminal::dim("Waiting for approval... (Ctrl+C to cancel)")
+    );
     on_verification(verification_url.as_str());
 
     let token_url = origin
@@ -132,8 +135,11 @@ where
                 validate_token(&token)?;
                 write_credential(&home.join("auth.json"), &token)?;
                 println!(
-                    "Login complete. Credential saved to {}.",
-                    home.join("auth.json").display()
+                    "{}",
+                    terminal::success(format!(
+                        "Signed in. Credential saved to {}",
+                        home.join("auth.json").display()
+                    ))
                 );
                 return Ok(());
             }

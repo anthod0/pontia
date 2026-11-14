@@ -35,7 +35,7 @@ impl ClientIntegration for CodexIntegration {
         false
     }
     fn skipped_summary(&self) -> Vec<String> {
-        vec!["Codex integration: skip".into()]
+        vec!["Skip Codex".into()]
     }
     fn service_path_variables(&self) -> &'static [&'static str] {
         &["CODEX_HOME"]
@@ -56,17 +56,17 @@ impl ClientIntegration for CodexIntegration {
 impl PreparedClientIntegration for PreparedSetup {
     fn summary(&self) -> Vec<String> {
         let summary = vec![
-            "Codex integration: register autostart".into(),
+            "Set up Codex autostart and the Codex launcher".into(),
             format!("Codex executable: {}", self.daemon.executable.display()),
             format!("CODEX_HOME: {}", self.daemon.home.display()),
-            format!("Codex service: {}", self.daemon.service_path.display()),
+            format!("Autostart service: {}", self.daemon.service_path.display()),
             self.shim.summary(),
         ];
         #[cfg(target_os = "linux")]
         let summary = {
             let mut summary = summary;
             if let ServiceUserIdentity::SystemdUsername(username) = &self.daemon.service_user {
-                summary.push(format!("user linger: enable for {username}"));
+                summary.push(format!("Enable user linger for {username}"));
             }
             summary
         };
@@ -88,7 +88,7 @@ impl PreparedClientIntegration for PreparedSetup {
     }
     fn next_steps(&self) -> Option<String> {
         Some(format!(
-            "Open a new terminal or run the following command to use the Codex launcher:\n  {}",
+            "Open a new terminal, or run this command to use the Codex launcher here:\n  {}",
             self.shim.activation_command()
         ))
     }

@@ -14,7 +14,7 @@ use uuid::Uuid;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
 use crate::login;
-use pontia::private_file;
+use pontia::{private_file, terminal};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -247,7 +247,7 @@ async fn enable_with_args(
                         .to_string(),
                 );
             }
-            let name = Input::<String>::new()
+            let name = Input::<String>::with_theme(&terminal::theme())
                 .with_prompt("Device name")
                 .default(default_name)
                 .interact_text()
@@ -929,12 +929,15 @@ impl RegistrationApi<'_> {
 
 fn select_edge(edges: &[Edge]) -> Result<&Edge, String> {
     if edges.len() == 1 {
-        println!("Using official edge: {}", edges[0].name);
+        println!(
+            "{}",
+            terminal::success(format!("Using edge {}", edges[0].name))
+        );
         return Ok(&edges[0]);
     }
     let names: Vec<&str> = edges.iter().map(|edge| edge.name.as_str()).collect();
-    let selected = Select::new()
-        .with_prompt("Official edge")
+    let selected = Select::with_theme(&terminal::theme())
+        .with_prompt("Edge to connect through")
         .items(&names)
         .default(0)
         .interact()
@@ -1052,14 +1055,15 @@ fn login_required() -> String {
 
 fn print_registered(device: &Device, already_registered: bool) {
     let name = &device.name;
-    if already_registered {
-        println!("Device is already registered.");
+    let status = if already_registered {
+        "Device already registered"
     } else {
-        println!("Device registration complete.");
-    }
-    println!("  Device: {name}");
-    println!("  Device ID: {}", device.id);
-    println!("  Edge: {}", device.edge_name);
+        "Device registered"
+    };
+    println!("{}", terminal::success(status));
+    println!("  {}  {name}", terminal::dim("Name     "));
+    println!("  {}  {}", terminal::dim("Device ID"), device.id);
+    println!("  {}  {}", terminal::dim("Edge     "), device.edge_name);
 }
 
 #[cfg(test)]

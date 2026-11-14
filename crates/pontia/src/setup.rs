@@ -11,7 +11,7 @@ use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 
 use crate::{
     init::{interactive_agent_selection, line_agent_selection, validated_user_home},
-    local_config,
+    local_config, terminal,
 };
 
 pub trait SetupPlatform {
@@ -113,14 +113,15 @@ where
         .map(|&index| integrations[index].prepare(&vars, &user_home, platform.command_runner()))
         .collect::<Result<Vec<_>, _>>()?;
     for setup in &prepared {
-        for line in setup.summary() {
-            writeln!(output, "  {line}").map_err(|error| error.to_string())?;
+        for line in terminal::summary_lines(&setup.summary(), false) {
+            writeln!(output, "{line}").map_err(|error| error.to_string())?;
         }
         setup.preflight(platform.command_runner())?;
     }
     for setup in &prepared {
         setup.install(platform.command_runner(), platform.definition_store())?;
-        writeln!(output, "✓ {}", setup.completion()).map_err(|error| error.to_string())?;
+        writeln!(output, "{}", terminal::success(setup.completion()))
+            .map_err(|error| error.to_string())?;
         if let Some(next_steps) = setup.next_steps() {
             writeln!(output, "{next_steps}").map_err(|error| error.to_string())?;
         }
@@ -136,14 +137,22 @@ where
         .flat_map(|setup| setup.service_environment_paths())
         .collect::<Vec<_>>();
     platform.start_service(&config, changed, &paths)?;
-    writeln!(output, "✓ Pontia service configuration verified")
-        .map_err(|error| error.to_string())?;
+    writeln!(
+        output,
+        "{}",
+        terminal::success("Pontia service configuration verified")
+    )
+    .map_err(|error| error.to_string())?;
     for client in selected.iter().map(|&index| &integrations[index]) {
         platform
             .enable_client(&config, client.client_type(), client.client_key())
             .map_err(|error| format!("Failed to enable {}: {error}", client.client_type()))?;
-        writeln!(output, "✓ Enabled {}", client.client_type())
-            .map_err(|error| error.to_string())?;
+        writeln!(
+            output,
+            "{}",
+            terminal::success(format!("Enabled {}", client.client_type()))
+        )
+        .map_err(|error| error.to_string())?;
     }
     Ok(())
 }
