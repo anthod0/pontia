@@ -63,7 +63,7 @@ test.each([true, false])(
       render(NewChatPage);
     });
 
-    expect(screen.getByRole("region", { name: "Loading dashboard" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start session" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Continue to New Chat" })).not.toBeInTheDocument();
 
     resolveWorkspaces(hasWorkspace ? [workspace()] : []);
@@ -184,8 +184,7 @@ test("remembers the selected new chat workspace after starting a chat", async ()
 test("offers Pi and Codex and requires a task before submission", async () => {
   render(NewChatPage);
 
-  expect(await screen.findByRole("heading", { name: "Start a session" })).toBeInTheDocument();
-  const clientSelector = screen.getByLabelText("Agent client");
+  const clientSelector = await screen.findByLabelText("Agent client");
   expect(clientSelector).toHaveTextContent("pi");
   await userEvent.click(clientSelector);
   expect(await screen.findByText("codex")).toBeInTheDocument();

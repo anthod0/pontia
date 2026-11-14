@@ -5,9 +5,9 @@
   import { navigate } from '$lib/navigation'
   import { toast } from 'svelte-sonner'
   import NewChatPanel from '../components/chat/NewChatPanel.svelte'
-  import PontiaMascot from '../components/chat/PontiaMascot.svelte'
+  import NewChatLayout from '../components/chat/NewChatLayout.svelte'
+  import NewChatLoading from '../components/chat/NewChatLoading.svelte'
   import WorkspaceOnboarding from '../components/workspaces/WorkspaceOnboarding.svelte'
-  import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import { isTransientNetworkError } from '../api/client'
   import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { titleFromInitialPrompt } from '$lib/session-chat/sessionChat'
@@ -50,6 +50,7 @@
   $: workspacesError = $workspacesQuery.error?.message ?? null
   $: workspacesLoading = $workspacesQuery.isFetching
   $: initialWorkspaceLoadComplete = !$workspacesQuery.isPending
+  $: workspaceSetupLoading = !workspaces.length && (!initialWorkspaceLoadComplete || workspaceSetupDecisionPending)
   $: if (initialWorkspaceLoadComplete && workspaceSetupDecisionPending && !workspacesLoading) {
     workspaceOnboardingActive = !workspaces.length && !workspacesError
     workspaceSetupDecisionPending = false
@@ -186,38 +187,28 @@
   }
 </script>
 
-{#if !workspaces.length && (!initialWorkspaceLoadComplete || workspaceSetupDecisionPending)}
-  <section class="flex min-h-[calc(100svh-5.5rem)] items-center justify-center md:min-h-[calc(100svh-6.5rem)]" aria-label="Loading dashboard">
-    <div class="w-full max-w-3xl space-y-3">
-      <Skeleton class="h-24 w-full" />
-      <Skeleton class="h-64 w-full" />
-    </div>
-  </section>
-{:else if workspaceOnboardingActive}
+{#if workspaceOnboardingActive && !workspaceSetupLoading}
   <WorkspaceOnboarding canContinue={workspaces.length > 0} onContinue={completeWorkspaceOnboarding} />
 {:else}
-  <section class="flex min-h-[calc(100svh-3.25rem)] flex-col gap-6">
-    <div class="mx-auto flex w-full max-w-[720px] flex-1 items-center justify-center py-12 text-center">
-      <div>
-        <PontiaMascot class="mx-auto mb-4 size-20" />
-        <h1 class="mb-2 text-[28px] font-semibold tracking-tight text-heading">Start a session</h1>
-        <p class="text-sm text-foreground">Choose a workspace and agent client, then describe the job.</p>
-      </div>
-    </div>
-    <NewChatPanel
-      bind:prompt={$chatDraft}
-      bind:workspaceId={createWorkspaceId}
-      bind:creationOptionId
-      {creating}
-      {deviceSelector}
-      {canCreate}
-      autofocus={autofocusComposer}
-      {workspaces}
-      {workspacesLoading}
-      {selectedWorkspace}
-      {creationOptions}
-      placement="bottom"
-      onStartChat={startChat}
-    />
-  </section>
+  <NewChatLayout>
+    {#if workspaceSetupLoading}
+      <NewChatLoading message="Loading workspaces…" {deviceSelector} />
+    {:else}
+      <NewChatPanel
+        bind:prompt={$chatDraft}
+        bind:workspaceId={createWorkspaceId}
+        bind:creationOptionId
+        {creating}
+        {deviceSelector}
+        {canCreate}
+        autofocus={autofocusComposer}
+        {workspaces}
+        {workspacesLoading}
+        {selectedWorkspace}
+        {creationOptions}
+        placement="bottom"
+        onStartChat={startChat}
+      />
+    {/if}
+  </NewChatLayout>
 {/if}

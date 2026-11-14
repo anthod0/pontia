@@ -13,6 +13,9 @@
   import TopBar from '../../components/layout/TopBar.svelte';
   import ChatShortcuts from '../../components/chat/ChatShortcuts.svelte';
   import NewChatPage from '../../pages/NewChatPage.svelte';
+  import NewChatLayout from '../../components/chat/NewChatLayout.svelte';
+  import NewChatLoading from '../../components/chat/NewChatLoading.svelte';
+  import { Skeleton } from '$lib/components/ui/skeleton/index.js';
   import * as Sidebar from '$lib/components/ui/sidebar/index.js';
   import DeviceProvider from '../../device/DeviceProvider.svelte';
   import { createDeviceConnections, type ConnectedDevice } from './deviceConnections';
@@ -37,6 +40,7 @@
   let loadingModule = false;
   const lastDeviceStorageKey = 'pontia.lastDeviceHandle';
   let lastHandle = $state<string | null>(null);
+  let currentPath = $state(dashboardRelativePath());
   // The routed device is active; the root uses the last routed device, then the first listed one.
   const activeHandle = $derived(handle ||
     ($devices.some(target => target.handle === lastHandle) ? lastHandle! : $devices[0]?.handle));
@@ -112,7 +116,7 @@
   });
 </script>
 
-<svelte:window onfocus={() => connections?.focus()} ononline={() => connections?.focus()} />
+<svelte:window onpopstate={() => currentPath = dashboardRelativePath()} onfocus={() => connections?.focus()} ononline={() => connections?.focus()} />
 <svelte:document onvisibilitychange={() => {
   if (document.visibilityState === 'visible') connections?.focus();
 }} />
@@ -143,8 +147,15 @@
             <span>{active.name} is offline.</span>
             <Button variant="outline" size="xs" onclick={() => connections?.retry(active.handle)}>Retry</Button>
           </div>
-        {:else if active?.state === 'connecting'}
-          <p role="status" class="px-4 py-2 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">Connecting…</p>
+        {:else if dashboardState === 'connecting'}
+          <Sidebar.Group class="group-data-[collapsible=icon]:hidden">
+            <Sidebar.GroupLabel role="status">{$loading ? 'Loading devices…' : 'Connecting…'}</Sidebar.GroupLabel>
+            <Sidebar.GroupContent>
+              <Sidebar.MenuSkeleton />
+              <Sidebar.MenuSkeleton />
+              <Sidebar.MenuSkeleton />
+            </Sidebar.GroupContent>
+          </Sidebar.Group>
         {/if}
       {/snippet}
     </AppSidebar>
@@ -156,7 +167,7 @@
     {#if device}
       {#key device}<DeviceProvider {device}><TopBar /></DeviceProvider>{/key}
     {:else}
-      <header class={['flex items-center px-3', handle ? 'h-8' : 'h-12']}><Sidebar.Trigger class="md:hidden" /></header>
+      <header class={['flex items-center px-3', currentPath === '/' || currentPath.startsWith('/chat/') ? 'h-12' : 'h-8']}><Sidebar.Trigger class="md:hidden" /></header>
     {/if}
   {/snippet}
   {#snippet children()}
@@ -172,6 +183,18 @@
         <p class="text-sm text-muted-foreground">Redirecting to sign in…</p>
         <Button size="sm" variant="outline" href={signInUrl}>Sign in</Button>
       </div>
+    {:else if dashboardState === 'connecting' && (!checkingDevices || activeHandle)}
+      {#if currentPath === '/'}
+        <NewChatLayout>
+          <NewChatLoading message={$loading ? 'Loading devices…' : `Connecting to ${active?.name ?? activeHandle}…`} {deviceSelector} />
+        </NewChatLayout>
+      {:else}
+        <div class="space-y-4 py-4" role="status" aria-label="Loading device content">
+          <Skeleton class="h-6 w-48" />
+          <Skeleton class="h-24 w-full" />
+          <Skeleton class="h-40 w-full" />
+        </div>
+      {/if}
     {:else if activeHandle}
       <RemoteDashboardPage
         handle={activeHandle} state={dashboardState} onRetry={retry}
@@ -181,11 +204,6 @@
       <div role="alert" class="flex items-center gap-3 py-4 text-sm">
         <span>{$error ?? moduleError}</span>
         <Button variant="outline" onclick={retry}>Try again</Button>
-      </div>
-    {:else if $loading && !checkingDevices}
-      <div class="flex min-h-96 flex-col items-center justify-center gap-3 bg-surface p-4" role="status">
-        <SpinnerGapIcon class="size-6 animate-spin text-primary" aria-hidden="true" />
-        <p class="text-sm text-muted-foreground">Loading devices…</p>
       </div>
     {:else}
       <DeviceOnboarding checking={checkingDevices} onCheck={checkDevices} />

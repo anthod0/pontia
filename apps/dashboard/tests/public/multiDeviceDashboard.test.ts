@@ -262,6 +262,48 @@ test("the root composer device selector switches devices like the sidebar", asyn
   expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent("Travel Laptop");
 });
 
+test.each(["handshake", "workspaces"])(
+  "the composer can switch to another device while the active device waits for %s",
+  async (pending) => {
+    if (pending === "handshake") {
+      fixture.connect.mockImplementation(async (handle, signal) => {
+        if (handle === "office-mac") {
+          await new Promise((_, reject) => {
+            signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+          });
+        }
+        return fixture.target(handle);
+      });
+    } else {
+      const request = fixture.request.getMockImplementation()!;
+      fixture.request.mockImplementation(async (handle, path, init) => {
+        if (handle === "office-mac" && path.endsWith("/workspaces")) {
+          await new Promise((_, reject) => {
+            init.signal!.addEventListener("abort", () => reject(init.signal!.reason), { once: true });
+          });
+        }
+        return request(handle, path, init);
+      });
+    }
+
+    render(MultiDeviceDashboardHarness);
+    if (pending === "workspaces") await sidebar().findByRole("button", { name: "office-mac chat" });
+    await userEvent.click(await screen.findByLabelText("Device", { exact: true }));
+    const options = await screen.findAllByRole("option", { hidden: true });
+    await userEvent.click(options.find((option) => option.textContent?.includes("Travel Laptop"))!);
+    document.body.style.pointerEvents = "";
+
+    await userEvent.type(await screen.findByRole("textbox"), "Work on the laptop");
+    await userEvent.click(screen.getByRole("button", { name: "Start session" }));
+    await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/created"));
+    const submissions = fixture.request.mock.calls.filter(
+      ([, path, init]) => path.endsWith("/sessions") && init.method === "POST",
+    );
+    expect(submissions).toHaveLength(1);
+    expect(submissions[0][0]).toBe("travel-laptop");
+  },
+);
+
 test("root honors the workspace query parameter for the active device", async () => {
   localStorage.setItem("pontia.lastDeviceHandle", "travel-laptop");
   window.history.replaceState({}, "", "/?workspace=other");
