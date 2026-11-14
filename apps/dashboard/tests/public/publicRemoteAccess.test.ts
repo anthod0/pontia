@@ -42,16 +42,32 @@ function json(value: unknown, status = 200): Response {
 
 test("loads the strict Cloud device list with browser credentials", async () => {
   const fetchMock = vi.fn(async () =>
-    json([
-      { device_handle: handle, name: "Office Mac" },
-      { device_handle: "travel-laptop", name: "Travel Laptop" },
-    ]),
+    json({
+      user_id: deviceId,
+      devices: [
+        { device_handle: handle, device_id: deviceId, edge_id: deviceId, name: "Office Mac" },
+        {
+          device_handle: "travel-laptop",
+          device_id: "12345678-9abc-def0-1234-56789abcdef0",
+          edge_id: deviceId,
+          name: "Travel Laptop",
+        },
+      ],
+    }),
   );
   vi.stubGlobal("fetch", fetchMock);
-  await expect(listPublicDevices()).resolves.toEqual([
-    { handle, name: "Office Mac" },
-    { handle: "travel-laptop", name: "Travel Laptop" },
-  ]);
+  await expect(listPublicDevices()).resolves.toEqual({
+    userId: deviceId,
+    devices: [
+      { handle, deviceId, edgeId: deviceId, name: "Office Mac" },
+      {
+        handle: "travel-laptop",
+        deviceId: "12345678-9abc-def0-1234-56789abcdef0",
+        edgeId: deviceId,
+        name: "Travel Laptop",
+      },
+    ],
+  });
   expect(fetchMock).toHaveBeenCalledWith("https://pontia.dev/api/dashboard/devices", {
     credentials: "include",
     signal: undefined,
@@ -59,13 +75,21 @@ test("loads the strict Cloud device list with browser credentials", async () => 
 });
 
 test.each([
-  [{ device_handle: handle, name: "Office Mac", online: true }],
+  [
+    {
+      device_handle: handle,
+      device_id: deviceId,
+      edge_id: deviceId,
+      name: "Office Mac",
+      online: true,
+    },
+  ],
   [{ device_handle: "Invalid", name: "Office Mac" }],
-  [{ device_handle: handle, name: " Office Mac" }],
+  [{ device_handle: handle, device_id: deviceId, edge_id: deviceId, name: " Office Mac" }],
 ])("rejects an invalid Cloud device list", async (body) => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => json(body)),
+    vi.fn(async () => json({ user_id: deviceId, devices: body })),
   );
   await expect(listPublicDevices()).rejects.toBeInstanceOf(CloudRequestError);
 });
@@ -147,8 +171,11 @@ test("constructs a direct public Dashboard device path", () => {
 });
 
 test("disposing one device cancels only that device's requests", () => {
-  const first = createRemoteConnection(handle);
-  const second = createRemoteConnection("travel-laptop");
+  const first = createRemoteConnection({ handle, deviceId, edgeId: deviceId }, deviceId);
+  const second = createRemoteConnection(
+    { handle: "travel-laptop", deviceId, edgeId: deviceId },
+    deviceId,
+  );
   first.dispose();
   expect(first.signal.aborted).toBe(true);
   expect(second.signal.aborted).toBe(false);

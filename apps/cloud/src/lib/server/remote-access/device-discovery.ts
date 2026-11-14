@@ -4,6 +4,8 @@ import { devices } from "../db/schema";
 
 export type DashboardDevice = {
   deviceHandle: string;
+  deviceId: string;
+  edgeId: string;
   name: string;
 };
 
@@ -12,7 +14,12 @@ export async function listDashboardDevices(
   userId: string,
 ): Promise<DashboardDevice[]> {
   return db
-    .select({ deviceHandle: devices.handle, name: devices.name })
+    .select({
+      deviceHandle: devices.handle,
+      deviceId: devices.id,
+      edgeId: devices.edgeId,
+      name: devices.name,
+    })
     .from(devices)
     .where(eq(devices.userId, userId))
     .orderBy(asc(devices.handle));

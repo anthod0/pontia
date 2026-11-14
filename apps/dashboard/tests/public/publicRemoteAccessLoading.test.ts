@@ -15,8 +15,13 @@ vi.mock("../../src/modes/public/remote-access", async (importOriginal) => {
   }
   return {
     ...(await importOriginal<typeof import("../../src/modes/public/remote-access")>()),
-    listPublicDevices: async () => [{ handle: "office-mac", name: "Office Mac" }],
-    createRemoteConnection: (handle: string) => {
+    listPublicDevices: async () => ({
+      userId: "user-one",
+      devices: [
+        { handle: "office-mac", deviceId: "office-mac", edgeId: "edge-one", name: "Office Mac" },
+      ],
+    }),
+    createRemoteConnection: ({ handle }: { handle: string; deviceId: string; edgeId: string }) => {
       const controller = new AbortController();
       return {
         e2eFetch: async () =>

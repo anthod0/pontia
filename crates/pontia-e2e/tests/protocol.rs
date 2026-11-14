@@ -775,3 +775,64 @@ fn response_profile_preserves_download_size_and_security_headers() {
     decoder.finish().unwrap();
     assert_eq!(decoded_headers.unwrap(), headers);
 }
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn restored_browser_sessions_send_independent_requests_to_the_existing_device_session() {
+    let (browser, mut device) = established(&Arc::new(AtomicU64::new(0)));
+    drop(admission(&browser, &mut device));
+    let saved = browser.export();
+    let original_id = browser.session_id();
+    drop(browser);
+    for _ in 0..3 {
+        let restored = BrowserSession::restore(&saved).unwrap();
+        assert_eq!(restored.session_id(), original_id);
+        let (context, mut upload, mut download) = restored.request().unwrap();
+        let (plain, _, mut response, _lease) = device
+            .request(
+                context.session_id,
+                context.request_id,
+                &upload.seal(b"restored request").unwrap(),
+            )
+            .unwrap();
+        assert_eq!(plain, b"restored request");
+        let mut wire = response.seal(b"restored response").unwrap();
+        wire.extend_from_slice(&response.finish().unwrap());
+        assert_eq!(
+            decode_records(&mut download, &wire).unwrap(),
+            b"restored response"
+        );
+    }
+    assert_eq!(device.session_count(), 1);
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn browser_restore_rejects_incomplete_unknown_and_invalid_snapshots() {
+    let (browser, _) = established(&Arc::new(AtomicU64::new(0)));
+    let saved = browser.export();
+    for length in 0..saved.len() {
+        assert!(matches!(
+            BrowserSession::restore(&saved[..length]),
+            Err(Error::Protocol)
+        ));
+    }
+    let mut changed = saved.to_vec();
+    changed.push(0);
+    assert!(matches!(
+        BrowserSession::restore(&changed),
+        Err(Error::Protocol)
+    ));
+    changed = saved.to_vec();
+    changed[0] = 2;
+    assert!(matches!(
+        BrowserSession::restore(&changed),
+        Err(Error::Protocol)
+    ));
+    changed = saved.to_vec();
+    changed[17..25].fill(0);
+    assert!(matches!(
+        BrowserSession::restore(&changed),
+        Err(Error::Protocol)
+    ));
+}

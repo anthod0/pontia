@@ -2,7 +2,7 @@ import { get, writable } from "svelte/store";
 import { DeviceRuntime } from "../../device/runtime";
 import { createApiAccess } from "./apiAccess";
 import type { RemoteAccess } from "./remoteAccessLoader.svelte";
-type PublicDevice = Awaited<ReturnType<RemoteAccess["listPublicDevices"]>>[number];
+type PublicDevice = Awaited<ReturnType<RemoteAccess["listPublicDevices"]>>["devices"][number];
 
 export type DeviceConnectionState = "connecting" | "online" | "offline" | "sign-in-required";
 export const deviceStateLabel: Record<DeviceConnectionState, string> = {
@@ -31,11 +31,14 @@ export function createDeviceConnections(remote: RemoteAccess) {
   const entries = new Map<string, Entry>();
   const lifetime = new AbortController();
   let refresh: Promise<void> | null = null;
+  let userId: string | null = null;
 
   function publish(): void {
     devices.set(
-      [...entries.values()].map(({ handle, name, state, runtime }) => ({
+      [...entries.values()].map(({ handle, deviceId, edgeId, name, state, runtime }) => ({
         handle,
+        deviceId,
+        edgeId,
         name,
         state,
         runtime,
@@ -57,6 +60,7 @@ export function createDeviceConnections(remote: RemoteAccess) {
   function requireSignIn(): void {
     if (get(signInRequired) || lifetime.signal.aborted) return;
     signInRequired.set(true);
+    remote.retainSavedConnections(null, []);
     lifetime.abort();
     for (const entry of entries.values()) {
       stop(entry);
@@ -76,10 +80,10 @@ export function createDeviceConnections(remote: RemoteAccess) {
   }
 
   async function connect(entry: Entry): Promise<void> {
-    if (lifetime.signal.aborted) return;
+    if (lifetime.signal.aborted || userId === null) return;
     stop(entry);
     entry.state = "connecting";
-    const connection = remote.createRemoteConnection(entry.handle, (failure) => {
+    const connection = remote.createRemoteConnection(entry, userId, (failure) => {
       if (failure instanceof remote.CloudRequestError && failure.status === 401) requireSignIn();
       else offline(entry);
     });
@@ -111,8 +115,15 @@ export function createDeviceConnections(remote: RemoteAccess) {
     loading.set(true);
     refresh = (async () => {
       try {
-        const listed = await remote.listPublicDevices(lifetime.signal);
+        const listing = await remote.listPublicDevices(lifetime.signal);
         if (lifetime.signal.aborted) return;
+        if (userId !== listing.userId) {
+          for (const entry of entries.values()) stop(entry);
+          entries.clear();
+        }
+        userId = listing.userId;
+        const listed = listing.devices;
+        remote.retainSavedConnections(userId, listed);
         const handles = new Set(listed.map((device) => device.handle));
         for (const [handle, entry] of entries) {
           if (!handles.has(handle)) {
@@ -122,8 +133,14 @@ export function createDeviceConnections(remote: RemoteAccess) {
         }
         for (const device of listed) {
           const existing = entries.get(device.handle);
-          if (existing) existing.name = device.name;
+          if (
+            existing &&
+            existing.deviceId === device.deviceId &&
+            existing.edgeId === device.edgeId
+          )
+            existing.name = device.name;
           else {
+            if (existing) stop(existing);
             const entry: Entry = {
               ...device,
               state: "connecting",
@@ -155,8 +172,9 @@ export function createDeviceConnections(remote: RemoteAccess) {
   }
 
   function focus(): void {
-    void refreshDevices();
-    for (const entry of entries.values()) retry(entry.handle);
+    void refreshDevices().then(() => {
+      if (!get(error)) for (const entry of entries.values()) retry(entry.handle);
+    });
   }
 
   return {

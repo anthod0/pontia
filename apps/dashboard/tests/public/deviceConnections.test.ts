@@ -121,7 +121,12 @@ test("refresh adds devices and cancels removed devices, including pending connec
   await manager.refreshDevices();
   await settle();
   const oldSignals = [...fixture.signals.values()].flat();
-  fixture.listed.splice(0, 2, { handle: "new-device", name: "New device" });
+  fixture.listed.splice(0, 2, {
+    handle: "new-device",
+    deviceId: "new-device",
+    edgeId: "edge-one",
+    name: "New device",
+  });
   await manager.refreshDevices();
   finish();
   await settle();
@@ -137,8 +142,8 @@ test.each(["list", "connect", "reauthorize"])(
   "central 401 during %s stops online, pending and offline devices until sign-in",
   async (source) => {
     fixture.listed.push(
-      { handle: "pending-device", name: "Pending" },
-      { handle: "offline-device", name: "Offline" },
+      { handle: "pending-device", deviceId: "pending-device", edgeId: "edge-one", name: "Pending" },
+      { handle: "offline-device", deviceId: "offline-device", edgeId: "edge-one", name: "Offline" },
     );
     let finish!: () => void;
     fixture.connect.mockImplementation(async (handle) => {
@@ -165,6 +170,7 @@ test.each(["list", "connect", "reauthorize"])(
     } else fixture.authorizationFailures.get("office-mac")!();
     await settle();
     expect(get(manager.signInRequired)).toBe(true);
+    expect(fixture.remote.retainSavedConnections).toHaveBeenLastCalledWith(null, []);
     expect(get(manager.devices).every(({ state }) => state === "sign-in-required")).toBe(true);
     expect([...fixture.signals.values()].flat().every((signal) => signal.aborted)).toBe(true);
     expect(runtimes.every((runtime) => get(runtime.connection.sseStatus) !== "open")).toBe(true);
@@ -208,4 +214,52 @@ test("failed reauthorization during an ordinary request takes only its device of
   await vi.advanceTimersByTimeAsync(5000);
   expect(device().state).toBe("online");
   expect(fixture.signals.get("travel-laptop")).toHaveLength(1);
+});
+
+test("a user switch replaces active runtimes even when device handles stay the same", async () => {
+  await manager.refreshDevices();
+  await settle();
+  const previous = device().runtime;
+  const signals = [...fixture.signals.values()].flat();
+  vi.mocked(fixture.remote.listPublicDevices).mockResolvedValueOnce({
+    userId: "user-two",
+    devices: [...fixture.listed],
+  });
+  await manager.refreshDevices();
+  await settle();
+  expect(signals.every((signal) => signal.aborted)).toBe(true);
+  expect(device().runtime).not.toBe(previous);
+  expect(device().state).toBe("online");
+  expect(fixture.remote.retainSavedConnections).toHaveBeenLastCalledWith(
+    "user-two",
+    fixture.listed,
+  );
+});
+
+test("reassigning a handle replaces the old device runtime", async () => {
+  await manager.refreshDevices();
+  await settle();
+  const previous = device().runtime;
+  const signal = fixture.signals.get("office-mac")![0];
+  fixture.listed[0].deviceId = "replacement-device";
+  await manager.refreshDevices();
+  await settle();
+  expect(signal.aborted).toBe(true);
+  expect(device().runtime).not.toBe(previous);
+  expect(device().deviceId).toBe("replacement-device");
+  expect(device().state).toBe("online");
+});
+
+test("moving a device to another edge replaces its cached connection and runtime", async () => {
+  await manager.refreshDevices();
+  await settle();
+  const previous = device().runtime;
+  const signal = fixture.signals.get("office-mac")![0];
+  fixture.listed[0].edgeId = "edge-two";
+  await manager.refreshDevices();
+  await settle();
+  expect(signal.aborted).toBe(true);
+  expect(device().runtime).not.toBe(previous);
+  expect(device().edgeId).toBe("edge-two");
+  expect(device().state).toBe("online");
 });

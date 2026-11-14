@@ -10,9 +10,15 @@ const redirectToSignIn = vi.hoisted(() => vi.fn());
 vi.mock("../../src/modes/public/signInRedirect", () => ({ redirectToSignIn }));
 vi.mock("../../src/modes/public/remote-access", async () => ({
   ...(await import("../../src/modes/public/remote-access/remoteAccess")),
+  retainSavedConnections: (
+    ...args: [string | null, { handle: string; deviceId: string; edgeId: string }[]]
+  ) => fixture.remote.retainSavedConnections(...args),
   listPublicDevices: (signal: AbortSignal) => fixture.remote.listPublicDevices(signal),
-  createRemoteConnection: (handle: string, onSignInRequired: () => void) =>
-    fixture.remote.createRemoteConnection(handle, onSignInRequired),
+  createRemoteConnection: (
+    device: { handle: string; deviceId: string; edgeId: string },
+    userId: string,
+    onSignInRequired: () => void,
+  ) => fixture.remote.createRemoteConnection(device, userId, onSignInRequired),
 }));
 
 beforeEach(() => {

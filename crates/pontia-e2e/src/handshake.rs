@@ -302,6 +302,32 @@ pub struct BrowserSession {
 }
 
 impl BrowserSession {
+    /// Versioned browser storage snapshot, including secret key material.
+    pub fn export(&self) -> Zeroizing<Vec<u8>> {
+        let mut bytes = Zeroizing::new(vec![1]);
+        bytes.extend_from_slice(&self.device_id);
+        bytes.extend_from_slice(&self.key_version.to_be_bytes());
+        bytes.extend_from_slice(&self.session_id);
+        bytes.extend_from_slice(self.master.as_ref());
+        bytes
+    }
+
+    pub fn restore(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() != 89 || bytes[0] != 1 {
+            return Err(Error::Protocol);
+        }
+        let key_version = u64::from_be_bytes(bytes[17..25].try_into().unwrap());
+        if key_version == 0 {
+            return Err(Error::Protocol);
+        }
+        Ok(Self {
+            device_id: bytes[1..17].try_into().unwrap(),
+            key_version,
+            session_id: bytes[25..57].try_into().unwrap(),
+            master: Zeroizing::new(bytes[57..89].try_into().unwrap()),
+        })
+    }
+
     pub fn session_id(&self) -> Id {
         self.session_id
     }

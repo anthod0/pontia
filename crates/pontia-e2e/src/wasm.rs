@@ -75,6 +75,16 @@ pub struct Session {
 }
 #[wasm_bindgen]
 impl Session {
+    pub fn export(&self) -> Vec<u8> {
+        self.inner.export().to_vec()
+    }
+
+    pub fn restore(bytes: &[u8]) -> std::result::Result<Session, JsValue> {
+        Ok(Self {
+            inner: BrowserSession::restore(bytes)?,
+        })
+    }
+
     pub fn request(
         &self,
         method: &str,

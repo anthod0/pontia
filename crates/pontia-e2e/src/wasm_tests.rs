@@ -189,3 +189,22 @@ fn wasm_request_prefix_cannot_be_emitted_twice() {
     let (mut request, _, _, _, _lease) = request(&session, &mut device);
     assert!(request.first_bytes().is_err());
 }
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn wasm_restored_session_continues_encrypted_communication_without_handshake() {
+    let (session, mut device) = connected();
+    let saved = session.export();
+    drop(session);
+    for _ in 0..2 {
+        let restored = crate::wasm::Session::restore(&saved).unwrap();
+        let (mut request, _, _, mut response, _lease) = request(&restored, &mut device);
+        request.finish_upload().unwrap();
+        let wire = response_bytes(&mut response, b"restored stream");
+        let (status, body, ended) = feed_response(&mut request, &wire);
+        assert_eq!(status, Some(409.0));
+        assert_eq!(body, b"restored stream");
+        assert!(ended);
+    }
+    assert_eq!(device.session_count(), 1);
+    assert!(crate::wasm::Session::restore(&saved[..10]).is_err());
+}

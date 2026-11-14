@@ -17,9 +17,15 @@ const redirectToSignIn = vi.hoisted(() => vi.fn());
 vi.mock("../../src/modes/public/signInRedirect", () => ({ redirectToSignIn }));
 vi.mock("../../src/modes/public/remote-access", async () => ({
   ...(await import("../../src/modes/public/remote-access/remoteAccess")),
+  retainSavedConnections: (
+    ...args: [string | null, { handle: string; deviceId: string; edgeId: string }[]]
+  ) => fixture.remote.retainSavedConnections(...args),
   listPublicDevices: (signal: AbortSignal) => fixture.remote.listPublicDevices(signal),
-  createRemoteConnection: (handle: string, onFailure: (error: unknown) => void) =>
-    fixture.remote.createRemoteConnection(handle, onFailure),
+  createRemoteConnection: (
+    device: { handle: string; deviceId: string; edgeId: string },
+    userId: string,
+    onFailure: (error: unknown) => void,
+  ) => fixture.remote.createRemoteConnection(device, userId, onFailure),
 }));
 
 const workspace = (id: string) => ({
@@ -225,9 +231,12 @@ test("root workspace selector lists only the active device workspaces", async ()
 });
 
 test("a single device hides the sidebar and composer device selectors", async () => {
-  vi.mocked(fixture.remote.listPublicDevices).mockResolvedValue([
-    { handle: "office-mac", name: "Office Mac" },
-  ]);
+  vi.mocked(fixture.remote.listPublicDevices).mockResolvedValue({
+    userId: "user-one",
+    devices: [
+      { handle: "office-mac", deviceId: "office-mac", edgeId: "edge-one", name: "Office Mac" },
+    ],
+  });
   render(MultiDeviceDashboardHarness);
   await screen.findByRole("textbox");
   expect(await sidebar().findByRole("button", { name: "office-mac chat" })).toBeInTheDocument();
@@ -279,7 +288,9 @@ test.each(["handshake", "workspaces"])(
       fixture.request.mockImplementation(async (handle, path, init) => {
         if (handle === "office-mac" && path.endsWith("/workspaces")) {
           await new Promise((_, reject) => {
-            init.signal!.addEventListener("abort", () => reject(init.signal!.reason), { once: true });
+            init.signal!.addEventListener("abort", () => reject(init.signal!.reason), {
+              once: true,
+            });
           });
         }
         return request(handle, path, init);
@@ -438,7 +449,12 @@ test("an account without devices shows setup steps and finds a newly registered 
   expect(await screen.findByRole("heading", { name: "Connect your first device" })).toBeVisible();
   expect(screen.getByText(/pontia" init/)).toBeVisible();
   expect(redirectToSignIn).not.toHaveBeenCalled();
-  fixture.listed.push({ handle: "office-mac", name: "Office Mac" });
+  fixture.listed.push({
+    handle: "office-mac",
+    deviceId: "office-mac",
+    edgeId: "edge-one",
+    name: "Office Mac",
+  });
   await fireEvent.click(screen.getByRole("button", { name: "Check for devices" }));
   await waitFor(() =>
     expect(fixture.connect).toHaveBeenCalledWith("office-mac", expect.anything()),

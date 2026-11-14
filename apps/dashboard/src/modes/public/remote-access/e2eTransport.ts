@@ -1,17 +1,25 @@
 import initWasm, {
   Identity,
   type Request as E2eRequest,
-  type Session,
+  Session,
 } from "../../../e2e-wasm/pontia_e2e";
 import wasmUrl from "../../../e2e-wasm/pontia_e2e_bg.wasm?url";
-import { requestPublicDeviceConnection, type PublicDeviceTarget } from "./remoteAccess";
+import {
+  CloudRequestError,
+  requestPublicDeviceConnection,
+  type PublicDeviceTarget,
+  type PublicDevice,
+} from "./remoteAccess";
+import { connectionCache } from "./sessionCache";
 const CONTENT_TYPE = "application/pontia-e2e";
 let initialized: Promise<unknown> | null = null;
 
 export function createRemoteConnection(
-  handle: string,
+  device: Pick<PublicDevice, "handle" | "deviceId" | "edgeId">,
+  userId: string,
   onConnectionFailure?: (error: unknown) => void,
 ) {
+  const { handle } = device;
   const lifetime = new AbortController();
   let session: Session | null = null;
   let sessionTarget: PublicDeviceTarget | null = null;
@@ -24,6 +32,8 @@ export function createRemoteConnection(
   };
   let establishing: Establishment | null = null;
   let generation = 0;
+  const cache = connectionCache(userId, device);
+  let saved: string | null = null;
 
   function bodyBytes(value: Uint8Array): ArrayBuffer {
     return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
@@ -86,6 +96,21 @@ export function createRemoteConnection(
       initialized ??= initWasm(wasmUrl);
       await initialized;
       checkActive();
+      const cached = cache.read();
+      if (cached) {
+        try {
+          session = Session.restore(decode(cached.session));
+        } catch {
+          cache.remove(cached.serialized);
+        }
+        if (session) {
+          saved = cached.serialized;
+          sessionTarget = cached.target;
+          admissionToken = cached.token;
+          storageScope = JSON.stringify([userId, cached.target.deviceId]);
+          return cached.target;
+        }
+      }
       const identity = new Identity();
       try {
         const connection = await requestPublicDeviceConnection(
@@ -94,7 +119,13 @@ export function createRemoteConnection(
           connectionSignal,
         );
         checkActive();
+        if (connection.userId !== userId) {
+          throw new CloudRequestError("Signed-in user changed", 401);
+        }
         const { target } = connection;
+        if (target.deviceId !== device.deviceId) {
+          throw new CloudRequestError("Device changed during connection", 409);
+        }
         const admission = await fetch(`${target.edgeApiOrigin}/browser-admissions`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -136,6 +167,7 @@ export function createRemoteConnection(
           sessionTarget = target;
           admissionToken = token;
           storageScope = JSON.stringify([connection.userId, target.deviceId]);
+          saved = cache.save(target, token, encode(session.export()));
           return target;
         } finally {
           handshake.free();
@@ -299,23 +331,32 @@ export function createRemoteConnection(
     if (response.status === 401) {
       request.free();
       // A delayed rejection must not invalidate a replacement session/handshake.
-      if (session === active) clearE2eSession();
+      if (session === active) invalidateE2eSession();
       await connectPublicDevice(signal);
       throw new Error("Device connection renewed; the request was not replayed");
     }
     if (response.status === 409 && !reauthorized) {
       request.free();
       // A delayed rejection must not invalidate a replacement session/handshake.
-      if (session === active) clearE2eSession();
+      if (session === active) invalidateE2eSession();
       return e2eFetch(path, init, true);
     }
     if (!response.ok) {
       request.free();
       const error = new Error(`E2E transport failed (${response.status})`);
-      if (session === active) onConnectionFailure?.(error);
+      if (session === active) {
+        // The device's per-session request budget is exhausted with a 429.
+        if (response.status === 409 || response.status === 429) invalidateE2eSession();
+        onConnectionFailure?.(error);
+      }
       throw error;
     }
     return decryptResponse(response, request);
+  }
+
+  function invalidateE2eSession(): void {
+    if (saved !== null) cache.remove(saved);
+    clearE2eSession();
   }
 
   function clearE2eSession(): void {
@@ -329,6 +370,7 @@ export function createRemoteConnection(
     admissionToken = null;
     storageScope = null;
     establishing = null;
+    saved = null;
   }
 
   async function uploadStorageScope(): Promise<string> {

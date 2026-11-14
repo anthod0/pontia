@@ -4,8 +4,13 @@ import type { RemoteAccess } from "../../../src/modes/public/remoteAccessLoader.
 
 export function createRemoteAccessFixture() {
   const listed = [
-    { handle: "office-mac", name: "Office Mac" },
-    { handle: "travel-laptop", name: "Travel Laptop" },
+    { handle: "office-mac", deviceId: "office-mac", edgeId: "edge-one", name: "Office Mac" },
+    {
+      handle: "travel-laptop",
+      deviceId: "travel-laptop",
+      edgeId: "edge-one",
+      name: "Travel Laptop",
+    },
   ];
   const streams = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
   const signals = new Map<string, AbortSignal[]>();
@@ -39,8 +44,12 @@ export function createRemoteAccessFixture() {
   });
   const remote: RemoteAccess = {
     ...cloud,
-    listPublicDevices: vi.fn(async (_signal?: AbortSignal) => [...listed]),
-    createRemoteConnection(handle, onConnectionFailure) {
+    retainSavedConnections: vi.fn(),
+    listPublicDevices: vi.fn(async (_signal?: AbortSignal) => ({
+      userId: "user-one",
+      devices: [...listed],
+    })),
+    createRemoteConnection({ handle }, _userId, onConnectionFailure) {
       const controller = new AbortController();
       signals.set(handle, [...(signals.get(handle) ?? []), controller.signal]);
       connectionFailures.set(handle, (error) => onConnectionFailure?.(error));

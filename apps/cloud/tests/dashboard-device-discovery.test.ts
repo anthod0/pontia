@@ -151,9 +151,17 @@ test("lists only the authenticated user's minimal stateless device records", asy
     event("/api/dashboard/devices", { origin: dashboardOrigin, token }),
   );
   expect(response.status).toBe(200);
-  expect((await response.json()) as unknown).toEqual([
-    { device_handle: "office-mac", name: "Office Mac" },
-  ]);
+  expect((await response.json()) as unknown).toEqual({
+    user_id: ownerId,
+    devices: [
+      {
+        device_handle: "office-mac",
+        device_id: ownerDeviceId,
+        edge_id: "0195e7e1-1b22-7c33-9d44-123456789abc",
+        name: "Office Mac",
+      },
+    ],
+  });
   expectCredentialedCors(response);
 });
 

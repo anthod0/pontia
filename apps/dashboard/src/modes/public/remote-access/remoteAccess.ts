@@ -7,6 +7,8 @@ const EDGE_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.edge\.pontia\.dev$/;
 
 export type PublicDevice = {
   handle: string;
+  deviceId: string;
+  edgeId: string;
   name: string;
 };
 
@@ -43,14 +45,20 @@ function hasOnlyKeys(value: Record<string, unknown>, keys: string[]): boolean {
 }
 
 function parseDevice(value: unknown): PublicDevice {
-  if (!isRecord(value) || !hasOnlyKeys(value, ["device_handle", "name"])) {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["device_handle", "device_id", "edge_id", "name"])) {
     throw new CloudRequestError("Cloud returned an invalid device list.");
   }
   const handle = value.device_handle;
   const name = value.name;
+  const deviceId = value.device_id;
+  const edgeId = value.edge_id;
   if (
     typeof handle !== "string" ||
     !isValidDeviceHandle(handle) ||
+    typeof deviceId !== "string" ||
+    !UUID.test(deviceId) ||
+    typeof edgeId !== "string" ||
+    !UUID.test(edgeId) ||
     typeof name !== "string" ||
     name.length === 0 ||
     name.length > 255 ||
@@ -58,7 +66,7 @@ function parseDevice(value: unknown): PublicDevice {
   ) {
     throw new CloudRequestError("Cloud returned an invalid device list.");
   }
-  return { handle, name };
+  return { handle, deviceId, edgeId, name };
 }
 
 function parseEdgeOrigin(value: unknown): string {
@@ -98,14 +106,41 @@ async function cloudJson(url: string, signal?: AbortSignal): Promise<unknown> {
   }
 }
 
-export async function listPublicDevices(signal?: AbortSignal): Promise<PublicDevice[]> {
+export async function listPublicDevices(signal?: AbortSignal): Promise<{
+  userId: string;
+  devices: PublicDevice[];
+}> {
   const value = await cloudJson(`${CLOUD_ORIGIN}/api/dashboard/devices`, signal);
-  if (!Array.isArray(value)) throw new CloudRequestError("Cloud returned an invalid device list.");
-  const devices = value.map(parseDevice);
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ["user_id", "devices"]) ||
+    typeof value.user_id !== "string" ||
+    !UUID.test(value.user_id) ||
+    !Array.isArray(value.devices)
+  )
+    throw new CloudRequestError("Cloud returned an invalid device list.");
+  const devices = value.devices.map(parseDevice);
   if (new Set(devices.map((device) => device.handle)).size !== devices.length) {
     throw new CloudRequestError("Cloud returned an invalid device list.");
   }
-  return devices;
+  return { userId: value.user_id, devices };
+}
+
+export function parseDeviceTarget(value: unknown): PublicDeviceTarget {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ["handle", "deviceId", "edgeApiOrigin"]) ||
+    typeof value.handle !== "string" ||
+    !isValidDeviceHandle(value.handle) ||
+    typeof value.deviceId !== "string" ||
+    !UUID.test(value.deviceId)
+  )
+    throw new Error("Invalid saved device target");
+  return {
+    handle: value.handle,
+    deviceId: value.deviceId,
+    edgeApiOrigin: parseEdgeOrigin(value.edgeApiOrigin),
+  };
 }
 
 function optionalText(value: unknown): value is string | null {

@@ -48,13 +48,25 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export async function listPublicDevices(signal?: AbortSignal): Promise<PublicDevice[]> {
+export async function listPublicDevices(
+  signal?: AbortSignal,
+): Promise<{ userId: string; devices: PublicDevice[] }> {
   await wait(300, signal);
   const scenario = readScenario();
   if (scenario === "signed-out") throw new CloudRequestError("Cloud request failed.", 401);
   if (scenario === "cloud-error") throw new CloudRequestError("Cloud request failed.", 503);
-  if (scenario === "no-devices") return [];
-  return mockCloudDevices.map(({ handle, name }) => ({ handle, name }));
+  return {
+    userId: "mock-user",
+    devices:
+      scenario === "no-devices"
+        ? []
+        : mockCloudDevices.map(({ handle, name }) => ({
+            handle,
+            deviceId: handle,
+            edgeId: "mock-edge",
+            name,
+          })),
+  };
 }
 
 export async function getCloudProfile(signal?: AbortSignal): Promise<CloudProfile> {
@@ -76,7 +88,8 @@ export async function requestPublicDeviceConnection(): Promise<PublicDeviceConne
 }
 
 export function createRemoteConnection(
-  handle: string,
+  { handle }: Pick<PublicDevice, "handle" | "deviceId" | "edgeId">,
+  _userId: string,
   _onConnectionFailure?: (error: unknown) => void,
 ) {
   const lifetime = new AbortController();
@@ -118,3 +131,5 @@ export function dashboardBootstrapUrl(handle: string): string {
   if (!isValidDeviceHandle(handle)) throw new Error("Invalid device handle.");
   return `${location.origin}/${encodeURIComponent(handle)}`;
 }
+
+export function retainSavedConnections(_userId: string | null, _devices: PublicDevice[]): void {}
