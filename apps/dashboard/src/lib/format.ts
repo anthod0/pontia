@@ -9,4 +9,3 @@ export function shortId(value: string | null | undefined): string {
   if (!value) return "—";
   return value.length > 12 ? `${value.slice(0, 10)}…` : value;
 }
-

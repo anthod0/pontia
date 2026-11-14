@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  clientControlDetails,
-  clientDeliveryPolicy,
-  defaultClientType,
-} from "../src/clients";
+import { clientControlDetails, clientDeliveryPolicy, defaultClientType } from "../src/clients";
 import type { SessionView } from "../src/api/types";
 
 const session = (client_type: string, extra = {}): SessionView =>
