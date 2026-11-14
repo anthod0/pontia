@@ -131,6 +131,20 @@ impl Peer {
                     .await?;
                 state.native = Some(native.into());
             }
+            Some("model") => {
+                if state.native.is_none() || state.closed {
+                    return Err(invalid());
+                }
+                let model = field(event, "model")?;
+                events
+                    .report_client_fact(
+                        &self.session,
+                        Some(&self.runtime),
+                        EventType::SessionModelUpdated,
+                        json!({"model": model}),
+                    )
+                    .await?;
+            }
             Some("permission_requested" | "permission_settled") => {
                 crate::interactions::event(self, &mut state, events, host, event).await?;
             }

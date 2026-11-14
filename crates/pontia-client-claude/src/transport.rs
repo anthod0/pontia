@@ -217,7 +217,7 @@ impl Connection {
         Ok(connection)
     }
 
-    pub async fn request(&self, mut request: Value) -> Result<()> {
+    pub async fn request(&self, mut request: Value) -> Result<Value> {
         // Allocate IDs under the writer lock: the host's high-water mark follows wire order.
         let mut writer = tokio::time::timeout(CONTROL_TIMEOUT, self.writer.lock())
             .await
@@ -243,7 +243,7 @@ impl Connection {
                 .await
                 .map_err(|_| Error::ControlUnknown("Claude Agent receipt lost".into()))?;
             match response["status"].as_str() {
-                Some("accepted") => Ok(()),
+                Some("accepted") => Ok(response),
                 Some("rejected") if response["reason"] == "input_busy" => Err(Error::Conflict {
                     code: "input_busy",
                     message: "Claude Agent input is still active".into(),

@@ -135,6 +135,7 @@ pub(crate) async fn resolve(peer: &Peer, id: &str, option: &str) -> Result<()> {
         connection
             .request(json!({"method":"permission","permission_id":native,"option":option}))
             .await
+            .map(|_| ())
     })
     .await
     .map_err(|_| Error::ControlUnknown("Claude Agent approval observer stopped".into()))?

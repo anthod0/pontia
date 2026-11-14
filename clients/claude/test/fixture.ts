@@ -36,6 +36,12 @@ export function sdk() {
   let interrupts = 0;
   let onInterrupt: (() => Promise<void>) | undefined;
   let onClose: (() => void) | undefined;
+  let onSetModel: (() => Promise<void>) | undefined;
+  let model = "sonnet";
+  const models = [
+    { value: "sonnet", displayName: "Sonnet", description: "Balanced" },
+    { value: "haiku", displayName: "Haiku", description: "Fast" },
+  ];
   const factory: QueryFactory = (args) => {
     calls += 1;
     assert.notEqual(typeof args.prompt, "string");
@@ -43,6 +49,11 @@ export function sdk() {
     options = args.options;
     return {
       [Symbol.asyncIterator]: () => messages[Symbol.asyncIterator](),
+      supportedModels: async () => models,
+      setModel: async (value) => {
+        await onSetModel?.();
+        model = value!;
+      },
       interrupt: async () => {
         interrupts += 1;
         await onInterrupt?.();
@@ -56,6 +67,12 @@ export function sdk() {
   return {
     factory,
     messages,
+    get model() {
+      return model;
+    },
+    onSetModel: (fn: () => Promise<void>) => {
+      onSetModel = fn;
+    },
     get calls() {
       return calls;
     },
@@ -79,7 +96,7 @@ export const first = "11111111-1111-4111-8111-111111111111";
 export const second = "22222222-2222-4222-8222-222222222222";
 export const native = "33333333-3333-4333-8333-333333333333";
 export function init(session_id = native) {
-  return { type: "system", subtype: "init", session_id };
+  return { type: "system", subtype: "init", session_id, model: "sonnet" };
 }
 export function assistant(
   input: string | undefined = first,

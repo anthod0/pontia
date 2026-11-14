@@ -86,6 +86,11 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
   const invoke = async (request: ObjectValue): Promise<ObjectValue> => {
     try {
       switch (request.method) {
+        case "list_models":
+          return { status: "accepted", models: await host.listModels() };
+        case "set_model":
+          await host.setModel(string(request.model));
+          break;
         case "input":
           host.submit(string(request.input_id), string(request.text));
           break;

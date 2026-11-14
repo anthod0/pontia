@@ -2,6 +2,7 @@ import type { SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sd
 
 export type HostEvent =
   | { kind: "ready"; native_session_id: string }
+  | { kind: "model"; model: string }
   | { kind: "started"; input_id: string }
   | { kind: "text"; input_id: string; item_id: string; delta: string }
   | { kind: "tool"; input_id: string; call_id: string; name: string; arguments: unknown }

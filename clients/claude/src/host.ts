@@ -5,7 +5,10 @@ import { FactError, InputFacts, type Emit, type ResultDiagnostic } from "./facts
 
 export type QueryFactory = (
   args: Parameters<typeof query>[0],
-) => Pick<Query, typeof Symbol.asyncIterator | "interrupt" | "close">;
+) => Pick<
+  Query,
+  typeof Symbol.asyncIterator | "interrupt" | "close" | "supportedModels" | "setModel"
+>;
 export class ControlError extends Error {
   constructor(
     readonly code: "rejected" | "unknown" | "unsupported",
@@ -28,6 +31,7 @@ export class Host {
   private closing = false;
   private closed = false;
   private usedInputs = new Set<string>();
+  private changingModel = false;
 
   constructor(
     private readonly options: {
@@ -107,6 +111,31 @@ export class Host {
         this.fail("sdk_start_failed");
         throw new ControlError("unknown", "sdk_start_failed");
       }
+    }
+  }
+
+  async listModels() {
+    if (!this.acceptsControl() || !this.execution || !this.native)
+      throw new ControlError("rejected", "execution_unavailable");
+    return (await this.execution.supportedModels()).map((model) => ({
+      id: model.value,
+      name: model.displayName,
+      description: model.description,
+    }));
+  }
+
+  async setModel(model: string): Promise<void> {
+    if (this.changingModel) throw new ControlError("rejected", "model_change_busy");
+    this.changingModel = true;
+    try {
+      if (!(await this.listModels()).some((entry) => entry.id === model))
+        throw new ControlError("rejected", "model_unavailable");
+      if (!this.acceptsControl()) throw new ControlError("rejected", "execution_unavailable");
+      await this.execution!.setModel(model);
+      if (!this.acceptsControl()) throw new ControlError("unknown", "model_change_unconfirmed");
+      this.emit({ kind: "model", model });
+    } finally {
+      this.changingModel = false;
     }
   }
 
@@ -210,6 +239,7 @@ export class Host {
         this.native = message.session_id;
         this.emit({ kind: "ready", native_session_id: this.native });
       }
+      this.emit({ kind: "model", model: message.model });
       return;
     }
     if (message.type === "system" && message.subtype === "api_retry") {

@@ -90,9 +90,27 @@ if (process.argv[2] === "history") {
         history({ type: "user", uuid: active.id, message: { role: "user", content: active.text } });
         if (!ready) {
           event({ kind: "ready", native_session_id: native });
+          event({ kind: "model", model: "sonnet" });
           ready = true;
         }
         // Receipt is deliberately delivered before execution begins.
+        send({ type: "response", id: request.id, status: "accepted" });
+      } else if (request.method === "list_models") {
+        send({
+          type: "response",
+          id: request.id,
+          status: "accepted",
+          models: [
+            { id: "sonnet", name: "Sonnet", description: "Balanced" },
+            { id: "haiku", name: "Haiku", description: "Fast" },
+          ],
+        });
+      } else if (request.method === "set_model") {
+        if (!["sonnet", "haiku"].includes(request.model)) {
+          send({ type: "response", id: request.id, status: "rejected" });
+          return;
+        }
+        event({ kind: "model", model: request.model });
         send({ type: "response", id: request.id, status: "accepted" });
       } else if (request.method === "permission") {
         if (active?.text === "approval-lost") process.exit(0);

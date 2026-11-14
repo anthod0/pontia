@@ -431,3 +431,78 @@ async fn claude_http_creation_inbox_live_output_interrupt_and_exit_share_applica
         .unwrap()
         .unwrap();
 }
+
+#[tokio::test]
+async fn claude_http_model_selection_tracks_confirmed_changes_in_the_same_session() {
+    let h = Harness::new().await;
+    let (status, created) = call(
+        &h.app,
+        "POST",
+        "/api/v1/sessions",
+        json!({
+            "client_type": "claude-agent", "workspace": h.root.path(),
+            "initial_task": {"input": "model selection"}
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let session = created["data"]["session"]["session_id"].as_str().unwrap();
+    h.gate(session, "start");
+    wait_turn(&h.app, session, "running").await;
+    let models_path = format!("/api/v1/sessions/{session}/models");
+    let model_path = format!("/api/v1/sessions/{session}/model");
+    let (status, listed) = call(&h.app, "GET", &models_path, Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{listed}");
+    assert_eq!(listed["data"]["current_model"], "sonnet");
+    assert_eq!(listed["data"]["models"][1]["id"], "haiku");
+    let runtime = &listed["data"]["runtime_id"];
+    let (status, _) = call(
+        &h.app,
+        "PATCH",
+        &model_path,
+        json!({"model": "haiku", "runtime_id": "stale-runtime"}),
+    )
+    .await;
+    assert!(status.is_client_error());
+    let (status, changed) = call(
+        &h.app,
+        "PATCH",
+        &model_path,
+        json!({"model": "haiku", "runtime_id": runtime}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{changed}");
+    let (_, listed) = call(&h.app, "GET", &models_path, Value::Null).await;
+    assert_eq!(listed["data"]["current_model"], "haiku");
+    let (status, _) = call(
+        &h.app,
+        "PATCH",
+        &model_path,
+        json!({"model": "missing", "runtime_id": runtime}),
+    )
+    .await;
+    assert!(status.is_client_error());
+    let (_, listed) = call(&h.app, "GET", &models_path, Value::Null).await;
+    assert_eq!(listed["data"]["current_model"], "haiku");
+    h.gate(session, "finish");
+    wait_turn(&h.app, session, "completed").await;
+    let (status, changed) = call(
+        &h.app,
+        "PATCH",
+        &model_path,
+        json!({"model": "sonnet", "runtime_id": runtime}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{changed}");
+    let (_, listed) = call(&h.app, "GET", &models_path, Value::Null).await;
+    assert_eq!(listed["data"]["current_model"], "sonnet");
+    h.app
+        .control()
+        .session_commands()
+        .terminate_session(session)
+        .await
+        .unwrap();
+    let (status, _) = call(&h.app, "GET", &models_path, Value::Null).await;
+    assert!(status.is_client_error());
+    h.stop().await;
+}

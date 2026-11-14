@@ -35,6 +35,8 @@ CLAUDE_CONFIG_DIR=/absolute/path/to/claude-config pontia setup claude-agent
 
 In Dashboard, choose a Workspace, create a **Claude Agent** Session, and send your first task. Subsequent tasks wait in the Inbox until the current task has a confirmed result.
 
+Once the Session has initialized, use the model picker in the composer to view available models and switch the model for subsequent responses in the same conversation. The current model updates after the change is confirmed.
+
 Tool requests offer **Allow once** and **Deny once**. Interrupt requests cancellation of the current task; Exit closes the Session's execution. After exiting, you can still browse its history and send another message to resume the same conversation.
 
 Active execution may not continue across a Pontia service restart or update.

@@ -33,7 +33,7 @@ test(
       );
     }
     await writeFile(join(cwd, "input.txt"), "isolated tool result marker\n");
-    const requests: Array<{ messages: unknown }> = [];
+    const requests: Array<{ messages: unknown; model: string }> = [];
     const server = createServer(async (request, response) => {
       try {
         const chunks: Buffer[] = [];
@@ -48,7 +48,7 @@ test(
           response.writeHead(404).end();
           return;
         }
-        requests.push({ messages: body.messages });
+        requests.push({ messages: body.messages, model: body.model });
         const message = {
           id: `message_${requests.length}`,
           type: "message",
@@ -237,7 +237,13 @@ test(
       assert.ok(JSON.stringify(toolResults[0]!.content).includes("isolated tool result marker"));
       const native = host.status().native_session_id;
       assert.ok(native);
+      const models = await host.listModels();
+      assert.ok(models.some((model) => model.id === "haiku"));
+      await host.setModel("haiku");
       await finish(host, randomUUID(), "Second isolated task", "fixture answer", "allow");
+      assert.ok(requests[2]!.model.includes("haiku"));
+      assert.notEqual(requests[2]!.model, requests[0]!.model);
+      assert.equal(host.status().native_session_id, native);
       assert.equal(await readFile(join(cwd, "write-3.txt"), "utf8"), "approved write marker");
       await finish(host, randomUUID(), "Denied isolated task", "fixture answer", "deny");
       await assert.rejects(access(join(cwd, "write-5.txt")));

@@ -81,7 +81,7 @@ test("automatic and subagent messages do not start or complete the next input", 
   await settle();
   assert.deepEqual(
     events.map((e) => e.kind),
-    ["ready"],
+    ["ready", "model"],
   );
   // A notification-started foreground round can subsequently consume the user input.
   fixture.messages.push(assistant(first));
@@ -89,7 +89,7 @@ test("automatic and subagent messages do not start or complete the next input", 
   await settle();
   assert.deepEqual(
     events.map((e) => e.kind),
-    ["ready", "started", "text", "finished"],
+    ["ready", "model", "started", "text", "finished"],
   );
 });
 
@@ -385,3 +385,76 @@ for (const resume of [undefined, native]) {
     assert.equal(fixture.calls, 1);
   });
 }
+
+test("model changes require initialization and preserve the model on rejection", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
+  await assert.rejects(host.listModels(), rejects("execution_unavailable"));
+  await assert.rejects(host.setModel("haiku"), rejects("execution_unavailable"));
+  assert.equal(fixture.calls, 0);
+  host.submit(first, "task");
+  fixture.messages.push(init());
+  await settle();
+  assert.deepEqual(
+    (await host.listModels()).map((model) => model.id),
+    ["sonnet", "haiku"],
+  );
+  await assert.rejects(host.setModel("missing"), rejects("model_unavailable"));
+  fixture.onSetModel(async () => {
+    throw new Error("SDK rejected change");
+  });
+  await assert.rejects(host.setModel("haiku"));
+  assert.equal(fixture.model, "sonnet");
+  assert.deepEqual(
+    events.filter((event) => event.kind === "model"),
+    [{ kind: "model", model: "sonnet" }],
+  );
+  fixture.onSetModel(async () => {});
+  await host.setModel("haiku");
+  assert.equal(fixture.model, "haiku");
+  assert.deepEqual(events.at(-1), { kind: "model", model: "haiku" });
+  assert.equal(host.status().native_session_id, native);
+  host.controlLost();
+  await assert.rejects(host.setModel("sonnet"), rejects("execution_unavailable"));
+  assert.equal(fixture.model, "haiku");
+});
+
+test("concurrent model changes do not overtake an unconfirmed change", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
+  host.submit(first, "task");
+  fixture.messages.push(init());
+  await settle();
+  let confirm!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    confirm = resolve;
+  });
+  fixture.onSetModel(() => pending);
+  const change = host.setModel("haiku");
+  await settle();
+  await assert.rejects(host.setModel("sonnet"), rejects("model_change_busy"));
+  assert.equal(fixture.model, "sonnet");
+  assert.deepEqual(events.at(-1), { kind: "model", model: "sonnet" });
+  confirm();
+  await change;
+  assert.equal(fixture.model, "haiku");
+  assert.deepEqual(events.at(-1), { kind: "model", model: "haiku" });
+});
+
+test("closing during a model change does not publish a model fact after closure", async () => {
+  const { fixture, events, host } = setup();
+  host.submit(first, "task");
+  fixture.messages.push(init());
+  await settle();
+  let confirm!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    confirm = resolve;
+  });
+  fixture.onSetModel(() => pending);
+  const change = host.setModel("haiku");
+  await settle();
+  await host.close();
+  confirm();
+  await assert.rejects(change, rejects("model_change_unconfirmed"));
+  assert.equal(events.at(-1)?.kind, "closed");
+});

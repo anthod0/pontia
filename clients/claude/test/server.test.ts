@@ -456,3 +456,41 @@ test("a non-private socket directory is refused without changing its permissions
   );
   assert.equal((await stat(testRoot)).mode & 0o777, 0o755);
 });
+
+test(
+  "socket model commands publish confirmed changes and reject unavailable models",
+  { timeout: 5000 },
+  async (t) => {
+    const { config, fixture } = await setup(t);
+    const connection = await attach(config);
+    connection.send({
+      host_id: connection.host,
+      id: 1,
+      method: "input",
+      input_id: first,
+      text: "task",
+    });
+    await connection.next((f) => f.type === "response" && f.id === 1);
+    fixture.messages.push(init());
+    await connection.next((f) => f.event?.kind === "model");
+    connection.send({ host_id: connection.host, id: 2, method: "list_models" });
+    const models = await connection.next((f) => f.type === "response" && f.id === 2);
+    assert.equal(models.status, "accepted");
+    assert.deepEqual(
+      models.models.map((m: { id: string }) => m.id),
+      ["sonnet", "haiku"],
+    );
+    connection.send({ host_id: connection.host, id: 3, method: "set_model", model: "haiku" });
+    assert.equal((await connection.next((f) => f.event?.kind === "model")).event.model, "haiku");
+    assert.equal(
+      (await connection.next((f) => f.type === "response" && f.id === 3)).status,
+      "accepted",
+    );
+    connection.send({ host_id: connection.host, id: 4, method: "set_model", model: "missing" });
+    assert.equal(
+      (await connection.next((f) => f.type === "response" && f.id === 4)).status,
+      "rejected",
+    );
+    assert.equal(fixture.model, "haiku");
+  },
+);
