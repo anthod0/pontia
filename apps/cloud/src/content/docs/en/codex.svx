@@ -53,6 +53,7 @@ After=network.target
 
 [Service]
 Type=oneshot
+KillMode=process
 ExecStart="/absolute/path/to/codex" app-server daemon start
 Environment="CODEX_HOME=/home/you/.codex"
 

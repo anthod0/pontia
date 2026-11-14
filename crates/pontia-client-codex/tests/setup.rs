@@ -234,6 +234,7 @@ fn initialization_installs_enables_and_verifies_codex_without_restarting_it() {
     let installs = store.installs.into_inner();
     assert_eq!(installs[0].0, setup.service_path);
     assert!(installs[0].1.contains("Type=oneshot"));
+    assert!(installs[0].1.contains("KillMode=process"));
     assert!(installs[0].1.contains("app-server daemon start"));
     assert!(installs[0].1.contains(&format!(
         "Environment=\"CODEX_HOME={}\"",
@@ -409,7 +410,7 @@ fn renders_codex_oneshot_user_service() {
     .expect("valid paths");
     assert_eq!(
         rendered,
-        "[Unit]\nDescription=Codex App Server Daemon Startup\nAfter=network.target\n\n[Service]\nType=oneshot\nExecStart=\"/home/alice/Codex App/bin/codex\" app-server daemon start\nEnvironment=\"CODEX_HOME=/home/alice/.codex%%dev\"\n\n[Install]\nWantedBy=default.target\n"
+        "[Unit]\nDescription=Codex App Server Daemon Startup\nAfter=network.target\n\n[Service]\nType=oneshot\nKillMode=process\nExecStart=\"/home/alice/Codex App/bin/codex\" app-server daemon start\nEnvironment=\"CODEX_HOME=/home/alice/.codex%%dev\"\n\n[Install]\nWantedBy=default.target\n"
     );
     assert!(!rendered.contains("RemainAfterExit"));
 }

@@ -117,7 +117,7 @@ pub fn render_codex_systemd(codex: &Path, codex_home: &Path) -> Result<String, S
     let codex = absolute_utf8_path(codex, "Codex executable")?;
     let codex_home = absolute_utf8_path(codex_home, "CODEX_HOME")?;
     Ok(format!(
-        "[Unit]\nDescription=Codex App Server Daemon Startup\nAfter=network.target\n\n[Service]\nType=oneshot\nExecStart=\"{}\" app-server daemon start\nEnvironment=\"CODEX_HOME={}\"\n\n[Install]\nWantedBy=default.target\n",
+        "[Unit]\nDescription=Codex App Server Daemon Startup\nAfter=network.target\n\n[Service]\nType=oneshot\nKillMode=process\nExecStart=\"{}\" app-server daemon start\nEnvironment=\"CODEX_HOME={}\"\n\n[Install]\nWantedBy=default.target\n",
         systemd_quote(codex),
         systemd_quote(codex_home),
     ))
