@@ -23,15 +23,22 @@ fi
 
 use_proxy() {
     entry=root
+    explicit_cd=false
     while [ "$#" -gt 0 ]; do
         case $1 in
             --) return 0 ;;
             --remote|--remote=*|--no-daemon|--help|--version|-h|-V) return 1 ;;
-            -c|--config|--enable|--disable|--remote-auth-token-env|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-C|--cd|--add-dir|-a|--ask-for-approval)
+            -C|--cd)
+                [ "$#" -ge 2 ] || return 1
+                explicit_cd=true
+                shift 2
+                continue ;;
+            --cd=*|-C?*) explicit_cd=true ;;
+            -c|--config|--enable|--disable|--remote-auth-token-env|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|--add-dir|-a|--ask-for-approval)
                 [ "$#" -ge 2 ] || return 1
                 shift 2
                 continue ;;
-            --*=*|-c?*|-i?*|-m?*|-p?*|-s?*|-C?*|-a?*) ;;
+            --*=*|-c?*|-i?*|-m?*|-p?*|-s?*|-a?*) ;;
             --oss|--strict-config|--approve-for-me|--dangerously-bypass-approvals-and-sandbox|--dangerously-bypass-hook-trust|--worktree|--search|--no-alt-screen|--last|--all|--include-non-interactive) ;;
             -*) return 1 ;;
             *)
@@ -48,6 +55,9 @@ use_proxy() {
     return 0
 }
 if use_proxy "$@"; then
+    if [ "$explicit_cd" = false ]; then
+        set -- --cd "$PWD" "$@"
+    fi
     exec "$native" --remote __PONTIA_REMOTE__ "$@"
 fi
 exec "$native" "$@"

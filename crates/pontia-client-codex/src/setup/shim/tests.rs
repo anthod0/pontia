@@ -50,8 +50,13 @@ impl Fixture {
     }
 
     fn args(&self, args: &[&str]) -> Vec<String> {
+        self.args_in(&self.home, args)
+    }
+
+    fn args_in(&self, cwd: &Path, args: &[&str]) -> Vec<String> {
         let output = Command::new(self.root.join("bin/codex"))
             .args(args)
+            .current_dir(cwd)
             .env("PATH", &self.vars["PATH"])
             .output()
             .unwrap();
@@ -84,21 +89,18 @@ fn routes_tui_entries_preserving_argument_boundaries_and_explicit_choices() {
         vec!["resume", "--last"],
         vec!["resume", "--last", "--include-non-interactive"],
         vec!["fork", "session id"],
-        vec![
-            "-m",
-            "some model",
-            "-C",
-            "/work space",
-            "prompt ' with $ symbols",
-        ],
+        vec!["-m", "some model", "prompt ' with $ symbols"],
         vec!["-c", "model=\"agents\"", "resume", "--all"],
         vec!["--model=local", "--", "--remote"],
-        vec!["-C/workspace", "agents"],
         vec!["-m", "--remote", "a prompt"],
+        vec!["-m", "--cd", "a prompt"],
+        vec!["--", "--cd=/prompt"],
     ] {
         let mut expected = vec![
             "--remote".to_string(),
             format!("unix://{}/codex-proxy.sock", fixture.root.display()),
+            "--cd".to_string(),
+            fixture.home.display().to_string(),
         ];
         expected.extend(args.iter().map(|arg| arg.to_string()));
         assert_eq!(fixture.args(&args), expected, "{args:?}");
@@ -119,6 +121,45 @@ fn routes_tui_entries_preserving_argument_boundaries_and_explicit_choices() {
         vec!["help", "resume"],
     ] {
         assert_eq!(fixture.args(&args), args, "{args:?}");
+    }
+}
+
+#[test]
+fn proxied_tui_uses_each_invocations_working_directory() {
+    let fixture = Fixture::new("bash");
+    fixture.enable();
+    for cwd in [&fixture.root, &fixture.native] {
+        assert_eq!(
+            fixture.args_in(cwd, &[]),
+            [
+                "--remote".to_string(),
+                format!("unix://{}/codex-proxy.sock", fixture.root.display()),
+                "--cd".to_string(),
+                cwd.display().to_string(),
+            ]
+        );
+    }
+}
+
+#[test]
+fn proxied_tui_preserves_explicit_working_directory_without_duplicate_options() {
+    let fixture = Fixture::new("bash");
+    fixture.enable();
+    for args in [
+        vec!["-m", "some model", "-C", "/work space", "prompt"],
+        vec!["--cd", "../relative workspace"],
+        vec!["--cd=/work space", "agents"],
+        vec!["-C/workspace", "agents"],
+        vec!["-C=/workspace"],
+        vec!["resume", "--last", "--cd", "/workspace"],
+        vec!["fork", "session id", "-C/workspace"],
+    ] {
+        let mut expected = vec![
+            "--remote".to_string(),
+            format!("unix://{}/codex-proxy.sock", fixture.root.display()),
+        ];
+        expected.extend(args.iter().map(|arg| arg.to_string()));
+        assert_eq!(fixture.args(&args), expected, "{args:?}");
     }
 }
 
