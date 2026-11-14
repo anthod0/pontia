@@ -109,7 +109,7 @@ test("does not complete connection until the device confirms the handshake", asy
   expect(fetchMock.mock.calls[0][0]).toBe(
     `https://pontia.dev/api/dashboard/devices/${handle}/connect`,
   );
-  expect(fetchMock.mock.calls[2][0]).toBe(`${edge}/devices/${deviceId}/e2e/v1/sessions`);
+  expect(fetchMock.mock.calls[2][0]).toBe(`${edge}/e2e/v1/sessions`);
   resolveHandshake(new Response(new Uint8Array([4])));
   await expect(connecting).resolves.toEqual({ handle, deviceId, edgeApiOrigin: edge });
   expect(mocks.confirm).toHaveBeenCalledWith(new Uint8Array([4]));
@@ -194,12 +194,12 @@ test.each([409])(
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       `https://pontia.dev/api/dashboard/devices/${handle}/connect`,
       `${edge}/browser-admissions`,
-      `${edge}/devices/${deviceId}/e2e/v1/sessions`,
-      `${edge}/devices/${deviceId}/e2e/v1/requests`,
+      `${edge}/e2e/v1/sessions`,
+      `${edge}/e2e/v1/requests`,
       `https://pontia.dev/api/dashboard/devices/${handle}/connect`,
       `${edge}/browser-admissions`,
-      `${edge}/devices/${deviceId}/e2e/v1/sessions`,
-      `${edge}/devices/${deviceId}/e2e/v1/requests`,
+      `${edge}/e2e/v1/sessions`,
+      `${edge}/e2e/v1/requests`,
     ]);
   },
 );
@@ -295,19 +295,30 @@ test("devices on the same edge keep independent encrypted sessions and reauthori
     deviceId,
   );
   let rejectFirstDevice = false;
-  const fetchMock = vi.fn(async (url: string) => {
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.includes("/connect")) {
       if (url.includes(otherHandle)) {
         const body = await cloudResponse().json();
         return new Response(
-          JSON.stringify({ ...body, device_handle: otherHandle, device_id: otherId }),
+          JSON.stringify({
+            ...body,
+            device_handle: otherHandle,
+            device_id: otherId,
+            admission_ticket: "other-ticket",
+          }),
         );
       }
       return cloudResponse();
     }
-    if (url.endsWith("/browser-admissions")) return admissionResponse(url);
+    if (url.endsWith("/browser-admissions")) {
+      const { ticket } = JSON.parse(init?.body as string);
+      return admissionResponse(ticket === "other-ticket" ? "other-token" : "first-token");
+    }
     if (url.endsWith("/sessions")) return new Response("confirmation");
-    if (rejectFirstDevice && url.includes(deviceId)) {
+    if (
+      rejectFirstDevice &&
+      new Headers(init?.headers).get("Authorization") === "Bearer first-token"
+    ) {
       rejectFirstDevice = false;
       return new Response(null, { status: 401 });
     }
@@ -323,11 +334,10 @@ test("devices on the same edge keep independent encrypted sessions and reauthori
     ]);
     const urls = fetchMock.mock.calls.map(([url]) => url);
     expect(
-      urls.filter((url) => url === `${edge}/devices/${deviceId}/e2e/v1/requests`),
-    ).toHaveLength(1);
-    expect(urls.filter((url) => url === `${edge}/devices/${otherId}/e2e/v1/requests`)).toHaveLength(
-      1,
-    );
+      fetchMock.mock.calls
+        .filter(([url]) => url === `${edge}/e2e/v1/requests`)
+        .map(([, init]) => new Headers(init?.headers).get("Authorization")),
+    ).toEqual(["Bearer first-token", "Bearer other-token"]);
     expect(urls.filter((url) => url.endsWith(`/${handle}/connect`))).toHaveLength(2);
     expect(urls.filter((url) => url.endsWith(`/${otherHandle}/connect`))).toHaveLength(1);
     remote.dispose();
@@ -429,7 +439,7 @@ test("failed ticket exchange starts again with central authorization", async () 
     `${edge}/browser-admissions`,
     `https://pontia.dev/api/dashboard/devices/${handle}/connect`,
     `${edge}/browser-admissions`,
-    `${edge}/devices/${deviceId}/e2e/v1/sessions`,
+    `${edge}/e2e/v1/sessions`,
   ]);
   expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ ticket: "admission-ticket" });
 });
@@ -447,7 +457,7 @@ test("refresh restores the saved admission and session without another handshake
   remote = createRemoteConnection({ handle, deviceId, edgeId: deviceId }, deviceId);
   expect(await (await remote.e2eFetch("/api/v1/workspaces")).text()).toBe("ok");
   expect(fetchMock).toHaveBeenCalledTimes(4);
-  expect(fetchMock.mock.calls[3][0]).toBe(`${edge}/devices/${deviceId}/e2e/v1/requests`);
+  expect(fetchMock.mock.calls[3][0]).toBe(`${edge}/e2e/v1/requests`);
   expect(fetchMock.mock.calls[3][1].headers.Authorization).toBe("Bearer first-token");
   expect(mocks.restore).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]));
 });
@@ -690,7 +700,7 @@ test("a reassigned handle cannot restore the previous device's credentials", asy
   vi.stubGlobal("fetch", fetchMock);
   await expect(remote.connect()).resolves.toMatchObject({ deviceId: replacementId });
   expect(mocks.restore).not.toHaveBeenCalled();
-  expect(fetchMock.mock.calls[2][0]).toBe(`${edge}/devices/${replacementId}/e2e/v1/sessions`);
+  expect(fetchMock.mock.calls[2][0]).toBe(`${edge}/e2e/v1/sessions`);
 });
 
 test("a late rejection of an already retried request leaves a newer session online", async () => {
@@ -747,5 +757,5 @@ test("changing edge binding discards credentials routed to the previous edge", a
   remote = createRemoteConnection(device, deviceId);
   await expect(remote.connect()).resolves.toMatchObject({ edgeApiOrigin: newEdge });
   expect(mocks.restore).not.toHaveBeenCalled();
-  expect(fetchMock.mock.calls[2][0]).toBe(`${newEdge}/devices/${deviceId}/e2e/v1/sessions`);
+  expect(fetchMock.mock.calls[2][0]).toBe(`${newEdge}/e2e/v1/sessions`);
 });

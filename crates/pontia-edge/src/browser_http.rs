@@ -1,7 +1,7 @@
 use axum::{
     Json,
     body::Body,
-    extract::{OriginalUri, Path, State},
+    extract::{OriginalUri, State},
     http::{HeaderMap, HeaderValue, Method, Request, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -11,8 +11,8 @@ use serde::Deserialize;
 
 use crate::{Edge, tickets::RedeemError};
 
-pub const SESSIONS_PATH: &str = "/devices/{device_id}/e2e/v1/sessions";
-pub const REQUESTS_PATH: &str = "/devices/{device_id}/e2e/v1/requests";
+pub const SESSIONS_PATH: &str = "/e2e/v1/sessions";
+pub const REQUESTS_PATH: &str = "/e2e/v1/requests";
 const CONTENT_TYPE: &str = "application/pontia-e2e";
 
 #[derive(Clone, Debug)]
@@ -94,7 +94,6 @@ pub(crate) async fn preflight(headers: HeaderMap) -> Response {
 
 pub(crate) async fn relay(
     State(edge): State<Edge>,
-    Path(device_id): Path<String>,
     OriginalUri(uri): OriginalUri,
     request: Request<Body>,
 ) -> Response {
@@ -109,31 +108,17 @@ pub(crate) async fn relay(
     {
         return StatusCode::BAD_REQUEST.into_response();
     }
-    let Ok(parsed_device_id) = uuid::Uuid::parse_str(&device_id) else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    if parsed_device_id.get_version_num() != 7 || parsed_device_id.to_string() != device_id {
-        return StatusCode::NOT_FOUND.into_response();
-    }
-    let device_id = parsed_device_id;
-    if !admission_token(request.headers())
-        .is_some_and(|token| edge.admissions.authenticate(token, device_id))
-    {
+    let Some(device_id) =
+        admission_token(request.headers()).and_then(|token| edge.admissions.authenticate(token))
+    else {
         return error(StatusCode::UNAUTHORIZED, "invalid_admission_token");
-    }
-    let internal_path = if uri.path().ends_with("/sessions") {
-        "/e2e/v1/sessions"
-    } else if uri.path().ends_with("/requests") {
-        "/e2e/v1/requests"
-    } else {
-        return StatusCode::NOT_FOUND.into_response();
     };
     let Some(connection) = edge.online.connection(device_id) else {
         return tunnel_error(TunnelError::Unavailable);
     };
     let mut forwarded = Request::new(request.into_body());
     *forwarded.method_mut() = Method::POST;
-    *forwarded.uri_mut() = format!("https://pontia-device{internal_path}")
+    *forwarded.uri_mut() = format!("https://pontia-device{}", uri.path())
         .parse()
         .unwrap();
     forwarded

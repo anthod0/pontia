@@ -25,23 +25,23 @@ mod tests {
         let device = Uuid::now_v7();
         let token = admissions.issue(device).unwrap();
         tokio::time::advance(Duration::from_secs(2 * 60 * 60)).await;
-        assert!(admissions.authenticate(&token, device));
+        assert_eq!(admissions.authenticate(&token), Some(device));
         tokio::time::advance(Duration::from_secs(2 * 60 * 60)).await;
-        assert!(admissions.authenticate(&token, device));
+        assert_eq!(admissions.authenticate(&token), Some(device));
         tokio::time::advance(LIFETIME).await;
-        assert!(!admissions.authenticate(&token, device));
-        assert!(!admissions.authenticate(&token, device));
+        assert_eq!(admissions.authenticate(&token), None);
+        assert_eq!(admissions.authenticate(&token), None);
     }
 
     #[tokio::test(start_paused = true)]
-    async fn wrong_device_does_not_extend_expiry() {
+    async fn unknown_token_does_not_extend_existing_admissions() {
         let admissions = Admissions::default();
         let device = Uuid::now_v7();
         let token = admissions.issue(device).unwrap();
         tokio::time::advance(Duration::from_secs(2 * 60 * 60)).await;
-        assert!(!admissions.authenticate(&token, Uuid::now_v7()));
+        assert_eq!(admissions.authenticate("unknown"), None);
         tokio::time::advance(Duration::from_secs(60 * 60)).await;
-        assert!(!admissions.authenticate(&token, device));
+        assert_eq!(admissions.authenticate(&token), None);
     }
 
     #[tokio::test(start_paused = true)]
@@ -51,14 +51,14 @@ mod tests {
         let first = admissions.issue(device).unwrap();
         let second = admissions.issue(device).unwrap();
         assert_ne!(first, second);
-        assert!(admissions.authenticate(&first, device));
-        assert!(admissions.authenticate(&second, device));
-        assert!(!Admissions::default().authenticate(&first, device));
+        assert_eq!(admissions.authenticate(&first), Some(device));
+        assert_eq!(admissions.authenticate(&second), Some(device));
+        assert_eq!(Admissions::default().authenticate(&first), None);
         tokio::task::yield_now().await;
         tokio::time::advance(LIFETIME).await;
         tokio::task::yield_now().await;
-        assert!(!admissions.authenticate(&first, device));
-        assert!(!admissions.authenticate(&second, device));
+        assert_eq!(admissions.authenticate(&first), None);
+        assert_eq!(admissions.authenticate(&second), None);
     }
 }
 
@@ -101,20 +101,15 @@ impl Admissions {
         Ok(token)
     }
 
-    pub(crate) fn authenticate(&self, token: &str, device_id: Uuid) -> bool {
+    pub(crate) fn authenticate(&self, token: &str) -> Option<Uuid> {
         let mut records = self.0.lock().unwrap();
-        let Some(admission) = records.get_mut(token) else {
-            return false;
-        };
+        let admission = records.get_mut(token)?;
         let now = Instant::now();
         if admission.expires_at <= now {
             records.remove(token);
-            return false;
-        }
-        if admission.device_id != device_id {
-            return false;
+            return None;
         }
         admission.expires_at = now + LIFETIME;
-        true
+        Some(admission.device_id)
     }
 }

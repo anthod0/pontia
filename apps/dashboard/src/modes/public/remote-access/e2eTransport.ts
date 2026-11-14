@@ -151,15 +151,12 @@ export function createRemoteConnection(
           decode(connection.capability),
         );
         try {
-          const confirmation = await fetch(
-            `${target.edgeApiOrigin}/devices/${target.deviceId}/e2e/v1/sessions`,
-            {
-              method: "POST",
-              headers: { "Content-Type": CONTENT_TYPE, Authorization: `Bearer ${token}` },
-              body: bodyBytes(handshake.bytes()),
-              signal: connectionSignal,
-            },
-          );
+          const confirmation = await fetch(`${target.edgeApiOrigin}/e2e/v1/sessions`, {
+            method: "POST",
+            headers: { "Content-Type": CONTENT_TYPE, Authorization: `Bearer ${token}` },
+            body: bodyBytes(handshake.bytes()),
+            signal: connectionSignal,
+          });
           if (!confirmation.ok) throw new Error(`E2E handshake failed (${confirmation.status})`);
           const bytes = new Uint8Array(await confirmation.arrayBuffer());
           checkActive();
@@ -317,7 +314,7 @@ export function createRemoteConnection(
     try {
       const body = bodyBytes(await encryptedBody(request, init.body));
       requestSignal.throwIfAborted();
-      response = await fetch(`${target.edgeApiOrigin}/devices/${target.deviceId}/e2e/v1/requests`, {
+      response = await fetch(`${target.edgeApiOrigin}/e2e/v1/requests`, {
         method: "POST",
         headers: { "Content-Type": CONTENT_TYPE, Authorization: `Bearer ${token}` },
         body,

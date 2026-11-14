@@ -36,10 +36,7 @@ async fn edge_relays_only_fixed_ciphertext_transports() {
     let token = server.admit(device_id).await;
     let response = server
         .http
-        .post(format!(
-            "{}/devices/{device_id}/e2e/v1/requests",
-            server.edge_origin
-        ))
+        .post(format!("{}/e2e/v1/requests", server.edge_origin))
         .header(header::ORIGIN, ORIGIN)
         .header(header::CONTENT_TYPE, "application/pontia-e2e")
         .bearer_auth(&token)
@@ -69,13 +66,9 @@ async fn edge_relays_only_fixed_ciphertext_transports() {
 #[tokio::test]
 async fn edge_rejects_cross_origin_ciphertext_before_device_forwarding() {
     let server = TestEdge::start().await;
-    let device_id = Uuid::now_v7();
     let response = server
         .http
-        .post(format!(
-            "{}/devices/{device_id}/e2e/v1/sessions",
-            server.edge_origin
-        ))
+        .post(format!("{}/e2e/v1/sessions", server.edge_origin))
         .header(header::ORIGIN, "https://attacker.example")
         .header(header::CONTENT_TYPE, "application/pontia-e2e")
         .body("ciphertext")
@@ -105,15 +98,13 @@ async fn both_e2e_routes_reject_invalid_tokens_before_forwarding() {
             }
         })
         .await;
-    let wrong_device = server.admit(Uuid::now_v7()).await;
     let token = server.admit(device_id).await;
     for route in ["sessions", "requests"] {
-        let url = format!("{}/devices/{device_id}/e2e/v1/{route}", server.edge_origin);
+        let url = format!("{}/e2e/v1/{route}", server.edge_origin);
         for authorization in [
             None,
             Some("Bearer unknown".to_owned()),
             Some(format!("Basic {token}")),
-            Some(format!("Bearer {wrong_device}")),
             Some(format!("Bearer {token} extra")),
         ] {
             let mut request = server
@@ -152,6 +143,57 @@ async fn both_e2e_routes_reject_invalid_tokens_before_forwarding() {
         assert_eq!(response.status(), StatusCode::OK);
     }
     assert_eq!(received.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn admission_tokens_route_both_transports_to_their_bound_devices() {
+    let server = TestEdge::start().await;
+    let mut devices = Vec::new();
+    let mut tokens = Vec::new();
+    for marker in ["first-device", "second-device"] {
+        let device_id = Uuid::now_v7();
+        devices.push(
+            server
+                .device(device_id, move |request: Request<Body>| async move {
+                    assert!(!request.headers().contains_key(header::AUTHORIZATION));
+                    Response::new(Body::from(format!("{marker}:{}", request.uri().path())))
+                })
+                .await,
+        );
+        tokens.push((server.admit(device_id).await, marker));
+    }
+    for route in ["sessions", "requests"] {
+        let url = format!("{}/e2e/v1/{route}", server.edge_origin);
+        for (token, marker) in &tokens {
+            let response = server
+                .http
+                .post(&url)
+                .header(header::ORIGIN, ORIGIN)
+                .header(header::CONTENT_TYPE, "application/pontia-e2e")
+                .bearer_auth(token)
+                .body("ciphertext")
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(
+                response.text().await.unwrap(),
+                format!("{marker}:/e2e/v1/{route}")
+            );
+        }
+        let offline_token = server.admit(Uuid::now_v7()).await;
+        let response = server
+            .http
+            .post(&url)
+            .header(header::ORIGIN, ORIGIN)
+            .header(header::CONTENT_TYPE, "application/pontia-e2e")
+            .bearer_auth(offline_token)
+            .body("ciphertext")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
 }
 
 #[tokio::test]
@@ -233,8 +275,8 @@ async fn browser_routes_support_authenticated_cors_and_strict_admission_json() {
     let server = TestEdge::start().await;
     for path in [
         "/browser-admissions".to_owned(),
-        format!("/devices/{}/e2e/v1/sessions", Uuid::now_v7()),
-        format!("/devices/{}/e2e/v1/requests", Uuid::now_v7()),
+        "/e2e/v1/sessions".to_owned(),
+        "/e2e/v1/requests".to_owned(),
     ] {
         let response = server
             .http
