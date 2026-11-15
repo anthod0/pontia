@@ -966,5 +966,32 @@ export function createPontiaPiExtension(
 }
 
 export default function pontiaPiExtension(pi: ExtensionAPI): void {
-  createPontiaPiExtension(pi);
+  const key = Symbol.for("pontia.pi.extension");
+  const registry = globalThis as typeof globalThis & { [key]?: symbol };
+  if (registry[key]) {
+    const home = pontiaHomeFromEnv();
+    if (home) {
+      void appendDiagnostic(defaultHookLogFile(home), {
+        level: "warn",
+        code: "duplicate_extension",
+        message: "Pontia Pi extension is already loaded in this process; skipping duplicate",
+      });
+    }
+    return;
+  }
+
+  const owner = Symbol();
+  registry[key] = owner;
+  const release = () => {
+    if (registry[key] === owner) delete registry[key];
+  };
+  try {
+    createPontiaPiExtension(pi);
+    pi.on("session_shutdown", (event) => {
+      if (event.reason === "reload" || event.reason === "quit") release();
+    });
+  } catch (error) {
+    release();
+    throw error;
+  }
 }
