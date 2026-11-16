@@ -18,7 +18,6 @@ impl RuntimeBindingUpsertService {
     pub(super) async fn confirm_binding(
         &self,
         session_id: &str,
-        _runtime_kind: &str,
         request: &RuntimeBindingUpsertRequest,
         workspace: &WorkspaceRecord,
         client_spec: &AgentClientSpec,

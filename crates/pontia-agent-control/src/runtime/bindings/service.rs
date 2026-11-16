@@ -53,7 +53,7 @@ impl RuntimeBindingUpsertService {
         let client_spec = self.clients.spec(&request.client_type).ok_or_else(|| {
             Error::Domain(format!("unsupported client_type: {}", request.client_type))
         })?;
-        let runtime_kind = client_spec.runtime_binding_kind().ok_or_else(|| {
+        client_spec.runtime_binding_kind().ok_or_else(|| {
             Error::Domain(format!(
                 "runtime binding upsert does not support client_type {}",
                 request.client_type
@@ -109,7 +109,6 @@ impl RuntimeBindingUpsertService {
 
         self.confirm_binding(
             &session_id,
-            runtime_kind,
             &request,
             &workspace,
             client_spec,

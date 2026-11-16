@@ -197,12 +197,12 @@ pub(super) fn validate_tool_call(
     arguments: &Value,
     managed_tool_use: Option<&ManagedToolUse>,
 ) -> Result<usize> {
-    if let Some(managed_tool_use) = managed_tool_use {
-        if managed_tool_use.tool_name != tool_name {
-            return Err(Error::Domain(
-                "managed tool use must match tool_name".into(),
-            ));
-        }
+    if let Some(managed_tool_use) = managed_tool_use
+        && managed_tool_use.tool_name != tool_name
+    {
+        return Err(Error::Domain(
+            "managed tool use must match tool_name".into(),
+        ));
     }
     let size = serde_json::to_vec(&(arguments, managed_tool_use))?.len();
     if size > MAX_TOOL_CALL_BYTES {
