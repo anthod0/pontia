@@ -19,9 +19,13 @@
 	{max}
 	{...restProps}
 >
-	<div
-		data-slot="progress-indicator"
-		class={cn("bg-primary h-full transition-all", value === null ? "w-1/3 animate-pulse" : "w-full flex-1")}
-		style:transform={value === null ? undefined : `translateX(-${100 - (100 * (value ?? 0)) / (max ?? 1)}%)`}
-	></div>
+	{#if value === null}
+		<div data-slot="progress-indicator" class="bg-primary h-full w-1/3 animate-pulse"></div>
+	{:else}
+		<div
+			data-slot="progress-indicator"
+			class="bg-primary h-full w-full flex-1 transition-transform"
+			style:transform={`translateX(-${100 - (100 * (value ?? 0)) / (max ?? 1)}%)`}
+		></div>
+	{/if}
 </ProgressPrimitive.Root>
