@@ -66,7 +66,7 @@ sudo pontia-edge auto-update enable
 sudo pontia-edge auto-update disable
 ```
 
-O timer verifica a cada hora, com até dez minutos de atraso aleatório. Desativá-lo interrompe as verificações futuras; uma atualização já em execução continua até o fim.
+O timer verifica a cada dez minutos, com até dez minutos de atraso aleatório. Desativá-lo interrompe as verificações futuras; uma atualização já em execução continua até o fim.
 
 ## Antes e depois de atualizar
 

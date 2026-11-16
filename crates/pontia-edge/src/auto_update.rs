@@ -10,7 +10,7 @@ use pontia_edge::{
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Install and enable hourly stable-release updates.
+    /// Install and enable stable-release checks every 10 minutes.
     Enable,
     /// Disable future checks without interrupting an update in progress.
     Disable,
@@ -28,7 +28,7 @@ pub async fn run(command: Command) -> Result<()> {
                 .enable_auto_update(Path::new(UNIT_DIRECTORY))
                 .await?;
             println!(
-                "Automatic updates enabled: stable releases are checked hourly with up to 10 minutes of random delay."
+                "Automatic updates enabled: stable releases are checked every 10 minutes with up to 10 minutes of random delay."
             );
         }
         Command::Disable => {

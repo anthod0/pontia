@@ -83,7 +83,7 @@ sudo pontia-edge auto-update enable
 sudo pontia-edge auto-update disable
 ```
 
-Automatic updates check hourly with up to ten minutes of random delay. An update already in progress continues when future checks are disabled.
+Automatic updates check every 10 minutes with up to ten minutes of random delay. An update already in progress continues when future checks are disabled.
 
 ## Stored files
 

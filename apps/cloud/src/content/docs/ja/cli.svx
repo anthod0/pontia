@@ -123,7 +123,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 | `pontia-edge init --edge-id ID --ticket TICKET` | Edge を初期化して登録します。通常は Cloud が生成したコマンド全体を使います |
 | `pontia-edge retry` | 同じサーバーで未完了の初期化を再開します |
 | `pontia-edge update` | 署名済みの最新安定版 Edge をインストールします |
-| `pontia-edge auto-update enable` | 1 時間ごとの更新チェックをインストールして有効にします |
+| `pontia-edge auto-update enable` | 10 分ごとの更新チェックをインストールして有効にします |
 | `pontia-edge auto-update disable` | 今後のチェックを無効にします |
 | `pontia-edge auto-update status` | タイマーのスケジュールと最後の更新結果を表示します |
 

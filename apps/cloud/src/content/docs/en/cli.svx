@@ -123,7 +123,7 @@ A self-hosted Edge has a separate root-operated CLI:
 | `pontia-edge init --edge-id ID --ticket TICKET` | Initialize and register an Edge; normally use the full Cloud-generated command |
 | `pontia-edge retry` | Resume incomplete initialization on the same server |
 | `pontia-edge update` | Install the latest signed stable Edge release |
-| `pontia-edge auto-update enable` | Install and enable hourly update checks |
+| `pontia-edge auto-update enable` | Install and enable update checks every 10 minutes |
 | `pontia-edge auto-update disable` | Disable future checks |
 | `pontia-edge auto-update status` | Show timer schedule and the last update result |
 

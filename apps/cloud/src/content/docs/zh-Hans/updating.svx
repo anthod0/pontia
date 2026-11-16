@@ -66,7 +66,7 @@ sudo pontia-edge auto-update enable
 sudo pontia-edge auto-update disable
 ```
 
-定时器每小时检查一次，附带最多十分钟的随机延迟。禁用后将停止后续检查；已在运行的更新会继续完成。
+定时器每十分钟检查一次，附带最多十分钟的随机延迟。禁用后将停止后续检查；已在运行的更新会继续完成。
 
 ## 更新前后
 

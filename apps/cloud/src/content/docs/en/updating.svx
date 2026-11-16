@@ -66,7 +66,7 @@ sudo pontia-edge auto-update enable
 sudo pontia-edge auto-update disable
 ```
 
-The timer checks hourly with up to ten minutes of random delay. Disabling it stops future checks; an update already running continues to completion.
+The timer checks every 10 minutes with up to ten minutes of random delay. Disabling it stops future checks; an update already running continues to completion.
 
 ## Before and after updating
 

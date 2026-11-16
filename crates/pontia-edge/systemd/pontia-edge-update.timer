@@ -1,8 +1,8 @@
 [Unit]
-Description=Check for Pontia Edge updates hourly
+Description=Check for Pontia Edge updates every 10 minutes
 
 [Timer]
-OnCalendar=hourly
+OnCalendar=*-*-* *:0/10:00
 RandomizedDelaySec=10m
 Persistent=true
 

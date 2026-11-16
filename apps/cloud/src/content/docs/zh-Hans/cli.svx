@@ -123,7 +123,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 | `pontia-edge init --edge-id ID --ticket TICKET` | 初始化并注册 Edge；通常使用 Cloud 生成的完整命令 |
 | `pontia-edge retry` | 在同一台服务器上继续未完成的初始化 |
 | `pontia-edge update` | 安装最新的已签名稳定版 Edge |
-| `pontia-edge auto-update enable` | 安装并启用每小时一次的更新检查 |
+| `pontia-edge auto-update enable` | 安装并启用每十分钟一次的更新检查 |
 | `pontia-edge auto-update disable` | 停用后续检查 |
 | `pontia-edge auto-update status` | 显示定时器计划和上一次更新结果 |
 

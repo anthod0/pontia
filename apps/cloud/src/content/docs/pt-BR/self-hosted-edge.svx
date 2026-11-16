@@ -83,7 +83,7 @@ sudo pontia-edge auto-update enable
 sudo pontia-edge auto-update disable
 ```
 
-As atualizações automáticas são verificadas a cada hora, com até dez minutos de atraso aleatório. Uma atualização já em andamento continua mesmo quando as verificações futuras são desativadas.
+As atualizações automáticas são verificadas a cada dez minutos, com até dez minutos de atraso aleatório. Uma atualização já em andamento continua mesmo quando as verificações futuras são desativadas.
 
 ## Arquivos armazenados
 

@@ -367,7 +367,7 @@ mod tests {
         let timer = std::fs::read_to_string(root.path().join(UPDATE_TIMER)).unwrap();
         assert!(service.contains("ExecStart=/usr/local/bin/pontia-edge update --automatic"));
         assert!(service.contains("ReadWritePaths=/usr/local/bin"));
-        assert!(timer.contains("OnCalendar=hourly"));
+        assert!(timer.contains("OnCalendar=*-*-* *:0/10:00"));
         assert!(timer.contains("RandomizedDelaySec=10m"));
         assert!(timer.contains("Persistent=true"));
         systemd.disable_auto_update().await.unwrap();
