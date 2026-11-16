@@ -144,6 +144,10 @@ async fn replacement_and_exit_fence_connections_without_synthesizing_facts() {
 async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_input() {
     let (state, root) = state().await;
     bind(&state, "sess_input", "rt_input").await;
+    sqlx::query("UPDATE sessions SET state='starting' WHERE session_id='sess_input'")
+        .execute(&state.db())
+        .await
+        .unwrap();
     let listener = PiIpcListener::bind(root.path()).await.unwrap();
     let task = tokio::spawn(listener.run(
         state.control().clone(),

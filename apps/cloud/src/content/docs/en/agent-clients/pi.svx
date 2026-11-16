@@ -5,14 +5,14 @@
 
 # Pi Agent Client
 
-The Pi integration connects real, `tmux`-backed Pi sessions to Pontia. You can use the native TUI and the Dashboard with the same underlying conversation.
+The Pi integration connects native Pi TUI sessions to Pontia. You can use the native TUI and the Dashboard with the same underlying conversation.
 
 ## Requirements
 
 Install these commands before running Pontia initialization:
 
 - `pi`
-- `tmux`
+- `tmux` for Sessions launched or resumed by Pontia
 
 Confirm that they are available to your user:
 
@@ -43,7 +43,9 @@ The plugin reports native Pi lifecycle and conversation facts to `pontiad` and a
 
 ## How Pi Sessions run
 
-Pontia launches Pi inside a managed `tmux` pane in the selected Workspace. Run Workflow commands such as `pontia workflow submit` in the managed pane for the current Workflow Agent Node.
+You can start `pi` directly in a terminal in an active registered Workspace. Pontia creates the Session when your first message starts running; this path does not require `tmux`. Keep the Pi TUI running to continue controlling it from the Dashboard.
+
+When you create or resume a Session through Pontia, it launches Pi in `tmux` in the selected Workspace. Run Workflow commands such as `pontia workflow submit` from the Pi Session for the current Workflow Agent Node.
 
 Conversation history is read from Pi's native data. Keep that data available to browse and resume conversations through Pontia.
 

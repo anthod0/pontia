@@ -1,4 +1,3 @@
-import type { EnvLike } from "./context.js";
 import { CONTROL_VERSION, type PiConnection } from "./control-socket.js";
 import { asRecord, optionalString } from "./values.js";
 import type { SessionContext } from "./session.js";
@@ -30,22 +29,12 @@ export function piSessionDetailsFromHookContext(ctx: unknown): PiSessionDetails 
   };
 }
 
-function tmuxBindingFromEnv(env: EnvLike): { socket_path: string; pane_id: string } | undefined {
-  const tmux = optionalString(env.TMUX);
-  const paneId = optionalString(env.TMUX_PANE);
-  const socketPath = optionalString(tmux?.split(",", 1)[0]);
-  if (!socketPath || !paneId) return undefined;
-  return { socket_path: socketPath, pane_id: paneId };
-}
-
 export async function bindSession(
   connection: PiConnection,
-  env: EnvLike,
   sessionDetails: PiSessionDetails,
   options: { startKind?: "fork"; parentSessionId?: string; runtimeId?: string } = {},
 ): Promise<SessionContext | undefined> {
   if (!sessionDetails.clientSessionKey) return undefined;
-  const tmux = tmuxBindingFromEnv(env);
   const body = await connection.request("runtime.register", {
     version: CONTROL_VERSION,
     binding: {
@@ -58,7 +47,6 @@ export async function bindSession(
       ...(options.startKind ? { start_kind: options.startKind } : {}),
       ...(options.parentSessionId ? { parent_session_id: options.parentSessionId } : {}),
       ...(options.runtimeId ? { runtime_id: options.runtimeId } : {}),
-      ...(tmux ? { tmux } : {}),
     },
   });
 

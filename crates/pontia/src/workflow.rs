@@ -2,7 +2,6 @@ use std::{
     env, fs,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
-    process::Command,
 };
 
 use clap::{Args, Subcommand};
@@ -458,7 +457,7 @@ fn resolve_existing_path(base: &Path, path: &Path, description: &str) -> Result<
 }
 
 async fn submit_workflow(config: &AppConfig) -> Result<(), String> {
-    let (session_id, runtime_id) = current_managed_pane_identity()?;
+    let (session_id, runtime_id) = current_session_identity()?;
     let token = config
         .external_api_token
         .as_deref()
@@ -488,7 +487,7 @@ async fn submit_workflow(config: &AppConfig) -> Result<(), String> {
 }
 
 async fn request_workflow_patch(config: &AppConfig) -> Result<(), String> {
-    let (session_id, runtime_id) = current_managed_pane_identity()?;
+    let (session_id, runtime_id) = current_session_identity()?;
     let token = config
         .external_api_token
         .as_deref()
@@ -523,7 +522,7 @@ async fn request_workflow_patch(config: &AppConfig) -> Result<(), String> {
 }
 
 async fn apply_workflow_patch(config: &AppConfig) -> Result<(), String> {
-    let (session_id, runtime_id) = current_managed_pane_identity()?;
+    let (session_id, runtime_id) = current_session_identity()?;
     let token = config
         .external_api_token
         .as_deref()
@@ -566,7 +565,7 @@ async fn apply_workflow_patch(config: &AppConfig) -> Result<(), String> {
 }
 
 async fn block_workflow_patch(config: &AppConfig) -> Result<(), String> {
-    let (session_id, runtime_id) = current_managed_pane_identity()?;
+    let (session_id, runtime_id) = current_session_identity()?;
     let token = config
         .external_api_token
         .as_deref()
@@ -608,30 +607,15 @@ fn local_api_addr(bind_addr: SocketAddr) -> SocketAddr {
     SocketAddr::new(ip, bind_addr.port())
 }
 
-fn current_managed_pane_identity() -> Result<(String, String), String> {
-    if env::var_os("TMUX").is_none() || env::var_os("TMUX_PANE").is_none() {
-        return Err("not running in a Pontia-managed tmux pane".to_string());
-    }
-    let session_id = pane_option("@pontia_session_id")?;
-    let runtime_id = pane_option("@pontia_runtime_id")?;
-    Ok((session_id, runtime_id))
-}
-
-fn pane_option(option: &str) -> Result<String, String> {
-    let pane_id = env::var("TMUX_PANE")
-        .map_err(|_| "not running in a Pontia-managed tmux pane".to_string())?;
-    let output = Command::new("tmux")
-        .args(["show-options", "-p", "-v", "-t", &pane_id, option])
-        .output()
-        .map_err(|error| format!("failed to inspect current tmux pane: {error}"))?;
-    if !output.status.success() {
-        return Err("not running in a Pontia-managed tmux pane".to_string());
-    }
-    let value = String::from_utf8(output.stdout)
-        .map_err(|_| "Pontia tmux pane identity is not UTF-8".to_string())?;
-    let value = value.trim();
-    if value.is_empty() {
-        return Err("not running in a Pontia-managed tmux pane".to_string());
-    }
-    Ok(value.to_string())
+fn current_session_identity() -> Result<(String, String), String> {
+    let read = |name: &str| {
+        env::var(name)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| format!("Missing {name}; run this command inside a Pontia Session"))
+    };
+    Ok((
+        read("PONTIA_SESSION_ID")?,
+        read("PONTIA_RUNTIME_INSTANCE_ID")?,
+    ))
 }

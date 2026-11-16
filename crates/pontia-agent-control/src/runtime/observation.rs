@@ -6,9 +6,9 @@ use tokio::sync::watch;
 
 use crate::client_contract::RuntimeBehavior;
 use pontia_core::error::{Error, Result};
-use pontia_runtime::{GenericRuntimeManager, ProcessObservation, TmuxProcessFingerprint};
+use pontia_runtime::{GenericRuntimeManager, ProcessFingerprint, ProcessObservation};
 use pontia_storage_sqlite::repositories::{
-    session_runtimes::{ActiveTmuxProcessBindingRow, SqliteSessionRuntimeRepository},
+    session_runtimes::{ActiveProcessBindingRow, SqliteSessionRuntimeRepository},
     sessions::SqliteSessionRepository,
     turns::SqliteTurnRepository,
 };
@@ -60,7 +60,7 @@ impl RuntimeObservationService {
         loop {
             tokio::select! {
                 _ = process_interval.tick() => {
-                    if let Err(error) = self.sweep_active_tmux_sessions().await {
+                    if let Err(error) = self.sweep_active_processes().await {
                         tracing::warn!(%error, "runtime process fingerprint sweep failed");
                     }
                 }
@@ -130,22 +130,22 @@ impl RuntimeObservationService {
         Ok(())
     }
 
-    pub async fn sweep_active_tmux_sessions(&self) -> Result<()> {
+    pub async fn sweep_active_processes(&self) -> Result<()> {
         let repository = SqliteSessionRuntimeRepository::new(self.pool.clone());
         for client in self.clients.registrations() {
             let Some(observation) = client.spec.adapter.lifecycle.process_observation else {
                 continue;
             };
             let bindings = repository
-                .active_tmux_process_bindings(
+                .active_process_bindings(
                     client.spec.client_type,
                     observation.role,
                     observation.observe_starting,
                 )
                 .await?;
             for binding in bindings {
-                if let Err(error) = self.observe_tmux_process(binding).await {
-                    tracing::warn!(%error, "tmux agent process observation failed");
+                if let Err(error) = self.observe_process(binding).await {
+                    tracing::warn!(%error, "agent process observation failed");
                 }
             }
         }
@@ -165,39 +165,29 @@ impl RuntimeObservationService {
         let Some(client_spec) = self.clients.spec(&session.client_type) else {
             return Ok(());
         };
-        match client_spec.adapter.runtime {
-            RuntimeBehavior::Tmux(_) if !client_spec.adapter.lifecycle.coupled_runtime => {
+        if client_spec.adapter.lifecycle.process_observation.is_some() {
+            let repository = SqliteSessionRuntimeRepository::new(self.pool.clone());
+            let Some(runtime_id) = repository
+                .runtime_id(session_id, client_spec.adapter.control_runtime_role)
+                .await?
+            else {
                 return Ok(());
-            }
-            RuntimeBehavior::Tmux(_) => {
-                let repository = SqliteSessionRuntimeRepository::new(self.pool.clone());
-                let Some(row) = repository.tmux_pane_binding(session_id).await? else {
-                    return Ok(());
-                };
-                let Some((socket_path, pane_id)) =
-                    row.socket_path
-                        .zip(row.pane_id)
-                        .filter(|(socket_path, pane_id)| {
-                            !socket_path.trim().is_empty() && !pane_id.trim().is_empty()
-                        })
-                else {
-                    return Ok(());
-                };
-                let Some(runtime_id) = row.runtime_id else {
-                    return Ok(());
-                };
-                return self
-                    .observe_tmux_process(ActiveTmuxProcessBindingRow {
-                        session_id: session_id.to_string(),
-                        client_type: session.client_type,
-                        runtime_id,
-                        role: "tui".into(),
-                        socket_path,
-                        pane_id,
-                        process_fingerprint: row.process_fingerprint,
-                    })
-                    .await;
-            }
+            };
+            let Some(record) = repository.get(&runtime_id).await? else {
+                return Ok(());
+            };
+            return self
+                .observe_process(ActiveProcessBindingRow {
+                    session_id: session_id.into(),
+                    client_type: session.client_type,
+                    runtime_id,
+                    role: record.role,
+                    process_fingerprint: record.process_fingerprint,
+                })
+                .await;
+        }
+        match client_spec.adapter.runtime {
+            RuntimeBehavior::Tmux(_) => return Ok(()),
             RuntimeBehavior::External => return Ok(()),
             RuntimeBehavior::InProcess => {
                 let Some(runtime_target) = SqliteSessionRuntimeRepository::new(self.pool.clone())
@@ -216,21 +206,19 @@ impl RuntimeObservationService {
             .await
     }
 
-    async fn observe_tmux_process(&self, binding: ActiveTmuxProcessBindingRow) -> Result<()> {
+    async fn observe_process(&self, binding: ActiveProcessBindingRow) -> Result<()> {
         let Some(fingerprint) = binding
             .process_fingerprint
             .as_deref()
-            .and_then(|value| serde_json::from_str::<TmuxProcessFingerprint>(value).ok())
+            .and_then(|value| serde_json::from_str::<ProcessFingerprint>(value).ok())
         else {
             return Ok(());
         };
-        if self.runtime.observe_tmux_process_fingerprint(&fingerprint) != ProcessObservation::Exited
-        {
+        if fingerprint.observe() != ProcessObservation::Exited {
             return Ok(());
         }
         tokio::time::sleep(PROCESS_OBSERVATION_RETRY_DELAY).await;
-        if self.runtime.observe_tmux_process_fingerprint(&fingerprint) != ProcessObservation::Exited
-        {
+        if fingerprint.observe() != ProcessObservation::Exited {
             return Ok(());
         }
 
@@ -246,7 +234,7 @@ impl RuntimeObservationService {
 
     async fn record_process_exit(
         &self,
-        binding: ActiveTmuxProcessBindingRow,
+        binding: ActiveProcessBindingRow,
         observation: crate::client_contract::ProcessObservationBehavior,
     ) -> Result<()> {
         let _identity_guard = self.control.lock_identity().await;

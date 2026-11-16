@@ -21,7 +21,7 @@ pub(crate) fn runtime_binding_record(
         tmux_pane_id: runtime.tmux_pane_id().map(str::to_owned),
         process_fingerprint: runtime
             .metadata
-            .get("tmux_process_fingerprint")
+            .get("process_fingerprint")
             .filter(|value| !value.is_null())
             .map(serde_json::to_string)
             .transpose()?,

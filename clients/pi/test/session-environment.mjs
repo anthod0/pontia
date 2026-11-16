@@ -16,13 +16,16 @@ registerHooks({
 const { createPontiaPiExtension } = await import("../src/index.ts");
 const [workspace, suffix] = process.argv.slice(2);
 const observations = {};
+const runtimes = {};
 const sessions = new Map();
-let managed = true;
 let activeWorkspace = true;
 let rejectRegistration = false;
 let existingState = "exited";
 
 function observe(step) {
+  runtimes[step] = execFileSync("sh", ["-c", 'printf "%s" "${PONTIA_RUNTIME_INSTANCE_ID-unset}"'], {
+    encoding: "utf8",
+  });
   observations[step] = execFileSync("sh", ["-c", 'printf "%s" "${PONTIA_SESSION_ID-unset}"'], {
     encoding: "utf8",
   });
@@ -38,7 +41,6 @@ function install() {
       registerCommand() {},
     },
     {
-      isManagedPane: async () => managed,
       logDiagnostic: async () => {},
       makeLiveOutputPublisher: () => ({}),
       connectPi: async () => ({
@@ -70,7 +72,6 @@ function install() {
             const key = params.binding.client_session_key;
             const sessionId = sessions.get(key) ?? `sess_${suffix}_${sessions.size + 1}`;
             sessions.set(key, sessionId);
-            managed = true;
             return {
               session: { session_id: sessionId },
               runtime: { runtime_id: `rt_${sessionId}` },
@@ -101,6 +102,7 @@ let handlers = install();
 observe("unbound");
 process.env.PONTIA_SESSION_ID = "wrong-before-binding";
 await handlers.session_start({ reason: "startup" }, context("native_one"));
+await handlers.agent_start({}, context("native_one"));
 observe("created");
 await handlers.session_shutdown({ reason: "quit" });
 observe("shutdown");
@@ -117,6 +119,7 @@ existingState = "exited";
 await handlers.session_shutdown({ reason: "new" });
 observe("switching");
 await handlers.session_start({ reason: "new" }, context("native_two"));
+await handlers.agent_start({}, context("native_two"));
 observe("switched");
 await handlers.session_shutdown({ reason: "fork" });
 await handlers.session_start({ reason: "fork" }, context("native_fork"));
@@ -130,7 +133,6 @@ observe("failed");
 rejectRegistration = false;
 
 handlers = install();
-managed = false;
 await handlers.session_start({ reason: "startup" }, context("native_manual"));
 observe("deferred");
 await handlers.agent_start({}, context("native_manual"));
@@ -151,4 +153,4 @@ for (const scenario of ["inactive", "duplicate", "missing_reload", "non_tui"]) {
   );
   observe(scenario);
 }
-process.stdout.write(JSON.stringify(observations));
+process.stdout.write(JSON.stringify({ observations, runtimes }));

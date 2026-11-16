@@ -21,7 +21,6 @@ pub(super) enum CommitOutcome {
     Skipped,
     Duplicate {
         result: EventIngestResult,
-        cleanup: Option<Box<DomainEvent>>,
     },
     Committed {
         result: EventIngestResult,
@@ -76,7 +75,6 @@ impl EventCommitter {
                 .await?
         {
             return Ok(CommitOutcome::Duplicate {
-                cleanup: Some(Box::new(event.clone())),
                 result: EventIngestResult {
                     accepted: true,
                     duplicate: true,
@@ -158,7 +156,6 @@ impl EventCommitter {
                     .await?;
             tx.commit().await?;
             return Ok(CommitOutcome::Duplicate {
-                cleanup: None,
                 result: EventIngestResult {
                     accepted: true,
                     duplicate: true,
@@ -445,7 +442,6 @@ async fn duplicate_report_in_tx(
     let state_version =
         SqliteEventRepository::session_event_count_in_tx(tx, &event.session_id).await?;
     Ok(Some(CommitOutcome::Duplicate {
-        cleanup: None,
         result: EventIngestResult {
             accepted: true,
             duplicate: true,
@@ -465,7 +461,6 @@ async fn duplicate_without_effects(
     let state_version =
         SqliteEventRepository::session_event_count_in_tx(tx, &event.session_id).await?;
     Ok(CommitOutcome::Duplicate {
-        cleanup: None,
         result: EventIngestResult {
             accepted: true,
             duplicate: true,

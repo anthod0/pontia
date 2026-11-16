@@ -20,17 +20,4 @@ pub struct RuntimeBindingUpsertRequest {
     pub forked_from_client_node_id: Option<String>,
     #[serde(default)]
     pub lineage_metadata: Value,
-    pub tmux: Option<RuntimeBindingTmuxRequest>,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct RuntimeBindingTmuxRequest {
-    pub socket_path: Option<String>,
-    pub session_id: Option<String>,
-    pub session_name: Option<String>,
-    pub window_id: Option<String>,
-    pub window_index: Option<i64>,
-    pub pane_id: Option<String>,
-    pub pane_index: Option<i64>,
-    pub pane_current_path: Option<String>,
 }

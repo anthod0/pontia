@@ -47,8 +47,8 @@ async function fixture(failInitialModelReport = false) {
       setModel,
     } as any,
     {
-      env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
-      isManagedPane: async () => true,
+      env: { PONTIA_HOME: root },
+
       logDiagnostic: vi.fn(async () => {}),
       connectPi: async (_home, _error, _submit, models) => {
         controls.push(models!);
@@ -65,7 +65,15 @@ async function fixture(failInitialModelReport = false) {
             }
             if (method === "workspaces.list")
               return { workspaces: [{ canonical_path: workspace, state: "active" }] };
-            if (method === "session.context") return { session_context: null };
+            if (method === "session.context")
+              return {
+                session_context: {
+                  session_id: "sess_models",
+                  runtime_id: "rt_models",
+                  client_type: "pi",
+                  session_state: "starting",
+                },
+              };
             return {
               session: { session_id: "sess_models" },
               runtime: { runtime_id: "rt_models" },

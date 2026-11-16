@@ -51,11 +51,14 @@ const client = await connectPi(
     },
   }),
 );
-await client.request("runtime.attach", {
+await client.request("runtime.register", {
   version: CONTROL_VERSION,
-  session_id: sessionId,
-  runtime_id: runtimeId,
-  client_session_key: clientSessionKey,
+  binding: {
+    client_type: "pi",
+    client_cwd: directory,
+    runtime_id: runtimeId,
+    client_session_key: clientSessionKey,
+  },
 });
 client.registered(identity);
 process.stdout.write("connected\n");

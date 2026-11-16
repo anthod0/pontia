@@ -24,13 +24,11 @@ pub struct RuntimeBindingTmuxPaneRow {
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
-pub struct ActiveTmuxProcessBindingRow {
+pub struct ActiveProcessBindingRow {
     pub session_id: String,
     pub client_type: String,
     pub runtime_id: String,
     pub role: String,
-    pub socket_path: String,
-    pub pane_id: String,
     pub process_fingerprint: Option<String>,
 }
 
@@ -174,20 +172,20 @@ impl SqliteSessionRuntimeRepository {
             .bind(id).fetch_optional(&self.pool).await?)
     }
 
-    pub async fn active_tmux_process_bindings(
+    pub async fn active_process_bindings(
         &self,
         client_type: &str,
         role: &str,
         observe_starting: bool,
-    ) -> Result<Vec<ActiveTmuxProcessBindingRow>> {
+    ) -> Result<Vec<ActiveProcessBindingRow>> {
         Ok(sqlx::query_as(
             r#"SELECT s.session_id, s.client_type, r.runtime_id, r.role,
-            r.tmux_socket_path AS socket_path, r.tmux_pane_id AS pane_id, r.process_fingerprint
+            r.process_fingerprint
             FROM sessions s
             JOIN session_runtimes r ON r.session_id = s.session_id
             WHERE s.client_type = ? AND r.role = ?
               AND (r.state = 'running' OR (? AND r.state = 'starting'))
-              AND r.tmux_socket_path IS NOT NULL AND r.tmux_pane_id IS NOT NULL"#,
+"#,
         )
         .bind(client_type)
         .bind(role)

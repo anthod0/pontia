@@ -31,6 +31,7 @@ impl RuntimeBindingUpsertService {
         &self,
         session_id: &str,
         request: &RuntimeBindingUpsertRequest,
+        process: &pontia_runtime::ProcessFingerprint,
     ) -> Result<()> {
         let state: String = sqlx::query_scalar("SELECT state FROM sessions WHERE session_id = ?")
             .bind(session_id)
@@ -54,30 +55,28 @@ impl RuntimeBindingUpsertService {
                 self.clients.control_runtime_role(&request.client_type),
             )
             .await?;
-        let existing_tmux = SqliteSessionRuntimeRepository::new(self.pool.clone())
-            .tmux_pane_binding(session_id)
-            .await?;
-        let incoming_tmux = request.tmux.as_ref().and_then(|tmux| {
-            Some((
-                non_empty(tmux.socket_path.as_deref())?,
-                non_empty(tmux.pane_id.as_deref())?,
-            ))
-        });
         let same_runtime = non_empty(request.runtime_id.as_deref())
             .zip(existing_runtime_id.as_deref())
             .is_some_and(|(incoming, existing)| incoming == existing);
-        let same_pane = match (existing_tmux, incoming_tmux) {
-            (Some(existing), Some((incoming_socket, incoming_pane))) => {
-                existing.socket_path.as_deref() == Some(incoming_socket.as_str())
-                    && existing.pane_id.as_deref() == Some(incoming_pane.as_str())
-            }
-            (None, None) => true,
-            _ => false,
-        };
         let same_client = binding.client_type == request.client_type
             && binding.client_session_key == request.client_session_key;
 
-        if same_client && same_runtime && same_pane {
+        let existing_process = match existing_runtime_id {
+            Some(runtime_id) => SqliteSessionRuntimeRepository::new(self.pool.clone())
+                .get(&runtime_id)
+                .await?
+                .and_then(|record| record.process_fingerprint),
+            None => None,
+        };
+        let same_process = existing_process
+            .as_deref()
+            .map(serde_json::from_str::<pontia_runtime::ProcessFingerprint>)
+            .transpose()?
+            .is_some_and(|existing| existing == *process);
+        if same_client
+            && same_runtime
+            && (same_process || (state == "starting" && existing_process.is_none()))
+        {
             return Ok(());
         }
         Err(Error::StateConflict(format!(

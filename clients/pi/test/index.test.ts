@@ -96,8 +96,6 @@ function install(
   let turnSequence = 0;
   const env: Record<string, string | undefined> = {
     PONTIA_HOME: defaultPontiaHome,
-    TMUX: "/tmp/tmux-1000/default,2071,502",
-    TMUX_PANE: "%42",
     ...(overrides.env ?? {}),
   };
   const managedRuntime =
@@ -107,12 +105,18 @@ function install(
   delete env.PONTIA_SESSION_ID;
   delete env.PONTIA_RUNTIME_INSTANCE_ID;
   const suppliedRequest = overrides.request;
-  let paneManaged = managedRuntime !== undefined || suppliedRequest === undefined;
   const request: PiConnection["request"] = async (method, params) => {
     const record = params as Record<string, any>;
-    if (managedRuntime && method === "session.context") return { session_context: null };
+    if (managedRuntime && method === "session.context")
+      return {
+        session_context: {
+          session_id: managedRuntime.sessionId,
+          runtime_id: managedRuntime.runtimeId,
+          client_type: "pi",
+          session_state: "starting",
+        },
+      };
     if (managedRuntime && method === "runtime.register" && !record.binding.start_kind) {
-      paneManaged = true;
       return {
         session: { session_id: managedRuntime.sessionId },
         runtime: { runtime_id: managedRuntime.runtimeId },
@@ -123,7 +127,6 @@ function install(
       method,
       method === "runtime.register" ? record.binding : params,
     );
-    if (method === "runtime.register") paneManaged = true;
     return result;
   };
   const connection: PiConnection = { request, registered() {}, async close() {} };
@@ -141,8 +144,6 @@ function install(
       }),
     })),
     logDiagnostic: vi.fn(async () => undefined),
-    loadManagedRuntime: vi.fn(async () => managedRuntime),
-    isManagedPane: vi.fn(async () => paneManaged),
     makeLiveOutputPublisher: vi.fn((): LiveOutputPublisherLike => ({
       appendText: vi.fn(),
       appendReasoning: vi.fn(),
@@ -160,15 +161,17 @@ function install(
 
 async function installBound(overrides: Parameters<typeof install>[0] = {}) {
   const workspace = await realpath(defaultPontiaHome);
+  const branchRequest = overrides.request;
   const extension = install({
     env: { PONTIA_SESSION_ID: "sess_1", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1" },
-    request: async (method) => {
+    ...overrides,
+    request: async (method, params) => {
       if (method === "workspaces.list")
         return { workspaces: [{ canonical_path: workspace, state: "active" }] };
+      if (branchRequest) return branchRequest(method, params);
       if (method === "session.get") return { session: {} };
       throw new Error(`Unexpected RPC: ${method}`);
     },
-    ...overrides,
   });
   await extension.handlers.session_start(
     { reason: "startup" },
@@ -433,7 +436,7 @@ describe("pontia pi extension lifecycle", () => {
     "pontia-edit diagnoses %s and never submits replacement",
     async (_name, navigationResult, navigationError, code) => {
       const logDiagnostic = vi.fn(async () => undefined);
-      const { commands, sendUserMessage } = install({
+      const { commands, sendUserMessage } = await installBound({
         env: {
           PONTIA_SESSION_ID: "sess_replay",
           PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
@@ -475,7 +478,7 @@ describe("pontia pi extension lifecycle", () => {
 
   test("pontia-edit diagnoses resolution and submission failures without retrying navigation", async () => {
     const resolveDiagnostic = vi.fn(async () => undefined);
-    const failedResolve = install({
+    const failedResolve = await installBound({
       env: {
         PONTIA_SESSION_ID: "sess_replay",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
@@ -502,7 +505,7 @@ describe("pontia pi extension lifecycle", () => {
     );
 
     const submitDiagnostic = vi.fn(async () => undefined);
-    const failedSubmit = install({
+    const failedSubmit = await installBound({
       env: {
         PONTIA_SESSION_ID: "sess_replay",
         PONTIA_RUNTIME_INSTANCE_ID: "rtinst_replay",
@@ -540,7 +543,7 @@ describe("pontia pi extension lifecycle", () => {
     );
   });
 
-  test("session_start startup reports one-time agent client ready from runtime env", async () => {
+  test("session_start startup reports one-time agent client ready from server runtime context", async () => {
     const workspace = await realpath(await tempDir());
     const requestImpl = vi.fn(async (method: string) => {
       expect(method).toBe("workspaces.list");
@@ -613,7 +616,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported).toEqual([]);
   });
 
-  test("session_start new reports agent client ready from runtime env", async () => {
+  test("session_start new reports agent client ready from server runtime context", async () => {
     const workspace = await realpath(await tempDir());
     const requestImpl = vi.fn(async (method: string) => {
       expect(method).toBe("workspaces.list");
@@ -652,7 +655,7 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
-  test("stale tmux runtime markers do not identify a new native pi session", async () => {
+  test("stale inherited runtime identity does not identify a new native pi session", async () => {
     const workspace = await realpath(await tempDir());
     const requestImpl = vi.fn(async (method: string, params?: any) => {
       if (method === "workspaces.list") {
@@ -665,7 +668,6 @@ describe("pontia pi extension lifecycle", () => {
         const body = params;
         expect(body).toMatchObject({
           client_session_key: "pi_session_fresh",
-          tmux: { socket_path: "/tmp/tmux-1000/default", pane_id: "%42" },
         });
         expect(body).not.toHaveProperty("session_id");
         expect(body).not.toHaveProperty("runtime_id");
@@ -680,11 +682,6 @@ describe("pontia pi extension lifecycle", () => {
     });
     const { handlers, reported } = install({
       request: requestImpl as any,
-      loadManagedRuntime: vi.fn(async () => ({
-        sessionId: "sess_stale",
-        runtimeId: "rtinst_stale",
-      })),
-      isManagedPane: vi.fn(async () => true),
     });
 
     await handlers.session_start(
@@ -699,6 +696,13 @@ describe("pontia pi extension lifecycle", () => {
       },
     );
 
+    expect(reported).toEqual([]);
+    await handlers.agent_start(
+      {},
+      {
+        sessionManager: { getSessionId: () => "pi_session_fresh", getCwd: () => workspace },
+      },
+    );
     expect(reported[0]).toMatchObject({
       session_id: "sess_fresh",
       data: { runtime_id: "rtinst_fresh", client_session_key: "pi_session_fresh" },
@@ -810,7 +814,6 @@ describe("pontia pi extension lifecycle", () => {
         expect(params).toMatchObject({
           client_session_key: "pi_session_resumed",
           client_session_file: "/tmp/pi/resumed.jsonl",
-          tmux: { socket_path: "/tmp/tmux-1000/default", pane_id: "%42" },
         });
         return {
           session: { session_id: "sess_existing" },
@@ -1059,7 +1062,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported[0]).toMatchObject({ session_id: "sess_late_env" });
   });
 
-  test("agent_start does not report a turn from tmux marker identity alone", async () => {
+  test("agent_start does not report a turn from inherited identity alone", async () => {
     const dir = await tempDir();
     const requestImpl = vi.fn(async () => {
       throw new Error("unexpected request");
@@ -1305,7 +1308,7 @@ describe("pontia pi extension lifecycle", () => {
     const logDiagnostic = vi.fn(async () => undefined);
     const { handlers, reported } = install({
       request,
-      isManagedPane: vi.fn(async () => true),
+
       logDiagnostic,
     });
 
@@ -1485,7 +1488,7 @@ describe("pontia pi extension lifecycle", () => {
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
   });
 
-  test("does not select an execution profile from tmux marker identity alone", async () => {
+  test("does not select an execution profile from inherited identity alone", async () => {
     const requestImpl = vi.fn(async (method: string) => {
       if (method === "session.get") {
         return { execution_profile_binding: { system_prompt: "Reviewer instructions" } };

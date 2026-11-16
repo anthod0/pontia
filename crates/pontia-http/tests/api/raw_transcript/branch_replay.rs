@@ -9,7 +9,19 @@ use pontia_client_pi::rpc::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
 use std::sync::Arc;
 use tokio::{net::UnixStream, sync::mpsc};
 
-fn rpc_client(state: &AppState) -> (Arc<PiRpcPeer>, mpsc::Receiver<RpcRequest>) {
+async fn rpc_client(state: &AppState) -> (Arc<PiRpcPeer>, mpsc::Receiver<RpcRequest>) {
+    sqlx::query(
+        "UPDATE session_runtimes SET process_fingerprint=? WHERE process_fingerprint IS NULL",
+    )
+    .bind(
+        serde_json::to_string(
+            &pontia_runtime::ProcessFingerprint::capture(std::process::id()).unwrap(),
+        )
+        .unwrap(),
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
     let (server, client) = UnixStream::pair().unwrap();
     tokio::spawn(serve_connection(state.control().clone(), server));
     PiRpcPeer::new(client)
@@ -205,7 +217,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
         .unwrap();
     }
 
-    let (pi, _requests) = rpc_client(&state);
+    let (pi, _requests) = rpc_client(&state).await;
     attach(&pi, session_id, runtime_id, session_key).await;
     let before: (i64, i64, i64) = sqlx::query_as(
         "SELECT (SELECT COUNT(*) FROM turns), (SELECT COUNT(*) FROM events), (SELECT COUNT(*) FROM inbox_messages WHERE state = 'dispatching')",
@@ -474,7 +486,7 @@ async fn branch_replay_resolves_root_middle_latest_and_abandoned_targets_without
 #[tokio::test]
 async fn branch_resolution_requires_registered_connection_identity() {
     let state = test_state().await;
-    let (pi, _requests) = rpc_client(&state);
+    let (pi, _requests) = rpc_client(&state).await;
     let error = pi
         .call(
             "branch.resolve",
@@ -564,7 +576,7 @@ async fn branch_inbox_delivery_is_opaque_idempotent_and_does_not_fabricate_a_tur
     .await
     .unwrap();
 
-    let (pi, mut requests) = rpc_client(&state);
+    let (pi, mut requests) = rpc_client(&state).await;
     attach(&pi, session_id, runtime_id, session_key).await;
     let client = pi.clone();
     let delivery = tokio::spawn(async move {
@@ -672,7 +684,7 @@ async fn branch_resolve_requests_paginated_history_on_its_own_connection_without
     sqlx::query("INSERT INTO turns(turn_id,session_id,head_cursor,tail_cursor,topology_status,state,input_summary) VALUES ('turn_target',?,?,?,'root','completed','question')").bind(session).bind(cursor(None)).bind(cursor(Some("a"))).execute(&state.db()).await.unwrap();
     sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary,branch_target_turn_id) VALUES ('msg_reverse',?,'dispatching','after_idle','replacement','turn_target')").bind(session).execute(&state.db()).await.unwrap();
     sqlx::query("UPDATE session_runtimes SET tmux_socket_path='/unused/branch.sock',tmux_pane_id='%1' WHERE session_id=?").bind(session).execute(&state.db()).await.unwrap();
-    let (pi, mut requests) = rpc_client(&state);
+    let (pi, mut requests) = rpc_client(&state).await;
     attach(&pi, session, runtime, native).await;
     let mut pending = tokio::spawn({
         let pi = pi.clone();

@@ -232,15 +232,13 @@ pub(super) fn clients() -> pontia_agent_control::clients::ClientRegistry {
         let mut spec = pontia_agent_control::client_contract::TEST_SPEC.clone();
         spec.client_type = "pi";
         spec.adapter.dispatch = pontia_agent_control::client_contract::DispatchBehavior::Connected;
-        spec.adapter.terminate = pontia_agent_control::client_contract::TerminateBehavior::Connected;
+        spec.adapter.terminate =
+            pontia_agent_control::client_contract::TerminateBehavior::Connected;
         spec.adapter.runtime = pontia_agent_control::client_contract::RuntimeBehavior::Tmux(
-            pontia_agent_control::client_contract::TmuxRuntimeBehavior {
-                process_names: &[],
-                hook_log: None,
-            },
+            pontia_agent_control::client_contract::TmuxRuntimeBehavior { hook_log: None },
         );
         spec.adapter.turn_lifecycle =
-            pontia_agent_control::client_contract::TurnLifecycleBehavior::ClientManagedForInteractiveTmux;
+            pontia_agent_control::client_contract::TurnLifecycleBehavior::ClientManagedInteractive;
         spec
     });
     let mut clients = pontia_agent_control::clients::ClientRegistry::default();

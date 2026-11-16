@@ -67,7 +67,12 @@ async fn seed_running_workflow(
             start_command: None,
             tmux_socket_path: Some("/tmp/fake-pontia-tmux.sock".to_string()),
             tmux_pane_id: Some("%42".to_string()),
-            process_fingerprint: None,
+            process_fingerprint: Some(
+                serde_json::to_string(
+                    &pontia_runtime::ProcessFingerprint::capture(std::process::id()).unwrap(),
+                )
+                .unwrap(),
+            ),
             role: "tui".into(),
             state: "running".into(),
             created_at: "2026-10-01T00:00:00Z".into(),

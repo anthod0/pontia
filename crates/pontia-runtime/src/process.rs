@@ -1,6 +1,8 @@
-use std::{collections::HashMap, ffi::OsStr};
+use std::collections::HashMap;
 
-use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, System, UpdateKind};
+use serde::{Deserialize, Serialize};
+
+use sysinfo::{ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, System};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProcessIdentity {
@@ -9,16 +11,12 @@ pub struct ProcessIdentity {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ProcessInfo {
-    pub pid: u32,
-    pub parent_pid: Option<u32>,
+struct ProcessInfo {
     pub start_time_seconds: u64,
     pub status: ProcessStatus,
-    pub name: String,
-    pub argv0: Option<String>,
 }
 
-pub(crate) struct ProcessTable {
+struct ProcessTable {
     processes: HashMap<u32, ProcessInfo>,
     query_complete: bool,
 }
@@ -29,9 +27,7 @@ impl ProcessTable {
         let refreshed_processes = system.refresh_processes_specifics(
             ProcessesToUpdate::All,
             true,
-            ProcessRefreshKind::nothing()
-                .with_cmd(UpdateKind::Always)
-                .without_tasks(),
+            ProcessRefreshKind::nothing().without_tasks(),
         );
         let processes: HashMap<u32, ProcessInfo> = system
             .processes()
@@ -41,15 +37,8 @@ impl ProcessTable {
                 (
                     pid,
                     ProcessInfo {
-                        pid,
-                        parent_pid: process.parent().map(Pid::as_u32),
                         start_time_seconds: process.start_time(),
                         status: process.status(),
-                        name: os_string(process.name()),
-                        argv0: process.cmd().first().and_then(|value| {
-                            let value = value.to_str()?;
-                            (!value.is_empty()).then(|| value.to_string())
-                        }),
                     },
                 )
             })
@@ -67,37 +56,29 @@ impl ProcessTable {
         self.processes.get(&pid)
     }
 
-    pub(crate) fn values(&self) -> impl Iterator<Item = &ProcessInfo> {
-        self.processes.values()
-    }
-
-    pub(crate) fn len(&self) -> usize {
-        self.processes.len()
-    }
-
-    pub(crate) fn observe(&self, identity: ProcessIdentity) -> ProcessIdentityObservation {
+    pub(crate) fn observe(&self, identity: ProcessIdentity) -> ProcessObservation {
         let Some(process) = self.get(identity.pid) else {
             return if self.query_complete {
-                ProcessIdentityObservation::Exited
+                ProcessObservation::Exited
             } else {
-                ProcessIdentityObservation::Unknown
+                ProcessObservation::Unknown
             };
         };
         if process.start_time_seconds == 0 || matches!(process.status, ProcessStatus::Unknown(_)) {
-            return ProcessIdentityObservation::Unknown;
+            return ProcessObservation::Unknown;
         }
         if process.start_time_seconds != identity.start_time_seconds
             || matches!(process.status, ProcessStatus::Zombie | ProcessStatus::Dead)
         {
-            ProcessIdentityObservation::Exited
+            ProcessObservation::Exited
         } else {
-            ProcessIdentityObservation::Alive
+            ProcessObservation::Alive
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProcessIdentityObservation {
+pub enum ProcessObservation {
     Alive,
     Exited,
     Unknown,
@@ -110,7 +91,7 @@ pub fn process_identity(pid: u32) -> Option<ProcessIdentity> {
         pid,
         start_time_seconds: process.start_time_seconds,
     };
-    (table.observe(identity) == ProcessIdentityObservation::Alive).then_some(identity)
+    (table.observe(identity) == ProcessObservation::Alive).then_some(identity)
 }
 
 pub fn system_boot_time_seconds() -> Option<u64> {
@@ -118,6 +99,35 @@ pub fn system_boot_time_seconds() -> Option<u64> {
     (boot_time != 0).then_some(boot_time)
 }
 
-fn os_string(value: &OsStr) -> String {
-    value.to_string_lossy().into_owned()
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessFingerprint {
+    pub boot_time_seconds: u64,
+    pub pid: u32,
+    pub start_time_seconds: u64,
+}
+
+impl ProcessFingerprint {
+    pub fn capture(pid: u32) -> Option<Self> {
+        let boot_time_seconds = system_boot_time_seconds()?;
+        let identity = process_identity(pid)?;
+        Some(Self {
+            boot_time_seconds,
+            pid,
+            start_time_seconds: identity.start_time_seconds,
+        })
+    }
+
+    pub fn observe(&self) -> ProcessObservation {
+        let Some(boot_time) = system_boot_time_seconds() else {
+            return ProcessObservation::Unknown;
+        };
+        if boot_time != self.boot_time_seconds {
+            return ProcessObservation::Exited;
+        }
+        ProcessTable::refresh_all().observe(ProcessIdentity {
+            pid: self.pid,
+            start_time_seconds: self.start_time_seconds,
+        })
+    }
 }

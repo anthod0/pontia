@@ -11,8 +11,7 @@ async fn current_runtime_exit_abandons_its_active_turn() {
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
 
-    let (upsert_status, upsert) =
-        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    let (upsert_status, upsert) = post_upsert(state.clone(), upsert_body(&workspace)).await;
     assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
     let session_id = upsert["session"]["session_id"].as_str().unwrap();
     let runtime_id = upsert["runtime"]["runtime_id"].as_str().unwrap();
@@ -70,8 +69,7 @@ async fn retrying_an_old_terminal_fact_does_not_end_the_current_turn() {
         .canonicalize()
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
-    let (upsert_status, upsert) =
-        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    let (upsert_status, upsert) = post_upsert(state.clone(), upsert_body(&workspace)).await;
     assert_eq!(upsert_status, StatusCode::OK, "{upsert:?}");
     let session_id = upsert["session"]["session_id"].as_str().unwrap();
     let runtime_id = upsert["runtime"]["runtime_id"].as_str().unwrap();
@@ -156,8 +154,7 @@ async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
 
-    let (first_status, first) =
-        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    let (first_status, first) = post_upsert(state.clone(), upsert_body(&workspace)).await;
     assert_eq!(first_status, StatusCode::OK, "{first:?}");
     let session_id = first["session"]["session_id"].as_str().unwrap().to_string();
 
@@ -175,7 +172,7 @@ async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
     .await;
     assert_eq!(exit_status, StatusCode::OK, "{exit:?}");
 
-    let second_body = upsert_body(&workspace, Some("%99"));
+    let second_body = upsert_body(&workspace);
     let (second_status, second) = post_upsert(state.clone(), second_body).await;
     assert_eq!(second_status, StatusCode::OK, "{second:?}");
     assert_eq!(second["session"]["session_id"], session_id);
@@ -230,7 +227,7 @@ async fn registration_and_repeated_resume_preserve_custom_command_and_native_fil
     .expect("native session");
     let command = format!("true --session-dir '{workspace}'");
 
-    let mut body = upsert_body(&workspace, Some("%42"));
+    let mut body = upsert_body(&workspace);
     body["start_command"] = json!(command);
     body["client_session_file"] = json!(session_file);
     let (upsert_status, upsert) = post_upsert(state.clone(), body.clone()).await;
@@ -270,7 +267,7 @@ async fn invalid_native_file_does_not_replace_runtime_or_change_resume_state() {
     let (state, app) = test_state().await;
     let workspace = app.temp_workspace();
     let file = workspace.path().join("session.jsonl");
-    let mut body = upsert_body(workspace.path().to_str().unwrap(), Some("%42"));
+    let mut body = upsert_body(workspace.path().to_str().unwrap());
     body["client_session_file"] = json!(file);
     body["start_command"] = json!("true");
     let (status, registered) = post_upsert(state.clone(), body).await;
@@ -411,7 +408,7 @@ async fn api_resumed_pi_can_register_from_its_launched_pane_in_c_locale() {
         "printf '%s\\n%s\\n' \"$TMUX\" \"$TMUX_PANE\" > pane.txt\nexec sleep 60\n",
     )
     .unwrap();
-    let mut body = upsert_body(workspace_path, Some("%42"));
+    let mut body = upsert_body(workspace_path);
     body["client_session_file"] = json!(session_file);
     body["start_command"] = json!(format!("sh '{}'", client_script.display()));
     let (status, registered) = post_upsert(state.clone(), body.clone()).await;
@@ -434,8 +431,8 @@ async fn api_resumed_pi_can_register_from_its_launched_pane_in_c_locale() {
     .await
     .unwrap();
     let mut lines = pane.lines();
-    let socket = lines.next().unwrap().split(',').next().unwrap();
-    let pane_id = lines.next().unwrap();
+    let _socket = lines.next().unwrap().split(',').next().unwrap();
+    let _pane_id = lines.next().unwrap();
     let (status, context) =
         super::get_session_context_by_client_session(state.clone(), "pi", "pi_session_123").await;
     assert_eq!(status, StatusCode::OK, "{context:?}");
@@ -444,7 +441,7 @@ async fn api_resumed_pi_can_register_from_its_launched_pane_in_c_locale() {
         "starting"
     );
     body["runtime_id"] = context["data"]["session_context"]["runtime_id"].clone();
-    body["tmux"] = json!({"socket_path": socket, "pane_id": pane_id});
+
     let (status, rebound) = post_upsert(state.clone(), body).await;
     assert_eq!(status, StatusCode::OK, "{rebound:?}");
     assert_eq!(rebound["session"]["session_id"], session_id);

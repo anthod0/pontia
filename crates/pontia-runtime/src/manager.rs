@@ -67,7 +67,6 @@ impl GenericRuntimeManager {
             &runtime_paths,
             &request,
             &launch_id,
-            &runtime_id,
         )?;
         let quoted_launch_script_path = script::shell_quote_path(&launch_script_path);
         let launch_command =
@@ -147,53 +146,12 @@ impl GenericRuntimeManager {
         tmux::terminate_session(runtime_handle)
     }
 
-    pub fn mark_tmux_pane_for_session(
-        &self,
-        socket_path: &str,
-        pane_id: &str,
-        session_id: &str,
-        runtime_id: &str,
-    ) -> Result<()> {
-        tmux::mark_pontia_pane(socket_path, pane_id, session_id, runtime_id)
-    }
-
-    pub fn clear_tmux_pane_markers(
-        &self,
-        socket_path: &str,
-        pane_id: &str,
-        expected_session_id: &str,
-        expected_runtime_id: &str,
-    ) -> Result<()> {
-        tmux::clear_pontia_pane_markers(
-            socket_path,
-            pane_id,
-            expected_session_id,
-            expected_runtime_id,
-        )
-    }
-
     pub fn kill_tmux_pane(&self, socket_path: &str, pane_id: &str) -> Result<()> {
         tmux::kill_pane(socket_path, pane_id)
     }
 
     pub fn is_tmux_pane_alive(&self, socket_path: &str, pane_id: &str) -> bool {
         tmux::is_pane_alive(socket_path, pane_id)
-    }
-
-    pub fn capture_tmux_process_fingerprint(
-        &self,
-        socket_path: &str,
-        pane_id: &str,
-        process_names: &[&str],
-    ) -> Option<crate::TmuxProcessFingerprint> {
-        tmux::capture_fingerprint(socket_path, pane_id, process_names)
-    }
-
-    pub fn observe_tmux_process_fingerprint(
-        &self,
-        fingerprint: &crate::TmuxProcessFingerprint,
-    ) -> crate::ProcessObservation {
-        tmux::observe_fingerprint(fingerprint)
     }
 
     pub fn is_alive(&self, runtime_handle: &str) -> bool {

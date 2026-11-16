@@ -13,10 +13,6 @@ vi.mock("../src/control-socket.js", async (original) => ({
   ...(await original<typeof import("../src/control-socket.js")>()),
   connectPi: connect,
 }));
-vi.mock("../src/managed-runtime.js", async (original) => ({
-  ...(await original<typeof import("../src/managed-runtime.js")>()),
-  isPontiaManagedTmuxPane: async () => true,
-}));
 vi.mock("../src/diagnostics.js", () => ({ appendDiagnostic: diagnostic }));
 
 type Handler = (event: any, context: any) => unknown;
@@ -71,8 +67,7 @@ beforeEach(async () => {
   root = await realpath(await tempDir("pi-duplicate-"));
   vi.stubEnv("PONTIA_HOME", root);
   vi.stubEnv("PONTIA_SESSION_ID", "stale");
-  vi.stubEnv("TMUX", "/unused/tmux,1,1");
-  vi.stubEnv("TMUX_PANE", "%1");
+  vi.stubEnv("PONTIA_RUNTIME_INSTANCE_ID", "stale");
   diagnostic.mockClear();
   const sessions = new Set<string>();
   connect.mockReset().mockImplementation(async () => ({
@@ -84,14 +79,12 @@ beforeEach(async () => {
       if (method === "session.context") {
         const id = params.client_session_key;
         return {
-          session_context: sessions.has(id)
-            ? {
-                session_id: `sess_${id}`,
-                runtime_id: `rt_${id}`,
-                client_type: "pi",
-                session_state: "idle",
-              }
-            : null,
+          session_context: {
+            session_id: `sess_${id}`,
+            runtime_id: `rt_${id}`,
+            client_type: "pi",
+            session_state: sessions.has(id) ? "idle" : "starting",
+          },
         };
       }
       if (method === "runtime.register") {

@@ -1,46 +1,8 @@
 use std::process::{Command, Stdio};
 
-use pontia_core::error::{Error, Result};
-
 use super::pane::is_pane_alive;
 
-const PONTIA_SESSION_MARKER: &str = "@pontia_session_id";
-const PONTIA_RUNTIME_INSTANCE_MARKER: &str = "@pontia_runtime_id";
 const REUSABLE_SHELL_COMMANDS: &[&str] = &["sh", "bash", "zsh", "fish", "dash"];
-
-pub(crate) fn mark_pontia_pane(
-    socket_path: &str,
-    pane_id: &str,
-    session_id: &str,
-    runtime_id: &str,
-) -> Result<()> {
-    set_pane_option(socket_path, pane_id, PONTIA_SESSION_MARKER, session_id)?;
-    set_pane_option(
-        socket_path,
-        pane_id,
-        PONTIA_RUNTIME_INSTANCE_MARKER,
-        runtime_id,
-    )
-}
-
-pub(crate) fn clear_pontia_pane_markers(
-    socket_path: &str,
-    pane_id: &str,
-    expected_session_id: &str,
-    expected_runtime_id: &str,
-) -> Result<()> {
-    if !is_pane_alive(socket_path, pane_id)
-        || pane_option(socket_path, pane_id, PONTIA_SESSION_MARKER).as_deref()
-            != Some(expected_session_id)
-        || pane_option(socket_path, pane_id, PONTIA_RUNTIME_INSTANCE_MARKER).as_deref()
-            != Some(expected_runtime_id)
-    {
-        return Ok(());
-    }
-
-    unset_pane_option(socket_path, pane_id, PONTIA_SESSION_MARKER)?;
-    unset_pane_option(socket_path, pane_id, PONTIA_RUNTIME_INSTANCE_MARKER)
-}
 
 pub(crate) fn is_reusable_shell_pane(socket_path: &str, pane_id: &str) -> bool {
     if !is_pane_alive(socket_path, pane_id) {
@@ -52,76 +14,6 @@ pub(crate) fn is_reusable_shell_pane(socket_path: &str, pane_id: &str) -> bool {
         && pane_tty(socket_path, pane_id)
             .and_then(|tty| foreground_processes_for_tty(&tty))
             .is_some_and(|ps_output| foreground_command_is_reusable_shell(&ps_output))
-}
-
-fn set_pane_option(socket_path: &str, pane_id: &str, option: &str, value: &str) -> Result<()> {
-    let status = Command::new("tmux")
-        .args([
-            "-S",
-            socket_path,
-            "set-option",
-            "-p",
-            "-t",
-            pane_id,
-            option,
-            value,
-        ])
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|err| Error::Domain(format!("tmux pane marker failed: {err}")))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(Error::Domain(format!(
-            "tmux pane marker failed with status {status}"
-        )))
-    }
-}
-
-fn unset_pane_option(socket_path: &str, pane_id: &str, option: &str) -> Result<()> {
-    let status = Command::new("tmux")
-        .args([
-            "-S",
-            socket_path,
-            "set-option",
-            "-p",
-            "-u",
-            "-t",
-            pane_id,
-            option,
-        ])
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|err| Error::Domain(format!("tmux pane marker cleanup failed: {err}")))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(Error::Domain(format!(
-            "tmux pane marker cleanup failed with status {status}"
-        )))
-    }
-}
-
-fn pane_option(socket_path: &str, pane_id: &str, option: &str) -> Option<String> {
-    let output = Command::new("tmux")
-        .args([
-            "-S",
-            socket_path,
-            "show-options",
-            "-p",
-            "-v",
-            "-t",
-            pane_id,
-            option,
-        ])
-        .stderr(Stdio::null())
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    Some(String::from_utf8(output.stdout).ok()?.trim().to_string())
-        .filter(|value| !value.is_empty())
 }
 
 fn pane_tty(socket_path: &str, pane_id: &str) -> Option<String> {

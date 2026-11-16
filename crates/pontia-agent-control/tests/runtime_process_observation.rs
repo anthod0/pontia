@@ -1,11 +1,10 @@
 use std::{
     process::{Command, Stdio},
-    thread,
     time::Duration,
 };
 
 use pontia_agent_control::AgentControl;
-use pontia_runtime::GenericRuntimeManager;
+use pontia_runtime::ProcessFingerprint;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
 
@@ -28,34 +27,12 @@ const OBSERVED_AGENT: pontia_agent_control::client_contract::AgentClientAdapter 
 #[tokio::test]
 async fn missing_bound_agent_process_projects_session_exited_after_confirmation() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let test_socket = temp.path().join("tmux.sock");
-    let _server = TmuxServer(&test_socket);
-    let tmux_session = format!("pontia_test_observation_{}", std::process::id());
-    let status = Command::new("tmux")
-        .arg("-S")
-        .arg(&test_socket)
-        .args(["new-session", "-d", "-s", &tmux_session, "sleep 60"])
-        .stderr(Stdio::null())
-        .status()
-        .expect("spawn tmux session");
-    assert!(status.success());
-
-    let socket_path = tmux_value(&test_socket, &tmux_session, "#{socket_path}");
-    let pane_id = tmux_value(&test_socket, &tmux_session, "#{pane_id}");
-    let fingerprint = (0..50)
-        .find_map(|_| {
-            let fingerprint = GenericRuntimeManager.capture_tmux_process_fingerprint(
-                &socket_path,
-                &pane_id,
-                &["sleep"],
-            );
-            if fingerprint.is_none() {
-                thread::sleep(Duration::from_millis(20));
-            }
-            fingerprint
-        })
-        .expect("capture sleep fingerprint");
-
+    let mut child = Command::new("sleep")
+        .arg("60")
+        .stdin(Stdio::null())
+        .spawn()
+        .unwrap();
+    let fingerprint = ProcessFingerprint::capture(child.id()).unwrap();
     let database_url = format!(
         "sqlite://{}?mode=rwc",
         temp.path().join("test.db").display()
@@ -68,22 +45,16 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
     .execute(&db)
     .await
     .expect("insert session");
-    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, tmux_socket_path, tmux_pane_id, process_fingerprint, role, state, created_at) VALUES (?, ?, ?, ?, ?, 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
+    sqlx::query(r#"INSERT INTO session_runtimes(session_id, runtime_id, process_fingerprint, role, state, created_at) VALUES (?, ?, ?, 'tui', 'running', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"#)
 .bind("sess_observed")
 .bind("rtinst_observed")
-.bind(&socket_path)
-.bind(&pane_id)
 .bind(json!(fingerprint).to_string())
     .execute(&db)
     .await
     .expect("insert binding");
 
-    let _ = Command::new("tmux")
-        .arg("-S")
-        .arg(&test_socket)
-        .args(["kill-session", "-t", &tmux_session])
-        .stderr(Stdio::null())
-        .status();
+    child.kill().unwrap();
+    child.wait().unwrap();
     wait_for_process_exit(&fingerprint).await;
 
     AgentControl::builder(db.clone(), temp.path().into())
@@ -102,7 +73,7 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
         })
         .build()
         .runtime_observer()
-        .sweep_active_tmux_sessions()
+        .sweep_active_processes()
         .await
         .expect("sweep runtime bindings");
 
@@ -124,7 +95,7 @@ async fn missing_bound_agent_process_projects_session_exited_after_confirmation(
 }
 
 #[tokio::test]
-async fn active_tmux_session_without_a_fingerprint_remains_unknown() {
+async fn active_session_without_a_fingerprint_remains_unknown() {
     let temp = tempfile::tempdir().expect("tempdir");
     let database_url = format!(
         "sqlite://{}?mode=rwc",
@@ -163,7 +134,7 @@ async fn active_tmux_session_without_a_fingerprint_remains_unknown() {
         })
         .build()
         .runtime_observer()
-        .sweep_active_tmux_sessions()
+        .sweep_active_processes()
         .await
         .expect("sweep runtime bindings");
 
@@ -184,39 +155,12 @@ async fn active_tmux_session_without_a_fingerprint_remains_unknown() {
     );
 }
 
-async fn wait_for_process_exit(fingerprint: &pontia_runtime::TmuxProcessFingerprint) {
+async fn wait_for_process_exit(fingerprint: &pontia_runtime::ProcessFingerprint) {
     tokio::time::timeout(Duration::from_secs(5), async {
-        while GenericRuntimeManager.observe_tmux_process_fingerprint(fingerprint)
-            != pontia_runtime::ProcessObservation::Exited
-        {
+        while fingerprint.observe() != pontia_runtime::ProcessObservation::Exited {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await
     .expect("test agent process must be confirmed exited before observation");
-}
-
-fn tmux_value(socket: &std::path::Path, session: &str, format: &str) -> String {
-    let output = Command::new("tmux")
-        .arg("-S")
-        .arg(socket)
-        .args(["display-message", "-p", "-t", session, format])
-        .output()
-        .expect("query tmux");
-    assert!(output.status.success());
-    String::from_utf8(output.stdout)
-        .expect("tmux output utf8")
-        .trim()
-        .to_string()
-}
-
-struct TmuxServer<'a>(&'a std::path::Path);
-impl Drop for TmuxServer<'_> {
-    fn drop(&mut self) {
-        let _ = Command::new("tmux")
-            .arg("-S")
-            .arg(self.0)
-            .arg("kill-server")
-            .output();
-    }
 }

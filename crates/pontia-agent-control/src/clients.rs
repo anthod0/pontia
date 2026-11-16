@@ -88,7 +88,7 @@ impl ClientAdapter {
             .is_some_and(|entry| entry.prepare_on_input)
     }
     pub fn client_owns_turn(&self) -> bool {
-        self.prepares_on_input() || self.spec.owns_interactive_tmux_turn()
+        self.prepares_on_input() || self.spec.owns_interactive_turn()
     }
     pub fn supports_restart(&self) -> bool {
         self.spec.adapter.runtime != crate::client_contract::RuntimeBehavior::External

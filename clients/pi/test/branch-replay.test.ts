@@ -36,8 +36,8 @@ test("RPC replay enters Pi's native command context and navigates the running se
     extensionFactories: [
       (pi) => {
         createPontiaPiExtension(pi, {
-          env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
-          isManagedPane: async () => true,
+          env: { PONTIA_HOME: root },
+
           logDiagnostic: async (_path, entry) => {
             diagnostics(entry);
           },
@@ -50,7 +50,15 @@ test("RPC replay enters Pi's native command context and navigates the running se
               async request(method, params) {
                 if (method === "workspaces.list")
                   return { workspaces: [{ canonical_path: root, state: "active" }] };
-                if (method === "session.context") return { session_context: null };
+                if (method === "session.context")
+                  return {
+                    session_context: {
+                      session_id: "sess_native",
+                      runtime_id: "rt_native",
+                      client_type: "pi",
+                      session_state: "starting",
+                    },
+                  };
                 if (method === "runtime.register")
                   return {
                     session: { session_id: "sess_native" },

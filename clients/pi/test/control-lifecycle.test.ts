@@ -23,7 +23,7 @@ test("session switches register a fresh connection and failed registration never
       registerCommand() {},
     } as any,
     {
-      env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
+      env: { PONTIA_HOME: root },
       connectPi: async (_home, _error, _submit, _models, _replay, lifecycle) => {
         controls.push(lifecycle!);
         expect(() => lifecycle!.interrupt()).toThrow();
@@ -43,7 +43,17 @@ test("session switches register a fresh connection and failed registration never
             }
             if (method === "workspaces.list")
               return { workspaces: [{ canonical_path: workspace, state: "active" }] };
-            if (method === "session.context") return { session_context: null };
+            if (method === "session.context") {
+              const id = (params as any).client_session_key;
+              return {
+                session_context: {
+                  session_id: `sess_${id}`,
+                  runtime_id: `rt_${id}`,
+                  client_type: "pi",
+                  session_state: "starting",
+                },
+              };
+            }
             const id = (params as any).binding.client_session_key;
             if (id === "failed") throw new Error("Registration rejected");
             return {
@@ -53,7 +63,7 @@ test("session switches register a fresh connection and failed registration never
           },
         };
       },
-      isManagedPane: async () => true,
+
       logDiagnostic: vi.fn(async () => {}),
     },
   );
@@ -100,7 +110,6 @@ test("a disconnected deferred registration can initialize on the next manual tur
   const workspace = await realpath(root);
   await mkdir(join(root, "state/pi"), { recursive: true });
   let registrations = 0;
-  let managed = false;
   const sockets = new Set<import("node:net").Socket>();
   const server = createServer((socket) => {
     sockets.add(socket);
@@ -123,7 +132,6 @@ test("a disconnected deferred registration can initialize on the next manual tur
             socket.destroy();
             return;
           }
-          managed = true;
           result = {
             session: { session_id: "sess_recovered" },
             runtime: { runtime_id: "rt_recovered" },
@@ -144,8 +152,8 @@ test("a disconnected deferred registration can initialize on the next manual tur
       registerCommand() {},
     } as any,
     {
-      env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
-      isManagedPane: async () => managed,
+      env: { PONTIA_HOME: root },
+
       makeReporter: () => ({
         report: async (_context, event) => {
           events.push(event);
@@ -192,7 +200,15 @@ test("the default extension streams over its registered connection and closes th
       calls.push({ method, params });
       if (method === "workspaces.list")
         return { workspaces: [{ canonical_path: workspace, state: "active" }] };
-      if (method === "session.context") return { session_context: null };
+      if (method === "session.context")
+        return {
+          session_context: {
+            session_id: "sess_live",
+            runtime_id: "rt_live",
+            client_type: "pi",
+            session_state: "starting",
+          },
+        };
       if (method === "runtime.register")
         return {
           session: { session_id: "sess_live" },
@@ -216,9 +232,8 @@ test("the default extension streams over its registered connection and closes th
       registerCommand() {},
     } as any,
     {
-      env: { PONTIA_HOME: root, TMUX: "/unused/tmux,1,1", TMUX_PANE: "%1" },
+      env: { PONTIA_HOME: root },
       connectPi: connect,
-      isManagedPane: async () => true,
     },
   );
   const context = {

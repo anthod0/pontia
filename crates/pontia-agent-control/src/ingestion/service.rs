@@ -15,10 +15,7 @@ use pontia_storage_sqlite::repositories::{
     events::SqliteEventRepository, sessions::SqliteSessionRepository, turns::SqliteTurnRepository,
 };
 
-use self::{
-    effects::clear_exited_session_tmux_markers,
-    validation::ensure_confirmed_event_matches_session_boundary,
-};
+use self::validation::ensure_confirmed_event_matches_session_boundary;
 use super::{
     EventIngestResult, PontiaEvent,
     projection_rows::{event_from_row, session_from_row, turn_from_row},
@@ -283,12 +280,7 @@ impl EventIngestService {
             .await?;
         match outcome {
             commit::CommitOutcome::Skipped => Ok(None),
-            commit::CommitOutcome::Duplicate { result, cleanup } => {
-                if let Some(event) = cleanup {
-                    clear_exited_session_tmux_markers(&self.pool, &event, false).await;
-                }
-                Ok(Some(result))
-            }
+            commit::CommitOutcome::Duplicate { result, .. } => Ok(Some(result)),
             commit::CommitOutcome::Committed { result, events } => {
                 for event in events {
                     self.effects

@@ -122,18 +122,11 @@ impl ControlQueryService {
                 false
             };
         }
-        if self
-            .clients
-            .spec(client_type)
-            .and_then(|spec| spec.tmux_runtime())
-            .is_some()
-        {
+        if entry.spec.owns_interactive_turn() {
             Ok(crate::runtime::bindings::writable_capabilities(
                 capabilities,
                 runtimes.iter().any(|runtime| {
-                    runtime.role == "tui"
-                        && runtime.tmux_socket_path.is_some()
-                        && runtime.tmux_pane_id.is_some()
+                    Some(runtime.role.as_str()) == entry.spec.adapter.control_runtime_role
                 }),
             ))
         } else {

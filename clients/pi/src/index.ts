@@ -28,12 +28,6 @@ import {
   type LiveOutputPublisherLike,
 } from "./live-output.js";
 import {
-  hasTmuxPaneEnvironment,
-  isPontiaManagedTmuxPane,
-  loadPontiaManagedRuntimeIdentity,
-  type ManagedRuntimeIdentity,
-} from "./managed-runtime.js";
-import {
   agentEndWasInterrupted,
   assistantDeltaFromEvent,
   assistantTextFromMessage,
@@ -73,8 +67,6 @@ export interface PontiaPiExtensionDependencies {
   env?: EnvLike;
   makeReporter?: (logFile: string) => ReporterLike;
   logDiagnostic?: (logFile: string, entry: DiagnosticEntry) => Promise<void>;
-  loadManagedRuntime?: (env: EnvLike) => Promise<ManagedRuntimeIdentity | undefined>;
-  isManagedPane?: (env: EnvLike) => Promise<boolean>;
   makeLiveOutputPublisher?: (context: TurnContext & { turnId: string }) => LiveOutputPublisherLike;
   connectPi?: typeof connectPi;
 }
@@ -152,10 +144,10 @@ export function createPontiaPiExtension(
 ): void {
   const sourceEnv = dependencies.env ?? process.env;
   delete sourceEnv.PONTIA_SESSION_ID;
-  if (!pontiaHomeFromEnv(sourceEnv) || !hasTmuxPaneEnvironment(sourceEnv)) return;
+  delete sourceEnv.PONTIA_RUNTIME_INSTANCE_ID;
+  if (!pontiaHomeFromEnv(sourceEnv)) return;
   // Environment extensions may load PONTIA_HOME after extension registration.
   const currentPontiaHome = () => pontiaHomeFromEnv(sourceEnv)!;
-  const currentEnv = () => ({ ...sourceEnv, PONTIA_HOME: currentPontiaHome() });
   const currentHookLogFile = () => defaultHookLogFile(currentPontiaHome());
 
   const rpcConnection: Pick<PiConnection, "request"> = {
@@ -172,8 +164,6 @@ export function createPontiaPiExtension(
         connection: rpcConnection,
       }));
   const logDiagnostic = dependencies.logDiagnostic ?? appendDiagnostic;
-  const loadManagedRuntime = dependencies.loadManagedRuntime ?? loadPontiaManagedRuntimeIdentity;
-  const isManagedPane = dependencies.isManagedPane ?? isPontiaManagedTmuxPane;
   const makeLiveOutputPublisher =
     dependencies.makeLiveOutputPublisher ??
     ((context: TurnContext & { turnId: string }) =>
@@ -184,7 +174,6 @@ export function createPontiaPiExtension(
   let boundSessionContext: SessionContext | undefined;
   let deferredManualSessionDetails: PiSessionDetails | undefined;
   let reportingDisabled = false;
-  let managedPaneConfirmed = false;
   let lastContextUsageJson: string | undefined;
   let pendingPrompt: string | undefined;
   let controlSocket: PiConnection | undefined;
@@ -386,23 +375,6 @@ export function createPontiaPiExtension(
     return socket;
   }
 
-  async function confirmManagedPane(refresh = false): Promise<boolean> {
-    if (managedPaneConfirmed && !refresh) return true;
-    managedPaneConfirmed = await isManagedPane(currentEnv());
-    return managedPaneConfirmed;
-  }
-
-  async function currentManagedSessionContext(): Promise<SessionContext | undefined> {
-    if (boundSessionContext) return boundSessionContext;
-    const runtimeIdentity = await loadManagedRuntime(currentEnv());
-    if (!runtimeIdentity) return undefined;
-    return {
-      sessionId: runtimeIdentity.sessionId,
-      runtimeId: runtimeIdentity.runtimeId,
-      clientType: "pi",
-    };
-  }
-
   pi.registerCommand("pontia-edit", {
     description: "Replay a Pontia Inbox message from a historical Pi entry",
     handler: async (args, ctx) => {
@@ -418,7 +390,7 @@ export function createPontiaPiExtension(
         return;
       }
 
-      const commandContext = await currentManagedSessionContext();
+      const commandContext = boundSessionContext;
       if (!commandContext) {
         await logDiagnostic(logFile, {
           level: "error",
@@ -486,7 +458,7 @@ export function createPontiaPiExtension(
 
       try {
         ctx.ui.setEditorText("");
-        const current = await currentManagedSessionContext();
+        const current = boundSessionContext;
         if (
           current?.sessionId !== commandContext.sessionId ||
           current?.runtimeId !== commandContext.runtimeId
@@ -527,7 +499,7 @@ export function createPontiaPiExtension(
 
   pi.on("before_agent_start", async (event, ctx) => {
     pendingPrompt = event.messageType === "user" ? event.prompt : undefined;
-    if (reportingDisabled || !(await confirmManagedPane())) return;
+    if (reportingDisabled || !boundSessionContext) return;
     try {
       const profilePrompt = await loadProfileSystemPrompt(
         rpcConnection,
@@ -577,6 +549,7 @@ export function createPontiaPiExtension(
     )
       return;
     delete sourceEnv.PONTIA_SESSION_ID;
+    delete sourceEnv.PONTIA_RUNTIME_INSTANCE_ID;
     await closeControlSocket();
     const parentSessionId = boundSessionContext?.sessionId;
     boundSessionContext = undefined;
@@ -591,7 +564,6 @@ export function createPontiaPiExtension(
       deferredManualSessionDetails = sessionDetails;
       const logFile = currentHookLogFile();
       let context: SessionContext | undefined;
-      const env = currentEnv();
 
       const workspaceActive = await isActiveRegisteredWorkspace(
         await registrationConnection(),
@@ -620,7 +592,7 @@ export function createPontiaPiExtension(
           });
           return;
         }
-        context = await bindSession(await registrationConnection(), env, sessionDetails, {
+        context = await bindSession(await registrationConnection(), sessionDetails, {
           startKind: "fork",
           parentSessionId,
         });
@@ -664,14 +636,14 @@ export function createPontiaPiExtension(
           });
           return;
         }
-        if (!existingSession && !(await confirmManagedPane())) {
+        if (!existingSession) {
           await closeControlSocket();
           boundSessionContext = undefined;
           readyReported = false;
           return;
         }
 
-        context = await bindSession(await registrationConnection(), env, sessionDetails, {
+        context = await bindSession(await registrationConnection(), sessionDetails, {
           runtimeId:
             reason === "reload" || existingSession?.sessionState === "starting"
               ? existingSession?.runtimeId
@@ -688,7 +660,7 @@ export function createPontiaPiExtension(
         }
         if (reason === "reload" || reason === "resume" || reason === "new") readyReported = false;
       }
-      if (!context || !(await confirmManagedPane(true))) {
+      if (!context) {
         if (reason === "reload") {
           reportingDisabled = true;
           deferredManualSessionDetails = undefined;
@@ -699,6 +671,7 @@ export function createPontiaPiExtension(
 
       boundSessionContext = context;
       sourceEnv.PONTIA_SESSION_ID = context.sessionId;
+      sourceEnv.PONTIA_RUNTIME_INSTANCE_ID = context.runtimeId;
       piContext = ctx;
       controlSocket!.registered(context);
       readyReported = reportAccepted(
@@ -720,14 +693,14 @@ export function createPontiaPiExtension(
 
   pi.on("session_shutdown", async (event) => {
     delete sourceEnv.PONTIA_SESSION_ID;
+    delete sourceEnv.PONTIA_RUNTIME_INSTANCE_ID;
     piContext = undefined;
     readyReported = false;
     try {
-      if (reportingDisabled || !(await confirmManagedPane())) return;
+      if (reportingDisabled || !boundSessionContext) return;
       const reason = (event as unknown as Record<string, unknown> | undefined)?.reason;
       if (reason !== "quit" && reason !== "new" && reason !== "resume" && reason !== "fork") return;
       const logFile = currentHookLogFile();
-      if (!boundSessionContext) return;
       await makeReporter(logFile).report(
         boundSessionContext,
         buildSessionExitedEvent(boundSessionContext, reason),
@@ -795,12 +768,11 @@ export function createPontiaPiExtension(
           pendingPrompt = undefined;
           return;
         }
-        boundSessionContext = await bindSession(
-          await registrationConnection(),
-          currentEnv(),
-          sessionDetails,
-        );
-        if (boundSessionContext) sourceEnv.PONTIA_SESSION_ID = boundSessionContext.sessionId;
+        boundSessionContext = await bindSession(await registrationConnection(), sessionDetails);
+        if (boundSessionContext) {
+          sourceEnv.PONTIA_SESSION_ID = boundSessionContext.sessionId;
+          sourceEnv.PONTIA_RUNTIME_INSTANCE_ID = boundSessionContext.runtimeId;
+        }
         if (boundSessionContext && !readyReported) {
           piContext = ctx;
           controlSocket!.registered(boundSessionContext);
@@ -826,10 +798,6 @@ export function createPontiaPiExtension(
       };
 
       pendingPrompt = undefined;
-      if (!(await confirmManagedPane(true))) {
-        activeTurn = undefined;
-        return;
-      }
       const reporter = makeReporter(logFile);
       lastContextUsageJson = undefined;
       // Editing and replaying input can start another run from the same Pi leaf.

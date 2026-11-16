@@ -23,7 +23,7 @@ async fn pi_client_session_key_binds_the_precreated_pontia_session_without_marke
     .execute(&state.db())
     .await
     .expect("precreate runtime binding");
-    let mut body = upsert_body(&workspace, Some("%42"));
+    let mut body = upsert_body(&workspace);
     body["client_session_key"] = json!(session_id);
 
     let (status, response) = post_upsert(state.clone(), body).await;
@@ -52,14 +52,13 @@ async fn fork_upsert_creates_independent_child_session_with_lineage() {
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
 
-    let (parent_status, parent_body) =
-        post_upsert(state.clone(), upsert_body(&workspace, Some("%41"))).await;
+    let (parent_status, parent_body) = post_upsert(state.clone(), upsert_body(&workspace)).await;
     assert_eq!(parent_status, StatusCode::OK, "{parent_body:?}");
     let parent_session_id = parent_body["session"]["session_id"]
         .as_str()
         .expect("parent session_id");
 
-    let mut fork_body = upsert_body(&workspace, Some("%42"));
+    let mut fork_body = upsert_body(&workspace);
     fork_body["client_session_key"] = json!("pi_session_fork");
     fork_body["start_kind"] = json!("fork");
     fork_body["parent_session_id"] = json!(parent_session_id);
@@ -126,7 +125,7 @@ async fn fork_upsert_creates_independent_child_session_with_lineage() {
 }
 
 #[tokio::test]
-async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() {
+async fn upsert_creates_session_runtime_binding_and_agent_binding_without_tmux() {
     let (state, _app) = test_state().await;
     let workspace = tempfile::tempdir().expect("workspace");
     let workspace = workspace
@@ -135,7 +134,7 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
 
-    let (status, body) = post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    let (status, body) = post_upsert(state.clone(), upsert_body(&workspace)).await;
 
     assert_eq!(status, StatusCode::OK, "{body:?}");
     let session_id = body["session"]["session_id"].as_str().expect("session_id");
@@ -165,14 +164,8 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_for_tmux_pi() 
     assert_eq!(row.get::<String, _>("role"), "tui");
     assert_eq!(row.get::<String, _>("runtime_id"), runtime_id);
     assert_eq!(row.get::<String, _>("start_command"), "pi --approve");
-    assert_eq!(
-        row.get::<String, _>("tmux_socket_path"),
-        std::path::Path::new(&workspace)
-            .join("missing-tmux.sock")
-            .to_str()
-            .unwrap()
-    );
-    assert_eq!(row.get::<String, _>("tmux_pane_id"), "%42");
+    assert_eq!(row.get::<Option<String>, _>("tmux_socket_path"), None);
+    assert_eq!(row.get::<Option<String>, _>("tmux_pane_id"), None);
     assert_eq!(row.get::<String, _>("state"), "running");
     let binding_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings WHERE session_id = ? AND client_type = 'pi' AND client_session_key = 'pi_session_123'")
         .bind(session_id)
@@ -225,12 +218,11 @@ async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fiel
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
 
-    let (first_status, first) =
-        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    let (first_status, first) = post_upsert(state.clone(), upsert_body(&workspace)).await;
     assert_eq!(first_status, StatusCode::OK, "{first:?}");
     let first_session_id = first["session"]["session_id"].as_str().unwrap().to_string();
 
-    let mut second_body = upsert_body(&workspace, Some("%42"));
+    let mut second_body = upsert_body(&workspace);
     second_body["runtime_id"] = first["runtime"]["runtime_id"].clone();
     second_body["start_command"] = json!("pi --resume");
     let (second_status, second) = post_upsert(state.clone(), second_body).await;
@@ -260,7 +252,7 @@ async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fiel
         second["runtime"]["runtime_id"].as_str().unwrap()
     );
     assert_eq!(row.get::<String, _>("start_command"), "pi --resume");
-    assert_eq!(row.get::<String, _>("tmux_pane_id"), "%42");
+    assert_eq!(row.get::<Option<String>, _>("tmux_pane_id"), None);
 
     let binding_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings")
         .fetch_one(&state.db())
@@ -279,13 +271,12 @@ async fn upsert_rejects_a_different_tui_while_the_bound_session_is_not_exited() 
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
 
-    let (first_status, first) =
-        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    let (first_status, first) = post_upsert(state.clone(), upsert_body(&workspace)).await;
     assert_eq!(first_status, StatusCode::OK, "{first:?}");
     let session_id = first["session"]["session_id"].as_str().unwrap();
     let runtime_id = first["runtime"]["runtime_id"].as_str().unwrap();
 
-    let mut replacement = upsert_body(&workspace, Some("%99"));
+    let mut replacement = upsert_body(&workspace);
     replacement["session_id"] = json!(session_id);
     replacement["runtime_id"] = json!(runtime_id);
     replacement["client_session_key"] = json!("pi_session_456");
@@ -293,13 +284,13 @@ async fn upsert_rejects_a_different_tui_while_the_bound_session_is_not_exited() 
 
     assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
     assert_eq!(body["error"]["code"], "state_conflict");
-    let pane_id: String =
+    let pane_id: Option<String> =
         sqlx::query_scalar("SELECT tmux_pane_id FROM session_runtimes WHERE session_id = ?")
             .bind(session_id)
             .fetch_one(&state.db())
             .await
             .expect("runtime binding");
-    assert_eq!(pane_id, "%42");
+    assert_eq!(pane_id, None);
 }
 
 #[tokio::test]
@@ -312,8 +303,7 @@ async fn upsert_rejects_a_different_runtime_owner_while_a_turn_is_active() {
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
 
-    let (first_status, first) =
-        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    let (first_status, first) = post_upsert(state.clone(), upsert_body(&workspace)).await;
     assert_eq!(first_status, StatusCode::OK, "{first:?}");
     let session_id = first["session"]["session_id"].as_str().unwrap();
     let runtime_id = first["runtime"]["runtime_id"].as_str().unwrap();
@@ -328,7 +318,7 @@ async fn upsert_rejects_a_different_runtime_owner_while_a_turn_is_active() {
     .await;
     assert_eq!(started_status, StatusCode::OK, "{started:?}");
 
-    let mut replacement = upsert_body(&workspace, Some("%99"));
+    let mut replacement = upsert_body(&workspace);
     replacement["session_id"] = json!(session_id);
     let (replacement_status, replacement_body) = post_upsert(state.clone(), replacement).await;
 
@@ -345,14 +335,7 @@ async fn upsert_rejects_a_different_runtime_owner_while_a_turn_is_active() {
             .await
             .expect("runtime binding");
     assert_eq!(row.get::<String, _>("runtime_id"), runtime_id);
-    assert_eq!(row.get::<String, _>("tmux_pane_id"), "%42");
-
-    let mut different_pane_refresh = upsert_body(&workspace, Some("%77"));
-    different_pane_refresh["session_id"] = json!(session_id);
-    different_pane_refresh["runtime_id"] = json!(runtime_id);
-    let (refresh_status, refresh_body) = post_upsert(state.clone(), different_pane_refresh).await;
-    assert_eq!(refresh_status, StatusCode::CONFLICT, "{refresh_body:?}");
-    assert_eq!(refresh_body["error"]["code"], "state_conflict");
+    assert_eq!(row.get::<Option<String>, _>("tmux_pane_id"), None);
 }
 
 #[tokio::test]
@@ -364,8 +347,8 @@ async fn concurrent_first_upserts_for_one_pi_session_key_create_once_without_ove
         .canonicalize()
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
-    let first_request = upsert_body(&workspace, Some("%42"));
-    let second_request = upsert_body(&workspace, Some("%42"));
+    let first_request = upsert_body(&workspace);
+    let second_request = upsert_body(&workspace);
 
     let (first, second) = tokio::join!(
         post_upsert(state.clone(), first_request),
@@ -402,8 +385,7 @@ async fn upsert_rejects_a_request_that_disagrees_with_the_agent_binding() {
         .expect("canonical workspace");
     let workspace = workspace.display().to_string();
 
-    let (first_status, first) =
-        post_upsert(state.clone(), upsert_body(&workspace, Some("%42"))).await;
+    let (first_status, first) = post_upsert(state.clone(), upsert_body(&workspace)).await;
     assert_eq!(first_status, StatusCode::OK, "{first:?}");
     let session_id = first["session"]["session_id"].as_str().expect("session id");
     sqlx::query(
@@ -414,7 +396,7 @@ async fn upsert_rejects_a_request_that_disagrees_with_the_agent_binding() {
     .await
     .expect("change agent binding identity");
 
-    let mut retry = upsert_body(&workspace, Some("%99"));
+    let mut retry = upsert_body(&workspace);
     retry["session_id"] = json!(session_id);
     let (status, body) = post_upsert(state.clone(), retry).await;
 
@@ -427,29 +409,4 @@ async fn upsert_rejects_a_request_that_disagrees_with_the_agent_binding() {
             .await
             .expect("runtime binding");
     assert_eq!(runtime_id, first["runtime"]["runtime_id"].as_str().unwrap());
-}
-
-#[tokio::test]
-async fn upsert_rejects_a_request_without_tmux_binding() {
-    let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
-    let workspace = workspace
-        .path()
-        .canonicalize()
-        .expect("canonical workspace");
-    let workspace = workspace.display().to_string();
-
-    let (status, body) = post_upsert(state.clone(), upsert_body(&workspace, None)).await;
-
-    assert_eq!(status, StatusCode::CONFLICT, "{body:?}");
-    assert_eq!(body["error"]["code"], "state_conflict");
-    assert_eq!(
-        body["error"]["message"],
-        "runtime binding upsert requires tmux"
-    );
-    let session_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
-        .fetch_one(&state.db())
-        .await
-        .expect("session count");
-    assert_eq!(session_count, 0);
 }

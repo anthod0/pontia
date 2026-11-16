@@ -11,7 +11,7 @@ use tower::ServiceExt;
 
 mod context;
 mod lifecycle;
-mod tmux;
+mod process;
 mod upsert;
 
 pub(super) async fn test_state() -> (AppState, TestApp) {
@@ -55,16 +55,6 @@ pub(super) async fn get_session_context_by_client_session(
     (status, json!({"data":value}))
 }
 
-pub(super) async fn exit_session(state: AppState, session_id: &str) -> (StatusCode, Value) {
-    request_json(
-        state,
-        "POST",
-        &format!("/api/v1/sessions/{session_id}/exit"),
-        None,
-    )
-    .await
-}
-
 pub(super) async fn request_json(
     state: AppState,
     method: &str,
@@ -100,36 +90,7 @@ pub(super) async fn request_json(
     (status, json)
 }
 
-pub(super) fn upsert_body(workspace: &str, pane_id: Option<&str>) -> Value {
-    upsert_body_with_tmux(
-        workspace,
-        std::path::Path::new(workspace)
-            .join("missing-tmux.sock")
-            .to_str()
-            .unwrap(),
-        pane_id,
-        Some("dev"),
-    )
-}
-
-pub(super) fn upsert_body_with_tmux(
-    workspace: &str,
-    socket_path: &str,
-    pane_id: Option<&str>,
-    session_name: Option<&str>,
-) -> Value {
-    let tmux = pane_id.map(|pane_id| {
-        json!({
-            "socket_path": socket_path,
-            "session_id": "$1",
-            "session_name": session_name,
-            "window_id": "@3",
-            "window_index": 0,
-            "pane_id": pane_id,
-            "pane_index": 1,
-            "pane_current_path": workspace
-        })
-    });
+pub(super) fn upsert_body(workspace: &str) -> Value {
     json!({
         "client_type": "pi",
         "client_session_key": "pi_session_123",
@@ -137,8 +98,7 @@ pub(super) fn upsert_body_with_tmux(
         "client_session_dir": "/tmp/pi",
         "client_cwd": workspace,
         "launch_cwd": workspace,
-        "start_command": "pi --approve",
-        "tmux": tmux
+        "start_command": "pi --approve"
     })
 }
 

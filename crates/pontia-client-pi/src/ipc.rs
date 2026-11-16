@@ -321,9 +321,22 @@ async fn dispatch(
         if query.client_session_key.trim().is_empty() {
             return Err(Error::Domain("client_session_key is required".into()));
         }
-        let context = AgentBindingService::new(state.db())
+        let bindings = AgentBindingService::new(state.db());
+        let context = match bindings
             .session_context_for_client_session("pi", &query.client_session_key)
-            .await?;
+            .await?
+        {
+            Some(context) => Some(context),
+            None => {
+                bindings
+                    .pending_session_context(
+                        "pi",
+                        &query.client_session_key,
+                        &query.client_session_key,
+                    )
+                    .await?
+            }
+        };
         return Ok(json!({"session_context":context}));
     }
     if registered.is_some() {
@@ -344,7 +357,17 @@ async fn dispatch(
             let result = state
                 .session_runtimes()
                 .with_session_identity_hint(client_session_key.clone())
-                .upsert(registration.binding)
+                .upsert(
+                    registration.binding,
+                    channel
+                        .process_id
+                        .and_then(pontia_runtime::ProcessFingerprint::capture)
+                        .ok_or_else(|| {
+                            Error::StateConflict(
+                                "Pi IPC peer process identity is unavailable".into(),
+                            )
+                        })?,
+                )
                 .await?;
             let session_id = result["session"]["session_id"]
                 .as_str()

@@ -22,15 +22,24 @@ test("child commands inherit the current binding independently in two Pi process
             ...process.env,
             PONTIA_HOME: root,
             PONTIA_SESSION_ID: "inherited-wrong-session",
-            TMUX: "/unused/tmux,1,1",
-            TMUX_PANE: "%1",
+            PONTIA_RUNTIME_INSTANCE_ID: "inherited-wrong-runtime",
+            TMUX: "",
+            TMUX_PANE: "",
           },
         },
       );
-      return { suffix, observations: JSON.parse(stdout) };
+      return { suffix, ...JSON.parse(stdout) };
     }),
   );
-  for (const { suffix, observations } of results) {
+  for (const { suffix, observations, runtimes } of results) {
+    expect(runtimes).toEqual(
+      Object.fromEntries(
+        Object.entries(observations).map(([step, session]) => [
+          step,
+          session === "unset" ? "unset" : `rt_${session}`,
+        ]),
+      ),
+    );
     expect(observations).toEqual({
       unbound: "unset",
       created: `sess_${suffix}_1`,

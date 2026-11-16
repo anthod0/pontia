@@ -4,12 +4,10 @@ use std::{
     time::Duration,
 };
 
-use super::super::{
-    is_reusable_shell_pane, mark_pontia_pane, pane_binding, run_launch_command_in_pane,
-};
+use super::super::{is_reusable_shell_pane, pane_binding, run_launch_command_in_pane};
 
 #[test]
-fn shell_pane_is_reusable_while_pontia_markers_are_present() {
+fn idle_shell_pane_is_reusable() {
     let session = format!("pontia_test_reuse_shell_{}", std::process::id());
     let status = Command::new("tmux")
         .args(["new-session", "-d", "-s", &session, "sh"])
@@ -19,13 +17,6 @@ fn shell_pane_is_reusable_while_pontia_markers_are_present() {
     assert!(status.success(), "tmux session should start");
 
     let binding = pane_binding(&session).expect("pane binding");
-    mark_pontia_pane(
-        &binding.socket_path,
-        &binding.pane_id,
-        "session_reuse",
-        "rtinst_reuse",
-    )
-    .expect("mark pontia pane");
 
     assert!(wait_for_reusable_shell_pane(
         &binding.socket_path,
@@ -49,7 +40,7 @@ fn wait_for_reusable_shell_pane(socket_path: &str, pane_id: &str) -> bool {
 }
 
 #[test]
-fn marked_shell_pane_with_foreground_child_process_is_not_reusable() {
+fn shell_pane_with_foreground_child_process_is_not_reusable() {
     let session = format!("pontia_test_reuse_foreground_child_{}", std::process::id());
     let status = Command::new("tmux")
         .args(["new-session", "-d", "-s", &session, "sh"])
@@ -59,13 +50,6 @@ fn marked_shell_pane_with_foreground_child_process_is_not_reusable() {
     assert!(status.success(), "tmux session should start");
 
     let binding = pane_binding(&session).expect("pane binding");
-    mark_pontia_pane(
-        &binding.socket_path,
-        &binding.pane_id,
-        "session_reuse",
-        "rtinst_reuse",
-    )
-    .expect("mark pontia pane");
     run_launch_command_in_pane(&binding.socket_path, &binding.pane_id, "sleep 60")
         .expect("start foreground child process");
 
@@ -98,13 +82,6 @@ fn pane_with_non_shell_foreground_command_is_not_reusable() {
 
     thread::sleep(Duration::from_millis(100));
     let binding = pane_binding(&session).expect("pane binding");
-    mark_pontia_pane(
-        &binding.socket_path,
-        &binding.pane_id,
-        "session_reuse",
-        "rtinst_reuse",
-    )
-    .expect("mark pontia pane");
 
     assert!(!is_reusable_shell_pane(
         &binding.socket_path,

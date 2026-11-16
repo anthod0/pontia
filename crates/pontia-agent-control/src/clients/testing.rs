@@ -16,12 +16,9 @@ pub(crate) fn clients() -> super::ClientRegistry {
         spec.capabilities.interrupt = true;
         spec.adapter.dispatch = DispatchBehavior::Connected;
         spec.adapter.terminate = TerminateBehavior::Connected;
-        spec.adapter.turn_lifecycle = TurnLifecycleBehavior::ClientManagedForInteractiveTmux;
-        spec.adapter.runtime = RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
-            process_names: &["test-agent"],
-            hook_log: None,
-        });
-        spec.adapter.runtime_binding = RuntimeBindingBehavior::Tmux {
+        spec.adapter.turn_lifecycle = TurnLifecycleBehavior::ClientManagedInteractive;
+        spec.adapter.runtime = RuntimeBehavior::Tmux(TmuxRuntimeBehavior { hook_log: None });
+        spec.adapter.runtime_binding = RuntimeBindingBehavior::Named {
             runtime_kind: "test_tui",
         };
         spec

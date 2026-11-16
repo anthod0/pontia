@@ -170,11 +170,18 @@ impl ClientControlService {
         }
         self.validate_identity(client_type, client_session_key, session_id, runtime_id)
             .await?;
-        if let Some(pid) = channel.process_id()
-            && let Some(record) = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).get(runtime_id).await?
-            && let Some(fingerprint) = record.process_fingerprint.as_deref().and_then(|json| serde_json::from_str::<pontia_runtime::TmuxProcessFingerprint>(json).ok())
-            && (fingerprint.agent_pid != pid || pontia_runtime::GenericRuntimeManager.observe_tmux_process_fingerprint(&fingerprint) == pontia_runtime::ProcessObservation::Exited) {
-            return Err(Error::StateConflict("Client connection does not belong to the confirmed agent process".into()));
+        if let Some(pid) = channel.process_id() {
+            let record = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).get(runtime_id).await?;
+            let confirmed = record
+                .and_then(|record| record.process_fingerprint)
+                .map(|value| serde_json::from_str::<pontia_runtime::ProcessFingerprint>(&value))
+                .transpose()?;
+            if confirmed.is_none() || confirmed != pontia_runtime::ProcessFingerprint::capture(pid)
+            {
+                return Err(Error::StateConflict(
+                    "Client connection does not belong to the confirmed agent process".into(),
+                ));
+            }
         }
         if self.current_runtime(session_id).await?.as_deref() != Some(runtime_id) {
             return Err(Error::StateConflict(

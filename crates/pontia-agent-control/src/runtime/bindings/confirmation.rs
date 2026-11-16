@@ -9,7 +9,6 @@ use crate::{
     UpsertAgentBindingRequest, WorkspaceRecord,
 };
 use pontia_core::{Error, Result, ids::new_runtime_id, time::utc_now};
-use pontia_runtime::GenericRuntimeManager;
 use pontia_storage_sqlite::repositories::session_runtimes::{
     SessionRuntimeRecord, SqliteSessionRuntimeRepository,
 };
@@ -24,6 +23,7 @@ impl RuntimeBindingUpsertService {
         workspace: &WorkspaceRecord,
         client_spec: &AgentClientSpec,
         created_session: bool,
+        process: &pontia_runtime::ProcessFingerprint,
     ) -> Result<Value> {
         let existing = SqliteSessionRuntimeRepository::new(self.pool.clone())
             .runtime_id(session_id, client_spec.adapter.control_runtime_role)
@@ -48,25 +48,18 @@ impl RuntimeBindingUpsertService {
                 ))
                 .await?;
         }
-        let socket = request
-            .tmux
-            .as_ref()
-            .and_then(|tmux| non_empty(tmux.socket_path.as_deref()));
-        let pane = request
-            .tmux
-            .as_ref()
-            .and_then(|tmux| non_empty(tmux.pane_id.as_deref()));
-        let fingerprint = match (
-            socket.as_deref(),
-            pane.as_deref(),
-            client_spec.tmux_runtime(),
-        ) {
-            (Some(socket), Some(pane), Some(options)) => GenericRuntimeManager
-                .capture_tmux_process_fingerprint(socket, pane, options.process_names)
-                .map(|value| serde_json::to_string(&value))
-                .transpose()?,
-            _ => None,
-        };
+        let prior = SqliteSessionRuntimeRepository::new(self.pool.clone())
+            .get(&runtime_id)
+            .await?;
+        let fingerprint = serde_json::to_string(process)?;
+        let terminal = prior.as_ref().filter(|record| {
+            record
+                .process_fingerprint
+                .as_ref()
+                .is_none_or(|existing| existing == &fingerprint)
+        });
+        let socket = terminal.and_then(|record| record.tmux_socket_path.clone());
+        let pane = terminal.and_then(|record| record.tmux_pane_id.clone());
         let mut tx = self.pool.begin().await?;
         fence_runtime_binding_write(
             &mut tx,
@@ -89,10 +82,11 @@ impl RuntimeBindingUpsertService {
                 session_id: session_id.into(),
                 role: "tui".into(),
                 state: prior_state,
-                start_command: non_empty(request.start_command.as_deref()),
-                tmux_socket_path: socket.clone(),
-                tmux_pane_id: pane.clone(),
-                process_fingerprint: fingerprint,
+                start_command: non_empty(request.start_command.as_deref())
+                    .or_else(|| prior.and_then(|record| record.start_command)),
+                tmux_socket_path: socket,
+                tmux_pane_id: pane,
+                process_fingerprint: Some(fingerprint),
                 created_at: utc_now()
                     .format(&time::format_description::well_known::Rfc3339)
                     .map_err(|err| Error::Domain(err.to_string()))?,
@@ -116,16 +110,6 @@ impl RuntimeBindingUpsertService {
             .with_clients(self.clients.clone())
             .get_session(session_id)
             .await?;
-        if let (Some(socket), Some(pane)) = (socket.as_deref(), pane.as_deref())
-            && GenericRuntimeManager.is_tmux_pane_alive(socket, pane)
-        {
-            GenericRuntimeManager.mark_tmux_pane_for_session(
-                socket,
-                pane,
-                session_id,
-                &runtime_id,
-            )?;
-        }
         Ok(
             json!({"session": session, "runtime": {"runtime_id": runtime_id, "capabilities": client_spec.capabilities}}),
         )

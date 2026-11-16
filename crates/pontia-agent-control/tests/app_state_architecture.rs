@@ -33,12 +33,14 @@ async fn runtime_registration_and_resume_publish_to_the_application_broker() {
         .build();
     let mut notices = state.agent_events().subscribe();
     let request = json!({
-        "client_type":"generic", "client_session_key":"native", "launch_cwd":root.path(),
-        "tmux":{"socket_path":root.path().join("missing.sock"),"pane_id":"%1"}
+        "client_type":"generic", "client_session_key":"native", "launch_cwd":root.path()
     });
     let registered = state
         .session_runtimes()
-        .upsert(serde_json::from_value(request.clone()).unwrap())
+        .upsert(
+            serde_json::from_value(request.clone()).unwrap(),
+            pontia_runtime::ProcessFingerprint::capture(std::process::id()).unwrap(),
+        )
         .await
         .unwrap();
     let session = registered["session"]["session_id"].as_str().unwrap();
@@ -82,7 +84,10 @@ async fn runtime_registration_and_resume_publish_to_the_application_broker() {
     );
     state
         .session_runtimes()
-        .upsert(serde_json::from_value(request).unwrap())
+        .upsert(
+            serde_json::from_value(request).unwrap(),
+            pontia_runtime::ProcessFingerprint::capture(std::process::id()).unwrap(),
+        )
         .await
         .unwrap();
     for kind in [EventType::SessionResuming, EventType::SessionStarted] {

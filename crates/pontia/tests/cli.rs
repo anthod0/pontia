@@ -2,7 +2,6 @@ use std::{
     fs,
     io::{Read, Write},
     net::TcpListener,
-    os::unix::fs::PermissionsExt,
     path::Path,
     process::Command,
     thread,
@@ -22,26 +21,6 @@ fn write_pontia_config(home: &Path, port: u16) {
         format!("bind_addr = \"0.0.0.0:{port}\"\nexternal_api_token = \"cli-test-token\"\n"),
     )
     .expect("write pontia config");
-}
-
-fn install_fake_tmux(bin_dir: &Path) {
-    let tmux = bin_dir.join("tmux");
-    fs::write(
-        &tmux,
-        r#"#!/bin/sh
-case "$*" in
-  *"@pontia_session_id") printf 'sess_workflow_cli\n' ;;
-  *"@pontia_runtime_id") printf 'rtinst_workflow_cli\n' ;;
-  *) exit 1 ;;
-esac
-"#,
-    )
-    .expect("write fake tmux");
-    let mut permissions = fs::metadata(&tmux)
-        .expect("fake tmux metadata")
-        .permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(tmux, permissions).expect("make fake tmux executable");
 }
 
 fn capture_one_request(listener: TcpListener) -> thread::JoinHandle<String> {
@@ -387,26 +366,19 @@ fn workflow_show_requires_an_id_when_argument_and_environment_are_missing() {
 }
 
 #[test]
-fn workflow_submit_discovers_managed_pane_and_posts_identity() {
+fn workflow_submit_posts_registered_session_identity_without_tmux() {
     let dir = temp_dir("submit-success");
-    let bin_dir = dir.path().join("bin");
-    fs::create_dir(&bin_dir).expect("create bin dir");
-    install_fake_tmux(&bin_dir);
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
     let addr = listener.local_addr().expect("test server address");
     write_pontia_config(dir.path(), addr.port());
     let request = capture_one_request(listener);
-    let path = format!(
-        "{}:{}",
-        bin_dir.display(),
-        std::env::var("PATH").unwrap_or_default()
-    );
 
     let output = pontia()
         .args(["workflow", "submit"])
-        .env("PATH", path)
-        .env("TMUX", "/tmp/tmux-test/default,1,0")
-        .env("TMUX_PANE", "%7")
+        .env_remove("TMUX")
+        .env_remove("TMUX_PANE")
+        .env("PONTIA_SESSION_ID", "sess_workflow_cli")
+        .env("PONTIA_RUNTIME_INSTANCE_ID", "rtinst_workflow_cli")
         .env("PONTIA_HOME", dir.path())
         .output()
         .expect("run workflow submit");
@@ -429,9 +401,6 @@ fn workflow_submit_discovers_managed_pane_and_posts_identity() {
 #[test]
 fn workflow_patch_request_posts_identity_and_prints_patch_id() {
     let dir = temp_dir("patch-request-success");
-    let bin_dir = dir.path().join("bin");
-    fs::create_dir(&bin_dir).expect("create bin dir");
-    install_fake_tmux(&bin_dir);
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
     let addr = listener.local_addr().expect("test server address");
     write_pontia_config(dir.path(), addr.port());
@@ -439,17 +408,13 @@ fn workflow_patch_request_posts_identity_and_prints_patch_id() {
         listener,
         r#"{"data":{"patch_id":"patch_cli_1","state":"requested"},"meta":{},"error":null}"#,
     );
-    let path = format!(
-        "{}:{}",
-        bin_dir.display(),
-        std::env::var("PATH").unwrap_or_default()
-    );
 
     let output = pontia()
         .args(["workflow", "patch", "request"])
-        .env("PATH", path)
-        .env("TMUX", "/tmp/tmux-test/default,1,0")
-        .env("TMUX_PANE", "%7")
+        .env_remove("TMUX")
+        .env_remove("TMUX_PANE")
+        .env("PONTIA_SESSION_ID", "sess_workflow_cli")
+        .env("PONTIA_RUNTIME_INSTANCE_ID", "rtinst_workflow_cli")
         .env("PONTIA_HOME", dir.path())
         .output()
         .expect("run Workflow Patch request");
@@ -474,9 +439,6 @@ fn workflow_patch_request_posts_identity_and_prints_patch_id() {
 #[test]
 fn workflow_patch_apply_posts_identity_and_prints_outcome() {
     let dir = temp_dir("patch-apply-success");
-    let bin_dir = dir.path().join("bin");
-    fs::create_dir(&bin_dir).unwrap();
-    install_fake_tmux(&bin_dir);
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     write_pontia_config(dir.path(), addr.port());
@@ -484,16 +446,12 @@ fn workflow_patch_apply_posts_identity_and_prints_outcome() {
         listener,
         r#"{"data":{"patch_id":"patch_cli_1","workflow_id":"wf_cli","outcome":"applied","revision":2},"meta":{},"error":null}"#,
     );
-    let path = format!(
-        "{}:{}",
-        bin_dir.display(),
-        std::env::var("PATH").unwrap_or_default()
-    );
     let output = pontia()
         .args(["workflow", "patch", "apply"])
-        .env("PATH", path)
-        .env("TMUX", "/tmp/tmux-test/default,1,0")
-        .env("TMUX_PANE", "%7")
+        .env_remove("TMUX")
+        .env_remove("TMUX_PANE")
+        .env("PONTIA_SESSION_ID", "sess_workflow_cli")
+        .env("PONTIA_RUNTIME_INSTANCE_ID", "rtinst_workflow_cli")
         .env("PONTIA_HOME", dir.path())
         .output()
         .unwrap();
@@ -514,9 +472,6 @@ fn workflow_patch_apply_posts_identity_and_prints_outcome() {
 #[test]
 fn workflow_patch_block_posts_managed_identity() {
     let dir = temp_dir("patch-block-success");
-    let bin_dir = dir.path().join("bin");
-    fs::create_dir(&bin_dir).expect("create bin dir");
-    install_fake_tmux(&bin_dir);
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     write_pontia_config(dir.path(), addr.port());
@@ -524,17 +479,13 @@ fn workflow_patch_block_posts_managed_identity() {
         listener,
         r#"{"data":{"patch_id":"patch_cli_1","workflow_id":"wf_cli","state":"blocked"},"meta":{},"error":null}"#,
     );
-    let path = format!(
-        "{}:{}",
-        bin_dir.display(),
-        std::env::var("PATH").unwrap_or_default()
-    );
 
     let output = pontia()
         .args(["workflow", "patch", "block"])
-        .env("PATH", path)
-        .env("TMUX", "/tmp/tmux-test/default,1,0")
-        .env("TMUX_PANE", "%7")
+        .env_remove("TMUX")
+        .env_remove("TMUX_PANE")
+        .env("PONTIA_SESSION_ID", "sess_workflow_cli")
+        .env("PONTIA_RUNTIME_INSTANCE_ID", "rtinst_workflow_cli")
         .env("PONTIA_HOME", dir.path())
         .output()
         .unwrap();
@@ -633,37 +584,18 @@ fn remote_disable_requires_login_without_removing_the_device_id() {
 }
 
 #[test]
-fn workflow_submit_rejects_a_pane_without_pontia_identity() {
+fn workflow_submit_rejects_missing_session_identity() {
     let dir = temp_dir("unmanaged-pane");
-    let bin_dir = dir.path().join("bin");
-    fs::create_dir(&bin_dir).expect("create bin dir");
-    let tmux = bin_dir.join("tmux");
-    fs::write(&tmux, "#!/bin/sh\nexit 1\n").expect("write fake tmux");
-    let mut permissions = fs::metadata(&tmux)
-        .expect("fake tmux metadata")
-        .permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(tmux, permissions).expect("make fake tmux executable");
-    let path = format!(
-        "{}:{}",
-        bin_dir.display(),
-        std::env::var("PATH").unwrap_or_default()
-    );
-
     let output = pontia()
         .args(["workflow", "submit"])
-        .env("PATH", path)
         .env("PONTIA_HOME", dir.path())
-        .env("TMUX", "/tmp/tmux-test/default,1,0")
-        .env("TMUX_PANE", "%8")
+        .env_remove("PONTIA_SESSION_ID")
+        .env_remove("PONTIA_RUNTIME_INSTANCE_ID")
         .output()
         .expect("run workflow submit");
 
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("not running in a Pontia-managed tmux pane")
-    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Missing PONTIA_SESSION_ID"));
 }
 
 #[test]

@@ -168,8 +168,12 @@ impl ClientAdapter {
         self.validate_bound_session(binding.as_ref())?;
         match self.spec.adapter.terminate {
             TerminateBehavior::Connected => {
-                let (socket, pane) = target.tmux_pane(&self.pool.clone()).await?;
-                GenericRuntimeManager.kill_tmux_pane(&socket, &pane)?;
+                if let Some(runtime_id) = &target.runtime_id
+                    && let Some(record) = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).get(runtime_id).await?
+                    && let Some((socket, pane)) = record.tmux_socket_path.zip(record.tmux_pane_id)
+                {
+                    GenericRuntimeManager.kill_tmux_pane(&socket, &pane)?;
+                }
             }
             TerminateBehavior::RuntimeManager => {
                 self.exit(target).await.into_result()?;

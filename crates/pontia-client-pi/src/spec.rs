@@ -46,7 +46,6 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         native_turn_metadata_key: None,
         control_runtime_role: Some("tui"),
         runtime: RuntimeBehavior::Tmux(TmuxRuntimeBehavior {
-            process_names: &["pi"],
             hook_log: Some(HookLogBehavior {
                 file_name: "pi-hook.log",
                 metadata_key: "pi_hook_log",
@@ -55,8 +54,8 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         dispatch: DispatchBehavior::Connected,
         client_session_identity: ClientSessionIdentityBehavior::RequiredOnReady,
         terminate: TerminateBehavior::Connected,
-        turn_lifecycle: TurnLifecycleBehavior::ClientManagedForInteractiveTmux,
-        runtime_binding: RuntimeBindingBehavior::Tmux {
+        turn_lifecycle: TurnLifecycleBehavior::ClientManagedInteractive,
+        runtime_binding: RuntimeBindingBehavior::Named {
             runtime_kind: "pi_tui",
         },
     },

@@ -82,6 +82,29 @@ impl AgentBindingService {
         Ok(binding)
     }
 
+    pub async fn pending_session_context(
+        &self,
+        client_type: &str,
+        session_id: &str,
+        client_session_key: &str,
+    ) -> Result<Option<AgentBindingSessionContext>> {
+        let pending: Option<(String, String)> = sqlx::query_as(
+                "SELECT s.session_id, r.runtime_id FROM sessions s JOIN session_runtimes r USING(session_id) LEFT JOIN agent_bindings a USING(session_id) WHERE s.session_id = ? AND s.client_type = ? AND s.state = 'starting' AND r.state = 'starting' AND r.role = 'tui' AND a.id IS NULL"
+            ).bind(session_id).bind(client_type).fetch_optional(&self.pool).await?;
+        Ok(
+            pending.map(|(session_id, runtime_id)| AgentBindingSessionContext {
+                session_id,
+                session_state: "starting".into(),
+                client_type: client_type.into(),
+                client_session_key: client_session_key.into(),
+                client_session_file: None,
+                runtime_id: Some(runtime_id),
+                binding_metadata: serde_json::json!({}),
+                runtime_metadata: serde_json::json!({}),
+            }),
+        )
+    }
+
     pub async fn session_context_for_client_session(
         &self,
         client_type: &str,

@@ -39,8 +39,7 @@ impl Session {
         let registered = peer.call("runtime.register", json!({
             "version": PROTOCOL_VERSION,
             "binding": {
-                "client_type": "pi", "client_session_key": "native", "client_cwd": root.path(),
-                "tmux": {"socket_path": root.path().join("tmux.sock"), "pane_id": "%1"}
+                "client_type": "pi", "client_session_key": "native", "client_cwd": root.path()
             }
         })).await.unwrap();
         let session = registered["session"]["session_id"]
@@ -285,13 +284,8 @@ async fn rejects_invalid_tool_payloads_and_unregistered_or_mismatched_identities
             .as_object_mut()
             .unwrap()
             .extend(overrides.as_object().unwrap().clone());
-        assert!(
-            session
-                .peer
-                .call("liveOutput.publish", params)
-                .await
-                .is_err()
-        );
+        let result = session.peer.call("liveOutput.publish", params).await;
+        assert!(result.is_err(), "override {overrides}: {result:?}");
         assert!(
             session
                 .state

@@ -42,7 +42,11 @@ impl RuntimeBindingUpsertService {
         }
     }
 
-    pub async fn upsert(&self, request: RuntimeBindingUpsertRequest) -> Result<Value> {
+    pub async fn upsert(
+        &self,
+        request: RuntimeBindingUpsertRequest,
+        process: pontia_runtime::ProcessFingerprint,
+    ) -> Result<Value> {
         let _upsert_guard = RUNTIME_BINDING_UPSERT_LOCK.lock().await;
         validate_required("client_type", &request.client_type)?;
         validate_required("client_session_key", &request.client_session_key)?;
@@ -55,18 +59,6 @@ impl RuntimeBindingUpsertService {
                 request.client_type
             ))
         })?;
-        let tmux = request
-            .tmux
-            .as_ref()
-            .ok_or_else(|| Error::Domain("runtime binding upsert requires tmux".to_string()))?;
-        if non_empty(tmux.socket_path.as_deref()).is_none()
-            || non_empty(tmux.pane_id.as_deref()).is_none()
-        {
-            return Err(Error::Domain(
-                "runtime binding upsert requires tmux.socket_path and tmux.pane_id".to_string(),
-            ));
-        }
-
         let launch_cwd = request
             .launch_cwd
             .as_deref()
@@ -94,7 +86,7 @@ impl RuntimeBindingUpsertService {
             Some(session_id) => {
                 self.ensure_existing_binding_agrees(&session_id, &request)
                     .await?;
-                self.ensure_active_runtime_is_not_replaced(&session_id, &request)
+                self.ensure_active_runtime_is_not_replaced(&session_id, &request, &process)
                     .await?;
                 self.record_resume_lifecycle_for_exited_session(&session_id, &request)
                     .await?;
@@ -122,6 +114,7 @@ impl RuntimeBindingUpsertService {
             &workspace,
             client_spec,
             created_session,
+            &process,
         )
         .await
     }

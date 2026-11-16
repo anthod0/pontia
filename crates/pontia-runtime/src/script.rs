@@ -18,19 +18,11 @@ pub(super) fn write_ephemeral_launch_script(
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
     launch_id: &str,
-    runtime_id: &str,
 ) -> Result<PathBuf> {
     let launch_dir = pontia_home.join("state/launch");
     std::fs::create_dir_all(&launch_dir)?;
     let path = launch_dir.join(format!("{launch_id}.sh"));
-    write_launch_script(
-        &path,
-        pontia_home,
-        runtime_paths,
-        request,
-        launch_id,
-        runtime_id,
-    )?;
+    write_launch_script(&path, pontia_home, runtime_paths, request, launch_id)?;
     let mut permissions = std::fs::metadata(&path)?.permissions();
     permissions.set_mode(0o700);
     std::fs::set_permissions(&path, permissions)?;
@@ -43,7 +35,6 @@ pub(super) fn write_launch_script(
     runtime_paths: &RuntimePaths<'_>,
     request: &RuntimeStartRequest,
     launch_id: &str,
-    runtime_id: &str,
 ) -> Result<()> {
     let runtime_environment = render_runtime_environment(request)?;
     let command = request
@@ -63,11 +54,7 @@ pub(super) fn write_launch_script(
         r#"#!/usr/bin/env sh
 unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_PATCH_ID
 export PONTIA_HOME={}
-{}if [ -n "${{TMUX:-}}" ] && [ -n "${{TMUX_PANE:-}}" ]; then
-  tmux set-option -p -t "$TMUX_PANE" @pontia_session_id {} || exit 1
-  tmux set-option -p -t "$TMUX_PANE" @pontia_runtime_id {} || exit 1
-fi
-PONTIA_LAUNCH_SCRIPT=${{0:-}}
+{}PONTIA_LAUNCH_SCRIPT=${{0:-}}
 cleanup_pontia_launch_script() {{
   if [ -n "$PONTIA_LAUNCH_SCRIPT" ]; then
     rm -f "$PONTIA_LAUNCH_SCRIPT"
@@ -80,8 +67,6 @@ cleanup_pontia_launch_script
 "#,
         shell_quote(&pontia_home.display().to_string()),
         runtime_environment,
-        shell_quote(&request.session_id),
-        shell_quote(runtime_id),
         log_setup,
         runtime_body,
     );
@@ -151,15 +136,8 @@ mod tests {
             .collect(),
         };
 
-        write_launch_script(
-            &script_path,
-            tempdir.path(),
-            &paths,
-            &request,
-            "launch_1",
-            "runtime_instance_1",
-        )
-        .expect("write script");
+        write_launch_script(&script_path, tempdir.path(), &paths, &request, "launch_1")
+            .expect("write script");
 
         let script = std::fs::read_to_string(script_path).expect("script");
         assert!(
@@ -185,14 +163,6 @@ mod tests {
                 "script unexpectedly exported {name}:\n{script}"
             );
         }
-        assert!(
-            script.contains(
-                "tmux set-option -p -t \"$TMUX_PANE\" @pontia_session_id 'sess_resume_1'"
-            )
-        );
-        assert!(script.contains(
-            "tmux set-option -p -t \"$TMUX_PANE\" @pontia_runtime_id 'runtime_instance_1'"
-        ));
         assert!(
             script.contains("session=sess_resume_1 launch=launch_1"),
             "script was:\n{script}"
@@ -224,7 +194,6 @@ mod tests {
             &paths,
             &request,
             "launch_explicit",
-            "rtinst_explicit",
         )
         .expect("write launch script");
 

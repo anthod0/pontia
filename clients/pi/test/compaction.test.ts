@@ -38,8 +38,8 @@ async function fixture() {
         registerCommand() {},
       } as any,
       {
-        env: { PONTIA_HOME: root, TMUX: "/unused,1,1", TMUX_PANE: "%1" },
-        isManagedPane: async () => true,
+        env: { PONTIA_HOME: root },
+
         logDiagnostic: async () => {},
         connectPi: async (
           _home,
@@ -61,14 +61,12 @@ async function fixture() {
                 return { workspaces: [{ canonical_path: workspace, state: "active" }] };
               if (method === "session.context")
                 return {
-                  session_context: existing
-                    ? {
-                        session_id: "sess",
-                        runtime_id: "runtime",
-                        client_type: "pi",
-                        session_state: "idle",
-                      }
-                    : null,
+                  session_context: {
+                    session_id: "sess",
+                    runtime_id: "runtime",
+                    client_type: "pi",
+                    session_state: existing ? "idle" : "starting",
+                  },
                 };
               if (method === "runtime.register") {
                 existing = true;

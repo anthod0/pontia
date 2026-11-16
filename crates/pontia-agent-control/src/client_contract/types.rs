@@ -26,8 +26,6 @@ pub enum RuntimeBehavior {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TmuxRuntimeBehavior {
-    /// Process names used to identify this agent below its bound tmux pane.
-    pub process_names: &'static [&'static str],
     pub hook_log: Option<HookLogBehavior>,
 }
 
@@ -47,7 +45,7 @@ pub enum TerminateBehavior {
 pub enum TurnLifecycleBehavior {
     ClientManaged,
     BackendManaged,
-    ClientManagedForInteractiveTmux,
+    ClientManagedInteractive,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +53,6 @@ pub enum RuntimeBindingBehavior {
     Named { runtime_kind: &'static str },
     SharedBackend,
     Unsupported,
-    Tmux { runtime_kind: &'static str },
 }
 
 impl RuntimeBindingBehavior {
@@ -114,16 +111,14 @@ impl AgentClientSpec {
         self.adapter.tmux_runtime()
     }
 
-    pub fn owns_interactive_tmux_turn(&self) -> bool {
-        self.tmux_runtime().is_some()
-            && self.adapter.turn_lifecycle == TurnLifecycleBehavior::ClientManagedForInteractiveTmux
+    pub fn owns_interactive_turn(&self) -> bool {
+        self.adapter.turn_lifecycle == TurnLifecycleBehavior::ClientManagedInteractive
     }
 
     pub fn runtime_binding_kind(&self) -> Option<&'static str> {
         match self.adapter.runtime_binding {
             RuntimeBindingBehavior::Named { runtime_kind } => Some(runtime_kind),
             RuntimeBindingBehavior::SharedBackend | RuntimeBindingBehavior::Unsupported => None,
-            RuntimeBindingBehavior::Tmux { runtime_kind } => Some(runtime_kind),
         }
     }
 }

@@ -51,8 +51,7 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
         json!({"session_context":null})
     );
     let registration = json!({"version":PROTOCOL_VERSION,"binding":{
-        "client_type":"pi","client_session_key":"native","client_cwd":root.path(),
-        "tmux":{"socket_path":"/unused/pi-test-tmux","pane_id":"%1"}
+        "client_type":"pi","client_session_key":"native","client_cwd":root.path()
     }});
     let registered = pi
         .call("runtime.register", registration.clone())
@@ -141,8 +140,7 @@ async fn disabling_pi_blocks_new_native_registration_but_preserves_existing_regi
         .unwrap();
     let (new_pi, _requests) = client(&state);
     assert!(new_pi.call("runtime.register", json!({"version":PROTOCOL_VERSION,"binding":{
-        "client_type":"pi", "client_session_key":"another-native", "client_cwd":root.path(),
-        "tmux":{"socket_path":"/unused/pi-test-tmux","pane_id":"%2"}
+        "client_type":"pi", "client_session_key":"another-native", "client_cwd":root.path()
     }})).await.is_err());
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
         .fetch_one(&state.db())
@@ -170,8 +168,7 @@ async fn disabling_pi_blocks_new_native_registration_but_preserves_existing_regi
     .unwrap();
     let (replacement, _requests) = client(&state);
     let rebound = replacement.call("runtime.register", json!({"version":PROTOCOL_VERSION, "binding":{
-        "client_type":"pi", "session_id":session, "runtime_id":runtime, "client_session_key":"native", "client_cwd":root.path(),
-        "tmux":{"socket_path":"/unused/pi-test-tmux","pane_id":"%1"}
+        "client_type":"pi", "session_id":session, "runtime_id":runtime, "client_session_key":"native", "client_cwd":root.path()
     }})).await.unwrap();
     assert_eq!(rebound["runtime"]["runtime_id"], runtime);
     assert_eq!(rebound["session"]["session_id"], session);
@@ -242,8 +239,7 @@ async fn register(pi: &PiRpcPeer, root: &std::path::Path) -> (String, String) {
         .call(
             "runtime.register",
             json!({"version":PROTOCOL_VERSION,"binding":{
-                "client_type":"pi", "client_session_key":"native", "client_cwd":root,
-                "tmux":{"socket_path":"/unused/pi-test-tmux","pane_id":"%1"}
+                "client_type":"pi", "client_session_key":"native", "client_cwd":root
             }}),
         )
         .await
@@ -701,7 +697,7 @@ async fn restarting_a_stable_runtime_rejects_old_connection_facts_and_receipts()
         .await
         .unwrap();
     let (current, mut requests) = client(&state);
-    current.call("runtime.attach", json!({"version":PROTOCOL_VERSION,"session_id":session,"runtime_id":runtime,"client_session_key":"native"})).await.unwrap();
+    current.call("runtime.register", json!({"version":PROTOCOL_VERSION,"binding":{"client_type":"pi","client_cwd":root.path(),"runtime_id":runtime,"client_session_key":"native"}})).await.unwrap();
     current
         .call(
             "event.report",
@@ -747,4 +743,43 @@ async fn restarting_a_stable_runtime_rejects_old_connection_facts_and_receipts()
         1
     );
     current.close();
+}
+
+#[tokio::test]
+async fn a_different_process_instance_cannot_attach_or_replace_the_registered_runtime() {
+    let (state, root) = state().await;
+    let (pi, _requests) = client(&state);
+    let (session, runtime) = register(&pi, root.path()).await;
+    pi.call(
+        "event.report",
+        fact(
+            &session,
+            &runtime,
+            "session.ready",
+            json!({"client_session_key":"native"}),
+        ),
+    )
+    .await
+    .unwrap();
+    pi.close();
+    // Represent a recorded previous instance of this PID; the IPC peer is the current instance.
+    let mut previous = pontia_runtime::ProcessFingerprint::capture(std::process::id()).unwrap();
+    previous.start_time_seconds -= 1;
+    let previous = serde_json::to_string(&previous).unwrap();
+    sqlx::query("UPDATE session_runtimes SET process_fingerprint=? WHERE runtime_id=?")
+        .bind(&previous)
+        .bind(&runtime)
+        .execute(&state.db())
+        .await
+        .unwrap();
+    let (other, _requests) = client(&state);
+    assert!(other.call("runtime.attach", json!({"version":PROTOCOL_VERSION,"session_id":session,"runtime_id":runtime,"client_session_key":"native"})).await.is_err());
+    assert!(other.call("runtime.register", json!({"version":PROTOCOL_VERSION,"binding":{
+        "client_type":"pi","client_session_key":"native","client_cwd":root.path(),"runtime_id":runtime
+    }})).await.is_err());
+    let saved: (String, String) = sqlx::query_as("SELECT s.state,r.process_fingerprint FROM sessions s JOIN session_runtimes r USING(session_id) WHERE r.runtime_id=?")
+        .bind(&runtime).fetch_one(&state.db()).await.unwrap();
+    assert_eq!(saved, ("idle".into(), previous));
+    other.close();
+    state.client_control().close().await;
 }

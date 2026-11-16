@@ -14,10 +14,9 @@ mod tmux;
 mod types;
 
 pub use manager::GenericRuntimeManager;
+pub use process::{ProcessFingerprint, ProcessObservation};
 use std::path::PathBuf;
-pub use tmux::{
-    ProcessObservation, TmuxProcessFingerprint, is_alive, pane_binding, spawn_tmux_session,
-};
+pub use tmux::{is_alive, pane_binding, spawn_tmux_session};
 pub use types::{AgentInput, RuntimeStartRequest, RuntimeStartResult, TmuxLaunchOptions};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -181,22 +180,6 @@ mod tests {
         assert!(status.success(), "tmux session should start");
         let binding = tmux::pane_binding(&tmux_session).expect("pane binding");
         let manager = GenericRuntimeManager;
-        manager
-            .mark_tmux_pane_for_session(
-                &binding.socket_path,
-                &binding.pane_id,
-                &session_id,
-                "rtinst_previous",
-            )
-            .expect("mark pane");
-        manager
-            .clear_tmux_pane_markers(
-                &binding.socket_path,
-                &binding.pane_id,
-                &session_id,
-                "rtinst_previous",
-            )
-            .expect("release exited runtime pane");
         for _ in 0..50 {
             if tmux::is_reusable_shell_pane(&binding.socket_path, &binding.pane_id) {
                 break;

@@ -5,14 +5,14 @@
 
 # Pi Agent Client
 
-Pi の連携は、`tmux` 上で動く実際の Pi のセッションを Pontia に接続します。同じ会話を、ネイティブの TUI と Dashboard の両方で使えます。
+Pi の連携は、ネイティブの Pi TUI セッションを Pontia に接続します。同じ会話を、ネイティブの TUI と Dashboard の両方で使えます。
 
 ## 要件
 
 Pontia の初期化を実行する前に、次のコマンドをインストールします。
 
 - `pi`
-- `tmux`
+- `tmux`（Pontia から Session を起動・再開する場合）
 
 ユーザーがこれらを利用できることを確認します。
 
@@ -43,7 +43,9 @@ pi install npm:@pontia/pi-client-plugin
 
 ## Pi の Session の実行方法
 
-Pontia は、選択した Workspace 内の管理対象の `tmux` ペインで Pi を起動します。`pontia workflow submit` などの Workflow コマンドは、現在の Workflow の Agent Node の管理対象ペインで実行してください。
+登録済みで有効な Workspace では、通常のターミナルから直接 `pi` を起動できます。最初のメッセージの実行が始まると、Pontia が Session を作成します。この手順では `tmux` は不要です。Dashboard から操作を続けるには、Pi TUI を起動したままにしてください。
+
+Pontia から Session を作成・再開する場合は、選択した Workspace 内で `tmux` を使って Pi を起動します。`pontia workflow submit` などの Workflow コマンドは、現在の Workflow の Agent Node の Pi Session 内で実行してください。
 
 会話履歴は Pi のネイティブなデータから読み込まれます。Pontia で会話を閲覧して再開できるよう、このデータを残しておいてください。
 

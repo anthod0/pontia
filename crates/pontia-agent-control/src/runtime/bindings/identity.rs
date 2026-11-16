@@ -3,9 +3,7 @@ use pontia_storage_sqlite::repositories::{
     agent_bindings::SqliteAgentBindingRepository, sessions::SqliteSessionRepository,
 };
 
-use super::{
-    RuntimeBindingUpsertRequest, request::non_empty, service::RuntimeBindingUpsertService,
-};
+use super::{RuntimeBindingUpsertRequest, service::RuntimeBindingUpsertService};
 use crate::AgentBindingService;
 
 impl RuntimeBindingUpsertService {
@@ -38,32 +36,7 @@ impl RuntimeBindingUpsertService {
             return Ok(Some(session_id));
         }
 
-        let Some(tmux) = request.tmux.as_ref() else {
-            return Ok(None);
-        };
-        let Some(socket_path) = non_empty(tmux.socket_path.as_deref()) else {
-            return Ok(None);
-        };
-        let Some(pane_id) = non_empty(tmux.pane_id.as_deref()) else {
-            return Ok(None);
-        };
-        Ok(sqlx::query_scalar(
-            r#"SELECT s.session_id
-               FROM sessions s
-               JOIN session_runtimes r ON r.session_id = s.session_id
-               LEFT JOIN agent_bindings a ON a.session_id = s.session_id
-               WHERE s.client_type = ?
-                 AND s.state != 'exited'
-                 AND a.id IS NULL
-                 AND r.tmux_socket_path = ?
-                 AND r.tmux_pane_id = ?
-                 AND r.state = 'starting'"#,
-        )
-        .bind(&request.client_type)
-        .bind(socket_path)
-        .bind(pane_id)
-        .fetch_optional(&self.pool)
-        .await?)
+        Ok(None)
     }
 
     pub(super) async fn ensure_requested_session(
