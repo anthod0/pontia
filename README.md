@@ -22,7 +22,7 @@ Pontia provides:
 
 Pontia currently supports:
 
-- pi, Codex, and Claude Code (through the Claude Agent client);
+- pi, Codex, and Claude Code;
 - ACP agents such as OpenCode, Kimi CLI, and Grok Build;
 - local and remote web dashboards;
 - end-to-end encrypted remote access through official or self-hosted Edges;
@@ -35,37 +35,38 @@ Pontia currently supports:
 
 - x86_64 and ARM64 Linux, or macOS 13.5 and later on Intel and Apple Silicon.
 - a systemd user service manager on Linux; a per-user LaunchAgent on macOS.
-- `curl`, `jq`, an OpenSSL implementation with Ed25519 support, and standard platform command-line tools.
+- Node.js with npm for the recommended `npx` command. Without Node.js, use the [shell installer](#install-with-the-shell-script).
 
 Install the clients you plan to use before initialization:
 
 - **pi:** the `pi` CLI and `tmux`;
 - **Codex:** the `codex` CLI;
-- **Claude Code:** Node.js LTS with npm, and a signed-in Claude Code. See the [Claude Agent guide](docs/claude-agent.md);
+- **Claude Code:** Node.js LTS with npm, and a signed-in Claude Code. See the [Claude Code guide](docs/claude-agent.md);
 - **ACP agents:** the agent itself, enabled after initialization as described in [Agent Clients](https://pontia.dev/docs/agent-clients#enable-an-acp-agent).
 
-### Install
-
-Run the installation script:
+### Install and initialize
 
 ```bash
-curl -fsSL https://get.pontia.dev/install.sh | sh
+npx @pontia/cli init
 ```
 
-The script installs Pontia to `$HOME/.local/bin` by default. Make sure this directory is included in your `PATH`.
+This installs Pontia to `$HOME/.local/bin` and starts the initializer. Add that directory to your `PATH`. To install without initializing, run `npx @pontia/cli install`.
 
-### Initialize Pontia
-
-```bash
-pontia init
-```
-
-The initializer lets you select the pi, Codex, and Claude Agent integrations, starts the Pontia service, and offers to sign in to Pontia Cloud and register the device for remote access. Accept the remote access prompt and complete the browser authorization; Pontia opens the Remote Dashboard when setup finishes.
+The initializer sets up your agent integrations, starts the Pontia service, and connects the device for remote access.
 
 To install or repair one integration later, run `pontia setup` and select a client, or name it directly:
 
 ```bash
-pontia setup claude-agent
+pontia setup codex
+```
+
+### Install with the shell script
+
+Without Node.js, use the signed release installer. It requires `curl`, an OpenSSL implementation with Ed25519 support, and standard platform command-line tools.
+
+```bash
+curl -fsSL https://get.pontia.dev/install.sh | sh
+"$HOME/.local/bin/pontia" init
 ```
 
 ## Configuration and management
