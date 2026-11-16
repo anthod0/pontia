@@ -1,6 +1,10 @@
-use pontia_agent_control::client_contract::{ClientIntegration, PreparedClientIntegration};
+use pontia_agent_control::client_contract::{
+    ClientIntegration, PreparedClientIntegration, PreparedClientUninstall,
+};
 use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 use std::{collections::HashMap, path::Path, sync::Arc};
+
+mod uninstall;
 
 pub fn integration() -> Arc<dyn ClientIntegration> {
     Arc::new(PiIntegration)
@@ -8,6 +12,14 @@ pub fn integration() -> Arc<dyn ClientIntegration> {
 struct PiIntegration;
 
 impl ClientIntegration for PiIntegration {
+    fn prepare_uninstall(
+        &self,
+        vars: &HashMap<String, String>,
+        user_home: &Path,
+        runner: &dyn CommandRunner,
+    ) -> Result<Option<Box<dyn PreparedClientUninstall>>, String> {
+        uninstall::prepare(vars, user_home, runner)
+    }
     fn client_type(&self) -> &'static str {
         "pi"
     }

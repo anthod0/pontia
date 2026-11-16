@@ -98,6 +98,14 @@ pub trait DefinitionStore {
     fn install(&self, path: &Path, contents: &str) -> Result<bool, String>;
 }
 
+pub fn remove_file_if_present(path: &Path) -> Result<(), String> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("failed to remove {}: {error}", path.display())),
+    }
+}
+
 pub fn launchd_executable_search_path(
     inherited_path: Option<&OsStr>,
     user_home: &Path,

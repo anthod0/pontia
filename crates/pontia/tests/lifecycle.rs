@@ -41,6 +41,9 @@ struct FakeManager {
 }
 
 impl ServiceManager for FakeManager {
+    fn uninstall(&self, _: &Path) -> Result<(), String> {
+        unreachable!("lifecycle operations do not uninstall the service")
+    }
     fn definition_path(&self, user_home: &Path) -> PathBuf {
         user_home.join("service-definition")
     }

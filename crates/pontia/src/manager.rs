@@ -203,6 +203,12 @@ impl<R: CommandRunner> ServiceManager for SystemdManager<'_, R> {
             Err(command_failure("systemctl", &args, &output))
         }
     }
+
+    fn uninstall(&self, user_home: &Path) -> Result<(), String> {
+        self.down()?;
+        pontia_runtime::local_service::remove_file_if_present(&self.definition_path(user_home))?;
+        self.require_systemctl(&["daemon-reload"])
+    }
 }
 
 pub struct LaunchdManager<'a, R> {
@@ -436,6 +442,11 @@ impl<R: CommandRunner> ServiceManager for LaunchdManager<'_, R> {
             self.require_launchctl(vec!["bootout".to_string(), target.clone()])?;
         }
         self.require_launchctl(vec!["disable".to_string(), target])
+    }
+
+    fn uninstall(&self, user_home: &Path) -> Result<(), String> {
+        self.down()?;
+        pontia_runtime::local_service::remove_file_if_present(&self.definition_path(user_home))
     }
 }
 

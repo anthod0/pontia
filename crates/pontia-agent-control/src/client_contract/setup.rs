@@ -33,6 +33,18 @@ pub trait ClientIntegration: Send + Sync {
         user_home: &Path,
         runner: &dyn CommandRunner,
     ) -> Result<Box<dyn PreparedClientIntegration>, String>;
+    /// Inspect installed artifacts without requiring the client's setup dependencies.
+    fn prepare_uninstall(
+        &self,
+        vars: &HashMap<String, String>,
+        user_home: &Path,
+        runner: &dyn CommandRunner,
+    ) -> Result<Option<Box<dyn PreparedClientUninstall>>, String>;
+}
+
+pub trait PreparedClientUninstall {
+    fn summary(&self) -> Vec<String>;
+    fn uninstall(&self, runner: &dyn CommandRunner) -> Result<(), String>;
 }
 
 /// Preparation is read-only. Installation applies the recommended local configuration.

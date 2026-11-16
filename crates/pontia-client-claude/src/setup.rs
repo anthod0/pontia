@@ -1,4 +1,6 @@
-use pontia_agent_control::client_contract::{ClientIntegration, PreparedClientIntegration};
+use pontia_agent_control::client_contract::{
+    ClientIntegration, PreparedClientIntegration, PreparedClientUninstall,
+};
 use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 use std::{
     collections::HashMap,
@@ -29,6 +31,23 @@ struct Prepared {
 }
 
 impl ClientIntegration for Integration {
+    fn prepare_uninstall(
+        &self,
+        vars: &HashMap<String, String>,
+        user_home: &Path,
+        _runner: &dyn CommandRunner,
+    ) -> Result<Option<Box<dyn PreparedClientUninstall>>, String> {
+        let root = vars
+            .get("PONTIA_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| user_home.join(".pontia"));
+        let directory = root.join("clients/claude-client");
+        match std::fs::symlink_metadata(&directory) {
+            Ok(_) => Ok(Some(Box::new(Uninstall(directory)))),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.to_string()),
+        }
+    }
     fn client_type(&self) -> &'static str {
         "claude-agent"
     }
@@ -80,6 +99,22 @@ impl ClientIntegration for Integration {
             root,
             config,
         }))
+    }
+}
+
+struct Uninstall(PathBuf);
+
+impl PreparedClientUninstall for Uninstall {
+    fn summary(&self) -> Vec<String> {
+        vec![format!("Remove Claude integration: {}", self.0.display())]
+    }
+
+    fn uninstall(&self, _runner: &dyn CommandRunner) -> Result<(), String> {
+        match std::fs::remove_dir_all(&self.0) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!("failed to remove {}: {error}", self.0.display())),
+        }
     }
 }
 

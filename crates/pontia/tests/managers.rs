@@ -610,3 +610,50 @@ fn systemd_starts_a_stopped_enabled_service_without_reloading_or_enabling_it() {
         )]
     );
 }
+
+#[test]
+fn uninstall_removes_service_definition_only_after_stopping_succeeds() {
+    let root = tempfile::tempdir().unwrap();
+    let runner = FakeRunner::with_outputs(vec![output(1, "", "permission denied")]);
+    let manager = SystemdManager::new(&runner);
+    let path = manager.definition_path(root.path());
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, "service definition").unwrap();
+    assert!(manager.uninstall(root.path()).is_err());
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "service definition"
+    );
+
+    let runner = FakeRunner::with_outputs(vec![output(0, "", ""), output(0, "", "")]);
+    SystemdManager::new(&runner).uninstall(root.path()).unwrap();
+    assert!(!path.exists());
+    assert_eq!(
+        runner.calls.borrow().last().unwrap().1,
+        ["--user", "daemon-reload"]
+    );
+}
+
+#[test]
+fn launchd_uninstall_removes_definition_after_unloading_the_job() {
+    let root = tempfile::tempdir().unwrap();
+    let runner = FakeRunner::with_outputs(vec![
+        output(0, "disabled services = {}", ""),
+        output(0, "state = running\n", ""),
+        output(0, "", ""),
+        output(0, "", ""),
+    ]);
+    let manager = LaunchdManager::new(&runner, 501);
+    let path = manager.definition_path(root.path());
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, "service definition").unwrap();
+    manager.uninstall(root.path()).unwrap();
+    assert!(!path.exists());
+    assert!(
+        runner
+            .calls
+            .borrow()
+            .iter()
+            .any(|(_, args)| args == &["bootout", "gui/501/dev.pontia.pontiad"])
+    );
+}

@@ -20,8 +20,11 @@ Use `pontia COMMAND --help` for the exact options in your installed version.
 | `pontia doctor` | Explain service, configuration, login, and remote-registration checks, with repair hints |
 | `pontia down` | Stop and disable the per-user service |
 | `pontia update` | Install the latest signed stable `pontia` and `pontiad` release |
+| `pontia uninstall` | Remove Pontia integrations, shell configuration, and autostart services |
 | `pontia --version` | Print the installed version |
 | `pontia completions SHELL` | Print the completion script for a shell |
+
+`pontia uninstall` shows the cleanup list and asks for confirmation; use `--yes` to skip the prompt. It keeps the binaries, configuration, credentials, history, cloud registration, and Agent Client installations. Open a new terminal after cleanup. Run `pontia init` to set up again.
 
 `pontia setup` accepts `pi`, `codex`, or `claude` and applies the recommended configuration without additional Client options.
 

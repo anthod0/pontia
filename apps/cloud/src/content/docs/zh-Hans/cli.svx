@@ -20,8 +20,11 @@
 | `pontia doctor` | 说明服务、配置、登录和远程注册检查结果，并给出修复提示 |
 | `pontia down` | 停止并禁用按用户运行的服务 |
 | `pontia update` | 安装最新的已签名稳定版 `pontia` 和 `pontiad` |
+| `pontia uninstall` | 清理 Pontia 客户端集成、shell 配置和自启动服务 |
 | `pontia --version` | 打印已安装的版本 |
 | `pontia completions SHELL` | 打印指定 shell 的补全脚本 |
+
+`pontia uninstall` 会列出清理项目并请求确认；使用 `--yes` 跳过确认。二进制、配置、凭证、历史数据、云端设备登记及 Agent Client 本体均保留。清理后请打开新终端；需要重新配置时运行 `pontia init`。
 
 `pontia setup` 接受 `pi`、`codex` 或 `claude`，并应用推荐配置，无需额外的 Client 选项。
 

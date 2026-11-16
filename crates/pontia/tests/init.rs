@@ -15,6 +15,17 @@ struct FakeSetup {
     home: PathBuf,
 }
 impl ClientIntegration for FakeIntegration {
+    fn prepare_uninstall(
+        &self,
+        _: &HashMap<String, String>,
+        _: &Path,
+        _: &dyn CommandRunner,
+    ) -> Result<
+        Option<Box<dyn pontia_agent_control::client_contract::PreparedClientUninstall>>,
+        String,
+    > {
+        unreachable!("initialization does not uninstall integrations")
+    }
     fn client_type(&self) -> &'static str {
         self.name
     }

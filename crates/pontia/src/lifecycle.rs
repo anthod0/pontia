@@ -77,6 +77,7 @@ pub trait ServiceManager {
     /// Restart without changing the service definition or enabled state.
     fn restart(&self) -> Result<(), String>;
     fn down(&self) -> Result<(), String>;
+    fn uninstall(&self, user_home: &Path) -> Result<(), String>;
 }
 
 pub trait HealthProbe {

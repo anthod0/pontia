@@ -7,7 +7,7 @@ pub struct PreparedUpdate(pontia_update::PreparedUpdate);
 
 pub async fn prepare(config: Option<&AppConfig>) -> Result<Option<PreparedUpdate>, String> {
     if let Some(config) = config {
-        ensure_no_active_execution(config).await?;
+        ensure_no_active_execution(config, "update").await?;
     }
     pontia_update::prepare(
         "pontia",
@@ -34,13 +34,13 @@ impl PreparedUpdate {
         restart: impl FnMut() -> Result<(), String>,
     ) -> Result<(), String> {
         if let Some(config) = config {
-            ensure_no_active_execution(config).await?;
+            ensure_no_active_execution(config, "update").await?;
         }
         self.0.install(restart)
     }
 }
 
-pub async fn ensure_no_active_execution(config: &AppConfig) -> Result<(), String> {
+pub async fn ensure_no_active_execution(config: &AppConfig, operation: &str) -> Result<(), String> {
     #[derive(Deserialize)]
     struct Response {
         data: Data,
@@ -70,7 +70,7 @@ pub async fn ensure_no_active_execution(config: &AppConfig) -> Result<(), String
     };
     let response = check.await.map_err(|error| {
         format!(
-            "Update refused: could not check active execution: {error}. No binaries were replaced."
+            "{operation} refused: could not check active execution: {error}. No changes were made."
         )
     })?;
     if response.data.blockers.is_empty() {
@@ -84,7 +84,7 @@ pub async fn ensure_no_active_execution(config: &AppConfig) -> Result<(), String
         .collect::<Vec<_>>()
         .join("\n");
     Err(format!(
-        "Update refused:\n{blockers}\nFinish or resolve these activities, then run pontia update again. No binaries were replaced."
+        "{operation} refused:\n{blockers}\nFinish or resolve these activities, then run pontia {operation} again. No changes were made."
     ))
 }
 
@@ -130,7 +130,7 @@ mod tests {
 
     async fn check(status: u16, body: &'static str) -> Result<(), String> {
         let (config, _root, server) = check_server(status, body).await;
-        let result = ensure_no_active_execution(&config).await;
+        let result = ensure_no_active_execution(&config, "update").await;
         server.await.unwrap();
         result
     }
@@ -184,6 +184,6 @@ mod tests {
         .unwrap();
         config.bind_addr = listener.local_addr().unwrap();
         drop(listener);
-        assert!(ensure_no_active_execution(&config).await.is_err());
+        assert!(ensure_no_active_execution(&config, "update").await.is_err());
     }
 }

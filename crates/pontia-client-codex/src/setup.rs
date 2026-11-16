@@ -5,7 +5,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use pontia_agent_control::client_contract::{ClientIntegration, PreparedClientIntegration};
+use pontia_agent_control::client_contract::{
+    ClientIntegration, PreparedClientIntegration, PreparedClientUninstall,
+};
 use pontia_runtime::local_service::{
     CommandOutput, CommandRunner, DefinitionStore, absolute_utf8_path,
     launchd_executable_search_path, systemd_quote, xml_escape,
@@ -15,6 +17,7 @@ pub const CODEX_SYSTEMD_SERVICE_NAME: &str = "pontia-codex.service";
 pub const CODEX_LAUNCHD_LABEL: &str = "dev.pontia.codex-daemon";
 
 mod shim;
+mod uninstall;
 
 struct PreparedSetup {
     daemon: CodexSetup,
@@ -28,6 +31,14 @@ pub fn integration() -> std::sync::Arc<dyn ClientIntegration> {
 struct CodexIntegration;
 
 impl ClientIntegration for CodexIntegration {
+    fn prepare_uninstall(
+        &self,
+        vars: &HashMap<String, String>,
+        user_home: &Path,
+        runner: &dyn CommandRunner,
+    ) -> Result<Option<Box<dyn PreparedClientUninstall>>, String> {
+        uninstall::prepare(vars, user_home, runner)
+    }
     fn client_type(&self) -> &'static str {
         "codex"
     }

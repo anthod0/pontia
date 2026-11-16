@@ -125,6 +125,15 @@ enum Command {
     /// Update pontia and pontiad to the latest stable release
     #[command(after_help = UPDATE_HELP)]
     Update,
+    /// Remove local integrations, shell configuration, and autostart services
+    #[command(
+        after_help = "Keeps pontia and pontiad, configuration, credentials, history, and cloud registration.\nAgent Client installations and native conversations are kept. Run pontia init to set up again."
+    )]
+    Uninstall {
+        /// Apply the displayed cleanup without prompting
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
     /// Stop and disable the per-user Pontia service
     #[command(after_help = DOWN_HELP)]
     Down,
@@ -251,6 +260,7 @@ async fn execute(command: Command) -> Result<bool, String> {
             Ok(true)
         }
         Command::Update => run_update().await,
+        Command::Uninstall { yes } => run_uninstall(yes).await,
         Command::Up => run_lifecycle(LifecycleCommand::Up),
         Command::Down => run_lifecycle(LifecycleCommand::Down),
         Command::Status => run_diagnostics(false).await,
@@ -260,6 +270,73 @@ async fn execute(command: Command) -> Result<bool, String> {
             Ok(true)
         }
     }
+}
+
+async fn run_uninstall(yes: bool) -> Result<bool, String> {
+    let runner = ProcessCommandRunner;
+    #[cfg(target_os = "linux")]
+    let manager = SystemdManager::with_environment_paths(
+        &runner,
+        pontia_clients::service_path_variables(),
+        &[],
+    );
+    #[cfg(target_os = "macos")]
+    let manager = launchd_manager(&runner, &[])?;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        let prepared = pontia::uninstall::PreparedUninstall::prepare(
+            &user_home()?,
+            &env::vars().collect(),
+            &manager,
+            &runner,
+            &pontia_clients::integrations(),
+        )?;
+        let remaining_data_hint = prepared.remaining_data_hint();
+        let summary = prepared.summary();
+        if summary.is_empty() {
+            println!("No installed Pontia integrations or services to remove.");
+            println!("{remaining_data_hint}");
+            return Ok(true);
+        }
+        for line in summary {
+            println!("  • {line}");
+        }
+        println!(
+            "Binaries, configuration, credentials, history, and cloud registration will be kept."
+        );
+        if !yes
+            && !Confirm::with_theme(&terminal::theme())
+                .with_prompt("Remove these Pontia integrations and services?")
+                .default(false)
+                .interact()
+                .map_err(|error| error.to_string())?
+        {
+            return Ok(true);
+        }
+        if prepared.service_installed() {
+            match manager.status()?.run_state {
+                RunState::Running => {
+                    let config = prepared.service_config()?;
+                    update::ensure_no_active_execution(&config, "uninstall").await?;
+                }
+                RunState::Starting => {
+                    return Err("Pontia is starting; retry uninstall once it has settled".into());
+                }
+                RunState::Stopped | RunState::Failed => {}
+            }
+        }
+        prepared.uninstall(&manager, &runner)?;
+        println!(
+            "{}",
+            terminal::success(
+                "Removed Pontia integrations and autostart services. Open a new terminal to refresh PATH."
+            )
+        );
+        println!("{remaining_data_hint}");
+        Ok(true)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    Err("pontia uninstall supports only Linux and macOS".into())
 }
 
 async fn run_update() -> Result<bool, String> {

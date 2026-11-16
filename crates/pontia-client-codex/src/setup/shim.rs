@@ -18,6 +18,79 @@ struct ShellFiles {
     fish: bool,
 }
 
+pub(super) struct ShimUninstall {
+    root: PathBuf,
+    shells: Vec<PathBuf>,
+}
+
+impl ShimUninstall {
+    pub(super) fn inspect(root: &Path) -> Result<Self, String> {
+        let manifest = root.join("state/codex-shim.json");
+        let shells: Option<ShellFiles> = read_optional(&manifest)?
+            .map(|text| serde_json::from_str(&text).map_err(|error| error.to_string()))
+            .transpose()?;
+        let uninstall = Self {
+            root: root.into(),
+            shells: shells.map(|shells| shells.paths).unwrap_or_default(),
+        };
+        uninstall.preflight()?;
+        Ok(uninstall)
+    }
+
+    fn preflight(&self) -> Result<(), String> {
+        let launcher = self.root.join("bin/codex");
+        match fs::symlink_metadata(&launcher) {
+            Ok(_) if !is_shim(&launcher)? => {
+                return Err(format!(
+                    "Refusing to remove an unmanaged executable: {}",
+                    launcher.display()
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+        for path in &self.shells {
+            absolute_utf8_path(path, "shell configuration path")?;
+            if let Some(text) = read_optional(path)?
+                && let Some(start) = text.find(BEGIN)
+                && !text[start..].contains(END)
+            {
+                return Err(format!(
+                    "Unterminated Pontia PATH block in {}",
+                    path.display()
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn summary(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        if self.root.join("bin/codex").exists() {
+            lines.push(format!(
+                "Remove Codex launcher: {}",
+                self.root.join("bin/codex").display()
+            ));
+        }
+        for path in &self.shells {
+            lines.push(format!("Remove Pontia PATH block from {}", path.display()));
+        }
+        lines
+    }
+
+    pub(super) fn uninstall(&self) -> Result<(), String> {
+        self.preflight()?;
+        for path in &self.shells {
+            edit_shell(path, None)?;
+        }
+        pontia_runtime::local_service::remove_file_if_present(&self.root.join("bin/codex"))?;
+        pontia_runtime::local_service::remove_file_if_present(
+            &self.root.join("state/codex-shim.json"),
+        )
+    }
+}
+
 pub(super) struct ShimSetup {
     root: PathBuf,
     shells: ShellFiles,

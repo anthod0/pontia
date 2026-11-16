@@ -20,8 +20,11 @@ Use `pontia COMMAND --help` para ver as opções exatas da versão instalada.
 | `pontia doctor` | Explicar as verificações de serviço, configuração, login e registro remoto, com dicas de reparo |
 | `pontia down` | Parar e desativar o serviço por usuário |
 | `pontia update` | Instalar a release estável assinada mais recente de `pontia` e `pontiad` |
+| `pontia uninstall` | Remover integrações do Pontia, configuração do shell e serviços de inicialização automática |
 | `pontia --version` | Exibir a versão instalada |
 | `pontia completions SHELL` | Exibir o script de autocompletar de um shell |
+
+`pontia uninstall` exibe a lista de limpeza e pede confirmação; use `--yes` para dispensar a confirmação. Os binários, configurações, credenciais, histórico, registro do dispositivo na nuvem e instalações dos Agent Clients são preservados. Abra um novo terminal após a limpeza. Execute `pontia init` para configurar novamente.
 
 `pontia setup` aceita `pi`, `codex` ou `claude` e aplica a configuração recomendada sem opções adicionais de Client.
 
