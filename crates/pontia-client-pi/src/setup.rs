@@ -12,6 +12,17 @@ pub fn integration() -> Arc<dyn ClientIntegration> {
 struct PiIntegration;
 
 impl ClientIntegration for PiIntegration {
+    fn maintain(
+        &self,
+        _vars: &HashMap<String, String>,
+        _user_home: &Path,
+        runner: &dyn CommandRunner,
+        _definitions: &dyn DefinitionStore,
+    ) -> Result<(), String> {
+        self.preflight(runner)?;
+        Self::install_plugin(runner, true)
+    }
+
     fn prepare_uninstall(
         &self,
         vars: &HashMap<String, String>,
@@ -58,13 +69,22 @@ impl PreparedClientIntegration for PiIntegration {
         runner: &dyn CommandRunner,
         _definitions: &dyn DefinitionStore,
     ) -> Result<(), String> {
+        Self::install_plugin(runner, false)
+    }
+    fn completion(&self) -> &'static str {
+        "Pi integration is ready"
+    }
+}
+
+impl PiIntegration {
+    fn install_plugin(runner: &dyn CommandRunner, update: bool) -> Result<(), String> {
         let packages =
             runner.run_with_env("pi", &["list".into()], &[("NO_COLOR".into(), "1".into())])?;
         if packages.code != 0 {
             return Err(format!("pi list failed with exit code {}", packages.code));
         }
         let mut source = "npm:@pontia/pi-client-plugin".to_string();
-        let mut current = None;
+        let mut current: Option<String> = None;
         for line in packages.stdout.lines() {
             if line == "Project packages:" {
                 break;
@@ -82,22 +102,23 @@ impl PreparedClientIntegration for PiIntegration {
                 if let Some(manifest) =
                     manifest.filter(|manifest| manifest["name"] == "@pontia/pi-client-plugin")
                 {
-                    if manifest["pi"]["extensions"]
-                        .as_array()
-                        .is_some_and(|extensions| {
-                            !extensions.is_empty()
-                                && extensions.iter().all(|entry| {
-                                    entry
-                                        .as_str()
-                                        .is_some_and(|entry| path.join(entry).is_file())
-                                })
-                        })
+                    if (!update || !candidate.starts_with("npm:"))
+                        && manifest["pi"]["extensions"]
+                            .as_array()
+                            .is_some_and(|extensions| {
+                                !extensions.is_empty()
+                                    && extensions.iter().all(|entry| {
+                                        entry
+                                            .as_str()
+                                            .is_some_and(|entry| path.join(entry).is_file())
+                                    })
+                            })
                     {
                         return Ok(());
                     }
                     source = candidate;
                     if source.starts_with("npm:") {
-                        if let Some(version) = manifest["version"].as_str() {
+                        if !update && let Some(version) = manifest["version"].as_str() {
                             source = format!("npm:@pontia/pi-client-plugin@{version}");
                         }
                     } else {
@@ -127,8 +148,5 @@ impl PreparedClientIntegration for PiIntegration {
                 "pi install npm:@pontia/pi-client-plugin failed with exit code {code}"
             ))
         }
-    }
-    fn completion(&self) -> &'static str {
-        "Pi integration is ready"
     }
 }

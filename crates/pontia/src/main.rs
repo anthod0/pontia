@@ -355,6 +355,7 @@ async fn run_update() -> Result<bool, String> {
             None
         };
         let Some(update) = update::prepare(config.as_ref()).await? else {
+            maintain_updated_clients(config.as_ref(), &manager).await?;
             return Ok(true);
         };
         if config.is_some() && manager.running_executable()? != update.daemon_path() {
@@ -384,6 +385,7 @@ async fn run_update() -> Result<bool, String> {
         // so keep treating stopped or failed loaded jobs as managed during replacement.
         let config = update_service_config(&manager, &user_home()?, true)?;
         let Some(update) = update::prepare(config.as_ref()).await? else {
+            maintain_updated_clients(config.as_ref(), &manager).await?;
             return Ok(true);
         };
         if config.is_some() && manager.running_executable()? != update.daemon_path() {

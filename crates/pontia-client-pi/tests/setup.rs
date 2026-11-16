@@ -115,6 +115,7 @@ struct Packages {
     directory: std::path::PathBuf,
     source: String,
     installs: RefCell<Vec<String>>,
+    install_code: i32,
 }
 
 impl CommandRunner for Packages {
@@ -143,7 +144,11 @@ impl CommandRunner for Packages {
             String::new()
         };
         Ok(CommandOutput {
-            code: 0,
+            code: if args[0] == "install" {
+                self.install_code
+            } else {
+                0
+            },
             stdout,
             stderr: String::new(),
         })
@@ -167,6 +172,7 @@ fn reuses_installed_npm_and_local_plugins_and_repairs_missing_npm_entrypoint() {
             directory: root.path().into(),
             source,
             installs: RefCell::new(Vec::new()),
+            install_code: 0,
         };
         let setup = pontia_client_pi::setup::integration()
             .prepare(&HashMap::new(), root.path(), &runner)
@@ -180,6 +186,7 @@ fn reuses_installed_npm_and_local_plugins_and_repairs_missing_npm_entrypoint() {
         directory: root.path().into(),
         source: "npm:@pontia/pi-client-plugin".into(),
         installs: RefCell::new(Vec::new()),
+        install_code: 0,
     };
     let setup = pontia_client_pi::setup::integration()
         .prepare(&HashMap::new(), root.path(), &runner)
@@ -191,4 +198,70 @@ fn reuses_installed_npm_and_local_plugins_and_repairs_missing_npm_entrypoint() {
         ["npm:@pontia/pi-client-plugin@1.2.3"]
     );
     assert!(root.path().join("index.ts").is_file());
+}
+
+#[test]
+fn maintenance_updates_existing_npm_plugins_even_when_the_entrypoint_is_present() {
+    for entrypoint_exists in [true, false] {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("package.json"),
+            r#"{"name":"@pontia/pi-client-plugin","version":"0.1.0","pi":{"extensions":["index.ts"]}}"#,
+        )
+        .unwrap();
+        if entrypoint_exists {
+            std::fs::write(root.path().join("index.ts"), "export default () => {};").unwrap();
+        }
+        let runner = Packages {
+            directory: root.path().into(),
+            source: "npm:@pontia/pi-client-plugin".into(),
+            installs: RefCell::new(Vec::new()),
+            install_code: 0,
+        };
+        pontia_client_pi::setup::integration()
+            .maintain(&HashMap::new(), root.path(), &runner, &NoDefinitions)
+            .unwrap();
+
+        assert_eq!(*runner.installs.borrow(), ["npm:@pontia/pi-client-plugin"]);
+        assert!(root.path().join("index.ts").is_file());
+    }
+}
+
+#[test]
+fn maintenance_preserves_local_plugin_installations() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("package.json"),
+        r#"{"name":"@pontia/pi-client-plugin","version":"0.0.0","pi":{"extensions":["index.ts"]}}"#,
+    )
+    .unwrap();
+    std::fs::write(root.path().join("index.ts"), "export default () => {};").unwrap();
+    let runner = Packages {
+        directory: root.path().into(),
+        source: root.path().display().to_string(),
+        installs: RefCell::new(Vec::new()),
+        install_code: 0,
+    };
+    pontia_client_pi::setup::integration()
+        .maintain(&HashMap::new(), root.path(), &runner, &NoDefinitions)
+        .unwrap();
+
+    assert!(runner.installs.borrow().is_empty());
+}
+
+#[test]
+fn maintenance_propagates_plugin_installation_failure() {
+    let root = tempfile::tempdir().unwrap();
+    let runner = Packages {
+        directory: root.path().into(),
+        source: "npm:@pontia/pi-client-plugin".into(),
+        installs: RefCell::new(Vec::new()),
+        install_code: 1,
+    };
+    assert!(
+        pontia_client_pi::setup::integration()
+            .maintain(&HashMap::new(), root.path(), &runner, &NoDefinitions)
+            .is_err()
+    );
+    assert_eq!(*runner.installs.borrow(), ["npm:@pontia/pi-client-plugin"]);
 }
