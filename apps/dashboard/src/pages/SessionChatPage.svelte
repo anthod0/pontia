@@ -716,11 +716,7 @@
     void conversationRendered.then(() => {
       if (sessionLoadIsCurrent(sessionId, generation)) return scrollChatToBottomAfterLayout()
     })
-    if (cached.historySource) {
-      await rebuildTimeline(sessionId, generation, cached.mode === 'tree')
-    } else {
-      void refreshSessionTimeline(sessionId, cached.latestTurnId)
-    }
+    void refreshSessionTimeline(sessionId, cached.latestTurnId)
     await detailPromise
     if (!sessionLoadIsCurrent(sessionId, generation)) return
     const loadedSession = currentSelectedSession()

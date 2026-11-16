@@ -199,7 +199,6 @@ export function createTimeline(device: DeviceRuntime) {
     if (
       (current.sessionId && current.sessionId !== sessionId) ||
       !snapshot ||
-      snapshot.historySource != null ||
       (expectedMode !== null && snapshot.mode !== expectedMode)
     )
       return false;
@@ -207,6 +206,7 @@ export function createTimeline(device: DeviceRuntime) {
     timelineState.set({
       sessionId,
       mode: snapshot.mode,
+      historySource: snapshot.historySource,
       groups: snapshot.groups,
       items: snapshot.items,
       nextOlderTurnId: snapshot.nextOlderTurnId,
@@ -219,7 +219,7 @@ export function createTimeline(device: DeviceRuntime) {
       errorCode: null,
       error: null,
     });
-    if (snapshot.latestTurnId) cachedRefreshCursorSessions.add(sessionId);
+    if (snapshot.latestTurnId || snapshot.historySource) cachedRefreshCursorSessions.add(sessionId);
     if (snapshot.hasMore && snapshot.nextOlderTurnId) cachedHistoryCursorSessions.add(sessionId);
     return true;
   }
@@ -475,7 +475,9 @@ export function createTimeline(device: DeviceRuntime) {
         "backward",
         turnId,
         options.limit ?? DEFAULT_HISTORY_LIMIT,
-        mode !== "rebuild" ? current.historySource : null,
+        mode === "rebuild" || (mode === "refresh" && cachedRefreshCursorSessions.has(sessionId))
+          ? null
+          : current.historySource,
       );
       if (generation !== timelineGeneration) return null;
       timelineState.update((state) => {
@@ -493,7 +495,8 @@ export function createTimeline(device: DeviceRuntime) {
           latestTurnId:
             page.history_source == null && mode === "rebuild" && options.latestTurnId
               ? options.latestTurnId
-              : (items.findLast((item) => item.turn_id !== null)?.turn_id ?? state.latestTurnId),
+              : (items.findLast((item) => item.turn_id !== null)?.turn_id ??
+                (mode === "more" ? state.latestTurnId : null)),
           hasMore: page.next_turn_id !== null,
           loading: false,
           refreshing: false,
@@ -504,10 +507,22 @@ export function createTimeline(device: DeviceRuntime) {
         };
       });
       if (mode === "more") cachedHistoryCursorSessions.delete(sessionId);
+      if (mode === "refresh") {
+        cachedRefreshCursorSessions.delete(sessionId);
+        cachedHistoryCursorSessions.delete(sessionId);
+      }
       await persistTimelineSnapshot(sessionId);
       return page;
     } catch (error) {
       if (generation !== timelineGeneration) return null;
+      if (
+        mode === "refresh" &&
+        cachedRefreshCursorSessions.has(sessionId) &&
+        !(error instanceof ApiError)
+      ) {
+        retainCachedTimelineAfterError(sessionId);
+        return null;
+      }
       if (
         !isPendingHistory(error) &&
         mode === "more" &&
@@ -796,6 +811,10 @@ export function createTimeline(device: DeviceRuntime) {
   ): Promise<boolean> {
     const current = get(timelineState);
     if (current.sessionId && current.sessionId !== sessionId) return false;
+
+    if (current.historySource && cachedRefreshCursorSessions.has(sessionId)) {
+      return (await loadSessionTimeline(sessionId, { mode: "refresh" })) !== null;
+    }
 
     if (current.mode === "tree") {
       if (!current.latestTurnId) {

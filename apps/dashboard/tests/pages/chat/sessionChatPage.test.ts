@@ -1281,68 +1281,72 @@ test("loads earlier chat history only after pulling beyond the top history senti
   );
 });
 
-test("restores a cached selected chat and refreshes it without rebuilding history", async () => {
-  const selected = session({ session_id: "session-cached", state: "running" });
-  window.history.pushState({}, "", "/dashboard/chat/session-cached");
-  mocks.pathParams = { sessionId: "session-cached" };
-  mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({
-    session: selected,
-    turns: [turn({ turn_id: "turn-latest", session_id: "session-cached" })],
-    inboxMessages: [],
-    events: [],
-  });
-  let resolveRefresh: (() => void) | null = null;
-  let resolveDetail: (() => void) | null = null;
-  mocks.loadSessionDetail.mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        resolveDetail = () => resolve(null);
-      }),
-  );
-  mocks.refreshSessionTimeline.mockImplementation(
-    () =>
-      new Promise<void>((resolve) => {
-        resolveRefresh = resolve;
-      }),
-  );
-  mocks.restoreSessionTimeline.mockImplementation(async (sessionId: string) => {
-    mocks.timelineState.set(
-      timelineStateValue({
-        sessionId,
-        items: timelineItemsFromTurns([turn({ turn_id: "turn-latest", session_id: sessionId })]),
-        nextOlderTurnId: "turn-older",
-        latestTurnId: "turn-latest",
-        hasMore: true,
-        status: "ready",
+test.each([undefined, "native", "file"] as const)(
+  "restores a cached %s chat and refreshes it without hiding history",
+  async (historySource) => {
+    const selected = session({ session_id: "session-cached", state: "running" });
+    window.history.pushState({}, "", "/dashboard/chat/session-cached");
+    mocks.pathParams = { sessionId: "session-cached" };
+    mocks.loadedSessions = [selected];
+    mocks.sessions.set([selected]);
+    mocks.sessionDetail.set({
+      session: selected,
+      turns: [turn({ turn_id: "turn-latest", session_id: "session-cached" })],
+      inboxMessages: [],
+      events: [],
+    });
+    let resolveRefresh: (() => void) | null = null;
+    let resolveDetail: (() => void) | null = null;
+    mocks.loadSessionDetail.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDetail = () => resolve(null);
+        }),
+    );
+    mocks.refreshSessionTimeline.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+    mocks.restoreSessionTimeline.mockImplementation(async (sessionId: string) => {
+      mocks.timelineState.set(
+        timelineStateValue({
+          sessionId,
+          historySource,
+          items: timelineItemsFromTurns([turn({ turn_id: "turn-latest", session_id: sessionId })]),
+          nextOlderTurnId: "turn-older",
+          latestTurnId: "turn-latest",
+          hasMore: true,
+          status: "ready",
+        }),
+      );
+      return true;
+    });
+
+    render(SessionChatPage);
+
+    await waitFor(() =>
+      expect(mocks.restoreSessionTimeline).toHaveBeenCalledWith("session-cached", {
+        topology: false,
       }),
     );
-    return true;
-  });
-
-  render(SessionChatPage);
-
-  await waitFor(() =>
-    expect(mocks.restoreSessionTimeline).toHaveBeenCalledWith("session-cached", {
-      topology: false,
-    }),
-  );
-  await waitFor(() =>
-    expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith("session-cached", "turn-latest"),
-  );
-  expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith(
-    "session-cached",
-    expect.objectContaining({ mode: "rebuild" }),
-  );
-  expect(await screen.findByText("hello")).toBeInTheDocument();
-  expect(document.querySelector("[data-chat-conversation-skeleton]")).not.toBeInTheDocument();
-  expect(
-    document.querySelector('[data-chat-initial-scroll-pending="true"]'),
-  ).not.toBeInTheDocument();
-  resolveDetail?.();
-  resolveRefresh?.();
-});
+    await waitFor(() =>
+      expect(mocks.refreshSessionTimeline).toHaveBeenCalledWith("session-cached", "turn-latest"),
+    );
+    expect(mocks.loadSessionTimeline).not.toHaveBeenCalledWith(
+      "session-cached",
+      expect.objectContaining({ mode: "rebuild" }),
+    );
+    expect(await screen.findByText("hello")).toBeInTheDocument();
+    expect(document.querySelector("[data-chat-conversation-skeleton]")).not.toBeInTheDocument();
+    expect(
+      document.querySelector('[data-chat-initial-scroll-pending="true"]'),
+    ).not.toBeInTheDocument();
+    resolveDetail?.();
+    resolveRefresh?.();
+  },
+);
 
 test("scrolls a restored chat to the bottom after its session detail arrives", async () => {
   const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});

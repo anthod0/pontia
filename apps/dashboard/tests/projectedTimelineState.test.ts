@@ -536,6 +536,99 @@ test("restores a cached timeline when topology is not known yet", async () => {
   });
 });
 
+test.each(["native", "file"] as const)(
+  "shows persisted %s history while revalidating its source and replacing reverted messages",
+  async (source) => {
+    mocks.getTurnTimeline.mockResolvedValueOnce(
+      page({
+        history_source: source,
+        items: [item("turn-old", "removed", "cached")],
+        next_turn_id: "older",
+      }),
+    );
+    await loadSessionTimeline("sess-restored");
+    resetTimelineState();
+    queryClient.clear();
+
+    expect(await restoreSessionTimeline("sess-restored")).toBe(true);
+    expect(get(timelineState)).toMatchObject({
+      historySource: source,
+      status: "ready",
+      items: [expect.objectContaining({ item_id: "removed" })],
+    });
+
+    let finish!: (value: TurnTimelinePage) => void;
+    mocks.getTurnTimeline.mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    const refreshing = refreshSessionTimeline("sess-restored");
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    expect(mocks.getTurnTimeline.mock.lastCall?.[1]).toMatchObject({
+      direction: "backward",
+      historySource: null,
+    });
+    expect(get(timelineState)).toMatchObject({
+      loading: false,
+      refreshing: true,
+      items: [expect.objectContaining({ item_id: "removed" })],
+    });
+
+    finish(page({ history_source: "native", items: [], next_turn_id: null }));
+    await refreshing;
+    expect(get(timelineState)).toMatchObject({
+      historySource: "native",
+      status: "empty",
+      items: [],
+      latestTurnId: null,
+      nextOlderTurnId: null,
+      hasMore: false,
+    });
+  },
+);
+
+test("revalidates an empty persisted file preview before resuming native tail refresh", async () => {
+  mocks.getTurnTimeline.mockResolvedValueOnce(
+    page({ history_source: "file", items: [], next_turn_id: null }),
+  );
+  await loadSessionTimeline("sess-empty-preview");
+  resetTimelineState();
+  await restoreSessionTimeline("sess-empty-preview");
+  mocks.getTurnTimeline.mockResolvedValueOnce(
+    page({
+      history_source: "native",
+      items: [item("turn-new", "new", "native")],
+      next_turn_id: null,
+    }),
+  );
+  await refreshSessionTimeline("sess-empty-preview");
+  expect(get(timelineState)).toMatchObject({ historySource: "native", latestTurnId: "turn-new" });
+  mocks.getTurnTimeline.mockResolvedValueOnce(
+    page({
+      history_source: "native",
+      items: [item("turn-new", "new", "updated")],
+      next_turn_id: null,
+    }),
+  );
+  await refreshSessionTimeline("sess-empty-preview");
+  expect(mocks.getTurnTimeline.mock.lastCall?.[1]).toMatchObject({
+    direction: "forward",
+    turnId: "turn-new",
+    historySource: "native",
+  });
+  expect(get(timelineState).items.map((entry) => entry.content_preview)).toEqual(["updated"]);
+});
+
+test("retains restored native history when revalidation loses its connection", async () => {
+  mocks.getTurnTimeline.mockResolvedValueOnce(page({ history_source: "native" }));
+  await loadSessionTimeline("sess-disconnected");
+  resetTimelineState();
+  await restoreSessionTimeline("sess-disconnected");
+  const cachedItems = get(timelineState).items;
+  mocks.getTurnTimeline.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  expect(await refreshSessionTimeline("sess-disconnected")).toBe(false);
+  expect(get(timelineState)).toMatchObject({ status: "ready", items: cachedItems, loading: false });
+});
+
 test("a stale persisted refresh cursor falls back to rebuilding the timeline", async () => {
   mocks.getTurnTimeline
     .mockResolvedValueOnce(
