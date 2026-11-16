@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.13] - 2026-11-16
+
+### Changed
+
+- Pontia Edge checks for automatic updates every 10 minutes instead of hourly.
+
+### Fixed
+
+- Pi applies the Agent Profile system prompt on the first prompt of a new Session and after switching Sessions.
+- The Dashboard uses the same conversation skeleton everywhere a conversation loads.
+- Dashboard progress bars no longer jump when the total becomes known.
+
 ## [0.7.12] - 2026-11-16
 
 ### Added
