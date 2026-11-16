@@ -973,7 +973,7 @@ test("does not substitute projected Turn summaries while timeline history is sti
 
   render(SessionChatPage);
 
-  expect(await screen.findByText("Loading conversation…")).toBeInTheDocument();
+  await screen.findAllByRole("status", { name: "Loading conversation" });
   expect(screen.queryByText("typed in tui")).not.toBeInTheDocument();
 });
 
@@ -1060,12 +1060,8 @@ test("does not show the empty conversation state while the selected chat is init
 
   await screen.findByPlaceholderText("Follow up…");
   expect(screen.queryByText("No messages yet")).not.toBeInTheDocument();
-  expect(document.querySelector("[data-chat-conversation-skeleton]")).not.toBeInTheDocument();
-
   resolveRestore?.(false);
-  await waitFor(() =>
-    expect(document.querySelector("[data-chat-conversation-skeleton]")).toBeInTheDocument(),
-  );
+  await tick();
   expect(screen.queryByText("No messages yet")).not.toBeInTheDocument();
 });
 

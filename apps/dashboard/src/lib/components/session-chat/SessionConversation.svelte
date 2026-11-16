@@ -10,6 +10,7 @@
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { copyText } from '$lib/copyText'
+  import SessionConversationSkeleton from './SessionConversationSkeleton.svelte'
   import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
@@ -468,7 +469,7 @@
 
 <Conversation.Root class="h-auto min-h-0 min-w-0 flex-1 overflow-visible">
   {#if loading}
-    <Conversation.EmptyState title="Loading conversation…" description="Fetching the latest session transcript." />
+    <SessionConversationSkeleton class="min-h-80" />
   {:else if !displayMessages.length && !timelineItems.some(item => item.kind === 'context_compaction')}
     <Empty.Root class="h-full">
       <Empty.Header>

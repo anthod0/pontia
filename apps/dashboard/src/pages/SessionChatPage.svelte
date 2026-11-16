@@ -10,7 +10,7 @@
   import { claimChatEntryAutofocus } from '$lib/chatEntryAutofocus'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
-  import { Skeleton } from '$lib/components/ui/skeleton/index.js'
+  import SessionConversationSkeleton from '$lib/components/session-chat/SessionConversationSkeleton.svelte'
   import * as Alert from '$lib/components/ui/alert/index.js'
   import SessionConversation from '$lib/components/session-chat/SessionConversation.svelte'
   import AgentStatus from '$lib/components/session-chat/AgentStatus.svelte'
@@ -988,22 +988,6 @@
 
 <svelte:window onpopstate={() => void selectSessionFromLocation()} />
 
-{#snippet conversationSkeleton(className: string)}
-  <div data-chat-conversation-skeleton class={`space-y-8 py-4 ${className}`} role="status" aria-label="Loading conversation">
-    <div class="flex justify-end"><Skeleton class="h-14 w-3/5 max-w-xl rounded-lg" /></div>
-    <div class="w-4/5 max-w-2xl space-y-3">
-      <Skeleton class="h-4 w-full" />
-      <Skeleton class="h-4 w-11/12" />
-      <Skeleton class="h-4 w-2/3" />
-    </div>
-    <div class="flex justify-end"><Skeleton class="h-10 w-2/5 max-w-md rounded-lg" /></div>
-    <div class="w-3/4 max-w-xl space-y-3">
-      <Skeleton class="h-4 w-full" />
-      <Skeleton class="h-4 w-4/5" />
-    </div>
-  </div>
-{/snippet}
-
 <section class="flex flex-col gap-4 pb-[var(--chat-bottom-padding)]" style={`--chat-top-offset: 4rem; --chat-bottom-padding: ${composerHeight + 16}px; --chat-composer-height: ${composerHeight}px`}>
   {#if selectedSession && controlDetails && (selectedSession.capabilities.accept_task || controlDetails.unavailableReason) && (controlDetails.unavailableReason || controlDetails.profile?.error || !sessionSupportsTimeline(selectedSession))}
     <div class="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
@@ -1033,7 +1017,7 @@
   <div class="mx-auto min-w-0 w-full max-w-[760px] flex-1">
     <div class="relative flex min-w-0 flex-col rounded-none bg-transparent">
       {#if $sessionDetailLoading && !selectedSession}
-        {@render conversationSkeleton('min-h-80')}
+        <SessionConversationSkeleton class="min-h-80" />
       {:else if !selectedSession && $sessionDetailErrorKind !== 'not_found'}
         <Empty.Root class="h-full">
           <Empty.Header>
@@ -1056,7 +1040,7 @@
           class={initialChatScrollPending || transcriptResolving ? 'relative min-h-80' : 'relative'}
         >
           {#if initialChatScrollPending}
-            {@render conversationSkeleton('pointer-events-none absolute inset-x-0 top-0 z-10')}
+            <SessionConversationSkeleton class="pointer-events-none absolute inset-x-0 top-0 z-10" />
           {/if}
           <div class={initialChatScrollPending || transcriptResolving ? 'opacity-0' : ''}>
             {#if !sessionSupportsTimeline(selectedSession) || timelineUnavailable}
