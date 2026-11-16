@@ -77,6 +77,7 @@ function install() {
               runtime: { runtime_id: `rt_${sessionId}` },
             };
           }
+          if (method === "session.get") return { session: {} };
           if (method === "event.report") return { accepted: true, turn_id: "turn_1" };
           throw new Error(`Unexpected RPC: ${method}`);
         },
@@ -94,6 +95,7 @@ function context(key) {
       getSessionFile: () => join(workspace, `${key}.jsonl`),
       getCwd: () => workspace,
       getLeafId: () => "entry_1",
+      buildSessionProjection: () => ({ messages: [] }),
     },
   };
 }
@@ -102,6 +104,10 @@ let handlers = install();
 observe("unbound");
 process.env.PONTIA_SESSION_ID = "wrong-before-binding";
 await handlers.session_start({ reason: "startup" }, context("native_one"));
+await handlers.before_agent_start(
+  { messageType: "user", prompt: "first message", systemPromptOptions: { sections: {} } },
+  context("native_one"),
+);
 await handlers.agent_start({}, context("native_one"));
 observe("created");
 await handlers.session_shutdown({ reason: "quit" });
@@ -119,6 +125,10 @@ existingState = "exited";
 await handlers.session_shutdown({ reason: "new" });
 observe("switching");
 await handlers.session_start({ reason: "new" }, context("native_two"));
+await handlers.before_agent_start(
+  { messageType: "user", prompt: "first message", systemPromptOptions: { sections: {} } },
+  context("native_two"),
+);
 await handlers.agent_start({}, context("native_two"));
 observe("switched");
 await handlers.session_shutdown({ reason: "fork" });
@@ -135,6 +145,10 @@ rejectRegistration = false;
 handlers = install();
 await handlers.session_start({ reason: "startup" }, context("native_manual"));
 observe("deferred");
+await handlers.before_agent_start(
+  { messageType: "user", prompt: "first message", systemPromptOptions: { sections: {} } },
+  context("native_manual"),
+);
 await handlers.agent_start({}, context("native_manual"));
 observe("manual");
 await handlers.session_shutdown({ reason: "quit" });

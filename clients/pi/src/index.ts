@@ -46,6 +46,12 @@ import {
 import type { SessionContext } from "./session.js";
 import { isActiveRegisteredWorkspace } from "./workspace.js";
 
+const extensionKey = Symbol.for("pontia.pi.extension");
+const registry = globalThis as typeof globalThis & {
+  [extensionKey]?: { owner?: symbol; forkParentSessionId?: string };
+};
+const extensionState = (registry[extensionKey] ??= {});
+
 interface ReporterLike {
   report(
     context: { runtimeId: string },
@@ -499,17 +505,59 @@ export function createPontiaPiExtension(
 
   pi.on("before_agent_start", async (event, ctx) => {
     pendingPrompt = event.messageType === "user" ? event.prompt : undefined;
-    if (reportingDisabled || !boundSessionContext) return;
+    if (reportingDisabled) return;
+    const logFile = currentHookLogFile();
     try {
+      if (!boundSessionContext) {
+        const hookSessionDetails = piSessionDetailsFromHookContext(ctx);
+        const sessionDetails = hookSessionDetails.clientSessionKey
+          ? hookSessionDetails
+          : deferredManualSessionDetails;
+        if (!sessionDetails) return;
+        const workspaceActive = await isActiveRegisteredWorkspace(
+          await registrationConnection(),
+          sessionDetails.clientCwd,
+        );
+        if (!workspaceActive) {
+          await closeControlSocket();
+          reportingDisabled = true;
+          await logDiagnostic(logFile, {
+            level: "info",
+            code: "workspace_not_active",
+            message:
+              "current pi workspace is not an active registered pontia workspace; pontia reporting disabled",
+            details: { client_cwd: sessionDetails.clientCwd },
+          });
+          return;
+        }
+        boundSessionContext = await bindSession(await registrationConnection(), sessionDetails);
+        if (boundSessionContext) {
+          sourceEnv.PONTIA_SESSION_ID = boundSessionContext.sessionId;
+          sourceEnv.PONTIA_RUNTIME_INSTANCE_ID = boundSessionContext.runtimeId;
+        }
+        if (boundSessionContext && !readyReported) {
+          piContext = ctx;
+          controlSocket!.registered(boundSessionContext);
+          readyReported = reportAccepted(
+            await makeReporter(logFile).report(
+              boundSessionContext,
+              buildSessionReadyEvent(boundSessionContext),
+            ),
+          );
+          await reportModel().catch(controlError);
+        }
+      }
+      if (!boundSessionContext) return;
       const profilePrompt = await loadProfileSystemPrompt(
         rpcConnection,
-        boundSessionContext?.sessionId,
+        boundSessionContext.sessionId,
         ctx.sessionManager.buildSessionProjection().messages,
       );
       if (profilePrompt) {
         event.systemPromptOptions.sections.pontia_execution_profile = profilePrompt;
       }
     } catch (error) {
+      if (!boundSessionContext) await closeControlSocket();
       await logDiagnostic(currentHookLogFile(), {
         level: "warn",
         code: "system_prompt_append_failed",
@@ -551,7 +599,8 @@ export function createPontiaPiExtension(
     delete sourceEnv.PONTIA_SESSION_ID;
     delete sourceEnv.PONTIA_RUNTIME_INSTANCE_ID;
     await closeControlSocket();
-    const parentSessionId = boundSessionContext?.sessionId;
+    const parentSessionId = boundSessionContext?.sessionId ?? extensionState.forkParentSessionId;
+    delete extensionState.forkParentSessionId;
     boundSessionContext = undefined;
     readyReported = false;
     if (!isPersistentTuiContext(ctx)) {
@@ -692,6 +741,11 @@ export function createPontiaPiExtension(
   });
 
   pi.on("session_shutdown", async (event) => {
+    if (event.reason === "fork") {
+      extensionState.forkParentSessionId = boundSessionContext?.sessionId;
+    } else {
+      delete extensionState.forkParentSessionId;
+    }
     delete sourceEnv.PONTIA_SESSION_ID;
     delete sourceEnv.PONTIA_RUNTIME_INSTANCE_ID;
     piContext = undefined;
@@ -739,51 +793,6 @@ export function createPontiaPiExtension(
           message: "pi agent_start has no native session entry id; turn.started was not reported",
         });
         return;
-      }
-      if (!boundSessionContext) {
-        const hookSessionDetails = piSessionDetailsFromHookContext(ctx);
-        const sessionDetails = hookSessionDetails.clientSessionKey
-          ? hookSessionDetails
-          : deferredManualSessionDetails;
-        if (!sessionDetails) {
-          activeTurn = undefined;
-          pendingPrompt = undefined;
-          return;
-        }
-        const workspaceActive = await isActiveRegisteredWorkspace(
-          await registrationConnection(),
-          sessionDetails.clientCwd,
-        );
-        if (!workspaceActive) {
-          await closeControlSocket();
-          reportingDisabled = true;
-          await logDiagnostic(logFile, {
-            level: "info",
-            code: "workspace_not_active",
-            message:
-              "current pi workspace is not an active registered pontia workspace; pontia reporting disabled",
-            details: { client_cwd: sessionDetails.clientCwd },
-          });
-          activeTurn = undefined;
-          pendingPrompt = undefined;
-          return;
-        }
-        boundSessionContext = await bindSession(await registrationConnection(), sessionDetails);
-        if (boundSessionContext) {
-          sourceEnv.PONTIA_SESSION_ID = boundSessionContext.sessionId;
-          sourceEnv.PONTIA_RUNTIME_INSTANCE_ID = boundSessionContext.runtimeId;
-        }
-        if (boundSessionContext && !readyReported) {
-          piContext = ctx;
-          controlSocket!.registered(boundSessionContext);
-          readyReported = reportAccepted(
-            await makeReporter(logFile).report(
-              boundSessionContext,
-              buildSessionReadyEvent(boundSessionContext),
-            ),
-          );
-          await reportModel().catch(controlError);
-        }
       }
       if (!boundSessionContext) {
         activeTurn = undefined;
@@ -934,9 +943,7 @@ export function createPontiaPiExtension(
 }
 
 export default function pontiaPiExtension(pi: ExtensionAPI): void {
-  const key = Symbol.for("pontia.pi.extension");
-  const registry = globalThis as typeof globalThis & { [key]?: symbol };
-  if (registry[key]) {
+  if (extensionState.owner) {
     const home = pontiaHomeFromEnv();
     if (home) {
       void appendDiagnostic(defaultHookLogFile(home), {
@@ -949,15 +956,13 @@ export default function pontiaPiExtension(pi: ExtensionAPI): void {
   }
 
   const owner = Symbol();
-  registry[key] = owner;
+  extensionState.owner = owner;
   const release = () => {
-    if (registry[key] === owner) delete registry[key];
+    if (extensionState.owner === owner) delete extensionState.owner;
   };
   try {
     createPontiaPiExtension(pi);
-    pi.on("session_shutdown", (event) => {
-      if (event.reason === "reload" || event.reason === "quit") release();
-    });
+    pi.on("session_shutdown", release);
   } catch (error) {
     release();
     throw error;

@@ -89,6 +89,9 @@ beforeEach(async () => {
       }
       if (method === "runtime.register") {
         const id = params.binding.client_session_key;
+        if (params.binding.start_kind === "fork") {
+          expect(params.binding.parent_session_id).toBe("sess_one");
+        }
         sessions.add(id);
         return { session: { session_id: `sess_${id}` }, runtime: { runtime_id: `rt_${id}` } };
       }
@@ -147,17 +150,20 @@ test("reload releases ownership so a different copy can restore the session", as
 });
 
 test.each(["new", "resume", "fork"])(
-  "%s keeps ownership while changing the session",
+  "%s releases ownership so the replacement extension binds the session",
   async (reason) => {
     const first = fakePi();
     (await load())(first.pi);
     await first.emit("session_start", "startup");
     await first.emit("session_shutdown", reason);
+    const replacement = fakePi();
+    (await load())(replacement.pi);
+    await replacement.emit("session_start", reason, "two");
     const duplicate = fakePi();
     (await load())(duplicate.pi);
-    await first.emit("session_start", reason, "two");
     expect(childSession()).toBe("sess_two");
     expect(duplicate.handlers.size).toBe(0);
+    expect(connect).toHaveBeenCalledTimes(2);
   },
 );
 

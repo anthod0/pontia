@@ -697,6 +697,7 @@ describe("pontia pi extension lifecycle", () => {
     );
 
     expect(reported).toEqual([]);
+    await handlers.before_agent_start({ messageType: "user", prompt: "first message" }, {});
     await handlers.agent_start(
       {},
       {
@@ -856,69 +857,95 @@ describe("pontia pi extension lifecycle", () => {
     });
   });
 
-  test("manual new session is not persisted until its first prompt starts", async () => {
-    const workspace = await realpath(await tempDir());
-    const requestImpl = vi.fn(async (method: string) => {
-      if (method === "workspaces.list") {
-        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
-      }
-      if (method === "session.context") {
-        return { session_context: null };
-      }
-      if (method === "runtime.register") {
-        return {
-          session: { session_id: "sess_manual" },
-          runtime: { runtime_id: "rtinst_manual" },
-        };
-      }
-      return Promise.reject(new Error("unexpected"));
-    });
-    const { handlers, reported } = install({
-      env: {
-        TMUX: "/tmp/tmux-1000/default,2071,502",
-        TMUX_PANE: "%42",
-      },
-      request: requestImpl as any,
-    });
-
-    await handlers.session_start(
-      { reason: "startup" },
-      {
-        sessionManager: {
-          getSessionId: () => "pi_session_manual",
-          getSessionFile: () => "/tmp/pi/session.jsonl",
-          getSessionDir: () => "/tmp/pi",
-          getCwd: () => workspace,
+  test.each(["startup", "new"])(
+    "manual %s injects its profile into the first prompt",
+    async (reason) => {
+      const workspace = await realpath(await tempDir());
+      const requestImpl = vi.fn(async (method: string) => {
+        if (method === "workspaces.list") {
+          return { workspaces: [{ canonical_path: workspace, state: "active" }] };
+        }
+        if (method === "session.context") {
+          return { session_context: null };
+        }
+        if (method === "runtime.register") {
+          return {
+            session: { session_id: "sess_manual" },
+            runtime: { runtime_id: "rtinst_manual" },
+          };
+        }
+        if (method === "session.get") {
+          return { execution_profile_binding: { system_prompt: "first-turn-profile" } };
+        }
+        return Promise.reject(new Error("unexpected"));
+      });
+      const { handlers, reported, env } = install({
+        env: {
+          TMUX: "/tmp/tmux-1000/default,2071,502",
+          TMUX_PANE: "%42",
         },
-      },
-    );
+        request: requestImpl as any,
+      });
 
-    expect(requestImpl).toHaveBeenCalledTimes(2);
-    expect(requestImpl).not.toHaveBeenCalledWith("runtime.register", expect.anything());
-    expect(reported).toEqual([]);
-
-    await handlers.before_agent_start(
-      { messageType: "user", prompt: "first message", systemPrompt: "Base prompt" },
-      {},
-    );
-    await handlers.agent_start(
-      {},
-      {
-        sessionManager: {
-          getSessionId: () => "pi_session_manual",
-          getSessionFile: () => "/tmp/pi/session.jsonl",
-          getSessionDir: () => "/tmp/pi",
-          getCwd: () => workspace,
+      await handlers.session_start(
+        { reason },
+        {
+          sessionManager: {
+            getSessionId: () => "pi_session_manual",
+            getSessionFile: () => "/tmp/pi/session.jsonl",
+            getSessionDir: () => "/tmp/pi",
+            getCwd: () => workspace,
+          },
         },
-      },
-    );
+      );
 
-    expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
-    expect(reported[1]).toMatchObject({
-      session_id: "sess_manual",
-      data: { input_summary: "first message" },
-    });
-  });
+      expect(requestImpl).toHaveBeenCalledTimes(2);
+      expect(requestImpl).not.toHaveBeenCalledWith("runtime.register", expect.anything());
+      expect(reported).toEqual([]);
+
+      const event = {
+        messageType: "user",
+        prompt: "first message",
+        systemPromptOptions: { sections: {} as Record<string, string> },
+      };
+      const promptContext = {
+        sessionManager: { buildSessionProjection: () => ({ messages: [] }) },
+      };
+      await handlers.before_agent_start(event, promptContext);
+
+      expect(event.systemPromptOptions.sections.pontia_execution_profile).toBe(
+        "first-turn-profile",
+      );
+      expect(env.PONTIA_SESSION_ID).toBe("sess_manual");
+      expect(env.PONTIA_RUNTIME_INSTANCE_ID).toBe("rtinst_manual");
+      expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+      await handlers.agent_start(
+        {},
+        {
+          sessionManager: {
+            getSessionId: () => "pi_session_manual",
+            getSessionFile: () => "/tmp/pi/session.jsonl",
+            getSessionDir: () => "/tmp/pi",
+            getCwd: () => workspace,
+          },
+        },
+      );
+
+      expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
+      expect(reported[1]).toMatchObject({
+        session_id: "sess_manual",
+        data: { input_summary: "first message" },
+      });
+      const nextEvent = { ...event, prompt: "follow-up", systemPromptOptions: { sections: {} } };
+      await handlers.before_agent_start(nextEvent, promptContext);
+      expect(nextEvent.systemPromptOptions.sections).toEqual({
+        pontia_execution_profile: "first-turn-profile",
+      });
+      expect(
+        requestImpl.mock.calls.filter(([method]) => method === "runtime.register"),
+      ).toHaveLength(1);
+    },
+  );
 
   test("session_start skips manual binding when current workspace is not active", async () => {
     const workspace = await realpath(await tempDir());

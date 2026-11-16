@@ -137,6 +137,9 @@ test("a disconnected deferred registration can initialize on the next manual tur
             runtime: { runtime_id: "rt_recovered" },
           };
         }
+        if (request.method === "session.get") {
+          result = { execution_profile_binding: { system_prompt: "recovered-profile" } };
+        }
         socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
       }
     });
@@ -170,13 +173,22 @@ test("a disconnected deferred registration can initialize on the next manual tur
       getSessionFile: () => join(root, "pi.jsonl"),
       getCwd: () => workspace,
       getLeafId: () => "entry_1",
+      buildSessionProjection: () => ({ messages: [] }),
     },
   };
   try {
     await handlers.session_start({ reason: "startup" }, context);
+    await handlers.before_agent_start({ messageType: "user", prompt: "first attempt" }, context);
     await handlers.agent_start({}, context);
     expect(registrations).toBe(1);
     expect(events).toEqual([]);
+    const retry = {
+      messageType: "user",
+      prompt: "retry",
+      systemPromptOptions: { sections: {} as Record<string, string> },
+    };
+    await handlers.before_agent_start(retry, context);
+    expect(retry.systemPromptOptions.sections.pontia_execution_profile).toBe("recovered-profile");
     await handlers.agent_start({}, context);
     expect(registrations).toBe(2);
     expect(events.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
