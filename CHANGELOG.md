@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.12] - 2026-11-16
+
+### Added
+
+- `pontia uninstall` removes Pontia integrations, shell configuration, and autostart services.
+
+### Changed
+
+- Pi Sessions started directly in a terminal connect to Pontia without `tmux`.
+
+### Fixed
+
+- The Dashboard keeps the conversation visible while it reconnects.
+- The Public Dashboard shows cached devices while it refreshes them in the background.
+- Switching Sessions in the Dashboard restores cached history right away.
+- Pi no longer initializes the Pontia extension twice when it is loaded more than once.
+
 ## [0.7.11] - 2026-11-15
 
 ### Added
