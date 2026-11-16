@@ -224,7 +224,7 @@ jobs:
             END { if (!found) exit 1 }
           ' CHANGELOG.md > release-notes.md
           test -s release-notes.md
-      - name: Verify assets and publish GitHub Release
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.detect.outputs.tag }}

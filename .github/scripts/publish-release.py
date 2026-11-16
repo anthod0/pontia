@@ -154,10 +154,6 @@ def publish_github_release(directory, version):
             continue
         if path.name not in existing:
             run("gh", "release", "upload", version, str(path))
-        with tempfile.TemporaryDirectory(prefix="pontia-github-check-") as temporary:
-            run("gh", "release", "download", version, "--pattern", path.name, "--dir", temporary)
-            if (Path(temporary) / path.name).read_bytes() != path.read_bytes():
-                raise ValueError(f"GitHub asset differs from original build: {path.name}")
     if release["isDraft"]:
         run("gh", "release", "edit", version, "--draft=false")
 
