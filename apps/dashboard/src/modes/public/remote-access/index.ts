@@ -1,5 +1,5 @@
 export { createRemoteConnection } from "./e2eTransport";
-export { retainSavedConnections } from "./sessionCache";
+export { deviceListCache, retainSavedConnections } from "./sessionCache";
 export {
   CloudRequestError,
   cloudAccountUrl,

@@ -8,6 +8,10 @@ import type {
   PublicDeviceTarget,
 } from "../src/modes/public/remote-access/index.ts";
 import { mockCloudDevices, mockDeviceHeader } from "./devices.ts";
+export {
+  deviceListCache,
+  retainSavedConnections,
+} from "../src/modes/public/remote-access/sessionCache";
 
 export type { CloudProfile, PublicDevice, PublicDeviceConnection, PublicDeviceTarget };
 
@@ -131,5 +135,3 @@ export function dashboardBootstrapUrl(handle: string): string {
   if (!isValidDeviceHandle(handle)) throw new Error("Invalid device handle.");
   return `${location.origin}/${encodeURIComponent(handle)}`;
 }
-
-export function retainSavedConnections(_userId: string | null, _devices: PublicDevice[]): void {}

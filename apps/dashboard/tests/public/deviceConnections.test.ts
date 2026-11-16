@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { get } from "svelte/store";
 import { createDeviceConnections } from "../../src/modes/public/deviceConnections";
+import {
+  deviceListCache,
+  retainSavedConnections,
+} from "../../src/modes/public/remote-access/sessionCache";
 import { createRemoteAccessFixture } from "./fixtures/remoteConnections";
 
 let fixture: ReturnType<typeof createRemoteAccessFixture>;
@@ -16,6 +20,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   manager.dispose();
+  vi.restoreAllMocks();
+  sessionStorage.clear();
   vi.useRealTimers();
 });
 
@@ -278,4 +284,112 @@ test("moving a device to another edge replaces its cached connection and runtime
   expect(device().runtime).not.toBe(previous);
   expect(device().edgeId).toBe("edge-two");
   expect(device().state).toBe("online");
+});
+
+function enablePersistence(): void {
+  manager.dispose();
+  fixture.remote.deviceListCache = deviceListCache;
+  fixture.remote.retainSavedConnections = retainSavedConnections;
+  manager = createDeviceConnections(fixture.remote);
+}
+
+test("reopening connects cached devices while the background list is pending", async () => {
+  enablePersistence();
+  await manager.refreshDevices();
+  await settle();
+  manager.dispose();
+  let finish!: (listing: { userId: string; devices: typeof fixture.listed }) => void;
+  vi.mocked(fixture.remote.listPublicDevices).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  manager = createDeviceConnections(fixture.remote);
+  const refresh = manager.refreshDevices();
+  await settle();
+  expect(get(manager.loading)).toBe(false);
+  expect(device().state).toBe("online");
+  const runtime = device().runtime;
+  finish({ userId: "user-one", devices: [{ ...fixture.listed[0], name: "Renamed Mac" }] });
+  await refresh;
+  expect(device().runtime).toBe(runtime);
+  expect(get(manager.devices).map(({ name }) => name)).toEqual(["Renamed Mac"]);
+  expect(fixture.signals.get("travel-laptop")!.every((signal) => signal.aborted)).toBe(true);
+  expect(deviceListCache.read()?.devices.map(({ name }) => name)).toEqual(["Renamed Mac"]);
+});
+
+test("a background Cloud failure preserves cached devices for another visit", async () => {
+  enablePersistence();
+  await manager.refreshDevices();
+  manager.dispose();
+  vi.mocked(fixture.remote.listPublicDevices).mockRejectedValueOnce(new Error("offline"));
+  manager = createDeviceConnections(fixture.remote);
+  await manager.refreshDevices();
+  await settle();
+  expect(device().state).toBe("online");
+  expect(get(manager.error)).not.toBeNull();
+  expect(deviceListCache.read()?.devices).toEqual(fixture.listed);
+});
+
+test.each(["list", "connection"])(
+  "401 from %s clears the cached list before reopening",
+  async (source) => {
+    enablePersistence();
+    await manager.refreshDevices();
+    await settle();
+    const unauthorized = new fixture.remote.CloudRequestError("unauthorized", 401);
+    if (source === "list") {
+      vi.mocked(fixture.remote.listPublicDevices).mockRejectedValueOnce(unauthorized);
+      await manager.refreshDevices();
+    } else fixture.connectionFailures.get("office-mac")!(unauthorized);
+    expect(deviceListCache.read()).toBeNull();
+    manager.dispose();
+    manager = createDeviceConnections(fixture.remote);
+    expect(get(manager.devices)).toEqual([]);
+    expect(get(manager.loading)).toBe(true);
+  },
+);
+
+test("background user changes replace cached connections and the saved list", async () => {
+  enablePersistence();
+  await manager.refreshDevices();
+  manager.dispose();
+  manager = createDeviceConnections(fixture.remote);
+  await settle();
+  const previous = device().runtime;
+  const signals = [...fixture.signals.values()].flat();
+  vi.mocked(fixture.remote.listPublicDevices).mockResolvedValueOnce({
+    userId: "user-two",
+    devices: [...fixture.listed],
+  });
+  await manager.refreshDevices();
+  await settle();
+  expect(signals.every((signal) => signal.aborted)).toBe(true);
+  expect(device().runtime).not.toBe(previous);
+  expect(deviceListCache.read()?.userId).toBe("user-two");
+});
+
+test.each(["broken json", JSON.stringify({ version: 1, userId: "user-one", devices: [{}] })])(
+  "invalid list cache falls back to discovery",
+  async (serialized) => {
+    sessionStorage.setItem("pontia.remote-device-list", serialized);
+    enablePersistence();
+    expect(get(manager.devices)).toEqual([]);
+    await manager.refreshDevices();
+    await settle();
+    expect(device().state).toBe("online");
+    expect(deviceListCache.read()?.devices).toEqual(fixture.listed);
+  },
+);
+
+test("unavailable browser storage does not prevent device discovery", async () => {
+  vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+    throw new DOMException("disabled", "SecurityError");
+  });
+  enablePersistence();
+  await manager.refreshDevices();
+  await settle();
+  expect(device().state).toBe("online");
+  expect(get(manager.error)).toBeNull();
 });

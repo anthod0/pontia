@@ -17,6 +17,10 @@ const redirectToSignIn = vi.hoisted(() => vi.fn());
 vi.mock("../../src/modes/public/signInRedirect", () => ({ redirectToSignIn }));
 vi.mock("../../src/modes/public/remote-access", async () => ({
   ...(await import("../../src/modes/public/remote-access/remoteAccess")),
+  deviceListCache: {
+    read: () => fixture.remote.deviceListCache.read(),
+    save: (listing) => fixture.remote.deviceListCache.save(listing),
+  },
   retainSavedConnections: (
     ...args: [string | null, { handle: string; deviceId: string; edgeId: string }[]]
   ) => fixture.remote.retainSavedConnections(...args),
@@ -251,7 +255,7 @@ test("choosing a sidebar device on the root opens that device", async () => {
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
   window.history.pushState({}, "", "/travel-laptop/chat/same");
   window.dispatchEvent(new PopStateEvent("popstate"));
-  await userEvent.click(screen.getByRole("button", { name: /New Chat/ }));
+  await userEvent.click(sidebar().getByRole("button", { name: /New Chat/ }));
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
   expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent("Travel Laptop");
   expect(fixture.connect).toHaveBeenCalledTimes(2);
@@ -346,7 +350,7 @@ test("root settings opens the active device", async () => {
   window.history.replaceState({}, "", "/travel-laptop/chat/same");
   render(MultiDeviceDashboardHarness);
   await screen.findByText("Device page");
-  await userEvent.click(screen.getByRole("button", { name: /New Chat/ }));
+  await userEvent.click(sidebar().getByRole("button", { name: /New Chat/ }));
   await screen.findByRole("textbox");
   await userEvent.click(screen.getByRole("button", { name: "Settings" }));
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop/settings/common"));

@@ -109,51 +109,52 @@ export function createDeviceConnections(remote: RemoteAccess) {
     }
   }
 
+  function reconcile(listing: Awaited<ReturnType<RemoteAccess["listPublicDevices"]>>): void {
+    if (userId !== listing.userId) {
+      for (const entry of entries.values()) stop(entry);
+      entries.clear();
+    }
+    userId = listing.userId;
+    const listed = listing.devices;
+    const handles = new Set(listed.map((device) => device.handle));
+    for (const [handle, entry] of entries) {
+      if (!handles.has(handle)) {
+        stop(entry);
+        entries.delete(handle);
+      }
+    }
+    for (const device of listed) {
+      const existing = entries.get(device.handle);
+      if (existing && existing.deviceId === device.deviceId && existing.edgeId === device.edgeId)
+        existing.name = device.name;
+      else {
+        if (existing) stop(existing);
+        const entry: Entry = {
+          ...device,
+          state: "connecting",
+          runtime: null,
+          connection: null,
+          retryDelay: 5000,
+        };
+        entries.set(device.handle, entry);
+        void connect(entry);
+      }
+    }
+    publish();
+  }
+
   function refreshDevices(): Promise<void> {
     if (lifetime.signal.aborted) return Promise.resolve();
     if (refresh) return refresh;
-    loading.set(true);
+    loading.set(userId === null);
     refresh = (async () => {
       try {
         const listing = await remote.listPublicDevices(lifetime.signal);
         if (lifetime.signal.aborted) return;
-        if (userId !== listing.userId) {
-          for (const entry of entries.values()) stop(entry);
-          entries.clear();
-        }
-        userId = listing.userId;
-        const listed = listing.devices;
-        remote.retainSavedConnections(userId, listed);
-        const handles = new Set(listed.map((device) => device.handle));
-        for (const [handle, entry] of entries) {
-          if (!handles.has(handle)) {
-            stop(entry);
-            entries.delete(handle);
-          }
-        }
-        for (const device of listed) {
-          const existing = entries.get(device.handle);
-          if (
-            existing &&
-            existing.deviceId === device.deviceId &&
-            existing.edgeId === device.edgeId
-          )
-            existing.name = device.name;
-          else {
-            if (existing) stop(existing);
-            const entry: Entry = {
-              ...device,
-              state: "connecting",
-              runtime: null,
-              connection: null,
-              retryDelay: 5000,
-            };
-            entries.set(device.handle, entry);
-            void connect(entry);
-          }
-        }
+        remote.retainSavedConnections(listing.userId, listing.devices);
+        remote.deviceListCache.save(listing);
+        reconcile(listing);
         error.set(null);
-        publish();
       } catch (failure) {
         if (lifetime.signal.aborted) return;
         if (failure instanceof remote.CloudRequestError && failure.status === 401) requireSignIn();
@@ -175,6 +176,12 @@ export function createDeviceConnections(remote: RemoteAccess) {
     void refreshDevices().then(() => {
       if (!get(error)) for (const entry of entries.values()) retry(entry.handle);
     });
+  }
+
+  const cached = remote.deviceListCache.read();
+  if (cached) {
+    reconcile(cached);
+    loading.set(false);
   }
 
   return {

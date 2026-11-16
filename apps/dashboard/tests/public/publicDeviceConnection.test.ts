@@ -28,6 +28,7 @@ vi.mock("../../src/e2e-wasm/pontia_e2e", () => ({
 
 import {
   createRemoteConnection,
+  deviceListCache,
   retainSavedConnections,
 } from "../../src/modes/public/remote-access";
 let remote: ReturnType<typeof createRemoteConnection>;
@@ -762,4 +763,42 @@ test("changing edge binding discards credentials routed to the previous edge", a
   await expect(remote.connect()).resolves.toMatchObject({ edgeApiOrigin: newEdge });
   expect(mocks.restore).not.toHaveBeenCalled();
   expect(fetchMock.mock.calls[2][0]).toBe(`${newEdge}/e2e/v1/sessions`);
+});
+
+test("a saved device list restores its E2E credentials without another handshake", async () => {
+  const device = { handle, deviceId, edgeId: deviceId, name: "Office Mac" };
+  deviceListCache.save({ userId: deviceId, devices: [device] });
+  const fetchMock = successfulConnectionFetch().mockResolvedValueOnce(new Response("ciphertext"));
+  vi.stubGlobal("fetch", fetchMock);
+  await remote.connect();
+  remote.dispose();
+  const listing = deviceListCache.read()!;
+  remote = createRemoteConnection(listing.devices[0], listing.userId);
+  expect(await (await remote.e2eFetch("/api/v1/workspaces")).text()).toBe("ok");
+  expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("/connect"))).toHaveLength(1);
+  expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("/sessions"))).toHaveLength(1);
+  retainSavedConnections(null, []);
+  expect(deviceListCache.read()).toBeNull();
+  expect(sessionStorage.length).toBe(0);
+});
+
+test("expired E2E credentials renew without discarding the device list", async () => {
+  const listing = {
+    userId: deviceId,
+    devices: [{ handle, deviceId, edgeId: deviceId, name: "Office Mac" }],
+  };
+  deviceListCache.save(listing);
+  const fetchMock = successfulConnectionFetch()
+    .mockResolvedValueOnce(new Response(null, { status: 409 }))
+    .mockResolvedValueOnce(cloudResponse())
+    .mockResolvedValueOnce(admissionResponse("replacement"))
+    .mockResolvedValueOnce(new Response("confirmation"))
+    .mockResolvedValueOnce(new Response("ciphertext"));
+  vi.stubGlobal("fetch", fetchMock);
+  await remote.connect();
+  remote.dispose();
+  remote = createRemoteConnection(listing.devices[0], listing.userId);
+  expect(await (await remote.e2eFetch("/api/v1/workspaces")).text()).toBe("ok");
+  expect(deviceListCache.read()).toEqual(listing);
+  expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("/sessions"))).toHaveLength(2);
 });
