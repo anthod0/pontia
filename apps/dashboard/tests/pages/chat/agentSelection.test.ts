@@ -1,5 +1,5 @@
-import { mocks, session, turn } from "./fixtures";
-import { render, screen, waitFor } from "@testing-library/svelte";
+import { mocks, session, turn, workspace } from "./fixtures";
+import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 
@@ -48,4 +48,30 @@ test("prevents creation while discovery is unavailable and recovers after an exp
       expect.objectContaining({ client_type: "pi" }),
     ),
   );
+});
+
+test("Alt+A and Alt+W switch the agent client and workspace, with Shift going back", async () => {
+  mocks.listSessionCreationOptions.mockResolvedValue([
+    { id: "pi", name: "Pi", client_type: "pi", metadata: {} },
+    { id: "company", name: "Company Agent", client_type: "acp", metadata: {} },
+  ]);
+  mocks.workspaces.set([
+    workspace({ workspace_id: "ws-1", name: "first" }),
+    workspace({ workspace_id: "ws-2", name: "second" }),
+  ]);
+  render(NewChatPage);
+  const clientSelect = await screen.findByLabelText("Agent client");
+  await waitFor(() => expect(clientSelect).toHaveTextContent("Pi"));
+
+  await fireEvent.keyDown(window, { key: "a", code: "KeyA", altKey: true });
+  expect(clientSelect).toHaveTextContent("Company Agent");
+  await fireEvent.keyDown(window, { key: "A", code: "KeyA", altKey: true, shiftKey: true });
+  expect(clientSelect).toHaveTextContent("Pi");
+
+  const workspaceSelect = screen.getByLabelText("Workspace", { exact: true });
+  await waitFor(() => expect(workspaceSelect).toHaveTextContent("first"));
+  await fireEvent.keyDown(window, { key: "w", code: "KeyW", altKey: true });
+  expect(workspaceSelect).toHaveTextContent("second");
+  await fireEvent.keyDown(window, { key: "w", code: "KeyW", altKey: true });
+  expect(workspaceSelect).toHaveTextContent("first");
 });

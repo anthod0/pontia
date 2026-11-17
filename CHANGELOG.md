@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New chat has keyboard shortcuts to switch the device (`Alt+M`), Agent Client (`Alt+A`), and Workspace (`Alt+W`). Add `Shift` to go back.
+
 ## [0.7.15] - 2026-11-18
 
 ### Added

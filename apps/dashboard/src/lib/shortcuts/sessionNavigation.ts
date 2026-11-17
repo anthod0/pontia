@@ -11,13 +11,23 @@ export function adjacentSessionId(
   currentSessionId: string | null,
   direction: 1 | -1,
 ): string | null {
-  if (!sessions.length) return null;
-  const currentIndex = currentSessionId
-    ? sessions.findIndex((session) => session.session_id === currentSessionId)
-    : -1;
-  if (currentIndex === -1)
-    return direction === 1 ? sessions[0].session_id : sessions[sessions.length - 1].session_id;
-  return sessions[(currentIndex + direction + sessions.length) % sessions.length].session_id;
+  return adjacentValue(
+    sessions.map((session) => session.session_id),
+    currentSessionId,
+    direction,
+  );
+}
+
+// Wraps at both ends; an unknown current value starts from the first or last entry.
+export function adjacentValue(
+  values: string[],
+  current: string | null,
+  direction: 1 | -1,
+): string | null {
+  if (!values.length) return null;
+  const currentIndex = current === null ? -1 : values.indexOf(current);
+  if (currentIndex === -1) return direction === 1 ? values[0] : values[values.length - 1];
+  return values[(currentIndex + direction + values.length) % values.length];
 }
 
 export function sessionIdFromChatPath(relativePath: string): string | null {

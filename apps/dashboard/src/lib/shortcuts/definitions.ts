@@ -7,6 +7,9 @@ export type ChatShortcutAction =
   | "openChatByPosition"
   | "newChat"
   | "focusInput"
+  | "switchDevice"
+  | "switchAgentClient"
+  | "switchWorkspace"
   | "showHelp";
 
 // "Mod" is the platform's primary modifier: Cmd on Apple platforms, Ctrl elsewhere.
@@ -17,9 +20,12 @@ export type ShortcutDefinition = {
   label: MessageKey;
 };
 
+type SwitchAction = "switchDevice" | "switchAgentClient" | "switchWorkspace";
+
 export type ChatShortcutMatch =
-  | { action: Exclude<ChatShortcutAction, "openChatByPosition"> }
-  | { action: "openChatByPosition"; position: string };
+  | { action: Exclude<ChatShortcutAction, "openChatByPosition" | SwitchAction> }
+  | { action: "openChatByPosition"; position: string }
+  | { action: SwitchAction; direction: 1 | -1 };
 
 export const chatShortcuts: Record<ChatShortcutAction, ShortcutDefinition> = {
   nextChat: { keys: ["Alt", "J"], label: "shortcuts.nextChat" },
@@ -27,6 +33,9 @@ export const chatShortcuts: Record<ChatShortcutAction, ShortcutDefinition> = {
   openChatByPosition: { keys: ["Alt", "1-9"], label: "shortcuts.openByPosition" },
   newChat: { keys: ["Alt", "N"], label: "chat.new" },
   focusInput: { keys: ["Alt", "L"], label: "shortcuts.focusInput" },
+  switchDevice: { keys: ["Alt", "M"], label: "shortcuts.switchDevice" },
+  switchAgentClient: { keys: ["Alt", "A"], label: "shortcuts.switchAgentClient" },
+  switchWorkspace: { keys: ["Alt", "W"], label: "shortcuts.switchWorkspace" },
   showHelp: { keys: ["Alt", "?"], label: "shortcuts.title" },
 };
 
@@ -50,12 +59,19 @@ export const messageInputShortcuts: { keyGroups: ShortcutKey[][]; label: Message
 
 const letterActions: Record<
   string,
-  Exclude<ChatShortcutAction, "openChatByPosition" | "showHelp">
+  Exclude<ChatShortcutAction, "openChatByPosition" | "showHelp" | SwitchAction>
 > = {
   KeyJ: "nextChat",
   KeyK: "previousChat",
   KeyN: "newChat",
   KeyL: "focusInput",
+};
+
+// Shift reverses the direction.
+const switchActions: Record<string, SwitchAction> = {
+  KeyM: "switchDevice",
+  KeyA: "switchAgentClient",
+  KeyW: "switchWorkspace",
 };
 
 // Matches on event.code so Option+letter on macOS, which produces symbols in event.key, still works.
@@ -64,6 +80,8 @@ export function matchChatShortcut(event: KeyboardEvent): ChatShortcutMatch | nul
 
   if (event.key === "?" || (event.code === "Slash" && event.shiftKey))
     return { action: "showHelp" };
+  const switchAction = switchActions[event.code];
+  if (switchAction) return { action: switchAction, direction: event.shiftKey ? -1 : 1 };
   if (event.shiftKey) return null;
 
   const letterAction = letterActions[event.code];

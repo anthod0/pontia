@@ -6,6 +6,8 @@
   import type { SessionCreationOption, WorkspaceView } from '../../api/types'
   import { workspaceTitle } from './sessionMetadata'
   import ClientIcon from './ClientIcon.svelte'
+  import { matchChatShortcut } from '$lib/shortcuts/definitions'
+  import { adjacentValue } from '$lib/shortcuts/sessionNavigation'
 
   interface Props {
     workspaceId: string
@@ -32,7 +34,22 @@
   }: Props = $props()
 
   const selectedOption = $derived(creationOptions.find((option) => option.id === creationOptionId))
+  const clientSelectDisabled = $derived(!fixedWorkspace && (disabled || !creationOptions.length))
+  const workspaceSelectDisabled = $derived(fixedWorkspace || disabled || workspacesLoading || !workspaces.length)
+
+  function handleKeydown(event: KeyboardEvent): void {
+    const shortcut = matchChatShortcut(event)
+    if (shortcut?.action === 'switchAgentClient' && !clientSelectDisabled) {
+      event.preventDefault()
+      creationOptionId = adjacentValue(creationOptions.map((option) => option.id), creationOptionId, shortcut.direction) ?? creationOptionId
+    } else if (shortcut?.action === 'switchWorkspace' && !workspaceSelectDisabled) {
+      event.preventDefault()
+      workspaceId = adjacentValue(workspaces.map((workspace) => workspace.workspace_id), workspaceId, shortcut.direction) ?? workspaceId
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 {#if fixedWorkspace}
   <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-1 text-sm text-muted-foreground sm:text-base">
@@ -60,7 +77,7 @@
 {:else}
   <div class="flex min-w-0 items-center gap-2">
     {@render deviceSelector?.(disabled)}
-    <Select.Root type="single" bind:value={creationOptionId} disabled={disabled || !creationOptions.length}>
+    <Select.Root type="single" bind:value={creationOptionId} disabled={clientSelectDisabled}>
       <Select.Trigger class="h-[34px] max-w-48 shrink-0 gap-1.5 bg-background px-3 text-[13px] font-medium text-heading hover:bg-muted data-[state=open]:border-primary data-[state=open]:bg-selected" aria-label={$t('clients.agentClient')}>
         <ClientIcon clientType={selectedOption?.client_type} acpAgentId={selectedOption?.metadata.acp_agent_id} class="size-3.5 text-foreground" />
         <span class="min-w-0 truncate">{selectedOption?.name ?? $t('clients.agentClient')}</span>
@@ -74,7 +91,7 @@
         {/each}
       </Select.Content>
     </Select.Root>
-    <Select.Root type="single" bind:value={workspaceId} disabled={disabled || workspacesLoading || !workspaces.length}>
+    <Select.Root type="single" bind:value={workspaceId} disabled={workspaceSelectDisabled}>
       <Select.Trigger class="h-[34px] max-w-48 shrink-0 gap-1.5 bg-background px-3 text-[13px] font-medium text-heading hover:bg-muted data-[state=open]:border-primary data-[state=open]:bg-selected" aria-label={$t('workspace.title')} title={selectedWorkspace?.canonical_path}>
         <FolderIcon class="size-3.5 text-muted-foreground" aria-hidden="true" />
         <span class="min-w-0 truncate">{selectedWorkspace ? workspaceTitle(selectedWorkspace) : workspacesLoading ? $t('common.loading') : $t('workspace.title')}</span>

@@ -3,6 +3,7 @@ import { matchChatShortcut } from "../../src/lib/shortcuts/definitions";
 import { formatShortcutKeys } from "../../src/lib/shortcuts/format";
 import {
   adjacentSessionId,
+  adjacentValue,
   sessionIdAtShortcutIndex,
 } from "../../src/lib/shortcuts/sessionNavigation";
 import type { SessionView } from "../../src/api/types";
@@ -24,6 +25,20 @@ describe("matchChatShortcut", () => {
     });
     expect(matchChatShortcut(keydown({ altKey: true, code: "KeyL", key: "l" }))).toEqual({
       action: "focusInput",
+    });
+  });
+
+  test("matches switch shortcuts, with Shift reversing the direction", () => {
+    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyM", key: "m" }))).toEqual({
+      action: "switchDevice",
+      direction: 1,
+    });
+    expect(
+      matchChatShortcut(keydown({ altKey: true, shiftKey: true, code: "KeyA", key: "A" })),
+    ).toEqual({ action: "switchAgentClient", direction: -1 });
+    expect(matchChatShortcut(keydown({ altKey: true, code: "KeyW", key: "∑" }))).toEqual({
+      action: "switchWorkspace",
+      direction: 1,
     });
   });
 
@@ -91,5 +106,12 @@ describe("session navigation", () => {
   test("opens sessions by their position in the list", () => {
     expect(sessionIdAtShortcutIndex(sessions, "2")).toBe("middle");
     expect(sessionIdAtShortcutIndex(sessions, "4")).toBeNull();
+  });
+
+  test("adjacentValue wraps and starts from the ends for an unknown value", () => {
+    expect(adjacentValue(["a", "b", "c"], "c", 1)).toBe("a");
+    expect(adjacentValue(["a", "b", "c"], "a", -1)).toBe("c");
+    expect(adjacentValue(["a", "b"], "missing", -1)).toBe("b");
+    expect(adjacentValue([], "a", 1)).toBeNull();
   });
 });
