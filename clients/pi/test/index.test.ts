@@ -270,89 +270,119 @@ describe("pontia pi extension lifecycle", () => {
     expect(started.data).not.toHaveProperty("inbox_message_id");
   });
 
-  test("socket input retains its Inbox identity across async hooks and never labels manual input", async () => {
-    let submit: ((input: { input: string; inboxMessageId?: string }) => void) | undefined;
-    let idle = true;
-    const workspace = await realpath(await tempDir());
-    const { handlers, reported, sendUserMessage } = install({
-      env: { PONTIA_SESSION_ID: "sess_direct", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_direct" },
-      request: vi.fn(async () => ({
-        workspaces: [{ canonical_path: workspace, state: "active" }],
-      })) as any,
-      connectPi: async (_home, _onError, onSubmit) => {
-        submit = onSubmit;
-        return { request: async () => null, registered() {}, close: async () => {} };
-      },
-    });
-    const ctx = {
-      isIdle: () => idle,
-      sessionManager: {
-        getSessionId: () => "pi_direct",
-        getCwd: () => workspace,
-      },
-    };
-    await handlers.session_start({ reason: "startup" }, ctx);
-    let started: Promise<void> | undefined;
-    let retry: Promise<void> | undefined;
-    let releaseRetry!: () => void;
-    const retryGate = new Promise<void>((resolve) => {
-      releaseRetry = resolve;
-    });
-    sendUserMessage.mockImplementation((input: string) => {
-      started = (async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        await handlers.before_agent_start({ messageType: "user", prompt: input }, ctx);
-        await handlers.agent_start({}, ctx);
-      })();
-      if (input === "from dashboard") {
-        retry = (async () => {
-          await retryGate;
-          await handlers.before_agent_start(
-            { messageType: "user", prompt: "retry continuation" },
-            ctx,
-          );
-          await handlers.agent_start({}, ctx);
-        })();
+  test.each(["before", "during"])(
+    "socket input arriving %s agent_settled retains its Inbox identity and never labels manual input",
+    async (arrival) => {
+      let submit: ((input: { input: string; inboxMessageId?: string }) => void) | undefined;
+      let idle = true;
+      const workspace = await realpath(await tempDir());
+      const { handlers, reported, commands, sendUserMessage } = install({
+        env: { PONTIA_SESSION_ID: "sess_direct", PONTIA_RUNTIME_INSTANCE_ID: "rtinst_direct" },
+        request: vi.fn(async () => ({
+          workspaces: [{ canonical_path: workspace, state: "active" }],
+        })) as any,
+        connectPi: async (_home, _onError, onSubmit) => {
+          submit = onSubmit;
+          return { request: async () => null, registered() {}, close: async () => {} };
+        },
+      });
+      const ctx = {
+        isIdle: () => idle,
+        sessionManager: {
+          getSessionId: () => "pi_direct",
+          getCwd: () => workspace,
+        },
+      };
+      await handlers.session_start({ reason: "startup" }, ctx);
+      let started: Promise<void> | undefined;
+      let settling = false;
+      const deferred: Array<() => void> = [];
+      let retry: Promise<void> | undefined;
+      let releaseRetry!: () => void;
+      const retryGate = new Promise<void>((resolve) => {
+        releaseRetry = resolve;
+      });
+      sendUserMessage.mockImplementation(
+        (input: string, options?: { expandPromptTemplates?: boolean }) => {
+          const start = () => {
+            if (options?.expandPromptTemplates && input.startsWith("/")) {
+              const [name, args] = input.slice(1).split(" ");
+              void commands[name].handler(args, ctx);
+              return;
+            }
+            started = (async () => {
+              await new Promise((resolve) => setTimeout(resolve, 0));
+              await handlers.before_agent_start({ messageType: "user", prompt: input }, ctx);
+              await handlers.agent_start({}, ctx);
+            })();
+          };
+          if (settling) deferred.push(start);
+          else start();
+          if (input === "from dashboard") {
+            retry = (async () => {
+              await retryGate;
+              await handlers.before_agent_start(
+                { messageType: "user", prompt: "retry continuation" },
+                ctx,
+              );
+              await handlers.agent_start({}, ctx);
+            })();
+          }
+        },
+      );
+      submit!({ input: "from dashboard", inboxMessageId: "msg_direct" });
+      expect(reported.filter((event) => event.type === "turn.started")).toHaveLength(0);
+      await started;
+      const first = reported.find((event) => event.type === "turn.started")!;
+      expect(first.data).toMatchObject({
+        input_summary: "from dashboard",
+        inbox_message_id: "msg_direct",
+      });
+      await handlers.agent_end({ messages: [] }, ctx);
+      releaseRetry();
+      await retry;
+      const continuation = reported.filter((event) => event.type === "turn.started")[1];
+      expect(continuation.data).toMatchObject({ input_summary: "retry continuation" });
+      expect(continuation.data).not.toHaveProperty("inbox_message_id");
+
+      idle = false;
+      expect(() => submit!({ input: "too early" })).toThrow(
+        expect.objectContaining({ code: -32010 }),
+      );
+      await handlers.agent_end({ messages: [] }, ctx);
+      if (arrival === "during") {
+        idle = true;
+        settling = true;
       }
-    });
-    submit!({ input: "from dashboard", inboxMessageId: "msg_direct" });
-    expect(reported.filter((event) => event.type === "turn.started")).toHaveLength(0);
-    await started;
-    const first = reported.find((event) => event.type === "turn.started")!;
-    expect(first.data).toMatchObject({
-      input_summary: "from dashboard",
-      inbox_message_id: "msg_direct",
-    });
-    await handlers.agent_end({ messages: [] }, ctx);
-    releaseRetry();
-    await retry;
-    const continuation = reported.filter((event) => event.type === "turn.started")[1];
-    expect(continuation.data).toMatchObject({ input_summary: "retry continuation" });
-    expect(continuation.data).not.toHaveProperty("inbox_message_id");
+      submit!({ input: "next from inbox", inboxMessageId: "msg_next" });
+      expect(() => submit!({ input: "duplicate while pending" })).toThrow(
+        expect.objectContaining({ code: -32010 }),
+      );
+      expect(reported.filter((event) => event.type === "turn.started")).toHaveLength(2);
+      idle = true;
+      settling = true;
+      await handlers.agent_settled({}, ctx);
+      settling = false;
+      const commandsToRun = deferred.splice(0);
+      for (const action of commandsToRun) action();
+      await started;
+      const second = reported.filter((event) => event.type === "turn.started")[2];
+      expect(second.data).toMatchObject({ inbox_message_id: "msg_next" });
+      await handlers.agent_end({ messages: [] }, ctx);
 
-    idle = false;
-    expect(() => submit!({ input: "too early" })).toThrow(
-      expect.objectContaining({ code: -32010 }),
-    );
-    await handlers.agent_end({ messages: [] }, ctx);
-    submit!({ input: "next from inbox", inboxMessageId: "msg_next" });
-    expect(sendUserMessage).toHaveBeenCalledTimes(1);
-    idle = true;
-    await handlers.agent_settled({}, ctx);
-    await started;
-    expect(sendUserMessage).toHaveBeenCalledTimes(2);
-    const second = reported.filter((event) => event.type === "turn.started")[2];
-    expect(second.data).toMatchObject({ inbox_message_id: "msg_next" });
-    await handlers.agent_end({ messages: [] }, ctx);
+      for (const action of commandsToRun) action();
+      await started;
+      expect(reported.filter((event) => event.type === "turn.started")).toHaveLength(3);
 
-    await handlers.before_agent_start({ messageType: "user", prompt: "typed manually" }, ctx);
-    await handlers.agent_start({}, ctx);
-    const manual = reported.filter((event) => event.type === "turn.started")[3];
-    expect(manual.data).toMatchObject({ input_summary: "typed manually" });
-    expect(manual.data).not.toHaveProperty("inbox_message_id");
-    await handlers.session_shutdown({ reason: "quit" }, ctx);
-    expect(() => submit!({ input: "stale" })).toThrow("no longer current");
-  });
+      await handlers.before_agent_start({ messageType: "user", prompt: "typed manually" }, ctx);
+      await handlers.agent_start({}, ctx);
+      const manual = reported.filter((event) => event.type === "turn.started")[3];
+      expect(manual.data).toMatchObject({ input_summary: "typed manually" });
+      expect(manual.data).not.toHaveProperty("inbox_message_id");
+      await handlers.session_shutdown({ reason: "quit" }, ctx);
+      expect(() => submit!({ input: "stale" })).toThrow("no longer current");
+    },
+  );
 
   test("pontia-edit resolves, navigates once without summarization, clears restored text, then submits replacement", async () => {
     const calls: string[] = [];

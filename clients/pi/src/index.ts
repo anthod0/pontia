@@ -201,7 +201,7 @@ export function createPontiaPiExtension(
     sessionContext: SessionContext;
     consumed: boolean;
   }>();
-  let queuedControlInput: ControlInput | undefined;
+  let queuedControlInput: { id: string; submission: ControlInput } | undefined;
 
   const modelId = (model: { provider: string; id: string }) => `${model.provider}/${model.id}`;
 
@@ -229,6 +229,13 @@ export function createPontiaPiExtension(
         `Pi input delivery uncertain: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  function dispatchQueuedInput(): void {
+    if (!queuedControlInput) return;
+    // Pi may defer commands sent during agent_settled. Bind the input identity
+    // inside the command, after Pi has taken it out of that native queue.
+    pi.sendUserMessage(`/pontia-input ${queuedControlInput.id}`, { expandPromptTemplates: true });
   }
 
   async function controlError(error: unknown): Promise<void> {
@@ -296,12 +303,11 @@ export function createPontiaPiExtension(
         }
         if (queuedControlInput)
           throw new RpcError(-32010, "Pi already has pending input; input was not submitted");
-        if (!piContext?.isIdle()) {
-          if (!activeTurn?.ended) throw new RpcError(-32010, "Pi is busy; input was not submitted");
-          queuedControlInput = submission;
-          return;
-        }
-        sendControlInput(submission);
+        const idle = piContext?.isIdle();
+        if (!idle && !activeTurn?.ended)
+          throw new RpcError(-32010, "Pi is busy; input was not submitted");
+        queuedControlInput = { id: randomUUID(), submission };
+        if (idle) dispatchQueuedInput();
       },
       {
         listModels() {
@@ -405,6 +411,16 @@ export function createPontiaPiExtension(
     controlSocket = socket;
     return socket;
   }
+
+  pi.registerCommand("pontia-input", {
+    description: "Deliver a pending Pontia input",
+    handler: async (args) => {
+      if (!queuedControlInput || args.trim() !== queuedControlInput.id) return;
+      const { submission } = queuedControlInput;
+      queuedControlInput = undefined;
+      sendControlInput(submission);
+    },
+  });
 
   pi.registerCommand("pontia-edit", {
     description: "Replay a Pontia Inbox message from a historical Pi entry",
@@ -925,9 +941,7 @@ export function createPontiaPiExtension(
 
   pi.on("agent_settled", (_event, ctx) => {
     if (!queuedControlInput || !ctx.isIdle()) return;
-    const submission = queuedControlInput;
-    queuedControlInput = undefined;
-    sendControlInput(submission);
+    dispatchQueuedInput();
   });
 
   pi.on("agent_end", async (event, ctx) => {
