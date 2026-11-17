@@ -3,7 +3,11 @@ import { fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { SessionOverviewView, SessionView } from "../../src/api/types";
 const { queryClient } = testDevice;
-import { type SessionOverviewSnapshot } from "../../src/queries/sessionOverview";
+import {
+  recentActiveSessions,
+  recentSessions,
+  type SessionOverviewSnapshot,
+} from "../../src/queries/sessionOverview";
 const { invalidateSessionOverview } = testDevice.sessionOverview;
 import SessionOverviewQueryHarness from "../components/SessionOverviewQueryHarness.svelte";
 
@@ -232,4 +236,34 @@ test("invalidating the overview refreshes active archived and non-archived queri
     expect(currentSnapshot?.list[0]?.title).toBe("current-2");
     expect(archivedSnapshot?.archived[0]?.title).toBe("archived-2");
   });
+});
+
+test("keeps server order for recent sessions and scopes active sessions to the selected workspace", () => {
+  const inWorkspace = (id: string, workspace_id: string) => ({ ...session(id), workspace_id });
+  const snapshot: SessionOverviewSnapshot = {
+    pinned: [],
+    active: [
+      inWorkspace("updated-recently", "w1"),
+      inWorkspace("other", "w2"),
+      inWorkspace("updated-earlier", "w1"),
+    ],
+    list: [inWorkspace("updated-earlier", "w1"), inWorkspace("exited", "w1")],
+    archived: [],
+    nextCursor: null,
+  };
+
+  expect(recentActiveSessions(snapshot, "w1").map((item) => item.session_id)).toEqual([
+    "updated-recently",
+    "updated-earlier",
+  ]);
+  expect(recentSessions(snapshot, "w1").map((item) => item.session_id)).toEqual([
+    "updated-recently",
+    "updated-earlier",
+    "exited",
+  ]);
+  expect(recentActiveSessions(snapshot, "").map((item) => item.session_id)).toEqual([
+    "updated-recently",
+    "other",
+    "updated-earlier",
+  ]);
 });

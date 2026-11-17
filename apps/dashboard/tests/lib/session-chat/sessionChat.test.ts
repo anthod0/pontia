@@ -7,7 +7,6 @@ import {
   timelineItemsToChatMessages,
   userPromptForDisplay,
   turnsToChatMessages,
-  visibleChatSessions,
 } from "../../../src/lib/session-chat/sessionChat";
 
 const session = (overrides) => ({
@@ -129,88 +128,6 @@ Skill instructions
 </skill>`;
 
   expect(userPromptForDisplay(prompt)).toBe("/skill:implement");
-});
-
-test("filters chat sessions to active sessions and sorts by creation time so output updates do not reorder them", () => {
-  const visible = visibleChatSessions(
-    [
-      session({
-        session_id: "older-created-active",
-        state: "idle",
-        created_at: "2026-01-01T00:00:00Z",
-        updated_at: "2026-01-01T00:30:00Z",
-      }),
-      session({
-        session_id: "newer-created-exited",
-        state: "exited",
-        created_at: "2026-01-01T00:20:00Z",
-        updated_at: "2026-01-01T00:20:00Z",
-      }),
-      session({
-        session_id: "newer-created-active",
-        state: "busy",
-        created_at: "2026-01-01T00:10:00Z",
-        updated_at: "2026-01-01T00:00:00Z",
-      }),
-    ],
-    "active",
-  );
-
-  expect(visible.map((item) => item.session_id)).toEqual([
-    "newer-created-active",
-    "older-created-active",
-  ]);
-});
-
-test("sorts active chat sessions before terminal sessions, then pinned and creation time within each group", () => {
-  const visible = visibleChatSessions(
-    [
-      session({
-        session_id: "terminal-pinned",
-        state: "exited",
-        pinned_at: "2026-01-01T00:40:00Z",
-        created_at: "2026-01-01T00:40:00Z",
-        updated_at: "2026-01-01T00:40:00Z",
-      }),
-      session({
-        session_id: "active-new-unpinned",
-        state: "idle",
-        pinned_at: null,
-        created_at: "2026-01-01T00:30:00Z",
-        updated_at: "2026-01-01T00:30:00Z",
-      }),
-      session({
-        session_id: "active-old-pinned",
-        state: "idle",
-        pinned_at: "2026-01-01T00:10:00Z",
-        created_at: "2026-01-01T00:00:00Z",
-        updated_at: "2026-01-01T00:00:00Z",
-      }),
-      session({
-        session_id: "active-new-pinned",
-        state: "idle",
-        pinned_at: "2026-01-01T00:20:00Z",
-        created_at: "2026-01-01T00:05:00Z",
-        updated_at: "2026-01-01T00:05:00Z",
-      }),
-      session({
-        session_id: "terminal-unpinned",
-        state: "error",
-        pinned_at: null,
-        created_at: "2026-01-01T00:50:00Z",
-        updated_at: "2026-01-01T00:50:00Z",
-      }),
-    ],
-    "all",
-  );
-
-  expect(visible.map((item) => item.session_id)).toEqual([
-    "active-new-pinned",
-    "active-old-pinned",
-    "active-new-unpinned",
-    "terminal-pinned",
-    "terminal-unpinned",
-  ]);
 });
 
 test("maps each turn into user and assistant chat messages in chronological order", () => {

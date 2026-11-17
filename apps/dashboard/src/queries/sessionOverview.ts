@@ -35,6 +35,25 @@ export function snapshotSessionOverview(
     nextCursor: data?.pages.at(-1)?.groups.list?.next_cursor ?? null,
   };
 }
+// The overview API scopes only list; active is complete and remains global.
+export function recentActiveSessions(
+  overview: SessionOverviewSnapshot,
+  workspaceId: string,
+): SessionView[] {
+  return workspaceId
+    ? overview.active.filter((session) => session.workspace_id === workspaceId)
+    : overview.active;
+}
+
+export function recentSessions(
+  overview: SessionOverviewSnapshot,
+  workspaceId: string,
+): SessionView[] {
+  const active = recentActiveSessions(overview, workspaceId);
+  const activeIds = new Set(active.map((session) => session.session_id));
+  return [...active, ...overview.list.filter((session) => !activeIds.has(session.session_id))];
+}
+
 export function createSessionOverview(device: DeviceRuntime) {
   const listLimit = 50;
 

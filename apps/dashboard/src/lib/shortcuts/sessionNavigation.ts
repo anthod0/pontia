@@ -1,31 +1,23 @@
 import type { SessionView } from "../../api/types";
-import { visibleChatSessions } from "../session-chat/sessionChat";
 
-export function activeChatSessions(sessions: SessionView[]): SessionView[] {
-  return visibleChatSessions(sessions, "active");
-}
-
+// Sessions arrive in the order the sidebar shows them.
 export function sessionIdAtShortcutIndex(sessions: SessionView[], key: string): string | null {
   if (!/^[1-9]$/.test(key)) return null;
-  return activeChatSessions(sessions)[Number(key) - 1]?.session_id ?? null;
+  return sessions[Number(key) - 1]?.session_id ?? null;
 }
 
-export function adjacentActiveSessionId(
+export function adjacentSessionId(
   sessions: SessionView[],
   currentSessionId: string | null,
   direction: 1 | -1,
 ): string | null {
-  const activeSessions = activeChatSessions(sessions);
-  if (!activeSessions.length) return null;
+  if (!sessions.length) return null;
   const currentIndex = currentSessionId
-    ? activeSessions.findIndex((session) => session.session_id === currentSessionId)
+    ? sessions.findIndex((session) => session.session_id === currentSessionId)
     : -1;
   if (currentIndex === -1)
-    return direction === 1
-      ? activeSessions[0].session_id
-      : activeSessions[activeSessions.length - 1].session_id;
-  const nextIndex = (currentIndex + direction + activeSessions.length) % activeSessions.length;
-  return activeSessions[nextIndex]?.session_id ?? null;
+    return direction === 1 ? sessions[0].session_id : sessions[sessions.length - 1].session_id;
+  return sessions[(currentIndex + direction + sessions.length) % sessions.length].session_id;
 }
 
 export function sessionIdFromChatPath(relativePath: string): string | null {

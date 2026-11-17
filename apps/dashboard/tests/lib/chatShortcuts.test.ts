@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 import { matchChatShortcut } from "../../src/lib/shortcuts/definitions";
 import { formatShortcutKeys } from "../../src/lib/shortcuts/format";
+import {
+  adjacentSessionId,
+  sessionIdAtShortcutIndex,
+} from "../../src/lib/shortcuts/sessionNavigation";
+import type { SessionView } from "../../src/api/types";
 
 function keydown(init: KeyboardEventInit): KeyboardEvent {
   return new KeyboardEvent("keydown", init);
@@ -68,5 +73,23 @@ describe("formatShortcutKeys", () => {
   test("uses Ctrl and Alt joined by + elsewhere", () => {
     expect(formatShortcutKeys(["Mod", "B"], false)).toBe("Ctrl+B");
     expect(formatShortcutKeys(["Alt", "?"], false)).toBe("Alt+?");
+  });
+});
+
+describe("session navigation", () => {
+  const sessions = ["top", "middle", "bottom"].map((session_id) => ({ session_id }) as SessionView);
+
+  test("Alt+J moves down and Alt+K moves up the list as given, wrapping at the ends", () => {
+    expect(adjacentSessionId(sessions, "top", 1)).toBe("middle");
+    expect(adjacentSessionId(sessions, "middle", -1)).toBe("top");
+    expect(adjacentSessionId(sessions, "bottom", 1)).toBe("top");
+    expect(adjacentSessionId(sessions, "top", -1)).toBe("bottom");
+    expect(adjacentSessionId(sessions, null, 1)).toBe("top");
+    expect(adjacentSessionId(sessions, null, -1)).toBe("bottom");
+  });
+
+  test("opens sessions by their position in the list", () => {
+    expect(sessionIdAtShortcutIndex(sessions, "2")).toBe("middle");
+    expect(sessionIdAtShortcutIndex(sessions, "4")).toBeNull();
   });
 });

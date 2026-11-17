@@ -3,19 +3,21 @@
   import { onMount } from 'svelte'
   import { navigate } from '$lib/navigation'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
-  import { snapshotSessionOverview } from "../../queries/sessionOverview";
+  import { recentActiveSessions, snapshotSessionOverview } from "../../queries/sessionOverview";
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import ShortcutKeys from '$lib/components/shortcuts/ShortcutKeys.svelte'
-  import { adjacentActiveSessionId, isChatRoute, sessionIdAtShortcutIndex, sessionIdFromChatPath } from '$lib/shortcuts/sessionNavigation'
+  import { adjacentSessionId, isChatRoute, sessionIdAtShortcutIndex, sessionIdFromChatPath } from '$lib/shortcuts/sessionNavigation'
   import { helpShortcuts, matchChatShortcut } from '$lib/shortcuts/definitions'
   const device = useDeviceRuntime();
   const { createSessionOverviewQuery } = device.sessionOverview;
+  const { selectedWorkspaceId } = device.sidebarWorkspaceFilter;
 
   let { newChatHandle }: { newChatHandle?: string } = $props()
 
   let shortcutsOpen = $state(false)
   const overviewQuery = createSessionOverviewQuery()
   const overview = $derived(snapshotSessionOverview(overviewQuery.data))
+  const shortcutSessions = $derived(recentActiveSessions(overview, $selectedWorkspaceId))
 
   onMount(() => {
     const openShortcuts = () => (shortcutsOpen = true)
@@ -70,8 +72,8 @@
 
     const currentSessionId = sessionIdFromChatPath(dashboardRelativePath())
     const sessionId = shortcut.action === 'openChatByPosition'
-      ? sessionIdAtShortcutIndex(overview.active, shortcut.position)
-      : adjacentActiveSessionId(overview.active, currentSessionId, shortcut.action === 'nextChat' ? 1 : -1)
+      ? sessionIdAtShortcutIndex(shortcutSessions, shortcut.position)
+      : adjacentSessionId(shortcutSessions, currentSessionId, shortcut.action === 'nextChat' ? 1 : -1)
     // Consume the key even when there is nowhere to go, so Option+letter does not type a symbol.
     event.preventDefault()
     if (sessionId) openChat(`/chat/${sessionId}`)

@@ -695,23 +695,22 @@ test("sidebar settings button navigates directly to common settings without docu
   expect(mocks.navigate).toHaveBeenCalledWith("/settings/common");
 });
 
-test("chat shortcuts switch among active sessions on chat routes", async () => {
-  window.history.pushState({}, "", "/dashboard/chat/session-older");
+test("chat shortcuts move down and up the active sessions in sidebar order", async () => {
+  window.history.pushState({}, "", "/dashboard/chat/session-middle");
+  // The overview API returns active sessions already ordered by most recent activity.
   mocks.sessions.set([
-    chatSession("session-busy", "busy", "2026-05-14T04:00:00Z"),
-    chatSession("session-error", "error", "2026-05-14T03:00:00Z"),
-    chatSession("session-older", "idle", "2026-05-14T02:00:00Z"),
-    chatSession("session-exited", "exited", "2026-05-14T01:00:00Z"),
+    chatSession("session-top", "busy", "2026-05-14T04:00:00Z"),
+    chatSession("session-middle", "idle", "2026-05-14T03:00:00Z"),
+    chatSession("session-bottom", "idle", "2026-05-14T02:00:00Z"),
   ]);
 
   render(AppShellHost);
 
   await fireEvent.keyDown(window, { key: "j", code: "KeyJ", altKey: true });
-  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-busy");
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-bottom");
 
-  window.history.pushState({}, "", "/dashboard/chat/session-busy");
   await fireEvent.keyDown(window, { key: "k", code: "KeyK", altKey: true });
-  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-older");
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-top");
 });
 
 test("chat help shortcut opens a kbd shortcut reference dialog", async () => {
@@ -734,23 +733,28 @@ test("chat header help button opens the shortcuts dialog", async () => {
   expect(screen.getByRole("dialog", { name: /keyboard shortcuts/i })).toBeInTheDocument();
 });
 
-test("chat numeric shortcuts open active sessions by sidebar order and skip inactive sessions", async () => {
+test("chat numeric shortcuts open active sessions by sidebar order within the selected workspace", async () => {
   mocks.sessions.set([
-    chatSession("session-recent", "idle", "2026-05-14T04:00:00Z"),
-    chatSession("session-pinned", "idle", "2026-05-14T01:00:00Z", "2026-05-14T05:00:00Z"),
-    chatSession("session-error", "error", "2026-05-14T06:00:00Z"),
+    chatSession("session-first", "idle", "2026-05-14T04:00:00Z"),
+    {
+      ...chatSession("session-other", "idle", "2026-05-14T03:00:00Z"),
+      workspace_id: "workspace-2",
+    },
+    chatSession("session-second", "idle", "2026-05-14T02:00:00Z"),
   ]);
 
   render(AppShellHost);
 
-  await fireEvent.keyDown(window, { key: "1", code: "Digit1", altKey: true });
-  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-pinned");
+  await fireEvent.keyDown(window, { key: "2", code: "Digit2", altKey: true });
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-other");
+
+  await fireEvent.click(
+    screen.getByRole("button", { name: "Filter recent sessions by workspace" }),
+  );
+  await fireEvent.click(screen.getByRole("menuitemradio", { name: /First workspace/ }));
 
   await fireEvent.keyDown(window, { key: "2", code: "Digit2", altKey: true });
-  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-recent");
-
-  await fireEvent.keyDown(window, { key: "3", code: "Digit3", altKey: true });
-  expect(mocks.navigate).not.toHaveBeenLastCalledWith("/chat/session-error");
+  expect(mocks.navigate).toHaveBeenLastCalledWith("/chat/session-second");
 });
 
 test("chat shortcuts are scoped to chat routes and work while typing", async () => {

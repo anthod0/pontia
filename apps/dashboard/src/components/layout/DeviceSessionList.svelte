@@ -14,7 +14,7 @@
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import { cn } from '$lib/utils.js'
-  import { snapshotSessionOverview } from "../../queries/sessionOverview";
+  import { recentSessions, snapshotSessionOverview } from "../../queries/sessionOverview";
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import { sessionStateDotClass } from '$lib/sessionState'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
@@ -35,22 +35,12 @@
   let sessionActionMenuOpenKey = $state<string | null>(null)
   let pinnedSessionsOpen = $state(true)
   let recentSessionsOpen = $state(true)
-  let selectedWorkspaceId = $state('')
+  const { selectedWorkspaceId } = device.sidebarWorkspaceFilter
   const workspacesQuery = createWorkspacesQuery()
-  const selectedWorkspace = $derived(workspacesQuery.data?.find((workspace) => workspace.workspace_id === selectedWorkspaceId))
-  const overviewQuery = createSessionOverviewQuery(false, () => selectedWorkspaceId || undefined)
+  const selectedWorkspace = $derived(workspacesQuery.data?.find((workspace) => workspace.workspace_id === $selectedWorkspaceId))
+  const overviewQuery = createSessionOverviewQuery(false, () => $selectedWorkspaceId || undefined)
   const overview = $derived(snapshotSessionOverview(overviewQuery.data))
-  let recentSessions = $derived.by(() => {
-    // The overview API scopes only list; active is complete and remains global.
-    const active = selectedWorkspaceId
-      ? overview.active.filter((session) => session.workspace_id === selectedWorkspaceId)
-      : overview.active
-    const activeIds = new Set(active.map((session) => session.session_id))
-    return [
-      ...active,
-      ...overview.list.filter((session) => !activeIds.has(session.session_id)),
-    ]
-  })
+  const sidebarRecentSessions = $derived(recentSessions(overview, $selectedWorkspaceId))
 
   $effect(() => {
     if (!renameDialogOpen && renamingSession && renamingSessionId === null) cancelRenameSession()
@@ -276,15 +266,15 @@
         </button>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger
-            class={cn('rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden', selectedWorkspaceId && 'text-primary')}
+            class={cn('rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden', $selectedWorkspaceId && 'text-primary')}
             aria-label="Filter recent sessions by workspace"
-            title={selectedWorkspaceId ? `Workspace: ${selectedWorkspace?.name || selectedWorkspace?.display_path || selectedWorkspaceId}` : 'All workspaces'}
+            title={$selectedWorkspaceId ? `Workspace: ${selectedWorkspace?.name || selectedWorkspace?.display_path || $selectedWorkspaceId}` : 'All workspaces'}
           >
-            <FunnelIcon class="size-4" weight={selectedWorkspaceId ? 'fill' : 'regular'} />
+            <FunnelIcon class="size-4" weight={$selectedWorkspaceId ? 'fill' : 'regular'} />
           </DropdownMenu.Trigger>
           <DropdownMenu.Content side="right" align="start" class="max-h-80 w-72 overflow-y-auto">
             <DropdownMenu.Label>Workspace</DropdownMenu.Label>
-            <DropdownMenu.RadioGroup bind:value={selectedWorkspaceId}>
+            <DropdownMenu.RadioGroup bind:value={$selectedWorkspaceId}>
               <DropdownMenu.RadioItem value="">All workspaces</DropdownMenu.RadioItem>
               <DropdownMenu.Separator />
               {#each workspacesQuery.data ?? [] as workspace (workspace.workspace_id)}
@@ -313,11 +303,11 @@
   {#if recentSessionsOpen}
     <Sidebar.GroupContent class="pr-1">
       <Sidebar.Menu>
-        {#if overviewQuery.isPending && !recentSessions.length}
+        {#if overviewQuery.isPending && !sidebarRecentSessions.length}
           <Sidebar.MenuSkeleton />
           <Sidebar.MenuSkeleton />
-        {:else if recentSessions.length}
-          {#each recentSessions as session}
+        {:else if sidebarRecentSessions.length}
+          {#each sidebarRecentSessions as session}
             {@render sessionMenuItem(session, `recent:${session.session_id}`)}
           {/each}
         {:else if !overviewQuery.error}
