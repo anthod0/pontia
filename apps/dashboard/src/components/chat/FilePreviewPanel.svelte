@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  import { onDestroy, tick } from 'svelte'
   import { t } from '$lib/i18n'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Tabs from '$lib/components/ui/tabs/index.js'
@@ -13,9 +13,10 @@
   import { copyText } from '$lib/copyText'
   import { ApiError } from '../../api/errors'
   import DeviceProvider from '../../device/DeviceProvider.svelte'
-  import type { FilePreviewTarget } from './filePreviewContext'
+  import { provideFilePreviewNavigator, type FilePreviewTarget } from './filePreviewContext'
   import FilePreviewResizer from './FilePreviewResizer.svelte'
   import { toast } from 'svelte-sonner'
+  import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeftIcon'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import BinaryIcon from 'phosphor-svelte/lib/BinaryIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
@@ -28,6 +29,8 @@
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import XIcon from 'phosphor-svelte/lib/XIcon'
 
+  /** One file in the panel's navigation history, with the reading position to restore on return. */
+  type HistoryEntry = { path: string; anchor: string | null; view: string; scrollTop: number }
   type PreviewFailure = { kind: 'missing' | 'tooLarge' | 'notText' } | { kind: 'failed'; message: string }
 
   const failureStates = {
@@ -39,9 +42,14 @@
   const skeletonLines = [42, 68, 55, 0, 74, 61, 83, 36, 0, 58, 70, 47, 64, 29]
 
   let { target, onclose }: { target: FilePreviewTarget; onclose: () => void } = $props()
-  const name = $derived(target.path.slice(target.path.lastIndexOf('/') + 1))
-  const language = $derived(textFileLanguage(target.path))
-  const key = $derived(downloadKey(target.device.id, target.sessionId, { kind: 'path', path: target.path }))
+  // The panel is recreated for each target opened from outside, so history starts from the initial target.
+  // svelte-ignore state_referenced_locally
+  let history = $state<HistoryEntry[]>([{ path: target.path, anchor: target.anchor ?? null, view: 'preview', scrollTop: 0 }])
+  const current = $derived(history[history.length - 1])
+  const path = $derived(current.path)
+  const name = $derived(path.slice(path.lastIndexOf('/') + 1))
+  const language = $derived(textFileLanguage(path))
+  const key = $derived(downloadKey(target.device.id, target.sessionId, { kind: 'path', path }))
   const task = $derived($downloads.find(task => task.key === key))
   const receiving = $derived(task?.status === 'receiving')
   let text = $state<string | null>(null)
@@ -50,19 +58,40 @@
   let copyTimer: ReturnType<typeof setTimeout> | undefined
   let attempt = $state(0)
   let view = $state('preview')
+  let panel: HTMLElement
   const highlighted = $derived(text === null || (language === 'markdown' && view === 'preview') ? '' : highlightMarkdownCode(text, language))
 
+  provideFilePreviewNavigator({
+    open(next) {
+      if (next.device !== target.device || next.sessionId !== target.sessionId) return
+      if (next.path === path) {
+        if (next.anchor) void scrollToAnchor(next.anchor)
+        return
+      }
+      history[history.length - 1] = { ...current, view, scrollTop: scroller()?.scrollTop ?? 0 }
+      history.push({ path: next.path, anchor: next.anchor ?? null, view: 'preview', scrollTop: 0 })
+    },
+  })
+
   $effect(() => {
-    const { device, sessionId, path } = target
+    const { device, sessionId } = target
+    const entry = current
     void attempt
     const controller = new AbortController()
     text = null
     failure = null
     copied = false
-    view = 'preview'
-    void device.fileApi.pathFileContent(sessionId, path, controller.signal)
+    view = entry.anchor ? 'preview' : entry.view
+    void device.fileApi.pathFileContent(sessionId, entry.path, controller.signal)
       .then(readTextPreview)
-      .then(content => { if (!controller.signal.aborted) text = content })
+      .then(async content => {
+        if (controller.signal.aborted) return
+        text = content
+        await tick()
+        if (controller.signal.aborted) return
+        if (entry.anchor) await scrollToAnchor(entry.anchor)
+        else if (entry.scrollTop) scroller()?.scrollTo({ top: entry.scrollTop })
+      })
       .catch(cause => {
         if (!controller.signal.aborted) failure = previewFailure(cause)
       })
@@ -70,6 +99,22 @@
   })
 
   onDestroy(() => clearTimeout(copyTimer))
+
+  function scroller() {
+    return panel.querySelector<HTMLElement>('[data-file-preview-content]:not([hidden])')
+  }
+
+  async function scrollToAnchor(anchor: string) {
+    if (language !== 'markdown') return
+    view = 'preview'
+    await tick()
+    const heading = [...scroller()?.querySelectorAll('[id]') ?? []].find(element => element.id === anchor)
+    heading?.scrollIntoView({ block: 'start' })
+  }
+
+  function back() {
+    history.pop()
+  }
 
   async function copy() {
     if (text === null) return
@@ -80,7 +125,7 @@
   }
 
   function download() {
-    downloads.start(target.device.id, target.sessionId, { kind: 'path', path: target.path }, name)
+    downloads.start(target.device.id, target.sessionId, { kind: 'path', path }, name)
   }
 
   function previewFailure(cause: unknown): PreviewFailure {
@@ -94,12 +139,15 @@
   <div class="file-source font-mono text-xs leading-relaxed">{@html highlighted}</div>
 {/snippet}
 
-<aside aria-label={$t('files.preview')} data-file-preview class="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-l bg-surface lg:w-[var(--file-preview-width)]">
+<aside bind:this={panel} aria-label={$t('files.preview')} data-file-preview class="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-l bg-surface lg:w-[var(--file-preview-width)]">
   <FilePreviewResizer />
   <header class="flex shrink-0 items-center gap-2 border-b px-4 py-3">
+    {#if history.length > 1}
+      <Button variant="ghost" size="icon-sm" onclick={back} aria-label={$t('files.previewBack')} title={$t('files.previewBack')}><ArrowLeftIcon class="size-4" /></Button>
+    {/if}
     <div class="min-w-0 flex-1">
-      <h2 class="truncate text-sm font-medium" title={target.path}>{name}</h2>
-      <p class="truncate text-xs text-muted-foreground" title={target.path}>{target.path}</p>
+      <h2 class="truncate text-sm font-medium" title={path}>{name}</h2>
+      <p class="truncate text-xs text-muted-foreground" title={path}>{path}</p>
     </div>
     <Button variant="ghost" size="icon-sm" disabled={text === null} onclick={copy} aria-label={$t('common.copy')} title={copied ? $t('common.copied') : $t('common.copy')}>
       {#if copied}<CheckIcon class="size-4 text-primary" />{:else}<CopyIcon class="size-4" />{/if}
@@ -159,7 +207,7 @@
         <Tabs.Content value="preview" class="min-h-0 flex-1 overflow-auto overscroll-contain p-4" data-file-preview-content>
           {#key target.device}
             <DeviceProvider device={target.device}>
-              <MessageResponse content={text} markdown sessionId={target.sessionId} />
+              <MessageResponse content={text} markdown sessionId={target.sessionId} linkBase={path} class="h-auto" />
             </DeviceProvider>
           {/key}
         </Tabs.Content>

@@ -11,15 +11,23 @@ export function createPreviews(device: DeviceRuntime) {
     const key = `${await device.access.uploadStorageScope()}:${fileId}`;
     let preview = previews.get(key);
     if (!preview) {
-      preview = loadPreview(sessionId, fileId);
+      preview = device.fileApi.sharedFileContent(sessionId, fileId).then(readPreview);
       previews.set(key, preview);
       preview.catch(() => previews.delete(key));
     }
     return preview;
   }
 
-  async function loadPreview(sessionId: string, fileId: string): Promise<Blob | null> {
-    const response = await device.fileApi.sharedFileContent(sessionId, fileId);
+  /** Reads a local image by path. Not cached because the file can change on disk. */
+  async function pathImagePreview(
+    sessionId: string,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<Blob | null> {
+    return readPreview(await device.fileApi.pathFileContent(sessionId, path, signal));
+  }
+
+  async function readPreview(response: Response): Promise<Blob | null> {
     const type = response.headers.get("Content-Type")?.split(";")[0] ?? "";
     const size = responseSize(response);
     if (!PREVIEW_TYPES.has(type) || (size !== null && size > PREVIEW_LIMIT)) {
@@ -42,5 +50,5 @@ export function createPreviews(device: DeviceRuntime) {
       reader.releaseLock();
     }
   }
-  return { filePreview };
+  return { filePreview, pathImagePreview };
 }

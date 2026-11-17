@@ -178,3 +178,116 @@ test("resizes the preview with the keyboard and remembers the width", async () =
   await fireEvent.dblClick(handle);
   expect(localStorage.getItem("pontia.filePreviewWidth")).toBeNull();
 });
+
+function requestedPath(call: unknown[]) {
+  return new URL(call[0] as string, "http://localhost").searchParams.get("path");
+}
+
+test("resolves relative chat links against the session workspace", async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response("spec"));
+  vi.stubGlobal("fetch", fetch);
+  render(FilePreviewHarness, {
+    content: "[spec](docs/spec%20v1.md) [up](../other/notes.md) [site](https://example.com/a.md)",
+    linkBase: "/repo/app/",
+  });
+  expect(screen.getByRole("link", { name: "site" })).toHaveAttribute(
+    "href",
+    "https://example.com/a.md",
+  );
+  await fireEvent.click(screen.getByRole("button", { name: "Preview spec v1.md" }));
+  await screen.findByText("spec");
+  expect(requestedPath(fetch.mock.calls[0])).toBe("/repo/app/docs/spec v1.md");
+  await fireEvent.click(screen.getByRole("button", { name: "Preview notes.md" }));
+  await waitFor(() => expect(requestedPath(fetch.mock.calls[1])).toBe("/repo/other/notes.md"));
+});
+
+test("follows links inside a previewed file and returns to the previous reading position", async () => {
+  const files: Record<string, string> = {
+    "/repo/docs/index.md":
+      "# Index\n\nSee [the guide](guide/setup.md#install-steps) and [top](#index).\n",
+    "/repo/docs/guide/setup.md": "# Setup\n\n## Install steps\n\nBack to [index](../index.md).\n",
+  };
+  const fetch = vi
+    .fn()
+    .mockImplementation((url: string) =>
+      Promise.resolve(new Response(files[requestedPath([url])!])),
+    );
+  vi.stubGlobal("fetch", fetch);
+  const scrollIntoView = vi.fn();
+  HTMLElement.prototype.scrollIntoView = scrollIntoView;
+  message("/repo/docs/index.md");
+  await fireEvent.click(screen.getByRole("button", { name: "Preview index.md" }));
+  const panel = screen.getByRole("complementary");
+  await within(panel).findByRole("heading", { name: "Index" });
+  expect(within(panel).queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+
+  await fireEvent.click(within(panel).getByRole("button", { name: "Preview index.md" }));
+  await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+  expect(fetch).toHaveBeenCalledTimes(1);
+
+  const content = panel.querySelector<HTMLElement>("[data-file-preview-content]")!;
+  content.scrollTop = 120;
+  scrollIntoView.mockClear();
+  await fireEvent.click(within(panel).getByRole("button", { name: "Preview setup.md" }));
+  const target = await within(panel).findByRole("heading", { name: "Install steps" });
+  await waitFor(() => expect(scrollIntoView.mock.contexts).toContain(target));
+  expect(
+    within(panel).getByText("/repo/docs/guide/setup.md", { selector: "p" }),
+  ).toBeInTheDocument();
+
+  const scrollTo = vi.fn();
+  HTMLElement.prototype.scrollTo = scrollTo;
+  await fireEvent.click(within(panel).getByRole("button", { name: "Back" }));
+  await within(panel).findByRole("heading", { name: "Index" });
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 120 }));
+  expect(within(panel).queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+test("opening a link from chat starts a new preview history", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(() => Promise.resolve(new Response("[next](next.md)"))),
+  );
+  message("/repo/a.md");
+  await fireEvent.click(screen.getByRole("button", { name: "Preview a.md" }));
+  const panel = screen.getByRole("complementary");
+  await fireEvent.click(await within(panel).findByRole("button", { name: "Preview next.md" }));
+  await within(panel).findByRole("button", { name: "Back" });
+  const chatLink = screen
+    .getAllByRole("button", { name: "Preview a.md" })
+    .find((button) => !panel.contains(button))!;
+  await fireEvent.click(chatLink);
+  const reopened = screen.getByRole("complementary");
+  await within(reopened).findByRole("button", { name: "Preview next.md" });
+  expect(within(reopened).queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+});
+
+test("opens local image links in the image viewer instead of the preview panel", async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(new Response("png", { headers: { "Content-Type": "image/png" } }))
+    .mockResolvedValueOnce(
+      new Response("text", { headers: { "Content-Type": "application/octet-stream" } }),
+    );
+  vi.stubGlobal("fetch", fetch);
+  render(FilePreviewHarness, {
+    content: "![chart](img/chart.png) [fake](img/fake.png)",
+    linkBase: "/repo/",
+  });
+  expect(document.querySelector("img")).toBeNull();
+
+  await fireEvent.click(screen.getByRole("button", { name: "Enlarge chart.png" }));
+  const viewer = await screen.findByRole("dialog");
+  await waitFor(() =>
+    expect(within(viewer).getByAltText("chart.png")).toHaveAttribute("src", "blob:download"),
+  );
+  expect(requestedPath(fetch.mock.calls[0])).toBe("/repo/img/chart.png");
+  expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+  await fireEvent.keyDown(viewer, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+  await fireEvent.click(screen.getByRole("button", { name: "Enlarge fake.png" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("not a PNG, JPEG, GIF, or WebP image");
+  expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+});

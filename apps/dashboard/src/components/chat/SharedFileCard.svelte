@@ -5,11 +5,8 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { Progress } from '$lib/components/ui/progress/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
-  import * as Dialog from '$lib/components/ui/dialog/index.js'
-  import { Lightbox } from 'picola/svelte'
-  import 'picola/picola.css'
+  import ImageLightbox from './ImageLightbox.svelte'
   import FileIcon from 'phosphor-svelte/lib/FileIcon'
-  import XIcon from 'phosphor-svelte/lib/XIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import { PREVIEW_LIMIT, PREVIEW_TYPES } from "$lib/downloads/preview";
   import { downloads, downloadKey } from '$lib/downloads/manager'
@@ -101,21 +98,4 @@
   {/if}
 </div>
 
-<Dialog.Root bind:open={enlarged}>
-  <Dialog.Content class="inset-0 block max-w-none translate-none rounded-none bg-black/90 p-0 text-white ring-0 sm:max-w-none" showCloseButton={false}>
-    <Dialog.Title class="sr-only">{file.name}</Dialog.Title>
-    {#if previewUrl}
-      <Lightbox
-        inline
-        slides={[{ src: previewUrl, alt: file.name }]}
-        zoom={{ max: 8 }}
-        counter={false}
-        labels={{ dialog: $t('files.sharedImage'), zoom: $t('files.toggleZoom') }}
-      >
-        {#snippet toolbar()}
-          <Dialog.Close class="pcl__button" aria-label={$t('common.close')}><XIcon class="size-5" /></Dialog.Close>
-        {/snippet}
-      </Lightbox>
-    {/if}
-  </Dialog.Content>
-</Dialog.Root>
+<ImageLightbox bind:open={enlarged} src={previewUrl} name={file.name} label={$t('files.sharedImage')} />

@@ -753,5 +753,7 @@
   "files.previewNotTextTitle": "无法预览此文件",
   "files.previewFailedTitle": "预览加载失败",
   "files.emptyFile": "文件为空",
-  "files.resizePreview": "调整预览宽度"
+  "files.resizePreview": "调整预览宽度",
+  "files.previewBack": "返回",
+  "files.previewNotImage": "此文件不是 20 MiB 以内的 PNG、JPEG、GIF 或 WebP 图片。"
 }

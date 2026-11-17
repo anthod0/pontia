@@ -1,11 +1,11 @@
 <script lang="ts" module>
-  import SvelteMarkdown, { buildUnsupportedHTML, type Renderers } from '@humanspeak/svelte-markdown'
+  import SvelteMarkdown, { buildUnsupportedHTML, defaultRenderers, type Renderers } from '@humanspeak/svelte-markdown'
   import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon'
   import { cn, type WithElementRef } from '$lib/utils.js'
   import type { HTMLAttributes } from 'svelte/elements'
   import MarkdownCodeBlock from './markdown-code-block.svelte'
   import LocalFileLink from './local-file-link.svelte'
-  import { localFilePath } from '$lib/downloads/localFilePath'
+  import { resolveLocalFileLink } from '$lib/downloads/localFilePath'
 
   export interface MessageResponseProps extends WithElementRef<HTMLAttributes<HTMLDivElement>, HTMLDivElement> {
     content: string
@@ -13,6 +13,8 @@
     streaming?: boolean
     streamId?: string | number
     sessionId?: string
+    /** Absolute path of the containing document, or a directory ending in `/`, used to resolve relative local links. */
+    linkBase?: string | null
   }
 
   const renderers: Partial<Renderers> = {
@@ -28,6 +30,7 @@
     streaming = false,
     streamId,
     sessionId,
+    linkBase = null,
     class: className,
     ref = $bindable(null),
     ...restProps
@@ -48,16 +51,26 @@
   {#if markdown}
     <SvelteMarkdown source={content} {streaming} {streamId} {renderers}>
       {#snippet link({ href, title, children })}
-        {@const path = localFilePath(href)}
-        {#if sessionId && path}
-          {#key `${sessionId}:${path}`}
-            <LocalFileLink {sessionId} {path} {title} {children} />
+        {@const local = sessionId ? resolveLocalFileLink(href, linkBase) : null}
+        {#if sessionId && local}
+          {#key `${sessionId}:${local.path}#${local.anchor}`}
+            <LocalFileLink {sessionId} path={local.path} anchor={local.anchor} {title} {children} />
           {/key}
         {:else}
           <a {href} {title} target="_blank" rel="noopener noreferrer">
             {@render children?.()}
             <ArrowSquareOutIcon aria-hidden="true" data-testid="markdown-external-link-icon" class="ml-1 inline-block size-3.5 align-[-0.125em]" />
           </a>
+        {/if}
+      {/snippet}
+      {#snippet image({ href, title, text })}
+        {@const local = sessionId ? resolveLocalFileLink(href, linkBase) : null}
+        {#if sessionId && local}
+          {#key `${sessionId}:${local.path}`}
+            <LocalFileLink {sessionId} path={local.path} {title}>{text || local.path.slice(local.path.lastIndexOf('/') + 1)}</LocalFileLink>
+          {/key}
+        {:else}
+          <defaultRenderers.image {href} {title} {text} />
         {/if}
       {/snippet}
     </SvelteMarkdown>

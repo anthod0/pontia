@@ -30,6 +30,8 @@
     compactionBusy?: boolean
     turns?: TurnView[]
     sessionId?: string
+    /** Session workspace directory; relative local file links in messages resolve against it. */
+    workspace?: string | null
     sharedFiles?: SharedFile[]
     sessionState?: string | null
     activeTurnId?: string | null
@@ -49,6 +51,7 @@
     compactionBusy = false,
     turns = [],
     sessionId = '',
+    workspace = null,
     sharedFiles = [],
     sessionState = null,
     activeTurnId = null,
@@ -340,6 +343,7 @@
             <Message.Response
               content={chatMessage.content}
               {sessionId}
+              linkBase={workspace ? `${workspace.replace(/\/+$/, '')}/` : null}
               markdown
               streaming={chatMessage.status === 'pending'}
               streamId={chatMessage.id}

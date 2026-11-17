@@ -1100,6 +1100,7 @@
                   timelineItems={$timelineState.sessionId === selectedSessionId ? $timelineState.items : []}
                   compactionBusy={selectedCompaction?.busy ?? false}
                   sessionId={selectedSessionId}
+                  workspace={selectedSession.workspace}
                   sharedFiles={$sharedFiles?.files ?? []}
                   turns={selectedTurns}
                   sessionState={selectedSession.state}

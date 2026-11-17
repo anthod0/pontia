@@ -753,5 +753,7 @@
   "files.previewNotTextTitle": "Cannot preview this file",
   "files.previewFailedTitle": "Could not load preview",
   "files.emptyFile": "This file is empty",
-  "files.resizePreview": "Resize preview"
+  "files.resizePreview": "Resize preview",
+  "files.previewBack": "Back",
+  "files.previewNotImage": "This file is not a PNG, JPEG, GIF, or WebP image under 20 MiB."
 }
