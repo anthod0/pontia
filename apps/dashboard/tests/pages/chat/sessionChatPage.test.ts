@@ -78,7 +78,7 @@ function observedHistorySentinels(): Element[] {
     );
 }
 
-test("focuses the composer and refreshes git only on the first entry, then refreshes git on manual focus", async () => {
+test("refreshes git on every entry and manual focus, while autofocusing only on first entry", async () => {
   const selected = session({ session_id: "session-2", workspace_id: "workspace-1" });
   window.history.pushState({}, "", "/dashboard/chat/session-2");
   mocks.pathParams = { sessionId: "session-2" };
@@ -90,19 +90,19 @@ test("focuses the composer and refreshes git only on the first entry, then refre
 
   const composer = await screen.findByPlaceholderText("Follow up…");
   await waitFor(() => expect(composer).toHaveFocus());
-  expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(1);
   expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith("workspace-1");
+  const entryRefreshCount = mocks.refreshWorkspaceGitStatus.mock.calls.length;
 
   composer.blur();
   composer.focus();
-  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(entryRefreshCount + 1));
 
   firstPage.unmount();
   mocks.refreshWorkspaceGitStatus.mockClear();
   render(SessionChatPage);
   const revisitedComposer = await screen.findByPlaceholderText("Follow up…");
   expect(revisitedComposer).not.toHaveFocus();
-  expect(mocks.refreshWorkspaceGitStatus).not.toHaveBeenCalled();
+  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith("workspace-1"));
 });
 
 function prepareBranchChat(
@@ -1035,6 +1035,10 @@ test("shows workspace git status in the selected chat composer summary", async (
   const sessionDetailsButton = await screen.findByRole("button", {
     name: "Session details: project · Pi · main · dirty",
   });
+  mocks.refreshWorkspaceGitStatus.mockClear();
+  await fireEvent.click(sessionDetailsButton);
+  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledWith("workspace-1"));
+  expect(await screen.findByRole("dialog", { name: "Session details" })).toBeInTheDocument();
   for (const value of ["project", "main", "↑1", "↓2", "+3", "~4", "?5", "!6", "Pi"]) {
     expect(within(sessionDetailsButton).getByText(value)).toBeInTheDocument();
   }
@@ -2030,7 +2034,7 @@ test("renders an existing session title in the top bar and metadata above the pr
     within(screen.getByRole("banner")).getByRole("heading", { name: /second · reviewer/i }),
   ).toBeInTheDocument();
   const sessionDetailsButton = screen.getByRole("button", {
-    name: /Session details: pontia · Pi · coder@1 · second/i,
+    name: /^Session details:/i,
   });
   await userEvent.click(sessionDetailsButton);
   const clientBadge = screen.getAllByLabelText("Client: Pi")[0];

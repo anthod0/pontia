@@ -38,6 +38,7 @@
     onSend: (message: string, deliveryPolicy: InboxDeliveryPolicy) => Promise<boolean>
     onInterrupt: () => void
     onFocus: () => void
+    onRefreshGitStatus: () => void
     onNewChat: () => void
     onRename: (title: string) => void
     onExit: () => void
@@ -65,6 +66,7 @@
     onSend,
     onInterrupt,
     onFocus,
+    onRefreshGitStatus,
     onNewChat,
     onRename,
     onExit,
@@ -115,7 +117,7 @@
         </DropdownMenu.Item>
       {/snippet}
       {#snippet header()}
-        <SessionMetadata {session} {gitStatus} {metadataItems} {metadataSummary} />
+        <SessionMetadata {session} {gitStatus} {metadataItems} {metadataSummary} {onRefreshGitStatus} />
       {/snippet}
     </MessageComposer>
     {#if canSendSessionMessage(session, 'x') === false}

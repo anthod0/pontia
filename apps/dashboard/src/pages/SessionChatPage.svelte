@@ -122,6 +122,7 @@
   let destroyed = false
   let selectedWorkspaceId = ''
   let gitStatusWorkspaceId = ''
+  let gitStatusSessionId = ''
 
   const workspacesQuery = createWorkspacesStore()
   const workspaceGitStatuses = createWorkspaceGitStatusesStore()
@@ -182,6 +183,10 @@
   $: if (selectedWorkspaceId !== gitStatusWorkspaceId) {
     gitStatusWorkspaceId = selectedWorkspaceId
     refreshWorkspaceGitStatusMutation.reset()
+  }
+  $: if (selectedSession && selectedSession.session_id !== gitStatusSessionId) {
+    gitStatusSessionId = selectedSession.session_id
+    void refreshSessionGitStatus(selectedSession)
   }
   $: workspaces = $workspacesQuery.data ?? []
   $: selectedSessionGitStatus = $workspaceGitStatuses[selectedWorkspaceId]
@@ -657,6 +662,7 @@
     compactionEvents = []
     requestedCompaction = null
     selectedSessionId = nextSessionId
+    gitStatusSessionId = ''
     selectSession(selectedSessionId || null)
     resetTimelineState(selectedSessionId)
     pendingPromptScrolls = []
@@ -1185,6 +1191,7 @@
           onCompact={() => void compactSelectedSession()}
           onInterrupt={() => void interruptSelectedSession()}
           onFocus={() => void refreshCurrentSessionGitStatus()}
+          onRefreshGitStatus={() => void refreshCurrentSessionGitStatus()}
         />{/if}
       {/if}
     </div>

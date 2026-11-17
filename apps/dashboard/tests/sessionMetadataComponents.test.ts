@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/svelte";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import SessionMetadata from "../src/components/chat/SessionMetadata.svelte";
 import {
   sessionMetadataItems,
@@ -93,6 +93,7 @@ function metadataProps() {
     workspaces,
     metadataItems,
     metadataSummary: sessionMetadataSummary(metadataItems),
+    onRefreshGitStatus: vi.fn(),
   };
 }
 
