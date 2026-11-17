@@ -27,6 +27,34 @@ function commands(): ChatCommand[] {
   ];
 }
 
+test.each([
+  [{ key: "Enter" }, "steer"],
+  [{ key: "Tab" }, "after_idle"],
+  [{ key: "Enter", altKey: true }, "after_idle"],
+])("submits using the delivery policy selected by %j", async (shortcut, policy) => {
+  const onSubmit = vi.fn();
+  render(MessageComposer, { value: "Continue the task", onSubmit });
+  await fireEvent.keyDown(screen.getByRole("textbox"), shortcut);
+  expect(onSubmit).toHaveBeenCalledExactlyOnceWith("Continue the task", policy);
+});
+
+test("empty input and Shift+Tab retain keyboard focus navigation", async () => {
+  const onSubmit = vi.fn();
+  const component = render(MessageComposer, { value: "", onSubmit });
+  const editor = screen.getByRole("textbox");
+  expect(await fireEvent.keyDown(editor, { key: "Tab" })).toBe(true);
+  await component.rerender({ value: "Continue the task" });
+  expect(await fireEvent.keyDown(editor, { key: "Tab", shiftKey: true })).toBe(true);
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
+test("Alt+Enter queues text ending in a backslash without changing its content", async () => {
+  const onSubmit = vi.fn();
+  render(MessageComposer, { value: "Keep this \\", onSubmit });
+  await fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", altKey: true });
+  expect(onSubmit).toHaveBeenCalledExactlyOnceWith("Keep this \\", "after_idle");
+});
+
 test("backslash plus Enter inserts a newline instead of submitting", async () => {
   const onSubmit = vi.fn();
   render(MessageComposer, { props: { value: "", onSubmit } });

@@ -1,4 +1,4 @@
-import type { InboxDeliveryPolicy, SessionView } from "../api/types";
+import type { SessionView } from "../api/types";
 
 export interface ClientControlDetails {
   connection: string;
@@ -16,7 +16,6 @@ export interface DashboardClient {
   clientType: string;
   customEntry?: { label: string; keyLabel: string; validateKey(key: string): string | null };
   defaultForCreation: boolean;
-  deliveryPolicy: InboxDeliveryPolicy;
   resumeWaitsForIdle?: boolean;
   controlDetails(session: SessionView): ClientControlDetails | null;
   sessionLabel?(session: SessionView): string;

@@ -60,6 +60,14 @@ impl Channel {
     }
 }
 impl ClientControlChannel for Channel {
+    fn steer<'a>(
+        &'a self,
+        input: &'a str,
+        message: Option<&'a str>,
+        _: &'a str,
+    ) -> ClientControlOperation<'a> {
+        self.submit(input, message)
+    }
     fn available(&self) -> bool {
         !self.closed.load(Ordering::SeqCst)
     }

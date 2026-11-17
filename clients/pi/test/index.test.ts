@@ -1,7 +1,7 @@
 import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { type PiConnection } from "../src/control-socket.js";
+import { type ControlInput, type PiConnection } from "../src/control-socket.js";
 import { createPontiaPiExtension } from "../src/index.js";
 import type { TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
@@ -184,6 +184,29 @@ async function installBound(overrides: Parameters<typeof install>[0] = {}) {
 }
 
 describe("pontia pi extension lifecycle", () => {
+  test("steer joins the active run and rejects a stale Turn without starting another run", async () => {
+    let submit!: (input: ControlInput) => void;
+    const { handlers, sendUserMessage, reported } = await installBound({
+      connectPi: async (_home, _error, onSubmit) => {
+        submit = onSubmit;
+        return { request: async () => null, registered() {}, close: async () => {} };
+      },
+    });
+    await handlers.model_select({}, { isIdle: () => false });
+    await handlers.agent_start({}, {});
+    submit({
+      input: "Adjust the task",
+      inboxMessageId: "msg_steer",
+      steerTargetTurnId: "turn_server_1",
+    });
+    expect(sendUserMessage).toHaveBeenCalledExactlyOnceWith("Adjust the task", {
+      deliverAs: "steer",
+    });
+    expect(reported.filter((event) => event.type === "turn.started")).toHaveLength(1);
+    expect(() => submit({ input: "Stale task", steerTargetTurnId: "turn_old" })).toThrow();
+    expect(sendUserMessage).toHaveBeenCalledOnce();
+  });
+
   test("custom runs do not inherit a pending user prompt", async () => {
     const { handlers, reported } = await installBound();
     await handlers.before_agent_start({ messageType: "user", prompt: "previous prompt" }, {});

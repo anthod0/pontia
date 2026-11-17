@@ -148,7 +148,7 @@
         moveSelection(-1)
         return true
       }
-      if ((event.key === 'Enter' || event.key === 'Tab') && files[selectedIndex]) {
+      if ((event.key === 'Enter' || event.key === 'Tab') && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && files[selectedIndex]) {
         event.preventDefault()
         void choose(files[selectedIndex])
         return true

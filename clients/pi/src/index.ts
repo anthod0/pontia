@@ -269,6 +269,28 @@ export function createPontiaPiExtension(
         if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
           throw new Error("Pi control session is no longer current");
         }
+        if (submission.steerTargetTurnId) {
+          if (
+            !activeTurn ||
+            activeTurn.ended ||
+            activeTurn.context.turnId !== submission.steerTargetTurnId ||
+            piContext?.isIdle()
+          ) {
+            throw new RpcError(
+              -32006,
+              "Pi steer target is no longer active; input was not submitted",
+            );
+          }
+          try {
+            pi.sendUserMessage(submission.input, { deliverAs: "steer" });
+          } catch (error) {
+            throw new RpcError(
+              -32007,
+              `Pi steer delivery uncertain: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+          return;
+        }
         if (queuedControlInput)
           throw new RpcError(-32010, "Pi already has pending input; input was not submitted");
         if (!piContext?.isIdle()) {

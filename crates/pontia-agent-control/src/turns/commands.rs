@@ -126,6 +126,12 @@ impl TurnCommandService {
             required_runtime_id,
         )
         .await?;
+        if let InputIntent::Steer { turn_id } = &intent {
+            let receipt = adapter
+                .input(&target, input, &metadata, &intent, None)
+                .await;
+            return Ok((query.get_turn(session_id, turn_id).await?, receipt));
+        }
         let turn_id = self
             .prepare_initial(session_id, &input, &metadata)
             .await?

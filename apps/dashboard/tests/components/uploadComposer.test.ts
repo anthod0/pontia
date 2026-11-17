@@ -55,6 +55,7 @@ test("sends attachment-only messages and clears recovery only after successful s
   await waitFor(() =>
     expect(onSubmit).toHaveBeenCalledWith(
       '<user_uploads note="Temporary files; copy any you need into the workspace.">\n<user_upload path="/device/report.txt">report.txt</user_upload>\n</user_uploads>',
+      "steer",
     ),
   );
   expect(await loadUploadRecords("composer-test", draftId)).toHaveLength(1);
@@ -73,7 +74,7 @@ test("blocks sending unfinished attachments until they are removed", async () =>
   await fireEvent.click(screen.getByRole("button", { name: "Remove attachment report.txt" }));
   await waitFor(() => expect(submit).toBeEnabled());
   await fireEvent.click(submit);
-  expect(onSubmit).toHaveBeenCalledWith("Read the report");
+  expect(onSubmit).toHaveBeenCalledWith("Read the report", "steer");
 });
 
 test("reports upload failures in a toast instead of beside the file", async () => {

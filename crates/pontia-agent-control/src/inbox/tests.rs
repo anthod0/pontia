@@ -670,6 +670,70 @@ async fn queued_steer_never_retargets_a_different_turn() {
 }
 
 #[tokio::test]
+async fn steer_targets_the_active_turn_while_after_idle_waits() {
+    let (_root, state, channel) = connected_inbox().await;
+    let inbox = state.inbox_commands();
+    sqlx::query(
+        "INSERT INTO turns(turn_id,session_id,state) VALUES ('active-turn','session','running')",
+    )
+    .execute(&state.db())
+    .await
+    .unwrap();
+    sqlx::query("UPDATE sessions SET state='busy' WHERE session_id='session'")
+        .execute(&state.db())
+        .await
+        .unwrap();
+    inbox
+        .submit_message_once("queued", "session", request("next task"))
+        .await
+        .unwrap();
+    let mut steer = request("adjust current task");
+    steer.delivery_policy = "steer".into();
+    inbox
+        .submit_message_once("steer", "session", steer)
+        .await
+        .unwrap();
+    let message = inbox
+        .get_message("session", "steer")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(message.state, "dispatched");
+    assert_eq!(message.turn_id.as_deref(), Some("active-turn"));
+    assert_eq!(
+        inbox
+            .get_message("session", "queued")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "pending"
+    );
+    assert_eq!(*channel.input.lock().unwrap(), ["adjust current task"]);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM turns WHERE session_id='session'")
+            .fetch_one(&state.db())
+            .await
+            .unwrap(),
+        1
+    );
+    sqlx::query("UPDATE turns SET state='completed' WHERE turn_id='active-turn'")
+        .execute(&state.db())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE sessions SET state='idle' WHERE session_id='session'")
+        .execute(&state.db())
+        .await
+        .unwrap();
+    inbox.drain_inbox("session").await.unwrap();
+    assert_eq!(
+        *channel.input.lock().unwrap(),
+        ["adjust current task", "next task"]
+    );
+    inbox.stop_scheduling().await;
+}
+
+#[tokio::test]
 async fn failed_session_restore_is_diagnostic_and_repeated_retry_does_not_restart() {
     let (_root, state, channel) = connected_inbox().await;
     sqlx::query("UPDATE sessions SET state='exited' WHERE session_id='session'")

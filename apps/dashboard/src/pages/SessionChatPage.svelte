@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../device/context';
-  import { clientControlDetails, clientDeliveryPolicy, clientResumeWaitsForIdle } from '../clients'
+  import { clientControlDetails, clientResumeWaitsForIdle } from '../clients'
   import { onDestroy, onMount, tick } from 'svelte'
   import { get } from 'svelte/store'
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
@@ -18,7 +18,7 @@
   import ChatRuler from '$lib/components/session-chat/ChatRuler.svelte'
   import type { HistoryFork } from '../stores/historyForks'
   import { SubmissionUnconfirmedError } from '../stores/inboxRecovery'
-  import type { DashboardStreamEvent, EventView, InboxMessageView, SessionView, TurnView } from '../api/types'
+  import type { DashboardStreamEvent, EventView, InboxDeliveryPolicy, InboxMessageView, SessionView, TurnView } from '../api/types'
   import { compactionDisabledReason, compactionStatus } from '$lib/session-chat/compaction'
   import type { ChatMessageRole, SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
@@ -953,7 +953,7 @@
     })
   }
 
-  async function sendMessage(message: string): Promise<boolean> {
+  async function sendMessage(message: string, deliveryPolicy: InboxDeliveryPolicy): Promise<boolean> {
     if (!canSend || !selectedSessionId || !message.trim()) return false
     submitting = true
     actionError = null
@@ -974,7 +974,7 @@
       }
       await submitInboxMessage(selectedSessionId, {
         input: message,
-        delivery_policy: clientDeliveryPolicy(selectedSession),
+        delivery_policy: deliveryPolicy,
         metadata: { source: 'dashboard_chat' },
       })
       return true

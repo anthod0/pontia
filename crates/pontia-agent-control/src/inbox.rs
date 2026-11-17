@@ -173,7 +173,13 @@ impl InboxCommandService {
                 )
                 .await?;
         }
+        let metadata = serde_json::to_string(&request.metadata)?;
+
+        let active_turn = SqliteTurnRepository::new(self.pool.clone())
+            .active_turn(session_id)
+            .await?;
         if request.delivery_policy == "steer"
+            && active_turn.is_some()
             && !self
                 .clients
                 .for_client(&session.client_type)?
@@ -183,12 +189,6 @@ impl InboxCommandService {
                 "This client does not support steer".into(),
             ));
         }
-
-        let metadata = serde_json::to_string(&request.metadata)?;
-
-        let active_turn = SqliteTurnRepository::new(self.pool.clone())
-            .active_turn(session_id)
-            .await?;
         let steer_target = if request.delivery_policy == "steer" {
             active_turn.as_ref().map(|turn| turn.turn_id.as_str())
         } else {

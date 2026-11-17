@@ -8,7 +8,6 @@ export const dashboardClient: DashboardClient = {
     validateKey: (key) => (key === "." || key === ".." ? "ACP Agent ID cannot be . or .." : null),
   },
   defaultForCreation: false,
-  deliveryPolicy: "after_idle",
   controlDetails: () => null,
   sessionLabel: (session) => {
     const details = session.acp as

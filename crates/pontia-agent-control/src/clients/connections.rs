@@ -295,6 +295,20 @@ impl ClientControlService {
         .await
     }
 
+    pub async fn steer(
+        &self,
+        session_id: &str,
+        runtime_id: &str,
+        input: &str,
+        inbox_message_id: Option<&str>,
+        turn_id: &str,
+    ) -> Result<()> {
+        self.request(session_id, runtime_id, false, |channel| async move {
+            channel.steer(input, inbox_message_id, turn_id).await
+        })
+        .await
+    }
+
     pub async fn list_models(
         &self,
         session_id: &str,

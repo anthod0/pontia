@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import type { SessionFilesStore } from '../../stores/sessionFiles'
-  import type { InboxMessageView, SessionView, WorkspaceGitStatusView } from '../../api/types'
+  import type { InboxDeliveryPolicy, InboxMessageView, SessionView, WorkspaceGitStatusView } from '../../api/types'
   import { canSendSessionMessage } from '$lib/session-chat/sessionChat'
   import ModelPicker from './ModelPicker.svelte'
   import { modelPickerDisabledReason } from '$lib/modelControls'
@@ -35,7 +35,7 @@
     onCancelInboxMessage: (message: InboxMessageView) => void
     onRetryInboxMessage: (message: InboxMessageView) => void
     onDismissInboxMessage: (message: InboxMessageView) => void
-    onSend: (message: string) => Promise<boolean>
+    onSend: (message: string, deliveryPolicy: InboxDeliveryPolicy) => Promise<boolean>
     onInterrupt: () => void
     onFocus: () => void
     onNewChat: () => void

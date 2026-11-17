@@ -37,4 +37,16 @@ pub trait ClientControlChannel: Send + Sync {
         input: &'a str,
         inbox_message_id: Option<&'a str>,
     ) -> ClientControlOperation<'a>;
+    fn steer<'a>(
+        &'a self,
+        _input: &'a str,
+        _inbox_message_id: Option<&'a str>,
+        _turn_id: &'a str,
+    ) -> ClientControlOperation<'a> {
+        Box::pin(async {
+            Err(pontia_core::Error::CapabilityUnavailable(
+                "This client does not support steer".into(),
+            ))
+        })
+    }
 }

@@ -28,13 +28,6 @@ export function clientControlDetails(session: SessionView) {
   );
 }
 
-export function clientDeliveryPolicy(session: SessionView | null | undefined) {
-  return (
-    clients.find((client) => client.clientType === session?.client_type)?.deliveryPolicy ??
-    "after_idle"
-  );
-}
-
 export function clientResumeWaitsForIdle(session: SessionView | null | undefined): boolean {
   return (
     clients.find((client) => client.clientType === session?.client_type)?.resumeWaitsForIdle ?? true

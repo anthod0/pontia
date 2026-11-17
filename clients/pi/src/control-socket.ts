@@ -18,6 +18,7 @@ export interface ControlIdentity {
 export interface ControlInput {
   input: string;
   inboxMessageId?: string;
+  steerTargetTurnId?: string;
 }
 export interface PiModel {
   id: string;
@@ -279,7 +280,7 @@ class RpcSocket {
         })().catch((failure) => this.fail(failure));
         return;
       }
-      if (message.method !== "submit") {
+      if (message.method !== "submit" && message.method !== "steer") {
         error(-32601, "Unknown Pi control method");
         return;
       }
@@ -290,6 +291,7 @@ class RpcSocket {
       if (
         typeof params.input !== "string" ||
         !params.input.trim() ||
+        (message.method === "steer" && (typeof params.turn_id !== "string" || !params.turn_id)) ||
         (params.inbox_message_id != null &&
           (typeof params.inbox_message_id !== "string" || !params.inbox_message_id))
       ) {
@@ -300,6 +302,7 @@ class RpcSocket {
         this.onSubmit({
           input: params.input,
           inboxMessageId: params.inbox_message_id ?? undefined,
+          ...(message.method === "steer" ? { steerTargetTurnId: params.turn_id } : {}),
         });
         respond({ result: { accepted: true } });
       } catch (failure) {

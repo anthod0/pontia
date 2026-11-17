@@ -76,8 +76,13 @@ impl ClientAdapter {
         };
         match self.spec.adapter.dispatch {
             DispatchMode::Connected => {
-                self.channel_input(target, &input.input, metadata["inbox_message_id"].as_str())
-                    .await?
+                self.channel_input(
+                    target,
+                    &input.input,
+                    metadata["inbox_message_id"].as_str(),
+                    intent,
+                )
+                .await?
             }
             DispatchMode::InProcessRecorded => {
                 self.registry

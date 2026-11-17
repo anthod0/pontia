@@ -8,6 +8,7 @@ impl ClientAdapter {
         target: &ControlTarget,
         input: &str,
         message: Option<&str>,
+        intent: &crate::turns::InputIntent,
     ) -> Result<()> {
         RuntimeReadinessService::new(self.pool.clone(), self.spec.adapter.control_runtime_role)
             .wait_until_ready(
@@ -17,9 +18,24 @@ impl ClientAdapter {
             )
             .await?;
         target.validate(&self.pool.clone()).await?;
-        self.control
-            .submit(&target.session_id, target.instance()?, input, message)
-            .await
+        match intent {
+            crate::turns::InputIntent::Start => {
+                self.control
+                    .submit(&target.session_id, target.instance()?, input, message)
+                    .await
+            }
+            crate::turns::InputIntent::Steer { turn_id } => {
+                self.control
+                    .steer(
+                        &target.session_id,
+                        target.instance()?,
+                        input,
+                        message,
+                        turn_id,
+                    )
+                    .await
+            }
+        }
     }
 
     pub(super) async fn channel_interrupt(&self, target: &ControlTarget) -> Result<()> {

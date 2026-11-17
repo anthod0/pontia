@@ -271,7 +271,7 @@ test.each(["busy", "waiting_for_interaction"])(
     await waitFor(() =>
       expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-1", {
         input: "Queue this follow-up",
-        delivery_policy: "after_idle",
+        delivery_policy: "steer",
         metadata: { source: "dashboard_chat" },
       }),
     );
@@ -1681,7 +1681,7 @@ test("mobile composer resize button opens a fullscreen follow-up composer sharin
     await waitFor(() =>
       expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-2", {
         input: "mobile draft plus more",
-        delivery_policy: "after_idle",
+        delivery_policy: "steer",
         metadata: { source: "dashboard_chat" },
       }),
     );
@@ -2178,9 +2178,14 @@ test("shows delivery loading on the submit button instead of below the optimisti
   expect(screen.getAllByText("slow network message")).toHaveLength(1);
 });
 
-test("follow-up composer submits with Enter while preserving modified Enter for newlines", async () => {
+test.each([
+  ["pi", { key: "Enter" }, "steer"],
+  ["codex", { key: "Enter" }, "steer"],
+  ["pi", { key: "Tab" }, "after_idle"],
+  ["codex", { key: "Enter", altKey: true }, "after_idle"],
+])("%s follow-up submits %j using %s while preserving newline shortcuts", async (clientType, shortcut, policy) => {
   const user = userEvent.setup();
-  const selected = session({ session_id: "session-2", state: "idle" });
+  const selected = session({ session_id: "session-2", state: "idle", client_type: clientType });
   window.history.pushState({}, "", "/dashboard/chat/session-2");
   mocks.pathParams = { sessionId: "session-2" };
   mocks.loadedSessions = [selected];
@@ -2201,11 +2206,11 @@ test("follow-up composer submits with Enter while preserving modified Enter for 
   expect(followUpInput.querySelectorAll("br:not(.ProseMirror-trailingBreak)")).toHaveLength(2);
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
-  expect(await fireEvent.keyDown(followUpInput, { key: "Enter" })).toBe(false);
+  expect(await fireEvent.keyDown(followUpInput, shortcut)).toBe(false);
   await waitFor(() =>
     expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-2", {
       input: "continue this session",
-      delivery_policy: "after_idle",
+      delivery_policy: policy,
       metadata: { source: "dashboard_chat" },
     }),
   );
@@ -2937,7 +2942,7 @@ test("hides exit on exited sessions and waits for idle after automatic resume be
   await waitFor(() =>
     expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-2", {
       input: "continue this session",
-      delivery_policy: "after_idle",
+      delivery_policy: "steer",
       metadata: { source: "dashboard_chat" },
     }),
   );
@@ -2970,7 +2975,7 @@ test("resumes an exited Claude conversation by submitting the real input before 
   await waitFor(() =>
     expect(mocks.submitInboxMessage).toHaveBeenCalledWith("claude-resume", {
       input: "continue bound conversation",
-      delivery_policy: "after_idle",
+      delivery_policy: "steer",
       metadata: { source: "dashboard_chat" },
     }),
   );

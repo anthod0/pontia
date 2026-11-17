@@ -3,7 +3,6 @@ import type { DashboardClient } from "../../apps/dashboard/src/clients/contract"
 export const dashboardClient: DashboardClient = {
   clientType: "claude-agent",
   defaultForCreation: false,
-  deliveryPolicy: "after_idle",
   resumeWaitsForIdle: false,
   controlDetails: (session) => {
     const reason = (session["claude-agent"] as { unavailable_reason?: string | null } | undefined)

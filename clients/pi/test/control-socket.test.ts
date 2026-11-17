@@ -40,6 +40,37 @@ function reply(socket: Socket, id: unknown, result: unknown) {
   socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
 }
 
+test("steer forwards its target Turn and rejects a missing target", async () => {
+  const responses: any[] = [];
+  const root = await server((socket, message) => {
+    if (!message.method) {
+      responses.push(message);
+      return;
+    }
+    for (const [id, params] of [
+      [
+        "valid",
+        { input: "Adjust the task", inbox_message_id: "msg_steer", turn_id: "turn_active" },
+      ],
+      ["missing", { input: "Adjust the task" }],
+    ]) {
+      socket.write(`${JSON.stringify({ jsonrpc: "2.0", id, method: "steer", params })}\n`);
+    }
+    reply(socket, message.id, {});
+  });
+  const submit = vi.fn();
+  const client = await connectPi(root, () => {}, submit);
+  onTestFinished(() => client.close());
+  await client.request("begin", {});
+  await vi.waitFor(() => expect(responses).toHaveLength(2));
+  expect(submit).toHaveBeenCalledExactlyOnceWith({
+    input: "Adjust the task",
+    inboxMessageId: "msg_steer",
+    steerTargetTurnId: "turn_active",
+  });
+  expect(responses.find((response) => response.id === "missing").error.code).toBe(-32602);
+});
+
 test("compaction control acknowledges native initiation and rejects malformed operations", async () => {
   const responses: any[] = [];
   const root = await server((socket, message) => {

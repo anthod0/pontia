@@ -23,7 +23,7 @@
   import { cn } from '$lib/utils.js'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { promptValueAfterEnter } from '$lib/promptEnterBehavior'
-  import type { FilePickerFileView } from '../../api/types'
+  import type { FilePickerFileView, InboxDeliveryPolicy } from '../../api/types'
   const device = useDeviceRuntime();
   const { createUploadDraft } = device.uploadDrafts;
 
@@ -46,7 +46,7 @@
     menuItems?: Snippet
     draftId?: string
     retainDraft?: boolean
-    onSubmit: (message: string) => void | Promise<boolean | void>
+    onSubmit: (message: string, deliveryPolicy: InboxDeliveryPolicy) => void | Promise<boolean | void>
     onInterrupt?: () => void
     onFocus?: () => void
   }
@@ -138,18 +138,18 @@
     fullscreenEditor?.focusEnd()
   }
 
-  function submit(): void {
+  function submit(deliveryPolicy: InboxDeliveryPolicy = 'steer'): void {
     if (cannotSubmit) return
     if (command) executeCommand(command)
-    else void submitMessage()
+    else void submitMessage(deliveryPolicy)
   }
 
-  async function submitMessage(): Promise<void> {
+  async function submitMessage(deliveryPolicy: InboxDeliveryPolicy): Promise<void> {
     const draft = uploads
     sending = true
     submissionError = null
     try {
-      if (!sentAwaitingCleanup) sentAwaitingCleanup = (await onSubmit(uploadMessage(value, completedFiles))) === true
+      if (!sentAwaitingCleanup) sentAwaitingCleanup = (await onSubmit(uploadMessage(value, completedFiles), deliveryPolicy)) === true
       if (sentAwaitingCleanup) {
         await draft?.clear()
         sentAwaitingCleanup = false
@@ -205,6 +205,14 @@
 
   function handleKeydown(event: KeyboardEvent): void {
     if (event.isComposing || event.keyCode === 229) return
+    const queueInput = !event.shiftKey && !event.ctrlKey && !event.metaKey
+      && ((event.key === 'Tab' && !event.altKey) || (event.key === 'Enter' && event.altKey))
+    if (queueInput) {
+      if (cannotSubmit || command || (event.key === 'Tab' && value.trim() && commands.some(item => item.name.startsWith(value.trim())))) return
+      event.preventDefault()
+      submit('after_idle')
+      return
+    }
     const isPlainEnter = event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey
     if (!isPlainEnter) return
 
@@ -267,7 +275,7 @@
   </div>
 {/if}
 
-<PromptInput.Root class={compact ? 'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center' : 'w-full'} onSubmit={submit}>
+<PromptInput.Root class={compact ? 'grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center' : 'w-full'} onSubmit={() => submit()}>
   {#if uploads}
     <div class={compact ? 'col-span-3 row-start-1' : 'contents'}>
       <UploadAttachments bind:this={uploadPicker} draft={uploads} disabled={disabled || busy || sending} />

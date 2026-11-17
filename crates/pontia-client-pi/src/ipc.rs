@@ -491,9 +491,37 @@ impl pontia_agent_control::ClientControlChannel for PiChannel {
     ) -> pontia_agent_control::ClientControlOperation<'a> {
         self.peer.submit(input, inbox_message_id)
     }
+    fn steer<'a>(
+        &'a self,
+        input: &'a str,
+        inbox_message_id: Option<&'a str>,
+        turn_id: &'a str,
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
+        self.peer.steer(input, inbox_message_id, turn_id)
+    }
 }
 
 impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
+    fn steer<'a>(
+        &'a self,
+        input: &'a str,
+        inbox_message_id: Option<&'a str>,
+        turn_id: &'a str,
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
+        Box::pin(async move {
+            if self
+                .call(
+                    "steer",
+                    json!({"input":input,"inbox_message_id":inbox_message_id,"turn_id":turn_id}),
+                )
+                .await?
+                != json!({"accepted":true})
+            {
+                return Err(Error::ControlUnknown("Invalid Pi steer response".into()));
+            }
+            Ok(())
+        })
+    }
     fn compact<'a>(
         &'a self,
         operation_id: &'a str,
