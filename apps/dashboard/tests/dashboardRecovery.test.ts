@@ -11,7 +11,7 @@ const { refreshDashboardSnapshot } = testDevice.snapshotRefresh;
 const { selectedWorkflowId } = testDevice.workflows;
 const { workflowKeys } = testDevice.workflowQueries;
 const { sessionKeys } = testDevice.sessionQueries;
-import type { WorkflowDetailView } from "../src/api/types";
+import type { TurnTimelineItem, WorkflowDetailView } from "../src/api/types";
 const timeline = testDevice.timeline;
 const { queryClient } = testDevice;
 import type { SessionOverviewSnapshot } from "../src/queries/sessionOverview";
@@ -103,6 +103,12 @@ beforeEach(() => {
           session_id: "current",
           groups: [],
           next_from_turn_id: null,
+        },
+        "/sessions/current/turns/tree/updates": {
+          session_id: "current",
+          current_turn_id: null,
+          retain_through_turn_id: null,
+          groups: [],
         },
         "/sessions/current/events": { events: [] },
       };
@@ -234,12 +240,24 @@ test("keeps a recovery requested during an older snapshot in flight", async () =
 test("reconnect replaces cached history after changes made while offline", async () => {
   online = true;
   supportsTimeline = true;
+  const cachedItem: TurnTimelineItem = {
+    item_id: "item-1",
+    turn_id: "turn-1",
+    kind: "assistant",
+    role: "assistant",
+    title: null,
+    status: null,
+    occurred_at: null,
+    content_preview: "Answer removed while offline",
+  };
   timeline.timelineState.update((value) => ({
     ...value,
     sessionId: "current",
     mode: "tree",
     status: "ready",
     latestTurnId: "turn-1",
+    groups: [{ turn_id: "turn-1", parent_turn_id: null, state: "completed", items: [cachedItem] }],
+    items: [cachedItem],
   }));
   let complete = false;
   const recovery = refreshDashboardSnapshot({ reason: "sse_open" }).then(() => {
@@ -247,8 +265,12 @@ test("reconnect replaces cached history after changes made while offline", async
   });
   await vi.waitFor(() => expect(complete).toBe(true));
   await recovery;
-  expect(get(timeline.timelineState).latestTurnId).toBeNull();
-  expect(get(timeline.timelineState).status).toBe("empty");
+  expect(get(timeline.timelineState)).toMatchObject({
+    latestTurnId: null,
+    status: "empty",
+    groups: [],
+    items: [],
+  });
   expect(get(sessionDetail)?.turns[0]?.turn_id).toBe("turn-2");
 });
 
