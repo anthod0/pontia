@@ -1,9 +1,8 @@
 use pontia_bot::identity::{BotAccess, BotIdentity, BotRole, IdentityError};
 use std::{
     future::Future,
-    io::Write,
     pin::Pin,
-    process::{Command, Output, Stdio},
+    process::{Command, Output},
     sync::Arc,
 };
 
@@ -67,43 +66,29 @@ impl Fixture {
         });
         Self { root, addr, server }
     }
-    async fn cli(&self, session: Option<&str>, action: &str, input: Value, file: bool) -> Output {
+    async fn cli(&self, session: Option<&str>, args: &[&str]) -> Output {
         let root = self.root.path().to_path_buf();
         let session = session.map(str::to_owned);
-        let action = action.to_owned();
+        let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
         tokio::task::spawn_blocking(move || {
             let mut command = Command::new(env!("CARGO_BIN_EXE_pontia"));
             command
-                .args(["bot", "memory", &action])
+                .args(["bot", "memory"])
+                .args(args)
                 .env("PONTIA_HOME", &root)
                 .env_remove("PONTIA_SESSION_ID");
             if let Some(session) = session {
                 command.env("PONTIA_SESSION_ID", session);
             }
-            if file {
-                let path = root.join("input.json");
-                std::fs::write(&path, serde_json::to_vec(&input).unwrap()).unwrap();
-                command.arg("--input").arg(path).output().unwrap()
-            } else {
-                let mut child = command
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                    .unwrap();
-                let _ = child
-                    .stdin
-                    .take()
-                    .unwrap()
-                    .write_all(&serde_json::to_vec(&input).unwrap());
-                child.wait_with_output().unwrap()
-            }
+            command.output().unwrap()
         })
         .await
         .unwrap()
     }
-    async fn call(&self, session: &str, action: &str, input: Value) -> Value {
-        let output = self.cli(Some(session), action, input, false).await;
+    async fn call(&self, session: &str, args: &[&str]) -> Value {
+        let mut args = args.to_vec();
+        args.push("--json");
+        let output = self.cli(Some(session), &args).await;
         assert!(
             output.status.success(),
             "{}",
@@ -121,38 +106,73 @@ impl Drop for Fixture {
 #[tokio::test]
 async fn cli_runs_memory_lifecycle_through_authenticated_http_and_sqlite() {
     let f = Fixture::new(true).await;
-    let output = f.cli(Some("bot-session"),"create",json!({"kind":"fact","content":"项目使用 Rust","keywords":["项目","Rust"],"workspace_id":"project"}),true).await;
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let created: Value = serde_json::from_slice(&output.stdout).unwrap();
-    let id = created["memory"]["id"].clone();
+    let content = "项目使用 Rust\n保留 '引号'、$变量 和 \"双引号\"";
+    let created = f
+        .call(
+            "bot-session",
+            &[
+                "create",
+                "--kind",
+                "fact",
+                "--content",
+                content,
+                "--keyword",
+                "项目",
+                "--keyword",
+                "Rust",
+                "--workspace-id",
+                "project",
+                "--session-id",
+                "source-session",
+                "--sources",
+                "用户的原始说明",
+                "--occurred-at",
+                "2026-11-01T08:00:00+08:00",
+            ],
+        )
+        .await;
+    let id = created["memory"]["id"].as_str().unwrap();
+    assert_eq!(created["memory"]["content"], content);
+    assert_eq!(created["memory"]["session_id"], "source-session");
+    assert_eq!(created["memory"]["sources"], "用户的原始说明");
+    assert_eq!(created["memory"]["occurred_at"], "2026-11-01T00:00:00Z");
     let search = f
-        .call("reader-session", "search", json!({"keywords":["RUST"]}))
+        .call("reader-session", &["search", "--keyword", "RUST"])
         .await;
     assert_eq!(search["results"][0]["memory"]["id"], id);
-    assert_eq!(search["results"][0]["memory"]["content"], "项目使用 Rust");
+    assert_eq!(search["results"][0]["memory"]["content"], content);
     assert_eq!(search["has_more"], false);
+    let text = f
+        .cli(Some("reader-session"), &["search", "--keyword", "Rust"])
+        .await;
+    assert!(text.status.success());
+    assert!(serde_json::from_slice::<Value>(&text.stdout).is_err());
+    let text = String::from_utf8(text.stdout).unwrap();
+    for value in [id, "项目使用 Rust", "用户的原始说明", "source-session"] {
+        assert!(text.contains(value));
+    }
     let hidden = f
         .call(
             "bot-session",
-            "create",
-            json!({"kind":"fact","content":"global","keywords":["Rust"]}),
+            &[
+                "create",
+                "--kind",
+                "fact",
+                "--content",
+                "global",
+                "--keyword",
+                "Rust",
+            ],
         )
         .await;
+    let hidden_id = hidden["memory"]["id"].as_str().unwrap();
     let read = f
-        .call(
-            "reader-session",
-            "read",
-            json!({"ids":[id,hidden["memory"]["id"]]}),
-        )
+        .call("reader-session", &["read", "--id", id, "--id", hidden_id])
         .await;
     assert_eq!(read["memories"].as_array().unwrap().len(), 1);
     assert!(read["memories"][0]["last_read_at"].is_null());
-    f.call("bot-session", "use", json!({"ids":[id]})).await;
-    let used = f.call("reader-session", "read", json!({"ids":[id]})).await;
+    f.call("bot-session", &["use", "--id", id]).await;
+    let used = f.call("reader-session", &["read", "--id", id]).await;
     assert!(used["memories"][0]["last_read_at"].is_string());
     assert_eq!(
         used["memories"][0]["updated_at"],
@@ -160,79 +180,106 @@ async fn cli_runs_memory_lifecycle_through_authenticated_http_and_sqlite() {
     );
     f.call(
         "dreaming-session",
-        "update",
-        json!({"id":id,"kind":"decision","content":"now Go","keywords":["Go"],"importance":"high"}),
+        &[
+            "update",
+            "--id",
+            id,
+            "--kind",
+            "decision",
+            "--content",
+            "now Go",
+            "--keyword",
+            "Go",
+            "--importance",
+            "high",
+        ],
     )
     .await;
     assert_eq!(
-        f.call("reader-session", "search", json!({"keywords":["Rust"]}))
+        f.call("reader-session", &["search", "--keyword", "Rust"])
             .await["results"],
         json!([])
     );
     assert_eq!(
-        f.call("reader-session", "search", json!({"keywords":["Go"]}))
+        f.call("reader-session", &["search", "--keyword", "Go"])
             .await["results"][0]["memory"]["id"],
         id
     );
+    let updated = f.call("reader-session", &["read", "--id", id]).await;
+    assert!(updated["memories"][0]["sources"].is_null());
+    assert!(updated["memories"][0]["occurred_at"].is_null());
     f.call(
         "dreaming-session",
-        "link",
-        json!({"memory_a_id":id,"memory_b_id":hidden["memory"]["id"]}),
+        &["link", "--memory-a-id", id, "--memory-b-id", hidden_id],
     )
     .await;
     assert_eq!(
-        f.call("bot-session", "neighbors", json!({"id":id})).await["memories"][0]["id"],
-        hidden["memory"]["id"]
+        f.call("bot-session", &["neighbors", "--id", id]).await["memories"][0]["id"],
+        hidden_id
     );
     assert_eq!(
-        f.call("reader-session", "neighbors", json!({"id":id}))
-            .await["memories"],
+        f.call("reader-session", &["neighbors", "--id", id]).await["memories"],
         json!([])
     );
     f.call(
         "dreaming-session",
-        "archive",
-        json!({"id":id,"archived":true}),
+        &["unlink", "--memory-a-id", id, "--memory-b-id", hidden_id],
     )
     .await;
     assert_eq!(
-        f.call("reader-session", "read", json!({"ids":[id]})).await["memories"],
+        f.call("bot-session", &["neighbors", "--id", id]).await["memories"],
         json!([])
     );
     f.call(
         "dreaming-session",
-        "archive",
-        json!({"id":id,"archived":false}),
+        &["archive", "--id", id, "--archived", "true"],
     )
     .await;
     assert_eq!(
-        f.call("reader-session", "read", json!({"ids":[id]})).await["memories"][0]["content"],
+        f.call("reader-session", &["read", "--id", id]).await["memories"],
+        json!([])
+    );
+    f.call(
+        "dreaming-session",
+        &["archive", "--id", id, "--archived", "false"],
+    )
+    .await;
+    assert_eq!(
+        f.call("reader-session", &["read", "--id", id]).await["memories"][0]["content"],
         "now Go"
     );
-    for (session, action, input) in [
+    for (session, args) in [
         (
             "reader-session",
-            "create",
-            json!({"kind":"fact","content":"bad","keywords":["bad"]}),
+            vec![
+                "create",
+                "--kind",
+                "fact",
+                "--content",
+                "bad",
+                "--keyword",
+                "bad",
+            ],
         ),
-        ("reader-session", "use", json!({"ids":[id]})),
-        ("bot-session", "archive", json!({"id":id,"archived":true})),
-        ("unknown-session", "search", json!({"keywords":["Go"]})),
+        ("reader-session", vec!["use", "--id", id]),
+        (
+            "bot-session",
+            vec!["archive", "--id", id, "--archived", "true"],
+        ),
+        ("unknown-session", vec!["search", "--keyword", "Go"]),
     ] {
-        let output = f.cli(Some(session), action, input, false).await;
+        let output = f.cli(Some(session), &args).await;
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("forbidden"));
     }
     let invalid = f
         .cli(
             Some("bot-session"),
-            "search",
-            json!({"keywords":["Go"],"limit":31}),
-            false,
+            &["search", "--keyword", "Go", "--limit", "31"],
         )
         .await;
     assert!(!invalid.status.success());
-    assert!(String::from_utf8_lossy(&invalid.stderr).contains("invalid_request"));
+    assert!(invalid.stdout.is_empty());
 }
 
 #[tokio::test]
@@ -276,18 +323,11 @@ async fn production_entrypoint_denies_unbound_and_caller_supplied_roles() {
             .status(),
         400
     );
-    let absent = f
-        .cli(None, "search", json!({"keywords":["secret"]}), false)
-        .await;
+    let absent = f.cli(None, &["search", "--keyword", "secret"]).await;
     assert!(!absent.status.success());
     assert!(String::from_utf8_lossy(&absent.stderr).contains("PONTIA_SESSION_ID"));
     let unbound = f
-        .cli(
-            Some("bot-session"),
-            "search",
-            json!({"keywords":["secret"]}),
-            false,
-        )
+        .cli(Some("bot-session"), &["search", "--keyword", "secret"])
         .await;
     assert!(!unbound.status.success());
     assert!(String::from_utf8_lossy(&unbound.stderr).contains("forbidden"));

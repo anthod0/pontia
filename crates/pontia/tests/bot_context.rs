@@ -6,9 +6,8 @@ use pontia_http::{HttpState, router};
 use serde_json::{Value, json};
 use std::{
     future::Future,
-    io::Write,
     pin::Pin,
-    process::{Command, Output, Stdio},
+    process::{Command, Output},
     sync::Arc,
 };
 
@@ -87,34 +86,26 @@ impl Fixture {
             server,
         }
     }
-    async fn cli(&self, session: &str, args: &[&str], input: Value) -> Output {
+    async fn cli(&self, session: &str, args: &[&str]) -> Output {
         let root = self.root.path().to_path_buf();
         let session = session.to_owned();
         let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
         tokio::task::spawn_blocking(move || {
-            let mut child = Command::new(env!("CARGO_BIN_EXE_pontia"))
+            Command::new(env!("CARGO_BIN_EXE_pontia"))
                 .arg("bot")
                 .args(args)
                 .env("PONTIA_HOME", root)
                 .env("PONTIA_SESSION_ID", session)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap();
-            child
-                .stdin
-                .take()
+                .output()
                 .unwrap()
-                .write_all(&serde_json::to_vec(&input).unwrap())
-                .unwrap();
-            child.wait_with_output().unwrap()
         })
         .await
         .unwrap()
     }
-    async fn call(&self, args: &[&str], input: Value) -> Value {
-        let output = self.cli("bot", args, input).await;
+    async fn call(&self, args: &[&str]) -> Value {
+        let mut args = args.to_vec();
+        args.push("--json");
+        let output = self.cli("bot", &args).await;
         assert!(
             output.status.success(),
             "{}",
@@ -142,24 +133,30 @@ impl Drop for Fixture {
 async fn user_cli_updates_shared_file_and_returns_current_text_only_on_rejection() {
     let f = Fixture::new(true).await;
     let result = f
-        .call(
-            &["update-user"],
-            json!({"old_text":"", "new_text":"语言：中文\n"}),
-        )
+        .call(&[
+            "update-user",
+            "--old-text",
+            "",
+            "--new-text",
+            "语言：中文\n",
+        ])
         .await;
     assert_eq!(result, json!({"updated":true}));
-    f.call(
-        &["update-user"],
-        json!({"old_text":"中文", "new_text":"英文"}),
-    )
-    .await;
+    let plain = f
+        .cli(
+            "bot",
+            &["update-user", "--old-text", "中文", "--new-text", "英文"],
+        )
+        .await;
+    assert!(plain.status.success());
+    assert!(!plain.stdout.is_empty());
+    assert!(serde_json::from_slice::<Value>(&plain.stdout).is_err());
     let path = f.root.path().join("bot/USER.md");
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "语言：英文\n");
     let failed = f
         .cli(
             "bot",
-            &["update-user"],
-            json!({"old_text":"中文", "new_text":"法文"}),
+            &["update-user", "--old-text", "中文", "--new-text", "法文"],
         )
         .await;
     assert!(!failed.status.success());
@@ -169,8 +166,7 @@ async fn user_cli_updates_shared_file_and_returns_current_text_only_on_rejection
         assert!(
             !f.cli(
                 session,
-                &["update-user"],
-                json!({"old_text":"", "new_text":"bad"})
+                &["update-user", "--old-text", "", "--new-text", "bad"]
             )
             .await
             .status
@@ -184,26 +180,40 @@ async fn user_cli_updates_shared_file_and_returns_current_text_only_on_rejection
 async fn workspace_tools_reuse_canonical_identity_and_persist_descriptions_for_control_queries() {
     let f = Fixture::new(true).await;
     let first = f
-        .call(
-            &["workspace", "register"],
-            json!({"root_id":"projects", "path":"app", "description":"用户的项目"}),
-        )
+        .call(&[
+            "workspace",
+            "register",
+            "--root-id",
+            "projects",
+            "--path",
+            "app",
+            "--description",
+            "用户的项目",
+        ])
         .await;
     let id = first["workspace"]["workspace_id"].as_str().unwrap();
     let again = f
-        .call(
-            &["workspace", "register"],
-            json!({"root_id":"projects", "path":"./alias"}),
-        )
+        .call(&[
+            "workspace",
+            "register",
+            "--root-id",
+            "projects",
+            "--path",
+            "./alias",
+        ])
         .await;
     assert_eq!(again["workspace"]["workspace_id"], id);
     assert_eq!(again["workspace"]["description"], "用户的项目");
     let limit = "文🙂".repeat(1_000);
     let changed = f
-        .call(
-            &["workspace", "describe"],
-            json!({"workspace_id":id, "description":limit}),
-        )
+        .call(&[
+            "workspace",
+            "describe",
+            "--workspace-id",
+            id,
+            "--description",
+            &limit,
+        ])
         .await;
     assert_eq!(changed["workspace"]["workspace_id"], id);
     assert_eq!(changed["workspace"]["description"], limit);
@@ -255,8 +265,14 @@ async fn workspace_tools_reuse_canonical_identity_and_persist_descriptions_for_c
     let failed = f
         .cli(
             "bot",
-            &["workspace", "describe"],
-            json!({"workspace_id":id, "description":"x".repeat(2_001)}),
+            &[
+                "workspace",
+                "describe",
+                "--workspace-id",
+                id,
+                "--description",
+                &"x".repeat(2_001),
+            ],
         )
         .await;
     assert!(!failed.status.success());
@@ -270,11 +286,23 @@ async fn workspace_tools_reuse_canonical_identity_and_persist_descriptions_for_c
             .as_deref(),
         Some(limit.as_str())
     );
-    f.call(
-        &["workspace", "describe"],
-        json!({"workspace_id":id, "description":null}),
-    )
-    .await;
+    let plain = f
+        .cli(
+            "bot",
+            &[
+                "workspace",
+                "describe",
+                "--workspace-id",
+                id,
+                "--clear-description",
+            ],
+        )
+        .await;
+    assert!(plain.status.success());
+    assert!(serde_json::from_slice::<Value>(&plain.stdout).is_err());
+    let text = String::from_utf8(plain.stdout).unwrap();
+    assert!(text.contains(id));
+    assert!(text.contains(&f.root.path().join("projects/app").display().to_string()));
     assert_eq!(
         queries
             .get_workspace(id)
@@ -293,8 +321,14 @@ async fn registration_keeps_directory_scope_and_explicit_activation_boundary() {
         assert!(
             !f.cli(
                 "bot",
-                &["workspace", "register"],
-                json!({"root_id":"projects", "path":path})
+                &[
+                    "workspace",
+                    "register",
+                    "--root-id",
+                    "projects",
+                    "--path",
+                    path
+                ]
             )
             .await
             .status
@@ -307,8 +341,16 @@ async fn registration_keeps_directory_scope_and_explicit_activation_boundary() {
     assert!(
         !f.cli(
             "bot",
-            &["workspace", "register"],
-            json!({"root_id":"projects", "path":"app", "description":"x".repeat(2_001)})
+            &[
+                "workspace",
+                "register",
+                "--root-id",
+                "projects",
+                "--path",
+                "app",
+                "--description",
+                &"x".repeat(2_001)
+            ]
         )
         .await
         .status
@@ -316,10 +358,14 @@ async fn registration_keeps_directory_scope_and_explicit_activation_boundary() {
     );
     assert!(queries.list_workspaces().await.unwrap().is_empty());
     let first = f
-        .call(
-            &["workspace", "register"],
-            json!({"root_id":"projects", "path":"app"}),
-        )
+        .call(&[
+            "workspace",
+            "register",
+            "--root-id",
+            "projects",
+            "--path",
+            "app",
+        ])
         .await;
     let id = first["workspace"]["workspace_id"].as_str().unwrap();
     assert!(
@@ -332,10 +378,14 @@ async fn registration_keeps_directory_scope_and_explicit_activation_boundary() {
         .status()
         .is_success()
     );
-    f.call(
-        &["workspace", "describe"],
-        json!({"workspace_id":id, "description":"保持归档状态"}),
-    )
+    f.call(&[
+        "workspace",
+        "describe",
+        "--workspace-id",
+        id,
+        "--description",
+        "保持归档状态",
+    ])
     .await;
     assert_eq!(
         queries.get_workspace(id).await.unwrap().unwrap().state,
@@ -346,8 +396,14 @@ async fn registration_keeps_directory_scope_and_explicit_activation_boundary() {
         assert!(
             !f.cli(
                 session,
-                &["workspace", "register"],
-                json!({"root_id":"projects", "path":"app"})
+                &[
+                    "workspace",
+                    "register",
+                    "--root-id",
+                    "projects",
+                    "--path",
+                    "app"
+                ]
             )
             .await
             .status
@@ -356,8 +412,14 @@ async fn registration_keeps_directory_scope_and_explicit_activation_boundary() {
         assert!(
             !f.cli(
                 session,
-                &["workspace", "describe"],
-                json!({"workspace_id":id, "description":"bad"})
+                &[
+                    "workspace",
+                    "describe",
+                    "--workspace-id",
+                    id,
+                    "--description",
+                    "bad"
+                ]
             )
             .await
             .status
@@ -369,10 +431,14 @@ async fn registration_keeps_directory_scope_and_explicit_activation_boundary() {
         "deleted"
     );
     let again = f
-        .call(
-            &["workspace", "register"],
-            json!({"root_id":"projects", "path":"alias"}),
-        )
+        .call(&[
+            "workspace",
+            "register",
+            "--root-id",
+            "projects",
+            "--path",
+            "alias",
+        ])
         .await;
     assert_eq!(again["workspace"]["workspace_id"], id);
     assert_eq!(again["workspace"]["state"], "active");
@@ -380,8 +446,14 @@ async fn registration_keeps_directory_scope_and_explicit_activation_boundary() {
     assert!(
         !f.cli(
             "bot",
-            &["workspace", "describe"],
-            json!({"workspace_id":"missing", "description":"bad"})
+            &[
+                "workspace",
+                "describe",
+                "--workspace-id",
+                "missing",
+                "--description",
+                "bad"
+            ]
         )
         .await
         .status

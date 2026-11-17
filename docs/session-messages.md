@@ -29,10 +29,16 @@ Tool details retain the client's timeline previews. For subsequent pages, submit
 
 ## Bot tool
 
-Authorized Bot, retrieval helper, and dreaming Sessions use the same query:
+Authorized Bot, retrieval helper, and dreaming Sessions use named CLI arguments:
 
 ```bash
-printf '%s' '{"session_id":"<target-session-id>","limit":10}' | pontia bot session-messages
+pontia bot session-messages --session-id '<target-session-id>' --limit 10
+pontia bot session-messages --session-id '<target-session-id>' \
+  --turn-id '<turn-id>' --limit 1 --category tool_call --category tool_result
 ```
 
-`PONTIA_SESSION_ID` identifies the caller. `--input <path>` reads a JSON file instead of stdin. Bot tool access remains closed until Bot Session bindings are connected; the authenticated Session query can be used independently.
+`PONTIA_SESSION_ID` identifies the caller; `--session-id` selects the target. Results are plain text by default, retaining message content, Turn IDs and item IDs. When another page exists, the output includes a continuation command that preserves the direction, categories, page size and history source. Follow it even when the current page contains no matching messages.
+
+Add `--json` to get the same result fields as the API. To continue from its `next` object, pass `session_id` as `--session-id`, `turn_id` as `--turn-id`, `direction` as `--direction`, `limit` as `--limit`, each category as a repeated `--category`, and `history_source` as `--history-source` when present. The source is `native` or `file`; retain the returned value on subsequent pages.
+
+Failures exit nonzero and print an error to stderr. Bot tool access remains closed until Bot Session bindings are connected; the authenticated Session query can be used independently.
