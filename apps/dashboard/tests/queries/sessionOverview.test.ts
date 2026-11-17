@@ -238,21 +238,37 @@ test("invalidating the overview refreshes active archived and non-archived queri
   });
 });
 
-test("keeps server order for recent sessions and scopes active sessions to the selected workspace", () => {
+test("excludes pinned sessions from recent sessions while preserving order and workspace scope", () => {
   const inWorkspace = (id: string, workspace_id: string) => ({ ...session(id), workspace_id });
+  const pinnedActive = {
+    ...inWorkspace("pinned-active", "w1"),
+    pinned_at: "2026-01-01T00:00:00Z",
+  };
+  const pinnedExited = {
+    ...inWorkspace("pinned-exited", "w1"),
+    state: "exited" as const,
+    pinned_at: "2026-01-01T00:00:00Z",
+  };
   const snapshot: SessionOverviewSnapshot = {
-    pinned: [],
+    pinned: [pinnedActive, pinnedExited],
     active: [
+      pinnedActive,
       inWorkspace("updated-recently", "w1"),
       inWorkspace("other", "w2"),
       inWorkspace("updated-earlier", "w1"),
     ],
-    list: [inWorkspace("updated-earlier", "w1"), inWorkspace("exited", "w1")],
+    list: [
+      pinnedActive,
+      pinnedExited,
+      inWorkspace("updated-earlier", "w1"),
+      inWorkspace("exited", "w1"),
+    ],
     archived: [],
     nextCursor: null,
   };
 
   expect(recentActiveSessions(snapshot, "w1").map((item) => item.session_id)).toEqual([
+    "pinned-active",
     "updated-recently",
     "updated-earlier",
   ]);
@@ -262,8 +278,15 @@ test("keeps server order for recent sessions and scopes active sessions to the s
     "exited",
   ]);
   expect(recentActiveSessions(snapshot, "").map((item) => item.session_id)).toEqual([
+    "pinned-active",
     "updated-recently",
     "other",
     "updated-earlier",
+  ]);
+  expect(recentSessions(snapshot, "").map((item) => item.session_id)).toEqual([
+    "updated-recently",
+    "other",
+    "updated-earlier",
+    "exited",
   ]);
 });

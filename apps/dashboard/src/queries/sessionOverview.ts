@@ -51,7 +51,10 @@ export function recentSessions(
 ): SessionView[] {
   const active = recentActiveSessions(overview, workspaceId);
   const activeIds = new Set(active.map((session) => session.session_id));
-  return [...active, ...overview.list.filter((session) => !activeIds.has(session.session_id))];
+  return [
+    ...active,
+    ...overview.list.filter((session) => !activeIds.has(session.session_id)),
+  ].filter((session) => !session.pinned_at);
 }
 
 export function createSessionOverview(device: DeviceRuntime) {
