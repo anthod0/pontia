@@ -76,6 +76,33 @@ describe("LiveOutputPublisher", () => {
     });
   });
 
+  test("consumed user input splits assistant text at its position", async () => {
+    vi.useFakeTimers();
+    const bodies: any[] = [];
+    const request = vi.fn(async (_method: string, body: any) => {
+      bodies.push(body);
+      return accepted(
+        body.type === "append" ? body.first_sequence + body.updates.length - 1 : body.sequence,
+      );
+    });
+    const publisher = new LiveOutputPublisher(context, {
+      connection: { request },
+      streamId: "stream_1",
+    });
+
+    publisher.appendText("before");
+    publisher.appendUserInput("   ");
+    publisher.appendUserInput("change direction");
+    publisher.appendText("after");
+    await vi.advanceTimersByTimeAsync(75);
+
+    expect(bodies[0].items).toEqual([
+      { kind: "assistant_text", item_id: "text_1", text: "before" },
+      { kind: "user_input", item_id: "input_2", text: "change direction" },
+      { kind: "assistant_text", item_id: "text_3", text: "after" },
+    ]);
+  });
+
   test("maps supported Pi tools before reporting live output", async () => {
     vi.useFakeTimers();
     const bodies: any[] = [];

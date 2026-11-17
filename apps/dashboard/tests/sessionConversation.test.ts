@@ -240,7 +240,7 @@ test("conversation shows duration for an earlier completed Turn", () => {
   expect(completedDuration.querySelector("time")).toHaveAttribute("datetime", "PT90S");
 });
 
-test("conversation updates the running Turn duration while output is streaming", async () => {
+test("conversation updates the running Turn duration in the Turn footer while output is streaming", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-06-11T00:02:00Z"));
   const runningMessages = messages.map((message) => ({
@@ -248,19 +248,6 @@ test("conversation updates the running Turn duration while output is streaming",
     turnId: "turn-running",
     createdAt: "2026-06-11T00:00:00Z",
     status: message.role === "assistant" ? ("pending" as const) : message.status,
-    thoughtSteps:
-      message.role === "assistant"
-        ? [
-            {
-              id: "running-thought",
-              kind: "thinking" as const,
-              title: "Thinking",
-              status: "started" as const,
-              content: "Inspecting the repo.",
-              occurredAt: null,
-            },
-          ]
-        : undefined,
   }));
 
   const { rerender } = render(SessionConversation, {
@@ -281,14 +268,11 @@ test("conversation updates the running Turn duration while output is streaming",
 
   const timer = screen.getByRole("timer", { name: "Turn running time" });
   expect(timer.querySelector("time")).toHaveAttribute("datetime", "PT120S");
+  expect(timer.closest("[data-chat-turn-footer]")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /copy assistant reply/i })).not.toBeInTheDocument();
 
   await vi.advanceTimersByTimeAsync(2000);
-
   expect(timer.querySelector("time")).toHaveAttribute("datetime", "PT122S");
-  const trigger = screen.getByRole("button", { name: "Show agent work steps" });
-  expect(trigger).toHaveAttribute("aria-expanded", "false");
-  expect(trigger).toContainElement(timer);
-  expect(screen.getAllByRole("timer")).toHaveLength(1);
 
   await rerender({
     messages: runningMessages.map((message) => ({ ...message, status: "sent" as const })),
@@ -306,33 +290,80 @@ test("conversation updates the running Turn duration while output is streaming",
   const duration = screen.getByRole("status", { name: "Turn completed duration" });
   expect(duration.querySelector("time")).toHaveAttribute("datetime", "PT123S");
   expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /copy assistant reply/i })).toBeInTheDocument();
+  vi.useRealTimers();
 });
-
-test("conversation groups assistant-side items after each user message", () => {
+test("conversation renders a steered Turn in consumption order with one footer", () => {
+  const turnId = "turn-steered";
+  const at = (seconds: number) => `2026-06-11T00:00:${String(seconds).padStart(2, "0")}Z`;
   render(SessionConversation, {
     props: {
-      sessionState: "busy",
+      sessionState: "idle",
+      turns: [durationTurn({ turn_id: turnId })],
       messages: [
-        ...messages,
+        { id: "u1", turnId, role: "user", content: "Start.", status: "sent", createdAt: at(0) },
         {
-          id: "message-3",
-          role: "user",
-          content: "Keep going.",
+          id: "a1",
+          turnId,
+          role: "assistant",
+          content: "First update.",
           status: "sent",
+          createdAt: at(1),
+        },
+        {
+          id: "c1:working",
+          turnId,
+          role: "assistant",
+          content: "",
+          status: "sent",
+          createdAt: at(2),
+          thoughtSteps: [
+            {
+              id: "c1",
+              kind: "tool_call",
+              title: "edit",
+              status: null,
+              content: "a.ts",
+              occurredAt: at(2),
+            },
+          ],
+        },
+        {
+          id: "u2",
+          turnId,
+          role: "user",
+          content: "Use six days.",
+          status: "sent",
+          createdAt: at(3),
+        },
+        {
+          id: "a2",
+          turnId,
+          role: "assistant",
+          content: "Recorded.",
+          status: "sent",
+          createdAt: at(4),
         },
       ],
     },
   });
 
-  const assistantGroups = document.querySelectorAll("[data-chat-assistant-group]");
-  expect(assistantGroups).toHaveLength(2);
-  expect(assistantGroups[0]).toContainElement(
-    document.querySelector('[data-chat-message-id="message-2"]'),
+  const turn = document.querySelector(`[data-chat-turn-id="${turnId}"]`) as HTMLElement;
+  const order = [...turn.querySelectorAll<HTMLElement>("[data-chat-message-id]")].map(
+    (element) => element.dataset.chatMessageId,
   );
-  expect(assistantGroups[1]).toContainElement(document.querySelector("[data-chat-agent-status]"));
+  expect(order).toEqual(["u1", "a1", "c1:working", "u2", "a2"]);
+  expect(screen.getByText("First update.")).toBeVisible();
+  expect(turn.querySelectorAll("[data-chat-turn-footer]")).toHaveLength(1);
+  expect(
+    screen
+      .getByText("Recorded.")
+      .compareDocumentPosition(turn.querySelector("[data-chat-turn-footer]") as Node) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(screen.getAllByRole("button", { name: /copy assistant reply/i })).toHaveLength(1);
 });
-
-test("conversation shows the current agent status above only the latest assistant reply", () => {
+test("conversation shows the running timer only on the latest Turn", () => {
   render(SessionConversation, {
     props: {
       sessionState: "busy",
@@ -354,13 +385,8 @@ test("conversation shows the current agent status above only the latest assistan
     },
   });
 
-  const timer = screen.getByRole("timer", { name: "Turn running time" });
-  const latestAssistantMessage = screen
-    .getByText("I checked it.")
-    .closest("[data-chat-message-id]");
-  expect(latestAssistantMessage).toContainElement(timer);
+  expect(screen.getAllByRole("timer", { name: "Turn running time" })).toHaveLength(1);
 });
-
 test("conversation hides the agent status component while the session is idle", () => {
   render(SessionConversation, { props: { sessionState: "idle", messages } });
 
@@ -543,7 +569,7 @@ test("conversation does not scroll the document to the bottom when refreshing wh
   expect(scrollTo).not.toHaveBeenCalled();
 });
 
-test("conversation shows agent status for a busy pending assistant message with thought steps", () => {
+test("conversation names the current step of busy work without assistant text", () => {
   render(SessionConversation, {
     props: {
       sessionState: "busy",
@@ -580,15 +606,9 @@ test("conversation shows agent status for a busy pending assistant message with 
   });
 
   expect(screen.getAllByRole("timer", { name: "Turn running time" })).toHaveLength(1);
-  expect(screen.queryByLabelText("Thinking in progress")).not.toBeInTheDocument();
-  expect(screen.getByText("bash")).toBeInTheDocument();
-  expect(screen.getByText("read")).toBeInTheDocument();
-  expect(
-    screen.queryByText("Waiting for the agent to report its next output."),
-  ).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Show agent work steps" })).toHaveTextContent("read");
   expect(screen.queryByText("Working…")).not.toBeInTheDocument();
 });
-
 test("conversation keeps active Turn work collapsed when a queued user message follows it", () => {
   render(SessionConversation, {
     props: {
@@ -597,10 +617,10 @@ test("conversation keeps active Turn work collapsed when a queued user message f
       messages: [
         ...messages,
         {
-          id: "turn-live:assistant",
+          id: "turn-live:working",
           turnId: "turn-live",
           role: "assistant",
-          content: "Streaming response",
+          content: "",
           status: "pending",
           createdAt: "2026-06-11T00:00:00Z",
           thoughtSteps: [
@@ -628,10 +648,10 @@ test("conversation keeps active Turn work collapsed when a queued user message f
 
   const trigger = screen.getByRole("button", { name: "Show agent work steps" });
   expect(trigger).toHaveAttribute("aria-expanded", "false");
-  expect(trigger).toContainElement(screen.getAllByRole("timer", { name: "Turn running time" })[0]);
+  const timer = screen.getByRole("timer", { name: "Turn running time" });
+  expect(timer.closest("[data-chat-turn-id]")).toHaveAttribute("data-chat-turn-id", "turn-live");
   expect(screen.getByText("Inspecting the active turn.")).not.toBeVisible();
 });
-
 test("conversation shows agent working only once after an interrupted pending thought summary", () => {
   render(SessionConversation, {
     props: {

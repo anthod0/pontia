@@ -48,6 +48,10 @@ pub(crate) async fn publish(
             item_id: format!("text:{}", field(event, "item_id")?),
             delta: field(event, "delta")?.into(),
         }],
+        Some("input") => vec![LiveOutputUpdate::UserInput {
+            item_id: format!("input:{}", field(event, "item_id")?),
+            text: field(event, "text")?.into(),
+        }],
         Some("tool") => vec![LiveOutputUpdate::ToolCall {
             item_id: format!("tool:{}", field(event, "call_id")?),
             call_id: field(event, "call_id")?.into(),

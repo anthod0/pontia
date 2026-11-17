@@ -109,6 +109,16 @@ async fn advertised_steering_joins_current_turn_and_after_idle_waits() {
     }
     assert_eq!(h.requests("_session/steering"), 2);
     assert_eq!(h.requests("session/prompt"), 1);
+    let items =
+        serde_json::to_value(h.app.live_output().snapshot(&session, &turn).unwrap().items).unwrap();
+    let inputs: Vec<_> = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["kind"] == "user_input")
+        .map(|item| item["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(inputs, ["end_turn", "end_turn"]);
     assert_eq!(h.events(&session, "turn.started").await, 1);
     assert_eq!(h.events(&session, "turn.completed").await, 0);
     for request in h

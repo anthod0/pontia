@@ -20,6 +20,13 @@ export function assistantTextFromMessage(message: unknown): string | undefined {
   return textFromContent(record.content);
 }
 
+export function userTextFromMessage(message: unknown): string | undefined {
+  if (!message || typeof message !== "object") return undefined;
+  const record = message as Record<string, unknown>;
+  if (record.role !== "user") return undefined;
+  return textFromContent(record.content);
+}
+
 export function thinkingDeltaFromEvent(event: unknown): string | undefined {
   if (!event || typeof event !== "object") return undefined;
   const streamEvent = (event as Record<string, unknown>).assistantMessageEvent;

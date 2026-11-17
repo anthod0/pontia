@@ -11,6 +11,33 @@ use serde_json::Value;
 
 use crate::peer::Prompt;
 
+/// Places steering the agent accepted into the running prompt at its position.
+pub(crate) async fn user_input(
+    output: &LiveOutputService,
+    session: &str,
+    runtime: &str,
+    prompt: &mut Prompt,
+    text: &str,
+) -> Result<()> {
+    let mut publisher = publisher(output, session, runtime, prompt)?;
+    publisher.prompt.thought = None;
+    let item_id = format!("input-{}", publisher.items.len());
+    let item = LiveOutputItem::UserInput {
+        item_id: item_id.clone(),
+        text: text.into(),
+    };
+    if publisher.prompt.sequence == 0 {
+        publisher.snapshot(vec![item]).await
+    } else {
+        publisher
+            .send(LiveOutputUpdate::UserInput {
+                item_id,
+                text: text.into(),
+            })
+            .await
+    }
+}
+
 pub(crate) async fn publish(
     output: &LiveOutputService,
     session: &str,
@@ -18,31 +45,7 @@ pub(crate) async fn publish(
     prompt: &mut Prompt,
     update: &Value,
 ) -> Result<()> {
-    let producer = LiveOutputProducer {
-        identity: LiveOutputIdentity {
-            session_id: session.into(),
-            turn_id: prompt.turn.clone(),
-            stream_id: format!("{runtime}:{}", prompt.turn),
-        },
-        source: LiveOutputSource::RuntimeBound {
-            runtime_id: runtime.into(),
-        },
-    };
-    let items = match output.snapshot(session, &prompt.turn) {
-        Some(snapshot)
-            if snapshot.identity == producer.identity && snapshot.sequence == prompt.sequence =>
-        {
-            snapshot.items
-        }
-        None if prompt.sequence == 0 => Vec::new(),
-        _ => return Err(invalidated()),
-    };
-    let mut publisher = Publisher {
-        output,
-        producer,
-        prompt,
-        items,
-    };
+    let mut publisher = publisher(output, session, runtime, prompt)?;
     if matches!(
         update["sessionUpdate"].as_str(),
         Some("agent_message_chunk" | "tool_call" | "tool_call_update")
@@ -90,6 +93,39 @@ pub(crate) async fn publish(
         _ => {}
     }
     Ok(())
+}
+
+fn publisher<'a>(
+    output: &'a LiveOutputService,
+    session: &str,
+    runtime: &str,
+    prompt: &'a mut Prompt,
+) -> Result<Publisher<'a>> {
+    let producer = LiveOutputProducer {
+        identity: LiveOutputIdentity {
+            session_id: session.into(),
+            turn_id: prompt.turn.clone(),
+            stream_id: format!("{runtime}:{}", prompt.turn),
+        },
+        source: LiveOutputSource::RuntimeBound {
+            runtime_id: runtime.into(),
+        },
+    };
+    let items = match output.snapshot(session, &prompt.turn) {
+        Some(snapshot)
+            if snapshot.identity == producer.identity && snapshot.sequence == prompt.sequence =>
+        {
+            snapshot.items
+        }
+        None if prompt.sequence == 0 => Vec::new(),
+        _ => return Err(invalidated()),
+    };
+    Ok(Publisher {
+        output,
+        producer,
+        prompt,
+        items,
+    })
 }
 
 struct Publisher<'a> {

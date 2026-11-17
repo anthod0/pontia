@@ -445,6 +445,14 @@ fn apply_update(items: &mut Vec<LiveOutputItem>, update: LiveOutputUpdate) -> Re
                 });
             }
         }
+        LiveOutputUpdate::UserInput { item_id, text } => {
+            if items.iter().any(|item| item.item_id() == item_id) {
+                return Err(Error::StateConflict(format!(
+                    "live output item_id {item_id} already exists"
+                )));
+            }
+            items.push(LiveOutputItem::UserInput { item_id, text });
+        }
         LiveOutputUpdate::ToolCall {
             item_id,
             call_id,

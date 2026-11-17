@@ -3088,12 +3088,18 @@ test("renders ordered live output over the active Turn transcript while preservi
   await waitFor(() => expect(screen.getByText("Hello")).toBeInTheDocument());
   expect(screen.getByText("hello")).toBeInTheDocument();
   expect(screen.getByText("Done")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /show agent work steps/i })).toHaveAttribute(
-    "aria-expanded",
-    "false",
-  );
+  const [readWork, commandWork] = screen.getAllByRole("button", { name: /show agent work steps/i });
+  expect(readWork).toHaveAttribute("aria-expanded", "false");
+  // Output stays in stream order: text, read, text, then the running command.
+  expect(
+    screen.getByText("Hello").compareDocumentPosition(readWork) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    readWork.compareDocumentPosition(screen.getByText("Done")) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(commandWork).toHaveTextContent("Run command");
   const user = userEvent.setup();
-  await user.click(screen.getByRole("button", { name: /show agent work steps/i }));
+  await user.click(readWork);
   await user.click(screen.getByRole("button", { name: "Show Read 1 file details" }));
   expect(screen.getByText("README.md")).toBeVisible();
   expect(screen.queryByText("transcript partial")).not.toBeInTheDocument();

@@ -33,6 +33,7 @@ export interface LiveToolResult {
 export type LiveOutputItem =
   | { kind: "assistant_text"; item_id: string; text: string }
   | { kind: "reasoning"; item_id: string; text: string; truncated: boolean }
+  | { kind: "user_input"; item_id: string; text: string }
   | {
       kind: "tool_call";
       item_id: string;
@@ -52,6 +53,7 @@ export type LiveOutputUpdate =
   | { type: "tool_output_updated"; call_id: string; text: string; truncated: boolean }
   | { type: "assistant_text_delta"; item_id: string; delta: string }
   | { type: "reasoning_delta"; item_id: string; delta: string; truncated: boolean }
+  | { type: "user_input"; item_id: string; text: string }
   | {
       type: "tool_call";
       item_id: string;
@@ -70,6 +72,7 @@ export interface CompleteToolCall {
 export interface LiveOutputPublisherLike {
   appendText(delta: string): void;
   appendReasoning(delta: string): void;
+  appendUserInput(text: string): void;
   appendToolCall(toolCall: CompleteToolCall): void;
   toolExecution(event: unknown): void;
   close(): Promise<void>;
@@ -125,6 +128,13 @@ export class LiveOutputPublisher implements LiveOutputPublisherLike {
     }
     item.text += delta;
     this.enqueue({ type: "assistant_text_delta", item_id: item.item_id, delta });
+  }
+
+  appendUserInput(text: string): void {
+    if (this.closing || this.disabled || !text.trim() || this.items.length >= 256) return;
+    const item: LiveOutputItem = { kind: "user_input", item_id: this.nextItemId("input"), text };
+    this.items.push(item);
+    this.enqueue({ type: "user_input", item_id: item.item_id, text });
   }
 
   appendReasoning(delta: string): void {

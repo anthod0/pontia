@@ -6,6 +6,7 @@ use pontia_agent_control::{
     LiveOutputUpdate, LiveReasoningBound,
 };
 use pontia_core::Result;
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 
 mod tool_calls;
@@ -145,8 +146,16 @@ impl CodexLiveOutput {
             let mut recovered_items = Vec::new();
             let mut covered_tools = HashSet::new();
             let mut covered_results = HashSet::new();
+            let mut turn_input_seen = false;
             for item in items {
-                if item["type"] == "agentMessage" && !unsafe_text {
+                if item["type"] == "userMessage" {
+                    // The first user message is the Turn input; later ones were steering.
+                    if std::mem::replace(&mut turn_input_seen, true)
+                        && let Some((item_id, text)) = user_input(item)
+                    {
+                        recovered_items.push(LiveOutputItem::UserInput { item_id, text });
+                    }
+                } else if item["type"] == "agentMessage" && !unsafe_text {
                     recovered_items.push(LiveOutputItem::AssistantText {
                         item_id: string(item, "id")?.into(),
                         text: item["text"]
@@ -258,7 +267,7 @@ impl CodexLiveOutput {
                 .filter_map(|item| match item {
                     LiveOutputItem::AssistantText { item_id, .. }
                     | LiveOutputItem::Reasoning { item_id, .. } => Some(item_id.clone()),
-                    LiveOutputItem::ToolCall { .. } => None,
+                    LiveOutputItem::UserInput { .. } | LiveOutputItem::ToolCall { .. } => None,
                 })
                 .collect();
             self.output
@@ -374,6 +383,47 @@ impl CodexLiveOutput {
         Ok(())
     }
 
+    /// A user message after the native Turn's input is steering consumed by the running Turn.
+    pub async fn user_message(
+        &mut self,
+        service: &CodexService,
+        runtime: &CodexRuntime,
+        session: &str,
+        notification: &Notification,
+    ) -> Result<()> {
+        let params = &notification["params"];
+        let item = &params["item"];
+        let Some((item_id, text)) = user_input(item) else {
+            return Ok(());
+        };
+        let native = string(params, "turnId")?;
+        let connection = runtime.connection().await?;
+        let Some(turns) = service
+            .turns(&connection, string(params, "threadId")?)
+            .await?
+        else {
+            return Ok(());
+        };
+        // Without a known first input, this message may itself be the Turn input.
+        let turn_input = turns
+            .iter()
+            .find(|turn| turn["id"] == native)
+            .and_then(|turn| turn["items"].as_array())
+            .and_then(|items| items.iter().find(|other| other["type"] == "userMessage"))
+            .map(|first| &first["id"]);
+        if turn_input.is_none_or(|first| first == &item["id"]) {
+            return Ok(());
+        }
+        self.publish(
+            service,
+            runtime,
+            session,
+            notification,
+            LiveOutputUpdate::UserInput { item_id, text },
+        )
+        .await
+    }
+
     pub async fn tool_output(
         &mut self,
         service: &CodexService,
@@ -469,6 +519,13 @@ impl CodexLiveOutput {
             let Some(snapshot) = self.output.snapshot(session, &turn_id) else {
                 return Ok(());
             };
+            if let LiveOutputUpdate::UserInput { item_id, .. } = &update
+                && snapshot.items.iter().any(|item| {
+                    matches!(item, LiveOutputItem::UserInput { item_id: existing, .. } if existing == item_id)
+                })
+            {
+                return Ok(());
+            }
             // ToolCall adds an immutable call, never updates its result or status.
             // The same native ID is used by snapshots, starts, completions and replays.
             if let LiveOutputUpdate::ToolCall { call_id, .. } = &update
@@ -615,6 +672,20 @@ impl CodexLiveOutput {
             source: LiveOutputSource::SharedBackend,
         }))
     }
+}
+
+fn user_input(item: &Value) -> Option<(String, String)> {
+    let id = item["id"]
+        .as_str()
+        .filter(|id| !is_history_item_id(Some(id)))?;
+    let text = item["content"]
+        .as_array()?
+        .iter()
+        .filter(|part| part["type"] == "text")
+        .filter_map(|part| part["text"].as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    (!text.trim().is_empty()).then(|| (format!("input:{id}"), text))
 }
 
 /// One live item per summary part. The numeric suffix keeps IDs distinct across

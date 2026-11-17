@@ -140,12 +140,6 @@ test("completed work expands inline from its summary heading", async () => {
       steps: [
         step({ id: "thought-1", content: "Inspecting the project." }),
         step({
-          id: "assistant-1",
-          kind: "assistant",
-          title: "Assistant update",
-          content: "I found the **relevant** component.",
-        }),
-        step({
           id: "thought-2",
           kind: "tool_call",
           title: "Read file",
@@ -159,6 +153,7 @@ test("completed work expands inline from its summary heading", async () => {
   });
 
   const trigger = screen.getByRole("button", { name: "Show agent work steps" });
+  expect(trigger).toHaveTextContent("4 steps");
   expect(screen.getByText("Inspecting the project.")).not.toBeVisible();
 
   await user.click(trigger);
@@ -169,7 +164,6 @@ test("completed work expands inline from its summary heading", async () => {
   );
   expect(screen.getByLabelText("Thinking")).toBeInTheDocument();
   expect(screen.getByText("Inspecting the project.")).toBeInTheDocument();
-  expect(screen.getByText("relevant")).toBeVisible();
   expect(screen.getByText("Read 1 file")).toBeInTheDocument();
   expect(screen.getByText("AGENTS.md")).not.toBeVisible();
   expect(screen.getByText("Custom tool")).toBeInTheDocument();
@@ -415,4 +409,22 @@ test("multi-file calls reveal all changes and keep execution output through upda
   expect(screen.getByText("-before +after")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Hide Change 3 files details" }));
   await waitFor(() => expect(screen.getByText("permission denied")).not.toBeVisible());
+});
+
+test("active work names its latest step and completed work counts its steps", async () => {
+  const steps = [
+    step({ id: "thinking" }),
+    step({
+      id: "bash",
+      kind: "tool_call",
+      title: "Run command",
+      content: "pnpm test",
+      managedToolUse: { tool_name: "bash", input: { type: "bash", command: "pnpm test" } },
+    }),
+  ];
+  const { rerender } = render(ThoughtSummary, { props: { steps, active: true } });
+  const trigger = screen.getByRole("button", { name: "Show agent work steps" });
+  expect(trigger).toHaveTextContent("Run command");
+  await rerender({ steps, active: false });
+  expect(trigger).toHaveTextContent("2 steps");
 });

@@ -45,6 +45,9 @@ pub(crate) async fn send(
     );
     let key = serde_json::to_string(request.id())?;
     let result_peer = peer.clone();
+    let output = events.live_output();
+    let session = target.session_id.clone();
+    let runtime = peer.runtime.clone();
     let input = input.to_owned();
     let turn = turn.to_owned();
     let (send, receive) = oneshot::channel();
@@ -75,6 +78,17 @@ pub(crate) async fn send(
                     )),
                 }
             });
+            if result.is_ok()
+                && let Some(output) = &output
+            {
+                let prompt = state.active.as_mut().expect("checked active prompt");
+                // Live presentation is best effort; the injected input is already confirmed.
+                if let Err(error) =
+                    crate::live_output::user_input(output, &session, &runtime, prompt, &input).await
+                {
+                    tracing::warn!(%session, %error, "ACP live steering input rejected");
+                }
+            }
             if matches!(result, Err(Error::ControlUnknown(_))) {
                 result_peer.invalidate(&mut state);
             }

@@ -440,7 +440,11 @@ impl CodexObserver {
                                 let _current = runtime.current_guard().await?;
                                 self.service.turn_fact(&session, &turn, "notification").await?;
                             }
-                            if let Err(error) = observation.output.tool_call(&self.service, &runtime, &session, &event).await {
+                            if event["params"]["item"]["type"] == "userMessage" {
+                                if let Err(error) = observation.output.user_message(&self.service, &runtime, &session, &event).await {
+                                    tracing::warn!(%session, %error, "Codex live user input rejected");
+                                }
+                            } else if let Err(error) = observation.output.tool_call(&self.service, &runtime, &session, &event).await {
                                 tracing::warn!(%session, %error, "Codex live output tool call rejected");
                             }
                         }

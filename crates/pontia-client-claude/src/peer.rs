@@ -169,7 +169,7 @@ impl Peer {
                     _ => return Err(invalid()),
                 };
             }
-            Some(kind @ ("started" | "finished" | "text" | "tool" | "tool_result")) => {
+            Some(kind @ ("started" | "finished" | "text" | "input" | "tool" | "tool_result")) => {
                 if state.closed {
                     return Err(invalid());
                 }

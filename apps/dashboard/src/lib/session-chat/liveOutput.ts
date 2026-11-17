@@ -24,6 +24,7 @@ export interface LiveToolResult {
 export type LiveOutputItem =
   | { kind: "assistant_text"; item_id: string; text: string }
   | { kind: "reasoning"; item_id: string; text: string; truncated?: boolean }
+  | { kind: "user_input"; item_id: string; text: string }
   | {
       kind: "tool_call";
       item_id: string;
@@ -43,6 +44,7 @@ export type LiveOutputUpdate =
   | { type: "tool_output_updated"; call_id: string; text: string; truncated: boolean }
   | { type: "assistant_text_delta"; item_id: string; delta: string }
   | { type: "reasoning_delta"; item_id: string; delta: string; truncated?: boolean }
+  | { type: "user_input"; item_id: string; text: string }
   | {
       type: "tool_call";
       item_id: string;
@@ -171,11 +173,12 @@ export function mergeLiveOutputMessages(
       (overlay.awaitingSnapshot && !overlay.closed && !terminalWithoutHistory)
     )
       continue;
-    const userMessages = transcriptForTurn.filter((message) => message.role === "user");
+    // The overlay places input consumed mid-Turn itself; only the Turn input stays.
+    const turnInput = transcriptForTurn.find((message) => message.role === "user");
     messages = messages.filter(
-      (message) => message.turnId !== overlay.turn_id || message.role === "user",
+      (message) => message.turnId !== overlay.turn_id || message === turnInput,
     );
-    if (!userMessages.length) {
+    if (!turnInput) {
       const input = userPromptForDisplay(turn.input?.summary ?? "").trim();
       if (input) {
         const insertionIndex = messages.findIndex((message) => message.createdAt > turn.created_at);
@@ -206,39 +209,40 @@ export function mergeLiveOutputMessages(
   return messages;
 }
 
+/** One message per output segment, in stream order: activity steps, then assistant text. */
 function liveItemsToMessages(overlay: LiveOutputOverlay): SessionChatMessage[] {
-  if (!overlay.items.length) return [];
-
-  const content = overlay.items
-    .filter(
-      (item): item is Extract<LiveOutputItem, { kind: "assistant_text" }> =>
-        item.kind === "assistant_text",
-    )
-    .map((item) => item.text)
-    .join("\n\n");
-  const thoughtSteps = overlay.items
-    .filter(
-      (item): item is Exclude<LiveOutputItem, { kind: "assistant_text" }> =>
-        item.kind !== "assistant_text",
-    )
-    .map((item) => liveThoughtStep(overlay.stream_id, item));
-
-  return [
-    {
-      id: `live:${overlay.stream_id}:assistant`,
+  const messages: SessionChatMessage[] = [];
+  let steps: SessionChatThoughtStep[] = [];
+  const push = (id: string, role: SessionChatMessage["role"], content: string) =>
+    messages.push({
+      id: `live:${overlay.stream_id}:${id}`,
       turnId: overlay.turn_id,
-      role: "assistant",
+      role,
       content,
-      status: "pending",
+      status: role === "user" ? "sent" : "pending",
       createdAt: "",
-      ...(thoughtSteps.length ? { thoughtSteps } : {}),
-    },
-  ];
+      ...(role === "assistant" && steps.length ? { thoughtSteps: steps } : {}),
+    });
+
+  for (const item of overlay.items) {
+    if (item.kind === "user_input") {
+      if (steps.length) push(`${steps[0]!.id}:working`, "assistant", "");
+      steps = [];
+      push(item.item_id, "user", userPromptForDisplay(item.text));
+    } else if (item.kind === "assistant_text") {
+      push(item.item_id, "assistant", item.text);
+      steps = [];
+    } else {
+      steps.push(liveThoughtStep(overlay.stream_id, item));
+    }
+  }
+  if (steps.length) push(`${steps[0]!.id}:working`, "assistant", "");
+  return messages;
 }
 
 function liveThoughtStep(
   streamId: string,
-  item: Exclude<LiveOutputItem, { kind: "assistant_text" }>,
+  item: Extract<LiveOutputItem, { kind: "reasoning" | "tool_call" }>,
 ): SessionChatThoughtStep {
   const id = `live:${streamId}:${item.item_id}`;
   if (item.kind === "reasoning")
@@ -302,6 +306,11 @@ function applyUpdate(items: LiveOutputItem[], update: LiveOutputUpdate): boolean
     }
     return !existing || existing.kind === "assistant_text";
   }
+  if (update.type === "user_input") {
+    if (items.some((item) => item.item_id === update.item_id)) return false;
+    items.push({ kind: "user_input", item_id: update.item_id, text: update.text });
+    return true;
+  }
   if (update.type === "tool_call") {
     if (
       items.some(
@@ -344,7 +353,7 @@ function applyUpdate(items: LiveOutputItem[], update: LiveOutputUpdate): boolean
 }
 
 function cloneItem(item: LiveOutputItem): LiveOutputItem {
-  return item.kind === "assistant_text" || item.kind === "reasoning"
+  return item.kind !== "tool_call"
     ? { ...item }
     : {
         ...item,

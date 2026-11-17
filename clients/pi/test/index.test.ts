@@ -147,6 +147,7 @@ function install(
     makeLiveOutputPublisher: vi.fn((): LiveOutputPublisherLike => ({
       appendText: vi.fn(),
       appendReasoning: vi.fn(),
+      appendUserInput: vi.fn(),
       appendToolCall: vi.fn(),
       toolExecution: vi.fn(),
       close: vi.fn(async () => undefined),
@@ -1871,6 +1872,7 @@ describe("pontia pi extension lifecycle", () => {
       makeLiveOutputPublisher: vi.fn(() => ({
         appendText,
         appendReasoning,
+        appendUserInput: vi.fn(),
         appendToolCall,
         toolExecution: vi.fn(),
         close,
@@ -1914,6 +1916,52 @@ describe("pontia pi extension lifecycle", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  test("publishes user messages consumed after the run input at their position", async () => {
+    const appendUserInput = vi.fn();
+    const { handlers } = await installBound({
+      makeLiveOutputPublisher: vi.fn(() => ({
+        appendText: vi.fn(),
+        appendReasoning: vi.fn(),
+        appendUserInput,
+        appendToolCall: vi.fn(),
+        toolExecution: vi.fn(),
+        close: vi.fn(async () => undefined),
+      })),
+    });
+
+    await handlers.before_agent_start({ messageType: "user", prompt: "start" }, {});
+    await handlers.agent_start({}, { sessionManager: { getLeafId: () => "leaf_1" } });
+    await handlers.message_start({ message: { role: "user", content: "start" } }, {});
+    await handlers.message_start({ message: { role: "assistant", content: [] } }, {});
+    await handlers.message_start(
+      { message: { role: "user", content: [{ type: "text", text: "change direction" }] } },
+      {},
+    );
+    await handlers.agent_end({ messages: [] }, {});
+
+    expect(appendUserInput.mock.calls).toEqual([["change direction"]]);
+  });
+
+  test("a continued run publishes its first consumed user message", async () => {
+    const appendUserInput = vi.fn();
+    const { handlers } = await installBound({
+      makeLiveOutputPublisher: vi.fn(() => ({
+        appendText: vi.fn(),
+        appendReasoning: vi.fn(),
+        appendUserInput,
+        appendToolCall: vi.fn(),
+        toolExecution: vi.fn(),
+        close: vi.fn(async () => undefined),
+      })),
+    });
+
+    await handlers.agent_start({}, { sessionManager: { getLeafId: () => "leaf_1" } });
+    await handlers.message_start({ message: { role: "user", content: "queued steer" } }, {});
+    await handlers.agent_end({ messages: [] }, {});
+
+    expect(appendUserInput.mock.calls).toEqual([["queued steer"]]);
+  });
+
   test("publishes thinking deltas as reasoning without adding them to the turn output", async () => {
     const appendText = vi.fn();
     const appendReasoning = vi.fn();
@@ -1921,6 +1969,7 @@ describe("pontia pi extension lifecycle", () => {
       makeLiveOutputPublisher: vi.fn(() => ({
         appendText,
         appendReasoning,
+        appendUserInput: vi.fn(),
         appendToolCall: vi.fn(),
         toolExecution: vi.fn(),
         close: vi.fn(async () => undefined),
@@ -2042,6 +2091,7 @@ describe("pontia pi extension lifecycle", () => {
         makeLiveOutputPublisher: () => ({
           appendText,
           appendReasoning: vi.fn(),
+          appendUserInput: vi.fn(),
           appendToolCall: vi.fn(),
           toolExecution: vi.fn(),
           close: vi.fn(async () => undefined),

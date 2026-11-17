@@ -151,6 +151,74 @@ fn item_summary(item: &LiveOutputItem) -> String {
     match item {
         LiveOutputItem::AssistantText { text, .. } => format!("text:{text}"),
         LiveOutputItem::Reasoning { text, .. } => format!("reasoning:{text}"),
+        LiveOutputItem::UserInput { text, .. } => format!("input:{text}"),
         LiveOutputItem::ToolCall { call_id, .. } => format!("tool:{call_id}"),
     }
+}
+
+#[tokio::test]
+async fn consumed_steering_streams_at_its_position_once_and_survives_recovery() {
+    let fixture = Fixture::new(turn(json!([])), Vec::new()).await;
+    fixture.wait_snapshot(|_| true).await;
+    let steer = json!({"type":"userMessage","id":"steer","content":[{"type":"text","text":"change direction"}]});
+    fixture
+        .notify(delta("thread", "native-turn", "a1", json!("before")))
+        .await;
+    fixture.server_state.turns.lock().await[0]["items"]
+        .as_array_mut()
+        .unwrap()
+        .push(steer.clone());
+    for method in ["item/started", "item/completed"] {
+        fixture
+            .notify(json!({"method":method,"params":{"threadId":"thread","turnId":"native-turn","item":steer}}))
+            .await;
+    }
+    fixture
+        .notify(delta("thread", "native-turn", "a2", json!("after")))
+        .await;
+    let snapshot = fixture
+        .wait_snapshot(|s| s.items.last() == Some(&text("a2", "after")))
+        .await;
+    let ids: Vec<_> = snapshot.items.iter().map(item_summary).collect();
+    assert_eq!(
+        ids,
+        vec!["text:before", "input:change direction", "text:after"]
+    );
+
+    // The Turn's own input never becomes a live item.
+    let first =
+        json!({"type":"userMessage","id":"user-item","content":[{"type":"text","text":"hello"}]});
+    fixture
+        .notify(json!({"method":"item/completed","params":{"threadId":"thread","turnId":"native-turn","item":first}}))
+        .await;
+    fixture
+        .notify(delta("thread", "native-turn", "a2", json!("!")))
+        .await;
+    let snapshot = fixture
+        .wait_snapshot(|s| s.items.last() == Some(&text("a2", "after!")))
+        .await;
+    assert_eq!(
+        snapshot.items.iter().map(item_summary).collect::<Vec<_>>(),
+        vec!["text:before", "input:change direction", "text:after!"]
+    );
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn native_recovery_restores_steering_after_the_turn_input() {
+    let fixture = Fixture::new(
+        turn(json!([
+            {"type":"agentMessage","id":"a1","text":"before"},
+            {"type":"userMessage","id":"steer","content":[{"type":"text","text":"change direction"}]},
+            {"type":"agentMessage","id":"a2","text":"after"}
+        ])),
+        Vec::new(),
+    )
+    .await;
+    let snapshot = fixture.wait_snapshot(|s| s.items.len() == 3).await;
+    assert_eq!(
+        snapshot.items.iter().map(item_summary).collect::<Vec<_>>(),
+        vec!["text:before", "input:change direction", "text:after"]
+    );
+    fixture.shutdown().await;
 }

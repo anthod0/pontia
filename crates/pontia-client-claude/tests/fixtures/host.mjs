@@ -112,6 +112,12 @@ if (process.argv[2] === "history") {
           message: { role: "assistant", content: [{ type: "text", text: request.text }] },
         });
         event({
+          kind: "input",
+          input_id: active.id,
+          item_id: request.input_id,
+          text: request.text,
+        });
+        event({
           kind: "text",
           input_id: active.id,
           item_id: request.input_id,

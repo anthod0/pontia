@@ -122,7 +122,7 @@ export class Host {
       priority: "now",
     });
     this.usedInputs.add(id);
-    this.current.steer(id);
+    this.current.steer(id, text);
   }
 
   private validateInput(id: string, text: string): void {

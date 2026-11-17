@@ -25,7 +25,7 @@ export type SessionChatExecutionStatus =
 
 export interface SessionChatThoughtStep {
   id: string;
-  kind: "assistant" | "thinking" | "tool_call" | "tool_result";
+  kind: "thinking" | "tool_call" | "tool_result";
   title: string;
   status: string | null;
   content: string;
@@ -120,65 +120,32 @@ export function turnsToChatMessages(
     });
 }
 
+/**
+ * Projects native timeline items into chat messages in native order. Within a Turn,
+ * each assistant message is one segment: the activity steps that preceded a piece of
+ * assistant text, followed by that text. User input consumed mid-Turn splits segments.
+ */
 export function timelineItemsToChatMessages(
   items: TimelineItem[],
   preserveTurnOrder = false,
   translate: Translator = defaultTranslate,
 ): SessionChatMessage[] {
   const messages: SessionChatMessage[] = [];
-  let pendingTurnId: string | null = null;
-  let pendingAssistantItems: TimelineItem[] = [];
-  let pendingThoughtSteps: SessionChatThoughtStep[] = [];
+  let segmentTurnId: string | null = null;
+  let pendingSteps: SessionChatThoughtStep[] = [];
 
-  const movePendingAssistantToThoughts = () => {
-    for (const item of pendingAssistantItems) {
-      pendingThoughtSteps.push({
-        id: item.item_id,
-        kind: "assistant",
-        title: translate("chat.assistantUpdate"),
-        status: item.status,
-        content: item.content_preview?.trim() || translate("chat.noDetails"),
-        occurredAt: item.occurred_at,
-      });
-    }
-    pendingAssistantItems = [];
-  };
-
-  const flushPendingTurn = () => {
-    if (!pendingAssistantItems.length && !pendingThoughtSteps.length) return;
-    const turnId =
-      pendingTurnId ?? pendingAssistantItems[0]?.item_id ?? pendingThoughtSteps[0]?.id ?? "pending";
-    const finalAssistant = pendingAssistantItems.at(-1);
-
-    if (finalAssistant) {
-      const finalContent = pendingAssistantItems
-        .map((item) => item.content_preview?.trim())
-        .filter(Boolean)
-        .join("\n\n");
-      messages.push({
-        id: finalAssistant.item_id,
-        turnId,
-        role: "assistant",
-        content: finalContent || translate("chat.noAssistantOutput"),
-        status: finalAssistant.status === "error" ? "failed" : "sent",
-        createdAt: finalAssistant.occurred_at ?? "",
-        ...(pendingThoughtSteps.length ? { thoughtSteps: pendingThoughtSteps } : {}),
-      });
-    } else {
-      messages.push({
-        id: `${pendingThoughtSteps[0].id}:working`,
-        turnId,
-        role: "assistant",
-        content: "",
-        status: pendingThoughtSteps.some((step) => step.status === "error") ? "failed" : "pending",
-        createdAt: pendingThoughtSteps[0]?.occurredAt ?? "",
-        thoughtSteps: pendingThoughtSteps,
-      });
-    }
-
-    pendingTurnId = null;
-    pendingAssistantItems = [];
-    pendingThoughtSteps = [];
+  const flushSteps = () => {
+    if (!pendingSteps.length) return;
+    messages.push({
+      id: `${pendingSteps[0].id}:working`,
+      turnId: segmentTurnId ?? pendingSteps[0].id,
+      role: "assistant",
+      content: "",
+      status: pendingSteps.some((step) => step.status === "error") ? "failed" : "pending",
+      createdAt: pendingSteps[0].occurredAt ?? "",
+      thoughtSteps: pendingSteps,
+    });
+    pendingSteps = [];
   };
 
   const orderedItems = preserveTurnOrder
@@ -186,13 +153,13 @@ export function timelineItemsToChatMessages(
     : items.slice().sort((a, b) => timelineTimestamp(a).localeCompare(timelineTimestamp(b)));
   for (const item of orderedItems) {
     if (item.kind === "context_compaction") {
-      flushPendingTurn();
+      flushSteps();
       continue;
     }
-    if (pendingTurnId && item.turn_id && item.turn_id !== pendingTurnId) flushPendingTurn();
+    if (segmentTurnId && item.turn_id && item.turn_id !== segmentTurnId) flushSteps();
 
     if (item.kind === "user") {
-      flushPendingTurn();
+      flushSteps();
       const content = userPromptForDisplay(item.content_preview ?? "");
       messages.push({
         id: item.item_id,
@@ -202,54 +169,59 @@ export function timelineItemsToChatMessages(
         status: item.status === "error" ? "failed" : "sent",
         createdAt: item.occurred_at ?? "",
       });
+      segmentTurnId = null;
       continue;
     }
 
-    if (item.kind === "assistant" || isThoughtStepKind(item.kind)) {
-      pendingTurnId ??= item.turn_id ?? item.item_id;
-    }
+    if (item.kind !== "assistant" && !isThoughtStepKind(item.kind)) continue;
+    if (!pendingSteps.length) segmentTurnId = item.turn_id ?? segmentTurnId ?? item.item_id;
 
     if (item.kind === "assistant") {
-      movePendingAssistantToThoughts();
-      pendingAssistantItems = [item];
+      messages.push({
+        id: item.item_id,
+        turnId: segmentTurnId ?? item.item_id,
+        role: "assistant",
+        content: item.content_preview?.trim() || translate("chat.noAssistantOutput"),
+        status: item.status === "error" ? "failed" : "sent",
+        createdAt: item.occurred_at ?? "",
+        ...(pendingSteps.length ? { thoughtSteps: pendingSteps } : {}),
+      });
+      pendingSteps = [];
       continue;
     }
 
-    if (isThoughtStepKind(item.kind)) {
-      movePendingAssistantToThoughts();
-      const content = item.content_preview?.trim() || translate("chat.noDetails");
-      if (item.kind === "tool_result" && item.call_id) {
-        const toolCall = pendingThoughtSteps.findLast(
-          (step) => step.kind === "tool_call" && step.callId === item.call_id && !step.result,
-        );
-        if (toolCall) {
-          toolCall.result = {
-            content,
-            status: item.status,
-            occurredAt: item.occurred_at,
-          };
-          continue;
-        }
+    const content = item.content_preview?.trim() || translate("chat.noDetails");
+    if (item.kind === "tool_result" && item.call_id) {
+      const toolCall = pendingSteps.findLast(
+        (step) => step.kind === "tool_call" && step.callId === item.call_id && !step.result,
+      );
+      if (toolCall) {
+        toolCall.result = {
+          content,
+          status: item.status,
+          occurredAt: item.occurred_at,
+        };
+        continue;
       }
-
-      const managedToolUse =
-        item.kind === "tool_call" ? (item.managed_tool_use ?? undefined) : undefined;
-      pendingThoughtSteps.push({
-        id: item.item_id,
-        kind: item.kind,
-        title: managedToolUse
-          ? managedToolUseTitle(managedToolUse, translate)
-          : item.title?.trim() || defaultThoughtStepTitle(item.kind, translate),
-        status: item.status ?? (item.kind === "tool_call" ? "started" : null),
-        content: managedToolUse ? managedToolUseContent(managedToolUse) : content,
-        occurredAt: item.occurred_at,
-        ...(item.call_id ? { callId: item.call_id } : {}),
-        ...(managedToolUse ? { managedToolUse } : {}),
-      });
     }
+
+    const managedToolUse =
+      item.kind === "tool_call" ? (item.managed_tool_use ?? undefined) : undefined;
+    pendingSteps.push({
+      id: item.item_id,
+      kind: item.kind,
+      title: managedToolUse
+        ? managedToolUseTitle(managedToolUse, translate)
+        : item.title?.trim() || defaultThoughtStepTitle(item.kind, translate),
+      status: item.status ?? (item.kind === "tool_call" ? "started" : null),
+      content: managedToolUse ? managedToolUseContent(managedToolUse) : content,
+      occurredAt: item.occurred_at,
+      ...(item.call_id ? { callId: item.call_id } : {}),
+      ...(managedToolUse ? { managedToolUse } : {}),
+    });
   }
 
-  flushPendingTurn();
+  flushSteps();
 
   return messages;
 }
@@ -266,14 +238,12 @@ export function canSendSessionMessage(
   );
 }
 
-function isThoughtStepKind(
-  kind: string,
-): kind is Exclude<SessionChatThoughtStep["kind"], "assistant"> {
+function isThoughtStepKind(kind: string): kind is SessionChatThoughtStep["kind"] {
   return kind === "thinking" || kind === "tool_call" || kind === "tool_result";
 }
 
 function defaultThoughtStepTitle(
-  kind: Exclude<SessionChatThoughtStep["kind"], "assistant">,
+  kind: SessionChatThoughtStep["kind"],
   translate: Translator,
 ): string {
   if (kind === "thinking") return translate("chat.thinking");

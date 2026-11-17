@@ -1307,6 +1307,32 @@ async fn steering_uses_the_active_turn_while_after_idle_waits() {
     assert_ne!(steering["input_id"], original["input_id"]);
     assert_eq!(steering["text"], "correction");
     assert_eq!(wire.iter().filter(|v| v["method"] == "input").count(), 1);
+    let mut items = Vec::new();
+    for _ in 0..200 {
+        items = h
+            .app
+            .live_output()
+            .snapshot(&session, &turns[0].0)
+            .map_or_else(Vec::new, |snapshot| {
+                serde_json::to_value(snapshot.items)
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .clone()
+            });
+        if items.len() >= 3 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item["kind"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["assistant_text", "user_input", "assistant_text"]
+    );
+    assert_eq!(items[1]["text"], "correction");
     assert_eq!(h.turns(&session).await, turns);
     h.gate(&session, 1, "finish");
     h.wait_states(&session, &["completed"]).await;

@@ -64,6 +64,10 @@ pub(super) fn validate_update(update: &LiveOutputUpdate) -> Result<()> {
                 return Err(Error::Domain("assistant text delta is too large".into()));
             }
         }
+        LiveOutputUpdate::UserInput { item_id, text } => {
+            validate_non_empty("item_id", item_id)?;
+            validate_user_input(text)?;
+        }
         LiveOutputUpdate::ReasoningDelta { item_id, delta, .. } => {
             validate_non_empty("item_id", item_id)?;
             if delta.is_empty() {
@@ -110,6 +114,12 @@ pub(super) fn validate_items(items: &[LiveOutputItem]) -> Result<()> {
             )));
         }
         match item {
+            LiveOutputItem::UserInput { text, .. } => {
+                validate_user_input(text)?;
+                total_text_bytes = total_text_bytes
+                    .checked_add(text.len())
+                    .ok_or_else(|| Error::Domain("live output text size overflow".into()))?;
+            }
             LiveOutputItem::AssistantText { text, .. } => {
                 total_text_bytes = total_text_bytes
                     .checked_add(text.len())
@@ -168,6 +178,16 @@ pub(super) fn validate_items(items: &[LiveOutputItem]) -> Result<()> {
         return Err(Error::Domain(format!(
             "live output tool arguments exceed {MAX_TOTAL_TOOL_BYTES} bytes"
         )));
+    }
+    Ok(())
+}
+
+fn validate_user_input(text: &str) -> Result<()> {
+    if text.trim().is_empty() {
+        return Err(Error::Domain("user input must not be empty".into()));
+    }
+    if text.len() > MAX_TOTAL_TEXT_BYTES {
+        return Err(Error::Domain("user input is too large".into()));
     }
     Ok(())
 }

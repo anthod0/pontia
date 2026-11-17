@@ -211,3 +211,70 @@ fn text_deltas_cannot_reuse_tool_item_identity() {
     assert_eq!(snapshot.sequence, 1);
     assert_eq!(snapshot.items, items);
 }
+
+#[test]
+fn user_input_keeps_its_consumption_position_and_rejects_duplicates() {
+    let store = LiveOutputStore::default();
+    store
+        .replace_snapshot(LiveOutputSnapshotReplacement {
+            producer: producer(),
+            sequence: 1,
+            items: vec![LiveOutputItem::AssistantText {
+                item_id: "text_1".into(),
+                text: "before".into(),
+            }],
+        })
+        .unwrap();
+    store
+        .publish_batch(LiveOutputBatch {
+            producer: producer(),
+            first_sequence: 2,
+            updates: vec![
+                LiveOutputUpdate::UserInput {
+                    item_id: "input_1".into(),
+                    text: "change direction".into(),
+                },
+                LiveOutputUpdate::AssistantTextDelta {
+                    item_id: "text_2".into(),
+                    delta: "after".into(),
+                },
+            ],
+        })
+        .unwrap();
+    assert_eq!(
+        store.snapshot("sess_1", "turn_1").unwrap().items,
+        vec![
+            LiveOutputItem::AssistantText {
+                item_id: "text_1".into(),
+                text: "before".into(),
+            },
+            LiveOutputItem::UserInput {
+                item_id: "input_1".into(),
+                text: "change direction".into(),
+            },
+            LiveOutputItem::AssistantText {
+                item_id: "text_2".into(),
+                text: "after".into(),
+            },
+        ]
+    );
+
+    let duplicate = store.publish_batch(LiveOutputBatch {
+        producer: producer(),
+        first_sequence: 4,
+        updates: vec![LiveOutputUpdate::UserInput {
+            item_id: "input_1".into(),
+            text: "again".into(),
+        }],
+    });
+    assert!(duplicate.is_err());
+    let blank = store.publish_batch(LiveOutputBatch {
+        producer: producer(),
+        first_sequence: 4,
+        updates: vec![LiveOutputUpdate::UserInput {
+            item_id: "input_2".into(),
+            text: "  ".into(),
+        }],
+    });
+    assert!(blank.is_err());
+}

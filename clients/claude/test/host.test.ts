@@ -502,6 +502,15 @@ for (const combined of [false, true]) {
     assert.ok(
       events.some((e) => e.kind === "text" && e.input_id === first && e.delta === "redirected"),
     );
+    const consumed = events.findIndex((e) => e.kind === "input");
+    assert.deepEqual(events[consumed], {
+      kind: "input",
+      input_id: first,
+      item_id: second,
+      text: "change direction",
+    });
+    assert.equal(events.filter((e) => e.kind === "input").length, 1);
+    assert.ok(consumed < events.findIndex((e) => e.kind === "text" && e.delta === "redirected"));
     host.submit(native, "next task");
     assert.equal((await fixture.next()).value.uuid, native);
   });

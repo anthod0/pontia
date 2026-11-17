@@ -2,11 +2,9 @@
   import { t } from '$lib/i18n';
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import LightbulbIcon from 'phosphor-svelte/lib/LightbulbIcon'
-  import * as Message from '$lib/components/ai-elements/message/index.js'
+  import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon'
   import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import { cn } from '$lib/utils.js'
-  import TurnDuration from './TurnDuration.svelte'
-  import type { TurnView } from '../../../api/types'
   import ThoughtCommandStep from './ThoughtCommandStep.svelte'
   import ThoughtExecution from './ThoughtExecution.svelte'
   import ThoughtFallbackStep from './ThoughtFallbackStep.svelte'
@@ -17,8 +15,6 @@
   interface Props {
     steps: SessionChatThoughtStep[]
     active?: boolean
-    turn?: TurnView
-    sessionId?: string
     class?: string
   }
 
@@ -35,10 +31,11 @@
 
   type DisplayStep = SessionChatThoughtStep | GroupedFileSteps
 
-  let { steps, active = false, turn, sessionId, class: className }: Props = $props()
+  let { steps, active = false, class: className }: Props = $props()
   let open = $state(false)
 
   const visibleSteps = $derived(groupFileSteps(steps))
+  const latestStep = $derived(steps.at(-1))
 
   function groupFileSteps(source: SessionChatThoughtStep[]): DisplayStep[] {
     const grouped: DisplayStep[] = []
@@ -83,28 +80,33 @@
   }
 
   function hasConnectorAfter(index: number): boolean {
-    return index < visibleSteps.length - 1 && visibleSteps[index + 1]?.kind !== 'assistant'
+    return index < visibleSteps.length - 1
+  }
+
+  function stepTitle(step: SessionChatThoughtStep): string {
+    return step.managedToolUse ? managedToolUseTitle(step.managedToolUse, $t) : step.title
   }
 </script>
 
 {#if visibleSteps.length}
-  <Collapsible.Root bind:open class={cn('not-prose min-w-0', className)}>
+  <Collapsible.Root bind:open class={cn('not-prose min-w-0', className)} data-chat-activity>
     <Collapsible.Trigger
-      class="group inline-flex min-w-0 items-center gap-1.5 py-2.5 pr-3 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      class="group inline-flex min-w-0 max-w-full items-center gap-1.5 py-1 pr-3 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={open ? $t('chat.hideSteps') : $t('chat.showSteps')}
     >
-      <span class="truncate"><TurnDuration {turn} {active} /></span>
+      {#if active && latestStep}
+        <SpinnerGapIcon class="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+        <span class="truncate">{stepTitle(latestStep)}</span>
+      {:else}
+        <span class="truncate">{$t('chat.activitySteps', { count: steps.length })}</span>
+      {/if}
       <CaretRightIcon class={cn('size-4 shrink-0 transition-transform', open && 'rotate-90')} aria-hidden="true" />
     </Collapsible.Trigger>
 
     <Collapsible.Content class="pb-2 pt-1">
       <div class="space-y-1">
         {#each visibleSteps as step, index (step.id)}
-          {#if step.kind === 'assistant'}
-            <div class="py-3">
-              <Message.Response content={step.content} markdown streamId={step.id} {sessionId} />
-            </div>
-          {:else if step.kind === 'tool_call' && step.managedToolUse?.input.type === 'bash'}
+          {#if step.kind === 'tool_call' && step.managedToolUse?.input.type === 'bash'}
             <ThoughtCommandStep title={step.managedToolUse ? managedToolUseTitle(step.managedToolUse, $t) : step.title} command={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)}>
               {#if step.executionStatus}
                 <ThoughtExecution {step} />
@@ -155,14 +157,7 @@
             </div>
           {/if}
         {/each}
-        {#if !visibleSteps.length}
-          <p class="py-2 text-sm text-muted-foreground">{$t('chat.working')}</p>
-        {/if}
       </div>
     </Collapsible.Content>
   </Collapsible.Root>
-{:else if active || turn?.state === 'completed'}
-  <div class={cn('not-prose py-2.5 text-sm leading-5 text-muted-foreground', className)}>
-    <TurnDuration {turn} {active} />
-  </div>
 {/if}

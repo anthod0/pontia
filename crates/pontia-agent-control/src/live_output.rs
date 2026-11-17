@@ -27,6 +27,11 @@ pub enum LiveOutputItem {
         #[serde(default)]
         truncated: bool,
     },
+    /// User input the agent consumed while the Turn was running, such as steering.
+    UserInput {
+        item_id: String,
+        text: String,
+    },
     ToolCall {
         item_id: String,
         call_id: String,
@@ -48,6 +53,7 @@ impl LiveOutputItem {
         match self {
             Self::AssistantText { item_id, .. }
             | Self::Reasoning { item_id, .. }
+            | Self::UserInput { item_id, .. }
             | Self::ToolCall { item_id, .. } => item_id,
         }
     }
@@ -85,6 +91,10 @@ pub enum LiveOutputUpdate {
         delta: String,
         #[serde(default)]
         truncated: bool,
+    },
+    UserInput {
+        item_id: String,
+        text: String,
     },
     ToolCall {
         item_id: String,

@@ -34,6 +34,7 @@ import {
   errorMessageFromAgentEnd,
   lastAssistantTextFromMessages,
   thinkingDeltaFromEvent,
+  userTextFromMessage,
 } from "./pi-message.js";
 import { loadProfileSystemPrompt } from "./profile.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
@@ -84,6 +85,8 @@ interface ActiveTurnState {
   liveOutput: LiveOutputPublisherLike;
   output: string;
   ended: boolean;
+  // A prompted run's first user message is the Turn input; later ones were consumed mid-run.
+  awaitingPromptMessage: boolean;
 }
 
 function leafIdFromHookContext(ctx: unknown): string | null {
@@ -827,6 +830,7 @@ export function createPontiaPiExtension(
         clientType: "pi",
         ...(submission ?? { input: pendingPrompt }),
       };
+      const prompted = turnContext.input !== undefined;
 
       pendingPrompt = undefined;
       const reporter = makeReporter(logFile);
@@ -854,6 +858,7 @@ export function createPontiaPiExtension(
         liveOutput: makeLiveOutputPublisher(activeContext),
         output: "",
         ended: false,
+        awaitingPromptMessage: prompted,
       };
     } catch (error) {
       if (!boundSessionContext) await closeControlSocket();
@@ -867,6 +872,18 @@ export function createPontiaPiExtension(
         details: error instanceof Error ? error.message : String(error),
       });
     }
+  });
+
+  pi.on("message_start", (event) => {
+    if (!activeTurn || activeTurn.ended) return;
+    const message = asRecord((event as unknown as Record<string, unknown>)?.message);
+    if (message?.role !== "user") return;
+    if (activeTurn.awaitingPromptMessage) {
+      activeTurn.awaitingPromptMessage = false;
+      return;
+    }
+    const text = userTextFromMessage(message);
+    if (text) activeTurn.liveOutput.appendUserInput(text);
   });
 
   pi.on("message_update", async (event, ctx) => {

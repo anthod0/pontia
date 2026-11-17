@@ -335,7 +335,7 @@ test("merges tool results into their calls by call id", () => {
   ]);
 });
 
-test("keeps intermediate assistant output distinct from thinking in the final Turn response", () => {
+test("keeps each intermediate assistant output after the activity that preceded it", () => {
   const messages = timelineItemsToChatMessages([
     timelineItem({
       item_id: "1",
@@ -397,17 +397,19 @@ test("keeps intermediate assistant output distinct from thinking in the final Tu
     }),
   ]);
 
-  expect(messages.map((message) => [message.role, message.content])).toEqual([
-    ["user", "Build it"],
-    ["assistant", "Final answer"],
+  expect(
+    messages.map((message) => [
+      message.role,
+      message.content,
+      message.thoughtSteps?.map((step) => step.id) ?? [],
+    ]),
+  ).toEqual([
+    ["user", "Build it", []],
+    ["assistant", "Intermediate update", ["2"]],
+    ["assistant", "Almost done", ["4", "5"]],
+    ["assistant", "Final answer", []],
   ]);
-  expect(messages[1].thoughtSteps?.map((step) => [step.id, step.kind, step.content])).toEqual([
-    ["2", "thinking", "Planning"],
-    ["3", "assistant", "Intermediate update"],
-    ["4", "tool_call", "run tests"],
-    ["5", "tool_result", "passed"],
-    ["6", "assistant", "Almost done"],
-  ]);
+  expect(messages.every((message) => message.turnId === "turn-1")).toBe(true);
 });
 
 test("keeps managed tool use data and formats display content from structured inputs", () => {
@@ -435,6 +437,56 @@ test("keeps managed tool use data and formats display content from structured in
       input: { type: "read", path: "src/app.ts", start_line: 5 },
     },
   });
+});
+
+test("places steering inside its Turn between the output segments around it", () => {
+  const messages = timelineItemsToChatMessages(
+    [
+      timelineItem({
+        item_id: "u1",
+        kind: "user",
+        role: "user",
+        turn_id: "t",
+        content_preview: "Start",
+      }),
+      timelineItem({
+        item_id: "a1",
+        kind: "assistant",
+        role: "assistant",
+        turn_id: "t",
+        content_preview: "Working",
+      }),
+      timelineItem({
+        item_id: "c1",
+        kind: "tool_call",
+        role: "tool",
+        turn_id: "t",
+        content_preview: "edit",
+      }),
+      timelineItem({
+        item_id: "u2",
+        kind: "user",
+        role: "user",
+        turn_id: "t",
+        content_preview: "Use six days",
+      }),
+      timelineItem({
+        item_id: "a2",
+        kind: "assistant",
+        role: "assistant",
+        turn_id: "t",
+        content_preview: "Updated",
+      }),
+    ],
+    true,
+  );
+  expect(messages.map((message) => [message.id, message.role, message.turnId])).toEqual([
+    ["u1", "user", "t"],
+    ["a1", "assistant", "t"],
+    ["c1:working", "assistant", "t"],
+    ["u2", "user", "t"],
+    ["a2", "assistant", "t"],
+  ]);
 });
 
 test("creates a pending assistant placeholder message for live thought steps before final output", () => {

@@ -5,6 +5,7 @@ export type HostEvent =
   | { kind: "model"; model: string }
   | { kind: "started"; input_id: string }
   | { kind: "text"; input_id: string; item_id: string; delta: string }
+  | { kind: "input"; input_id: string; item_id: string; text: string }
   | { kind: "tool"; input_id: string; call_id: string; name: string; arguments: unknown }
   | { kind: "tool_result"; input_id: string; call_id: string; failed: boolean; content: unknown }
   | {
@@ -82,6 +83,8 @@ export class InputFacts {
   finished = false;
   private inputs: Set<string>;
   private pending: Set<string>;
+  // Steering text until a native frame proves which reply consumed it.
+  private unconsumed = new Map<string, string>();
   private ownsReplies = false;
   private streamMessage?: string;
   private streamed = new Set<string>();
@@ -98,9 +101,21 @@ export class InputFacts {
     this.pending = new Set([id]);
   }
 
-  steer(id: string): void {
+  steer(id: string, text: string): void {
     this.inputs.add(id);
     this.pending.add(id);
+    this.unconsumed.set(id, text);
+  }
+
+  private consumed(message: Pick<SDKResultMessage, "user_message_uuid" | "user_message_uuids">) {
+    const ids =
+      message.user_message_uuids ?? (message.user_message_uuid ? [message.user_message_uuid] : []);
+    for (const id of ids) {
+      const text = this.unconsumed.get(id);
+      if (text === undefined) continue;
+      this.unconsumed.delete(id);
+      this.emit({ kind: "input", input_id: this.id, item_id: id, text });
+    }
   }
 
   accept(message: SDKMessage): void {
@@ -115,6 +130,7 @@ export class InputFacts {
       }
       if (this.finished) return;
       if (!this.started) throw new FactError("result_without_start", message);
+      this.consumed(message);
       const terminal = outcome(message);
       if (!terminal) throw new FactError("unsupported_result", message);
       const ids = message.user_message_uuids ?? [message.user_message_uuid!];
@@ -141,6 +157,7 @@ export class InputFacts {
           this.started = true;
           this.emit({ kind: "started", input_id: this.id });
         }
+        this.consumed(message);
       }
       if (!this.ownsReplies) return;
       if (message.type === "stream_event") {

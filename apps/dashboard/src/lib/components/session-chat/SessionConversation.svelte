@@ -15,6 +15,7 @@
   import AgentBottomStatus from './AgentBottomStatus.svelte'
   import AgentStatus from './AgentStatus.svelte'
   import ThoughtSummary from './ThoughtSummary.svelte'
+  import TurnDuration from './TurnDuration.svelte'
   import CompactionCheckpoint from './CompactionCheckpoint.svelte'
   import MessageTime from './MessageTime.svelte'
   import SharedFileCard from '../../../components/chat/SharedFileCard.svelte'
@@ -64,11 +65,16 @@
   let editedInput = $state('')
   let copiedMessageResetTimer: ReturnType<typeof setTimeout> | null = null
   const displayMessages = $derived(messages)
-  const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState, activeTurnId, timelineItems, compactionBusy))
+  const displayItems = $derived(conversationDisplayItems(displayMessages, timelineItems, compactionBusy))
   const displayTurns = $derived(conversationDisplayTurns(displayItems))
   const sharedFilesByTurn = $derived(groupFilesByTurn(sharedFiles))
   const turnsById = $derived(new Map(turns.map((turn) => [turn.turn_id, turn])))
-  const activeLoadingMessageId = $derived(activePendingAssistantMessageId(displayMessages, activeTurnId))
+  const busy = $derived(sessionState === 'busy')
+  const showBottomStatus = $derived(sessionState === 'starting' || sessionState === 'exited' || sessionState === 'interrupted')
+  // The Turn whose footer shows live progress: the active Turn, else the latest one.
+  const progressTurnId = $derived(
+    displayTurns.find((turn) => turn.turnId !== null && turn.turnId === activeTurnId)?.id ?? displayTurns.at(-1)?.id ?? null,
+  )
   const branchActionMessageIdSet = $derived(new Set(Object.keys(branchActionInputs)))
   let topHistoryLoadInFlight = false
   let topHistorySentinelVisible = $state(false)
@@ -88,18 +94,10 @@
     if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
   })
 
-  function activePendingAssistantMessageId(chatMessages: SessionChatMessage[], turnId: string | null): string | null {
-    if (turnId) {
-      return chatMessages.findLast((message) => message.turnId === turnId && message.role === 'assistant' && message.status === 'pending')?.id ?? null
-    }
-    const message = chatMessages.at(-1)
-    return message?.role === 'assistant' && message.status === 'pending' ? message.id : null
-  }
-
-  async function copyMessage(message: SessionChatMessage): Promise<void> {
-    const copied = await copyText(message.content)
+  async function copyMessage(id: string, content: string): Promise<void> {
+    const copied = await copyText(content)
     if (!copied) return
-    copiedMessageId = message.id
+    copiedMessageId = id
     if (copiedMessageResetTimer) clearTimeout(copiedMessageResetTimer)
     copiedMessageResetTimer = setTimeout(() => {
       copiedMessageId = null
@@ -158,26 +156,11 @@
   }
 
   type ConversationDisplayItem =
-    | { kind: 'message'; id: string; message: SessionChatMessage; showAgentStatus: boolean }
+    | { kind: 'message'; id: string; message: SessionChatMessage }
     | { kind: 'compaction'; id: string; checkpoint: TimelineItem | null }
-    | { kind: 'agent_status'; id: string }
-    | { kind: 'agent_bottom_status'; id: string }
 
-  type ConversationDisplayGroup =
-    | { kind: 'user_message'; id: string; item: Extract<ConversationDisplayItem, { kind: 'message' }> }
-    | { kind: 'compaction'; id: string; item: Extract<ConversationDisplayItem, { kind: 'compaction' }> }
-    | { kind: 'assistant_group'; id: string; items: ConversationDisplayItem[] }
-
-  function conversationDisplayItems(chatMessages: SessionChatMessage[], state: string | null, turnId: string | null, nativeItems: TimelineItem[], compacting: boolean): ConversationDisplayItem[] {
-    const showBottomStatus = state === 'starting' || state === 'exited' || state === 'interrupted'
-    const showStatus = Boolean(state && state !== 'idle' && !showBottomStatus)
-    const latestAssistantId = chatMessages.at(-1)?.role === 'assistant' ? chatMessages.at(-1)?.id : null
-    const items: ConversationDisplayItem[] = chatMessages.map((message) => ({
-      kind: 'message',
-      id: message.id,
-      message,
-      showAgentStatus: showStatus && message.id === latestAssistantId,
-    }))
+  function conversationDisplayItems(chatMessages: SessionChatMessage[], nativeItems: TimelineItem[], compacting: boolean): ConversationDisplayItem[] {
+    const items: ConversationDisplayItem[] = chatMessages.map((message) => ({ kind: 'message', id: message.id, message }))
     const positions = new Map(nativeItems.map((item, index) => [item.item_id, index]))
     for (const [index, checkpoint] of nativeItems.entries()) {
       if (checkpoint.kind !== 'context_compaction') continue
@@ -192,59 +175,37 @@
       items.splice(nextIndex < 0 ? items.length : nextIndex, 0, { kind: 'compaction', id: `compaction:${checkpoint.item_id}`, checkpoint })
     }
     if (compacting) items.push({ kind: 'compaction', id: 'compaction:pending', checkpoint: null })
-    if (showBottomStatus) return [...items, { kind: 'agent_bottom_status', id: `agent-bottom-status:${state}` }]
-    if (!showStatus || latestAssistantId || (state === 'busy' && activePendingAssistantMessageId(chatMessages, turnId))) return items
-    return [...items, { kind: 'agent_status', id: `agent-status:${state}` }]
+    return items
   }
 
   interface ConversationDisplayTurn {
     id: string
     turnId: string | null
     items: ConversationDisplayItem[]
+    reply: string
+    repliedAt: string
   }
 
   function conversationDisplayTurns(items: ConversationDisplayItem[]): ConversationDisplayTurn[] {
     const turns: ConversationDisplayTurn[] = []
     for (const item of items) {
       let turn = turns.at(-1)
-      const itemTurnId = item.kind === 'message' ? item.message.turnId : item.kind === 'compaction' ? item.checkpoint?.turn_id ?? null : turn?.turnId ?? null
+      const itemTurnId = item.kind === 'message' ? item.message.turnId ?? null : item.checkpoint?.turn_id ?? turn?.turnId ?? null
       if (!turn || itemTurnId !== turn.turnId) {
-        turn = { id: item.id, turnId: itemTurnId, items: [] }
+        turn = { id: item.id, turnId: itemTurnId, items: [], reply: '', repliedAt: '' }
         turns.push(turn)
       }
       turn.items.push(item)
+      if (item.kind === 'message' && item.message.role === 'assistant' && item.message.content.trim()) {
+        turn.reply = turn.reply ? `${turn.reply}\n\n${item.message.content}` : item.message.content
+        turn.repliedAt = item.message.createdAt || turn.repliedAt
+      }
     }
     return turns
   }
 
-  function conversationDisplayGroups(items: ConversationDisplayItem[]): ConversationDisplayGroup[] {
-    const groups: ConversationDisplayGroup[] = []
-    let assistantGroup: Extract<ConversationDisplayGroup, { kind: 'assistant_group' }> | null = null
-
-    function flushAssistantGroup(): void {
-      if (!assistantGroup) return
-      groups.push(assistantGroup)
-      assistantGroup = null
-    }
-
-    for (const item of items) {
-      if (item.kind === 'compaction') {
-        flushAssistantGroup()
-        groups.push({ kind: 'compaction', id: item.id, item })
-        continue
-      }
-      if (item.kind === 'message' && item.message.role === 'user') {
-        flushAssistantGroup()
-        groups.push({ kind: 'user_message', id: `user:${item.id}`, item })
-        continue
-      }
-
-      assistantGroup ??= { kind: 'assistant_group', id: `assistant-group:${item.id}`, items: [] }
-      assistantGroup.items.push(item)
-    }
-
-    flushAssistantGroup()
-    return groups
+  function lastMessageId(turn: ConversationDisplayTurn): string | null {
+    return turn.items.findLast((item) => item.kind === 'message')?.id ?? null
   }
 
   function topHistoryPullReady(): boolean {
@@ -330,27 +291,33 @@
   ontouchcancel={resetTopHistoryPull}
 />
 
-{#snippet conversationItem(displayItem: ConversationDisplayItem)}
+{#snippet copyButton(id: string, content: string, label: string, copiedLabel: string)}
+  {@const isCopied = copiedMessageId === id}
+  <Button
+    type="button"
+    variant="ghost"
+    size="icon-sm"
+    aria-label={isCopied ? copiedLabel : label}
+    title={isCopied ? $t('common.copied') : label}
+    onclick={() => copyMessage(id, content)}
+  >
+    {#if isCopied}
+      <CheckIcon class="size-3.5" />
+    {:else}
+      <CopyIcon class="size-3.5" />
+    {/if}
+  </Button>
+{/snippet}
+
+{#snippet conversationItem(displayItem: ConversationDisplayItem, liveSegment: boolean)}
   {#if displayItem.kind === 'compaction'}
     <CompactionCheckpoint item={displayItem.checkpoint} busy={displayItem.checkpoint === null} />
-  {:else if displayItem.kind === 'agent_status'}
-    <Message.Root from="assistant" data-chat-agent-status>
-      <Message.Content>
-        {#if sessionState === 'busy'}
-          <ThoughtSummary steps={[]} active turn={turns.find((turn) => turn.turn_id === activeTurnId) ?? turns.find((turn) => turn.state === 'running')} />
-        {:else}
-          <AgentStatus state={sessionState} />
-        {/if}
-      </Message.Content>
-    </Message.Root>
-  {:else if displayItem.kind === 'agent_bottom_status'}
-    <AgentBottomStatus state={sessionState} />
   {:else}
     {@const chatMessage = displayItem.message}
     {@const uploadParts = chatMessage.role === 'user' ? parseUploadMessage(chatMessage.content) : null}
     <Message.Root
       from={chatMessage.role}
-      class={`${chatMessage.role === 'user' ? `relative ${editingMessageId === chatMessage.id ? 'w-full' : ''}` : ''} scroll-mt-16`}
+      class={`${chatMessage.role === 'user' ? `relative ${editingMessageId === chatMessage.id ? 'w-full' : ''} ${chatMessage.status === 'pending' ? 'opacity-60' : ''}` : ''} scroll-mt-16`}
       data-chat-message-id={chatMessage.id}
       data-chat-turn-id={chatMessage.turnId}
       data-chat-role={chatMessage.role}
@@ -360,21 +327,24 @@
           {#each uploadParts.files as file}<li class="rounded-md border bg-background px-2 py-1 text-xs" title={file.path}>{$t('files.uploadedPrefix')} {file.name}</li>{/each}
         </ul>
       {/if}
-      {#if !uploadParts || uploadParts.text.trim() || editingMessageId === chatMessage.id}
-      <Message.Content class={`${chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''} ${editingMessageId === chatMessage.id ? 'w-full' : ''}`}>
-        {#if displayItem.showAgentStatus && sessionState !== 'busy'}
-          <AgentStatus state={sessionState} />
-        {/if}
-        {#if chatMessage.role === 'assistant'}
-          {@const turn = chatMessage.turnId ? turnsById.get(chatMessage.turnId) : undefined}
-          {@const active = (sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId}
-          {@const firstAssistant = displayMessages.find((message) => message.turnId === chatMessage.turnId && message.role === 'assistant')?.id === chatMessage.id}
-          {#if chatMessage.thoughtSteps?.length || active || (displayItem.showAgentStatus && sessionState === 'busy') || (firstAssistant && turn?.state === 'completed')}
-            <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps ?? []} {sessionId} {turn} active={active || (displayItem.showAgentStatus && sessionState === 'busy')} />
-          {/if}
+      {#if chatMessage.role === 'assistant'}
+        {#if chatMessage.thoughtSteps?.length}
+          <ThoughtSummary steps={chatMessage.thoughtSteps} active={liveSegment && busy && !chatMessage.content.trim()} />
         {/if}
         {#if chatMessage.content.trim()}
-          {#if chatMessage.role === 'user' && editingMessageId === chatMessage.id}
+          <Message.Content class={chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''}>
+            <Message.Response
+              content={chatMessage.content}
+              {sessionId}
+              markdown
+              streaming={chatMessage.status === 'pending'}
+              streamId={chatMessage.id}
+            />
+          </Message.Content>
+        {/if}
+      {:else if !uploadParts || uploadParts.text.trim() || editingMessageId === chatMessage.id}
+        <Message.Content class={`${chatMessage.status === 'failed' ? 'border-destructive/40 text-destructive' : ''} ${editingMessageId === chatMessage.id ? 'w-full' : ''}`}>
+          {#if editingMessageId === chatMessage.id}
             <div class="w-full space-y-3">
               <textarea
                 aria-label={$t('chat.editHistoricalMessage')}
@@ -397,42 +367,12 @@
                 </Button>
               </div>
             </div>
-          {:else if chatMessage.role === 'user'}
-            <Message.Response content={uploadParts?.text ?? ''} markdown={false} />
           {:else}
-            <Message.Response
-              content={chatMessage.content}
-              {sessionId}
-              markdown={chatMessage.role === 'assistant'}
-              streaming={chatMessage.role === 'assistant' && chatMessage.status === 'pending'}
-              streamId={chatMessage.id}
-            />
+            <Message.Response content={uploadParts?.text ?? ''} markdown={false} />
           {/if}
-          {#if chatMessage.role === 'assistant'}
-            {@const isCopied = copiedMessageId === chatMessage.id}
-            <div class="mt-2 flex items-center justify-start text-muted-foreground">
-              {#if chatMessage.createdAt}<MessageTime value={chatMessage.createdAt} />{/if}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={isCopied ? $t('chat.replyCopied') : $t('chat.copyReply')}
-                title={isCopied ? $t('common.copied') : $t('chat.copyReply')}
-                onclick={() => copyMessage(chatMessage)}
-              >
-                {#if isCopied}
-                  <CheckIcon class="size-3.5" />
-                {:else}
-                  <CopyIcon class="size-3.5" />
-                {/if}
-              </Button>
-            </div>
-          {/if}
-        {/if}
-      </Message.Content>
+        </Message.Content>
       {/if}
       {#if chatMessage.role === 'user' && editingMessageId !== chatMessage.id}
-        {@const isCopied = copiedMessageId === chatMessage.id}
         <div
           class="flex items-center justify-end gap-0.5 text-muted-foreground"
           data-user-message-actions
@@ -451,24 +391,31 @@
               <PencilSimpleIcon class="size-3.5" />
             </Button>
           {/if}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={isCopied ? $t('chat.userMessageCopied', { message: chatMessage.content }) : $t('chat.copyUserMessage', { message: chatMessage.content })}
-            title={isCopied ? $t('common.copied') : $t('chat.copyMessage')}
-            onclick={() => copyMessage(chatMessage)}
-          >
-            {#if isCopied}
-              <CheckIcon class="size-3.5" />
-            {:else}
-              <CopyIcon class="size-3.5" />
-            {/if}
-          </Button>
+          {@render copyButton(chatMessage.id, chatMessage.content, $t('chat.copyUserMessage', { message: chatMessage.content }), $t('chat.userMessageCopied', { message: chatMessage.content }))}
         </div>
       {/if}
     </Message.Root>
+  {/if}
+{/snippet}
 
+{#snippet turnFooter(displayTurn: ConversationDisplayTurn, showProgress: boolean)}
+  {@const turn = displayTurn.turnId ? turnsById.get(displayTurn.turnId) : undefined}
+  {@const running = showProgress && busy}
+  {@const showDuration = running || turn?.state === 'completed'}
+  {@const status = showProgress && !busy && !showBottomStatus && sessionState !== 'idle' ? sessionState : null}
+  {#if showDuration || displayTurn.reply || status}
+    <div class="not-prose flex min-w-0 flex-wrap items-center gap-x-1 text-sm text-muted-foreground" data-chat-turn-footer>
+      {#if status}
+        <AgentStatus state={status} class="pt-0" />
+      {/if}
+      {#if showDuration}
+        <span class="px-1 text-xs"><TurnDuration {turn} active={running} /></span>
+      {/if}
+      {#if displayTurn.reply && !running}
+        {#if displayTurn.repliedAt}<MessageTime value={displayTurn.repliedAt} />{/if}
+        {@render copyButton(`reply:${displayTurn.id}`, displayTurn.reply, $t('chat.copyReply'), $t('chat.replyCopied'))}
+      {/if}
+    </div>
   {/if}
 {/snippet}
 
@@ -496,30 +443,28 @@
         </div>
       {/if}
       {#each displayTurns as displayTurn, index (displayTurn.id)}
+        {@const showProgress = displayTurn.id === progressTurnId}
+        {@const liveMessageId = showProgress ? lastMessageId(displayTurn) : null}
         <div
           data-chat-turn={displayTurn.turnId ? '' : undefined}
           data-chat-turn-id={displayTurn.turnId}
-          class="flex min-w-0 flex-col gap-6"
+          class="flex min-w-0 flex-col gap-4"
           class:latest-turn={index === displayTurns.length - 1 && displayTurn.turnId !== null}
         >
-          {#each conversationDisplayGroups(displayTurn.items) as displayGroup (displayGroup.id)}
-            {#if displayGroup.kind === 'user_message' || displayGroup.kind === 'compaction'}
-              {@render conversationItem(displayGroup.item)}
-            {:else}
-              <div class="space-y-3" data-chat-assistant-group>
-                {#each displayGroup.items as displayItem (displayItem.id)}
-                  {@render conversationItem(displayItem)}
-                {/each}
-              </div>
-            {/if}
+          {#each displayTurn.items as displayItem (displayItem.id)}
+            {@render conversationItem(displayItem, displayItem.id === liveMessageId)}
           {/each}
           {#if displayTurn.turnId && sharedFilesByTurn.get(displayTurn.turnId)?.length}
             <ul class="max-w-md space-y-2" aria-label={$t('files.sharedInTurn')} data-chat-turn-files>
               {#each sharedFilesByTurn.get(displayTurn.turnId) ?? [] as file (file.file_id)}<li><SharedFileCard {file} {sessionId} /></li>{/each}
             </ul>
           {/if}
+          {@render turnFooter(displayTurn, showProgress)}
         </div>
       {/each}
+      {#if showBottomStatus}
+        <AgentBottomStatus state={sessionState} />
+      {/if}
     </Conversation.Content>
   {/if}
 </Conversation.Root>
