@@ -126,6 +126,22 @@ test("unavailable OPFS falls back to a complete in-memory download", async () =>
   expect(exported[0].size).toBe(65 * 1024 * 1024);
 });
 
+test("cancelling a temporary-storage download removes partial data without exporting it", async () => {
+  const controller = new AbortController();
+  const saving = saveDownload(
+    response(65 * 1024 * 1024),
+    "cancelled",
+    (progress) => {
+      if (progress.received >= 1024 * 1024) controller.abort();
+    },
+    controller.signal,
+  );
+  await expect(saving).rejects.toMatchObject({ name: "AbortError" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(exported).toHaveLength(0);
+  expect(root.directories.get("pontia-downloads")!.directories.size).toBe(0);
+});
+
 test("page-open cleanup respects retained files and another tab's active download", async () => {
   const directory = await root.getDirectoryHandle("pontia-downloads", { create: true });
   for (const [id, expiry] of [

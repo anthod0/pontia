@@ -9,18 +9,19 @@
   import FileIcon from 'phosphor-svelte/lib/FileIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import { PREVIEW_LIMIT, PREVIEW_TYPES } from "$lib/downloads/preview";
-  import { saveDownload, type DownloadProgress } from '$lib/downloads/save'
+  import { downloads, downloadKey } from '$lib/downloads/manager'
   import { ApiError } from '../../api/errors'
   import type { SharedFile } from '../../api/types'
   const device = useDeviceRuntime();
   const { filePreview } = device.previews;
-  const { sharedFileContent } = device.fileApi;
 
   let { file, sessionId }: { file: SharedFile; sessionId: string } = $props()
   let previewUrl = $state<string | null>(null)
   let enlarged = $state(false)
-  let downloading = $state(false)
-  let progress = $state<DownloadProgress | null>(null)
+  const key = $derived(downloadKey(device.id, sessionId, { kind: 'shared', fileId: file.file_id }))
+  const task = $derived($downloads.find(task => task.key === key))
+  const downloading = $derived(task?.status === 'receiving')
+  const progress = $derived(downloading ? task!.progress : null)
   let error = $state<string | null>(null)
   let destroyed = false
 
@@ -48,18 +49,9 @@
     return { destroy: () => observer.disconnect() }
   }
 
-  async function download() {
-    downloading = true
+  function download() {
     error = null
-    progress = { received: 0, total: null }
-    try {
-      await saveDownload(await sharedFileContent(sessionId, file.file_id), file.name, value => { progress = value })
-    } catch (cause) {
-      showError(cause)
-    } finally {
-      downloading = false
-      progress = null
-    }
+    downloads.start(device.id, sessionId, { kind: 'shared', fileId: file.file_id }, file.name)
   }
 
   function sizeLabel(size: number) {
@@ -86,7 +78,7 @@
         <DownloadSimpleIcon class="size-4" />
       </Button>
     </Card.Content>
-    {#if progress || error}
+    {#if progress || error || task?.error}
       <div class="space-y-1 px-2">
         {#if progress}
           <div class="space-y-1" role="status">
@@ -94,7 +86,7 @@
             <p class="text-xs text-muted-foreground">{sizeLabel(progress.received)}{progress.total !== null ? ` / ${sizeLabel(progress.total)}` : ''}</p>
           </div>
         {/if}
-        {#if error}<p class="text-xs text-destructive" role="alert">{error}</p>{/if}
+        {#if task?.error || error}<p class="text-xs text-destructive" role="alert">{task?.error || error}</p>{/if}
       </div>
     {/if}
   </Card.Root>

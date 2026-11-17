@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import MessageResponse from "../../src/lib/components/ai-elements/message/message-response.svelte";
 import { token } from "../../src/stores/auth";
+import { get } from "svelte/store";
+import { downloads } from "../../src/lib/downloads/manager";
 
 let saved: { name: string; blob: Blob }[];
 let blob: Blob;
@@ -20,6 +22,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const task of get(downloads)) downloads.cancel(task.id);
+  downloads.clearFinished();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   token.set("");
@@ -104,6 +108,35 @@ test("uses indeterminate progress when response size is unknown", async () => {
   expect(progress).not.toHaveAttribute("aria-valuenow");
   stream.close();
   await waitFor(() => expect(saved).toHaveLength(1));
+});
+
+test("continues after leaving the message and restores progress when returning", async () => {
+  let stream!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      stream = controller;
+    },
+  });
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(new Response(body, { headers: { "Content-Length": "10" } }));
+  vi.stubGlobal("fetch", fetch);
+  const view = message("/tmp/report.txt");
+  await fireEvent.click(screen.getByRole("button", { name: "Download report.txt" }));
+  stream.enqueue(new TextEncoder().encode("first"));
+  await waitFor(() => expect(get(downloads)[0].progress.received).toBe(5));
+  view.unmount();
+  expect(fetch.mock.calls[0][1].signal.aborted).toBe(false);
+
+  message("/tmp/report.txt");
+  expect(screen.getByRole("button", { name: "Receiving report.txt" })).toBeDisabled();
+  const progress = await screen.findByRole("progressbar");
+  expect(progress).toHaveAttribute("aria-valuenow", "50");
+  stream.enqueue(new TextEncoder().encode(" last"));
+  stream.close();
+  await waitFor(() => expect(saved).toHaveLength(1));
+  expect(await saved[0].blob.text()).toBe("first last");
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 test("allows retry after a missing file becomes available", async () => {

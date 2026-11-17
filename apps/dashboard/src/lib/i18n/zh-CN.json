@@ -718,5 +718,17 @@
   "inbox.storageUnreadable": "无法读取已保存的待处理输入。请保留浏览器存储，以便恢复。",
   "auth.streamTokenRequired": "请在设置中填写 API 令牌，以连接 Dashboard 实时更新。",
   "devices.signInToContinue": "请登录 Pontia 以继续。",
-  "devices.unreachable": "无法连接 Pontia 以加载设备。"
+  "devices.unreachable": "无法连接 Pontia 以加载设备。",
+  "downloads.title": "下载",
+  "downloads.description": "站内切换不影响下载，请保持此标签页打开。",
+  "downloads.localDevice": "本机",
+  "downloads.activeCount": "{count} 项正在下载",
+  "downloads.noActive": "没有进行中的下载",
+  "downloads.failed": "下载失败",
+  "downloads.cancelled": "已取消",
+  "downloads.clearFinished": "清除已结束",
+  "downloads.empty": "下载的文件会显示在这里",
+  "downloads.cancelNamed": "取消下载 {name}",
+  "downloads.retryNamed": "重新下载 {name}",
+  "downloads.deviceUnavailable": "设备已断开连接，请在设备上线后重试。"
 }

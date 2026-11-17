@@ -94,7 +94,7 @@ export function createDeviceConnections(remote: RemoteAccess) {
       await connection.connect();
       const id = await connection.uploadStorageScope();
       if (connection.signal.aborted) return;
-      const runtime = new DeviceRuntime(id, createApiAccess(connection));
+      const runtime = new DeviceRuntime(id, createApiAccess(connection), entry.name);
       entry.runtime = runtime;
       entry.unsubscribe = runtime.connection.sseStatus.subscribe((status) => {
         if (status !== "open") return;

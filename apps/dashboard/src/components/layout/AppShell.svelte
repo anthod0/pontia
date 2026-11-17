@@ -4,6 +4,7 @@
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import AppSidebar from './AppSidebar.svelte'
   import TopBar from './TopBar.svelte'
+  import DownloadCenter from './DownloadCenter.svelte'
   import ChatShortcuts from '../chat/ChatShortcuts.svelte'
   import ConnectionNotice from './ConnectionNotice.svelte'
   import SettingsShell from '../settings/SettingsShell.svelte'
@@ -58,11 +59,14 @@
     <AppSidebar />
   {/if}
   <Sidebar.Inset class="bg-surface">
-    {#if topbar}
-      {@render topbar()}
-    {:else}
-      <TopBar />
-    {/if}
+    <div class={['sticky z-10 pr-20', !chatPath && 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">
+      {#if topbar}
+        {@render topbar()}
+      {:else}
+        <TopBar />
+      {/if}
+      <div class="absolute inset-y-0 right-3 flex items-center md:right-4"><DownloadCenter /></div>
+    </div>
     <main class={mainClass}>
       <div class={contentClass}>
         {#if settingsPath && settingsEnabled}

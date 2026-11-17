@@ -75,7 +75,7 @@
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
-<header class={['sticky z-10 flex items-center', chatPath ? 'pointer-events-none h-12 px-3 md:px-4' : settingsPath ? 'h-12 bg-surface' : 'h-8 bg-surface px-3 md:px-4']} style="top: var(--visual-viewport-top, 0px)">
+<header class={['flex items-center', chatPath ? 'pointer-events-none h-12 px-3 md:px-4' : settingsPath ? 'h-12 bg-surface' : 'h-8 bg-surface px-3 md:px-4']}>
   {#if settingsPath}
     <!-- Phones switch sections here; wider screens list them in the sidebar and show the current one as the title. -->
     <div class="flex min-w-0 items-center gap-2 px-3 md:hidden">

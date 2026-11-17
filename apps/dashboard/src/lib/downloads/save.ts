@@ -76,6 +76,7 @@ async function receive(
   response: Response,
   onProgress: (progress: DownloadProgress) => void,
   writer?: FileSystemWritableFileStream,
+  signal?: AbortSignal,
 ): Promise<{ blob: Blob; size: number }> {
   const total = responseSize(response);
   if (total !== null && total > MAX_SIZE) throw new Error(translate("files.downloadLimit"));
@@ -83,9 +84,15 @@ async function receive(
   let received = 0;
   onProgress({ received, total });
   const reader = response.body!.getReader();
+  const abort = () => {
+    void reader.cancel(signal?.reason).catch(() => {});
+  };
+  signal?.addEventListener("abort", abort, { once: true });
   try {
     while (true) {
+      signal?.throwIfAborted();
       const { done, value } = await reader.read();
+      signal?.throwIfAborted();
       if (done) break;
       received += value.byteLength;
       if (received > MAX_SIZE) throw new Error(translate("files.downloadLimit"));
@@ -94,6 +101,7 @@ async function receive(
       onProgress({ received, total });
     }
   } finally {
+    signal?.removeEventListener("abort", abort);
     await reader.cancel();
     reader.releaseLock();
   }
@@ -104,6 +112,7 @@ export async function saveDownload(
   response: Response,
   name: string,
   onProgress: (progress: DownloadProgress) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const total = responseSize(response);
   const root = total === null || total > MEMORY_LIMIT ? await downloadRoot() : null;
@@ -123,22 +132,25 @@ export async function saveDownload(
         return false;
       }
       try {
-        const { size } = await receive(response, onProgress, writer);
+        const { size } = await receive(response, onProgress, writer, signal);
         await writer.close();
         const retention = retentionMilliseconds(size);
         const file = await handle.getFile();
+        signal?.throwIfAborted();
         triggerSave(file, name, retention);
         await setExpiry(dir, Date.now() + retention);
         setTimeout(() => void cleanupEntry(root, id).catch(console.error), retention);
         return true;
       } catch (error) {
         await writer.abort().catch(() => {});
+        setTimeout(() => void cleanupEntry(root, id).catch(console.error), 0);
         throw error;
       }
     });
     if (saved) return;
     await cleanupEntry(root, id);
   }
-  const { blob, size } = await receive(response, onProgress);
+  const { blob, size } = await receive(response, onProgress, undefined, signal);
+  signal?.throwIfAborted();
   triggerSave(blob, name, retentionMilliseconds(size));
 }

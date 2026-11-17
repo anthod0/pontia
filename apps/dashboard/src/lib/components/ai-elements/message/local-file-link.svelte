@@ -1,13 +1,12 @@
 <script lang="ts">
-  import { onDestroy, type Snippet } from 'svelte'
+  import { type Snippet } from 'svelte'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon'
   import { Button } from '$lib/components/ui/button/index.js'
-  import { saveDownload, type DownloadProgress } from '$lib/downloads/save'
+  import { downloads, downloadKey } from '$lib/downloads/manager'
   import { t, number } from '$lib/i18n'
   import { useDeviceRuntime } from '../../../../device/context'
-  import { ApiError } from '../../../../api/errors'
 
   let { sessionId, path, title, children }: {
     sessionId: string
@@ -18,19 +17,28 @@
 
   const device = useDeviceRuntime()
   const name = $derived(path.slice(path.lastIndexOf('/') + 1))
-  let downloading = $state(false)
+  const key = $derived(downloadKey(device.id, sessionId, { kind: 'path', path }))
+  const task = $derived($downloads.find(task => task.key === key))
+  const status = $derived(task?.status)
+  const downloading = $derived(status === 'receiving')
   let showProgress = $state(false)
   let completed = $state(false)
-  let error = $state<string | null>(null)
-  let progress = $state<DownloadProgress>({ received: 0, total: null })
-  let progressTimer: ReturnType<typeof setTimeout> | undefined
-  let completedTimer: ReturnType<typeof setTimeout> | undefined
-  let request: AbortController | undefined
+  const error = $derived(task?.error)
+  const progress = $derived(task?.progress ?? { received: 0, total: null })
 
-  onDestroy(() => {
-    clearTimeout(progressTimer)
-    clearTimeout(completedTimer)
-    request?.abort()
+  $effect(() => {
+    showProgress = false
+    if (!downloading) return
+    const timer = setTimeout(() => { showProgress = true }, 300)
+    return () => clearTimeout(timer)
+  })
+
+  $effect(() => {
+    const isComplete = status === 'complete'
+    completed = isComplete
+    if (!isComplete) return
+    const timer = setTimeout(() => { completed = false }, 1600)
+    return () => clearTimeout(timer)
   })
 
   const percent = $derived(progress.total === null ? undefined : progress.total === 0 ? 100 : Math.min(100, Math.floor(progress.received / progress.total * 100)))
@@ -40,31 +48,8 @@
       ? `${$number(progress.received / 1024, { maximumFractionDigits: 1 })} KiB`
       : `${$number(progress.received / 1024 / 1024, { maximumFractionDigits: 1 })} MiB`)
 
-  async function download() {
-    if (downloading) return
-    downloading = true
-    completed = false
-    error = null
-    progress = { received: 0, total: null }
-    request = new AbortController()
-    clearTimeout(completedTimer)
-    progressTimer = setTimeout(() => { showProgress = true }, 300)
-    try {
-      const response = await device.fileApi.pathFileContent(sessionId, path, request.signal)
-      await saveDownload(response, name, value => { progress = value })
-      completed = true
-      completedTimer = setTimeout(() => { completed = false }, 1600)
-    } catch (cause) {
-      if (!request.signal.aborted) {
-        error = cause instanceof ApiError && cause.status === 404
-          ? $t('files.missing')
-          : cause instanceof Error ? cause.message : String(cause)
-      }
-    } finally {
-      clearTimeout(progressTimer)
-      showProgress = false
-      downloading = false
-    }
+  function download() {
+    downloads.start(device.id, sessionId, { kind: 'path', path }, name)
   }
 </script>
 

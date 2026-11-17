@@ -29,14 +29,18 @@ import { createEvents } from "../services/eventStream";
 import { createLiveOutput } from "../services/liveOutputStream";
 import { createUploadDrafts } from "../lib/uploads/draft";
 import { createPreviews } from "../lib/downloads/preview";
+import { downloads } from "../lib/downloads/manager";
 
 export class DeviceRuntime {
   readonly queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  private readonly unregisterDownloads: () => void;
   constructor(
     readonly id: string,
     readonly access: ApiAccess,
+    readonly name: string | null = null,
   ) {
     this.queryClient.mount();
+    this.unregisterDownloads = downloads.registerDevice(this);
   }
 
   private _api?: ReturnType<typeof createApi>;
@@ -185,6 +189,7 @@ export class DeviceRuntime {
   }
 
   dispose(): void {
+    this.unregisterDownloads();
     this._uploadDrafts?.dispose();
     this.queryClient.unmount();
     this.lifecycle.stopDashboardRuntime();

@@ -718,5 +718,17 @@
   "inbox.storageUnreadable": "Saved Inbox submissions could not be read. Preserve browser storage to recover them.",
   "auth.streamTokenRequired": "Set an API token in Settings to open the dashboard event stream.",
   "devices.signInToContinue": "Sign in to Pontia to continue.",
-  "devices.unreachable": "Could not reach Pontia to load devices."
+  "devices.unreachable": "Could not reach Pontia to load devices.",
+  "downloads.title": "Downloads",
+  "downloads.description": "Downloads continue while you browse Pontia. Keep this tab open.",
+  "downloads.localDevice": "Local device",
+  "downloads.activeCount": "{count} downloading",
+  "downloads.noActive": "No active downloads",
+  "downloads.failed": "Download failed",
+  "downloads.cancelled": "Cancelled",
+  "downloads.clearFinished": "Clear finished",
+  "downloads.empty": "Your downloads will appear here",
+  "downloads.cancelNamed": "Cancel download of {name}",
+  "downloads.retryNamed": "Retry download of {name}",
+  "downloads.deviceUnavailable": "Device disconnected. Retry when it is online."
 }
