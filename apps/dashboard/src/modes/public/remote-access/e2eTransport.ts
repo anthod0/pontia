@@ -325,10 +325,12 @@ export function createRemoteConnection(
       request.free();
       throw error;
     }
-    if (response.status === 401) {
+    if (response.status === 401 && !reauthorized) {
       request.free();
       // A delayed rejection must not invalidate a replacement session/handshake.
       if (session === active) invalidateE2eSession();
+      const method = (init.method ?? "GET").toUpperCase();
+      if (method === "GET" || method === "HEAD") return e2eFetch(path, init, true);
       await connectPublicDevice(signal);
       throw new Error("Device connection renewed; the request was not replayed");
     }
@@ -343,7 +345,7 @@ export function createRemoteConnection(
       const error = new Error(`E2E transport failed (${response.status})`);
       if (session === active) {
         // The device's per-session request budget is exhausted with a 429.
-        if (response.status === 409 || response.status === 429) invalidateE2eSession();
+        if ([401, 409, 429].includes(response.status)) invalidateE2eSession();
         onConnectionFailure?.(error);
       }
       throw error;

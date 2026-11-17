@@ -33,6 +33,8 @@ export function createDeviceConnections(remote: RemoteAccess) {
   const lifetime = new AbortController();
   let refresh: Promise<void> | null = null;
   let userId: string | null = null;
+  let refreshRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  let refreshRetryDelay = 5000;
 
   function publish(): void {
     devices.set(
@@ -61,6 +63,7 @@ export function createDeviceConnections(remote: RemoteAccess) {
   function requireSignIn(): void {
     if (get(signInRequired) || lifetime.signal.aborted) return;
     signInRequired.set(true);
+    clearTimeout(refreshRetryTimer);
     remote.retainSavedConnections(null, []);
     lifetime.abort();
     for (const entry of entries.values()) {
@@ -147,6 +150,7 @@ export function createDeviceConnections(remote: RemoteAccess) {
   function refreshDevices(): Promise<void> {
     if (lifetime.signal.aborted) return Promise.resolve();
     if (refresh) return refresh;
+    clearTimeout(refreshRetryTimer);
     loading.set(userId === null);
     refresh = (async () => {
       try {
@@ -155,11 +159,16 @@ export function createDeviceConnections(remote: RemoteAccess) {
         remote.retainSavedConnections(listing.userId, listing.devices);
         remote.deviceListCache.save(listing);
         reconcile(listing);
+        refreshRetryDelay = 5000;
         error.set(null);
       } catch (failure) {
         if (lifetime.signal.aborted) return;
         if (failure instanceof remote.CloudRequestError && failure.status === 401) requireSignIn();
-        else error.set(translate("devices.unreachable"));
+        else {
+          error.set(translate("devices.unreachable"));
+          refreshRetryTimer = setTimeout(() => void refreshDevices(), refreshRetryDelay);
+          refreshRetryDelay = Math.min(refreshRetryDelay * 2, 60_000);
+        }
       } finally {
         loading.set(false);
         refresh = null;
@@ -194,6 +203,7 @@ export function createDeviceConnections(remote: RemoteAccess) {
     retry,
     focus,
     dispose() {
+      clearTimeout(refreshRetryTimer);
       lifetime.abort();
       for (const entry of entries.values()) stop(entry);
       entries.clear();

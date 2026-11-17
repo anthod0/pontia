@@ -57,7 +57,7 @@ const admissionResponse = (token = "admission-token") => Response.json({ token }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  sessionStorage.clear();
+  localStorage.clear();
   mocks.restore.mockImplementation(() => mocks.confirm());
   remote = createRemoteConnection({ handle, deviceId, edgeId: deviceId }, deviceId);
   mocks.start.mockReturnValue({
@@ -175,7 +175,7 @@ test("a cancelled handshake cannot install a stale session", async () => {
   expect(fetchMock).toHaveBeenCalledTimes(6);
 });
 
-test.each([409])(
+test.each([401, 409])(
   "reauthorizes rejected encrypted requests through connect (%i)",
   async (status) => {
     const fetchMock = vi
@@ -330,7 +330,7 @@ test("devices on the same edge keep independent encrypted sessions and reauthori
     await Promise.all([remote.connect(), other.connect()]);
     rejectFirstDevice = true;
     await Promise.all([
-      expect(remote.e2eFetch("/api/v1/sessions/same")).rejects.toThrow(),
+      remote.e2eFetch("/api/v1/sessions/same").then((response) => response.text()),
       other.e2eFetch("/api/v1/sessions/same").then((response) => response.text()),
     ]);
     const urls = fetchMock.mock.calls.map(([url]) => url);
@@ -338,7 +338,7 @@ test("devices on the same edge keep independent encrypted sessions and reauthori
       fetchMock.mock.calls
         .filter(([url]) => url === `${edge}/e2e/v1/requests`)
         .map(([, init]) => new Headers(init?.headers).get("Authorization")),
-    ).toEqual(["Bearer first-token", "Bearer other-token"]);
+    ).toEqual(["Bearer first-token", "Bearer other-token", "Bearer first-token"]);
     expect(urls.filter((url) => url.endsWith(`/${handle}/connect`))).toHaveLength(2);
     expect(urls.filter((url) => url.endsWith(`/${otherHandle}/connect`))).toHaveLength(1);
     remote.dispose();
@@ -445,7 +445,7 @@ test("failed ticket exchange starts again with central authorization", async () 
   expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ ticket: "admission-ticket" });
 });
 
-test("refresh restores the saved admission and session without another handshake", async () => {
+test("reopening after tab storage is cleared restores the saved admission and session", async () => {
   const fetchMock = vi
     .fn()
     .mockResolvedValueOnce(cloudResponse())
@@ -455,6 +455,7 @@ test("refresh restores the saved admission and session without another handshake
   vi.stubGlobal("fetch", fetchMock);
   await remote.connect();
   remote.dispose();
+  sessionStorage.clear();
   remote = createRemoteConnection({ handle, deviceId, edgeId: deviceId }, deviceId);
   expect(await (await remote.e2eFetch("/api/v1/workspaces")).text()).toBe("ok");
   expect(fetchMock).toHaveBeenCalledTimes(4);
@@ -473,12 +474,13 @@ test("admission rejection aborts the previous connection's streams", async () =>
     .mockResolvedValueOnce(new Response(null, { status: 401 }))
     .mockResolvedValueOnce(cloudResponse())
     .mockResolvedValueOnce(admissionResponse("replacement"))
-    .mockResolvedValueOnce(new Response("confirmation"));
+    .mockResolvedValueOnce(new Response("confirmation"))
+    .mockResolvedValueOnce(new Response("ciphertext"));
   vi.stubGlobal("fetch", fetchMock);
   const response = await remote.e2eFetch("/api/v1/events");
   const streamSignal = fetchMock.mock.calls[3][1].signal as AbortSignal;
   expect(streamSignal.aborted).toBe(false);
-  await expect(remote.e2eFetch("/api/v1/workspaces")).rejects.toThrow();
+  expect(await (await remote.e2eFetch("/api/v1/workspaces")).text()).toBe("ok");
   expect(streamSignal.aborted).toBe(true);
   await response.body?.cancel();
 });
@@ -509,8 +511,8 @@ test("delayed admission rejections share a replacement without replaying either 
   vi.stubGlobal("fetch", fetchMock);
   await remote.connect();
   const requests = Promise.allSettled([
-    remote.e2eFetch("/api/v1/workspaces"),
-    remote.e2eFetch("/api/v1/sessions/overview"),
+    remote.e2eFetch("/api/v1/workspaces", { method: "POST", body: "action" }),
+    remote.e2eFetch("/api/v1/sessions", { method: "POST", body: "action" }),
   ]);
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(8));
   rejectSecond(new Response(null, { status: 401 }));
@@ -553,15 +555,15 @@ test.each(["json", "version", "target", "session"])("replaces a corrupt %s cache
   vi.stubGlobal("fetch", fetchMock);
   await remote.connect();
   remote.dispose();
-  const key = sessionStorage.key(0)!;
-  const saved = JSON.parse(sessionStorage.getItem(key)!);
+  const key = localStorage.key(0)!;
+  const saved = JSON.parse(localStorage.getItem(key)!);
   if (kind === "version") saved.version = 99;
   if (kind === "target") saved.target.edgeApiOrigin = "https://attacker.example";
   if (kind === "session")
     mocks.restore.mockImplementationOnce(() => {
       throw new Error("invalid snapshot");
     });
-  sessionStorage.setItem(key, kind === "json" ? "broken json" : JSON.stringify(saved));
+  localStorage.setItem(key, kind === "json" ? "broken json" : JSON.stringify(saved));
   fetchMock
     .mockResolvedValueOnce(cloudResponse())
     .mockResolvedValueOnce(admissionResponse("replacement"))
@@ -569,7 +571,7 @@ test.each(["json", "version", "target", "session"])("replaces a corrupt %s cache
   remote = createRemoteConnection({ handle, deviceId, edgeId: deviceId }, deviceId);
   await remote.connect();
   expect(fetchMock).toHaveBeenCalledTimes(6);
-  expect(JSON.parse(sessionStorage.getItem(key)!).token).toBe("replacement");
+  expect(JSON.parse(localStorage.getItem(key)!).token).toBe("replacement");
 });
 
 test("another user cannot restore a saved connection for the same handle", async () => {
@@ -594,31 +596,31 @@ test("a user change during authorization cannot install credentials under the pr
   vi.stubGlobal("fetch", fetchMock);
   await expect(remote.connect()).rejects.toMatchObject({ status: 401 });
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(sessionStorage.length).toBe(0);
+  expect(localStorage.length).toBe(0);
 });
 
 test("reconciles saved connections on user changes, removal and logout without clearing unrelated storage", async () => {
   vi.stubGlobal("fetch", successfulConnectionFetch());
   await remote.connect();
-  sessionStorage.setItem("unrelated", "keep");
-  const key = [...Array(sessionStorage.length)]
-    .map((_, i) => sessionStorage.key(i)!)
+  localStorage.setItem("unrelated", "keep");
+  const key = [...Array(localStorage.length)]
+    .map((_, i) => localStorage.key(i)!)
     .find((key) => key !== "unrelated")!;
-  const saved = sessionStorage.getItem(key)!;
+  const saved = localStorage.getItem(key)!;
   retainSavedConnections(deviceId, [{ handle, deviceId, edgeId: deviceId }]);
-  expect(sessionStorage.getItem(key)).toBe(saved);
+  expect(localStorage.getItem(key)).toBe(saved);
   for (const [user, handles] of [
     [deviceId, []],
     ["other-user", [handle]],
     [null, []],
   ] as const) {
-    sessionStorage.setItem(key, saved);
+    localStorage.setItem(key, saved);
     retainSavedConnections(
       user,
       handles.map((handle) => ({ handle, deviceId, edgeId: deviceId })),
     );
-    expect(sessionStorage.getItem(key)).toBeNull();
-    expect(sessionStorage.getItem("unrelated")).toBe("keep");
+    expect(localStorage.getItem(key)).toBeNull();
+    expect(localStorage.getItem("unrelated")).toBe("keep");
   }
 });
 
@@ -661,7 +663,7 @@ test("a device capacity rejection discards the saved session without replaying t
   await expect(
     remote.e2eFetch("/api/v1/sessions", { method: "POST", body: "action" }),
   ).rejects.toThrow();
-  expect(sessionStorage.length).toBe(0);
+  expect(localStorage.length).toBe(0);
   remote.dispose();
   fetchMock
     .mockResolvedValueOnce(cloudResponse())
@@ -674,7 +676,7 @@ test("a device capacity rejection discards the saved session without replaying t
 });
 
 test("storage policy denial leaves live connections usable", async () => {
-  const storage = vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+  const storage = vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
     throw new DOMException("Storage disabled", "SecurityError");
   });
   try {
@@ -694,7 +696,7 @@ test("a reassigned handle cannot restore the previous device's credentials", asy
   remote.dispose();
   const replacementId = "12345678-9abc-def0-1234-56789abcdef0";
   retainSavedConnections(deviceId, [{ handle, deviceId: replacementId, edgeId: deviceId }]);
-  expect(sessionStorage.length).toBe(0);
+  expect(localStorage.length).toBe(0);
   remote = createRemoteConnection({ handle, deviceId: replacementId, edgeId: deviceId }, deviceId);
   const body = await cloudResponse().json();
   const fetchMock = vi
@@ -733,7 +735,9 @@ test("a late rejection of an already retried request leaves a newer session onli
   const pending = remote.e2eFetch("/api/v1/workspaces");
   const rejected = expect(pending).rejects.toThrow();
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(8));
-  await expect(remote.e2eFetch("/api/v1/workspaces")).rejects.toThrow();
+  await expect(
+    remote.e2eFetch("/api/v1/sessions", { method: "POST", body: "action" }),
+  ).rejects.toThrow();
   rejectRetry(new Response(null, { status: 409 }));
   await rejected;
   expect(failure).not.toHaveBeenCalled();
@@ -750,7 +754,7 @@ test("changing edge binding discards credentials routed to the previous edge", a
   remote.dispose();
   const device = { handle, deviceId, edgeId: "12345678-9abc-def0-1234-56789abcdef0" };
   retainSavedConnections(deviceId, [device]);
-  expect(sessionStorage.length).toBe(0);
+  expect(localStorage.length).toBe(0);
   const body = await cloudResponse().json();
   const newEdge = "https://other.edge.pontia.dev";
   const fetchMock = vi
@@ -779,26 +783,49 @@ test("a saved device list restores its E2E credentials without another handshake
   expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("/sessions"))).toHaveLength(1);
   retainSavedConnections(null, []);
   expect(deviceListCache.read()).toBeNull();
-  expect(sessionStorage.length).toBe(0);
+  expect(localStorage.length).toBe(0);
 });
 
-test("expired E2E credentials renew without discarding the device list", async () => {
-  const listing = {
-    userId: deviceId,
-    devices: [{ handle, deviceId, edgeId: deviceId, name: "Office Mac" }],
-  };
-  deviceListCache.save(listing);
-  const fetchMock = successfulConnectionFetch()
-    .mockResolvedValueOnce(new Response(null, { status: 409 }))
-    .mockResolvedValueOnce(cloudResponse())
-    .mockResolvedValueOnce(admissionResponse("replacement"))
-    .mockResolvedValueOnce(new Response("confirmation"))
-    .mockResolvedValueOnce(new Response("ciphertext"));
-  vi.stubGlobal("fetch", fetchMock);
-  await remote.connect();
-  remote.dispose();
-  remote = createRemoteConnection(listing.devices[0], listing.userId);
-  expect(await (await remote.e2eFetch("/api/v1/workspaces")).text()).toBe("ok");
-  expect(deviceListCache.read()).toEqual(listing);
-  expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("/sessions"))).toHaveLength(2);
-});
+test.each([401, 409])(
+  "expired credentials (%i) renew without discarding the device list",
+  async (status) => {
+    const listing = {
+      userId: deviceId,
+      devices: [{ handle, deviceId, edgeId: deviceId, name: "Office Mac" }],
+    };
+    deviceListCache.save(listing);
+    const fetchMock = successfulConnectionFetch()
+      .mockResolvedValueOnce(new Response(null, { status }))
+      .mockResolvedValueOnce(cloudResponse())
+      .mockResolvedValueOnce(admissionResponse("replacement"))
+      .mockResolvedValueOnce(new Response("confirmation"))
+      .mockResolvedValueOnce(new Response("ciphertext"));
+    vi.stubGlobal("fetch", fetchMock);
+    await remote.connect();
+    remote.dispose();
+    remote = createRemoteConnection(listing.devices[0], listing.userId);
+    expect(await (await remote.e2eFetch("/api/v1/workspaces")).text()).toBe("ok");
+    expect(deviceListCache.read()).toEqual(listing);
+    expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("/sessions"))).toHaveLength(2);
+  },
+);
+
+test.each([401, 409])(
+  "stops after one renewal when credentials are rejected again (%i)",
+  async (status) => {
+    const failed = vi.fn();
+    remote.dispose();
+    remote = createRemoteConnection({ handle, deviceId, edgeId: deviceId }, deviceId, failed);
+    const fetchMock = successfulConnectionFetch()
+      .mockResolvedValueOnce(new Response(null, { status }))
+      .mockResolvedValueOnce(cloudResponse())
+      .mockResolvedValueOnce(admissionResponse("replacement"))
+      .mockResolvedValueOnce(new Response("confirmation"))
+      .mockResolvedValueOnce(new Response(null, { status }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(remote.e2eFetch("/api/v1/workspaces")).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(failed).toHaveBeenCalledOnce();
+    expect(localStorage.length).toBe(0);
+  },
+);

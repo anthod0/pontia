@@ -21,7 +21,7 @@ beforeEach(() => {
 afterEach(() => {
   manager.dispose();
   vi.restoreAllMocks();
-  sessionStorage.clear();
+  localStorage.clear();
   vi.useRealTimers();
 });
 
@@ -298,6 +298,7 @@ test("reopening connects cached devices while the background list is pending", a
   await manager.refreshDevices();
   await settle();
   manager.dispose();
+  sessionStorage.clear();
   let finish!: (listing: { userId: string; devices: typeof fixture.listed }) => void;
   vi.mocked(fixture.remote.listPublicDevices).mockImplementationOnce(
     () =>
@@ -373,7 +374,7 @@ test("background user changes replace cached connections and the saved list", as
 test.each(["broken json", JSON.stringify({ version: 1, userId: "user-one", devices: [{}] })])(
   "invalid list cache falls back to discovery",
   async (serialized) => {
-    sessionStorage.setItem("pontia.remote-device-list", serialized);
+    localStorage.setItem("pontia.remote-device-list", serialized);
     enablePersistence();
     expect(get(manager.devices)).toEqual([]);
     await manager.refreshDevices();
@@ -384,7 +385,7 @@ test.each(["broken json", JSON.stringify({ version: 1, userId: "user-one", devic
 );
 
 test("unavailable browser storage does not prevent device discovery", async () => {
-  vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+  vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
     throw new DOMException("disabled", "SecurityError");
   });
   enablePersistence();
@@ -393,3 +394,46 @@ test("unavailable browser storage does not prevent device discovery", async () =
   expect(device().state).toBe("online");
   expect(get(manager.error)).toBeNull();
 });
+
+test("device discovery retries transient failures with capped backoff and resets after success", async () => {
+  const list = vi.mocked(fixture.remote.listPublicDevices);
+  list.mockRejectedValue(new Error("offline"));
+  await manager.refreshDevices();
+  for (const delay of [5000, 10000, 20000, 40000, 60000, 60000]) {
+    const attempts = list.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(delay - 1);
+    expect(list).toHaveBeenCalledTimes(attempts);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(list).toHaveBeenCalledTimes(attempts + 1);
+  }
+  list.mockResolvedValue({ userId: "user-one", devices: fixture.listed });
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(get(manager.error)).toBeNull();
+  expect(device().state).toBe("online");
+  const attempts = list.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(list).toHaveBeenCalledTimes(attempts);
+  list.mockRejectedValueOnce(new Error("offline"));
+  await manager.refreshDevices();
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(get(manager.error)).toBeNull();
+  expect(list).toHaveBeenCalledTimes(attempts + 2);
+});
+
+test.each(["dispose", "unauthorized"])(
+  "%s cancels pending device discovery retries",
+  async (reason) => {
+    const list = vi.mocked(fixture.remote.listPublicDevices);
+    list.mockRejectedValueOnce(new Error("offline"));
+    await manager.refreshDevices();
+    if (reason === "dispose") manager.dispose();
+    else {
+      list.mockRejectedValueOnce(new fixture.remote.CloudRequestError("unauthorized", 401));
+      await manager.refreshDevices();
+      expect(get(manager.signInRequired)).toBe(true);
+    }
+    const attempts = list.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(180000);
+    expect(list).toHaveBeenCalledTimes(attempts);
+  },
+);

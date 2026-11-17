@@ -7,7 +7,7 @@ type DeviceList = { userId: string; devices: PublicDevice[] };
 
 function accessStorage<T>(action: (storage: Storage) => T, unavailable: T): T {
   try {
-    return action(window.sessionStorage);
+    return action(window.localStorage);
   } catch (error) {
     // Browser policy or storage quota can disable persistence; live access still works.
     if (error instanceof DOMException) return unavailable;
