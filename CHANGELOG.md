@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.15] - 2026-11-18
+
+### Added
+
+- The Dashboard previews text files in a right sidebar.
+- New chat remembers the last Agent Client you used.
+- The shortcut help lists message input shortcuts.
+
+### Changed
+
+- Project directories must be activated as Workspaces before terminal clients connect, Sessions are created, or Workflows run. Codex runs natively in directories that are not active Workspaces.
+- The download center no longer shows a description.
+
+### Fixed
+
+- The Dashboard keeps remote device connections, retries the device list after network failures, and retries reads after device access expires.
+- Git status refreshes when you open a chat or click the Session metadata.
+- Codex user messages no longer appear twice after history is rebuilt.
+- Pi keeps the inbox message identity when Pontia input is delivered after a Turn ends.
+
 ## [0.7.14] - 2026-11-17
 
 ### Added
