@@ -4,6 +4,25 @@
   "categories": {
     "correctness": "error"
   },
+  "overrides": [
+    {
+      "files": ["apps/dashboard/src/**"],
+      "excludeFiles": ["apps/dashboard/src/modes/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)modes/(local|public)(/|$|[?#])",
+                "message": "Shared code must reference mode dependencies through $dashboard-mode."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
   "ignorePatterns": [
     // Oxlint misparses <script> strings inside Svelte {@html} JSON-LD templates.
     "apps/cloud/src/lib/components/BlogPost.svelte",

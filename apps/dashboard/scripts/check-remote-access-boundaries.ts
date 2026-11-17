@@ -79,13 +79,6 @@ for (const { file, specifier, target } of imports) {
       report("remoteAccessLoader must use the remote-access entry point.");
     }
   }
-  if (
-    !within(file, resolve(src, "modes")) &&
-    within(target, resolve(src, "modes")) &&
-    !specifier.startsWith("$dashboard-mode/")
-  ) {
-    report("Shared code must reference mode dependencies through $dashboard-mode.");
-  }
 }
 
 if (violations.length > 0) {
