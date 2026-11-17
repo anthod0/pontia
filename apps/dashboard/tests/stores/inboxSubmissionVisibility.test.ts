@@ -99,34 +99,38 @@ test("a message sent to a busy Session is listed in the Inbox queue", async () =
   expect(inbox.queuedInboxMessages([message])).toEqual([message]);
 });
 
-test("a chat submission to a busy Session appears before its receipt and keeps queue actions", async () => {
-  await seedSession("busy");
-  const device = (await import("../deviceFixture")).testDevice;
-  let accept!: () => void;
-  api.submitInboxMessage.mockImplementation(
-    (_session, _input, id: string) =>
-      new Promise((resolve) => {
-        accept = () => resolve(pending(id));
-      }),
-  );
+test.each(["busy", "waiting_for_interaction"])(
+  "a submission to a %s Session stays in Inbox until delivery",
+  async (state) => {
+    await seedSession(state);
+    const device = (await import("../deviceFixture")).testDevice;
+    let accept!: () => void;
+    api.submitInboxMessage.mockImplementation(
+      (_session, _input, id: string) =>
+        new Promise((resolve) => {
+          accept = () => resolve(pending(id));
+        }),
+    );
 
-  const submitting = device.sessions.submitInboxMessage(
-    "session",
-    { input: "hello" },
-    { showInChat: true },
-  );
-  await vi.waitFor(() =>
-    expect(
-      device.inboxQueries.inboxSubmissionMessages(
-        [],
-        device.inboxQueries.optimisticInboxSubmissions("session"),
-      ),
-    ).toMatchObject([{ role: "user", content: "hello" }]),
-  );
-  accept();
-  const message = await submitting;
-  expect(device.inboxQueries.queuedInboxMessages([message])).toEqual([message]);
-});
+    const submitting = device.sessions.submitInboxMessage("session", { input: "hello" });
+    const submissions = () => device.inboxQueries.optimisticInboxSubmissions("session");
+    const chatMessages = () => device.inboxQueries.inboxSubmissionMessages([], submissions());
+    await vi.waitFor(() =>
+      expect(device.inboxQueries.queuedInboxMessages([], submissions())).toMatchObject([
+        { input: { summary: "hello" }, state: "pending" },
+      ]),
+    );
+    expect(chatMessages()).toEqual([]);
+    accept();
+    const message = await submitting;
+    expect(device.inboxQueries.queuedInboxMessages([message], submissions())).toEqual([message]);
+    expect(chatMessages()).toEqual([]);
+
+    device.inboxQueries.syncInboxSubmissions("session", [{ ...message, state: "dispatched" }]);
+    expect(device.inboxQueries.queuedInboxMessages([message], submissions())).toEqual([]);
+    expect(chatMessages()).toMatchObject([{ role: "user", content: "hello" }]);
+  },
+);
 
 test("a delayed Inbox snapshot cannot overwrite an acknowledged submission", async () => {
   await seedSession("busy");

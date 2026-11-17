@@ -189,7 +189,6 @@ vi.mock("../../../src/stores/sessions", async (importOriginal) => {
     submitInboxMessage: async (
       sessionId: string,
       input: import("../../../src/api/types").SubmitInboxMessageInput,
-      options: { showInChat?: boolean } = {},
     ) => {
       const detailSession = mocks.sessionDetail.get()?.session;
       const currentSession = detailSession?.session_id === sessionId ? detailSession : null;
@@ -202,9 +201,8 @@ vi.mock("../../../src/stores/sessions", async (importOriginal) => {
         metadata: input.metadata,
         branchTargetTurnId: input.branch_target_turn_id ?? null,
         showInChat:
-          options.showInChat ??
-          (!input.branch_target_turn_id &&
-            !["busy", "waiting_for_interaction"].includes(currentSession?.state ?? "")),
+          !input.branch_target_turn_id &&
+          !["busy", "waiting_for_interaction"].includes(currentSession?.state ?? ""),
         submittedAt: new Date().toISOString(),
         acceptedMessage: null,
         dispatchedTurnId: null,

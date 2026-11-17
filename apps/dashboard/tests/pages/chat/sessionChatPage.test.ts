@@ -252,13 +252,15 @@ test.each(["busy", "waiting_for_interaction"])(
     mocks.pathParams = { sessionId: "session-1" };
     window.history.pushState({}, "", "/dashboard/chat/session-1");
 
-    mocks.submitInboxMessage.mockResolvedValueOnce(
-      inboxMessage({
-        message_id: "message-queued",
-        session_id: "session-1",
-        input: { summary: "Queue this follow-up" },
-      }),
-    );
+    const queuedMessage = inboxMessage({
+      message_id: `message-queued-${state}`,
+      session_id: "session-1",
+      input: { summary: "Queue this follow-up" },
+    });
+    mocks.submitInboxMessage.mockImplementationOnce(async () => {
+      mocks.sessionDetail.set({ ...mocks.sessionDetail.get()!, inboxMessages: [queuedMessage] });
+      return queuedMessage;
+    });
     render(SessionChatPage);
 
     const input = await screen.findByPlaceholderText("Follow up…");
@@ -274,7 +276,9 @@ test.each(["busy", "waiting_for_interaction"])(
       }),
     );
     expect(mocks.interruptSession).not.toHaveBeenCalled();
-    expect(await screen.findByText("Queue this follow-up")).toBeInTheDocument();
+    const queued = await screen.findByRole("region", { name: "Inbox" });
+    expect(within(queued).getByText("Queue this follow-up")).toBeInTheDocument();
+    expect(screen.getByRole("log")).not.toHaveTextContent("Queue this follow-up");
 
     await waitFor(() => expect(mocks.dashboardEventListeners.size).toBeGreaterThan(0));
     for (const listener of mocks.dashboardEventListeners) {
@@ -289,10 +293,15 @@ test.each(["busy", "waiting_for_interaction"])(
           source: "client",
           type: "turn.started",
           time: "2026-05-14T00:01:00Z",
-          payload: { metadata: { inbox_message_id: "message-queued" } },
+          payload: { metadata: { inbox_message_id: queuedMessage.message_id } },
         },
       });
     }
+
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: "Inbox" })).not.toBeInTheDocument();
+      expect(screen.getByRole("log")).toHaveTextContent("Queue this follow-up");
+    });
 
     mocks.timelineState.set(
       timelineStateValue({
@@ -2362,7 +2371,7 @@ test("hides the floating scroll-down button at the bottom", async () => {
 });
 
 test.each(["idle", "busy"])(
-  "scrolls to the submitted message before acknowledgement while %s",
+  "scrolls when the submitted message enters the chat while %s",
   async (state) => {
     const user = userEvent.setup();
     const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
@@ -2400,11 +2409,19 @@ test.each(["idle", "busy"])(
     });
     await user.click(screen.getByRole("button", { name: /send/i }));
 
-    await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
-    expect(scrollTo).toHaveBeenCalledWith({ top: 4096 });
+    if (state === "busy") {
+      const queued = await screen.findByRole("region", { name: "Inbox" });
+      expect(within(queued).getByText("continue this session")).toBeInTheDocument();
+      expect(within(queued).getByRole("button", { name: /cancel inbox message/i })).toBeDisabled();
+      expect(document.querySelector('[data-chat-role="user"]')).not.toBeInTheDocument();
+      expect(scrollTo).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+    }
     accept(
       inboxMessage({
         session_id: "session-2",
+        state: "dispatched",
         turn_id: "turn-2",
         input: { summary: "continue this session" },
       }),
@@ -2415,7 +2432,9 @@ test.each(["idle", "busy"])(
         "true",
       ),
     );
-    expect(scrollTo).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 4096 });
+    expect(screen.queryByRole("region", { name: "Inbox" })).not.toBeInTheDocument();
 
     const submittedTurn = turn({
       session_id: "session-2",
@@ -2450,7 +2469,7 @@ test.each(["idle", "busy"])(
   },
 );
 
-test("scrolls once for each queued submission, not on unrelated assistant updates", async () => {
+test("scrolls once for each dispatched submission, not on unrelated assistant updates", async () => {
   const user = userEvent.setup();
   const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   const selected = session({ session_id: "session-2", state: "busy" });
@@ -2477,6 +2496,7 @@ test("scrolls once for each queued submission, not on unrelated assistant update
       inboxMessage({
         session_id: "session-2",
         message_id: "queued-1",
+        state: "dispatched",
         turn_id: "turn-2",
         input: { summary: "continue this session" },
       }),
@@ -2485,6 +2505,7 @@ test("scrolls once for each queued submission, not on unrelated assistant update
       inboxMessage({
         session_id: "session-2",
         message_id: "queued-2",
+        state: "dispatched",
         turn_id: "turn-3",
         input: { summary: "another queued question" },
       }),

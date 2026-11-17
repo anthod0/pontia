@@ -109,7 +109,9 @@ const nativeUserMessage: SessionChatMessage = {
 };
 
 test("keeps a consumed submission in the chat until its native user message loads", () => {
-  seed(submission({ acceptedMessage: null }));
+  seed(submission({ acceptedMessage: null, showInChat: false }));
+
+  expect(inboxSubmissionMessages([], optimisticInboxSubmissions("session-1"))).toEqual([]);
 
   reconcileInboxSubmissionForDashboardEvent(turnStarted("message-1", "turn-1"));
 
@@ -121,13 +123,16 @@ test("keeps a consumed submission in the chat until its native user message load
 });
 
 test("keeps a dispatched submission until its native user message loads", () => {
-  seed(submission());
+  seed(submission({ showInChat: false }));
 
   syncInboxSubmissions("session-1", [
     acceptedInboxMessage({ state: "dispatched", turn_id: "turn-1" }),
   ]);
 
   expect(optimisticInboxSubmissions("session-1")).toMatchObject([{ dispatchedTurnId: "turn-1" }]);
+  expect(inboxSubmissionMessages([], optimisticInboxSubmissions("session-1"))).toMatchObject([
+    { content: "follow up", turnId: "turn-1" },
+  ]);
   reconcileInboxSubmissions("session-1", [nativeUserMessage]);
   expect(optimisticInboxSubmissions("session-1")).toEqual([]);
 });
@@ -135,7 +140,12 @@ test("keeps a dispatched submission until its native user message loads", () => 
 test.each([false, true])(
   "keeps a dispatched submission without a Turn when receipt is pending: %s",
   (receiptPending) => {
-    seed(submission({ acceptedMessage: receiptPending ? null : acceptedInboxMessage() }));
+    seed(
+      submission({
+        showInChat: false,
+        acceptedMessage: receiptPending ? null : acceptedInboxMessage(),
+      }),
+    );
 
     syncInboxSubmissions("session-1", [acceptedInboxMessage({ state: "dispatched" })]);
     expect(inboxSubmissionMessages([], optimisticInboxSubmissions("session-1"))).toMatchObject([

@@ -40,7 +40,6 @@ export interface OptimisticInboxSubmission {
 
 interface SubmitInboxVariables {
   submission: UnconfirmedSubmission;
-  showInChat?: boolean;
 }
 
 interface RetryInboxVariables {
@@ -54,9 +53,41 @@ interface InboxMessageVariables {
 
 export function createInboxQueries(device: DeviceRuntime) {
   /** Inbox messages to list as queued; pending inputs already shown in the chat are excluded. */
-  function queuedInboxMessages(messages: InboxMessageView[]): InboxMessageView[] {
-    return messages.filter(
-      (message) => message.state !== "pending" || !chatShownInboxMessageIds.has(message.message_id),
+  function queuedInboxMessages(
+    messages: InboxMessageView[],
+    submissions: OptimisticInboxSubmission[] = [],
+  ): InboxMessageView[] {
+    const optimisticMessages = submissions
+      .filter(
+        (submission) =>
+          !submission.showInChat &&
+          !submission.acceptedMessage &&
+          !messages.some((message) => message.message_id === submission.localId),
+      )
+      .map((submission): InboxMessageView => ({
+        message_id: submission.localId,
+        session_id: submission.sessionId,
+        state: "pending",
+        delivery_policy: submission.deliveryPolicy ?? "after_idle",
+        input: { summary: submission.input },
+        metadata: submission.metadata ?? {},
+        branch_target_turn_id: submission.branchTargetTurnId,
+        turn_id: null,
+        steer_target_turn_id: null,
+        retry_of_message_id: null,
+        retried_by_message_id: null,
+        superseded_by_message_id: null,
+        failure_message: null,
+        created_at: submission.submittedAt,
+        updated_at: submission.submittedAt,
+        dispatched_at: null,
+        cancelled_at: null,
+      }));
+    return [...messages, ...optimisticMessages].filter(
+      (message) =>
+        message.state !== "pending" ||
+        (!chatShownInboxMessageIds.has(message.message_id) &&
+          !consumedInboxMessageIds.has(message.message_id)),
     );
   }
   const consumedInboxMessageIds = new Map<string, string | null>();
@@ -167,11 +198,14 @@ export function createInboxQueries(device: DeviceRuntime) {
       failInboxSubmission(sessionId, localId);
       return;
     }
+    const dispatched = consumed || message.state === "dispatched";
+    if (dispatched) rememberChatShownInboxMessage(message.message_id);
     setOptimisticInboxSubmissions(sessionId, (submissions) =>
       submissions.map((submission) =>
         submission.localId === localId
           ? {
               ...submission,
+              showInChat: submission.showInChat || dispatched,
               dispatchedTurnId: consumed ? dispatchedTurnId : submission.dispatchedTurnId,
               input: message.input.summary.trim(),
               deliveryPolicy: message.delivery_policy,
@@ -219,7 +253,7 @@ export function createInboxQueries(device: DeviceRuntime) {
           return [submission];
         const dispatchedTurnId =
           turnId ?? submission.dispatchedTurnId ?? submission.acceptedMessage?.turn_id ?? null;
-        return [{ ...submission, dispatchedTurnId }];
+        return [{ ...submission, showInChat: true, dispatchedTurnId }];
       }),
     );
   }
@@ -232,9 +266,11 @@ export function createInboxQueries(device: DeviceRuntime) {
         const latest = messagesById.get(messageId);
         if (!latest) return [submission];
         if (["cancelled", "superseded", "failed", "dismissed"].includes(latest.state)) return [];
+        if (latest.state === "dispatched") rememberChatShownInboxMessage(messageId);
         return [
           {
             ...submission,
+            showInChat: submission.showInChat || latest.state === "dispatched",
             acceptedMessage: latest,
             dispatchedTurnId: submission.dispatchedTurnId ?? latest.turn_id,
           },
@@ -374,16 +410,14 @@ export function createInboxQueries(device: DeviceRuntime) {
 
   const submitInboxMutationOptions = () => ({
     mutationFn: ({ submission }: SubmitInboxVariables) => deliverSubmission(submission),
-    onMutate: ({ submission, showInChat }: SubmitInboxVariables) => {
+    onMutate: ({ submission }: SubmitInboxVariables) => {
       device.inboxRecovery.rememberSubmission(submission);
       const session = device.queryClient.getQueryData<SessionView>(
         device.sessionQueries.sessionKeys.detail(submission.sessionId),
       );
       const visible =
-        showInChat ??
-        (!submission.input.branch_target_turn_id && !isExecutingSessionState(session?.state));
-      if (visible && !isExecutingSessionState(session?.state))
-        rememberChatShownInboxMessage(submission.messageId);
+        !submission.input.branch_target_turn_id && !isExecutingSessionState(session?.state);
+      if (visible) rememberChatShownInboxMessage(submission.messageId);
       return { localId: beginInboxSubmission(submission, visible) };
     },
     onError: (
@@ -464,11 +498,9 @@ export function createInboxQueries(device: DeviceRuntime) {
   function mutateSubmitInboxMessage(
     sessionId: string,
     input: SubmitInboxMessageInput,
-    options: { showInChat?: boolean } = {},
   ): Promise<InboxMessageView> {
     return executeMutation(submitInboxMutationOptions(), {
       submission: { messageId: `msg_${crypto.randomUUID()}`, sessionId, input },
-      showInChat: options.showInChat,
     });
   }
 

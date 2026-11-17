@@ -183,9 +183,8 @@ export function createSessions(device: DeviceRuntime) {
   function submitInboxMessage(
     sessionId: string,
     input: SubmitInboxMessageInput,
-    options: { showInChat?: boolean } = {},
   ): Promise<InboxMessageView> {
-    return device.inboxQueries.mutateSubmitInboxMessage(sessionId, input, options);
+    return device.inboxQueries.mutateSubmitInboxMessage(sessionId, input);
   }
 
   function recoverInboxSubmission(submission: UnconfirmedSubmission): Promise<void> {

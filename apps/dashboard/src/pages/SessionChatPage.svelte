@@ -227,7 +227,9 @@
     $timelineState.sessionId === selectedSessionId ? $timelineState.latestTurnId : null,
   )
   $: selectedInboxMessages = selectedSessionId && $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.inboxMessages : []
-  $: visibleInboxMessages = queuedInboxMessages(visibleChatInboxMessages(selectedInboxMessages))
+  $: selectedInboxSubmissions = $optimisticInboxQuery.data?.[selectedSessionId] ?? []
+  $: visibleInboxMessages = queuedInboxMessages(visibleChatInboxMessages(selectedInboxMessages), selectedInboxSubmissions)
+  $: pendingInboxSubmissionId = selectedInboxSubmissions.find((submission) => !submission.acceptedMessage)?.localId ?? null
   $: canSend = canSendSessionMessage(selectedSession, 'x') && !submitting
   $: if (!timelineUnavailable && matchingPromptScrolls(messages, pendingPromptScrolls, selectedSessionId).length) {
     void scrollSubmittedPromptAfterLayout(selectedSessionId)
@@ -974,7 +976,7 @@
         input: message,
         delivery_policy: clientDeliveryPolicy(selectedSession),
         metadata: { source: 'dashboard_chat' },
-      }, { showInChat: true })
+      })
       return true
     } catch (error) {
       pendingPromptScrolls = pendingPromptScrolls.filter((request) => request !== scrollRequest)
@@ -1166,7 +1168,7 @@
           metadataItems={selectedSessionMetadataItems}
           metadataSummary={selectedSessionMetadataSummary}
           queuedMessages={visibleInboxMessages}
-          inboxBusyMessageId={inboxActionMessageId}
+          inboxBusyMessageId={inboxActionMessageId ?? pendingInboxSubmissionId}
           {submitting}
           {actionBusy}
           compaction={selectedCompaction}
