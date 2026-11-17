@@ -410,8 +410,8 @@ impl CodexLiveOutput {
             .find(|turn| turn["id"] == native)
             .and_then(|turn| turn["items"].as_array())
             .and_then(|items| items.iter().find(|other| other["type"] == "userMessage"))
-            .map(|first| &first["id"]);
-        if turn_input.is_none_or(|first| first == &item["id"]) {
+            .and_then(user_input_id);
+        if turn_input.is_none_or(|first| first == item_id) {
             return Ok(());
         }
         self.publish(
@@ -674,10 +674,20 @@ impl CodexLiveOutput {
     }
 }
 
-fn user_input(item: &Value) -> Option<(String, String)> {
-    let id = item["id"]
+fn user_input_id(item: &Value) -> Option<String> {
+    // History can rebuild `id` as item-N while notifications use a native UUID.
+    // The sender's clientId survives both projections, including recovery.
+    if let Some(id) = item["clientId"].as_str() {
+        return Some(format!("input:client:{id}"));
+    }
+    item["id"]
         .as_str()
-        .filter(|id| !is_history_item_id(Some(id)))?;
+        .filter(|id| !is_history_item_id(Some(id)))
+        .map(|id| format!("input:{id}"))
+}
+
+fn user_input(item: &Value) -> Option<(String, String)> {
+    let id = user_input_id(item)?;
     let text = item["content"]
         .as_array()?
         .iter()
@@ -685,7 +695,7 @@ fn user_input(item: &Value) -> Option<(String, String)> {
         .filter_map(|part| part["text"].as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    (!text.trim().is_empty()).then(|| (format!("input:{id}"), text))
+    (!text.trim().is_empty()).then_some((id, text))
 }
 
 /// One live item per summary part. The numeric suffix keeps IDs distinct across

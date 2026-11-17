@@ -205,6 +205,91 @@ async fn consumed_steering_streams_at_its_position_once_and_survives_recovery() 
 }
 
 #[tokio::test]
+async fn client_identity_excludes_turn_input_but_keeps_identical_steering() {
+    let mut initial = turn(json!([]));
+    initial["items"][0]["id"] = json!("item-1");
+    initial["items"][0]["clientId"] = json!("submitted-input");
+    let fixture = Fixture::new(initial, Vec::new()).await;
+    let first = json!({"type":"userMessage","id":"live-input","clientId":"submitted-input","content":[{"type":"text","text":"hello"}]});
+    for method in ["item/started", "item/completed"] {
+        fixture
+            .notify(json!({"method":method,"params":{"threadId":"thread","turnId":"native-turn","item":first}}))
+            .await;
+    }
+    fixture
+        .notify(delta("thread", "native-turn", "a1", json!("before")))
+        .await;
+    let snapshot = fixture
+        .wait_snapshot(|s| s.items.last() == Some(&text("a1", "before")))
+        .await;
+    assert_eq!(snapshot.items, vec![text("a1", "before")]);
+
+    for (history_id, live_id, client_id) in [
+        ("item-3", "live-steer-1", "submitted-steer-1"),
+        ("item-4", "live-steer-2", "submitted-steer-2"),
+    ] {
+        let mut steer = first.clone();
+        steer["id"] = json!(history_id);
+        steer["clientId"] = json!(client_id);
+        fixture.server_state.turns.lock().await[0]["items"]
+            .as_array_mut()
+            .unwrap()
+            .push(steer.clone());
+        steer["id"] = json!(live_id);
+        for method in ["item/started", "item/completed"] {
+            fixture
+                .notify(json!({"method":method,"params":{"threadId":"thread","turnId":"native-turn","item":steer}}))
+                .await;
+        }
+    }
+    fixture
+        .notify(delta("thread", "native-turn", "a2", json!("after")))
+        .await;
+    let snapshot = fixture
+        .wait_snapshot(|s| s.items.last() == Some(&text("a2", "after")))
+        .await;
+    assert_eq!(
+        snapshot.items.iter().map(item_summary).collect::<Vec<_>>(),
+        vec!["text:before", "input:hello", "input:hello", "text:after"]
+    );
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn recovered_steering_with_client_identity_is_not_repeated_by_notifications() {
+    let mut initial = turn(json!([
+        {"type":"agentMessage","id":"a1","text":"before"},
+        {"type":"userMessage","id":"item-3","clientId":"submitted-steer","content":[{"type":"text","text":"hello"}]}
+    ]));
+    initial["items"][0]["id"] = json!("item-1");
+    initial["items"][0]["clientId"] = json!("submitted-input");
+    let fixture = Fixture::new(initial, Vec::new()).await;
+    let snapshot = fixture.wait_snapshot(|_| true).await;
+    assert_eq!(
+        snapshot.items.iter().map(item_summary).collect::<Vec<_>>(),
+        vec!["text:before", "input:hello"]
+    );
+    for client_id in ["submitted-input", "submitted-steer"] {
+        for method in ["item/started", "item/completed"] {
+            fixture
+                .notify(json!({"method":method,"params":{"threadId":"thread","turnId":"native-turn","item":{"type":"userMessage","id":format!("live-{client_id}"),"clientId":client_id,"content":[{"type":"text","text":"hello"}]}}}))
+                .await;
+        }
+    }
+    fixture
+        .notify(delta("thread", "native-turn", "a2", json!("after")))
+        .await;
+    let snapshot = fixture
+        .wait_snapshot(|s| s.items.last() == Some(&text("a2", "after")))
+        .await;
+    assert_eq!(
+        snapshot.items.iter().map(item_summary).collect::<Vec<_>>(),
+        vec!["text:before", "input:hello", "text:after"]
+    );
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
 async fn native_recovery_restores_steering_after_the_turn_input() {
     let fixture = Fixture::new(
         turn(json!([
