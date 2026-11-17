@@ -71,7 +71,7 @@
 {#if visibleTurns.length}
   <Tooltip.Provider delayDuration={120}>
   <aside
-    class="fixed right-4 top-1/2 z-30 hidden -translate-y-1/2 xl:block"
+    class="fixed right-[calc(var(--file-preview-width,0px)+1rem)] top-1/2 z-30 hidden -translate-y-1/2 xl:block"
     aria-label={$t('chat.ruler')}
     data-chat-ruler
   >

@@ -1148,7 +1148,7 @@
           <div
             data-chat-scroll-down-container
             style="bottom: calc(var(--chat-composer-height) + 0.5rem)"
-            class={`pointer-events-none fixed left-0 right-0 z-40 px-4 transition-[left] duration-200 ease-linear md:left-[var(--sidebar-width)] md:px-8 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)] ${showScrollDownButton ? 'chat-scroll-down-enter' : 'chat-scroll-down-exit'}`}
+            class={`pointer-events-none fixed left-0 right-0 lg:right-[var(--file-preview-width,0px)] z-40 px-4 transition-[left] duration-200 ease-linear md:left-[var(--sidebar-width)] md:px-8 group-has-data-[state=collapsed]/sidebar-wrapper:md:left-[var(--sidebar-width-icon)] ${showScrollDownButton ? 'chat-scroll-down-enter' : 'chat-scroll-down-exit'}`}
           >
             <div class="mx-auto flex w-full max-w-[760px] justify-end">
               <Button

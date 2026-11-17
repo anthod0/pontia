@@ -11,6 +11,8 @@
   import { isSettingsPath } from '../settings/sections'
   import { dashboardRelativePath } from '$lib/dashboardRoutes'
   import { installVisualViewportCssVars } from '$lib/visualViewport'
+  import { provideFilePreview } from '../chat/filePreviewContext'
+  import FilePreviewPanel from '../chat/FilePreviewPanel.svelte'
 
   let { children, sidebar, topbar, settingsEnabled = true }: {
     children: Snippet
@@ -19,8 +21,12 @@
     settingsEnabled?: boolean
   } = $props()
   let currentPath = $state(dashboardRelativePath())
+  let currentLocation = location.pathname
+  const filePreview = provideFilePreview()
 
   function updatePath(): void {
+    if (currentLocation !== location.pathname) filePreview.set(null)
+    currentLocation = location.pathname
     currentPath = dashboardRelativePath()
   }
 
@@ -50,7 +56,7 @@
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
-<Sidebar.Provider>
+<Sidebar.Provider class="file-preview-layout" data-preview-open={$filePreview ? 'true' : 'false'}>
   {#if sidebar}
     {@render sidebar()}
   {:else}
@@ -58,7 +64,7 @@
     <ConnectionNotice />
     <AppSidebar />
   {/if}
-  <Sidebar.Inset class="bg-surface">
+  <Sidebar.Inset class="bg-surface lg:mr-[var(--file-preview-width)]">
     <div class={['sticky z-10 pr-20', !chatPath && 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">
       {#if topbar}
         {@render topbar()}
@@ -79,4 +85,20 @@
       </div>
     </main>
   </Sidebar.Inset>
+  {#if $filePreview}
+    {#key $filePreview}
+      <FilePreviewPanel target={$filePreview} onclose={() => filePreview.set(null)} />
+    {/key}
+  {/if}
 </Sidebar.Provider>
+
+<style>
+  :global(.file-preview-layout) {
+    --file-preview-width: 0px;
+  }
+  @media (min-width: 1024px) {
+    :global(.file-preview-layout[data-preview-open='true']) {
+      --file-preview-width: clamp(360px, 40vw, 640px);
+    }
+  }
+</style>

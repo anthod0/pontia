@@ -735,5 +735,13 @@
   "downloads.empty": "Your downloads will appear here",
   "downloads.cancelNamed": "Cancel download of {name}",
   "downloads.retryNamed": "Retry download of {name}",
-  "downloads.deviceUnavailable": "Device disconnected. Retry when it is online."
+  "downloads.deviceUnavailable": "Device disconnected. Retry when it is online.",
+  "files.preview": "Preview",
+  "files.previewNamed": "Preview {name}",
+  "files.loadingPreview": "Loading preview…",
+  "files.previewTooLarge": "Text preview is limited to 1 MiB. Download the file to read it.",
+  "files.previewNotText": "This file cannot be previewed as UTF-8 text. You can download it instead.",
+  "files.source": "Source",
+  "files.previewMode": "File view",
+  "files.copyFailed": "Could not copy. Select the text and copy it manually."
 }

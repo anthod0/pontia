@@ -735,5 +735,13 @@
   "downloads.empty": "下载的文件会显示在这里",
   "downloads.cancelNamed": "取消下载 {name}",
   "downloads.retryNamed": "重新下载 {name}",
-  "downloads.deviceUnavailable": "设备已断开连接，请在设备上线后重试。"
+  "downloads.deviceUnavailable": "设备已断开连接，请在设备上线后重试。",
+  "files.preview": "预览",
+  "files.previewNamed": "预览 {name}",
+  "files.loadingPreview": "正在加载预览…",
+  "files.previewTooLarge": "文字预览上限为 1 MiB，请下载文件查看。",
+  "files.previewNotText": "此文件无法作为 UTF-8 文本预览，可以下载后查看。",
+  "files.source": "源码",
+  "files.previewMode": "文件显示方式",
+  "files.copyFailed": "复制失败，请选中文字手动复制。"
 }
