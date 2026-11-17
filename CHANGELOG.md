@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.14] - 2026-11-17
+
+### Added
+
+- The Dashboard is available in Chinese, with a language preference.
+- Claude Code and ACP agents accept steering messages from the Dashboard. ACP agents without steering support queue the message instead.
+- Pi supports steering and delivery shortcuts in the inbox.
+- `pontia init` and the Dashboard detect installed agent clients, and the Dashboard can set them up through the CLI.
+- The Dashboard downloads local file links with inline progress, and downloads keep running across page navigation.
+- The conversation shows context compaction progress.
+- Shared images open in a fullscreen viewer with zoom.
+
+### Changed
+
+- The conversation shows each Turn's output and steering messages in the order they happened.
+- The shared files dialog shows files as a borderless list.
+
+### Fixed
+
+- Queued messages stay in the inbox until they are delivered.
+- Switching devices in the Dashboard restores the last chat.
+- Chat navigation shortcuts follow the sidebar order.
+- The chat ruler no longer grows past its maximum height or shows a scrollbar.
+- `pontia update` refreshes installed Pi integrations even when Pontia is already up to date.
+
 ## [0.7.13] - 2026-11-16
 
 ### Changed
