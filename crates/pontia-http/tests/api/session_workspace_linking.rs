@@ -6,13 +6,13 @@ use axum::http::StatusCode;
 use serde_json::json;
 
 #[tokio::test]
-async fn create_session_upserts_canonical_workspace_and_links_session() {
+async fn create_session_links_existing_canonical_workspace() {
     let _scope = GenericClientTestScope::new().await;
     let state = crate::common::test_app::TestApp::builder()
         .external_api_token(Some(crate::support::http::TOKEN.to_string()))
         .build_state()
         .await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let canonical = std::fs::canonicalize(workspace.path()).expect("canonical");
 
     let (status, body) = post_json(

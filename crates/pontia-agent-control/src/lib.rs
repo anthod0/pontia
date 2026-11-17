@@ -62,7 +62,7 @@ pub use views::{
     TurnOutputView, TurnView,
 };
 
-pub use workspaces::{WorkspaceRecord, get_workspace_record, upsert_workspace};
+pub use workspaces::{WorkspaceRecord, get_workspace_record};
 
 pub mod client_contract;
 

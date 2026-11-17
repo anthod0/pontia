@@ -24,6 +24,7 @@ fi
 use_proxy() {
     entry=root
     explicit_cd=false
+    workspace=$PWD
     while [ "$#" -gt 0 ]; do
         case $1 in
             --) return 0 ;;
@@ -31,9 +32,12 @@ use_proxy() {
             -C|--cd)
                 [ "$#" -ge 2 ] || return 1
                 explicit_cd=true
+                workspace=$2
                 shift 2
                 continue ;;
-            --cd=*|-C?*) explicit_cd=true ;;
+            --cd=*) explicit_cd=true; workspace=${1#--cd=} ;;
+            -C=*) explicit_cd=true; workspace=${1#-C=} ;;
+            -C?*) explicit_cd=true; workspace=${1#-C} ;;
             -c|--config|--enable|--disable|--remote-auth-token-env|-i|--image|-m|--model|--local-provider|-p|--profile|-s|--sandbox|--add-dir|-a|--ask-for-approval)
                 [ "$#" -ge 2 ] || return 1
                 shift 2
@@ -54,7 +58,7 @@ use_proxy() {
     done
     return 0
 }
-if use_proxy "$@"; then
+if use_proxy "$@" && PONTIA_HOME=__PONTIA_HOME__ pontia workspace-check -- "$workspace" >/dev/null 2>&1; then
     if [ "$explicit_cd" = false ]; then
         set -- --cd "$PWD" "$@"
     fi

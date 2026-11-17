@@ -211,6 +211,13 @@ impl Harness {
     async fn with_root(root: tempfile::TempDir) -> Self {
         let pool = connect_sqlite("sqlite::memory:").await.unwrap();
         run_migrations(&pool).await.unwrap();
+        pontia_agent_control::workspaces::upsert_canonical_workspace(
+            &pool,
+            root.path().canonicalize().unwrap().to_str().unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
         let mut clients = ClientRegistry::default();
         clients.register(pontia_client_claude::registration_with_host(Some(
             format!("{}/tests/fixtures/host.mjs", env!("CARGO_MANIFEST_DIR")).into(),

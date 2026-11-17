@@ -233,6 +233,10 @@ async fn relay(
                     {
                         match (request, value.get("result").filter(|_| value.get("error").is_none())) {
                             (PendingRequest::Open(operation, params, prepared), Some(result)) => {
+                                if prepared.is_none() {
+                                    downstream.send(frame).await.map_err(protocol::protocol_error)?;
+                                    continue;
+                                }
                                 if let Some(thread) = result["thread"]["id"].as_str() {
                                     let runtime_id = runtimes.entry(thread.into()).or_insert_with(|| pontia_core::ids::new_runtime_id().to_string()).clone();
                                     let (bound, ready) = tokio::sync::oneshot::channel();
@@ -265,7 +269,7 @@ async fn relay(
                             _ => None,
                         }
                     } else if value["method"] == "turn/started" {
-                        value["params"]["threadId"].as_str().map(|thread| ObservedEvent::TurnStarted(thread.into()))
+                        value["params"]["threadId"].as_str().filter(|thread| runtimes.contains_key(*thread)).map(|thread| ObservedEvent::TurnStarted(thread.into()))
                     } else { None };
                     if let Some(event) = event {
                         observations.send(Observation { daemon: daemon.clone(), event }).await

@@ -65,6 +65,8 @@ impl NativeSessionService {
         profile_binding: Option<Value>,
         reserved_session: Option<&str>,
     ) -> Result<String> {
+        let workspace =
+            crate::workspaces::require_active_workspace(&self.pool, &identity.launch_cwd).await?;
         let control = self.events.history_control();
         let _identity = match &control {
             Some(control) => Some(control.lock_identity().await),
@@ -79,7 +81,6 @@ impl NativeSessionService {
         crate::agent_clients::AgentClientService::new(self.pool.clone(), self.events.clients())
             .for_creation(client, &metadata)
             .await?;
-        let workspace = crate::upsert_workspace(&self.pool, &identity.launch_cwd).await?;
         let session = reserved_session
             .map(str::to_owned)
             .unwrap_or_else(|| new_session_id().to_string());
@@ -141,6 +142,7 @@ impl NativeSessionService {
             .binding_for_client_session(client, native_key)
             .await?
         {
+            crate::workspaces::require_active_workspace(&self.pool, &binding.launch_cwd).await?;
             return Ok(binding.session_id);
         }
         let observation = observation?;
@@ -168,7 +170,7 @@ impl NativeSessionService {
             .for_creation(client, &json!({}))
             .await?;
         let session = new_session_id().to_string();
-        let workspace = crate::upsert_workspace(&self.pool, cwd).await?;
+        let workspace = crate::workspaces::require_active_workspace(&self.pool, cwd).await?;
         self.events
             .ingest_pontia_event(PontiaEvent::new(
                 &session,
@@ -176,13 +178,17 @@ impl NativeSessionService {
                 PontiaEventSource::RuntimeManager,
                 client,
                 PontiaEventType::SessionCreated,
-                json!({"workspace":cwd}),
+                json!({"workspace":workspace.canonical_path}),
             ))
             .await?;
         pontia_storage_sqlite::repositories::sessions::SqliteSessionRepository::new(
             self.pool.clone(),
         )
-        .update_session_workspace(&session, Some(cwd), Some(&workspace.workspace_id))
+        .update_session_workspace(
+            &session,
+            Some(&workspace.canonical_path),
+            Some(&workspace.workspace_id),
+        )
         .await?;
         Ok(session)
     }

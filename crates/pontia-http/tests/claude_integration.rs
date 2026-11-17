@@ -92,6 +92,13 @@ impl Harness {
         let root = tempfile::tempdir().unwrap();
         let pool = connect_sqlite("sqlite::memory:").await.unwrap();
         run_migrations(&pool).await.unwrap();
+        pontia_agent_control::workspaces::upsert_canonical_workspace(
+            &pool,
+            root.path().canonicalize().unwrap().to_str().unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
         let mut clients = ClientRegistry::default();
         clients.register(pontia_client_claude::registration_with_host(Some(
             format!(

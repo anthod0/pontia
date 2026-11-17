@@ -11,7 +11,8 @@ use super::{
     validation::validate_handle,
 };
 use crate::{
-    PontiaEvent, PontiaEventSource, PontiaEventType, get_workspace_record, upsert_workspace,
+    PontiaEvent, PontiaEventSource, PontiaEventType,
+    workspaces::{require_active_workspace, require_active_workspace_id},
 };
 
 enum SessionManagementAction {
@@ -92,28 +93,20 @@ impl SessionCommandService {
         }
 
         let workspace_record = if let Some(workspace_id) = request.workspace_id.as_deref() {
-            Some(
-                get_workspace_record(&self.pool, workspace_id)
-                    .await?
-                    .ok_or_else(|| {
-                        Error::NotFound(format!("workspace {workspace_id} not found"))
-                    })?,
-            )
+            require_active_workspace_id(&self.pool, workspace_id).await?
         } else if let Some(workspace) = request.workspace.as_deref() {
-            Some(upsert_workspace(&self.pool, workspace).await?)
+            require_active_workspace(&self.pool, workspace).await?
         } else {
-            None
+            return Err(Error::Domain(
+                "An active registered Workspace is required".into(),
+            ));
         };
-        if let (Some(workspace), Some(handle)) = (workspace_record.as_ref(), handle) {
-            self.ensure_handle_available(&workspace.workspace_id, handle)
+        if let Some(handle) = handle {
+            self.ensure_handle_available(&workspace_record.workspace_id, handle)
                 .await?;
         }
-        let runtime_workspace = workspace_record
-            .as_ref()
-            .map(|workspace| workspace.canonical_path.clone());
-        let runtime_workspace_name = workspace_record
-            .as_ref()
-            .and_then(|workspace| workspace.name.clone());
+        let runtime_workspace = Some(workspace_record.canonical_path.clone());
+        let runtime_workspace_name = workspace_record.name.clone();
 
         let session_id = new_session_id().to_string();
         let runtime_id = pontia_core::ids::new_runtime_id().to_string();
@@ -188,7 +181,7 @@ impl SessionCommandService {
         };
         let Some(runtime) = runtime else {
             drop(initial_slot);
-            self.update_session_workspace(&session_id, workspace_record.as_ref())
+            self.update_session_workspace(&session_id, Some(&workspace_record))
                 .await?;
             if let Some(task) = request.initial_task {
                 self.inbox
@@ -214,7 +207,7 @@ impl SessionCommandService {
             adapter.spec.adapter.control_runtime_role,
         )
         .await?;
-        self.update_session_workspace(&session_id, workspace_record.as_ref())
+        self.update_session_workspace(&session_id, Some(&workspace_record))
             .await?;
 
         ingest

@@ -3,7 +3,7 @@ use sqlx::Row;
 #[tokio::test]
 async fn pi_client_session_key_binds_the_precreated_pontia_session_without_marker_identity() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()
@@ -45,7 +45,7 @@ async fn pi_client_session_key_binds_the_precreated_pontia_session_without_marke
 #[tokio::test]
 async fn fork_upsert_creates_independent_child_session_with_lineage() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()
@@ -127,7 +127,7 @@ async fn fork_upsert_creates_independent_child_session_with_lineage() {
 #[tokio::test]
 async fn upsert_creates_session_runtime_binding_and_agent_binding_without_tmux() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()
@@ -211,7 +211,7 @@ async fn upsert_creates_session_runtime_binding_and_agent_binding_without_tmux()
 #[tokio::test]
 async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fields() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()
@@ -264,7 +264,7 @@ async fn upsert_is_idempotent_for_same_pi_session_key_and_refreshes_runtime_fiel
 #[tokio::test]
 async fn upsert_rejects_a_different_tui_while_the_bound_session_is_not_exited() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()
@@ -296,7 +296,7 @@ async fn upsert_rejects_a_different_tui_while_the_bound_session_is_not_exited() 
 #[tokio::test]
 async fn upsert_rejects_a_different_runtime_owner_while_a_turn_is_active() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()
@@ -341,7 +341,7 @@ async fn upsert_rejects_a_different_runtime_owner_while_a_turn_is_active() {
 #[tokio::test]
 async fn concurrent_first_upserts_for_one_pi_session_key_create_once_without_overwriting() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()
@@ -378,7 +378,7 @@ async fn concurrent_first_upserts_for_one_pi_session_key_create_once_without_ove
 #[tokio::test]
 async fn upsert_rejects_a_request_that_disagrees_with_the_agent_binding() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()

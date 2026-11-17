@@ -34,6 +34,21 @@ impl CodexService {
                 "Codex proxy thread is not loaded".into(),
             ));
         }
+        let existing = pontia_agent_control::AgentBindingService::new(self.pool.clone())
+            .binding_for_client_session("codex", native)
+            .await?;
+        let expected_session = reservation
+            .as_ref()
+            .map(|reservation| reservation.session.clone())
+            .or_else(|| existing.as_ref().map(|binding| binding.session_id.clone()))
+            .unwrap_or_else(|| pontia_core::ids::new_session_id().to_string());
+        // Fence recovery before publishing a new identity. Existing Sessions retain
+        // identity-before-operation lock ordering used by resume commands.
+        let mut new_session_guard = if existing.is_none() {
+            Some(runtime.lock_session(&expected_session).await)
+        } else {
+            None
+        };
         let session = NativeSessionService::new(self.pool.clone(), self.event_ingest.clone())
             .resolve_subscription_session(
                 "codex",
@@ -44,9 +59,7 @@ impl CodexService {
                 },
                 json!({"codex_control_root":runtime.root,"codex_launch_cwd":cwd}),
                 profile_binding,
-                reservation
-                    .as_ref()
-                    .map(|reservation| reservation.session.as_str()),
+                Some(&expected_session),
             )
             .await?;
         if let Some(reservation) = reservation {
@@ -57,8 +70,14 @@ impl CodexService {
             }
             let _ = reservation.bound.send(());
         }
+        if session != expected_session {
+            new_session_guard = None;
+        }
+        let operation_guard = match new_session_guard {
+            Some(guard) => guard,
+            None => runtime.lock_session(&session).await,
+        };
         self.record_fork_lineage(&session, thread, params).await?;
-        let _operation = runtime.lock_session(&session).await;
         if self.root(&session).await? != runtime.root {
             return Err(Error::StateConflict(
                 "Codex Session belongs to another control root".into(),
@@ -88,7 +107,7 @@ impl CodexService {
                 .set_subscription(&session, SubscriptionState::AwaitingFirstInput)
                 .await;
             let _ = observation_changes().send((runtime.root.clone(), session.clone()));
-            return Ok((session, _operation));
+            return Ok((session, operation_guard));
         }
         // A queued proxy receipt must not resurrect a thread unloaded since the operation.
         let (snapshot, boundary) = connection
@@ -144,7 +163,7 @@ impl CodexService {
                 .bind(&session).execute(&self.pool).await?;
         self.subscribe_opened_thread(runtime, &session, native)
             .await?;
-        Ok((session, _operation))
+        Ok((session, operation_guard))
     }
     pub(super) async fn subscribe_opened_thread(
         &self,

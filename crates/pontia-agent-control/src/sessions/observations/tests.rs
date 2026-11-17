@@ -64,6 +64,13 @@ impl Fixture {
         .await
         .unwrap();
         pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+        crate::workspaces::upsert_canonical_workspace(
+            &pool,
+            root.path().canonicalize().unwrap().to_str().unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )
@@ -536,5 +543,138 @@ async fn native_terminal_fact_is_fenced_again_when_committing() {
     assert_eq!(
         events.list_events(&fixture.session).await.unwrap().len(),
         before
+    );
+}
+
+#[tokio::test]
+async fn native_admission_requires_explicit_workspace_activation_without_side_effects() {
+    let fixture = Fixture::new().await;
+    let cwd = fixture._root.path().join("unregistered");
+    std::fs::create_dir(&cwd).unwrap();
+    for state in [None, Some("archived"), Some("deleted")] {
+        if let Some(state) = state {
+            crate::workspaces::upsert_canonical_workspace(
+                &fixture.state.db(),
+                cwd.to_str().unwrap(),
+                None,
+            )
+            .await
+            .unwrap();
+            sqlx::query("UPDATE workspaces SET state=? WHERE canonical_path=?")
+                .bind(state)
+                .bind(cwd.to_str().unwrap())
+                .execute(&fixture.state.db())
+                .await
+                .unwrap();
+        }
+        let before: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT workspace_id,state,updated_at FROM workspaces ORDER BY workspace_id",
+        )
+        .fetch_all(&fixture.state.db())
+        .await
+        .unwrap();
+        assert!(
+            fixture
+                .service
+                .resolve_subscription_session(
+                    "native-test",
+                    "unregistered-thread",
+                    NativeSessionIdentity {
+                        launch_cwd: cwd.display().to_string(),
+                        client_session_file: None
+                    },
+                    json!({}),
+                    None,
+                    None,
+                )
+                .await
+                .is_err()
+        );
+        assert!(
+            fixture
+                .service
+                .resolve_observed_session(
+                    "native-test",
+                    "unregistered-thread",
+                    Ok(NativeSessionObservation {
+                        identity: NativeSessionIdentity {
+                            launch_cwd: cwd.display().to_string(),
+                            client_session_file: None
+                        },
+                        provisioned_runtime: RuntimeStartResult {
+                            runtime_kind: "external".into(),
+                            runtime_handle: "external".into(),
+                            capabilities: Default::default(),
+                            metadata: json!({})
+                        },
+                        runtime_id: "unregistered-runtime".into(),
+                    })
+                )
+                .await
+                .is_err()
+        );
+        let after: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT workspace_id,state,updated_at FROM workspaces ORDER BY workspace_id",
+        )
+        .fetch_all(&fixture.state.db())
+        .await
+        .unwrap();
+        assert_eq!(after, before);
+        let sessions: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+            .fetch_one(&fixture.state.db())
+            .await
+            .unwrap();
+        assert_eq!(sessions, 1);
+        let bindings: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings")
+            .fetch_one(&fixture.state.db())
+            .await
+            .unwrap();
+        assert_eq!(bindings, 0);
+    }
+    let workspace = crate::workspaces::upsert_canonical_workspace(
+        &fixture.state.db(),
+        cwd.to_str().unwrap(),
+        Some("Chosen name"),
+    )
+    .await
+    .unwrap();
+    let adopt = || {
+        fixture.service.resolve_subscription_session(
+            "native-test",
+            "registered-thread",
+            NativeSessionIdentity {
+                launch_cwd: cwd.display().to_string(),
+                client_session_file: None,
+            },
+            json!({}),
+            None,
+            None,
+        )
+    };
+    let session = adopt().await.unwrap();
+    assert_eq!(adopt().await.unwrap(), session);
+    let workspace_id: String =
+        sqlx::query_scalar("SELECT workspace_id FROM sessions WHERE session_id=?")
+            .bind(&session)
+            .fetch_one(&fixture.state.db())
+            .await
+            .unwrap();
+    assert_eq!(workspace_id, workspace.workspace_id);
+    sqlx::query("UPDATE workspaces SET state='deleted' WHERE workspace_id=?")
+        .bind(&workspace_id)
+        .execute(&fixture.state.db())
+        .await
+        .unwrap();
+    assert!(adopt().await.is_err());
+    assert!(
+        fixture
+            .service
+            .resolve_observed_session(
+                "native-test",
+                "registered-thread",
+                Err(Error::Domain("no new observation".into()))
+            )
+            .await
+            .is_err()
     );
 }

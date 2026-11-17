@@ -38,7 +38,7 @@ inputs = ["research.md"]
 output = "result.md"
 ```
 
-Defina `cwd` como um diretório existente. Todos os Agent Clients do Workflow são iniciados nele. Para usar o diretório também a partir de New chat, [ative-o como uma Workspace](/docs/workspaces).
+Defina `cwd` como um diretório existente que você tenha [ativado como uma Workspace](/docs/workspaces). Todos os Agent Clients do Workflow são iniciados nele.
 
 Use `type = "agent"` em cada Node. Os Nodes são executados na ordem da definição. Cada entrada indica um Handoff inicial ou a saída de um Node anterior. Dê a cada saída um nome de arquivo único, sem componentes de diretório.
 

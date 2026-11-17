@@ -159,7 +159,7 @@ async fn reclaims_stale_sockets_but_preserves_live_listeners_and_other_files() {
 }
 
 #[tokio::test]
-async fn only_matching_successful_thread_responses_are_observed() {
+async fn ephemeral_thread_responses_are_forwarded_without_observation() {
     let root = tempfile::tempdir().unwrap();
     let upstream_path = root.path().join("native.sock");
     let upstream = UnixListener::bind(&upstream_path).unwrap();
@@ -199,13 +199,6 @@ async fn only_matching_successful_thread_responses_are_observed() {
         native.send(message.clone()).await.unwrap();
         assert_eq!(receive(&mut client).await, message);
     }
-    for expected in ["resumed", "started"] {
-        let observation = incoming.recv().await.unwrap();
-        let ObservedEvent::ThreadOpened { result, .. } = observation.event else {
-            panic!("unexpected event")
-        };
-        assert_eq!(result["thread"]["id"], expected);
-    }
     assert!(incoming.try_recv().is_err());
     shutdown.send(true).unwrap();
     task.await.unwrap().unwrap();
@@ -220,7 +213,7 @@ async fn test_state(root: &Path) -> pontia_agent_control::AgentControl {
 }
 
 #[tokio::test]
-async fn unsubscribe_requires_a_matching_success_and_only_cli_close_ends_associations() {
+async fn ephemeral_threads_never_create_runtime_associations() {
     for cli_close in [true, false] {
         let root = tempfile::tempdir().unwrap();
         let upstream_path = root.path().join("native.sock");
@@ -251,32 +244,13 @@ async fn unsubscribe_requires_a_matching_success_and_only_cli_close_ends_associa
             .await
             .unwrap();
         receive(&mut client).await;
-        let ObservedEvent::ThreadOpened { runtime_id, .. } = incoming.recv().await.unwrap().event
-        else {
-            panic!("expected open")
-        };
-        for (response, confirmed) in [
-            (serde_json::json!({"id":2,"error":{"code":-32600}}), false),
-            (
-                serde_json::json!({"id":"2","result":{"status":"unsubscribed"}}),
-                false,
-            ),
-            (
-                serde_json::json!({"id":2,"result":{"status":"futureStatus"}}),
-                false,
-            ),
-            (
-                serde_json::json!({"id":2,"result":{"status":"unsubscribed"}}),
-                true,
-            ),
-            (
-                serde_json::json!({"id":2,"result":{"status":"notSubscribed"}}),
-                true,
-            ),
-            (
-                serde_json::json!({"id":2,"result":{"status":"notLoaded"}}),
-                true,
-            ),
+        for response in [
+            serde_json::json!({"id":2,"error":{"code":-32600}}),
+            serde_json::json!({"id":"2","result":{"status":"unsubscribed"}}),
+            serde_json::json!({"id":2,"result":{"status":"futureStatus"}}),
+            serde_json::json!({"id":2,"result":{"status":"unsubscribed"}}),
+            serde_json::json!({"id":2,"result":{"status":"notSubscribed"}}),
+            serde_json::json!({"id":2,"result":{"status":"notLoaded"}}),
         ] {
             client
                 .send(Message::text(
@@ -291,19 +265,7 @@ async fn unsubscribe_requires_a_matching_success_and_only_cli_close_ends_associa
                 .await
                 .unwrap();
             receive(&mut client).await;
-            if confirmed {
-                let ObservedEvent::ThreadUnsubscribed {
-                    thread,
-                    runtime_id: ended,
-                } = incoming.recv().await.unwrap().event
-                else {
-                    panic!("expected unsubscribe")
-                };
-                assert_eq!(thread, "a");
-                assert_eq!(ended, runtime_id);
-            } else {
-                assert!(incoming.try_recv().is_err());
-            }
+            assert!(incoming.try_recv().is_err());
         }
         if cli_close {
             client.close(None).await.unwrap();
@@ -314,7 +276,7 @@ async fn unsubscribe_requires_a_matching_success_and_only_cli_close_ends_associa
             let ObservedEvent::ConnectionClosed(runtimes) = observation.event else {
                 panic!("expected CLI close")
             };
-            assert_eq!(runtimes, HashMap::from([("a".into(), runtime_id)]));
+            assert!(runtimes.is_empty());
         } else {
             native.close(None).await.unwrap();
             assert!(receive(&mut client).await.is_close());

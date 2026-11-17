@@ -182,7 +182,9 @@ impl ShimSetup {
         let bin = self.root.join("bin");
         fs::create_dir_all(&bin).map_err(|e| e.to_string())?;
         let remote = format!("unix://{}", crate::proxy::socket_path(&self.root).display());
-        let script = include_str!("shim.sh").replace("__PONTIA_REMOTE__", &quote(&remote));
+        let script = include_str!("shim.sh")
+            .replace("__PONTIA_REMOTE__", &quote(&remote))
+            .replace("__PONTIA_HOME__", &quote(self.root.to_str().unwrap()));
         write_changed(&launcher, &script)?;
         if fs::metadata(&launcher)
             .map_err(|e| e.to_string())?

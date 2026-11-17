@@ -13,12 +13,14 @@ use tower::ServiceExt;
 
 const TOKEN: &str = "test-token";
 
-async fn test_state() -> AppState {
-    TestApp::builder()
+async fn test_state() -> (AppState, tempfile::TempDir) {
+    let state = TestApp::builder()
         .database_name("session_create.db")
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
-        .await
+        .await;
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
+    (state, workspace)
 }
 
 async fn post_json(
@@ -107,7 +109,7 @@ async fn patch_json(state: AppState, uri: &str, body: Value) -> (StatusCode, Val
 #[tokio::test]
 async fn create_session_rejects_unauthenticated_requests() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let (status, body) = post_json(
         state,
@@ -126,7 +128,7 @@ async fn create_session_rejects_unauthenticated_requests() {
 #[tokio::test]
 async fn create_session_rejects_unsupported_client_type() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let (status, body) = post_json(
         state,
@@ -144,7 +146,7 @@ async fn create_session_rejects_unsupported_client_type() {
 #[tokio::test]
 async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_capabilities() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let (status, body) = post_json(
         state.clone(),
@@ -153,7 +155,7 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
         None,
         json!({
             "client_type":"generic",
-            "workspace":"/tmp/workspace",
+            "workspace":_workspace.path(),
             "execution_profile_id":"implementer",
             "execution_profile_version":"1",
             "metadata":{"purpose":"session_create"}
@@ -169,7 +171,7 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
     assert_eq!(session["client_type"], "generic");
     assert_eq!(session["handle"], Value::Null);
     assert_eq!(session["state"], "idle");
-    assert_eq!(session["workspace"], "/tmp/workspace");
+    assert_eq!(session["workspace"], _workspace.path().to_str().unwrap());
     assert_eq!(session["execution_profile_id"], "implementer");
     assert_eq!(session["execution_profile_version"], "1");
     assert_eq!(session["metadata"], json!({"purpose":"session_create"}));
@@ -236,7 +238,7 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
 #[tokio::test]
 async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let (status, body) = post_json(
         state.clone(),
@@ -245,7 +247,7 @@ async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
         None,
         json!({
             "client_type":"generic",
-            "workspace":"/tmp",
+            "workspace":_workspace.path(),
             "handle":"@reviewer"
         }),
     )
@@ -264,7 +266,7 @@ async fn create_session_accepts_handle_and_exposes_it_on_session_views() {
 #[tokio::test]
 async fn create_session_accepts_title_and_exposes_it_on_session_views() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let (status, body) = post_json(
         state.clone(),
@@ -273,7 +275,7 @@ async fn create_session_accepts_title_and_exposes_it_on_session_views() {
         None,
         json!({
             "client_type":"generic",
-            "workspace":"/tmp",
+            "workspace":_workspace.path(),
             "title":"Inspect dashboard session titles"
         }),
     )
@@ -295,8 +297,8 @@ async fn create_session_accepts_title_and_exposes_it_on_session_views() {
 #[tokio::test]
 async fn session_management_pin_archive_and_unarchive_update_session_views_and_list_filters() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let (state, _workspace) = test_state().await;
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace_path = workspace.path().to_string_lossy();
 
     let (create_status, create_body) = post_json(
@@ -304,7 +306,7 @@ async fn session_management_pin_archive_and_unarchive_update_session_views_and_l
         "/api/v1/sessions",
         Some(TOKEN),
         None,
-        json!({"client_type":"generic", "title":"managed session", "workspace": workspace_path}),
+        json!({"client_type":"generic", "workspace":_workspace.path(), "title":"managed session", "workspace": workspace_path}),
     )
     .await;
     assert_eq!(create_status, StatusCode::CREATED);
@@ -397,7 +399,7 @@ async fn session_management_pin_archive_and_unarchive_update_session_views_and_l
 #[tokio::test]
 async fn patch_session_updates_title_through_session_events() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let (_, create_body) = post_json(
         state.clone(),
@@ -406,7 +408,7 @@ async fn patch_session_updates_title_through_session_events() {
         None,
         json!({
             "client_type":"generic",
-            "workspace":"/tmp",
+            "workspace":_workspace.path(),
             "title":"Original title"
         }),
     )
@@ -454,7 +456,7 @@ async fn patch_session_updates_title_through_session_events() {
 #[tokio::test]
 async fn create_session_accepts_role_and_description_and_exposes_them_on_session_views() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let (status, body) = post_json(
         state.clone(),
@@ -463,7 +465,7 @@ async fn create_session_accepts_role_and_description_and_exposes_them_on_session
         None,
         json!({
             "client_type":"generic",
-            "workspace":"/tmp",
+            "workspace":_workspace.path(),
             "handle":"@reviewer",
             "role":"reviewer",
             "description":"Reviews Rust backend changes for event projection correctness."
@@ -492,7 +494,7 @@ async fn create_session_accepts_role_and_description_and_exposes_them_on_session
 #[tokio::test]
 async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_friendly_error() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let first = post_json(
         state.clone(),
@@ -501,7 +503,7 @@ async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_fr
         None,
         json!({
             "client_type":"generic",
-            "workspace":"/tmp",
+            "workspace":_workspace.path(),
             "handle":"@reviewer"
         }),
     )
@@ -516,7 +518,7 @@ async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_fr
         None,
         json!({
             "client_type":"generic",
-            "workspace":"/tmp",
+            "workspace":_workspace.path(),
             "handle":"@reviewer"
         }),
     )
@@ -534,7 +536,7 @@ async fn create_session_rejects_duplicate_handle_in_same_workspace_with_agent_fr
 #[tokio::test]
 async fn create_session_allows_reusing_handle_after_previous_session_exited() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let first = post_json(
         state.clone(),
@@ -543,7 +545,7 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
         None,
         json!({
             "client_type":"generic",
-            "workspace":"/tmp",
+            "workspace":_workspace.path(),
             "handle":"@reviewer"
         }),
     )
@@ -572,7 +574,7 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
         None,
         json!({
             "client_type":"generic",
-            "workspace":"/tmp",
+            "workspace":_workspace.path(),
             "handle":"@reviewer"
         }),
     )
@@ -590,7 +592,7 @@ async fn create_session_allows_reusing_handle_after_previous_session_exited() {
 #[tokio::test]
 async fn create_session_rejects_handle_without_workspace() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let (status, body) = post_json(
         state,
@@ -616,7 +618,7 @@ async fn create_session_rejects_handle_without_workspace() {
 #[tokio::test]
 async fn create_session_rejects_invalid_handle_format() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let (status, body) = post_json(
         state,
@@ -625,7 +627,7 @@ async fn create_session_rejects_invalid_handle_format() {
         None,
         json!({
             "client_type":"generic",
-            "workspace":"/tmp",
+            "workspace":_workspace.path(),
             "handle":"reviewer"
         }),
     )
@@ -643,7 +645,7 @@ async fn create_session_rejects_invalid_handle_format() {
 #[tokio::test]
 async fn create_session_with_initial_task_creates_queued_initial_turn() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
 
     let (status, body) = post_json(
         state.clone(),
@@ -652,6 +654,7 @@ async fn create_session_with_initial_task_creates_queued_initial_turn() {
         None,
         json!({
             "client_type":"generic",
+            "workspace":_workspace.path(),
             "initial_task":{"input":"do the first thing","metadata":{"priority":"high"}}
         }),
     )
@@ -684,9 +687,10 @@ async fn create_session_with_initial_task_creates_queued_initial_turn() {
 #[tokio::test]
 async fn create_session_is_idempotent_when_idempotency_key_is_retried() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let body = json!({
         "client_type":"generic",
+        "workspace":_workspace.path(),
         "initial_task":{"input":"only once"}
     });
 

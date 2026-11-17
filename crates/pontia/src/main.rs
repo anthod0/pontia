@@ -3,6 +3,7 @@ mod login;
 mod remote;
 mod update;
 mod workflow;
+mod workspace;
 
 use std::{
     collections::HashMap,
@@ -95,6 +96,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    #[command(hide = true)]
+    WorkspaceCheck { path: PathBuf },
     /// Share one file with the user of the current Session
     #[command(after_help = "The file is read when the user downloads it.")]
     SendFile {
@@ -230,6 +233,10 @@ fn cli_command() -> clap::Command {
 
 async fn execute(command: Command) -> Result<bool, String> {
     match command {
+        Command::WorkspaceCheck { path } => {
+            let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
+            workspace::is_active(&config, &path).await
+        }
         Command::Init => run_init().await,
         Command::Setup { client } => {
             let vars = env::vars().collect();

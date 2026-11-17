@@ -13,6 +13,13 @@ async fn state() -> (AgentControl, tempfile::TempDir) {
         .await
         .unwrap();
     run_migrations(&db).await.unwrap();
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &db,
+        root.path().canonicalize().unwrap().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         db.clone(),
     )
@@ -580,8 +587,11 @@ async fn rpc_queries_read_workspace_session_and_pinned_or_latest_profiles() {
     let (state, root) = state().await;
     let (pi, _requests) = client(&state);
     assert_eq!(
-        pi.call("workspaces.list", json!({})).await.unwrap(),
-        json!({"workspaces": []})
+        pi.call("workspaces.list", json!({})).await.unwrap()["workspaces"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
     );
     let (session, _) = register(&pi, root.path()).await;
     let workspaces = pi.call("workspaces.list", json!({})).await.unwrap();
@@ -782,4 +792,46 @@ async fn a_different_process_instance_cannot_attach_or_replace_the_registered_ru
     assert_eq!(saved, ("idle".into(), previous));
     other.close();
     state.client_control().close().await;
+}
+
+#[tokio::test]
+async fn runtime_registration_cannot_register_or_reactivate_a_workspace() {
+    let (state, root) = state().await;
+    let cwd = root.path().join("unregistered");
+    std::fs::create_dir(&cwd).unwrap();
+    for workspace_state in [None, Some("archived"), Some("deleted")] {
+        if let Some(workspace_state) = workspace_state {
+            pontia_agent_control::workspaces::upsert_canonical_workspace(
+                &state.db(),
+                cwd.to_str().unwrap(),
+                None,
+            )
+            .await
+            .unwrap();
+            sqlx::query("UPDATE workspaces SET state=? WHERE canonical_path=?")
+                .bind(workspace_state)
+                .bind(cwd.to_str().unwrap())
+                .execute(&state.db())
+                .await
+                .unwrap();
+        }
+        let before: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT workspace_id,state,updated_at FROM workspaces ORDER BY workspace_id",
+        )
+        .fetch_all(&state.db())
+        .await
+        .unwrap();
+        let (pi, _requests) = client(&state);
+        assert!(pi.call("runtime.register", json!({"version":PROTOCOL_VERSION,"binding":{"client_type":"pi","client_session_key":"native","client_cwd":cwd}})).await.is_err());
+        let after: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT workspace_id,state,updated_at FROM workspaces ORDER BY workspace_id",
+        )
+        .fetch_all(&state.db())
+        .await
+        .unwrap();
+        assert_eq!(before, after);
+        let counts: (i64,i64,i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM sessions),(SELECT COUNT(*) FROM agent_bindings),(SELECT COUNT(*) FROM session_runtimes)").fetch_one(&state.db()).await.unwrap();
+        assert_eq!(counts, (0, 0, 0));
+        pi.close();
+    }
 }

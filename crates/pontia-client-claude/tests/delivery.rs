@@ -98,6 +98,13 @@ async fn npm_install_reports_authentication_retries_without_fabricating_turns() 
     let address = format!("127.0.0.1:{}", port.trim().parse::<u16>().unwrap());
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &pool,
+        root.path().canonicalize().unwrap().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     let mut clients = ClientRegistry::default();
     clients.register(pontia_client_claude::registration_with_host(None));
     let app = AgentControl::builder(pool, pontia)

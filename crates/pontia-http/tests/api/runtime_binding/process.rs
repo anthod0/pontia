@@ -5,7 +5,7 @@ use super::{
 #[tokio::test]
 async fn registration_tracks_the_ipc_peer_without_a_terminal_binding() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().unwrap();
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let (status, registered) = post_upsert(
         state.clone(),
         upsert_body(workspace.path().to_str().unwrap()),
@@ -29,7 +29,7 @@ async fn registration_tracks_the_ipc_peer_without_a_terminal_binding() {
 #[tokio::test]
 async fn pending_native_identity_recovers_the_launch_and_preserves_its_terminal_location() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().unwrap();
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     sqlx::query("INSERT INTO sessions (session_id, client_type, state) VALUES ('sess_pending', 'pi', 'starting')")
         .execute(&state.db()).await.unwrap();
     sqlx::query("INSERT INTO session_runtimes (runtime_id, session_id, role, state, tmux_socket_path, tmux_pane_id, start_command, created_at) VALUES ('rt_pending', 'sess_pending', 'tui', 'starting', '/launch/socket', '%9', 'pi --approve', '2026-01-01T00:00:00Z')")

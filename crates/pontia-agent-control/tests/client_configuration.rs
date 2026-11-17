@@ -11,6 +11,13 @@ async fn omitted_client_selection_uses_the_registered_default_without_global_sta
         .await
         .unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &pool,
+        root.path().canonicalize().unwrap().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )
@@ -22,7 +29,8 @@ async fn omitted_client_selection_uses_the_registered_default_without_global_sta
     let state = AgentControl::builder(pool, root.path().to_path_buf())
         .clients(clients)
         .build();
-    let request: CreateSessionRequest = serde_json::from_value(json!({})).unwrap();
+    let request: CreateSessionRequest =
+        serde_json::from_value(json!({"workspace":root.path()})).unwrap();
     let result = state
         .session_commands()
         .create_session(request)

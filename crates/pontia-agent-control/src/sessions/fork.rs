@@ -54,6 +54,10 @@ impl SessionCommandService {
             .get_session(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+        let workspace_id = session.workspace_id.as_deref().ok_or_else(|| {
+            Error::StateConflict("An active registered Workspace is required".into())
+        })?;
+        crate::workspaces::require_active_workspace_id(&self.pool, workspace_id).await?;
         if !session.capabilities.fork_session {
             return Err(Error::CapabilityUnavailable(
                 "Session fork is unavailable".into(),

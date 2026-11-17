@@ -247,10 +247,13 @@ async fn startup_failure_ends_runtime_and_preserves_reason() {
 #[tokio::test]
 async fn session_query_returns_all_runtimes() {
     let (app, root) = fixture().await;
-    let workspace =
-        pontia_agent_control::upsert_workspace(&app.db(), root.path().to_str().unwrap())
-            .await
-            .unwrap();
+    let workspace = pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &app.db(),
+        root.path().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     sqlx::query("UPDATE sessions SET workspace_id=? WHERE session_id='session'")
         .bind(workspace.workspace_id)
         .execute(&app.db())

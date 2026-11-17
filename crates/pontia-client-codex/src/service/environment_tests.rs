@@ -131,6 +131,13 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
             .await
             .unwrap();
         pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+        pontia_agent_control::workspaces::upsert_canonical_workspace(
+            &pool,
+            root.path().canonicalize().unwrap().to_str().unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )
@@ -413,6 +420,13 @@ set = {{ PROBE_NATIVE = "native", PONTIA_SESSION_ID = "wrong-native" }}
             .await
             .unwrap();
         pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+        pontia_agent_control::workspaces::upsert_canonical_workspace(
+            &pool,
+            root.path().canonicalize().unwrap().to_str().unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )

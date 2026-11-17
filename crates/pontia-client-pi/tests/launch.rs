@@ -283,6 +283,13 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
             .await
             .unwrap();
         run_migrations(&pool).await.unwrap();
+        pontia_agent_control::workspaces::upsert_canonical_workspace(
+            &pool,
+            root.path().canonicalize().unwrap().to_str().unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
         for (file, environment, fallback, overridden) in [
             (
                 json!({"tui_command":"file-pi"}),

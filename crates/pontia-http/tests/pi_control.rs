@@ -24,6 +24,13 @@ async fn state() -> (AppState, tempfile::TempDir) {
         .await
         .unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &pool,
+        root.path().canonicalize().unwrap().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     let state = AppState::builder(
         pontia_agent_control::AgentControl::builder(pool, root.path().into())
             .clients(crate::common::clients::clients())

@@ -38,7 +38,7 @@ inputs = ["research.md"]
 output = "result.md"
 ```
 
-Set `cwd` to an existing directory. Every Agent Client in the Workflow launches there. To also use the directory from New chat, [activate it as a Workspace](/docs/workspaces).
+Set `cwd` to an existing directory that you have [activated as a Workspace](/docs/workspaces). Every Agent Client in the Workflow launches there.
 
 Use `type = "agent"` for each Node. Nodes execute in definition order. Each input names an initial Handoff or an earlier Node output. Give every output a unique file name without directory components.
 

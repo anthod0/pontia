@@ -26,7 +26,7 @@ Os dois comandos configuram a inicialização automática, verificam a conexão 
 
 <h2 id="codex-launcher">Launcher do Codex</h2>
 
-A configuração do Codex instala `$PONTIA_HOME/bin/codex` e o adiciona ao início do `PATH` nos seus arquivos de inicialização do bash, zsh ou fish. Comandos `codex` interativos em novos shells passam então a se conectar ao daemon gerenciado pelo Pontia, e as threads que eles iniciam, retomam ou bifurcam aparecem como Sessions do Pontia. Outros subcomandos, como `codex exec` ou `codex login`, executam o executável original sem alterações.
+A configuração do Codex instala `$PONTIA_HOME/bin/codex` e o adiciona ao início do `PATH` nos arquivos de inicialização do bash, zsh ou fish. Primeiro, [ative o diretório do projeto como uma Workspace](/docs/workspaces). Comandos interativos `codex` nesse diretório passam pelo Pontia: uma nova conversa aparece como Session na primeira entrada, e conversas retomadas ou bifurcadas também podem se conectar. Em diretórios não registrados ou inativos, o launcher executa o Codex nativo sem alterações. Outros subcomandos, como `codex exec` ou `codex login`, também executam o programa original sem alterações.
 
 Abra um novo terminal, ou execute o comando de ativação exibido após a configuração, para usar o launcher. Se o launcher ou a configuração de PATH gerenciada por ele estiver faltando, execute `pontia setup codex` novamente. Repetir a configuração preserva configurações de shell não relacionadas e não duplica o bloco de PATH gerenciado. O executável original do Codex continua disponível.
 

@@ -108,6 +108,13 @@ impl TestAppBuilder {
         }
 
         let db = self.open_database(Some(pontia_home.path())).await;
+        pontia_agent_control::workspaces::upsert_canonical_workspace(
+            &db,
+            workspace.path().to_str().unwrap(),
+            None,
+        )
+        .await
+        .expect("register fixture Workspace");
         let state = self
             .build_app_state(db.clone(), pontia_home.path().to_path_buf())
             .await;
@@ -224,4 +231,23 @@ impl Drop for EnvGuard {
             }
         }
     }
+}
+
+pub(crate) async fn registered_workspace(state: &AppState) -> tempfile::TempDir {
+    let workspace = tempfile::tempdir().expect("workspace");
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &state.db(),
+        workspace.path().canonicalize().unwrap().to_str().unwrap(),
+        None,
+    )
+    .await
+    .expect("register fixture Workspace");
+    workspace
+}
+
+pub(crate) async fn workspace_id(state: &AppState) -> String {
+    sqlx::query_scalar("SELECT workspace_id FROM workspaces WHERE state='active' LIMIT 1")
+        .fetch_one(&state.db())
+        .await
+        .unwrap()
 }

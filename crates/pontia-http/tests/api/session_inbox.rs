@@ -14,12 +14,14 @@ use crate::common::generic_client::GenericClientTestScope;
 
 const TOKEN: &str = "test-token";
 
-async fn test_state() -> AppState {
-    TestApp::builder()
+async fn test_state() -> (AppState, tempfile::TempDir) {
+    let state = TestApp::builder()
         .database_name("inbox.db")
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
-        .await
+        .await;
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
+    (state, workspace)
 }
 
 async fn post_json(
@@ -78,7 +80,8 @@ async fn create_session(state: AppState) -> String {
     create_session_with_body(state, json!({"client_type":"generic"})).await
 }
 
-async fn create_session_with_body(state: AppState, body: Value) -> String {
+async fn create_session_with_body(state: AppState, mut body: Value) -> String {
+    body["workspace_id"] = json!(crate::common::test_app::workspace_id(&state).await);
     let (status, body) = post_json(state, "/api/v1/sessions", None, body).await;
     assert_eq!(status, StatusCode::CREATED);
     body["data"]["session"]["session_id"]
@@ -131,7 +134,7 @@ async fn started_event_body(
 #[tokio::test]
 async fn idle_after_idle_inbox_message_dispatches_immediately() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
     let (status, body) = post_json(
@@ -175,7 +178,7 @@ async fn unsupported_steer_is_accepted_and_waits_until_idle_without_a_failure() 
 
 async fn busy_inbox_waits_until_idle(policy: &str) {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     let (started_status, _) = post_internal_event(
@@ -261,7 +264,7 @@ async fn busy_inbox_waits_until_idle(policy: &str) {
 #[tokio::test]
 async fn idempotent_inbox_retry_returns_current_message_state_without_duplicate_turn() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let uri = format!("/api/v1/sessions/{session_id}/inbox/messages");
 
@@ -293,7 +296,7 @@ async fn idempotent_inbox_retry_returns_current_message_state_without_duplicate_
 #[tokio::test]
 async fn inbox_submission_rejects_whitespace_only_input() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
     let (status, body) = post_json(
@@ -311,7 +314,7 @@ async fn inbox_submission_rejects_whitespace_only_input() {
 #[tokio::test]
 async fn branch_submission_rejects_interrupt_delivery() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
     let (status, body) = post_json(
@@ -339,7 +342,7 @@ async fn branch_submission_rejects_interrupt_delivery() {
 #[tokio::test]
 async fn branch_submission_rejects_an_unsupported_session_before_persisting() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
     let (status, body) = post_json(
@@ -377,7 +380,7 @@ async fn branch_submission_rejects_an_unsupported_session_before_persisting() {
 #[tokio::test]
 async fn cancel_pending_message_prevents_later_dispatch() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
@@ -427,7 +430,7 @@ async fn cancel_pending_message_prevents_later_dispatch() {
 #[tokio::test]
 async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
     EventIngestService::for_projection_tests(state.db())
         .with_clients(crate::common::clients::clients())
@@ -491,7 +494,7 @@ async fn newest_pending_interrupt_supersedes_older_pending_interrupt() {
 #[tokio::test]
 async fn interrupt_now_without_interrupt_capability_marks_message_failed() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
@@ -529,7 +532,7 @@ async fn interrupt_now_without_interrupt_capability_marks_message_failed() {
 #[tokio::test]
 async fn failed_inbox_message_can_be_dismissed_idempotently() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
@@ -594,7 +597,7 @@ async fn failed_inbox_message_can_be_dismissed_idempotently() {
 #[tokio::test]
 async fn pending_inbox_message_cannot_be_dismissed() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let active_turn_id = submit_inbox_turn(state.clone(), &session_id, "first").await;
     post_internal_event(
@@ -653,6 +656,7 @@ async fn persistent_submission_survives_response_loss_and_database_reopen() {
     )
     .external_api_token(Some(TOKEN.into()))
     .build();
+    let _workspace = crate::common::test_app::registered_workspace(&state).await;
     let session = create_session(state.clone()).await;
     let uri = format!("/api/v1/sessions/{session}/inbox/messages");
     let first = post_json(
@@ -750,7 +754,7 @@ async fn persistent_submission_survives_response_loss_and_database_reopen() {
 #[tokio::test]
 async fn retry_restores_exited_session_once_and_links_original_failure() {
     let scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session = create_session(state.clone()).await;
     sqlx::query("UPDATE sessions SET state='exited' WHERE session_id=?")
         .bind(&session)
