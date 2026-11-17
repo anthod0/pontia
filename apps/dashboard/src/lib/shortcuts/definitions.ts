@@ -41,13 +41,11 @@ export const helpShortcuts: ShortcutDefinition[] = [
   sidebarShortcut,
 ];
 
-export const messageInputShortcuts: ShortcutDefinition[] = [
-  { keys: ["Enter"], label: "common.send" },
-  { keys: ["Tab"], label: "shortcuts.queueMessage" },
-  { keys: ["Alt", "Enter"], label: "shortcuts.queueMessage" },
-  { keys: ["Shift", "Enter"], label: "shortcuts.newline" },
-  { keys: ["Mod", "Enter"], label: "shortcuts.newline" },
-  { keys: ["Enter"], label: "shortcuts.newlineAfterBackslash" },
+export const messageInputShortcuts: { keyGroups: ShortcutKey[][]; label: MessageKey }[] = [
+  { keyGroups: [["Enter"]], label: "common.send" },
+  { keyGroups: [["Tab"], ["Alt", "Enter"]], label: "shortcuts.queueMessage" },
+  { keyGroups: [["Shift", "Enter"], ["Mod", "Enter"]], label: "shortcuts.newline" },
+  { keyGroups: [["Enter"]], label: "shortcuts.newlineAfterBackslash" },
 ];
 
 const letterActions: Record<

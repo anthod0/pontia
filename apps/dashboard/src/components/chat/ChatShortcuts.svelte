@@ -104,7 +104,11 @@
       {#each messageInputShortcuts as shortcut}
         <div class="flex items-center justify-between gap-4 py-1.5">
           <div class="min-w-0 text-sm">{$t(shortcut.label)}</div>
-          <ShortcutKeys keys={shortcut.keys} class="inline-flex shrink-0 border border-border bg-transparent" />
+          <div class="flex flex-wrap justify-end gap-2">
+            {#each shortcut.keyGroups as keys}
+              <ShortcutKeys {keys} class="inline-flex shrink-0 border border-border bg-transparent" />
+            {/each}
+          </div>
         </div>
       {/each}
       <p class="text-xs text-muted-foreground">{$t('shortcuts.inputSuggestions')}</p>
