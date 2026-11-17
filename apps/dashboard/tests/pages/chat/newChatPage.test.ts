@@ -181,6 +181,30 @@ test("remembers the selected new chat workspace after starting a chat", async ()
   expect(window.localStorage.getItem("pontia.chat.lastWorkspaceId:local")).toBe("workspace-2");
 });
 
+test("remembers the selected agent client for the next new chat", async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(NewChatPage);
+
+  const clientSelector = await screen.findByLabelText("Agent client");
+  await user.click(clientSelector);
+  await user.click(await screen.findByText("codex"));
+  expect(clientSelector).toHaveTextContent("codex");
+  expect(window.localStorage.getItem("pontia.chat.lastCreationOptionId:local")).toBe("codex");
+  unmount();
+  document.body.style.pointerEvents = "";
+
+  render(NewChatPage);
+  expect(await screen.findByLabelText("Agent client")).toHaveTextContent("codex");
+});
+
+test("falls back to the first agent client when the remembered one is unavailable", async () => {
+  window.localStorage.setItem("pontia.chat.lastCreationOptionId:local", "removed-client");
+  render(NewChatPage);
+
+  await waitFor(() => expect(screen.getByLabelText("Agent client")).toHaveTextContent("Pi"));
+  expect(window.localStorage.getItem("pontia.chat.lastCreationOptionId:local")).toBe("pi");
+});
+
 test("offers Pi and Codex and requires a task before submission", async () => {
   render(NewChatPage);
 
