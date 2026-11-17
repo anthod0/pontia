@@ -1,5 +1,7 @@
 mod history_recovery;
+mod messages;
 mod page;
+pub use messages::{MessageCategory, SessionMessagesPage, SessionMessagesQuery};
 mod recovery;
 mod session;
 mod source;
@@ -8,11 +10,11 @@ mod tree_history;
 mod tree_updates;
 
 use pontia_core::error::Error;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::client_contract::raw_transcripts::TurnTimelineItem;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TurnTimelineDirection {
     Forward,
@@ -64,6 +66,7 @@ pub struct TurnTreeUpdatesPage {
 
 #[derive(Debug)]
 pub enum TurnTimelineServiceError {
+    InvalidQuery(String),
     SessionNotFound,
     TurnNotFound,
     CapabilityUnavailable,
@@ -86,6 +89,7 @@ impl From<Error> for TurnTimelineServiceError {
 
 #[derive(Clone)]
 pub struct TurnTimelineService {
+    require_source: bool,
     history_source: Option<crate::client_contract::native_history::HistorySource>,
     clients: crate::clients::ClientRegistry,
     pub(super) pool: sqlx::SqlitePool,
@@ -130,6 +134,7 @@ impl TurnTimelineService {
     }
     pub fn new(events: crate::EventIngestService) -> Self {
         Self {
+            require_source: false,
             history_source: None,
             pool: events.db(),
             clients: events.clients(),

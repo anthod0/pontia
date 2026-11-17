@@ -1,7 +1,9 @@
 use axum::extract::FromRef;
+use pontia_agent_control::TurnTimelineService;
 use pontia_agent_control::workspaces::WorkspaceService;
 use pontia_bot::identity::{BotIdentity, UnboundBotIdentity};
 use pontia_bot::memory::{MemoryCommands, MemoryService};
+use pontia_bot::session_messages::SessionMessages;
 use pontia_bot::{
     user::{UserCommands, UserService},
     workspaces::WorkspaceCommands,
@@ -20,6 +22,7 @@ pub struct HttpState {
     user_service: UserService,
     user_commands: UserCommands,
     workspace_commands: WorkspaceCommands,
+    session_messages: SessionMessages,
 }
 
 impl HttpState {
@@ -32,7 +35,12 @@ impl HttpState {
             WorkspaceService::new(app.db(), app.workspace_browser()),
             Arc::new(UnboundBotIdentity),
         );
+        let session_messages = SessionMessages::new(
+            TurnTimelineService::new(app.control().event_ingest_service()),
+            Arc::new(UnboundBotIdentity),
+        );
         Self {
+            session_messages,
             user_service,
             user_commands,
             workspace_commands,
@@ -46,6 +54,10 @@ impl HttpState {
         self.memory_commands =
             MemoryCommands::new(MemoryService::new(self.app.db()), identity.clone());
         self.user_commands = UserCommands::new(self.user_service.clone(), identity.clone());
+        self.session_messages = SessionMessages::new(
+            TurnTimelineService::new(self.app.control().event_ingest_service()),
+            identity.clone(),
+        );
         self.workspace_commands = WorkspaceCommands::new(
             WorkspaceService::new(self.app.db(), self.app.workspace_browser()),
             identity,
@@ -59,6 +71,10 @@ impl HttpState {
 
     pub fn user_commands(&self) -> &UserCommands {
         &self.user_commands
+    }
+
+    pub fn session_messages(&self) -> &SessionMessages {
+        &self.session_messages
     }
 
     pub fn workspace_commands(&self) -> &WorkspaceCommands {

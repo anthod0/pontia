@@ -43,8 +43,9 @@ pub use live_output::{
 };
 pub use queries::{ControlQueryService, DomainEventReader, SessionOwnership, SessionSnapshot};
 pub use raw_transcripts::{
-    TurnTimelineDirection, TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage,
-    TurnTimelineService, TurnTimelineServiceError, TurnTreeHistoryPage, TurnTreeUpdatesPage,
+    MessageCategory, SessionMessagesPage, SessionMessagesQuery, TurnTimelineDirection,
+    TurnTimelineGroup, TurnTimelineItem, TurnTimelinePage, TurnTimelineService,
+    TurnTimelineServiceError, TurnTreeHistoryPage, TurnTreeUpdatesPage,
 };
 pub use runtime::{RuntimeBindingUpsertRequest, RuntimeBindingUpsertService};
 pub use runtime::{RuntimeObservationService, RuntimeReadinessService};

@@ -28,9 +28,13 @@ impl TurnTimelineService {
             .list_turns(&session_id)
             .await?;
         let mut history_source = None;
-        if let Some(binding) = crate::AgentBindingService::new(service.pool.clone())
+        let binding = crate::AgentBindingService::new(service.pool.clone())
             .binding_for_session(&session_id)
-            .await?
+            .await?;
+        if service.require_source && binding.is_none() {
+            return Err(TurnTimelineServiceError::SourceUnavailable);
+        }
+        if let Some(binding) = binding
             && let Some(history) = service.native_history(&binding).await
             && let Some(selection) = history
                 .select_timeline(
@@ -61,6 +65,9 @@ impl TurnTimelineService {
                 .collect();
         }
         if turns.is_empty() {
+            if anchor_turn_id.is_some() {
+                return Err(TurnTimelineServiceError::TurnNotFound);
+            }
             let items = service.read_session_page(&session_id, &turns, &[]).await?;
             return Ok(TurnTimelinePage {
                 session_id,

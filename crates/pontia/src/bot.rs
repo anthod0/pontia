@@ -19,6 +19,15 @@ pub(crate) struct BotCommand {
 
 #[derive(Debug, Subcommand)]
 enum BotTool {
+    /// Read recent Session messages or a fragment anchored at a Turn
+    #[command(
+        after_help = "JSON input: session_id (target), optional turn_id (inclusive anchor), direction (backward/default or forward), limit (1–100 Turns, default 10), categories (user, assistant, other, tool_call, tool_result).\nTools are excluded by default. Pass all five categories to include everything.\nPages are chronological. Submit the returned next object unchanged as input to continue, even when items is empty.\nMessage item_id values are opaque client locators; turn_id locates their surrounding fragment.\nExecution status is queried separately."
+    )]
+    SessionMessages {
+        /// JSON input file, or - for stdin
+        #[arg(long, default_value = "-")]
+        input: PathBuf,
+    },
     /// Update shared USER.md with old_text/new_text; empty old_text appends
     UpdateUser {
         /// JSON input file, or - for stdin (2,000 character result limit)
@@ -74,6 +83,7 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
         .ok_or("Missing PONTIA_SESSION_ID; run bot tools inside a Pontia Session")?;
     let (endpoint, action, input) = match command.command {
         BotTool::Memory { action, input } => ("memory", Some(json!(action)), input),
+        BotTool::SessionMessages { input } => ("session-messages", None, input),
         BotTool::UpdateUser { input } => ("user", None, input),
         BotTool::Workspace { action, input } => ("workspace", Some(json!(action)), input),
     };

@@ -28,6 +28,7 @@ const TOKEN: &str = "test-token";
 
 mod branch_replay;
 mod runtime_history;
+mod session_messages;
 mod timeline_boundaries;
 mod timeline_queries;
 mod timeline_reading;

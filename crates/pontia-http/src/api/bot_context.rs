@@ -56,3 +56,25 @@ pub async fn workspace_command(
             })?;
     Ok(ok(json!({"workspace": workspace})))
 }
+
+pub async fn session_messages(
+    State(state): State<HttpState>,
+    request: Result<Json<pontia_bot::session_messages::SessionMessagesRequest>, JsonRejection>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
+    let page = state
+        .session_messages()
+        .execute(request)
+        .await
+        .map_err(|error| match error {
+            pontia_bot::session_messages::Error::Forbidden => ApiError::custom(
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                "Session is not authorized to read Bot Session messages",
+            ),
+            pontia_bot::session_messages::Error::Timeline(error) => {
+                super::timeline::turn_timeline_service_error(error)
+            }
+        })?;
+    Ok(ok(json!(page)))
+}

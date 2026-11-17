@@ -99,8 +99,9 @@ fn invalid_timeline_query(message: impl Into<String>) -> ApiError {
     ApiError::custom(StatusCode::BAD_REQUEST, "invalid_timeline_query", message)
 }
 
-fn turn_timeline_service_error(error: TurnTimelineServiceError) -> ApiError {
+pub(super) fn turn_timeline_service_error(error: TurnTimelineServiceError) -> ApiError {
     match error {
+        TurnTimelineServiceError::InvalidQuery(message) => invalid_timeline_query(message),
         TurnTimelineServiceError::SessionNotFound => ApiError::custom(
             StatusCode::NOT_FOUND,
             "session_not_found",
@@ -160,4 +161,19 @@ fn turn_timeline_service_error(error: TurnTimelineServiceError) -> ApiError {
         ),
         TurnTimelineServiceError::Inner(error) => ApiError::from(error),
     }
+}
+
+pub async fn read_session_messages(
+    State(state): State<AppState>,
+    request: Result<
+        Json<pontia_agent_control::SessionMessagesQuery>,
+        axum::extract::rejection::JsonRejection,
+    >,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let Json(query) = request.map_err(|error| invalid_timeline_query(error.body_text()))?;
+    let page = TurnTimelineService::new(state.control().event_ingest_service())
+        .messages(query)
+        .await
+        .map_err(turn_timeline_service_error)?;
+    Ok(ok(json!(page)))
 }

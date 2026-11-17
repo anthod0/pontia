@@ -115,14 +115,33 @@ impl TurnTimelineService {
         if selected.is_empty() {
             // A native source must confirm an empty history too. Otherwise an
             // unavailable source would be indistinguishable from no messages.
-            if let Some(binding) = AgentBindingService::new(self.pool.clone())
+            let binding = AgentBindingService::new(self.pool.clone())
                 .binding_for_session(session_id)
-                .await?
-                && let Some(history) = self.native_history(&binding).await
+                .await?;
+            if let Some(binding) = &binding
+                && let Some(history) = self.native_history(binding).await
             {
                 return history
                     .read_ranges(Vec::new())
                     .await
+                    .map_err(classify_reader_error);
+            }
+            if self.require_source {
+                let binding = binding.ok_or(TurnTimelineServiceError::SourceUnavailable)?;
+                let backend = self
+                    .clients
+                    .timeline(&binding.client_type)
+                    .ok_or(TurnTimelineServiceError::CapabilityUnavailable)?;
+                let source = backend
+                    .resolver
+                    .resolve(&super::binding_resolve_request(&binding))
+                    .map_err(classify_adapter_error)?;
+                return backend
+                    .reader
+                    .read_turn_ranges(TurnTimelineReadRequest {
+                        source,
+                        ranges: vec![],
+                    })
                     .map_err(classify_reader_error);
             }
             return Ok(Vec::new());
@@ -195,7 +214,10 @@ impl TurnTimelineService {
             Ok(source) => source,
             Err(error) => {
                 let error = classify_adapter_error(error);
-                if source_pending && matches!(error, TurnTimelineServiceError::SourceUnavailable) {
+                if !self.require_source
+                    && source_pending
+                    && matches!(error, TurnTimelineServiceError::SourceUnavailable)
+                {
                     return Ok(Vec::new());
                 }
                 return Err(error);
@@ -238,7 +260,10 @@ impl TurnTimelineService {
             Ok(items) => items,
             Err(error) => {
                 let error = classify_reader_error(error);
-                if source_pending && matches!(error, TurnTimelineServiceError::SourceUnavailable) {
+                if !self.require_source
+                    && source_pending
+                    && matches!(error, TurnTimelineServiceError::SourceUnavailable)
+                {
                     return Ok(Vec::new());
                 }
                 return Err(error);

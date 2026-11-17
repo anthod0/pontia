@@ -1,5 +1,5 @@
 mod bot_context;
-pub use bot_context::{update_user, workspace_command};
+pub use bot_context::{session_messages, update_user, workspace_command};
 mod bot_memory;
 pub use bot_memory::memory_command;
 mod agent_clients;
@@ -50,7 +50,9 @@ pub use sessions::{
     session_creation_options, session_overview, set_session_model, unarchive_session,
     unpin_session, update_session,
 };
-pub use timeline::{get_turn_timeline, get_turn_tree_history, get_turn_tree_updates};
+pub use timeline::{
+    get_turn_timeline, get_turn_tree_history, get_turn_tree_updates, read_session_messages,
+};
 pub use turns::{get_turn, interrupt_turn, list_session_events, list_turn_events, list_turns};
 pub use workflows::{
     WorkflowPatchApplyRequest, WorkflowPatchBlockRequest, WorkflowPatchRequest, WorkflowRunRequest,
