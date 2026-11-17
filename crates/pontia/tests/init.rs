@@ -8,7 +8,7 @@ use std::{path::PathBuf, sync::Arc};
 
 struct FakeIntegration {
     name: &'static str,
-    default: bool,
+    detected: bool,
 }
 struct FakeSetup {
     name: &'static str,
@@ -29,8 +29,16 @@ impl ClientIntegration for FakeIntegration {
     fn client_type(&self) -> &'static str {
         self.name
     }
-    fn selected_by_default(&self) -> bool {
-        self.default
+    fn detect(
+        &self,
+        _: &pontia_agent_control::client_contract::DetectionContext<'_>,
+    ) -> pontia_agent_control::client_contract::ClientDetection {
+        use pontia_agent_control::client_contract::ClientDetection;
+        if self.detected {
+            ClientDetection::detected(self.name)
+        } else {
+            ClientDetection::not_detected()
+        }
     }
     fn skipped_summary(&self) -> Vec<String> {
         Vec::new()
@@ -113,6 +121,7 @@ struct FakePlatform {
     dashboard_ready: bool,
     enable_error: bool,
     settings_error: bool,
+    detected: Vec<&'static str>,
     enabled: RefCell<Vec<(String, String)>>,
     persisted_paths: Vec<(String, PathBuf)>,
 }
@@ -125,6 +134,7 @@ impl Default for FakePlatform {
             dashboard_ready: true,
             enable_error: false,
             settings_error: false,
+            detected: vec!["pi"],
             enabled: RefCell::new(Vec::new()),
             persisted_paths: Vec::new(),
         }
@@ -136,11 +146,11 @@ impl pontia::setup::SetupPlatform for FakePlatform {
         vec![
             Arc::new(FakeIntegration {
                 name: "pi",
-                default: true,
+                detected: self.detected.contains(&"pi"),
             }),
             Arc::new(FakeIntegration {
                 name: "codex",
-                default: false,
+                detected: self.detected.contains(&"codex"),
             }),
         ]
     }
@@ -867,17 +877,19 @@ fn setup_reuses_persisted_paths() {
 }
 
 #[test]
-fn rerun_defaults_to_saved_enabled_clients_and_does_not_enable_skipped_clients() {
+fn initialization_selects_detected_clients_and_rechecks_on_rerun() {
     let root = tempfile::tempdir().unwrap();
     let vars = vars(root.path(), &root.path().join("pontia"));
-    let platform = FakePlatform::default();
-    run(
-        &mut Cursor::new("codex\ny\n"),
-        &mut Vec::new(),
-        &vars,
-        &platform,
-    )
-    .unwrap();
+    let mut platform = FakePlatform {
+        detected: vec!["codex"],
+        ..Default::default()
+    };
+    run(&mut Cursor::new("\ny\n"), &mut Vec::new(), &vars, &platform).unwrap();
+    assert_eq!(
+        *platform.enabled.borrow(),
+        vec![("codex".into(), "default".into())]
+    );
+    platform.detected = vec!["pi"];
     platform.events.borrow_mut().clear();
     run(&mut Cursor::new("\ny\n"), &mut Vec::new(), &vars, &platform).unwrap();
     assert!(
@@ -885,27 +897,8 @@ fn rerun_defaults_to_saved_enabled_clients_and_does_not_enable_skipped_clients()
             .events
             .borrow()
             .iter()
-            .any(|event| event.starts_with("initialize-codex:"))
-    );
-    assert!(
-        !platform
-            .events
-            .borrow()
-            .iter()
             .any(|event| event == "install-pi")
     );
-    assert_eq!(
-        *platform.enabled.borrow(),
-        vec![("codex".into(), "default".into())]
-    );
-    platform.events.borrow_mut().clear();
-    run(
-        &mut Cursor::new("none\ny\n"),
-        &mut Vec::new(),
-        &vars,
-        &platform,
-    )
-    .unwrap();
     assert!(
         !platform
             .events
@@ -915,32 +908,25 @@ fn rerun_defaults_to_saved_enabled_clients_and_does_not_enable_skipped_clients()
     );
     assert_eq!(
         *platform.enabled.borrow(),
-        vec![("codex".into(), "default".into())]
+        vec![
+            ("codex".into(), "default".into()),
+            ("pi".into(), "default".into())
+        ]
     );
 }
 
 #[test]
-fn rerun_with_all_clients_disabled_does_not_restore_product_defaults() {
+fn no_detected_clients_still_allows_setup_and_manual_selection() {
     let root = tempfile::tempdir().unwrap();
     let vars = vars(root.path(), &root.path().join("pontia"));
-    let platform = FakePlatform::default();
-    run(
-        &mut Cursor::new("none\ny\n"),
-        &mut Vec::new(),
-        &vars,
-        &platform,
-    )
-    .unwrap();
-    platform.events.borrow_mut().clear();
-    run(&mut Cursor::new("\ny\n"), &mut Vec::new(), &vars, &platform).unwrap();
-    assert!(platform.enabled.borrow().is_empty());
-    assert!(
-        !platform
-            .events
-            .borrow()
-            .iter()
-            .any(|event| event == "install-pi")
-    );
+    let platform = FakePlatform {
+        detected: vec![],
+        ..Default::default()
+    };
+    for _ in 0..2 {
+        run(&mut Cursor::new("\ny\n"), &mut Vec::new(), &vars, &platform).unwrap();
+        assert!(platform.enabled.borrow().is_empty());
+    }
     run(
         &mut Cursor::new("pi\ny\n"),
         &mut Vec::new(),
@@ -955,11 +941,14 @@ fn rerun_with_all_clients_disabled_does_not_restore_product_defaults() {
 }
 
 #[test]
-fn missing_token_in_an_existing_installation_keeps_saved_selection() {
+fn missing_token_in_an_existing_installation_uses_detection_without_disabling_saved_clients() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("pontia");
     fs::create_dir_all(home.join("data")).unwrap();
-    let platform = FakePlatform::default();
+    let platform = FakePlatform {
+        detected: vec![],
+        ..Default::default()
+    };
     platform
         .enabled
         .borrow_mut()
@@ -977,16 +966,12 @@ fn missing_token_in_an_existing_installation_keeps_saved_selection() {
             .events
             .borrow()
             .iter()
-            .any(|event| event == "install-pi")
+            .any(|event| event.starts_with("initialize-codex:") || event == "install-pi")
     );
-    assert!(
-        platform
-            .events
-            .borrow()
-            .iter()
-            .any(|event| event.starts_with("initialize-codex:"))
+    assert_eq!(
+        *platform.enabled.borrow(),
+        vec![("codex".into(), "default".into())]
     );
-    assert_eq!(platform.enabled.borrow().len(), 1);
 }
 
 #[test]

@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use pontia_agent_control::client_contract::ClientIntegration;
+use pontia_agent_control::client_contract::{ClientIntegration, DetectionContext, DetectionStatus};
 use pontia_config::AppConfig;
 use pontia_runtime::local_service::{CommandRunner, DefinitionStore};
 
@@ -86,6 +86,13 @@ where
     S: FnOnce(&mut R, &mut W, &[Arc<dyn ClientIntegration>], &[bool]) -> Result<Vec<usize>, String>,
 {
     let integrations = platform.integrations();
+    let config = local_config::load(vars)?;
+    let user_home = validated_user_home(vars)?;
+    let vars = integration_vars(vars, &user_home, platform)?;
+    let context = DetectionContext {
+        vars: &vars,
+        pontia_home: &config.pontia_home,
+    };
     let selected = match client {
         Some(name) => vec![
             integrations
@@ -99,22 +106,19 @@ where
             &integrations,
             &integrations
                 .iter()
-                .map(|client| client.selected_by_default())
+                .map(|client| client.detect(&context).status == DetectionStatus::Detected)
                 .collect::<Vec<_>>(),
         )?,
     };
     if selected.is_empty() {
         return Ok(());
     }
-    let config = local_config::load(vars)?;
     if config.bind_addr.port() == 0 {
         return Err(
             "bind_addr port 0 is not supported by pontia setup; configure a concrete service port"
                 .into(),
         );
     }
-    let user_home = validated_user_home(vars)?;
-    let vars = integration_vars(vars, &user_home, platform)?;
     platform.preflight()?;
     let prepared = selected
         .iter()

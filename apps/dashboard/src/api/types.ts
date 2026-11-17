@@ -7,6 +7,10 @@ export interface AgentClientView {
   name: string;
   short_id: string;
   enabled: boolean;
+  detection: {
+    status: "detected" | "not_detected" | "unknown";
+    detail: string | null;
+  };
   setup_command: string | null;
   has_record: boolean;
   config_overrides: JsonObject;

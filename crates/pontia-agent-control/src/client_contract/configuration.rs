@@ -3,6 +3,13 @@ use serde_json::Value;
 
 /// Client-owned interpretation of management identities and effective configuration.
 pub trait ClientConfiguration: Send + Sync {
+    fn detect(
+        &self,
+        _effective: &Value,
+        _context: &super::DetectionContext<'_>,
+    ) -> super::ClientDetection {
+        super::ClientDetection::unknown("No installation detector is available")
+    }
     /// Identities supplied by defaults and the startup configuration file.
     fn keys(&self) -> Vec<String>;
     /// Display name and stable CLI selector, owned by the integration.

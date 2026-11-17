@@ -8,7 +8,7 @@ use std::{
 use dialoguer::{MultiSelect, console::Term};
 
 use crate::{lifecycle::local_health_addr, local_config, terminal};
-use pontia_agent_control::client_contract::ClientIntegration;
+use pontia_agent_control::client_contract::{ClientIntegration, DetectionContext, DetectionStatus};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,19 +101,16 @@ where
         } else {
             None
         };
+    let vars = crate::setup::integration_vars(vars, &user_home, platform)?;
+    let context = DetectionContext {
+        vars: &vars,
+        pontia_home: &existing.pontia_home,
+    };
     let defaults = integrations
         .iter()
-        .map(|client| {
-            enabled.as_ref().map_or_else(
-                || client.selected_by_default(),
-                |enabled| {
-                    enabled.contains(&(client.client_type().into(), client.client_key().into()))
-                },
-            )
-        })
+        .map(|client| client.detect(&context).status == DetectionStatus::Detected)
         .collect::<Vec<_>>();
     let selected = select_agents(input, output, &integrations, &defaults)?;
-    let vars = crate::setup::integration_vars(vars, &user_home, platform)?;
     let prepared = integrations
         .iter()
         .enumerate()

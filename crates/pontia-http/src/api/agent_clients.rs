@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::{Path, State, rejection::JsonRejection},
 };
-use pontia_agent_control::agent_clients::AgentClientService;
+use pontia_agent_control::{agent_clients::AgentClientService, client_contract::DetectionContext};
 use pontia_application::AppState;
 use serde_json::{Value, json};
 
@@ -12,7 +12,12 @@ pub async fn list_agent_clients(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let service = AgentClientService::new(state.db(), state.control().clients());
-    Ok(ok(json!({"agent_clients": service.list().await?})))
+    let vars = std::env::vars().collect();
+    let context = DetectionContext {
+        vars: &vars,
+        pontia_home: state.pontia_home(),
+    };
+    Ok(ok(json!({"agent_clients": service.list(&context).await?})))
 }
 
 pub async fn get_agent_client(
@@ -20,8 +25,13 @@ pub async fn get_agent_client(
     Path((client, key)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let service = AgentClientService::new(state.db(), state.control().clients());
+    let vars = std::env::vars().collect();
+    let context = DetectionContext {
+        vars: &vars,
+        pontia_home: state.pontia_home(),
+    };
     Ok(ok(
-        json!({"agent_client": service.get(&client, &key).await?}),
+        json!({"agent_client": service.get(&client, &key, &context).await?}),
     ))
 }
 
@@ -59,8 +69,13 @@ pub async fn patch_agent_client(
     }
     let service = AgentClientService::new(state.db(), state.control().clients());
     service.save(&client, &key, enabled, overrides).await?;
+    let vars = std::env::vars().collect();
+    let context = DetectionContext {
+        vars: &vars,
+        pontia_home: state.pontia_home(),
+    };
     Ok(ok(
-        json!({"agent_client": service.get(&client, &key).await?}),
+        json!({"agent_client": service.get(&client, &key, &context).await?}),
     ))
 }
 

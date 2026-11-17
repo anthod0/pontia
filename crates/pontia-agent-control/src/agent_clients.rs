@@ -8,7 +8,10 @@ use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use std::collections::BTreeSet;
 
-use crate::{client_contract::ClientConfiguration, clients::ClientRegistry};
+use crate::{
+    client_contract::{ClientConfiguration, ClientDetection, DetectionContext},
+    clients::ClientRegistry,
+};
 
 fn effective_configuration(
     configuration: &dyn ClientConfiguration,
@@ -30,6 +33,7 @@ pub struct AgentClientDetails {
     pub name: String,
     pub short_id: String,
     pub enabled: bool,
+    pub detection: ClientDetection,
     pub setup_command: Option<String>,
     pub has_record: bool,
     pub config_overrides: Value,
@@ -62,7 +66,7 @@ impl AgentClientService {
             })
     }
 
-    pub async fn list(&self) -> Result<Vec<AgentClientDetails>> {
+    pub async fn list(&self, context: &DetectionContext<'_>) -> Result<Vec<AgentClientDetails>> {
         let mut identities = BTreeSet::new();
         for entry in self.clients.registrations() {
             if let Some(configuration) = &entry.configuration {
@@ -76,12 +80,17 @@ impl AgentClientService {
         }
         let mut result = Vec::new();
         for (client, key) in identities {
-            result.push(self.get(&client, &key).await?);
+            result.push(self.get(&client, &key, context).await?);
         }
         Ok(result)
     }
 
-    pub async fn get(&self, client: &str, key: &str) -> Result<AgentClientDetails> {
+    pub async fn get(
+        &self,
+        client: &str,
+        key: &str,
+        context: &DetectionContext<'_>,
+    ) -> Result<AgentClientDetails> {
         let configuration = self
             .configuration(client)
             .map_err(|_| Error::NotFound(format!("Client not found: {client}")))?;
@@ -109,6 +118,7 @@ impl AgentClientService {
             enabled: record.as_ref().is_some_and(|row| row.enabled),
             has_record: record.is_some(),
             config_overrides: overrides,
+            detection: configuration.detect(&effective, context),
             effective_config: effective,
             created_at: record.as_ref().map(|row| row.created_at.clone()),
             updated_at: record.map(|row| row.updated_at),
@@ -192,7 +202,15 @@ impl AgentClientService {
         client: &str,
         key: &str,
     ) -> Result<pontia_runtime::client_setup::SetupOperation> {
-        self.get(client, key).await?;
+        self.get(
+            client,
+            key,
+            &DetectionContext {
+                vars: &std::env::vars().collect(),
+                pontia_home: &home,
+            },
+        )
+        .await?;
         let integration = self.clients.integration(client, key).ok_or_else(|| {
             Error::CapabilityUnavailable("Setup is unavailable for this client".into())
         })?;

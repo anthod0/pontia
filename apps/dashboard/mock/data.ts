@@ -332,6 +332,7 @@ function agentClient(
     client_key: clientKey,
     name,
     short_id: clientKey,
+    detection: { status: "detected", detail: null },
     setup_command:
       clientType === "acp"
         ? null

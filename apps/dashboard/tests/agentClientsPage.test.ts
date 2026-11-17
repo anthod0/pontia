@@ -27,6 +27,7 @@ const peer = (key: string): AgentClientView => ({
   short_id: key,
   name: key,
   enabled: true,
+  detection: { status: "unknown", detail: null },
   setup_command: null,
   has_record: true,
   config_overrides: { name: key },
@@ -41,7 +42,10 @@ beforeEach(() => {
   api.listAgentClients.mockResolvedValue([peer("grok"), peer("opencode")]);
 });
 
-test("editing a flat peer saves only its database overrides, never the effective configuration", async () => {
+test("a client that is not detected remains configurable and saves only its database overrides", async () => {
+  api.listAgentClients.mockResolvedValue([
+    { ...peer("opencode"), detection: { status: "not_detected", detail: null } },
+  ]);
   const user = userEvent.setup();
   api.patchAgentClient.mockImplementation(async (target, patch) => ({
     ...target,
@@ -151,6 +155,7 @@ const setupClient = (): AgentClientView => ({
   client_type: "pi",
   name: "Pi",
   enabled: false,
+  detection: { status: "unknown", detail: null },
   setup_command: "pontia setup pi",
 });
 const operation = (status: "running" | "succeeded" | "failed") => ({

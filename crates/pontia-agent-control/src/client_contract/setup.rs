@@ -10,7 +10,7 @@ pub trait ClientIntegration: Send + Sync {
     fn setup_name(&self) -> &'static str {
         self.client_type()
     }
-    fn selected_by_default(&self) -> bool;
+    fn detect(&self, context: &super::DetectionContext<'_>) -> super::ClientDetection;
     fn client_key(&self) -> &'static str {
         "default"
     }

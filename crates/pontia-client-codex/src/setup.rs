@@ -42,8 +42,11 @@ impl ClientIntegration for CodexIntegration {
     fn client_type(&self) -> &'static str {
         "codex"
     }
-    fn selected_by_default(&self) -> bool {
-        false
+    fn detect(
+        &self,
+        context: &pontia_agent_control::client_contract::DetectionContext<'_>,
+    ) -> pontia_agent_control::client_contract::ClientDetection {
+        detect(context)
     }
     fn skipped_summary(&self) -> Vec<String> {
         vec!["Skip Codex".into()]
@@ -529,7 +532,23 @@ fn launchctl_service_missing(output: &CommandOutput) -> bool {
         || text.contains("does not exist")
 }
 
+pub(crate) fn detect(
+    context: &pontia_agent_control::client_contract::DetectionContext<'_>,
+) -> pontia_agent_control::client_contract::ClientDetection {
+    use pontia_agent_control::client_contract::ClientDetection;
+    match find_executable(context.vars) {
+        Ok(Some(path)) => ClientDetection::detected(path.display().to_string()),
+        Ok(None) => ClientDetection::not_detected(),
+        Err(error) => ClientDetection::unknown(error),
+    }
+}
+
 fn resolve_executable(vars: &HashMap<String, String>) -> Result<PathBuf, String> {
+    find_executable(vars)?
+        .ok_or_else(|| "Codex must be installed and executable on PATH".to_string())
+}
+
+fn find_executable(vars: &HashMap<String, String>) -> Result<Option<PathBuf>, String> {
     let path = vars
         .get("PATH")
         .filter(|path| !path.trim().is_empty())
@@ -542,11 +561,11 @@ fn resolve_executable(vars: &HashMap<String, String>) -> Result<PathBuf, String>
         } else {
             current_dir.join(directory).join("codex")
         };
-        if candidate.is_file() && is_executable(&candidate)? && !shim::is_shim(&candidate)? {
-            return Ok(candidate);
+        if pontia_runtime::executable::is_executable(&candidate)? && !shim::is_shim(&candidate)? {
+            return Ok(Some(candidate));
         }
     }
-    Err("Codex must be installed and executable on PATH".to_string())
+    Ok(None)
 }
 
 fn resolve_codex_home(vars: &HashMap<String, String>, user_home: &Path) -> Result<PathBuf, String> {
@@ -685,19 +704,4 @@ fn require_command(
 fn utf8_path<'a>(path: &'a Path, description: &str) -> Result<&'a str, String> {
     path.to_str()
         .ok_or_else(|| format!("{description} is not valid UTF-8: {}", path.display()))
-}
-
-#[cfg(unix)]
-fn is_executable(path: &Path) -> Result<bool, String> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let metadata = path
-        .metadata()
-        .map_err(|error| format!("failed to inspect {}: {error}", path.display()))?;
-    Ok(metadata.permissions().mode() & 0o111 != 0)
-}
-
-#[cfg(not(unix))]
-fn is_executable(path: &Path) -> Result<bool, String> {
-    Ok(path.is_file())
 }

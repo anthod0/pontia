@@ -40,7 +40,9 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
         context: Arc::new(OnceLock::new()),
     });
     ClientRegistration {
-        configuration: Some(Arc::new(Configuration)),
+        configuration: Some(Arc::new(Configuration {
+            host: adapter.host.clone(),
+        })),
         interactions: Some(adapter.clone()),
         events: None,
         service: Some(adapter.clone()),
@@ -55,8 +57,13 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
     }
 }
 
-struct Configuration;
+struct Configuration {
+    host: Option<PathBuf>,
+}
 impl ClientConfiguration for Configuration {
+    fn detect(&self, _: &Value, context: &DetectionContext<'_>) -> ClientDetection {
+        setup::detect(context, self.host.as_deref())
+    }
     fn keys(&self) -> Vec<String> {
         vec!["default".into()]
     }

@@ -49,6 +49,29 @@ impl AcpConfiguration {
 }
 
 impl ClientConfiguration for AcpConfiguration {
+    fn detect(
+        &self,
+        effective: &Value,
+        context: &pontia_agent_control::client_contract::DetectionContext<'_>,
+    ) -> pontia_agent_control::client_contract::ClientDetection {
+        use pontia_agent_control::client_contract::{ClientDetection, DetectionContext};
+        let config: AcpAgentConfig = match serde_json::from_value(effective.clone()) {
+            Ok(config) => config,
+            Err(error) => return ClientDetection::unknown(error.to_string()),
+        };
+        if config.registry_id.is_some() {
+            return ClientDetection::unknown(
+                "Registry agents are resolved and downloaded when started",
+            );
+        }
+        let mut vars = context.vars.clone();
+        vars.extend(config.env);
+        DetectionContext {
+            vars: &vars,
+            pontia_home: context.pontia_home,
+        }
+        .command(&config.command)
+    }
     fn keys(&self) -> Vec<String> {
         self.defaults
             .keys()

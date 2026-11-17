@@ -22,6 +22,43 @@ pub(crate) fn host_path(root: &Path) -> PathBuf {
     root.join("clients/claude-client").join(HOST_SCRIPT)
 }
 
+pub(crate) fn detect(
+    context: &pontia_agent_control::client_contract::DetectionContext<'_>,
+    configured_host: Option<&Path>,
+) -> pontia_agent_control::client_contract::ClientDetection {
+    use pontia_agent_control::client_contract::{ClientDetection, DetectionStatus};
+    let native = context.command("claude");
+    let host = configured_host
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| host_path(context.pontia_home));
+    let host_exists = match host.try_exists() {
+        Ok(exists) => exists && host.is_file(),
+        Err(error) => {
+            return ClientDetection::unknown(format!("Cannot inspect {}: {error}", host.display()));
+        }
+    };
+    let node = context.command(
+        context
+            .vars
+            .get("PONTIA_CLAUDE_NODE_PATH")
+            .map(String::as_str)
+            .unwrap_or("node"),
+    );
+    if host_exists && node.status == DetectionStatus::Detected {
+        return ClientDetection::detected(format!("SDK host: {}", host.display()));
+    }
+    if native.status == DetectionStatus::Detected {
+        return ClientDetection::detected(format!(
+            "Claude Code CLI: {}. SDK host requires setup.",
+            native.detail.unwrap_or_default()
+        ));
+    }
+    if host_exists {
+        return node;
+    }
+    native
+}
+
 struct Integration;
 struct Prepared {
     node: PathBuf,
@@ -54,8 +91,14 @@ impl ClientIntegration for Integration {
     fn setup_name(&self) -> &'static str {
         "claude"
     }
-    fn selected_by_default(&self) -> bool {
-        false
+    fn detect(
+        &self,
+        context: &pontia_agent_control::client_contract::DetectionContext<'_>,
+    ) -> pontia_agent_control::client_contract::ClientDetection {
+        detect(
+            context,
+            context.vars.get("PONTIA_CLAUDE_HOST_PATH").map(Path::new),
+        )
     }
     fn skipped_summary(&self) -> Vec<String> {
         vec!["Skip Claude Code".into()]

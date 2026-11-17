@@ -20,6 +20,26 @@ impl PiConfiguration {
 }
 
 impl ClientConfiguration for PiConfiguration {
+    fn detect(
+        &self,
+        effective: &Value,
+        context: &pontia_agent_control::client_contract::DetectionContext<'_>,
+    ) -> pontia_agent_control::client_contract::ClientDetection {
+        use pontia_agent_control::client_contract::ClientDetection;
+        let command = match command(effective) {
+            Ok(command) => command,
+            Err(error) => return ClientDetection::unknown(error.to_string()),
+        };
+        if command
+            .chars()
+            .any(|c| c.is_whitespace() || "'\"$`;|&()<>{}*?~\\".contains(c))
+        {
+            return ClientDetection::unknown(
+                "This shell command must be checked in its launch environment",
+            );
+        }
+        context.command(&command)
+    }
     fn keys(&self) -> Vec<String> {
         vec!["default".into()]
     }

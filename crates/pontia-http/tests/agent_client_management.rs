@@ -494,3 +494,43 @@ async fn setup_is_advertised_only_for_registered_integrations_and_rejects_other_
         );
     }
 }
+
+#[tokio::test]
+async fn detection_refreshes_from_files_without_changing_enabled_settings() {
+    use std::{fs, os::unix::fs::PermissionsExt};
+    let (app, root) = app().await;
+    let program = root.path().join("local-agent");
+    let (status, missing) = request(
+        &app,
+        "PATCH",
+        "/acp/local",
+        Some(json!({
+            "enabled":true, "config_overrides":{"command":program}
+        })),
+        true,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        missing["data"]["agent_client"]["detection"]["status"],
+        "not_detected"
+    );
+    fs::write(&program, "#!/bin/sh\nexit 99\n").unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+    let (_, found) = request(&app, "GET", "", None, true).await;
+    let found = found["data"]["agent_clients"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["client_key"] == "local")
+        .unwrap();
+    assert_eq!(found["detection"]["status"], "detected");
+    assert_eq!(found["enabled"], true);
+    fs::remove_file(&program).unwrap();
+    let (_, missing_again) = request(&app, "GET", "/acp/local", None, true).await;
+    assert_eq!(
+        missing_again["data"]["agent_client"]["detection"]["status"],
+        "not_detected"
+    );
+    assert_eq!(missing_again["data"]["agent_client"]["enabled"], true);
+}

@@ -23,7 +23,12 @@ async fn codex_configuration_preserves_admission_without_consuming_legacy_tui_se
         .clients(clients.clone())
         .build();
     let service = AgentClientService::new(pool.clone(), clients);
-    let entries = service.list().await.unwrap();
+    let vars = std::collections::HashMap::new();
+    let context = pontia_agent_control::client_contract::DetectionContext {
+        vars: &vars,
+        pontia_home: root.path(),
+    };
+    let entries = service.list(&context).await.unwrap();
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].client_type, "codex");
     assert!(!entries[0].enabled);
@@ -81,7 +86,13 @@ async fn codex_configuration_preserves_admission_without_consuming_legacy_tui_se
         )
         .await
         .unwrap();
-    assert!(service.get("codex", "default").await.unwrap().enabled);
+    assert!(
+        service
+            .get("codex", "default", &context)
+            .await
+            .unwrap()
+            .enabled
+    );
     create().await.unwrap();
     service.delete("codex", "default").await.unwrap();
     assert!(matches!(

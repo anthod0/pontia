@@ -4,6 +4,7 @@
 //! module stays independent from HTTP transport details.
 
 pub mod client_setup;
+pub mod executable;
 mod in_process;
 pub mod local_service;
 mod manager;

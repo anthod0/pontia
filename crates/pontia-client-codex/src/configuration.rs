@@ -16,6 +16,13 @@ impl CodexConfiguration {
 }
 
 impl ClientConfiguration for CodexConfiguration {
+    fn detect(
+        &self,
+        _: &Value,
+        context: &pontia_agent_control::client_contract::DetectionContext<'_>,
+    ) -> pontia_agent_control::client_contract::ClientDetection {
+        crate::setup::detect(context)
+    }
     fn keys(&self) -> Vec<String> {
         vec!["default".into()]
     }

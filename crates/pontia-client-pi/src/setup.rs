@@ -34,8 +34,11 @@ impl ClientIntegration for PiIntegration {
     fn client_type(&self) -> &'static str {
         "pi"
     }
-    fn selected_by_default(&self) -> bool {
-        true
+    fn detect(
+        &self,
+        context: &pontia_agent_control::client_contract::DetectionContext<'_>,
+    ) -> pontia_agent_control::client_contract::ClientDetection {
+        context.command("pi")
     }
     fn skipped_summary(&self) -> Vec<String> {
         vec!["Skip pi".into()]

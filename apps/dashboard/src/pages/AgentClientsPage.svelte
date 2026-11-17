@@ -178,13 +178,16 @@
         {#each clients as client (client.id)}
           <button
             type="button"
-            class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60 {selected?.id === client.id ? 'bg-muted font-medium text-heading' : client.enabled ? 'text-foreground' : 'text-muted-foreground'}"
+            class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60 {selected?.id === client.id ? 'bg-muted font-medium text-heading' : client.detection.status !== 'not_detected' && client.enabled ? 'text-foreground' : 'text-muted-foreground'}"
             aria-current={selected?.id === client.id ? 'true' : undefined}
             disabled={saving || startingSetup}
             onclick={() => select(client)}
           >
-            <ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-4 {client.enabled ? 'text-foreground' : 'opacity-50'}" />
-            <span class="min-w-0 flex-1 truncate">{client.name}</span>
+            <ClientIcon clientType={client.client_type} acpAgentId={client.client_key} class="size-4 {client.detection.status !== 'not_detected' && client.enabled ? 'text-foreground' : 'opacity-50'}" />
+            <span class="min-w-0 flex-1">
+              <span class="block truncate">{client.name}</span>
+              <span class="block text-xs font-normal text-muted-foreground">{$t(`clients.detection.${client.detection.status}`)}</span>
+            </span>
             {#if !client.enabled}<ProhibitIcon class="size-3.5 shrink-0 text-muted-foreground" aria-label={$t('common.disabled')} />{/if}
           </button>
         {:else}
@@ -202,6 +205,14 @@
                   {selected.client_type} / {selected.short_id} · {selected.has_record ? $t('clients.databaseUpdated', { date: formatDateTime(selected.updated_at, $currentLocale) }) : $t('clients.inherited')}
                 </p>
                 <p class="break-all font-mono text-xs text-muted-foreground" title={$t('clients.uniqueId')}>{selected.id}</p>
+                <div role="status" class="space-y-1 pt-2 text-sm">
+                  <p class="flex items-center gap-1.5">
+                    {#if selected.detection.status === 'detected'}<CheckCircleIcon class="size-4 text-success" />
+                    {:else if selected.detection.status === 'not_detected'}<WarningCircleIcon class="size-4 text-muted-foreground" />{/if}
+                    {$t(`clients.detection.${selected.detection.status}`)}
+                  </p>
+                  {#if selected.detection.detail}<p class="break-words text-xs text-muted-foreground">{selected.detection.detail}</p>{/if}
+                </div>
               </div>
               <div class="flex shrink-0 items-center gap-2 pt-1">
                 <Label for="client-enabled" class="text-sm text-muted-foreground">{$t('common.enabled')}</Label>

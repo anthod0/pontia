@@ -1,4 +1,7 @@
 {
+  "clients.detection.detected": "Detected",
+  "clients.detection.not_detected": "Not detected",
+  "clients.detection.unknown": "Unable to determine",
   "common.refresh": "Refresh",
   "clients.loading": "Loading clients",
   "clients.setup": "Client initialization",
