@@ -620,6 +620,7 @@
   "chat.messageSummary": "{role} message: {summary}",
   "chat.editMessageNamed": "Edit message: {message}",
   "chat.userMessageCopied": "User message copied: {message}",
+  "chat.questionReplyTitle": "{count, plural, one {Answered question} other {Answered # questions}}",
   "chat.copyUserMessage": "Copy user message: {message}",
   "chat.hideDetails": "Hide {title} details",
   "chat.showDetails": "Show {title} details",

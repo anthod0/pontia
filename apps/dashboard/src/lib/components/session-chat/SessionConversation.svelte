@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { parseUploadMessage } from '$lib/uploads/message'
+  import { parseQuestionReplies, questionRepliesText } from '$lib/session-chat/questionReply'
   import { onDestroy, tick } from 'svelte'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
@@ -18,6 +19,7 @@
   import TurnDuration from './TurnDuration.svelte'
   import CompactionCheckpoint from './CompactionCheckpoint.svelte'
   import MessageTime from './MessageTime.svelte'
+  import QuestionReplyCard from './QuestionReplyCard.svelte'
   import SharedFileCard from '../../../components/chat/SharedFileCard.svelte'
   import type { SharedFile, TurnView, TimelineItem } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
@@ -315,6 +317,8 @@
   {:else}
     {@const chatMessage = displayItem.message}
     {@const uploadParts = chatMessage.role === 'user' ? parseUploadMessage(chatMessage.content) : null}
+    {@const questionReplies = uploadParts ? parseQuestionReplies(uploadParts.text) : null}
+    {@const copyContent = questionReplies ? questionRepliesText(questionReplies) : chatMessage.content}
     <Message.Root
       from={chatMessage.role}
       class={`${chatMessage.role === 'user' ? `relative ${editingMessageId === chatMessage.id ? 'w-full' : ''} ${chatMessage.status === 'pending' ? 'opacity-60' : ''}` : ''} scroll-mt-16`}
@@ -367,6 +371,8 @@
                 </Button>
               </div>
             </div>
+          {:else if questionReplies}
+            <QuestionReplyCard replies={questionReplies} />
           {:else}
             <Message.Response content={uploadParts?.text ?? ''} markdown={false} />
           {/if}
@@ -391,7 +397,7 @@
               <PencilSimpleIcon class="size-3.5" />
             </Button>
           {/if}
-          {@render copyButton(chatMessage.id, chatMessage.content, $t('chat.copyUserMessage', { message: chatMessage.content }), $t('chat.userMessageCopied', { message: chatMessage.content }))}
+          {@render copyButton(chatMessage.id, copyContent, $t('chat.copyUserMessage', { message: copyContent }), $t('chat.userMessageCopied', { message: copyContent }))}
         </div>
       {/if}
     </Message.Root>

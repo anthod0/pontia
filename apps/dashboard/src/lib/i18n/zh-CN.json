@@ -620,6 +620,7 @@
   "chat.messageSummary": "{role}消息：{summary}",
   "chat.editMessageNamed": "编辑消息：{message}",
   "chat.userMessageCopied": "用户消息已复制：{message}",
+  "chat.questionReplyTitle": "已回答 {count} 个问题",
   "chat.copyUserMessage": "复制用户消息：{message}",
   "chat.hideDetails": "收起{title}详情",
   "chat.showDetails": "展开{title}详情",

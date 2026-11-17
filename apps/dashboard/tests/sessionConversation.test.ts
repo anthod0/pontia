@@ -838,3 +838,31 @@ test("conversation shows shared files on the Turn they are bound to", () => {
   expect(screen.queryByText("other.txt")).not.toBeInTheDocument();
   expect(screen.queryByText("unbound.txt")).not.toBeInTheDocument();
 });
+
+test("Codex question replies render as answered questions", async () => {
+  const content = `<send_user_message_question_reply>
+[{"answer":"采用该方案","question":"是否采用方案？","questionItemId":"[\\"request_user_input_async\\",\\"call-1\\",0]"}]
+</send_user_message_question_reply>`;
+  const { container } = render(SessionConversation, {
+    messages: [
+      { id: "reply", turnId: "turn-1", role: "user", content, status: "sent", createdAt: "" },
+    ],
+  });
+  const card = container.querySelector("[data-question-reply]") as HTMLElement;
+  expect(card).toBeInTheDocument();
+  expect(within(card).getByText("是否采用方案？")).toBeInTheDocument();
+  expect(within(card).getByText("采用该方案")).toBeInTheDocument();
+  expect(container).not.toHaveTextContent("send_user_message_question_reply");
+});
+
+test("malformed question reply envelopes stay as plain text", () => {
+  const content =
+    "<send_user_message_question_reply>\nnot json\n</send_user_message_question_reply>";
+  const { container } = render(SessionConversation, {
+    messages: [
+      { id: "reply", turnId: "turn-1", role: "user", content, status: "sent", createdAt: "" },
+    ],
+  });
+  expect(container.querySelector("[data-question-reply]")).not.toBeInTheDocument();
+  expect(container).toHaveTextContent("not json");
+});
