@@ -17,6 +17,7 @@ impl Fixture {
         let native = test_root.path().join("native bin");
         fs::create_dir(&home).unwrap();
         fs::create_dir(&native).unwrap();
+        executable(&native.join("pontia"), "#!/bin/sh\nexit 0\n");
         executable(&native.join("codex"), "#!/bin/sh\nprintf '%s\\0' \"$@\"\n");
         let vars = HashMap::from([
             ("PONTIA_HOME".into(), root.display().to_string()),
@@ -389,4 +390,55 @@ fn fish_startup_prioritizes_launcher_after_existing_user_path_configuration() {
         String::from_utf8(resolve().stdout).unwrap().trim(),
         fixture.root.join("bin/codex").to_str().unwrap()
     );
+}
+
+#[test]
+fn inactive_or_unavailable_workspace_runs_native_codex_unchanged() {
+    let fixture = Fixture::new("bash");
+    fixture.enable();
+    for exit in [1, 127] {
+        executable(
+            &fixture.native.join("pontia"),
+            &format!("#!/bin/sh\nexit {exit}\n"),
+        );
+        for args in [
+            vec![],
+            vec!["resume", "--last"],
+            vec!["fork", "native-id"],
+            vec!["-C", "/unregistered", "prompt"],
+        ] {
+            assert_eq!(fixture.args(&args), args);
+        }
+    }
+}
+
+#[test]
+fn launcher_checks_the_effective_directory_with_argument_boundaries_preserved() {
+    let fixture = Fixture::new("bash");
+    fixture.enable();
+    let log = fixture.root.join("check-args");
+    executable(
+        &fixture.native.join("pontia"),
+        &format!(
+            "#!/bin/sh\nprintf '%s\\0' \"$@\" > {}\nexit 1\n",
+            quote(log.to_str().unwrap())
+        ),
+    );
+    for (args, cwd) in [
+        (vec![], fixture.home.to_str().unwrap()),
+        (vec!["--cd", "../project ' $name"], "../project ' $name"),
+        (
+            vec!["--cd=/project space", "resume", "--last"],
+            "/project space",
+        ),
+        (vec!["-C/project", "fork", "id"], "/project"),
+        (vec!["-C=/project"], "/project"),
+        (vec!["--", "--cd=/prompt"], fixture.home.to_str().unwrap()),
+    ] {
+        fixture.args(&args);
+        assert_eq!(
+            fs::read(&log).unwrap(),
+            format!("workspace-check\0--\0{cwd}\0").as_bytes()
+        );
+    }
 }

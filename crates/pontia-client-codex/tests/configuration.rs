@@ -13,6 +13,13 @@ async fn codex_configuration_preserves_admission_without_consuming_legacy_tui_se
         .await
         .unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &pool,
+        root.path().canonicalize().unwrap().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     let mut client = pontia_client_codex::registration();
     client.configuration = Some(Arc::new(CodexConfiguration::new(
         json!({"tui_command":"file-codex"}),

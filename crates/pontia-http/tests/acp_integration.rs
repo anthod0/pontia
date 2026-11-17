@@ -48,6 +48,13 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &pool,
+        root.path().canonicalize().unwrap().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     let mut clients = ClientRegistry::default();
     clients.register(pontia_client_pi::registration(None));
     clients.register(pontia_client_codex::registration());
@@ -206,6 +213,13 @@ async fn acp_tools_use_existing_http_snapshot_updates_reconnect_and_closed_event
     }));
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &pool,
+        root.path().canonicalize().unwrap().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )
@@ -311,6 +325,13 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     }));
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &pool,
+        root.path().canonicalize().unwrap().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )

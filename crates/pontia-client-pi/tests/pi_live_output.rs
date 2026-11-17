@@ -26,6 +26,13 @@ impl Session {
             .await
             .unwrap();
         run_migrations(&db).await.unwrap();
+        pontia_agent_control::workspaces::upsert_canonical_workspace(
+            &db,
+            root.path().canonicalize().unwrap().to_str().unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             db.clone(),
         )

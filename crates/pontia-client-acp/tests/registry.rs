@@ -322,6 +322,18 @@ async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_b
     };
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &pool,
+        workspace
+            .as_path()
+            .canonicalize()
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     let management =
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),

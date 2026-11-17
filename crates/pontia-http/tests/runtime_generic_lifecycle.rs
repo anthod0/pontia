@@ -15,12 +15,14 @@ use common::{generic_client::GenericClientTestScope, test_app::TestApp};
 
 const TOKEN: &str = "test-token";
 
-async fn test_state(name: &str) -> AppState {
-    TestApp::builder()
+async fn test_state(name: &str) -> (AppState, tempfile::TempDir) {
+    let state = TestApp::builder()
         .database_name(format!("{name}.db"))
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
-        .await
+        .await;
+    let workspace = common::test_app::registered_workspace(&state).await;
+    (state, workspace)
 }
 
 async fn request(
@@ -76,7 +78,10 @@ async fn binding_fields(state: &AppState, session_id: &str) -> Value {
     })
 }
 
-async fn create_session_with_body(state: AppState, body: Value) -> String {
+async fn create_session_with_body(state: AppState, mut body: Value) -> String {
+    if body["workspace"].is_null() {
+        body["workspace_id"] = json!(common::test_app::workspace_id(&state).await);
+    }
     let (status, body) = request(state, "POST", "/api/v1/sessions", Some(body)).await;
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
     body["data"]["session"]["session_id"]
@@ -103,8 +108,8 @@ async fn submit_turn(state: AppState, session_id: &str) -> String {
 #[tokio::test]
 async fn generic_runtime_preserves_session_metadata_and_stable_identity() {
     let scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_named_runtime").await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let (state, _workspace) = test_state("generic_named_runtime").await;
+    let workspace = common::test_app::registered_workspace(&state).await;
 
     let session_id = create_session_with_body(
         state.clone(),
@@ -128,7 +133,7 @@ async fn generic_runtime_preserves_session_metadata_and_stable_identity() {
 #[tokio::test]
 async fn generic_terminate_and_restart_update_runtime_lifecycle() {
     let scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_restart").await;
+    let (state, _workspace) = test_state("generic_restart").await;
     let session_id =
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;
     let first = binding_fields(&state, &session_id).await;
@@ -170,7 +175,7 @@ async fn generic_terminate_and_restart_update_runtime_lifecycle() {
 #[tokio::test]
 async fn observe_missing_generic_runtime_projects_session_error() {
     let scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_observe_session_error").await;
+    let (state, _workspace) = test_state("generic_observe_session_error").await;
     let session_id =
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;
     scope.reset_runtime_registry();
@@ -196,7 +201,7 @@ async fn observe_missing_generic_runtime_projects_session_error() {
 #[tokio::test]
 async fn observe_missing_generic_runtime_does_not_fail_a_terminal_branch_leaf() {
     let scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_observe_terminal_leaf").await;
+    let (state, _workspace) = test_state("generic_observe_terminal_leaf").await;
     let session_id =
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;
     sqlx::query(
@@ -243,7 +248,7 @@ async fn observe_missing_generic_runtime_abandons_active_turn_without_forging_ag
     let scope = GenericClientTestScope::new()
         .await
         .with_capabilities(pontia_client_pi::CAPABILITIES);
-    let state = test_state("generic_observe_turn_failed").await;
+    let (state, _workspace) = test_state("generic_observe_turn_failed").await;
     let session_id =
         create_session_with_body(state.clone(), json!({"client_type":"generic"})).await;
     let turn_id = submit_turn(state.clone(), &session_id).await;

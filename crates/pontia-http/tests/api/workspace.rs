@@ -12,6 +12,7 @@ use crate::common::{generic_client::GenericClientTestScope, test_app::TestApp};
 
 const TOKEN: &str = "test-token";
 
+mod admission;
 mod availability;
 
 async fn test_state(roots: Vec<WorkspaceRootConfig>) -> AppState {

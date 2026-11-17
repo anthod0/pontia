@@ -26,6 +26,8 @@ roots = [
 
 在 [Workspaces](https://app.pontia.dev/workspaces) 中选择一个根目录，浏览到项目并激活该目录。已激活的 Workspace 会出现在 New chat 中，并可关联多个 Session。
 
+连接终端客户端、创建 Session 或运行 Workflow 前，请先在 Workspaces 中手动激活项目目录。安装集成、启用 Client 或添加浏览根目录都不会激活其中的目录。子目录需要单独激活。停用或撤销后，需要再次激活 Workspace 才能接入新的 Session。
+
 重命名 Workspace 不会移动其目录。停用或撤销 Workspace 会将其从新的选择中移除，但会保留项目文件。如果目录被移到所有已配置的根目录之外或已不存在，Dashboard 会将该注册标记为不可用，以便你撤销它。
 
 ## 文件提及

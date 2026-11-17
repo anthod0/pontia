@@ -13,12 +13,14 @@ use crate::common::generic_client::GenericClientTestScope;
 
 const TOKEN: &str = "test-token";
 
-async fn test_state() -> AppState {
-    TestApp::builder()
+async fn test_state() -> (AppState, tempfile::TempDir) {
+    let state = TestApp::builder()
         .database_name("turn_submit.db")
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
-        .await
+        .await;
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
+    (state, workspace)
 }
 
 async fn request(
@@ -62,11 +64,12 @@ async fn post_internal_event(state: AppState, body: Value) -> (StatusCode, Value
     crate::common::reporting::report_fact(state, body).await
 }
 async fn create_session(state: AppState) -> String {
+    let workspace_id = crate::common::test_app::workspace_id(&state).await;
     let (status, body) = request(
         state,
         "POST",
         "/api/v1/sessions",
-        Some(json!({"client_type":"generic"})),
+        Some(json!({"client_type":"generic","workspace_id":workspace_id})),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
@@ -103,7 +106,7 @@ fn event_body(_event_id: &str, event_type: &str, session_id: &str, turn_id: &str
 #[tokio::test]
 async fn post_turn_external_endpoint_is_removed() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
     let (status, _) = request(
@@ -120,7 +123,7 @@ async fn post_turn_external_endpoint_is_removed() {
 #[tokio::test]
 async fn inbox_submission_still_creates_turns_and_turn_events_are_queryable() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
 
     let turn_id = submit_inbox_message(state.clone(), &session_id, "continue work").await;
@@ -163,7 +166,7 @@ async fn inbox_submission_still_creates_turns_and_turn_events_are_queryable() {
 #[tokio::test]
 async fn internal_events_advance_inbox_submitted_turn_and_session_projection() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state().await;
+    let (state, _workspace) = test_state().await;
     let session_id = create_session(state.clone()).await;
     let turn_id = submit_inbox_message(state.clone(), &session_id, "run").await;
 

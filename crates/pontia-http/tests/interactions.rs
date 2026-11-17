@@ -58,6 +58,13 @@ impl Fixture {
         .await
         .unwrap();
         pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+        pontia_agent_control::workspaces::upsert_canonical_workspace(
+            &pool,
+            root.path().canonicalize().unwrap().to_str().unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )
@@ -83,7 +90,10 @@ impl Fixture {
         let session = app
             .control()
             .session_commands()
-            .create_session(serde_json::from_value(json!({"client_type":"generic"})).unwrap())
+            .create_session(
+                serde_json::from_value(json!({"client_type":"generic","workspace":root.path()}))
+                    .unwrap(),
+            )
             .await
             .unwrap()
             .session_id()
@@ -213,7 +223,10 @@ async fn transient_notifications_are_delivered_before_a_durable_backlog_is_drain
         f.app
             .control()
             .session_commands()
-            .create_session(serde_json::from_value(json!({"client_type":"generic"})).unwrap())
+            .create_session(
+                serde_json::from_value(json!({"client_type":"generic","workspace":f.root.path()}))
+                    .unwrap(),
+            )
             .await
             .unwrap();
     }
@@ -446,7 +459,10 @@ async fn transient_interaction_sse_does_not_replace_the_durable_cursor() {
     f.app
         .control()
         .session_commands()
-        .create_session(serde_json::from_value(json!({"client_type":"generic"})).unwrap())
+        .create_session(
+            serde_json::from_value(json!({"client_type":"generic","workspace":f.root.path()}))
+                .unwrap(),
+        )
         .await
         .unwrap();
     let frame = tokio::time::timeout(std::time::Duration::from_secs(3), stream.frame())

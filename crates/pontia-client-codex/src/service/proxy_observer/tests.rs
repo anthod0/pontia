@@ -102,6 +102,10 @@ impl Fixture {
                         let mut threads = threads.lock().await;
                         let response = if params["reject"] == true || faults.lock().await.contains(method) {
                             json!({"id":id,"error":{"code":-32600,"message":"rejected"}})
+                        } else if method == "thread/unsubscribe" && faults.lock().await.contains("unsubscribe_wrong_id") {
+                            json!({"id":"unmatched","result":{"status":"unsubscribed"}})
+                        } else if method == "thread/unsubscribe" && faults.lock().await.contains("unsubscribe_future_status") {
+                            json!({"id":id,"result":{"status":"futureStatus"}})
                         } else if method == "thread/read" && !threads[native].materialized {
                             json!({"id":id,"error":{"code":-32603,"message":"failed to read thread: rollout is empty"}})
                         } else if method == "thread/resume" && !threads[native].materialized {
@@ -121,7 +125,7 @@ impl Fixture {
                                     }).unwrap_or_default();
                                     let parent = params["threadId"].clone();
                                     let native = format!("thread-{}", threads.len());
-                                    let value = json!({"id":native,"sessionId":"shared-native-root","forkedFromId":parent,"cwd":home,"ephemeral":params["ephemeral"] == true,"canAcceptDirectInput":true,"status":{"type":"idle"}});
+                                    let value = json!({"id":native,"sessionId":"shared-native-root","forkedFromId":parent,"cwd":params["cwd"].as_str().unwrap_or(home.to_str().unwrap()),"ephemeral":params["ephemeral"] == true,"canAcceptDirectInput":true,"status":{"type":"idle"}});
                                     threads.insert(native, Thread {
                                         value: value.clone(), materialized: method == "thread/fork",
                                         developer_instructions: params["developerInstructions"].clone(),
@@ -150,6 +154,9 @@ impl Fixture {
                                         thread.subscribers.retain(|peer| !peer.same_channel(&sender));
                                         if subscribed { "unsubscribed" } else { "notSubscribed" }
                                     } else { "notLoaded" };
+                                    let faults = faults.lock().await;
+                                    let status = if faults.contains("unsubscribe_not_subscribed") { "notSubscribed" }
+                                        else if faults.contains("unsubscribe_not_loaded") { "notLoaded" } else { status };
                                     json!({"status":status})
                                 }
                                 "thread/archive" => {
@@ -188,6 +195,13 @@ impl Fixture {
             .await
             .unwrap();
         pontia_storage_sqlite::run_migrations(&pool).await.unwrap();
+        pontia_agent_control::workspaces::upsert_canonical_workspace(
+            &pool,
+            root.path().canonicalize().unwrap().to_str().unwrap(),
+            None,
+        )
+        .await
+        .unwrap();
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )
@@ -272,7 +286,24 @@ impl Fixture {
     }
 }
 
-async fn rpc(wire: &mut crate::runtime::protocol::Socket, method: &str, params: Value) -> Value {
+async fn rpc(
+    wire: &mut crate::runtime::protocol::Socket,
+    method: &str,
+    mut params: Value,
+) -> Value {
+    if (method == "thread/start" || (method == "thread/fork" && params["threadId"].is_null()))
+        && params["cwd"].is_null()
+    {
+        params["cwd"] = json!(
+            wire.get_ref()
+                .peer_addr()
+                .unwrap()
+                .as_pathname()
+                .unwrap()
+                .parent()
+                .unwrap()
+        );
+    }
     wire.send(Message::text(
         json!({"id":1,"method":method,"params":params}).to_string(),
     ))
@@ -859,5 +890,132 @@ async fn native_start_pins_profile_and_resume_preserves_it_without_profile_queri
         f.threads.lock().await[native].developer_instructions,
         "native-user-marker\n\nnative-creation-marker"
     );
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn unregistered_and_inactive_threads_stay_native_across_start_resume_and_fork() {
+    let f = Fixture::new().await;
+    let cwd = f.root.path().join("native-project");
+    std::fs::create_dir(&cwd).unwrap();
+    for state in [None, Some("archived"), Some("deleted")] {
+        if let Some(state) = state {
+            pontia_agent_control::workspaces::upsert_canonical_workspace(
+                &f.app.db(),
+                cwd.to_str().unwrap(),
+                None,
+            )
+            .await
+            .unwrap();
+            sqlx::query("UPDATE workspaces SET state=? WHERE canonical_path=?")
+                .bind(state)
+                .bind(cwd.to_str().unwrap())
+                .execute(&f.app.db())
+                .await
+                .unwrap();
+        }
+        let before: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT workspace_id,state,updated_at FROM workspaces ORDER BY workspace_id",
+        )
+        .fetch_all(&f.app.db())
+        .await
+        .unwrap();
+        let mut cli = f.client().await;
+        let opened = rpc(&mut cli, "thread/start", json!({"cwd":cwd,"developerInstructions":"native only","config":{"model_reasoning_effort":"high"}})).await;
+        let native = opened["result"]["thread"]["id"].as_str().unwrap();
+        rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+        let resumed = rpc(&mut cli, "thread/resume", json!({"threadId":native})).await;
+        assert_eq!(resumed["result"]["thread"]["id"], native);
+        let forked = rpc(&mut cli, "thread/fork", json!({"threadId":native})).await;
+        let child = forked["result"]["thread"]["id"].as_str().unwrap();
+        assert_ne!(child, native);
+        {
+            let threads = f.threads.lock().await;
+            assert_eq!(threads[native].developer_instructions, "native only");
+            assert_eq!(
+                threads[native].config,
+                json!({"model_reasoning_effort":"high"})
+            );
+            assert!(threads[child].config.is_null());
+        }
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+            .fetch_one(&f.app.db())
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+        let after: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT workspace_id,state,updated_at FROM workspaces ORDER BY workspace_id",
+        )
+        .fetch_all(&f.app.db())
+        .await
+        .unwrap();
+        assert_eq!(after, before);
+    }
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn revoked_workspace_cannot_resume_a_previously_adopted_thread() {
+    let f = Fixture::new().await;
+    let mut cli = f.client().await;
+    let opened = rpc(&mut cli, "thread/start", json!({})).await;
+    let native = opened["result"]["thread"]["id"].as_str().unwrap();
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    let session = f.session(native, "busy").await;
+    f.complete(native).await;
+    f.session(native, "idle").await;
+    cli.close(None).await.unwrap();
+    f.session(native, "exited").await;
+    sqlx::query("UPDATE workspaces SET state='deleted'")
+        .execute(&f.app.db())
+        .await
+        .unwrap();
+    let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_runtimes")
+        .fetch_one(&f.app.db())
+        .await
+        .unwrap();
+    let mut cli = f.client().await;
+    rpc(&mut cli, "thread/resume", json!({"threadId":native})).await;
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    assert_eq!(
+        f.app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "exited"
+    );
+    let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_runtimes")
+        .fetch_one(&f.app.db())
+        .await
+        .unwrap();
+    assert_eq!(before, after);
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn failed_workspace_preflight_preserves_native_replies_and_connection() {
+    let f = Fixture::new().await;
+    let mut cli = f.client().await;
+    let opened = rpc(&mut cli, "thread/start", json!({})).await;
+    let native = opened["result"]["thread"]["id"].as_str().unwrap();
+    // An empty rollout cannot yet be read. Codex must receive and answer the request itself.
+    for method in ["thread/resume", "thread/fork"] {
+        let response = rpc(&mut cli, method, json!({"threadId":native,"reject":true})).await;
+        assert_eq!(response["error"]["code"], -32600);
+    }
+    assert!(
+        rpc(&mut cli, "config/read", json!({}))
+            .await
+            .get("result")
+            .is_some()
+    );
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+        .fetch_one(&f.app.db())
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
     f.stop().await;
 }

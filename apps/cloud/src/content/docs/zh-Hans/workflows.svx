@@ -38,7 +38,7 @@ inputs = ["research.md"]
 output = "result.md"
 ```
 
-将 `cwd` 设为一个已存在的目录。Workflow 中的每个 Agent Client 都在该目录中启动。如果还想在 New chat 中使用该目录，请[将其激活为 Workspace](/docs/workspaces)。
+将 `cwd` 设为一个已存在且已[激活为 Workspace](/docs/workspaces) 的目录。Workflow 中的每个 Agent Client 都在该目录中启动。
 
 每个 Node 都使用 `type = "agent"`。Node 按定义顺序执行。每个输入指向一个初始 Handoff 或之前某个 Node 的输出。为每个输出指定一个唯一的、不含目录部分的文件名。
 

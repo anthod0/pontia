@@ -68,7 +68,7 @@ async fn opening_a_thread_does_not_block_another_threads_input_or_output() {
     let native = opened["result"]["thread"]["id"].as_str().unwrap();
     let permit = f.config_gate.acquire().await.unwrap();
     cli.send(Message::text(
-        json!({"id":2,"method":"thread/start","params":{}}).to_string(),
+        json!({"id":2,"method":"thread/start","params":{"cwd":f.root.path()}}).to_string(),
     ))
     .await
     .unwrap();

@@ -10,7 +10,7 @@ use super::{
     RuntimeBindingUpsertRequest,
     request::{is_fork_start, non_empty, validate_required},
 };
-use crate::upsert_workspace;
+use crate::workspaces::require_active_workspace;
 
 static RUNTIME_BINDING_UPSERT_LOCK: Mutex<()> = Mutex::const_new(());
 
@@ -66,7 +66,7 @@ impl RuntimeBindingUpsertService {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .ok_or_else(|| Error::Domain("launch_cwd or client_cwd is required".to_string()))?;
-        let workspace = upsert_workspace(&self.pool, launch_cwd).await?;
+        let workspace = require_active_workspace(&self.pool, launch_cwd).await?;
 
         let existing_session_id = if let Some(session_id) = non_empty(request.session_id.as_deref())
         {

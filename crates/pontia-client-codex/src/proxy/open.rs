@@ -44,9 +44,38 @@ pub(super) async fn prepare(
         .map(|binding| binding.session_id.clone())
         .unwrap_or_else(|| pontia_core::ids::new_session_id().to_string());
     let connection = runtime.connection().await?;
-    let cwd = params["cwd"]
-        .as_str()
-        .or_else(|| binding.as_ref().map(|binding| binding.launch_cwd.as_str()));
+    let native_cwd = if params["cwd"].as_str().is_none() && operation != ThreadOperation::Start {
+        if let Some(native) = params["threadId"].as_str() {
+            match connection
+                .call(
+                    "thread/read",
+                    json!({"threadId":native,"includeTurns":false}),
+                )
+                .await
+            {
+                Ok(snapshot) => Some(snapshot),
+                Err(error) => {
+                    tracing::debug!(%error, "Codex Workspace preflight unavailable; forwarding native request");
+                    return Ok(None);
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let cwd = params["cwd"].as_str().or_else(|| {
+        native_cwd
+            .as_ref()
+            .and_then(|value| value["thread"]["cwd"].as_str())
+    });
+    let Some(cwd) = cwd else { return Ok(None) };
+    match pontia_agent_control::workspaces::require_active_workspace(&state.db(), cwd).await {
+        Ok(_) => {}
+        Err(Error::NotFound(_) | Error::StateConflict(_) | Error::Io(_)) => return Ok(None),
+        Err(error) => return Err(error),
+    }
     let response = connection
         .call("config/read", json!({"cwd":cwd,"includeLayers":false}))
         .await?;

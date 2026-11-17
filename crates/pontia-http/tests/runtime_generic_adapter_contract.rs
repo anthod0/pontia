@@ -19,12 +19,14 @@ use common::{generic_client::GenericClientTestScope, test_app::TestApp};
 
 const TOKEN: &str = "test-token";
 
-async fn test_state(name: &str) -> AppState {
-    TestApp::builder()
+async fn test_state(name: &str) -> (AppState, tempfile::TempDir) {
+    let state = TestApp::builder()
         .database_name(format!("{name}.db"))
         .external_api_token(Some(TOKEN.to_string()))
         .build_state()
-        .await
+        .await;
+    let workspace = common::test_app::registered_workspace(&state).await;
+    (state, workspace)
 }
 
 async fn post_json(
@@ -76,11 +78,12 @@ async fn response_json(response: axum::response::Response) -> (StatusCode, Value
 }
 
 async fn create_session(state: AppState) -> String {
+    let workspace_id = common::test_app::workspace_id(&state).await;
     let (status, body) = post_json(
         state,
         "/api/v1/sessions",
         Some(TOKEN),
-        json!({"client_type":"generic"}),
+        json!({"client_type":"generic","workspace_id":workspace_id}),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
@@ -90,7 +93,10 @@ async fn create_session(state: AppState) -> String {
         .to_string()
 }
 
-async fn create_session_with_body(state: AppState, body: Value) -> Value {
+async fn create_session_with_body(state: AppState, mut body: Value) -> Value {
+    if body["workspace"].is_null() {
+        body["workspace_id"] = json!(common::test_app::workspace_id(&state).await);
+    }
     let (status, body) = post_json(state, "/api/v1/sessions", Some(TOKEN), body).await;
     assert_eq!(status, StatusCode::CREATED, "{body:?}");
     body
@@ -140,7 +146,7 @@ async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime(
     let _scope = GenericClientTestScope::new()
         .await
         .with_capabilities(pontia_client_pi::CAPABILITIES);
-    let state = test_state("generic_contract_pi_like_capabilities").await;
+    let (state, _workspace) = test_state("generic_contract_pi_like_capabilities").await;
     let session_id = create_session(state.clone()).await;
 
     let (status, body) = get_json(state.clone(), &format!("/api/v1/sessions/{session_id}")).await;
@@ -163,7 +169,7 @@ async fn generic_test_client_can_expose_pi_like_capabilities_without_pi_runtime(
 #[tokio::test]
 async fn capability_model_declares_default_generic_adapter_capabilities() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_contract_capabilities").await;
+    let (state, _workspace) = test_state("generic_contract_capabilities").await;
     let session_id = create_session(state.clone()).await;
 
     let (status, body) = get_json(state, &format!("/api/v1/sessions/{session_id}")).await;
@@ -183,7 +189,7 @@ async fn capability_model_declares_default_generic_adapter_capabilities() {
 #[tokio::test]
 async fn generic_initial_task_dispatches_in_process() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_contract_in_process_initial_task").await;
+    let (state, _workspace) = test_state("generic_contract_in_process_initial_task").await;
 
     let body = create_session_with_body(
         state.clone(),
@@ -213,7 +219,7 @@ async fn generic_initial_task_dispatches_in_process() {
 #[tokio::test]
 async fn turn_input_handoff_uses_control_plane_assigned_identity() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_contract_turn_input").await;
+    let (state, _workspace) = test_state("generic_contract_turn_input").await;
     let session_id = create_session(state.clone()).await;
 
     let (turn_id, body) = submit_turn(state, &session_id, "adapter contract task").await;
@@ -233,7 +239,7 @@ async fn turn_input_handoff_uses_control_plane_assigned_identity() {
 #[tokio::test]
 async fn event_source_returns_turn_facts_through_internal_event_api() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_contract_event_source").await;
+    let (state, _workspace) = test_state("generic_contract_event_source").await;
     let session_id = create_session(state.clone()).await;
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "run to completion").await;
     let runtime_id = runtime_id(&state, &session_id).await;
@@ -292,7 +298,7 @@ async fn event_source_returns_turn_facts_through_internal_event_api() {
 #[tokio::test]
 async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_contract_workflow_resume").await;
+    let (state, _workspace) = test_state("generic_contract_workflow_resume").await;
     let session_id = create_session(state.clone()).await;
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "initial workflow work").await;
     let runtime_id = runtime_id(&state, &session_id).await;
@@ -364,7 +370,7 @@ async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() 
 #[tokio::test]
 async fn unsupported_capabilities_degrade_independently_without_forged_facts() {
     let _scope = GenericClientTestScope::new().await;
-    let state = test_state("generic_contract_degradation").await;
+    let (state, _workspace) = test_state("generic_contract_degradation").await;
     let session_id = create_session(state.clone()).await;
     let (turn_id, _) = submit_turn(state.clone(), &session_id, "cannot interrupt").await;
     let runtime_id = runtime_id(&state, &session_id).await;

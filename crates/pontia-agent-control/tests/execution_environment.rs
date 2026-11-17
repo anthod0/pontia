@@ -34,6 +34,13 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &pool,
+        root.path().canonicalize().unwrap().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )
@@ -143,6 +150,13 @@ async fn owned_creation_is_idempotent_and_keeps_the_original_environment() {
     .await
     .unwrap();
     run_migrations(&pool).await.unwrap();
+    pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &pool,
+        root.path().canonicalize().unwrap().to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
     pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
         pool.clone(),
     )

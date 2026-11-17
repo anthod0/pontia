@@ -4,7 +4,7 @@ use super::{AppState, StatusCode, json, post_upsert, request_json, test_state, u
 #[tokio::test]
 async fn current_runtime_exit_abandons_its_active_turn() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()
@@ -63,7 +63,7 @@ async fn current_runtime_exit_abandons_its_active_turn() {
 #[tokio::test]
 async fn retrying_an_old_terminal_fact_does_not_end_the_current_turn() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()
@@ -147,7 +147,7 @@ async fn retrying_an_old_terminal_fact_does_not_end_the_current_turn() {
 #[tokio::test]
 async fn upsert_existing_exited_pi_session_records_resume_lifecycle() {
     let (state, _app) = test_state().await;
-    let workspace = tempfile::tempdir().expect("workspace");
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()
@@ -213,7 +213,7 @@ async fn registration_and_repeated_resume_preserve_custom_command_and_native_fil
     let (state, mut app) = test_state().await;
     let tmux = TestTmuxServer::new();
     app.set_env("TMUX", format!("{},0,0", tmux.socket_path().display()));
-    let workspace = app.temp_workspace();
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace = workspace
         .path()
         .canonicalize()
@@ -264,8 +264,8 @@ async fn registration_and_repeated_resume_preserve_custom_command_and_native_fil
 
 #[tokio::test]
 async fn invalid_native_file_does_not_replace_runtime_or_change_resume_state() {
-    let (state, app) = test_state().await;
-    let workspace = app.temp_workspace();
+    let (state, _app) = test_state().await;
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let file = workspace.path().join("session.jsonl");
     let mut body = upsert_body(workspace.path().to_str().unwrap());
     body["client_session_file"] = json!(file);
@@ -394,7 +394,7 @@ async fn api_resumed_pi_can_register_from_its_launched_pane_in_c_locale() {
     app.remove_env("TMUX");
     app.set_env("TMUX_TMPDIR", tmux.0.path());
     app.set_env("LC_ALL", "C");
-    let workspace = app.temp_workspace();
+    let workspace = crate::common::test_app::registered_workspace(&state).await;
     let workspace_path = workspace.path().to_str().unwrap();
     let session_file = workspace.path().join("session.jsonl");
     std::fs::write(

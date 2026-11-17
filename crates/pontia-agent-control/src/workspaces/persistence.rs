@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use sqlx::SqlitePool;
 
@@ -10,11 +10,51 @@ use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 
 use super::WorkspaceRecord;
 
-pub async fn upsert_workspace(pool: &SqlitePool, workspace: &str) -> Result<WorkspaceRecord> {
-    let input_path = PathBuf::from(workspace);
-    std::fs::create_dir_all(&input_path)?;
-    let canonical_path = std::fs::canonicalize(&input_path)?.display().to_string();
-    upsert_canonical_workspace(pool, &canonical_path, None).await
+pub async fn require_active_workspace(
+    pool: &SqlitePool,
+    workspace: &str,
+) -> Result<WorkspaceRecord> {
+    let canonical = std::fs::canonicalize(workspace).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            Error::NotFound(format!("Workspace directory {workspace} not found"))
+        } else {
+            Error::Io(error)
+        }
+    })?;
+    if !canonical.is_dir() {
+        return Err(Error::Domain("Workspace must be a directory".into()));
+    }
+    let path = canonical.display().to_string();
+    let row = SqliteWorkspaceRepository::new(pool.clone())
+        .get_workspace_record_by_canonical_path(&path)
+        .await?
+        .ok_or_else(|| {
+            Error::NotFound(format!(
+                "Workspace {path} must be registered and activated first"
+            ))
+        })?;
+    require_active_workspace_id(pool, &row.workspace_id).await
+}
+
+pub async fn require_active_workspace_id(
+    pool: &SqlitePool,
+    workspace_id: &str,
+) -> Result<WorkspaceRecord> {
+    let row = SqliteWorkspaceRepository::new(pool.clone())
+        .get_workspace(workspace_id)
+        .await?
+        .ok_or_else(|| Error::NotFound(format!("workspace {workspace_id} not found")))?;
+    if row.state != "active" {
+        return Err(Error::StateConflict(format!(
+            "Workspace {workspace_id} must be activated first"
+        )));
+    }
+    Ok(WorkspaceRecord {
+        workspace_id: row.workspace_id,
+        canonical_path: row.canonical_path,
+        name: row.name,
+        description: row.description,
+    })
 }
 
 pub async fn upsert_canonical_workspace(

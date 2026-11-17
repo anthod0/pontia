@@ -394,3 +394,58 @@ async fn delayed_archive_notification_does_not_end_a_later_cli_resubscription() 
     assert_eq!(f.management_calls(native).await, ["thread/unsubscribe"]);
     f.stop().await;
 }
+
+#[tokio::test]
+async fn managed_unsubscribe_requires_a_matching_confirmed_native_response() {
+    for (fault, confirms) in [
+        (Some("thread/unsubscribe"), false),
+        (Some("unsubscribe_wrong_id"), false),
+        (Some("unsubscribe_future_status"), false),
+        (None, true),
+        (Some("unsubscribe_not_subscribed"), true),
+        (Some("unsubscribe_not_loaded"), true),
+    ] {
+        let f = Fixture::new().await;
+        let mut cli = f.client().await;
+        let opened = rpc(&mut cli, "thread/fork", json!({})).await;
+        let native = opened["result"]["thread"]["id"].as_str().unwrap();
+        let session = f.session(native, "idle").await;
+        f.runtimes(&session, 1, 0).await;
+        if let Some(fault) = fault {
+            f.faults.lock().await.insert(fault.into());
+        }
+        cli.send(Message::text(
+            json!({"id":7,"method":"thread/unsubscribe","params":{"threadId":native}}).to_string(),
+        ))
+        .await
+        .unwrap();
+        loop {
+            let frame = tokio::time::timeout(Duration::from_secs(5), cli.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            let Message::Text(text) = frame else { continue };
+            let value: Value = serde_json::from_str(&text).unwrap();
+            if value.get("id").is_some() && value.get("method").is_none() {
+                assert_eq!(
+                    value["id"],
+                    if fault == Some("unsubscribe_wrong_id") {
+                        json!("unmatched")
+                    } else {
+                        json!(7)
+                    }
+                );
+                break;
+            }
+        }
+        // A later adoption drains earlier proxy observations before checking their effects.
+        let barrier = rpc(&mut cli, "thread/fork", json!({})).await;
+        f.session(barrier["result"]["thread"]["id"].as_str().unwrap(), "idle")
+            .await;
+        f.runtimes(&session, usize::from(!confirms), usize::from(confirms))
+            .await;
+        assert_eq!(f.exit_events(&session).await, i64::from(confirms));
+        f.stop().await;
+    }
+}

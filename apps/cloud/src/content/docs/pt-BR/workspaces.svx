@@ -26,6 +26,8 @@ As raízes controlam quais diretórios o Dashboard pode navegar. O sandbox do Ag
 
 Em [Workspaces](https://app.pontia.dev/workspaces), escolha uma raiz, navegue até um projeto e ative esse diretório. Uma Workspace ativa fica disponível em New chat e pode ser associada a várias Sessions.
 
+Ative cada diretório de projeto em Workspaces antes de conectar um cliente no terminal, criar uma Session ou executar um Workflow. Instalar uma integração, habilitar um Client ou adicionar uma raiz de navegação não ativa seus diretórios. Subdiretórios precisam de ativação própria. Após desativar ou revogar uma Workspace, ative-a novamente antes de conectar novas Sessions.
+
 Renomear uma Workspace mantém o diretório no lugar. Desativá-la ou revogá-la a remove das novas seleções, preservando os arquivos do projeto. Se um diretório for movido para fora de todas as raízes configuradas ou desaparecer, o Dashboard marca o registro como indisponível para que você possa revogá-lo.
 
 ## Menções de arquivos

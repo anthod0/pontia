@@ -26,6 +26,8 @@ Roots control which directories the Dashboard can browse. The Agent Client's san
 
 In [Workspaces](https://app.pontia.dev/workspaces), choose a root, browse to a project, and activate that directory. An active Workspace becomes available in New chat and can be associated with multiple Sessions.
 
+Activate each project directory in Workspaces before connecting a terminal client, creating a Session, or running a Workflow. Installing an integration, enabling a Client, or adding a browser root does not activate its directories. Subdirectories need their own activation. After deactivation or revocation, activate the Workspace again before connecting new Sessions.
+
 Renaming a Workspace keeps its directory in place. Deactivating or revoking it removes it from new selections while preserving project files. If a directory moves outside all configured roots or disappears, the Dashboard marks the registration unavailable so you can revoke it.
 
 ## File mentions

@@ -3,7 +3,10 @@ pub mod path_policy;
 pub use commands::{RegisterWorkspaceRequest, WORKSPACE_DESCRIPTION_LIMIT, WorkspaceService};
 pub mod availability;
 mod persistence;
-pub use persistence::{get_workspace_record, upsert_canonical_workspace, upsert_workspace};
+pub use persistence::{
+    get_workspace_record, require_active_workspace, require_active_workspace_id,
+    upsert_canonical_workspace,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkspaceRecord {
