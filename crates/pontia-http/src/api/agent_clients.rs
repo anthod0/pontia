@@ -72,3 +72,21 @@ pub async fn delete_agent_client(
     service.delete(&client, &key).await?;
     Ok(ok(json!({"deleted": true})))
 }
+
+pub async fn setup_agent_client(
+    State(state): State<AppState>,
+    Path((client, key)): Path<(String, String)>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let service = AgentClientService::new(state.db(), state.control().clients());
+    let operation = service
+        .setup(state.pontia_home().to_path_buf(), &client, &key)
+        .await?;
+    Ok(ok(json!({"operation": operation})))
+}
+
+pub async fn agent_client_setup_status(
+    State(state): State<AppState>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let operation = AgentClientService::setup_status(state.pontia_home().to_path_buf()).await?;
+    Ok(ok(json!({"operation": operation})))
+}

@@ -47,6 +47,8 @@ Instead of `command` and `args`, an entry can set `registry_id` to launch an age
 
 Run `pontia setup pi`, `pontia setup codex`, or `pontia setup claude` to install or repair a local integration. Omit the Client to select interactively. Setup also enables the Client.
 
+In the Dashboard, open **Settings → Agent Clients**, select Pi, Codex, or Claude Code, and click **Initialize** to perform the same setup on that device. The page shows the latest setup output and result, including after reconnecting.
+
 ## Client capabilities differ
 
 The Dashboard presents the controls supported by the selected Client, such as interruption, model changes, history branching, and queued delivery.

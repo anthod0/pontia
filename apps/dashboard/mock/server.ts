@@ -514,6 +514,25 @@ function eventStream(device: MockDevice, signal: AbortSignal): Response {
 const routes: [method: string, pattern: string, handler: Handler][] = [
   ["GET", "/auth/validate", () => ({ valid: true })],
 
+  ["GET", "/agent-client-setup", ({ device }) => ({ operation: device.data.clientSetup })],
+  [
+    "POST",
+    "/agent-clients/:type/:key/setup",
+    ({ device, params: [type, key] }) => {
+      const client = findAgentClient(device, type, key);
+      if (!client.setup_command) throw new Error("Setup is unavailable for this client");
+      client.enabled = true;
+      device.data.clientSetup = {
+        id: crypto.randomUUID(),
+        client_type: type,
+        client_key: key,
+        status: "succeeded",
+        error: null,
+        output: "Demo setup completed.",
+      };
+      return { operation: device.data.clientSetup };
+    },
+  ],
   ["GET", "/agent-clients", ({ device }) => ({ agent_clients: device.data.agentClients })],
   [
     "PATCH",

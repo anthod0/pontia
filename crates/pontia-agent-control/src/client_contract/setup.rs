@@ -7,6 +7,9 @@ use std::{
 /// Client-owned local integration operations; the CLI owns selection and confirmation.
 pub trait ClientIntegration: Send + Sync {
     fn client_type(&self) -> &'static str;
+    fn setup_name(&self) -> &'static str {
+        self.client_type()
+    }
     fn selected_by_default(&self) -> bool;
     fn client_key(&self) -> &'static str {
         "default"

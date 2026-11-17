@@ -1,6 +1,7 @@
 mod agent_clients;
 pub use agent_clients::{
-    delete_agent_client, get_agent_client, list_agent_clients, patch_agent_client,
+    agent_client_setup_status, delete_agent_client, get_agent_client, list_agent_clients,
+    patch_agent_client, setup_agent_client,
 };
 mod agent_profiles;
 mod auth;

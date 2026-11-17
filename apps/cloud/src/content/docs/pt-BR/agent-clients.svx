@@ -47,6 +47,8 @@ Em vez de `command` e `args`, uma entrada pode definir `registry_id` para inicia
 
 Execute `pontia setup pi`, `pontia setup codex` ou `pontia setup claude` para instalar ou reparar uma integração local. Omita o Client para selecioná-lo de forma interativa. O setup também ativa o Client.
 
+No Dashboard, abra **Settings → Agent Clients**, selecione Pi, Codex ou Claude Code e clique em **Initialize** para executar a mesma configuração nesse dispositivo. A página mostra a saída e o resultado do último setup, inclusive após reconectar.
+
 ## Os recursos variam entre Clients
 
 O Dashboard apresenta os controles suportados pelo Client selecionado, como interrupção, troca de modelo, ramificação do histórico e entrega em fila.

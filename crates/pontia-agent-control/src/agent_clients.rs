@@ -30,6 +30,7 @@ pub struct AgentClientDetails {
     pub name: String,
     pub short_id: String,
     pub enabled: bool,
+    pub setup_command: Option<String>,
     pub has_record: bool,
     pub config_overrides: Value,
     pub effective_config: Value,
@@ -101,6 +102,10 @@ impl AgentClientService {
             client_key: key.into(),
             name,
             short_id,
+            setup_command: self
+                .clients
+                .integration(client, key)
+                .map(|integration| format!("pontia setup {}", integration.setup_name())),
             enabled: record.as_ref().is_some_and(|row| row.enabled),
             has_record: record.is_some(),
             config_overrides: overrides,
@@ -177,5 +182,42 @@ impl AgentClientService {
             .as_ref()
             .map(|configuration| effective_configuration(configuration.as_ref(), &key, record))
             .transpose()
+    }
+}
+
+impl AgentClientService {
+    pub async fn setup(
+        &self,
+        home: std::path::PathBuf,
+        client: &str,
+        key: &str,
+    ) -> Result<pontia_runtime::client_setup::SetupOperation> {
+        self.get(client, key).await?;
+        let integration = self.clients.integration(client, key).ok_or_else(|| {
+            Error::CapabilityUnavailable("Setup is unavailable for this client".into())
+        })?;
+        let client = integration.client_type().to_string();
+        tokio::task::spawn_blocking(move || {
+            let cli = std::env::current_exe()?.with_file_name("pontia");
+            pontia_runtime::client_setup::start(
+                &home,
+                &cli,
+                &client,
+                &uuid::Uuid::now_v7().to_string(),
+            )
+            .map_err(Error::Domain)
+        })
+        .await
+        .map_err(|error| Error::Domain(error.to_string()))?
+    }
+
+    pub async fn setup_status(
+        home: std::path::PathBuf,
+    ) -> Result<Option<pontia_runtime::client_setup::SetupOperation>> {
+        tokio::task::spawn_blocking(move || {
+            pontia_runtime::client_setup::latest(&home).map_err(Error::Domain)
+        })
+        .await
+        .map_err(|error| Error::Domain(error.to_string()))?
     }
 }

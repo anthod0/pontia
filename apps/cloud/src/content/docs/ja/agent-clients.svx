@@ -47,6 +47,8 @@ args = ["--acp"]
 
 ローカルの連携をインストールまたは修復するには、`pontia setup pi`、`pontia setup codex`、`pontia setup claude` を実行します。Client を省略すると対話形式で選択できます。セットアップでは Client も有効になります。
 
+Dashboard の **Settings → Agent Clients** で Pi、Codex、Claude Code を選び、**Initialize** をクリックすると、そのデバイスで同じセットアップを実行できます。最新のセットアップの出力と結果は、再接続後も確認できます。
+
 ## Client によってケイパビリティは異なる
 
 Dashboard には、中断、モデルの変更、履歴の分岐、キューに入れた配信など、選択した Client が対応している操作が表示されます。

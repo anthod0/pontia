@@ -8,6 +8,8 @@ const api = vi.hoisted(() => ({
   listAgentClients: vi.fn(),
   patchAgentClient: vi.fn(),
   resetAgentClient: vi.fn(),
+  setupAgentClient: vi.fn(),
+  getAgentClientSetup: vi.fn(),
 }));
 vi.mock("../src/api/client", async (importOriginal) => {
   const original = await importOriginal();
@@ -25,6 +27,7 @@ const peer = (key: string): AgentClientView => ({
   short_id: key,
   name: key,
   enabled: true,
+  setup_command: null,
   has_record: true,
   config_overrides: { name: key },
   effective_config: { name: key, command: "inherited-command" },
@@ -34,6 +37,7 @@ const peer = (key: string): AgentClientView => ({
 
 beforeEach(() => {
   vi.resetAllMocks();
+  api.getAgentClientSetup.mockResolvedValue(null);
   api.listAgentClients.mockResolvedValue([peer("grok"), peer("opencode")]);
 });
 
@@ -140,4 +144,61 @@ test("custom clients use their stable key rather than their display name", async
       { config_overrides: { name: "Company Agent", command: "agent" } },
     ),
   );
+});
+
+const setupClient = (): AgentClientView => ({
+  ...peer("default"),
+  client_type: "pi",
+  name: "Pi",
+  enabled: false,
+  setup_command: "pontia setup pi",
+});
+const operation = (status: "running" | "succeeded" | "failed") => ({
+  id: "setup-1",
+  client_type: "pi",
+  client_key: "default",
+  status,
+  error: status === "failed" ? "Process exited with 1" : null,
+  output: "Setup output",
+});
+
+test("setup enables the selected client and preserves an unsaved override draft", async () => {
+  const user = userEvent.setup();
+  api.listAgentClients.mockResolvedValue([setupClient()]);
+  api.setupAgentClient.mockResolvedValue(operation("running"));
+  render(AgentClientsPage);
+  await user.click(await screen.findByRole("button", { name: /^Pi/ }));
+  const editor = screen.getByLabelText("Database overrides (JSON)");
+  await user.clear(editor);
+  await user.click(editor);
+  await user.paste('{"name":"Unsaved"}');
+  await user.click(screen.getByRole("button", { name: "Initialize" }));
+  expect(api.setupAgentClient).toHaveBeenCalledWith(setupClient());
+  expect(screen.getByRole("button", { name: "Initializing…" })).toBeDisabled();
+  api.listAgentClients.mockResolvedValue([{ ...setupClient(), enabled: true }]);
+  api.getAgentClientSetup.mockResolvedValue(operation("succeeded"));
+  await waitFor(() => expect(screen.getByRole("switch", { name: "Enabled" })).toBeChecked(), {
+    timeout: 4000,
+  });
+  expect(editor).toHaveValue('{"name":"Unsaved"}');
+  expect(screen.getByRole("button", { name: "Initialize" })).toBeEnabled();
+});
+
+test("a reopened page recovers a running setup across a temporary disconnect and permits retry after failure", async () => {
+  const user = userEvent.setup();
+  api.listAgentClients.mockResolvedValue([setupClient()]);
+  api.getAgentClientSetup
+    .mockResolvedValueOnce(operation("running"))
+    .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+    .mockResolvedValue(operation("failed"));
+  api.setupAgentClient.mockResolvedValue({ ...operation("running"), id: "retry" });
+  render(AgentClientsPage);
+  await user.click(await screen.findByRole("button", { name: /^Pi/ }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Initializing…" })).toBeDisabled());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Initialize" })).toBeEnabled(), {
+    timeout: 6000,
+  });
+  expect(screen.getByRole("switch", { name: "Enabled" })).not.toBeChecked();
+  await user.click(screen.getByRole("button", { name: "Initialize" }));
+  expect(api.setupAgentClient).toHaveBeenCalledTimes(1);
 });

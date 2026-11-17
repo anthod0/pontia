@@ -60,5 +60,8 @@ pub fn registration(config: &AppConfig) -> ClientRegistry {
     clients.register(pontia_client_acp::registration_from_sources(
         sources.acp_file.clone(),
     ));
+    for integration in integrations() {
+        clients.register_integration(integration);
+    }
     clients
 }

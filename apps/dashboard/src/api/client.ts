@@ -4,6 +4,7 @@ import type {
   Interaction,
   ForkSessionOutcome,
   AgentClientView,
+  AgentClientSetupOperation,
   JsonObject,
   AgentProfileView,
   ApiEnvelope,
@@ -108,6 +109,25 @@ export function createApi(device: DeviceRuntime) {
       idempotency: false,
       retryNetworkErrors: false,
     });
+  }
+
+  async function setupAgentClient(target: AgentClientView): Promise<AgentClientSetupOperation> {
+    return (
+      await request<{ operation: AgentClientSetupOperation }>(`${agentClientPath(target)}/setup`, {
+        method: "POST",
+        mutating: true,
+        idempotency: false,
+        retryNetworkErrors: false,
+      })
+    ).operation;
+  }
+
+  async function getAgentClientSetup(
+    options: ReadRequestOptions = {},
+  ): Promise<AgentClientSetupOperation | null> {
+    return (
+      await request<{ operation: AgentClientSetupOperation | null }>("/agent-client-setup", options)
+    ).operation;
   }
 
   async function listSessionCreationOptions(
@@ -842,6 +862,8 @@ export function createApi(device: DeviceRuntime) {
     listAgentClients,
     patchAgentClient,
     resetAgentClient,
+    setupAgentClient,
+    getAgentClientSetup,
     listSessionCreationOptions,
     listPendingInteractions,
     getInteraction,

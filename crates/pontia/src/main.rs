@@ -112,6 +112,11 @@ enum Command {
         /// Agent Client to configure
         client: Option<String>,
     },
+    #[command(hide = true)]
+    SetupWorker {
+        client: String,
+        operation_id: uuid::Uuid,
+    },
     /// Manage Agent Client settings through the Pontia service
     Client(pontia::client::ClientCommand),
     /// Sign in to the Pontia cloud from a headless terminal
@@ -201,19 +206,21 @@ fn cli_command() -> clap::Command {
     for name in AGENT_TOOLS {
         command = command.mut_subcommand(name, |tool| tool.hide(true));
     }
-    let clients: Vec<&'static str> = pontia_clients::integrations()
+    let integrations = pontia_clients::integrations();
+    let clients: Vec<&'static str> = integrations
         .iter()
-        .map(|client| match client.client_type() {
-            "claude-agent" => "claude",
-            name => name,
-        })
+        .map(|client| client.setup_name())
         .collect();
     command = command.mut_subcommand("setup", |setup| {
         setup.mut_arg("client", |arg| {
             arg.value_parser(
-                clap::builder::PossibleValuesParser::new(clients).map(|name| match name.as_str() {
-                    "claude" => "claude-agent".into(),
-                    _ => name,
+                clap::builder::PossibleValuesParser::new(clients).map(move |name| {
+                    integrations
+                        .iter()
+                        .find(|client| client.setup_name() == name)
+                        .expect("validated setup name")
+                        .client_type()
+                        .to_string()
                 }),
             )
         })
@@ -228,6 +235,38 @@ async fn execute(command: Command) -> Result<bool, String> {
             let vars = env::vars().collect();
             setup::run_interactive(client.as_deref(), &vars, &RealInitPlatform)?;
             Ok(true)
+        }
+        Command::SetupWorker {
+            client,
+            operation_id,
+        } => {
+            let result = (|| {
+                let integration = pontia_clients::integrations()
+                    .into_iter()
+                    .find(|entry| entry.client_type() == client)
+                    .ok_or_else(|| format!("Unknown setup integration: {client}"))?;
+                let home = env::var_os("PONTIA_HOME")
+                    .map(PathBuf::from)
+                    .ok_or("PONTIA_HOME is required")?;
+                let cli = env::current_exe().map_err(|error| error.to_string())?;
+                pontia_runtime::client_setup::run_worker(
+                    &home,
+                    &cli,
+                    &client,
+                    integration.client_key(),
+                    integration.setup_name(),
+                    &operation_id.to_string(),
+                    &mut std::io::stdout(),
+                )
+            })();
+            if let Err(error) = &result {
+                println!(
+                    "{}",
+                    serde_json::to_string(&Err::<(), _>(error))
+                        .map_err(|error| error.to_string())?
+                );
+            }
+            result.map(|_| true)
         }
         Command::SendFile { path } => {
             let config = pontia_clients::config_from_env().map_err(|e| e.to_string())?;

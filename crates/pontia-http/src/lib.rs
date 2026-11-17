@@ -126,6 +126,14 @@ fn external_api_router(state: HttpState) -> Router {
             "/api/v1/workflow/patches/block",
             post(api::block_workflow_patch),
         )
+        .route(
+            "/api/v1/agent-client-setup",
+            get(api::agent_client_setup_status),
+        )
+        .route(
+            "/api/v1/agent-clients/{client_type}/{client_key}/setup",
+            post(api::setup_agent_client),
+        )
         .route("/api/v1/agent-clients", get(api::list_agent_clients))
         .route(
             "/api/v1/agent-clients/{client_type}/{client_key}",

@@ -64,6 +64,7 @@ impl ClientServiceTasks {
 pub struct ClientRegistry {
     entries: Arc<HashMap<&'static str, ClientRegistration>>,
     registration_order: Arc<Vec<&'static str>>,
+    integrations: Arc<HashMap<&'static str, Arc<dyn crate::client_contract::ClientIntegration>>>,
 }
 
 impl Default for ClientRegistry {
@@ -71,11 +72,29 @@ impl Default for ClientRegistry {
         Self {
             entries: Arc::new(HashMap::new()),
             registration_order: Arc::new(Vec::new()),
+            integrations: Arc::new(HashMap::new()),
         }
     }
 }
 
 impl ClientRegistry {
+    pub fn register_integration(
+        &mut self,
+        integration: Arc<dyn crate::client_contract::ClientIntegration>,
+    ) {
+        Arc::make_mut(&mut self.integrations).insert(integration.client_type(), integration);
+    }
+
+    pub fn integration(
+        &self,
+        client: &str,
+        key: &str,
+    ) -> Option<&Arc<dyn crate::client_contract::ClientIntegration>> {
+        self.integrations
+            .get(client)
+            .filter(|integration| integration.client_key() == key)
+    }
+
     pub fn register(&mut self, client: ClientRegistration) {
         if !self.entries.contains_key(client.spec.client_type) {
             Arc::make_mut(&mut self.registration_order).push(client.spec.client_type);

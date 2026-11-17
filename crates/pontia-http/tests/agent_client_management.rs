@@ -15,6 +15,7 @@ async fn app() -> (Router, tempfile::TempDir) {
     let db = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&db).await.unwrap();
     let mut clients = ClientRegistry::default();
+    clients.register_integration(pontia_client_pi::setup::integration());
     let mut pi = pontia_client_pi::registration(None);
     pi.configuration = Some(Arc::new(pontia_client_pi::config::PiConfiguration::new(
         json!({"tui_command":"file-pi"}),
@@ -141,6 +142,7 @@ async fn all_management_operations_require_authentication() {
     for (method, path, body) in [
         ("GET", "", None),
         ("GET", "/pi/default", None),
+        ("POST", "/pi/default/setup", None),
         ("PATCH", "/pi/default", Some(json!({"enabled":false}))),
         ("DELETE", "/pi/default", None),
     ] {
@@ -449,4 +451,46 @@ async fn null_clears_inherited_launch_source_and_delete_removes_database_only_pe
         request(&app, "GET", "/acp/only-db", None, true).await.0,
         StatusCode::NOT_FOUND
     );
+}
+
+#[tokio::test]
+async fn setup_is_advertised_only_for_registered_integrations_and_rejects_other_targets() {
+    let (app, root) = app().await;
+    let (_, pi) = request(&app, "GET", "/pi/default", None, true).await;
+    assert_eq!(
+        pi["data"]["agent_client"]["setup_command"],
+        "pontia setup pi"
+    );
+    let (_, acp) = request(&app, "GET", "/acp/grok", None, true).await;
+    assert!(acp["data"]["agent_client"]["setup_command"].is_null());
+    assert_eq!(
+        request(&app, "POST", "/acp/grok/setup", None, true).await.0,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(
+        request(&app, "POST", "/pi/unknown/setup", None, true)
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert!(!root.path().join("state/client-setup").exists());
+    for authorized in [false, true] {
+        let mut req = Request::builder().uri("/api/v1/agent-client-setup");
+        if authorized {
+            req = req.header("Authorization", "Bearer test-token");
+        }
+        let response = app
+            .clone()
+            .oneshot(req.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            if authorized {
+                StatusCode::OK
+            } else {
+                StatusCode::UNAUTHORIZED
+            }
+        );
+    }
 }

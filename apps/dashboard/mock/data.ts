@@ -1,5 +1,6 @@
 import type {
   AgentClientView,
+  AgentClientSetupOperation,
   AgentProfileView,
   EventView,
   InboxMessageView,
@@ -42,6 +43,7 @@ export interface MockData {
   workflows: MockWorkflow[];
   agentProfiles: AgentProfileView[];
   agentClients: AgentClientView[];
+  clientSetup: AgentClientSetupOperation | null;
   creationOptions: SessionCreationOption[];
   models: SessionModel[];
   files: string[];
@@ -330,6 +332,10 @@ function agentClient(
     client_key: clientKey,
     name,
     short_id: clientKey,
+    setup_command:
+      clientType === "acp"
+        ? null
+        : `pontia setup ${clientType === "claude-agent" ? "claude" : clientType}`,
     enabled: true,
     has_record: false,
     config_overrides: {},
@@ -737,6 +743,7 @@ export function createSampleData(): MockData {
       agentProfile("reviewer", "1", "Reviewer", "Reviews a change for bugs and style."),
       agentProfile("reviewer", "2", "Reviewer", "Reviews a change and checks it against the spec."),
     ],
+    clientSetup: null,
     agentClients: [
       agentClient("pi", "pi", "Pi", "pi"),
       agentClient("codex", "codex", "Codex", "codex"),

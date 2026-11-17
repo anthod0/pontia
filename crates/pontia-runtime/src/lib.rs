@@ -3,6 +3,7 @@
 //! The MVP generic runtime records a binding and immediately reports ready. This
 //! module stays independent from HTTP transport details.
 
+pub mod client_setup;
 mod in_process;
 pub mod local_service;
 mod manager;

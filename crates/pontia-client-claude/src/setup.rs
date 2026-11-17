@@ -51,6 +51,9 @@ impl ClientIntegration for Integration {
     fn client_type(&self) -> &'static str {
         "claude-agent"
     }
+    fn setup_name(&self) -> &'static str {
+        "claude"
+    }
     fn selected_by_default(&self) -> bool {
         false
     }

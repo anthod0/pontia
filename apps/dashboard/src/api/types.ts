@@ -7,11 +7,21 @@ export interface AgentClientView {
   name: string;
   short_id: string;
   enabled: boolean;
+  setup_command: string | null;
   has_record: boolean;
   config_overrides: JsonObject;
   effective_config: JsonObject;
   created_at: string | null;
   updated_at: string | null;
+}
+
+export interface AgentClientSetupOperation {
+  id: string;
+  client_type: string;
+  client_key: string;
+  status: "running" | "succeeded" | "failed";
+  error: string | null;
+  output: string;
 }
 
 export type SessionState =
