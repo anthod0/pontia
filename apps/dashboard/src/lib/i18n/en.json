@@ -307,6 +307,7 @@
   "files.receiving": "Receiving…",
   "files.download": "Download",
   "files.receptionProgress": "File reception progress",
+  "files.toggleZoom": "Toggle zoom",
   "files.sharedImage": "Shared image",
   "files.missing": "File no longer exists",
   "files.selectUpload": "Select files to upload",
