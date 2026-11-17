@@ -95,7 +95,9 @@ test("refreshes git on every entry and manual focus, while autofocusing only on 
 
   composer.blur();
   composer.focus();
-  await waitFor(() => expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(entryRefreshCount + 1));
+  await waitFor(() =>
+    expect(mocks.refreshWorkspaceGitStatus).toHaveBeenCalledTimes(entryRefreshCount + 1),
+  );
 
   firstPage.unmount();
   mocks.refreshWorkspaceGitStatus.mockClear();
