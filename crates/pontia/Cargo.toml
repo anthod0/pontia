@@ -32,3 +32,10 @@ url = "2"
 uuid = { workspace = true, features = ["v7"] }
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 clap_complete = "4.6.11"
+
+[dev-dependencies]
+axum = "0.8"
+pontia-application.workspace = true
+pontia-bot.workspace = true
+pontia-http.workspace = true
+pontia-storage-sqlite.workspace = true

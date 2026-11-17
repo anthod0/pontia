@@ -101,6 +101,7 @@ pub fn router(state: impl Into<HttpState>) -> Router {
 
 fn external_api_router(state: HttpState) -> Router {
     Router::new()
+        .route("/api/v1/bot/memory", post(api::memory_command))
         .route("/api/v1/uploads", post(api::create_upload))
         .route(
             "/api/v1/uploads/{upload_id}",

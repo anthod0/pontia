@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+pontia-bot.workspace = true
 pontia-agent-control.workspace = true
 async-stream = "0.3"
 axum = "0.8"

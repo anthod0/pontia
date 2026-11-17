@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/pontia-bot",
     "crates/pontia-e2e",
     "crates/pontia-edge",
     "crates/pontia-update",
@@ -31,6 +32,7 @@ license = "Apache-2.0"
 repository = "https://github.com/anthod0/pontia"
 
 [workspace.dependencies]
+pontia-bot = { path = "crates/pontia-bot" }
 pontia-agent-control = { path = "crates/pontia-agent-control" }
 pontia-clients = { path = "crates/pontia-clients" }
 pontia-client-pi = { path = "crates/pontia-client-pi" }

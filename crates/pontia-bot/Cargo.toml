@@ -1,0 +1,18 @@
+[package]
+name = "pontia-bot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time = { workspace = true, features = ["formatting", "parsing"] }
+uuid = { workspace = true, features = ["v7"] }
+
+[dev-dependencies]
+pontia-storage-sqlite.workspace = true
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }

@@ -1,3 +1,4 @@
+mod bot;
 mod diagnostics;
 mod login;
 mod remote;
@@ -44,7 +45,7 @@ Configuration and state live in $PONTIA_HOME (default: ~/.pontia).
 
 For documentation, see https://pontia.dev/llms.txt";
 
-const AGENT_TOOLS: [&str; 2] = ["send-file", "workflow"];
+const AGENT_TOOLS: [&str; 3] = ["send-file", "workflow", "bot"];
 
 const INIT_HELP: &str = "\
 Prompts on the terminal. Rerunning checks the service and defaults to enabled clients.
@@ -155,6 +156,8 @@ enum Command {
     },
     /// Run and interact with Workflows
     Workflow(workflow::WorkflowCommand),
+    /// Use tools for the current Bot, retrieval or dreaming Session
+    Bot(bot::BotCommand),
 }
 
 #[derive(Debug)]
@@ -281,6 +284,11 @@ async fn execute(command: Command) -> Result<bool, String> {
         Command::Login => {
             let vars: HashMap<String, String> = env::vars().collect();
             login::run(&vars).await?;
+            Ok(true)
+        }
+        Command::Bot(command) => {
+            let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
+            bot::run(command, &config).await?;
             Ok(true)
         }
         Command::Workflow(command) => {

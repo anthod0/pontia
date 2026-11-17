@@ -1,3 +1,5 @@
+mod bot_memory;
+pub use bot_memory::memory_command;
 mod agent_clients;
 pub use agent_clients::{
     agent_client_setup_status, delete_agent_client, get_agent_client, list_agent_clients,
