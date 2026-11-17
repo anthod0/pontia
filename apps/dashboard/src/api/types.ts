@@ -235,6 +235,9 @@ export interface AgentProfileView {
   version: string;
   name: string;
   description: string | null;
+  default_client_type: string | null;
+  default_client_key: string | null;
+  default_model: string | null;
   supported_client_types: string[];
   agent_kind: AgentKind;
   system_prompt_template: string | null;
@@ -259,6 +262,9 @@ export interface UpsertAgentProfileInput {
   version: string;
   name: string;
   description?: string | null;
+  default_client_type?: string | null;
+  default_client_key?: string | null;
+  default_model?: string | null;
   supported_client_types?: string[];
   agent_kind: AgentKind;
   system_prompt_template?: string | null;

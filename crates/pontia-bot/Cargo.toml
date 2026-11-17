@@ -17,5 +17,6 @@ time = { workspace = true, features = ["formatting", "parsing"] }
 uuid = { workspace = true, features = ["v7"] }
 
 [dev-dependencies]
+pontia-agent-control = { workspace = true, features = ["generic-test-client"] }
 pontia-storage-sqlite.workspace = true
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }

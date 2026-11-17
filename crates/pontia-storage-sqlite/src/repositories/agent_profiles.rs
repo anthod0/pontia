@@ -3,7 +3,7 @@ use sqlx::SqlitePool;
 
 use crate::models::agent_profiles::ExecutionProfileRow;
 
-const EXECUTION_PROFILE_COLUMNS: &str = r#"profile_id, version, name, description, supported_client_types, agent_kind,
+const EXECUTION_PROFILE_COLUMNS: &str = r#"profile_id, version, name, description, default_client_type, default_client_key, default_model, supported_client_types, agent_kind,
           system_prompt_template, turn_prompt_template, default_session_role,
           default_session_description, handle_prefix,
           expected_output_schema, artifact_contract, default_execution_policy,
@@ -16,6 +16,9 @@ pub struct ExecutionProfileWriteRecord {
     pub version: String,
     pub name: String,
     pub description: Option<String>,
+    pub default_client_type: Option<String>,
+    pub default_client_key: Option<String>,
+    pub default_model: Option<String>,
     pub supported_client_types: String,
     pub agent_kind: String,
     pub system_prompt_template: Option<String>,
@@ -41,19 +44,45 @@ impl SqliteAgentProfileRepository {
     }
 
     pub async fn insert_version(&self, record: ExecutionProfileWriteRecord) -> Result<()> {
+        let mut connection = self.pool.acquire().await?;
+        Self::insert_version_in(&mut connection, record).await
+    }
+
+    pub async fn initialize_profile(&self, record: ExecutionProfileWriteRecord) -> Result<()> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM execution_profiles WHERE profile_id = ?)",
+        )
+        .bind(&record.profile_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !exists {
+            Self::insert_version_in(&mut tx, record).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn insert_version_in(
+        connection: &mut sqlx::SqliteConnection,
+        record: ExecutionProfileWriteRecord,
+    ) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO execution_profiles (
-                    profile_id, version, name, description, supported_client_types, agent_kind,
+                    profile_id, version, name, description, default_client_type, default_client_key, default_model, supported_client_types, agent_kind,
                     system_prompt_template, turn_prompt_template, default_session_role,
                     default_session_description, handle_prefix,
                     expected_output_schema, artifact_contract, default_execution_policy,
                     default_review_policy, metadata
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(record.profile_id)
         .bind(record.version)
         .bind(record.name)
         .bind(record.description)
+        .bind(record.default_client_type)
+        .bind(record.default_client_key)
+        .bind(record.default_model)
         .bind(record.supported_client_types)
         .bind(record.agent_kind)
         .bind(record.system_prompt_template)
@@ -66,7 +95,7 @@ impl SqliteAgentProfileRepository {
         .bind(record.default_execution_policy)
         .bind(record.default_review_policy)
         .bind(record.metadata)
-        .execute(&self.pool)
+        .execute(connection)
         .await?;
         Ok(())
     }
@@ -74,7 +103,8 @@ impl SqliteAgentProfileRepository {
     pub async fn update_version(&self, record: ExecutionProfileWriteRecord) -> Result<()> {
         sqlx::query(
             r#"UPDATE execution_profiles
-               SET name = ?, description = ?, supported_client_types = ?, agent_kind = ?,
+               SET name = ?, description = ?, default_client_type = ?, default_client_key = ?, default_model = ?,
+                   supported_client_types = ?, agent_kind = ?,
                    system_prompt_template = ?, turn_prompt_template = ?, default_session_role = ?,
                    default_session_description = ?, handle_prefix = ?, expected_output_schema = ?,
                    artifact_contract = ?, default_execution_policy = ?, default_review_policy = ?,
@@ -83,6 +113,9 @@ impl SqliteAgentProfileRepository {
         )
         .bind(record.name)
         .bind(record.description)
+        .bind(record.default_client_type)
+        .bind(record.default_client_key)
+        .bind(record.default_model)
         .bind(record.supported_client_types)
         .bind(record.agent_kind)
         .bind(record.system_prompt_template)

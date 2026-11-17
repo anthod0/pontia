@@ -1,12 +1,24 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProfileLaunchDefaults {
+    pub profile_id: String,
+    pub version: String,
+    pub client_type: String,
+    pub client_key: String,
+    pub model: String,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ExecutionProfileView {
     pub profile_id: String,
     pub version: String,
     pub name: String,
     pub description: Option<String>,
+    pub default_client_type: Option<String>,
+    pub default_client_key: Option<String>,
+    pub default_model: Option<String>,
     pub supported_client_types: Vec<String>,
     pub agent_kind: String,
     pub system_prompt_template: Option<String>,
@@ -32,6 +44,9 @@ pub struct UpsertExecutionProfileRequest {
     pub version: String,
     pub name: String,
     pub description: Option<String>,
+    pub default_client_type: Option<String>,
+    pub default_client_key: Option<String>,
+    pub default_model: Option<String>,
     #[serde(default)]
     pub supported_client_types: Vec<String>,
     pub agent_kind: String,

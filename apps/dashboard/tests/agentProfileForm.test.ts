@@ -12,6 +12,9 @@ const profile: AgentProfileView = {
   name: "Reviewer",
   description: "Reviews work",
   supported_client_types: ["pi"],
+  default_client_type: null,
+  default_client_key: null,
+  default_model: null,
   agent_kind: "executor",
   system_prompt_template: "system",
   turn_prompt_template: "turn",
@@ -29,6 +32,29 @@ const profile: AgentProfileView = {
   created_at: "2026-05-15T00:00:00Z",
   updated_at: "2026-05-15T00:00:00Z",
 };
+
+test("preserves launch defaults when editing instructions or copying a version", () => {
+  const configured = {
+    ...profile,
+    default_client_type: "pi",
+    default_client_key: "default",
+    default_model: "provider/model",
+  };
+  for (const clearVersion of [false, true]) {
+    const draft = createAgentProfileDraftFromProfile(configured, { clearVersion });
+    draft.version = "v2";
+    draft.system_prompt_template = "Changed instructions";
+    const result = buildAgentProfileInput(draft);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.input).toMatchObject({
+      default_client_type: "pi",
+      default_client_key: "default",
+      default_model: "provider/model",
+      system_prompt_template: "Changed instructions",
+    });
+  }
+});
 
 test("creates a version draft by copying the current profile and clearing only the version", () => {
   const draft = createAgentProfileDraftFromProfile(profile, { clearVersion: true });

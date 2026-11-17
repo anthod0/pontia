@@ -350,6 +350,9 @@ function profileFromInput(input: UpsertAgentProfileInput): AgentProfileView {
   const timestamp = now();
   return {
     description: null,
+    default_client_type: null,
+    default_client_key: null,
+    default_model: null,
     supported_client_types: [],
     system_prompt_template: null,
     turn_prompt_template: null,

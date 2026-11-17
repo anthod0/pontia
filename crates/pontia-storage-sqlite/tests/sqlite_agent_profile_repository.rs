@@ -20,6 +20,9 @@ fn upsert_record(profile_id: &str, version: &str, name: &str) -> ExecutionProfil
         version: version.to_string(),
         name: name.to_string(),
         description: Some(format!("{name} description")),
+        default_client_type: None,
+        default_client_key: None,
+        default_model: None,
         supported_client_types: json!(["pi"]).to_string(),
         agent_kind: "executor".to_string(),
         system_prompt_template: Some("system".to_string()),
@@ -62,6 +65,9 @@ async fn inserts_updates_and_gets_execution_profile_versions() {
             version: "1".to_string(),
             name: "Repo Profile Edited".to_string(),
             description: None,
+            default_client_type: None,
+            default_client_key: None,
+            default_model: None,
             supported_client_types: json!(["pi", "generic"]).to_string(),
             agent_kind: "executor".to_string(),
             system_prompt_template: None,
@@ -193,22 +199,18 @@ async fn builtin_upgrade_preserves_user_profiles_and_existing_versions() {
         ..sqlx::migrate::Migrator::DEFAULT
     };
     previous.run(&pool).await.unwrap();
-    let repository = SqliteAgentProfileRepository::new(pool.clone());
-    repository
-        .insert_version(upsert_record("custom", "1", "Custom"))
-        .await
-        .unwrap();
-    let old_default = repository
-        .get_version("default", "1")
-        .await
-        .unwrap()
-        .unwrap();
-    let custom = repository
-        .get_version("custom", "1")
-        .await
-        .unwrap()
-        .unwrap();
+    sqlx::query("INSERT INTO execution_profiles (profile_id, version, name, system_prompt_template) VALUES ('custom', '1', 'Custom', 'custom instructions')")
+        .execute(&pool).await.unwrap();
+    let old_prompt: Option<String> = sqlx::query_scalar("SELECT system_prompt_template FROM execution_profiles WHERE profile_id = 'default' AND version = '1'")
+        .fetch_one(&pool).await.unwrap();
+    let custom_updated_at: String = sqlx::query_scalar(
+        "SELECT updated_at FROM execution_profiles WHERE profile_id = 'custom' AND version = '1'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     run_migrations(&pool).await.unwrap();
+    let repository = SqliteAgentProfileRepository::new(pool.clone());
     let old_after = repository
         .get_version("default", "1")
         .await
@@ -219,15 +221,15 @@ async fn builtin_upgrade_preserves_user_profiles_and_existing_versions() {
         .await
         .unwrap()
         .unwrap();
+    assert_eq!(old_after.system_prompt_template, old_prompt);
     assert_eq!(
-        old_after.system_prompt_template,
-        old_default.system_prompt_template
+        custom_after.system_prompt_template.as_deref(),
+        Some("custom instructions")
     );
-    assert_eq!(
-        custom_after.system_prompt_template,
-        custom.system_prompt_template
-    );
-    assert_eq!(custom_after.updated_at, custom.updated_at);
+    assert_eq!(custom_after.updated_at, custom_updated_at);
+    assert_eq!(custom_after.default_client_type, None);
+    assert_eq!(custom_after.default_client_key, None);
+    assert_eq!(custom_after.default_model, None);
     let default = repository.get_latest("default").await.unwrap().unwrap();
     assert_eq!(default.version, "2");
     assert_eq!(

@@ -10,6 +10,29 @@ use super::{
 };
 
 impl AgentProfileService {
+    /// Initialize an application-provided default without replacing any existing version.
+    pub async fn initialize_profile(&self, request: UpsertExecutionProfileRequest) -> Result<()> {
+        if self.profile_exists(&request.profile_id).await? {
+            return Ok(());
+        }
+        self.validate_configuration(&request).await?;
+        SqliteAgentProfileRepository::new(self.pool.clone())
+            .initialize_profile(execution_profile_write_record(&request)?)
+            .await
+    }
+
+    async fn validate_configuration(&self, request: &UpsertExecutionProfileRequest) -> Result<()> {
+        validate_request(&self.clients, request)?;
+        if let (Some(client), Some(key)) =
+            (&request.default_client_type, &request.default_client_key)
+        {
+            crate::agent_clients::AgentClientService::new(self.pool.clone(), self.clients.clone())
+                .resolve(client, key)
+                .await?;
+        }
+        Ok(())
+    }
+
     pub async fn create_profile(
         &self,
         request: UpsertExecutionProfileRequest,
@@ -44,7 +67,7 @@ impl AgentProfileService {
         for version in self.list_versions(&request.profile_id, true).await? {
             ensure_not_builtin(&version)?;
         }
-        validate_request(&self.clients, &request)?;
+        self.validate_configuration(&request).await?;
 
         let result = SqliteAgentProfileRepository::new(self.pool.clone())
             .insert_version(execution_profile_write_record(&request)?)
@@ -82,7 +105,7 @@ impl AgentProfileService {
                 "profile_id and version in path must match request body".to_string(),
             ));
         }
-        validate_request(&self.clients, &request)?;
+        self.validate_configuration(&request).await?;
         let current = self
             .get_version(profile_id, version)
             .await?
@@ -163,6 +186,9 @@ fn execution_profile_write_record(
         version: request.version.clone(),
         name: request.name.clone(),
         description: request.description.clone(),
+        default_client_type: request.default_client_type.clone(),
+        default_client_key: request.default_client_key.clone(),
+        default_model: request.default_model.clone(),
         supported_client_types: serde_json::to_string(&request.supported_client_types)?,
         agent_kind: request.agent_kind.clone(),
         system_prompt_template: request.system_prompt_template.clone(),

@@ -1,6 +1,32 @@
 # Local control-plane SQLite database
 
 ```sql
+CREATE TABLE bots (
+    bot_id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    client_type TEXT NOT NULL,
+    client_key TEXT NOT NULL,
+    model TEXT NOT NULL,
+    current_session_id TEXT,
+    created_at TEXT NOT NULL
+        DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL
+        DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE bot_messages (
+    id TEXT PRIMARY KEY NOT NULL,
+    bot_id TEXT NOT NULL REFERENCES bots(bot_id),
+    kind TEXT NOT NULL CHECK (kind IN ('user_input', 'bot_reply')),
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL
+        DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX idx_bot_messages_bot_created
+    ON bot_messages(bot_id, created_at, id);
+
 CREATE TABLE bot_memories (
     id TEXT PRIMARY KEY NOT NULL,
 
@@ -215,6 +241,12 @@ CREATE TABLE execution_profiles (
   archived_at TEXT,
   archived_reason TEXT,
   agent_kind TEXT NOT NULL DEFAULT 'executor',
+  default_client_type TEXT,
+  default_client_key TEXT,
+  default_model TEXT CHECK (
+    (default_client_type IS NULL AND default_client_key IS NULL AND default_model IS NULL)
+    OR (default_client_type IS NOT NULL AND default_client_key IS NOT NULL AND default_model IS NOT NULL)
+  ),
   PRIMARY KEY (profile_id, version)
 );
 

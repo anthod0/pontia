@@ -4,6 +4,42 @@ use pontia_core::{Error, Result};
 use serde_json::Value;
 
 impl AgentProfileService {
+    /// Resolve and pin a Profile version before creating a Session. Instruction binding
+    /// still goes through `resolve_for_client` with this version at Session creation.
+    pub async fn launch_defaults(
+        &self,
+        id: &str,
+        version: Option<&str>,
+    ) -> Result<super::ProfileLaunchDefaults> {
+        let profile = match version {
+            Some(version) => self.get_version(id, version).await?,
+            None => self.get_latest(id).await?,
+        }
+        .ok_or_else(|| Error::NotFound(format!("agent profile {id} not found")))?;
+        if !profile.active {
+            return Err(Error::Domain(format!("agent profile {id} is archived")));
+        }
+        let (Some(client_type), Some(client_key), Some(model)) = (
+            profile.default_client_type,
+            profile.default_client_key,
+            profile.default_model,
+        ) else {
+            return Err(Error::Domain(format!(
+                "agent profile {id} has no launch defaults"
+            )));
+        };
+        crate::agent_clients::AgentClientService::new(self.pool.clone(), self.clients.clone())
+            .resolve(&client_type, &client_key)
+            .await?;
+        Ok(super::ProfileLaunchDefaults {
+            profile_id: profile.profile_id,
+            version: profile.version,
+            client_type,
+            client_key,
+            model,
+        })
+    }
+
     pub async fn resolve_for_client(
         &self,
         client_type: &str,

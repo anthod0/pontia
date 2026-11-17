@@ -13,6 +13,9 @@ export interface AgentProfileDraft {
   version: string;
   name: string;
   description: string;
+  default_client_type: string | null;
+  default_client_key: string | null;
+  default_model: string | null;
   supported_client_types_text: string;
   agent_kind: AgentKind;
   system_prompt_template: string;
@@ -41,6 +44,9 @@ export function createAgentProfileDraft(): AgentProfileDraft {
     version: "",
     name: "",
     description: "",
+    default_client_type: null,
+    default_client_key: null,
+    default_model: null,
     supported_client_types_text: defaultClientType,
     agent_kind: "executor",
     system_prompt_template: "",
@@ -65,6 +71,9 @@ export function createAgentProfileDraftFromProfile(
     version: options.clearVersion ? "" : profile.version,
     name: profile.name,
     description: profile.description ?? "",
+    default_client_type: profile.default_client_type,
+    default_client_key: profile.default_client_key,
+    default_model: profile.default_model,
     supported_client_types_text: profile.supported_client_types.join(", "),
     agent_kind: profile.agent_kind,
     system_prompt_template: profile.system_prompt_template ?? "",
@@ -113,6 +122,9 @@ export function buildAgentProfileInput(draft: AgentProfileDraft): BuildAgentProf
       version: draft.version.trim(),
       name: draft.name.trim(),
       description: nullableTrimmed(draft.description),
+      default_client_type: draft.default_client_type,
+      default_client_key: draft.default_client_key,
+      default_model: draft.default_model,
       supported_client_types: splitClientTypes(draft.supported_client_types_text),
       agent_kind: draft.agent_kind,
       system_prompt_template: nullableTrimmed(draft.system_prompt_template),

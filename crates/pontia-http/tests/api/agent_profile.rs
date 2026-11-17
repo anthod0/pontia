@@ -129,6 +129,71 @@ fn custom_profile_body(profile_id: &str, version: &str) -> Value {
 }
 
 #[tokio::test]
+async fn profile_client_support_remains_optional_without_launch_defaults() {
+    let state = test_state().await;
+    let profile = json!({"profile_id":"instructions-only", "version":"1", "name":"Instructions", "agent_kind":"executor"});
+    let (status, created) = post_json(state, "/api/v1/agent-profiles", profile, None).await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    assert_eq!(
+        created["data"]["agent_profile"]["supported_client_types"],
+        json!([])
+    );
+    assert!(created["data"]["agent_profile"]["default_client_type"].is_null());
+}
+
+#[tokio::test]
+async fn profile_launch_defaults_round_trip_and_reject_partial_configuration() {
+    let state = test_state().await;
+    let mut profile = custom_profile_body("helper-defaults", "1");
+    profile["default_client_type"] = json!("pi");
+    profile["default_client_key"] = json!("default");
+    let (status, _) = post_json(
+        state.clone(),
+        "/api/v1/agent-profiles",
+        profile.clone(),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    profile["default_model"] = json!("provider/creation-model");
+    let (status, created) = post_json(
+        state.clone(),
+        "/api/v1/agent-profiles",
+        profile.clone(),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    assert_eq!(
+        created["data"]["agent_profile"]["default_model"],
+        "provider/creation-model"
+    );
+    profile["default_model"] = json!("provider/edited-model");
+    let (status, updated) = put_json(
+        state.clone(),
+        "/api/v1/agent-profiles/helper-defaults/versions/1",
+        profile,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    let (status, fetched) = get_json(state, "/api/v1/agent-profiles/helper-defaults").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        fetched["data"]["agent_profile"]["default_client_type"],
+        "pi"
+    );
+    assert_eq!(
+        fetched["data"]["agent_profile"]["default_client_key"],
+        "default"
+    );
+    assert_eq!(
+        fetched["data"]["agent_profile"]["default_model"],
+        "provider/edited-model"
+    );
+}
+
+#[tokio::test]
 async fn list_agent_profiles_includes_builtin_latest_profiles() {
     let state = test_state().await;
 

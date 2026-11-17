@@ -15,6 +15,29 @@ pub(super) fn validate_request(
     validate_non_empty("profile_id", &request.profile_id)?;
     validate_non_empty("version", &request.version)?;
     validate_non_empty("name", &request.name)?;
+    match (
+        &request.default_client_type,
+        &request.default_client_key,
+        &request.default_model,
+    ) {
+        (None, None, None) => {}
+        (Some(client_type), Some(client_key), Some(model)) => {
+            validate_non_empty("default_client_type", client_type)?;
+            validate_non_empty("default_client_key", client_key)?;
+            validate_non_empty("default_model", model)?;
+            if !request.supported_client_types.contains(client_type) {
+                return Err(Error::Domain(
+                    "default client must be included in supported_client_types".into(),
+                ));
+            }
+        }
+        _ => {
+            return Err(Error::Domain(
+                "default_client_type, default_client_key and default_model must be set together"
+                    .into(),
+            ));
+        }
+    }
     for client_type in &request.supported_client_types {
         if clients.spec(client_type).is_none() {
             return Err(Error::Domain(format!(
