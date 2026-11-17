@@ -24,8 +24,8 @@
       </div>
     {/if}
     {#if files.length > 0}
-      <ul class="-mx-1 min-h-0 space-y-2 overflow-y-auto px-1">
-        {#each files as file (file.file_id)}<li><SharedFileCard {file} {sessionId} /></li>{/each}
+      <ul class="-mx-2 min-h-0 overflow-y-auto">
+        {#each files as file (file.file_id)}<li><SharedFileCard {file} {sessionId} variant="row" /></li>{/each}
       </ul>
     {:else if loading}
       <p role="status" class="text-sm text-muted-foreground">{$t('files.loadingShared')}</p>
