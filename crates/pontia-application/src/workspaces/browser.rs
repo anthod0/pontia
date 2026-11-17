@@ -1,4 +1,4 @@
-use pontia_agent_control::workspaces::{get_workspace_record, upsert_canonical_workspace};
+use pontia_agent_control::workspaces::{WorkspaceService, get_workspace_record};
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
@@ -301,32 +301,9 @@ impl WorkspaceBrowserService {
         &self,
         request: RegisterWorkspaceRequest,
     ) -> Result<WorkspaceView> {
-        let root = self.root(&request.root_id)?;
-        let root_path = canonical_root(root)?;
-        let workspace_path = resolve_relative_path(&root_path, &request.path)?;
-        if !workspace_path.exists() {
-            return Err(Error::NotFound(format!(
-                "workspace directory {:?} not found",
-                request.path
-            )));
-        }
-        if !workspace_path.is_dir() {
-            return Err(Error::Domain(format!(
-                "workspace path {:?} is not a directory",
-                request.path
-            )));
-        }
-        let record = upsert_canonical_workspace(
-            &self.pool,
-            &workspace_path.display().to_string(),
-            request.name.as_deref(),
-        )
-        .await?;
-        ControlQueryService::new(self.pool.clone())
-            .with_workspace_browser(self.config.clone())
-            .get_workspace(&record.workspace_id)
-            .await?
-            .ok_or_else(|| Error::NotFound(format!("workspace {} not found", record.workspace_id)))
+        WorkspaceService::new(self.pool.clone(), self.config.clone())
+            .register(request)
+            .await
     }
 
     pub async fn rename_workspace(

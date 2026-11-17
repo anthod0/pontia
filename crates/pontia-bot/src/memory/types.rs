@@ -48,20 +48,6 @@ pub struct Memory {
     pub last_read_at: Option<String>,
 }
 
-/// Roles and scope come from trusted Session bindings, never from command input.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MemoryRole {
-    Bot,
-    Retrieval,
-    Dreaming,
-}
-
-#[derive(Clone, Debug)]
-pub struct MemoryAccess {
-    pub role: MemoryRole,
-    pub workspace_id: Option<String>,
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateMemory {

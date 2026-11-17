@@ -46,13 +46,7 @@ pub struct FilePickerResultView {
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct RegisterWorkspaceRequest {
-    pub root_id: String,
-    #[serde(default)]
-    pub path: String,
-    pub name: Option<String>,
-}
+pub use pontia_agent_control::workspaces::RegisterWorkspaceRequest;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct RenameWorkspaceRequest {

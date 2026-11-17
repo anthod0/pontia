@@ -1,3 +1,5 @@
+mod bot_context;
+pub use bot_context::{update_user, workspace_command};
 mod bot_memory;
 pub use bot_memory::memory_command;
 mod agent_clients;

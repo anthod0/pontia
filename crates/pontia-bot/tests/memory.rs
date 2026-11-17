@@ -1,3 +1,4 @@
+use pontia_bot::identity::{BotAccess, BotIdentity, BotRole, IdentityError};
 use std::{
     future::Future,
     pin::Pin,
@@ -13,22 +14,23 @@ use serde_json::{Value, json};
 use time::OffsetDateTime;
 
 struct TestIdentity;
-impl MemoryIdentity for TestIdentity {
+impl BotIdentity for TestIdentity {
     fn resolve<'a>(
         &'a self,
         session: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<MemoryAccess>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = std::result::Result<BotAccess, IdentityError>> + Send + 'a>>
+    {
         Box::pin(async move {
             let (role, workspace) = match session {
-                "bot" => (MemoryRole::Bot, None),
-                "dreaming" => (MemoryRole::Dreaming, None),
-                "reader" => (MemoryRole::Retrieval, None),
-                "reader-a" => (MemoryRole::Retrieval, Some("a")),
-                "bot-a" => (MemoryRole::Bot, Some("a")),
-                "dreaming-a" => (MemoryRole::Dreaming, Some("a")),
-                _ => return Err(Error::Forbidden),
+                "bot" => (BotRole::Bot, None),
+                "dreaming" => (BotRole::Dreaming, None),
+                "reader" => (BotRole::Retrieval, None),
+                "reader-a" => (BotRole::Retrieval, Some("a")),
+                "bot-a" => (BotRole::Bot, Some("a")),
+                "dreaming-a" => (BotRole::Dreaming, Some("a")),
+                _ => return Err(IdentityError),
             };
-            Ok(MemoryAccess {
+            Ok(BotAccess {
                 role,
                 workspace_id: workspace.map(str::to_owned),
             })

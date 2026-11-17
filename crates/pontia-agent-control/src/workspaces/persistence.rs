@@ -45,6 +45,7 @@ pub async fn upsert_canonical_workspace(
             workspace_id: row.workspace_id,
             canonical_path: canonical_path.to_string(),
             name,
+            description: row.description,
         });
     }
 
@@ -72,6 +73,7 @@ pub async fn upsert_canonical_workspace(
             workspace_id: row.workspace_id,
             canonical_path: canonical_path.to_string(),
             name,
+            description: row.description,
         });
     }
 
@@ -79,6 +81,7 @@ pub async fn upsert_canonical_workspace(
         workspace_id,
         canonical_path: canonical_path.to_string(),
         name,
+        description: None,
     })
 }
 
@@ -102,6 +105,7 @@ pub async fn get_workspace_record(
                 workspace_id: row.workspace_id,
                 canonical_path: row.canonical_path,
                 name: row.name,
+                description: row.description,
             })
         })
         .transpose()

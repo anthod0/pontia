@@ -1,3 +1,4 @@
+use crate::identity::{BotAccess, BotRole};
 use std::sync::Arc;
 
 use sqlx::SqlitePool;
@@ -28,15 +29,15 @@ impl MemoryService {
 
     pub async fn execute(
         &self,
-        access: &MemoryAccess,
+        access: &BotAccess,
         command: MemoryCommand,
     ) -> Result<MemoryResponse> {
         use MemoryCommand::*;
         let allowed = match &command {
-            Create(_) => matches!(access.role, MemoryRole::Bot | MemoryRole::Dreaming),
-            Use(_) => access.role == MemoryRole::Bot,
-            Update(_) | Archive(_) | Link(_) | Unlink(_) => access.role == MemoryRole::Dreaming,
-            Read(_) | Search(_) | Neighbors(_) => true,
+            Create(_) => matches!(access.role, BotRole::Bot | BotRole::Dreaming),
+            Use(_) => access.role == BotRole::Bot,
+            Update(_) | Archive(_) | Link(_) | Unlink(_) => access.role == BotRole::Dreaming,
+            Read(_) | Search(_) | Neighbors(_) => access.role != BotRole::Helper,
         };
         if !allowed {
             return Err(Error::Forbidden);
@@ -53,7 +54,7 @@ impl MemoryService {
                 }
                 input.occurred_at = occurred_at(input.occurred_at)?;
                 let keywords = Keywords::parse(std::mem::take(&mut input.keywords))?;
-                let author = if access.role == MemoryRole::Bot {
+                let author = if access.role == BotRole::Bot {
                     MemoryAuthor::Bot
                 } else {
                     MemoryAuthor::Dreaming
@@ -170,7 +171,7 @@ impl MemoryService {
         &self,
         input: MemoryEdge,
         link: bool,
-        access: &MemoryAccess,
+        access: &BotAccess,
         now: OffsetDateTime,
     ) -> Result<MemoryResponse> {
         validate_id(&input.memory_a_id)?;
@@ -197,7 +198,7 @@ impl MemoryService {
     }
 }
 
-fn scope<'a>(access: &'a MemoryAccess, requested: Option<&'a str>) -> Result<Option<&'a str>> {
+fn scope<'a>(access: &'a BotAccess, requested: Option<&'a str>) -> Result<Option<&'a str>> {
     validate_optional_id(requested)?;
     match (access.workspace_id.as_deref(), requested) {
         (Some(bound), Some(requested)) if bound != requested => Err(Error::Forbidden),

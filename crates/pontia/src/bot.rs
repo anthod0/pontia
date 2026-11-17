@@ -19,6 +19,20 @@ pub(crate) struct BotCommand {
 
 #[derive(Debug, Subcommand)]
 enum BotTool {
+    /// Update shared USER.md with old_text/new_text; empty old_text appends
+    UpdateUser {
+        /// JSON input file, or - for stdin (2,000 character result limit)
+        #[arg(long, default_value = "-")]
+        input: PathBuf,
+    },
+    /// Register an existing directory or update a Workspace description
+    Workspace {
+        #[arg(value_enum)]
+        action: WorkspaceAction,
+        /// JSON: register uses root_id/path/name/description; describe uses workspace_id/description
+        #[arg(long, default_value = "-")]
+        input: PathBuf,
+    },
     /// Read or maintain device memories using JSON input
     #[command(
         after_help = "Input is a JSON object for the selected action, read from stdin by default.\nRequires PONTIA_SESSION_ID and a Session authorized by the Bot application.\nPrints the JSON result; errors exit nonzero.\n\nExample search input: {\"keywords\":[\"项目\",\"Rust\"],\"limit\":10}\nExample create input: {\"kind\":\"fact\",\"content\":\"项目使用 Rust\",\"keywords\":[\"项目\",\"Rust\"]}\n\nKeywords: 1–32 strings, each 1–128 characters after normalization.\nWhitespace is collapsed, letters lowercased, duplicates removed.\nEach keyword matches as a whole, including Chinese short words and mixed text.\nUse read/use with ids; archive with id and archived; link/unlink with memory_a_id\nand memory_b_id; neighbors with id, optional after cursor and limit (1–100).\nUpdate replaces kind, content, keywords, importance, occurred_at and sources.\nSearch limit is 1–30 (default 10); has_more refers only to the top 100 candidates.\nRead/use accept 1–100 IDs. Optional workspace_id restricts reads to that Workspace."
@@ -46,12 +60,23 @@ enum MemoryAction {
     Use,
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum WorkspaceAction {
+    Register,
+    Describe,
+}
+
 pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), String> {
     let session_id = env::var("PONTIA_SESSION_ID")
         .ok()
         .filter(|id| !id.trim().is_empty())
         .ok_or("Missing PONTIA_SESSION_ID; run bot tools inside a Pontia Session")?;
-    let BotTool::Memory { action, input } = command.command;
+    let (endpoint, action, input) = match command.command {
+        BotTool::Memory { action, input } => ("memory", Some(json!(action)), input),
+        BotTool::UpdateUser { input } => ("user", None, input),
+        BotTool::Workspace { action, input } => ("workspace", Some(json!(action)), input),
+    };
     let source: Box<dyn Read> = if input.as_os_str() == "-" {
         Box::new(io::stdin())
     } else {
@@ -65,13 +90,19 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
         .read_to_end(&mut bytes)
         .map_err(|err| err.to_string())?;
     if bytes.len() > 2 * 1024 * 1024 {
-        return Err("Memory input exceeds 2 MiB".into());
+        return Err("Bot input exceeds 2 MiB".into());
     }
     let input: Value =
         serde_json::from_slice(&bytes).map_err(|err| format!("Invalid JSON input: {err}"))?;
     if !input.is_object() {
-        return Err("Memory input must be a JSON object".into());
+        return Err("Bot input must be a JSON object".into());
     }
+    let request = match action {
+        Some(action) => {
+            json!({"session_id": session_id, "command": {"action": action, "input": input}})
+        }
+        None => json!({"session_id": session_id, "input": input}),
+    };
     let token = config
         .external_api_token
         .as_deref()
@@ -81,9 +112,9 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|err| err.to_string())?
-        .post(format!("http://{addr}/api/v1/bot/memory"))
+        .post(format!("http://{addr}/api/v1/bot/{endpoint}"))
         .bearer_auth(token)
-        .json(&json!({"session_id": session_id, "command": {"action": action, "input": input}}))
+        .json(&request)
         .send()
         .await
         .map_err(|err| format!("Cannot reach pontiad: {err}"))?;

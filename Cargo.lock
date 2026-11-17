@@ -2709,6 +2709,8 @@ dependencies = [
 name = "pontia-bot"
 version = "0.0.0"
 dependencies = [
+ "pontia-agent-control",
+ "pontia-core",
  "pontia-storage-sqlite",
  "serde",
  "serde_json",

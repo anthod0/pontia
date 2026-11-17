@@ -4,6 +4,7 @@ pub struct WorkspaceRow {
     pub canonical_path: String,
     pub display_path: String,
     pub name: Option<String>,
+    pub description: Option<String>,
     pub state: String,
     pub metadata: String,
     pub created_at: String,

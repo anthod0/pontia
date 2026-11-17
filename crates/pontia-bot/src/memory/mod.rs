@@ -4,7 +4,7 @@ mod service;
 mod storage;
 mod types;
 
-pub use commands::{MemoryCommands, MemoryIdentity, UnboundMemoryIdentity};
+pub use commands::MemoryCommands;
 pub use service::MemoryService;
 pub use types::*;
 

@@ -1,3 +1,6 @@
+mod commands;
+pub mod path_policy;
+pub use commands::{RegisterWorkspaceRequest, WORKSPACE_DESCRIPTION_LIMIT, WorkspaceService};
 pub mod availability;
 mod persistence;
 pub use persistence::{get_workspace_record, upsert_canonical_workspace, upsert_workspace};
@@ -7,4 +10,5 @@ pub struct WorkspaceRecord {
     pub workspace_id: String,
     pub canonical_path: String,
     pub name: Option<String>,
+    pub description: Option<String>,
 }

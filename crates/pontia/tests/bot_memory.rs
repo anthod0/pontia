@@ -1,3 +1,4 @@
+use pontia_bot::identity::{BotAccess, BotIdentity, BotRole, IdentityError};
 use std::{
     future::Future,
     io::Write,
@@ -7,24 +8,25 @@ use std::{
 };
 
 use pontia_application::AppState;
-use pontia_bot::memory::{Error, MemoryAccess, MemoryIdentity, MemoryRole, Result};
+
 use pontia_http::{HttpState, router};
 use serde_json::{Value, json};
 
 struct BoundSessions;
-impl MemoryIdentity for BoundSessions {
+impl BotIdentity for BoundSessions {
     fn resolve<'a>(
         &'a self,
         session: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<MemoryAccess>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = std::result::Result<BotAccess, IdentityError>> + Send + 'a>>
+    {
         Box::pin(async move {
             let (role, workspace_id) = match session {
-                "bot-session" => (MemoryRole::Bot, None),
-                "dreaming-session" => (MemoryRole::Dreaming, None),
-                "reader-session" => (MemoryRole::Retrieval, Some("project".into())),
-                _ => return Err(Error::Forbidden),
+                "bot-session" => (BotRole::Bot, None),
+                "dreaming-session" => (BotRole::Dreaming, None),
+                "reader-session" => (BotRole::Retrieval, Some("project".into())),
+                _ => return Err(IdentityError),
             };
-            Ok(MemoryAccess { role, workspace_id })
+            Ok(BotAccess { role, workspace_id })
         })
     }
 }
@@ -51,7 +53,7 @@ impl Fixture {
             .build();
         let mut state = HttpState::from(app);
         if bound {
-            state = state.with_memory_identity(Arc::new(BoundSessions));
+            state = state.with_bot_identity(Arc::new(BoundSessions));
         }
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();

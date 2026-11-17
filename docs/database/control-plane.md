@@ -136,6 +136,7 @@ CREATE TABLE workspaces (
   canonical_path TEXT NOT NULL UNIQUE,
   display_path TEXT NOT NULL,
   name TEXT,
+  description TEXT,
   state TEXT NOT NULL DEFAULT 'active',
   metadata TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
