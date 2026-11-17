@@ -75,7 +75,7 @@
     aria-label={$t('chat.ruler')}
     data-chat-ruler
   >
-    <div class="relative max-h-[calc(100svh-14rem)] overflow-y-auto px-2 py-2">
+    <div class="relative max-h-[33svh] overflow-y-auto px-2 py-2 [scrollbar-width:none]! [&::-webkit-scrollbar]:hidden!">
       <ol class="relative flex min-w-8 flex-col items-end gap-0">
         {#each visibleTurns as turn (turn.turn_id)}
           {@const branched = branchedTurnIdSet.has(turn.turn_id)}
