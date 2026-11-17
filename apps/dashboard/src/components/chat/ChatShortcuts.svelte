@@ -8,7 +8,7 @@
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import ShortcutKeys from '$lib/components/shortcuts/ShortcutKeys.svelte'
   import { adjacentSessionId, isChatRoute, sessionIdAtShortcutIndex, sessionIdFromChatPath } from '$lib/shortcuts/sessionNavigation'
-  import { helpShortcuts, matchChatShortcut } from '$lib/shortcuts/definitions'
+  import { helpShortcuts, messageInputShortcuts, matchChatShortcut } from '$lib/shortcuts/definitions'
   const device = useDeviceRuntime();
   const { createSessionOverviewQuery } = device.sessionOverview;
   const { selectedWorkspaceId } = device.sidebarWorkspaceFilter;
@@ -84,7 +84,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <Dialog.Root bind:open={shortcutsOpen}>
-  <Dialog.Content class="sm:max-w-lg">
+  <Dialog.Content class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
     <Dialog.Header>
       <Dialog.Title>{$t('shortcuts.title')}</Dialog.Title>
       <Dialog.Description>{$t('shortcuts.description')}</Dialog.Description>
@@ -94,9 +94,20 @@
       {#each helpShortcuts as shortcut}
         <div class="flex items-center justify-between gap-4 py-1.5">
           <div class="min-w-0 text-sm">{$t(shortcut.label)}</div>
-          <ShortcutKeys keys={shortcut.keys} class="shrink-0 border border-border bg-transparent" />
+          <ShortcutKeys keys={shortcut.keys} class="inline-flex shrink-0 border border-border bg-transparent" />
         </div>
       {/each}
     </div>
+
+    <section class="space-y-1 border-t pt-4" aria-labelledby="message-input-shortcuts-title">
+      <h3 id="message-input-shortcuts-title" class="font-medium">{$t('shortcuts.messageInput')}</h3>
+      {#each messageInputShortcuts as shortcut}
+        <div class="flex items-center justify-between gap-4 py-1.5">
+          <div class="min-w-0 text-sm">{$t(shortcut.label)}</div>
+          <ShortcutKeys keys={shortcut.keys} class="inline-flex shrink-0 border border-border bg-transparent" />
+        </div>
+      {/each}
+      <p class="text-xs text-muted-foreground">{$t('shortcuts.inputSuggestions')}</p>
+    </section>
   </Dialog.Content>
 </Dialog.Root>

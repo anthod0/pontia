@@ -41,6 +41,15 @@ export const helpShortcuts: ShortcutDefinition[] = [
   sidebarShortcut,
 ];
 
+export const messageInputShortcuts: ShortcutDefinition[] = [
+  { keys: ["Enter"], label: "common.send" },
+  { keys: ["Tab"], label: "shortcuts.queueMessage" },
+  { keys: ["Alt", "Enter"], label: "shortcuts.queueMessage" },
+  { keys: ["Shift", "Enter"], label: "shortcuts.newline" },
+  { keys: ["Mod", "Enter"], label: "shortcuts.newline" },
+  { keys: ["Enter"], label: "shortcuts.newlineAfterBackslash" },
+];
+
 const letterActions: Record<
   string,
   Exclude<ChatShortcutAction, "openChatByPosition" | "showHelp">
