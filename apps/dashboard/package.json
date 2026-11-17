@@ -14,7 +14,7 @@
     "prepare": "svelte-kit sync",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "check": "bun scripts/check-remote-access-boundaries.ts && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.node.json",
+    "check": "bun scripts/check-remote-access-boundaries.ts && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --tsgo --incremental && bun check --no-script -p tsconfig.node.json",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -53,6 +53,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^24.12.3",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "bits-ui": "^2.20.0",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",

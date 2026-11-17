@@ -33,7 +33,7 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "check": "bun check --no-script"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^1.5.0",

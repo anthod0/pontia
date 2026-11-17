@@ -73,18 +73,20 @@ clippy:
 test:
     SQLX_OFFLINE=true cargo test --workspace
 
-dashboard-check:
+ts-check:
     bun run --cwd apps/dashboard check
+    bun run --cwd apps/cloud check
+    bun run --cwd apps/cron check
+    bun run --cwd clients/pi check
+    bun run --cwd clients/claude check
 
 dashboard-test:
     bun run --cwd apps/dashboard test
 
 pi-client-test:
     bun run --cwd clients/pi test
-    bun run --cwd clients/pi typecheck
 
 claude-client-test:
-    bun run --cwd clients/claude typecheck
     bun run --cwd clients/claude test
 
 npm-cli-test:
@@ -98,7 +100,4 @@ claude-delivery-test:
     bash scripts/pack-claude-client.sh "$test_root/claude-client.tgz"
     PONTIA_CLAUDE_TEST_PACKAGE="$test_root/claude-client.tgz" SQLX_OFFLINE=true cargo test -p pontia-client-claude --test delivery -- --ignored
 
-cloud-check:
-    bun run --cwd apps/cloud check
-
-check: fmt-check sqlx-check clippy test dashboard-check dashboard-test pi-client-test claude-client-test npm-cli-test cloud-check
+check: fmt-check sqlx-check clippy test ts-check dashboard-test pi-client-test claude-client-test npm-cli-test

@@ -6,7 +6,7 @@
   "scripts": {
     "test": "npm run build && node --test dist/test/*.test.js",
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "check": "bun check --no-script"
   },
   "license": "Apache-2.0",
   "type": "module",

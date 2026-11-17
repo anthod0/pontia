@@ -7,7 +7,7 @@
   "scripts": {
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "check": "tsc --noEmit && wrangler deploy --dry-run",
+    "check": "bun check --no-script && wrangler deploy --dry-run",
     "test": "bun test tests",
     "deploy": "wrangler deploy"
   },
