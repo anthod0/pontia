@@ -54,8 +54,8 @@ function outcome(message: SDKResultMessage): "completed" | "failed" | "interrupt
   )
     return "failed";
   if (
-    message.subtype === "error_during_execution" &&
-    message.is_error &&
+    ((message.subtype === "error_during_execution" && message.is_error) ||
+      (message.subtype === "success" && !message.is_error)) &&
     ((message.stop_reason === null && message.terminal_reason === "aborted_streaming") ||
       (message.stop_reason === "tool_use" && message.terminal_reason === "aborted_tools"))
   )
@@ -65,22 +65,23 @@ function outcome(message: SDKResultMessage): "completed" | "failed" | "interrupt
 
 function association(
   message: Pick<SDKResultMessage, "user_message_uuid" | "user_message_uuids">,
-  input: string,
+  inputs: Set<string>,
 ): "none" | "matched" | "conflict" {
   const ids =
     message.user_message_uuids ?? (message.user_message_uuid ? [message.user_message_uuid] : []);
   if (!ids.length) return message.user_message_uuid ? "conflict" : "none";
-  return ids.length === 1 &&
-    ids[0] === input &&
-    (!message.user_message_uuid || message.user_message_uuid === input)
+  return ids.every((id) => inputs.has(id)) &&
+    (!message.user_message_uuid || ids.includes(message.user_message_uuid))
     ? "matched"
     : "conflict";
 }
 
-// One user input, not one model/tool round. No raw SDK messages leave this module.
+// One Pontia task, including native steering continuations.
 export class InputFacts {
   started = false;
   finished = false;
+  private inputs: Set<string>;
+  private pending: Set<string>;
   private ownsReplies = false;
   private streamMessage?: string;
   private streamed = new Set<string>();
@@ -93,12 +94,19 @@ export class InputFacts {
     private emit: Emit,
   ) {
     this.historyAnchor = id;
+    this.inputs = new Set([id]);
+    this.pending = new Set([id]);
+  }
+
+  steer(id: string): void {
+    this.inputs.add(id);
+    this.pending.add(id);
   }
 
   accept(message: SDKMessage): void {
     if ("parent_tool_use_id" in message && message.parent_tool_use_id) return;
     if (message.type === "result") {
-      const match = association(message, this.id);
+      const match = association(message, this.inputs);
       if (match === "none") return; // An automatic/background result does not consume our task.
       this.ownsReplies = false;
       this.streamMessage = undefined;
@@ -109,6 +117,10 @@ export class InputFacts {
       if (!this.started) throw new FactError("result_without_start", message);
       const terminal = outcome(message);
       if (!terminal) throw new FactError("unsupported_result", message);
+      const ids = message.user_message_uuids ?? [message.user_message_uuid!];
+      for (const id of ids) this.pending.delete(id);
+      // A native result may finish only the round displaced by steering.
+      if (this.pending.size) return;
       this.finished = true;
       this.emit({
         kind: "finished",
@@ -121,7 +133,7 @@ export class InputFacts {
     }
     if (this.finished) return;
     if (message.type === "stream_event" || message.type === "assistant") {
-      const match = association(message, this.id);
+      const match = association(message, this.inputs);
       if (match === "conflict") throw new Error("input_association_conflict");
       if (match === "matched") {
         this.ownsReplies = true;

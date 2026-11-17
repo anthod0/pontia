@@ -50,7 +50,7 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
         in_process: None,
         session: Some(adapter.clone()),
         prepare_on_input: true,
-        steer: false,
+        steer: true,
         spec: &spec::SPEC,
         data: Some(adapter),
         launcher: None,
@@ -195,10 +195,43 @@ impl ClientSession for Adapter {
         intent: &'a InputIntent,
     ) -> ClientOperation<'a, InputReceipt> {
         Box::pin(async move {
-            if !matches!(intent, InputIntent::Start) || turn.is_some() {
+            let peer = self.target(&events, target).await?;
+            if let InputIntent::Steer { turn_id } = intent {
+                let target_input = {
+                    let state = peer.state.lock().await;
+                    if state.unavailable.is_some() || state.closing || state.closed {
+                        return Err(unavailable());
+                    }
+                    let input = state.input.as_ref().ok_or_else(unavailable)?;
+                    if input.turn.as_deref() != Some(turn_id.as_str()) {
+                        return Err(Error::Conflict {
+                            code: "steer_target_changed",
+                            message: "Claude Code steering target is no longer active".into(),
+                        });
+                    }
+                    input.id.clone()
+                };
+                let result = peer
+                    .connection()?
+                    .request(json!({
+                        "method": "steer", "target_input_id": target_input,
+                        "input_id": uuid::Uuid::new_v4().to_string(), "text": text,
+                    }))
+                    .await;
+                if let Err(error) = result {
+                    if matches!(error, Error::ControlUnknown(_)) {
+                        peer.state.lock().await.unavailable = Some("input_delivery_unknown".into());
+                    }
+                    return Err(error);
+                }
+                return Ok(InputReceipt {
+                    native_turn_id: None,
+                    runtime_id: Some(peer.runtime.clone()),
+                });
+            }
+            if turn.is_some() {
                 return Err(unsupported());
             }
-            let peer = self.target(&events, target).await?;
             let id = uuid::Uuid::new_v4().to_string();
             {
                 let mut state = peer.state.lock().await;

@@ -95,6 +95,29 @@ if (process.argv[2] === "history") {
         }
         // Receipt is deliberately delivered before execution begins.
         send({ type: "response", id: request.id, status: "accepted" });
+      } else if (request.method === "steer") {
+        if (!active?.started || request.target_input_id !== active.id) {
+          send({ type: "response", id: request.id, status: "rejected" });
+          return;
+        }
+        history({
+          type: "user",
+          uuid: request.input_id,
+          message: { role: "user", content: request.text },
+        });
+        active.reply = randomUUID();
+        history({
+          type: "assistant",
+          uuid: active.reply,
+          message: { role: "assistant", content: [{ type: "text", text: request.text }] },
+        });
+        event({
+          kind: "text",
+          input_id: active.id,
+          item_id: request.input_id,
+          delta: request.text,
+        });
+        send({ type: "response", id: request.id, status: "accepted" });
       } else if (request.method === "list_models") {
         send({
           type: "response",

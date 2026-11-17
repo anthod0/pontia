@@ -1275,3 +1275,45 @@ async fn default_instructions_are_fixed_before_input_and_survive_resume() {
     );
     h.stop().await;
 }
+
+#[tokio::test]
+async fn steering_uses_the_active_turn_while_after_idle_waits() {
+    let h = Harness::new().await;
+    let session = h.create("original").await;
+    h.gate(&session, 1, "start");
+    let turns = h.wait_states(&session, &["running"]).await;
+    h.submit(&session, "queued").await;
+    let steered = h
+        .app
+        .inbox_commands()
+        .submit_message(
+            &session,
+            SubmitInboxMessageRequest {
+                input: "correction".into(),
+                metadata: json!({}),
+                delivery_policy: "steer".into(),
+                branch_target_turn_id: None,
+            },
+        )
+        .await
+        .unwrap();
+    let steered = steered.data;
+    assert_eq!(steered["inbox_message"]["state"], "dispatched");
+    assert_eq!(steered["inbox_message"]["turn_id"], turns[0].0);
+    let wire = h.wire(&session);
+    let original = wire.iter().find(|v| v["method"] == "input").unwrap();
+    let steering = wire.iter().find(|v| v["method"] == "steer").unwrap();
+    assert_eq!(steering["target_input_id"], original["input_id"]);
+    assert_ne!(steering["input_id"], original["input_id"]);
+    assert_eq!(steering["text"], "correction");
+    assert_eq!(wire.iter().filter(|v| v["method"] == "input").count(), 1);
+    assert_eq!(h.turns(&session).await, turns);
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.app.inbox_commands().drain_inbox(&session).await.unwrap();
+    h.wait_inputs(&session, 2).await;
+    h.gate(&session, 2, "start");
+    h.gate(&session, 2, "finish");
+    h.wait_states(&session, &["completed", "completed"]).await;
+    h.stop().await;
+}

@@ -494,3 +494,51 @@ test(
     assert.equal(fixture.model, "haiku");
   },
 );
+
+test(
+  "steer RPC targets the active task and duplicate delivery runs once",
+  { timeout: 5000 },
+  async (t) => {
+    const { config, fixture } = await setup(t);
+    const connection = await attach(config);
+    connection.send({
+      host_id: connection.host,
+      id: 1,
+      method: "input",
+      input_id: first,
+      text: "task",
+    });
+    await connection.next((f) => f.type === "response");
+    await fixture.next();
+    fixture.messages.push(init());
+    fixture.messages.push(assistant());
+    await connection.next((f) => f.event?.kind === "started");
+    const steering = {
+      host_id: connection.host,
+      id: 2,
+      method: "steer",
+      target_input_id: first,
+      input_id: second,
+      text: "correction",
+    };
+    connection.send(steering);
+    connection.send(steering);
+    for (let n = 0; n < 2; n++)
+      assert.equal(
+        (await connection.next((f) => f.type === "response" && f.id === 2)).status,
+        "accepted",
+      );
+    assert.equal((await fixture.next()).value.priority, "now");
+    fixture.messages.push(result(first));
+    fixture.messages.push(assistant(second));
+    fixture.messages.push(result(second));
+    const finished = await connection.next((f) => f.event?.kind === "finished");
+    assert.equal(finished.event.input_id, first);
+    assert.equal(finished.event.outcome, "completed");
+    connection.send({ ...steering, id: 3 });
+    assert.equal(
+      (await connection.next((f) => f.type === "response" && f.id === 3)).status,
+      "rejected",
+    );
+  },
+);

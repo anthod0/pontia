@@ -196,7 +196,11 @@ test(
       host.submit(id, text);
       const deadline = Date.now() + 20000;
       while (!events.some((event) => event.kind === "finished" && event.input_id === id)) {
-        assert.equal(host.status().unavailable, null);
+        assert.equal(
+          host.status().unavailable,
+          null,
+          JSON.stringify(events.filter((e) => e.kind === "unavailable")),
+        );
         assert.ok(Date.now() < deadline, "SDK did not finish the fixture task");
         for (const event of events) {
           if (
@@ -316,3 +320,181 @@ test(
     }
   },
 );
+
+for (const phase of ["streaming", "approval"] as const) {
+  test(
+    `real SDK: native steering during ${phase} continues the task and preserves both inputs in history`,
+    {
+      skip: process.env.PONTIA_CLAUDE_SDK_TEST !== "1",
+      timeout: 60000,
+    },
+    async () => {
+      await using sandbox = await mkdtempDisposable(join(tmpdir(), "pontia-steer-sdk-"));
+      const cwd = join(sandbox.path, "workspace");
+      const config = join(sandbox.path, "config");
+      const temporary = join(sandbox.path, "tmp");
+      await Promise.all([cwd, config, temporary].map((path) => mkdir(path)));
+      const requests: unknown[] = [];
+      const events: HostEvent[] = [];
+      const server = createServer(async (request, response) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+        if (request.url?.includes("count_tokens")) {
+          response.setHeader("content-type", "application/json");
+          response.end(JSON.stringify({ input_tokens: 12 }));
+          return;
+        }
+        if (!request.url?.startsWith("/v1/messages")) {
+          response.writeHead(404).end();
+          return;
+        }
+        requests.push(body.messages);
+        const message = {
+          id: `steering_${requests.length}`,
+          type: "message",
+          role: "assistant",
+          model: body.model,
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 12, output_tokens: 1 },
+        };
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        const send = (frame: { type: string; [key: string]: unknown }) =>
+          response.write(`event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`);
+        send({ type: "message_start", message });
+        if (requests.length === 1 && phase === "approval") {
+          send({
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "tool_use", id: "steer-write", name: "Write", input: {} },
+          });
+          send({
+            type: "content_block_delta",
+            index: 0,
+            delta: {
+              type: "input_json_delta",
+              partial_json: JSON.stringify({
+                file_path: join(cwd, "not-approved.txt"),
+                content: "unapproved",
+              }),
+            },
+          });
+          send({ type: "content_block_stop", index: 0 });
+          send({
+            type: "message_delta",
+            delta: { stop_reason: "tool_use", stop_sequence: null },
+            usage: { output_tokens: 2 },
+          });
+          send({ type: "message_stop" });
+          response.end();
+          return;
+        }
+        send({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+        send({
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: requests.length === 1 ? "working" : "redirected" },
+        });
+        // Keep the original response streaming until native steering aborts it.
+        if (requests.length === 1) return;
+        send({ type: "content_block_stop", index: 0 });
+        send({
+          type: "message_delta",
+          delta: { stop_reason: "end_turn", stop_sequence: null },
+          usage: { output_tokens: 2 },
+        });
+        send({ type: "message_stop" });
+        response.end();
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      assert.ok(address && typeof address !== "string");
+      const env: Record<string, string | undefined> = Object.fromEntries(
+        ["HOME", "USERPROFILE", "PATH", "LANG", "LC_ALL", "SystemRoot"].map((key) => [
+          key,
+          process.env[key],
+        ]),
+      );
+      Object.assign(env, {
+        CLAUDE_CONFIG_DIR: config,
+        TMPDIR: temporary,
+        ANTHROPIC_BASE_URL: `http://127.0.0.1:${address.port}`,
+        ANTHROPIC_API_KEY: "fixture-not-a-secret",
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+        DISABLE_AUTOUPDATER: "1",
+      });
+      const host = new Host(
+        { session_id: "steering-session", cwd },
+        (event) => events.push(event),
+        (args) =>
+          query({
+            ...args,
+            options: {
+              ...args.options,
+              env,
+              strictMcpConfig: true,
+              mcpServers: {},
+              plugins: [],
+              model: "claude-sonnet-4-6",
+            },
+          }),
+      );
+      const first = randomUUID();
+      const second = randomUUID();
+      const waitFor = async (predicate: () => boolean) => {
+        const deadline = Date.now() + 20000;
+        while (!predicate()) {
+          assert.equal(
+            host.status().unavailable,
+            null,
+            JSON.stringify(events.filter((e) => e.kind === "unavailable")),
+          );
+          assert.ok(Date.now() < deadline, "SDK steering did not progress");
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      };
+      try {
+        host.submit(first, "original steering fixture task");
+        await waitFor(() =>
+          events.some((e) => e.kind === (phase === "approval" ? "permission_requested" : "text")),
+        );
+        host.steer(first, second, "native steering correction marker");
+        await waitFor(() => host.status().finished);
+        assert.deepEqual(
+          events.filter((e) => e.kind === "started").map((e) => e.input_id),
+          [first],
+        );
+        assert.deepEqual(
+          events.filter((e) => e.kind === "finished").map((e) => [e.input_id, e.outcome]),
+          [[first, "completed"]],
+        );
+        assert.ok(
+          events.some((e) => e.kind === "text" && e.delta === "redirected" && e.input_id === first),
+        );
+        assert.ok(JSON.stringify(requests[1]).includes("native steering correction marker"));
+        await host.close();
+        const native = host.status().native_session_id!;
+        const transcript = (await readdir(config, { recursive: true })).find((path) =>
+          path.endsWith(`/${native}.jsonl`),
+        );
+        assert.ok(transcript);
+        const history = await readFile(join(config, transcript), "utf8");
+        assert.ok(history.includes(first));
+        assert.ok(history.includes(second));
+        if (phase === "approval") {
+          assert.ok(events.some((e) => e.kind === "permission_settled" && e.outcome === "expired"));
+          await assert.rejects(access(join(cwd, "not-approved.txt")));
+        }
+      } finally {
+        try {
+          await host.close();
+        } finally {
+          server.closeAllConnections();
+          await new Promise<void>((resolve) => server.close(() => resolve()));
+        }
+      }
+    },
+  );
+}

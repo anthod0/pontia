@@ -94,6 +94,13 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
         case "input":
           host.submit(string(request.input_id), string(request.text));
           break;
+        case "steer":
+          host.steer(
+            string(request.target_input_id),
+            string(request.input_id),
+            string(request.text),
+          );
+          break;
         case "interrupt":
           await host.interrupt(string(request.input_id));
           break;

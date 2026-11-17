@@ -2179,42 +2179,52 @@ test("shows delivery loading on the submit button instead of below the optimisti
 });
 
 test.each([
+  ["claude-agent", { key: "Enter" }, "steer"],
+  ["claude-agent", { key: "Tab" }, "after_idle"],
+  ["claude-agent", { key: "Enter", altKey: true }, "after_idle"],
   ["pi", { key: "Enter" }, "steer"],
   ["codex", { key: "Enter" }, "steer"],
   ["pi", { key: "Tab" }, "after_idle"],
   ["codex", { key: "Enter", altKey: true }, "after_idle"],
-])("%s follow-up submits %j using %s while preserving newline shortcuts", async (clientType, shortcut, policy) => {
-  const user = userEvent.setup();
-  const selected = session({ session_id: "session-2", state: "idle", client_type: clientType });
-  window.history.pushState({}, "", "/dashboard/chat/session-2");
-  mocks.pathParams = { sessionId: "session-2" };
-  mocks.loadedSessions = [selected];
-  mocks.sessions.set([selected]);
-  mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
-  mocks.submitInboxMessage.mockResolvedValue(undefined);
+])(
+  "%s follow-up submits %j using %s while preserving newline shortcuts",
+  async (clientType, shortcut, policy) => {
+    const user = userEvent.setup();
+    const selected = session({
+      session_id: "session-2",
+      state: clientType === "claude-agent" ? "running" : "idle",
+      client_type: clientType,
+    });
+    window.history.pushState({}, "", "/dashboard/chat/session-2");
+    mocks.pathParams = { sessionId: "session-2" };
+    mocks.loadedSessions = [selected];
+    mocks.sessions.set([selected]);
+    mocks.sessionDetail.set({ session: selected, turns: [], inboxMessages: [], events: [] });
+    mocks.submitInboxMessage.mockResolvedValue(undefined);
 
-  render(SessionChatPage);
+    render(SessionChatPage);
 
-  const followUpInput = await screen.findByPlaceholderText("Follow up…");
-  expect(
-    screen.queryByText("Enter to send · Shift+Enter / Ctrl+Enter for newline"),
-  ).not.toBeInTheDocument();
+    const followUpInput = await screen.findByPlaceholderText("Follow up…");
+    expect(
+      screen.queryByText("Enter to send · Shift+Enter / Ctrl+Enter for newline"),
+    ).not.toBeInTheDocument();
 
-  await user.type(followUpInput, "continue this session");
-  expect(await fireEvent.keyDown(followUpInput, { key: "Enter", shiftKey: true })).toBe(false);
-  expect(await fireEvent.keyDown(followUpInput, { key: "Enter", ctrlKey: true })).toBe(false);
-  expect(followUpInput.querySelectorAll("br:not(.ProseMirror-trailingBreak)")).toHaveLength(2);
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+    await user.type(followUpInput, "continue this session");
+    expect(await fireEvent.keyDown(followUpInput, { key: "Enter", shiftKey: true })).toBe(false);
+    expect(await fireEvent.keyDown(followUpInput, { key: "Enter", ctrlKey: true })).toBe(false);
+    expect(followUpInput.querySelectorAll("br:not(.ProseMirror-trailingBreak)")).toHaveLength(2);
+    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 
-  expect(await fireEvent.keyDown(followUpInput, shortcut)).toBe(false);
-  await waitFor(() =>
-    expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-2", {
-      input: "continue this session",
-      delivery_policy: policy,
-      metadata: { source: "dashboard_chat" },
-    }),
-  );
-});
+    expect(await fireEvent.keyDown(followUpInput, shortcut)).toBe(false);
+    await waitFor(() =>
+      expect(mocks.submitInboxMessage).toHaveBeenCalledWith("session-2", {
+        input: "continue this session",
+        delivery_policy: policy,
+        metadata: { source: "dashboard_chat" },
+      }),
+    );
+  },
+);
 
 test("enables history intersection loading only after initial timeline load and bottom scroll", async () => {
   installIntersectionObserverMock();

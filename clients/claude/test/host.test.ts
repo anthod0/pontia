@@ -458,3 +458,96 @@ test("closing during a model change does not publish a model fact after closure"
   await assert.rejects(change, rejects("model_change_unconfirmed"));
   assert.equal(events.at(-1)?.kind, "closed");
 });
+
+for (const combined of [false, true]) {
+  test(`steering stays in the active task with ${combined ? "combined" : "separate"} native results`, async (t) => {
+    const { fixture, events, host } = setup();
+    t.after(() => host.close());
+    host.submit(first, "original");
+    await fixture.next();
+    fixture.messages.push(init());
+    fixture.messages.push(assistant());
+    await settle();
+    host.steer(first, second, "change direction");
+    const steering = (await fixture.next()).value;
+    assert.equal(steering.uuid, second);
+    assert.equal(steering.priority, "now");
+    assert.equal(steering.message.content, "change direction");
+    assert.equal(fixture.interrupts, 0);
+    if (!combined) {
+      fixture.messages.push(
+        result(first, {
+          subtype: "success",
+          is_error: false,
+          stop_reason: null,
+          terminal_reason: "aborted_streaming",
+        }),
+      );
+      await settle();
+      assert.equal(events.filter((e) => e.kind === "finished").length, 0);
+      assert.throws(() => host.submit(native, "queued"), rejects("input_busy"));
+    }
+    fixture.messages.push(assistant(second, [{ type: "text", text: "redirected" }], "steered"));
+    fixture.messages.push(result(second, combined ? { user_message_uuids: [first, second] } : {}));
+    await settle();
+    assert.equal(host.status().unavailable, null);
+    assert.deepEqual(
+      events.filter((e) => e.kind === "started").map((e) => e.input_id),
+      [first],
+    );
+    assert.deepEqual(
+      events.filter((e) => e.kind === "finished").map((e) => [e.input_id, e.outcome]),
+      [[first, "completed"]],
+    );
+    assert.ok(
+      events.some((e) => e.kind === "text" && e.input_id === first && e.delta === "redirected"),
+    );
+    host.submit(native, "next task");
+    assert.equal((await fixture.next()).value.uuid, native);
+  });
+}
+
+test("steering rejects stale, finished and disconnected targets without consuming the message ID", async (t) => {
+  const { fixture, host } = setup();
+  t.after(() => host.close());
+  host.submit(first, "task");
+  await fixture.next();
+  assert.throws(() => host.steer(first, second, "too early"), rejects("no_matching_execution"));
+  fixture.messages.push(init());
+  fixture.messages.push(assistant());
+  await settle();
+  assert.throws(() => host.steer(second, second, "wrong target"), rejects("no_matching_execution"));
+  host.controlLost();
+  assert.throws(() => host.steer(first, second, "disconnected"), rejects("execution_unavailable"));
+  host.controlRestored(true);
+  fixture.messages.push(result());
+  await settle();
+  assert.throws(() => host.steer(first, second, "too late"), rejects("no_matching_execution"));
+  host.submit(second, "next task");
+  assert.equal((await fixture.next()).value.uuid, second);
+});
+
+test("multiple steering messages are delivered in order and all must resolve before the task ends", async (t) => {
+  const { fixture, host, events } = setup();
+  t.after(() => host.close());
+  host.submit(first, "task");
+  await fixture.next();
+  fixture.messages.push(init());
+  fixture.messages.push(assistant());
+  await settle();
+  host.steer(first, second, "first correction");
+  host.steer(first, native, "second correction");
+  assert.throws(() => host.steer(first, second, "duplicate"), rejects("input_already_submitted"));
+  assert.equal((await fixture.next()).value.uuid, second);
+  assert.equal((await fixture.next()).value.uuid, native);
+  fixture.messages.push(result(first));
+  fixture.messages.push(assistant(second));
+  fixture.messages.push(result(second));
+  await settle();
+  assert.equal(host.status().finished, false);
+  fixture.messages.push(assistant(native));
+  fixture.messages.push(result(native));
+  await settle();
+  assert.equal(host.status().unavailable, null);
+  assert.equal(events.filter((e) => e.kind === "finished").length, 1);
+});
