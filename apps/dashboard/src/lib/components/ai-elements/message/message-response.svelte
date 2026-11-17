@@ -4,12 +4,15 @@
   import { cn, type WithElementRef } from '$lib/utils.js'
   import type { HTMLAttributes } from 'svelte/elements'
   import MarkdownCodeBlock from './markdown-code-block.svelte'
+  import LocalFileLink from './local-file-link.svelte'
+  import { localFilePath } from '$lib/downloads/localFilePath'
 
   export interface MessageResponseProps extends WithElementRef<HTMLAttributes<HTMLDivElement>, HTMLDivElement> {
     content: string
     markdown?: boolean
     streaming?: boolean
     streamId?: string | number
+    sessionId?: string
   }
 
   const renderers: Partial<Renderers> = {
@@ -24,6 +27,7 @@
     markdown = false,
     streaming = false,
     streamId,
+    sessionId,
     class: className,
     ref = $bindable(null),
     ...restProps
@@ -44,10 +48,17 @@
   {#if markdown}
     <SvelteMarkdown source={content} {streaming} {streamId} {renderers}>
       {#snippet link({ href, title, children })}
-        <a {href} {title} target="_blank" rel="noopener noreferrer">
-          {@render children?.()}
-          <ArrowSquareOutIcon aria-hidden="true" data-testid="markdown-external-link-icon" class="ml-1 inline-block size-3.5 align-[-0.125em]" />
-        </a>
+        {@const path = localFilePath(href)}
+        {#if sessionId && path}
+          {#key `${sessionId}:${path}`}
+            <LocalFileLink {sessionId} {path} {title} {children} />
+          {/key}
+        {:else}
+          <a {href} {title} target="_blank" rel="noopener noreferrer">
+            {@render children?.()}
+            <ArrowSquareOutIcon aria-hidden="true" data-testid="markdown-external-link-icon" class="ml-1 inline-block size-3.5 align-[-0.125em]" />
+          </a>
+        {/if}
       {/snippet}
     </SvelteMarkdown>
   {:else}

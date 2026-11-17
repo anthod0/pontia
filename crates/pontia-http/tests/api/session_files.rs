@@ -41,6 +41,121 @@ async fn content(app: &TestApp, session: &str, id: &str) -> axum::response::Resp
         .unwrap()
 }
 
+async fn path_content(
+    app: &TestApp,
+    session: &str,
+    path: &std::path::Path,
+    authenticated: bool,
+) -> axum::response::Response {
+    let mut url = reqwest::Url::parse(&format!(
+        "http://localhost/api/v1/sessions/{session}/files/content"
+    ))
+    .unwrap();
+    url.query_pairs_mut()
+        .append_pair("path", path.to_str().unwrap());
+    let mut request = Request::builder().uri(&url.as_str()["http://localhost".len()..]);
+    if authenticated {
+        request = request.header("Authorization", "Bearer test-token");
+    }
+    pontia_http::router(app.state.clone())
+        .oneshot(request.body(Body::empty()).unwrap())
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn path_download_reads_current_file_without_creating_shares_or_events() {
+    let app = fixture().await;
+    let path = app.workspace().path().join("报告 #1.txt");
+    for bytes in [b"original".as_slice(), b"updated"] {
+        std::fs::write(&path, bytes).unwrap();
+        let response = path_content(&app, "s", &path, true).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers()["content-length"],
+            bytes.len().to_string()
+        );
+        assert!(
+            response.headers()["content-disposition"]
+                .to_str()
+                .unwrap()
+                .starts_with("attachment; filename*=UTF-8''")
+        );
+        assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        assert_eq!(
+            response.into_body().collect().await.unwrap().to_bytes(),
+            bytes
+        );
+    }
+    for table in ["session_files", "events"] {
+        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
+            .fetch_one(&app.db)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(
+        path_content(&app, "s", &path, true).await.status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn path_download_requires_authentication_session_and_absolute_regular_file_within_size_limit()
+{
+    let app = fixture().await;
+    let path = app.workspace().path().join("report.txt");
+    let file = std::fs::File::create(&path).unwrap();
+    assert_eq!(
+        path_content(&app, "s", &path, false).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        path_content(&app, "missing", &path, true).await.status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        path_content(&app, "s", std::path::Path::new("relative.txt"), true)
+            .await
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        path_content(&app, "s", app.workspace().path(), true)
+            .await
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    file.set_len((1 << 30) + 1).unwrap();
+    assert_eq!(
+        path_content(&app, "s", &path, true).await.status(),
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+}
+
+#[tokio::test]
+async fn path_download_resolves_symlinks_and_rejects_non_regular_files() {
+    let app = fixture().await;
+    let target = app.workspace().path().join("target");
+    let path = app.workspace().path().join("link");
+    std::fs::write(&target, b"linked file").unwrap();
+    std::os::unix::fs::symlink(&target, &path).unwrap();
+    let response = path_content(&app, "s", &path, true).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.into_body().collect().await.unwrap().to_bytes(),
+        &b"linked file"[..]
+    );
+    let socket_path = app.workspace().path().join("socket");
+    let _socket = std::os::unix::net::UnixListener::bind(&socket_path).unwrap();
+    assert_ne!(
+        path_content(&app, "s", &socket_path, true).await.status(),
+        StatusCode::OK
+    );
+}
+
 #[tokio::test]
 async fn declaration_and_event_are_atomic_and_streams_enrich_replayed_events() {
     let app = fixture().await;

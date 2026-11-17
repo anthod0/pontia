@@ -149,21 +149,50 @@ impl SessionFileService {
             if current != path {
                 return Err(FileContentError::PathChanged);
             }
-            let (file, media_type) = open_file(path).map_err(content_io_error)?;
-            let size = file.metadata().map_err(content_io_error)?.len();
-            if size > MAX_FILE_SIZE {
-                return Err(FileContentError::TooLarge);
-            }
-            Ok(SharedFileContent {
-                file,
-                size,
-                media_type,
-                name: record.name,
-            })
+            read_content(path, record.name)
         })
         .await
         .map_err(|e| FileContentError::Internal(Error::Io(std::io::Error::other(e))))?
     }
+
+    pub async fn path_content(
+        &self,
+        session_id: &str,
+        path: PathBuf,
+    ) -> std::result::Result<SharedFileContent, FileContentError> {
+        self.ensure_session(session_id).await?;
+        if !path.is_absolute() {
+            return Err(Error::Domain("An absolute file path is required".into()).into());
+        }
+        tokio::task::spawn_blocking(move || {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or(FileContentError::NotFound)?
+                .to_owned();
+            let path = path.canonicalize().map_err(content_io_error)?;
+            read_content(&path, name)
+        })
+        .await
+        .map_err(|e| FileContentError::Internal(Error::Io(std::io::Error::other(e))))?
+    }
+}
+
+fn read_content(
+    path: &Path,
+    name: String,
+) -> std::result::Result<SharedFileContent, FileContentError> {
+    let (file, media_type) = open_file(path).map_err(content_io_error)?;
+    let size = file.metadata().map_err(content_io_error)?.len();
+    if size > MAX_FILE_SIZE {
+        return Err(FileContentError::TooLarge);
+    }
+    Ok(SharedFileContent {
+        file,
+        size,
+        media_type,
+        name,
+    })
 }
 
 fn content_io_error(error: std::io::Error) -> FileContentError {

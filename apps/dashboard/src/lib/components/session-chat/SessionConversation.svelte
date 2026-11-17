@@ -367,7 +367,7 @@
           {@const active = (sessionState ? sessionState === 'busy' : true) && chatMessage.id === activeLoadingMessageId}
           {@const firstAssistant = displayMessages.find((message) => message.turnId === chatMessage.turnId && message.role === 'assistant')?.id === chatMessage.id}
           {#if chatMessage.thoughtSteps?.length || active || (displayItem.showAgentStatus && sessionState === 'busy') || (firstAssistant && turn?.state === 'completed')}
-            <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps ?? []} {turn} active={active || (displayItem.showAgentStatus && sessionState === 'busy')} />
+            <ThoughtSummary class="mb-3" steps={chatMessage.thoughtSteps ?? []} {sessionId} {turn} active={active || (displayItem.showAgentStatus && sessionState === 'busy')} />
           {/if}
         {/if}
         {#if chatMessage.content.trim()}
@@ -399,6 +399,7 @@
           {:else}
             <Message.Response
               content={chatMessage.content}
+              {sessionId}
               markdown={chatMessage.role === 'assistant'}
               streaming={chatMessage.role === 'assistant' && chatMessage.status === 'pending'}
               streamId={chatMessage.id}

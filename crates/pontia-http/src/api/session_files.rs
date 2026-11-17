@@ -8,7 +8,7 @@ use axum::{
 };
 use pontia_application::{
     AppState,
-    session_files::{FileContentError, SessionFileService},
+    session_files::{FileContentError, SessionFileService, SharedFileContent},
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -54,19 +54,41 @@ pub async fn shared_file_content(
 ) -> Result<Response, ApiError> {
     let content = SessionFileService::new(state.db())
         .content(&session_id, &file_id)
-        .await
-        .map_err(|e| match e {
-            FileContentError::NotFound => ApiError::not_found(e.to_string()),
-            FileContentError::PathChanged => {
-                ApiError::custom(StatusCode::CONFLICT, "file_path_changed", e.to_string())
-            }
-            FileContentError::TooLarge => ApiError::custom(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "file_too_large",
-                e.to_string(),
-            ),
-            FileContentError::Internal(error) => error.into(),
-        })?;
+        .await;
+    file_response(content)
+}
+
+#[derive(Deserialize)]
+pub struct FileContentQuery {
+    path: std::path::PathBuf,
+}
+
+pub async fn path_file_content(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+    Query(query): Query<FileContentQuery>,
+) -> Result<Response, ApiError> {
+    let content = SessionFileService::new(state.db())
+        .path_content(&session_id, query.path)
+        .await;
+    file_response(content)
+}
+
+fn file_response(
+    content: Result<SharedFileContent, FileContentError>,
+) -> Result<Response, ApiError> {
+    let content = content.map_err(|e| match e {
+        FileContentError::NotFound => ApiError::not_found(e.to_string()),
+        FileContentError::PathChanged => {
+            ApiError::custom(StatusCode::CONFLICT, "file_path_changed", e.to_string())
+        }
+        FileContentError::TooLarge => ApiError::custom(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "file_too_large",
+            e.to_string(),
+        ),
+        FileContentError::Internal(error) => error.into(),
+    })?;
     let mut reader = tokio::fs::File::from_std(content.file).take(content.size);
     let stream = async_stream::try_stream! {
         let mut buffer = vec![0u8; 64 * 1024];

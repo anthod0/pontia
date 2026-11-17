@@ -18,6 +18,7 @@
     steps: SessionChatThoughtStep[]
     active?: boolean
     turn?: TurnView
+    sessionId?: string
     class?: string
   }
 
@@ -34,7 +35,7 @@
 
   type DisplayStep = SessionChatThoughtStep | GroupedFileSteps
 
-  let { steps, active = false, turn, class: className }: Props = $props()
+  let { steps, active = false, turn, sessionId, class: className }: Props = $props()
   let open = $state(false)
 
   const visibleSteps = $derived(groupFileSteps(steps))
@@ -101,7 +102,7 @@
         {#each visibleSteps as step, index (step.id)}
           {#if step.kind === 'assistant'}
             <div class="py-3">
-              <Message.Response content={step.content} markdown streamId={step.id} />
+              <Message.Response content={step.content} markdown streamId={step.id} {sessionId} />
             </div>
           {:else if step.kind === 'tool_call' && step.managedToolUse?.input.type === 'bash'}
             <ThoughtCommandStep title={step.managedToolUse ? managedToolUseTitle(step.managedToolUse, $t) : step.title} command={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)}>

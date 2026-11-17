@@ -63,4 +63,4 @@ mod uploads;
 pub use uploads::{append_upload, complete_upload, create_upload, get_upload};
 
 mod session_files;
-pub use session_files::{list_session_files, share_file, shared_file_content};
+pub use session_files::{list_session_files, path_file_content, share_file, shared_file_content};

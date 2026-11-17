@@ -46,5 +46,10 @@ export function createFileApi(device: DeviceRuntime) {
       signal,
     );
   }
-  return { listSessionFiles, sharedFileContent };
+  function pathFileContent(sessionId: string, path: string, signal?: AbortSignal) {
+    const query = new URLSearchParams({ path });
+    return fileRequest(`${encodeURIComponent(sessionId)}/files/content?${query}`, signal);
+  }
+
+  return { listSessionFiles, sharedFileContent, pathFileContent };
 }
