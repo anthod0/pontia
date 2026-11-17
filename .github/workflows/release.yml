@@ -126,6 +126,9 @@ jobs:
           package-manager-cache: false
       - name: Pack Claude client
         run: bash scripts/pack-claude-client.sh "$RUNNER_TEMP/claude-client.tgz"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
       - name: Verify npm Claude client on the release platform
         run: PONTIA_CLAUDE_TEST_PACKAGE="$RUNNER_TEMP/claude-client.tgz" SQLX_OFFLINE=true cargo test --locked -p pontia-client-claude --test delivery -- --ignored
       - name: Build binaries
