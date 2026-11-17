@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import type { TurnView } from '../../../api/types'
 
   type DurationTurn = Pick<TurnView, 'state' | 'started_at' | 'completed_at'>
@@ -38,20 +39,20 @@
     const hours = Math.floor(totalSeconds / 3600)
     const minutes = Math.floor((totalSeconds % 3600) / 60)
     const seconds = totalSeconds % 60
-    if (hours) return `${hours}h ${minutes}m ${seconds}s`
-    if (minutes) return `${minutes}m ${seconds}s`
-    return `${seconds}s`
+    if (hours) return $t('chat.hoursMinutesSeconds', { hours, minutes, seconds })
+    if (minutes) return $t('chat.minutesSeconds', { minutes, seconds })
+    return $t('chat.seconds', { seconds })
   }
 </script>
 
 <span
   class="inline-flex items-center gap-1"
   role={running ? 'timer' : 'status'}
-  aria-label={running ? 'Turn running time' : 'Turn completed duration'}
+  aria-label={running ? $t('chat.runningTime') : $t('chat.completedDuration')}
   aria-live={running ? 'off' : 'polite'}
   data-chat-turn-duration
 >
-  <span>{running ? 'working for' : 'worked for'}</span>
+  <span>{running ? $t('chat.workingFor') : $t('chat.workedFor')}</span>
   {#if visible}
     <time datetime={`PT${elapsedSeconds}S`}>{formatDuration(elapsedSeconds)}</time>
   {:else}

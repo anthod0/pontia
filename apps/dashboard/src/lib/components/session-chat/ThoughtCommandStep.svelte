@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import TerminalWindowIcon from 'phosphor-svelte/lib/TerminalWindowIcon'
@@ -23,7 +24,7 @@
 <Collapsible.Root bind:open class="relative min-w-0">
   <Collapsible.Trigger
     class="group/command flex w-full min-w-0 gap-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    aria-label={open ? `Hide ${title} details` : `Show ${title} details`}
+    aria-label={open ? $t('chat.hideDetails', { title: title }) : $t('chat.showDetails', { title: title })}
   >
     <span class="relative z-10 flex size-6 shrink-0 items-center justify-center bg-background text-muted-foreground">
       <TerminalWindowIcon class="size-4 group-hover/command:hidden" aria-hidden="true" />

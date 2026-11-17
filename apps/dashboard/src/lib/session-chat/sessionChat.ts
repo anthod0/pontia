@@ -1,3 +1,4 @@
+import { translate as defaultTranslate, type Translator } from "$lib/i18n";
 import type { ManagedToolUse, SessionView, TimelineItem, TurnView } from "../../api/types";
 import { untitledSessionLabel } from "../sessionTitle";
 import { parseUploadMessage } from "../uploads/message";
@@ -56,6 +57,7 @@ export function isTerminalChatSession(session: Pick<SessionView, "state">): bool
 
 export function sessionChatTitle(
   session: Pick<SessionView, "client_type" | "title" | "handle" | "role" | "description">,
+  translate: Translator = defaultTranslate,
 ): string {
   const title = session.title?.trim();
   const handle = session.handle?.trim();
@@ -66,7 +68,7 @@ export function sessionChatTitle(
   if (handle) return handle;
   if (description) return description;
   if (role) return role;
-  return untitledSessionLabel(session.client_type);
+  return untitledSessionLabel(session.client_type, translate);
 }
 
 export function userPromptForDisplay(prompt: string): string {
@@ -93,14 +95,17 @@ export function titleFromInitialPrompt(prompt: string, maxLength = 60): string |
     : normalized;
 }
 
-export function turnsToChatMessages(turns: TurnView[]): SessionChatMessage[] {
+export function turnsToChatMessages(
+  turns: TurnView[],
+  translate: Translator = defaultTranslate,
+): SessionChatMessage[] {
   return turns
     .slice()
     .sort((a, b) => turnTimestamp(a).localeCompare(turnTimestamp(b)))
     .flatMap((turn) => {
       const input =
         userPromptForDisplay(textFromUnknown(turn.input?.summary ?? turn.input)) ||
-        "No input summary was reported.";
+        translate("chat.noInputSummary");
       return [
         {
           id: `${turn.turn_id}:user`,
@@ -110,7 +115,7 @@ export function turnsToChatMessages(turns: TurnView[]): SessionChatMessage[] {
           status: "sent",
           createdAt: turn.created_at,
         },
-        assistantMessageForTurn(turn),
+        assistantMessageForTurn(turn, translate),
       ];
     });
 }
@@ -118,6 +123,7 @@ export function turnsToChatMessages(turns: TurnView[]): SessionChatMessage[] {
 export function timelineItemsToChatMessages(
   items: TimelineItem[],
   preserveTurnOrder = false,
+  translate: Translator = defaultTranslate,
 ): SessionChatMessage[] {
   const messages: SessionChatMessage[] = [];
   let pendingTurnId: string | null = null;
@@ -129,9 +135,9 @@ export function timelineItemsToChatMessages(
       pendingThoughtSteps.push({
         id: item.item_id,
         kind: "assistant",
-        title: "Assistant update",
+        title: translate("chat.assistantUpdate"),
         status: item.status,
-        content: item.content_preview?.trim() || "No details reported.",
+        content: item.content_preview?.trim() || translate("chat.noDetails"),
         occurredAt: item.occurred_at,
       });
     }
@@ -153,7 +159,7 @@ export function timelineItemsToChatMessages(
         id: finalAssistant.item_id,
         turnId,
         role: "assistant",
-        content: finalContent || "No assistant output was reported.",
+        content: finalContent || translate("chat.noAssistantOutput"),
         status: finalAssistant.status === "error" ? "failed" : "sent",
         createdAt: finalAssistant.occurred_at ?? "",
         ...(pendingThoughtSteps.length ? { thoughtSteps: pendingThoughtSteps } : {}),
@@ -211,7 +217,7 @@ export function timelineItemsToChatMessages(
 
     if (isThoughtStepKind(item.kind)) {
       movePendingAssistantToThoughts();
-      const content = item.content_preview?.trim() || "No details reported.";
+      const content = item.content_preview?.trim() || translate("chat.noDetails");
       if (item.kind === "tool_result" && item.call_id) {
         const toolCall = pendingThoughtSteps.findLast(
           (step) => step.kind === "tool_call" && step.callId === item.call_id && !step.result,
@@ -232,8 +238,8 @@ export function timelineItemsToChatMessages(
         id: item.item_id,
         kind: item.kind,
         title: managedToolUse
-          ? managedToolUseTitle(managedToolUse)
-          : item.title?.trim() || defaultThoughtStepTitle(item.kind),
+          ? managedToolUseTitle(managedToolUse, translate)
+          : item.title?.trim() || defaultThoughtStepTitle(item.kind, translate),
         status: item.status ?? (item.kind === "tool_call" ? "started" : null),
         content: managedToolUse ? managedToolUseContent(managedToolUse) : content,
         occurredAt: item.occurred_at,
@@ -268,24 +274,28 @@ function isThoughtStepKind(
 
 function defaultThoughtStepTitle(
   kind: Exclude<SessionChatThoughtStep["kind"], "assistant">,
+  translate: Translator,
 ): string {
-  if (kind === "thinking") return "Thinking";
-  if (kind === "tool_call") return "Tool call";
-  return "Tool result";
+  if (kind === "thinking") return translate("chat.thinking");
+  if (kind === "tool_call") return translate("chat.toolCall");
+  return translate("chat.toolResult");
 }
 
-export function managedToolUseTitle(toolUse: ManagedToolUse): string {
+export function managedToolUseTitle(
+  toolUse: ManagedToolUse,
+  translate: Translator = defaultTranslate,
+): string {
   switch (toolUse.input.type) {
     case "read":
-      return "Read file";
+      return translate("chat.readFile");
     case "edit":
-      return "Edit file";
+      return translate("chat.editFile");
     case "write":
-      return "Write file";
+      return translate("chat.writeFile");
     case "bash":
-      return "Run command";
+      return translate("chat.runCommand");
     case "file_changes":
-      return "Change files";
+      return translate("chat.changeFiles");
   }
 }
 
@@ -321,7 +331,7 @@ function timelineTimestamp(item: TimelineItem): string {
   return item.occurred_at ?? item.item_id;
 }
 
-function assistantMessageForTurn(turn: TurnView): SessionChatMessage {
+function assistantMessageForTurn(turn: TurnView, translate: Translator): SessionChatMessage {
   const output = textFromUnknown(turn.output?.summary);
   if (output) {
     return {
@@ -339,7 +349,7 @@ function assistantMessageForTurn(turn: TurnView): SessionChatMessage {
       id: `${turn.turn_id}:assistant`,
       turnId: turn.turn_id,
       role: "assistant",
-      content: textFromUnknown(turn.failure) || "The turn failed without a reported reason.",
+      content: textFromUnknown(turn.failure) || translate("chat.failedWithoutReason"),
       status: "failed",
       createdAt: turn.completed_at ?? turn.created_at,
     };
@@ -349,9 +359,7 @@ function assistantMessageForTurn(turn: TurnView): SessionChatMessage {
     id: `${turn.turn_id}:assistant`,
     turnId: turn.turn_id,
     role: "assistant",
-    content: activePendingTurnStates.has(turn.state)
-      ? ""
-      : "No assistant output was reported for this turn.",
+    content: activePendingTurnStates.has(turn.state) ? "" : translate("chat.noTurnOutput"),
     status: activePendingTurnStates.has(turn.state) ? "pending" : "sent",
     createdAt: turn.completed_at ?? turn.created_at,
   };

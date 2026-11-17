@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { onDestroy } from 'svelte'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
@@ -47,14 +48,14 @@
     <button
       type="button"
       class="inline-flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label={copied ? 'Code block copied' : 'Copy code block'}
-      title={copied ? 'Code block copied' : 'Copy code block'}
+      aria-label={copied ? $t('chat.codeCopied') : $t('chat.copyCode')}
+      title={copied ? $t('chat.codeCopied') : $t('chat.copyCode')}
       onclick={copyCode}
     >
       {#if copied}
-        <CheckIcon class="size-3.5" /> <span>Copied</span>
+        <CheckIcon class="size-3.5" /> <span>{$t('common.copied')}</span>
       {:else}
-        <CopyIcon class="size-3.5" /> <span>Copy</span>
+        <CopyIcon class="size-3.5" /> <span>{$t('common.copy')}</span>
       {/if}
     </button>
   </div>

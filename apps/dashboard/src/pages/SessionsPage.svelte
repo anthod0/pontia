@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { statusLabel } from '$lib/i18n/status';
+  import { t, currentLocale } from '$lib/i18n';
   import { useDeviceRuntime } from '../device/context';
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { navigate } from '$lib/navigation'
@@ -40,13 +42,13 @@
       <button type="button" class="w-full px-1 py-3 text-left transition hover:bg-muted/50 sm:px-2" onclick={() => openSession(session.session_id)}>
         <div class="flex min-w-0 items-start justify-between gap-3">
           <div class="min-w-0 space-y-1">
-            <div class="truncate font-medium">{sessionChatTitle(session)}</div>
-            <div class="truncate text-sm text-muted-foreground">{clientDisplayName(session.client_type)} · Updated {new Date(session.updated_at).toLocaleString()}</div>
+            <div class="truncate font-medium">{sessionChatTitle(session, $t)}</div>
+            <div class="truncate text-sm text-muted-foreground">{clientDisplayName(session.client_type)} {$t('chat.updatedPrefix')} {new Date(session.updated_at).toLocaleString($currentLocale)}</div>
           </div>
           {#if session.state !== 'exited'}
             <Badge variant="secondary" class="shrink-0 gap-1.5">
               <span class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}></span>
-              {session.state}
+              {statusLabel(session.state, $t)}
             </Badge>
           {/if}
         </div>
@@ -71,8 +73,8 @@
 <section class="mx-auto flex w-full max-w-4xl flex-col gap-6" aria-labelledby="sessions-page-title">
   <div class="flex items-center justify-between gap-3">
     <div class="space-y-2">
-      <h1 id="sessions-page-title" class="text-3xl font-semibold tracking-tight">Sessions</h1>
-      <p class="text-sm text-muted-foreground">Browse active, archived, and pinned sessions.</p>
+      <h1 id="sessions-page-title" class="text-3xl font-semibold tracking-tight">{$t('sessions.title')}</h1>
+      <p class="text-sm text-muted-foreground">{$t('sessions.description')}</p>
     </div>
     <Badge variant="secondary">{selectedCount}</Badge>
   </div>
@@ -80,49 +82,49 @@
   {#if overviewQuery.error}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />
-      <Alert.Title>Could not load sessions</Alert.Title>
+      <Alert.Title>{$t('sessions.loadFailed')}</Alert.Title>
       <Alert.Description>{overviewQuery.error.message}</Alert.Description>
     </Alert.Root>
   {/if}
 
   {#if overviewQuery.isPending}
     <Card.Root>
-      <Card.Content class="py-6 text-sm text-muted-foreground" role="status">Loading sessions…</Card.Content>
+      <Card.Content class="py-6 text-sm text-muted-foreground" role="status">{$t('sessions.loading')}</Card.Content>
     </Card.Root>
   {:else}
     <Tabs.Root bind:value={selectedTab}>
-      <Tabs.List variant="line" aria-label="Session views">
-        <Tabs.Trigger value="all">All</Tabs.Trigger>
-        <Tabs.Trigger value="archived">Archived</Tabs.Trigger>
-        <Tabs.Trigger value="pinned">Pinned</Tabs.Trigger>
+      <Tabs.List variant="line" aria-label={$t('sessions.views')}>
+        <Tabs.Trigger value="all">{$t('common.all')}</Tabs.Trigger>
+        <Tabs.Trigger value="archived">{$t('common.archived')}</Tabs.Trigger>
+        <Tabs.Trigger value="pinned">{$t('common.pinned')}</Tabs.Trigger>
       </Tabs.List>
 
       <Tabs.Content value="all" class="space-y-6 pt-4">
         {#if overview.active.length || listSessions.length}
           {#if overview.active.length}
             <section class="space-y-2" aria-labelledby="active-sessions-title">
-              <h2 id="active-sessions-title" class="text-sm font-semibold">Active</h2>
+              <h2 id="active-sessions-title" class="text-sm font-semibold">{$t('common.active')}</h2>
               {@render sessionList(overview.active, 'active-session-list')}
             </section>
           {/if}
 
           <section class="space-y-2" aria-labelledby="session-list-title">
-            <h2 id="session-list-title" class="text-sm font-semibold">All sessions</h2>
+            <h2 id="session-list-title" class="text-sm font-semibold">{$t('sessions.all')}</h2>
             {#if listSessions.length}
               {@render sessionList(listSessions, 'all-session-list')}
             {:else}
-              <p class="py-4 text-sm text-muted-foreground">No other sessions.</p>
+              <p class="py-4 text-sm text-muted-foreground">{$t('sessions.noOther')}</p>
             {/if}
             {#if overview.nextCursor}
               <div class="flex justify-center pt-2">
                 <Button variant="outline" disabled={overviewQuery.isFetchingNextPage} onclick={() => void overviewQuery.fetchNextPage()}>
-                  {overviewQuery.isFetchingNextPage ? 'Loading…' : 'Load more'}
+                  {overviewQuery.isFetchingNextPage ? $t('common.loading') : $t('common.loadMore')}
                 </Button>
               </div>
             {/if}
           </section>
         {:else if !overviewQuery.error}
-          {@render emptyState('No sessions', 'Start a new chat to create a session.')}
+          {@render emptyState($t('sessions.empty'), $t('sessions.startHint'))}
         {/if}
       </Tabs.Content>
 
@@ -130,7 +132,7 @@
         {#if overview.archived.length}
           {@render sessionList(overview.archived, 'archived-session-list')}
         {:else}
-          {@render emptyState('No archived sessions', 'Archived sessions will appear here.')}
+          {@render emptyState($t('sessions.noArchived'), $t('sessions.archivedHint'))}
         {/if}
       </Tabs.Content>
 
@@ -138,7 +140,7 @@
         {#if overview.pinned.length}
           {@render sessionList(overview.pinned, 'pinned-session-list')}
         {:else}
-          {@render emptyState('No pinned sessions', 'Pinned sessions will appear here.')}
+          {@render emptyState($t('sessions.noPinned'), $t('sessions.pinnedHint'))}
         {/if}
       </Tabs.Content>
     </Tabs.Root>

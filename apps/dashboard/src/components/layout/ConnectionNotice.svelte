@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../device/context';
   import { toast } from 'svelte-sonner'
   const device = useDeviceRuntime();
@@ -11,8 +12,9 @@
 
   $effect(() => {
     if (!unhealthy) return
+    const message = $t('connection.lost')
     const timer = setTimeout(() => {
-      toast.warning('Connection lost, reconnecting…', {
+      toast.warning(message, {
         id: toastId,
         duration: Number.POSITIVE_INFINITY,
         dismissible: false,

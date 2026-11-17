@@ -1,3 +1,4 @@
+import { translate } from "$lib/i18n";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { get } from "svelte/store";
 import { token } from "./auth";
@@ -8,8 +9,7 @@ export function createApiAccess(): ApiAccess {
   const credential = get(token);
   const lifetime = new AbortController();
   const apiCredentials: RequestCredentials = "same-origin";
-  const apiStreamUnavailableMessage =
-    "Set an API token in Settings to open the dashboard event stream.";
+  const apiStreamUnavailableMessage = translate("auth.streamTokenRequired");
 
   function apiUrl(path: string): string {
     return path;

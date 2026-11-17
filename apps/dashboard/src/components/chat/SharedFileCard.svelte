@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, currentLocale, number } from '$lib/i18n';
   import { useDeviceRuntime } from '../../device/context';
   import { onDestroy } from 'svelte'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -30,7 +31,7 @@
 
   function showError(cause: unknown) {
     error = cause instanceof ApiError && cause.status === 404
-      ? 'File no longer exists'
+      ? $t('files.missing')
       : cause instanceof Error ? cause.message : String(cause)
   }
 
@@ -62,8 +63,8 @@
   }
 
   function sizeLabel(size: number) {
-    return size < 1024 ? `${size} B` : size < 1024 * 1024
-      ? `${(size / 1024).toFixed(1)} KiB` : `${(size / 1024 / 1024).toFixed(1)} MiB`
+    return size < 1024 ? `${$number(size)} B` : size < 1024 * 1024
+      ? `${$number(size / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} KiB` : `${$number(size / 1024 / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MiB`
   }
 </script>
 
@@ -71,7 +72,7 @@
   <Card.Root size="sm" class="gap-2 py-2">
     <Card.Content class="flex items-center gap-2 px-2">
       {#if previewUrl}
-        <button type="button" class="shrink-0" onclick={() => { enlarged = true }} aria-label={`Enlarge ${file.name}`}>
+        <button type="button" class="shrink-0" onclick={() => { enlarged = true }} aria-label={$t('files.enlargeNamed', { name: file.name })}>
           <img src={previewUrl} alt={file.name} class="size-10 rounded object-cover" />
         </button>
       {:else}
@@ -79,9 +80,9 @@
       {/if}
       <div class="min-w-0 flex-1">
         <Card.Title class="truncate text-sm" title={file.name}>{file.name}</Card.Title>
-        <Card.Description class="truncate text-xs" title={new Date(file.created_at).toLocaleString()}>{sizeLabel(file.size)}</Card.Description>
+        <Card.Description class="truncate text-xs" title={new Date(file.created_at).toLocaleString($currentLocale)}>{sizeLabel(file.size)}</Card.Description>
       </div>
-      <Button size="icon-sm" variant="ghost" onclick={download} disabled={downloading} aria-label={downloading ? `Receiving ${file.name}` : `Download ${file.name}`} title={downloading ? 'Receiving…' : 'Download'}>
+      <Button size="icon-sm" variant="ghost" onclick={download} disabled={downloading} aria-label={downloading ? $t('files.receivingNamed', { name: file.name }) : $t('files.downloadNamed', { name: file.name })} title={downloading ? $t('files.receiving') : $t('files.download')}>
         <DownloadSimpleIcon class="size-4" />
       </Button>
     </Card.Content>
@@ -89,7 +90,7 @@
       <div class="space-y-1 px-2">
         {#if progress}
           <div class="space-y-1" role="status">
-            <Progress value={progress.total === null ? null : progress.total === 0 ? 100 : progress.received / progress.total * 100} aria-label="File reception progress" />
+            <Progress value={progress.total === null ? null : progress.total === 0 ? 100 : progress.received / progress.total * 100} aria-label={$t('files.receptionProgress')} />
             <p class="text-xs text-muted-foreground">{sizeLabel(progress.received)}{progress.total !== null ? ` / ${sizeLabel(progress.total)}` : ''}</p>
           </div>
         {/if}
@@ -103,7 +104,7 @@
   <Dialog.Content class="max-w-4xl">
     <Dialog.Header>
       <Dialog.Title class="break-all">{file.name}</Dialog.Title>
-      <Dialog.Description>Shared image</Dialog.Description>
+      <Dialog.Description>{$t('files.sharedImage')}</Dialog.Description>
     </Dialog.Header>
     {#if previewUrl}<img src={previewUrl} alt={file.name} class="max-h-[75vh] w-full object-contain" />{/if}
   </Dialog.Content>

@@ -1,3 +1,4 @@
+import type { MessageKey } from "$lib/i18n";
 import { SIDEBAR_KEYBOARD_SHORTCUT } from "$lib/components/ui/sidebar/constants";
 
 export type ChatShortcutAction =
@@ -13,7 +14,7 @@ export type ShortcutKey = "Mod" | "Alt" | "Shift" | (string & {});
 
 export type ShortcutDefinition = {
   keys: ShortcutKey[];
-  label: string;
+  label: MessageKey;
 };
 
 export type ChatShortcutMatch =
@@ -21,18 +22,18 @@ export type ChatShortcutMatch =
   | { action: "openChatByPosition"; position: string };
 
 export const chatShortcuts: Record<ChatShortcutAction, ShortcutDefinition> = {
-  nextChat: { keys: ["Alt", "J"], label: "Next active chat" },
-  previousChat: { keys: ["Alt", "K"], label: "Previous active chat" },
-  openChatByPosition: { keys: ["Alt", "1-9"], label: "Open active chat by position" },
-  newChat: { keys: ["Alt", "N"], label: "New chat" },
-  focusInput: { keys: ["Alt", "L"], label: "Focus chat input" },
-  showHelp: { keys: ["Alt", "?"], label: "Keyboard shortcuts" },
+  nextChat: { keys: ["Alt", "J"], label: "shortcuts.nextChat" },
+  previousChat: { keys: ["Alt", "K"], label: "shortcuts.previousChat" },
+  openChatByPosition: { keys: ["Alt", "1-9"], label: "shortcuts.openByPosition" },
+  newChat: { keys: ["Alt", "N"], label: "chat.new" },
+  focusInput: { keys: ["Alt", "L"], label: "shortcuts.focusInput" },
+  showHelp: { keys: ["Alt", "?"], label: "shortcuts.title" },
 };
 
 // Handled by the shadcn sidebar provider; listed here so the help dialog stays in sync.
 export const sidebarShortcut: ShortcutDefinition = {
   keys: ["Mod", SIDEBAR_KEYBOARD_SHORTCUT.toUpperCase()],
-  label: "Toggle sidebar",
+  label: "shortcuts.toggleSidebar",
 };
 
 export const helpShortcuts: ShortcutDefinition[] = [

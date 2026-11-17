@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
 	import { Button } from "$lib/components/ui/button/index.js";
 	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
 	import { cn } from "$lib/utils.js";
@@ -32,5 +33,5 @@
 	{...restProps}
 >
 	<SidebarSimpleIcon  />
-	<span class="sr-only">Toggle Sidebar</span>
+	<span class="sr-only">{$t('nav.toggleSidebar')}</span>
 </Button>

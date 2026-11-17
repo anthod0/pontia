@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte'
   import PontiaMascot from './PontiaMascot.svelte'
   import DeviceStatus, { type DeviceStatusView } from '../devices/DeviceStatus.svelte'
@@ -13,8 +14,8 @@
     {:else}
       <div>
         <PontiaMascot class="mx-auto mb-4 size-20" />
-        <h1 class="mb-2 text-[28px] font-semibold tracking-tight text-heading">Start a session</h1>
-        <p class="text-sm text-foreground">Choose a workspace and agent client, then describe the job.</p>
+        <h1 class="mb-2 text-[28px] font-semibold tracking-tight text-heading">{$t('chat.startSessionTitle')}</h1>
+        <p class="text-sm text-foreground">{$t('chat.startDescription')}</p>
       </div>
     {/if}
   </div>

@@ -1,3 +1,4 @@
+import { translate } from "$lib/i18n";
 import { get, writable } from "svelte/store";
 import { DeviceRuntime } from "../../device/runtime";
 import { createApiAccess } from "./apiAccess";
@@ -5,11 +6,11 @@ import type { RemoteAccess } from "./remoteAccessLoader.svelte";
 type PublicDevice = Awaited<ReturnType<RemoteAccess["listPublicDevices"]>>["devices"][number];
 
 export type DeviceConnectionState = "connecting" | "online" | "offline" | "sign-in-required";
-export const deviceStateLabel: Record<DeviceConnectionState, string> = {
-  connecting: "Connecting",
-  online: "Online",
-  offline: "Offline",
-  "sign-in-required": "Sign in required",
+export const deviceStateLabel: Record<DeviceConnectionState, import("$lib/i18n").MessageKey> = {
+  connecting: "devices.connecting",
+  online: "devices.online",
+  offline: "devices.offline",
+  "sign-in-required": "auth.required",
 };
 export type ConnectedDevice = PublicDevice & {
   state: DeviceConnectionState;
@@ -66,7 +67,7 @@ export function createDeviceConnections(remote: RemoteAccess) {
       stop(entry);
       entry.state = "sign-in-required";
     }
-    error.set("Sign in to Pontia to continue.");
+    error.set(translate("devices.signInToContinue"));
     loading.set(false);
     publish();
   }
@@ -158,7 +159,7 @@ export function createDeviceConnections(remote: RemoteAccess) {
       } catch (failure) {
         if (lifetime.signal.aborted) return;
         if (failure instanceof remote.CloudRequestError && failure.status === 401) requireSignIn();
-        else error.set("Could not reach Pontia to load devices.");
+        else error.set(translate("devices.unreachable"));
       } finally {
         loading.set(false);
         refresh = null;

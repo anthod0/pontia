@@ -1,3 +1,4 @@
+import { translate, type Translator } from "$lib/i18n";
 import type { ContextUsageView } from "../api/types";
 
 export function formatTokenCount(value: number): string {
@@ -15,7 +16,8 @@ export function contextUsageRatio(usage: ContextUsageView): number | null {
 
 export function contextUsageSummary(
   usage: ContextUsageView,
-  options: { includeConfidence?: boolean } = {},
+  options: { includeConfidence?: boolean; includeLabel?: boolean } = {},
+  t: Translator = translate,
 ): string {
   const ratio = contextUsageRatio(usage);
   const percent = ratio === null ? null : `${Math.round(ratio * 100)}%`;
@@ -24,8 +26,9 @@ export function contextUsageSummary(
       ? `${formatTokenCount(usage.used_tokens)} / ${formatTokenCount(usage.max_tokens)}`
       : usage.used_tokens !== null
         ? formatTokenCount(usage.used_tokens)
-        : "unknown";
+        : t("context.unknown");
   const parts = [percent, usageLabel];
   if (options.includeConfidence !== false) parts.push(usage.confidence);
-  return `Context ${parts.filter(Boolean).join(" · ")}`;
+  const summary = parts.filter(Boolean).join(" · ");
+  return options.includeLabel === false ? summary : t("context.summary", { usage: summary });
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Empty from '$lib/components/ui/empty/index.js'
   import { dashboardPath } from '$lib/dashboardRoutes'
@@ -12,13 +13,13 @@
   <Empty.Root>
     <Empty.Header>
       <p class="text-sm font-medium text-muted-foreground">{status}</p>
-      <Empty.Title class="text-2xl">{notFound ? 'Page not found' : 'Something went wrong'}</Empty.Title>
+      <Empty.Title class="text-2xl">{notFound ? $t('error.notFound') : $t('error.title')}</Empty.Title>
       <Empty.Description>
-        {notFound ? "This page doesn't exist or has been moved." : message || 'An unexpected error occurred.'}
+        {notFound ? $t('error.notFoundDescription') : message || $t('error.unexpected')}
       </Empty.Description>
     </Empty.Header>
     <Empty.Content>
-      <Button href={dashboardPath('/')}>Back to chat</Button>
+      <Button href={dashboardPath('/')}>{$t('nav.backToChat')}</Button>
     </Empty.Content>
   </Empty.Root>
 </main>

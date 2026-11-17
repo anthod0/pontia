@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { cn } from '$lib/utils.js'
 
   interface Props {
@@ -10,11 +11,11 @@
 
   const statusText = $derived(
     state === 'starting'
-      ? 'Session starting'
+      ? $t('chat.sessionStarting')
       : state === 'exited'
-        ? 'session exited · send a message to resume'
+        ? $t('chat.resumeHint')
         : state === 'interrupted'
-          ? 'session interrupted'
+          ? $t('chat.interrupted')
           : null,
   )
 </script>

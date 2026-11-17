@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { clientSessionLabel } from '../../clients'
   import AtIcon from 'phosphor-svelte/lib/AtIcon'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
@@ -21,36 +22,36 @@
   let { session, gitStatus, gitStatusErrors = {}, workspaces }: Props = $props()
 </script>
 
-<Badge variant="outline" class="h-7 max-w-full justify-start gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={`Workspace: ${sessionWorkspacePath(session, workspaces)}`} aria-label={`Workspace: ${sessionWorkspacePath(session, workspaces)}`}>
+<Badge variant="outline" class="h-7 max-w-full justify-start gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={$t('chat.workspaceValue', { value: sessionWorkspacePath(session, workspaces, $t) })} aria-label={$t('chat.workspaceValue', { value: sessionWorkspacePath(session, workspaces, $t) })}>
   <FolderIcon class="size-4" aria-hidden="true" />
-  <span class="min-w-0 truncate">{sessionWorkspaceTitle(session, workspaces)}</span>
+  <span class="min-w-0 truncate">{sessionWorkspaceTitle(session, workspaces, $t)}</span>
 </Badge>
 {#if gitStatus}
   <Badge
     variant={gitStatus.state === 'error' ? 'destructive' : 'outline'}
     class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground"
-    title={gitStatusTitle(session, gitStatus, gitStatusErrors)}
-    aria-label={gitStatusAriaLabel(gitStatus)}
+    title={gitStatusTitle(session, gitStatus, gitStatusErrors, $t)}
+    aria-label={gitStatusAriaLabel(gitStatus, $t)}
   >
-    <GitBranchIcon class="size-4" aria-label="Git branch" />
+    <GitBranchIcon class="size-4" aria-label={$t('git.branch')} />
     <GitStatusInline {gitStatus} />
   </Badge>
 {/if}
-{#if sessionContextUsageLabel(session)}
-  <Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={`Context usage: ${sessionContextUsageLabel(session)}`} aria-label={`Context usage: ${sessionContextUsageLabel(session)}`}>
-    <GaugeIcon class="size-4" aria-hidden="true" /> {sessionContextUsageLabel(session)}
+{#if sessionContextUsageLabel(session, $t)}
+  <Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={$t('context.usage', { usage: sessionContextUsageLabel(session, $t) })} aria-label={$t('context.usage', { usage: sessionContextUsageLabel(session, $t) })}>
+    <GaugeIcon class="size-4" aria-hidden="true" /> {sessionContextUsageLabel(session, $t)}
   </Badge>
 {/if}
-<Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={`Client: ${clientSessionLabel(session)}`} aria-label={`Client: ${clientSessionLabel(session)}`}>
+<Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={$t('chat.clientValue', { value: clientSessionLabel(session) })} aria-label={$t('chat.clientValue', { value: clientSessionLabel(session) })}>
   <TerminalWindowIcon class="size-4" aria-hidden="true" /> {clientSessionLabel(session)}
 </Badge>
 {#if sessionProfileTitle(session)}
-  <Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={`Profile: ${sessionProfileTitle(session)}`} aria-label={`Profile: ${sessionProfileTitle(session)}`}>
+  <Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={$t('chat.profileValue', { value: sessionProfileTitle(session) })} aria-label={$t('chat.profileValue', { value: sessionProfileTitle(session) })}>
     <RobotIcon class="size-4" aria-hidden="true" /> {sessionProfileTitle(session)}
   </Badge>
 {/if}
 {#if sessionHandleTitle(session)}
-  <Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={`Handle: ${sessionHandleTitle(session)}`} aria-label={`Handle: ${sessionHandleTitle(session)}`}>
+  <Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={$t('chat.handleValue', { value: sessionHandleTitle(session) })} aria-label={$t('chat.handleValue', { value: sessionHandleTitle(session) })}>
     <AtIcon class="size-4" aria-hidden="true" /> {sessionHandleTitle(session)}
   </Badge>
 {/if}

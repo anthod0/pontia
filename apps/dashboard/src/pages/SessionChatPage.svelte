@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../device/context';
   import { clientControlDetails, clientDeliveryPolicy, clientResumeWaitsForIdle } from '../clients'
   import { onDestroy, onMount, tick } from 'svelte'
@@ -191,16 +192,16 @@
       ? refreshWorkspaceGitStatusMutation.error.message
       : String(refreshWorkspaceGitStatusMutation.error) }
     : {}
-  $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, workspaces, selectedSessionGitStatus, workspaceGitStatusErrors) : []
-  $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems)
+  $: selectedSessionMetadataItems = selectedSession ? sessionMetadataItems(selectedSession, workspaces, selectedSessionGitStatus, workspaceGitStatusErrors, $t) : []
+  $: selectedSessionMetadataSummary = sessionMetadataSummary(selectedSessionMetadataItems, $t)
   $: transcriptMessages = $timelineState.sessionId === selectedSessionId
-    ? timelineItemsToChatMessages($timelineState.items, true)
+    ? timelineItemsToChatMessages($timelineState.items, true, $t)
     : []
   $: selectedTurns = $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.turns : []
   $: selectedCompaction = compactionStatus([
     ...($sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.events : []),
     ...compactionEvents,
-  ], requestedCompaction)
+  ], requestedCompaction, $t)
   $: timelineMessages = mergeLiveOutputMessages(
     transcriptMessages,
     selectedTurns,
@@ -344,7 +345,7 @@
 
   async function retryFailedInboxMessage(message: InboxMessageView): Promise<void> {
     if (!selectedSessionId || !['failed', 'unknown'].includes(message.state)) return
-    if (message.state === 'unknown' && !window.confirm('Delivery may already have executed. Send again as a new input, accepting possible duplicate execution?')) return
+    if (message.state === 'unknown' && !window.confirm($t('chat.duplicateConfirm'))) return
     inboxActionMessageId = message.message_id
     actionError = null
     try {
@@ -389,7 +390,7 @@
       if (session?.capabilities.fork_session) {
         const existing = $pendingHistoryForks.find((operation) => operation.sourceSessionId === sessionId && operation.turnId === projectedTurn.turn_id)
         if (existing) {
-          branchActionError = 'Recover the existing fork below before starting another edit.'
+          branchActionError = $t('chat.recoverBeforeEdit')
           return false
         }
         const operation = await device.historyForks.start(sessionId, projectedTurn.turn_id, input)
@@ -401,7 +402,7 @@
       }
       if (session && isExecutingSessionState(session.state)) {
         if (session.capabilities.interrupt !== true) {
-          throw new Error('This Session cannot interrupt the active Turn before editing history.')
+          throw new Error($t('chat.cannotInterrupt'))
         }
         await interruptSession(sessionId)
         await waitForBranchSubmissionReady(sessionId)
@@ -830,7 +831,7 @@
   }
 
   async function compactSelectedSession(): Promise<void> {
-    if (!selectedSession || actionBusy || compactionDisabledReason(selectedSession, selectedCompaction?.busy ?? false)) return
+    if (!selectedSession || actionBusy || compactionDisabledReason(selectedSession, selectedCompaction?.busy ?? false, $t)) return
     const sessionId = selectedSessionId
     actionBusy = true
     actionError = null
@@ -911,7 +912,7 @@
         if (branchSubmissionReadyFromStores(sessionId)) finish(resolve)
       }
       const timeout = setTimeout(() => {
-        finish(() => reject(new Error('Edit timed out waiting for the active Turn to be interrupted.')))
+        finish(() => reject(new Error($t('chat.interruptTimeout'))))
       }, timeoutMs)
 
       const stop = sessionDetail.subscribe(check)
@@ -942,7 +943,7 @@
         if (sessionStateFromDetail(sessionId) === 'idle') finish(resolve)
       }
       const timeout = setTimeout(() => {
-        finish(() => reject(new Error('Session resume timed out before becoming idle.')))
+        finish(() => reject(new Error($t('chat.resumeTimeout'))))
       }, timeoutMs)
 
       unsubscribeDetail = sessionDetail.subscribe(check)
@@ -997,20 +998,20 @@
       {#if controlDetails.profile?.error}
         <span class="text-destructive" role="alert">{controlDetails.profile.error}</span>
       {/if}
-      {#if !sessionSupportsTimeline(selectedSession)}<span>Native history is currently unavailable.</span>{/if}
+      {#if !sessionSupportsTimeline(selectedSession)}<span>{$t('chat.historyUnavailable')}</span>{/if}
     </div>
   {/if}
   {#if $sessionDetailError && selectedSession}
     <Alert.Root variant="destructive" role="alert" class="mx-auto w-full max-w-[760px]">
       <WarningCircleIcon class="size-4" />
-      <Alert.Title>Session refresh failed</Alert.Title>
-      <Alert.Description>{$sessionDetailError} Showing the last loaded snapshot.</Alert.Description>
+      <Alert.Title>{$t('chat.refreshFailed')}</Alert.Title>
+      <Alert.Description>{$sessionDetailError} {$t('chat.lastSnapshot')}</Alert.Description>
     </Alert.Root>
   {/if}
   {#if actionError}
     <Alert.Root variant="destructive" role="alert" class="mx-auto w-full max-w-[760px]">
       <WarningCircleIcon class="size-4" />
-      <Alert.Title>Session action failed</Alert.Title>
+      <Alert.Title>{$t('chat.actionFailed')}</Alert.Title>
       <Alert.Description>{actionError}</Alert.Description>
     </Alert.Root>
   {/if}
@@ -1021,18 +1022,18 @@
       {:else if !selectedSession && $sessionDetailErrorKind !== 'not_found'}
         <Empty.Root class="h-full">
           <Empty.Header>
-            <Empty.Title>{$sessionDetailErrorKind === 'authentication' ? 'Authentication required' : $sessionDetailErrorKind === 'network' ? 'Unable to connect' : 'Unable to load session'}</Empty.Title>
-            <Empty.Description>{$sessionDetailError ?? 'Loading session…'} The dashboard will reload the snapshot when the connection recovers.</Empty.Description>
+            <Empty.Title>{$sessionDetailErrorKind === 'authentication' ? $t('auth.required') : $sessionDetailErrorKind === 'network' ? $t('connection.failed') : $t('chat.loadFailed')}</Empty.Title>
+            <Empty.Description>{$sessionDetailError ?? $t('chat.loading')} {$t('chat.reloadOnReconnect')}</Empty.Description>
           </Empty.Header>
-          <Empty.Content><Button onclick={() => void loadSelectedSession(selectedSessionId)} disabled={$sessionDetailLoading}>Retry</Button></Empty.Content>
+          <Empty.Content><Button onclick={() => void loadSelectedSession(selectedSessionId)} disabled={$sessionDetailLoading}>{$t('common.retry')}</Button></Empty.Content>
         </Empty.Root>
       {:else if !selectedSession}
         <Empty.Root class="h-full">
           <Empty.Header>
-            <Empty.Title>Session not found</Empty.Title>
-            <Empty.Description>Start a new chat or select a recent session from the sidebar.</Empty.Description>
+            <Empty.Title>{$t('chat.notFound')}</Empty.Title>
+            <Empty.Description>{$t('chat.chooseSession')}</Empty.Description>
           </Empty.Header>
-          <Empty.Content><Button onclick={() => openNewChat()}>Start a new chat</Button></Empty.Content>
+          <Empty.Content><Button onclick={() => openNewChat()}>{$t('chat.startNew')}</Button></Empty.Content>
         </Empty.Root>
       {:else}
         <div
@@ -1049,36 +1050,36 @@
               {/if}
               <Empty.Root data-timeline-status={$timelineState.status} class="min-h-80">
                 <Empty.Header>
-                  <Empty.Title>{$timelineState.status === 'pending' ? 'Waiting for native history' : 'Conversation history unavailable'}</Empty.Title>
-                  <Empty.Description>{!sessionSupportsTimeline(selectedSession) ? selectedSession.timeline_unavailable_reason ?? 'Conversation history is unavailable for this session.' : $timelineState.error}</Empty.Description>
+                  <Empty.Title>{$timelineState.status === 'pending' ? $t('chat.waitingHistory') : $t('chat.conversationUnavailable')}</Empty.Title>
+                  <Empty.Description>{!sessionSupportsTimeline(selectedSession) ? selectedSession.timeline_unavailable_reason ?? $t('chat.noConversationHistory') : $timelineState.error}</Empty.Description>
                 </Empty.Header>
                 <Empty.Content>
-                  <Button variant="outline" onclick={() => loadSelectedSession(selectedSessionId)}>Retry history</Button>
+                  <Button variant="outline" onclick={() => loadSelectedSession(selectedSessionId)}>{$t('chat.retryHistory')}</Button>
                 </Empty.Content>
               </Empty.Root>
             {:else}
               {#if $timelineState.status === 'pending'}
-                <p role="status" class="py-2 text-sm text-muted-foreground">Waiting for native history…</p>
+                <p role="status" class="py-2 text-sm text-muted-foreground">{$t('chat.loadingHistory')}</p>
               {/if}
               {#if $timelineState.compactionHistoryError}
                 <Alert.Root class="my-3" role="status">
                   <WarningCircleIcon class="size-4" />
-                  <Alert.Title>Some compaction history is unavailable</Alert.Title>
+                  <Alert.Title>{$t('chat.compactionHistoryUnavailable')}</Alert.Title>
                   <Alert.Description>
                     {$timelineState.compactionHistoryError}
-                    <Button variant="outline" size="sm" disabled={$timelineState.refreshing} onclick={() => void refreshSessionTimeline(selectedSessionId)}>Retry</Button>
+                    <Button variant="outline" size="sm" disabled={$timelineState.refreshing} onclick={() => void refreshSessionTimeline(selectedSessionId)}>{$t('common.retry')}</Button>
                   </Alert.Description>
                 </Alert.Root>
               {/if}
               {#each $timelineState.groups.filter((group) => group.history_issue) as group (group.turn_id)}
                 <Alert.Root class="my-3" role="status">
                   <WarningCircleIcon class="size-4" />
-                  <Alert.Title>Some history could not be associated</Alert.Title>
+                  <Alert.Title>{$t('chat.historyUnassociated')}</Alert.Title>
                   <Alert.Description>
                     {#if group.history_issue === 'topology_unknown'}
-                      The earlier branch could not be confirmed
+                      {$t('chat.branchUnconfirmed')}
                     {:else}
-                      The native history range for this turn could not be confirmed. Other verified turns remain available.
+                      {$t('chat.unconfirmedRange')}
                     {/if}
                   </Alert.Description>
                 </Alert.Root>
@@ -1111,14 +1112,14 @@
         {#each $pendingHistoryForks.filter((operation) => operation.sourceSessionId === selectedSessionId || operation.sessionId === selectedSessionId) as operation (operation.operationId)}
           <Alert.Root variant="destructive" class="mx-4 my-2">
             <WarningCircleIcon class="size-4" />
-            <Alert.Title>{operation.stage === 'fork_failed' ? 'Fork failed' : operation.stage === 'session_pending' ? 'Fork created; Session attachment pending' : operation.stage === 'input_unconfirmed' ? 'New Session created; input submission unconfirmed' : 'Fork result unconfirmed'}</Alert.Title>
+            <Alert.Title>{operation.stage === 'fork_failed' ? $t('chat.forkFailed') : operation.stage === 'session_pending' ? $t('chat.forkPending') : operation.stage === 'input_unconfirmed' ? $t('chat.submissionUnconfirmed') : $t('chat.forkUnconfirmed')}</Alert.Title>
             <Alert.Description>
-              {operation.error ?? 'Check this operation to recover its confirmed progress.'}
+              {operation.error ?? $t('chat.recoverProgress')}
               <div class="mt-2 flex gap-2">
                 {#if operation.stage === 'fork_failed'}
-                  <Button variant="outline" size="sm" onclick={() => device.historyForks.forget(operation.operationId)}>Dismiss</Button>
+                  <Button variant="outline" size="sm" onclick={() => device.historyForks.forget(operation.operationId)}>{$t('common.dismiss')}</Button>
                 {:else}
-                  <Button variant="outline" size="sm" disabled={branchActionSubmitting} onclick={() => recoverHistoryFork(operation)}>Check / recover edit</Button>
+                  <Button variant="outline" size="sm" disabled={branchActionSubmitting} onclick={() => recoverHistoryFork(operation)}>{$t('chat.recoverEdit')}</Button>
                 {/if}
               </div>
             </Alert.Description>
@@ -1128,7 +1129,7 @@
         {#if branchActionError}
           <Alert.Root variant="destructive" role="alert" class="mx-4 mb-4">
             <WarningCircleIcon class="size-4" />
-            <Alert.Title>Branch action failed</Alert.Title>
+            <Alert.Title>{$t('chat.branchFailed')}</Alert.Title>
             <Alert.Description>{branchActionError}</Alert.Description>
           </Alert.Root>
         {/if}
@@ -1146,8 +1147,8 @@
                 variant="outline"
                 size="icon"
                 class="pointer-events-auto bg-background shadow-none"
-                aria-label="Scroll to bottom"
-                title="Scroll to bottom"
+                aria-label={$t('chat.scrollBottom')}
+                title={$t('chat.scrollBottom')}
                 onclick={scrollChatToBottom}
               >
                 <CaretDownIcon class="size-4" />

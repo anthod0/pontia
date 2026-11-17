@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, currentLocale } from '$lib/i18n';
   import { useDeviceRuntime } from '../device/context';
   import { defaultClientType } from '../clients'
   import { clientDisplayName } from '$lib/clientName'
@@ -74,18 +75,18 @@
   $: if (versionsQuery.data) selectedVersion = versions.some((profile) => profile.version === selectedVersion) ? selectedVersion : (versions[0]?.version ?? '')
   $: selectedVersionProfile = sortedVersions.find((profile) => profile.version === selectedVersion) ?? sortedVersions[0] ?? selectedProfile
   $: profileRows = selectedVersionProfile ? [
-    { label: 'Artifact contract', value: JSON.stringify(selectedVersionProfile.artifact_contract ?? {}, null, 2) },
-    { label: 'Execution policy', value: JSON.stringify(selectedVersionProfile.default_execution_policy ?? {}, null, 2) },
-    { label: 'Review policy', value: JSON.stringify(selectedVersionProfile.default_review_policy ?? {}, null, 2) },
-    { label: 'Metadata', value: JSON.stringify(selectedVersionProfile.metadata ?? {}, null, 2) },
-    { label: 'Expected output schema', value: selectedVersionProfile.expected_output_schema ?? 'Not configured' },
+    { label: $t('profiles.artifactContract'), value: JSON.stringify(selectedVersionProfile.artifact_contract ?? {}, null, 2) },
+    { label: $t('profiles.executionPolicy'), value: JSON.stringify(selectedVersionProfile.default_execution_policy ?? {}, null, 2) },
+    { label: $t('profiles.reviewPolicy'), value: JSON.stringify(selectedVersionProfile.default_review_policy ?? {}, null, 2) },
+    { label: $t('common.metadata'), value: JSON.stringify(selectedVersionProfile.metadata ?? {}, null, 2) },
+    { label: $t('profiles.outputSchema'), value: selectedVersionProfile.expected_output_schema ?? $t('common.notConfigured') },
   ] : []
   $: builtinSelected = Boolean(selectedVersionProfile?.metadata?.builtin)
   $: saving = createProfileMutation.isPending || createVersionMutation.isPending || updateVersionMutation.isPending || deleteProfileMutation.isPending || deleteVersionMutation.isPending
-  $: archiveDialogTitle = pendingArchive === 'profile' ? 'Archive profile?' : 'Archive profile version?'
+  $: archiveDialogTitle = pendingArchive === 'profile' ? $t('profiles.archiveConfirm') : $t('profiles.archiveVersionConfirm')
   $: archiveDialogDescription = pendingArchive === 'profile'
-    ? selectedProfile ? `Archive profile ${selectedProfile.profile_id} and all active versions?` : ''
-    : selectedVersionProfile ? `Archive version ${selectedVersionProfile.profile_id}@${selectedVersionProfile.version}?` : ''
+    ? selectedProfile ? $t('profiles.archiveNamed', { id: selectedProfile.profile_id }) : ''
+    : selectedVersionProfile ? $t('profiles.archiveNamedVersion', { id: selectedVersionProfile.profile_id, version: selectedVersionProfile.version }) : ''
   $: if (!archiveDialogOpen && pendingArchive && !saving) pendingArchive = null
 
   async function refreshAll(): Promise<void> {
@@ -152,7 +153,7 @@
       selectedProfileId = saved.profile_id
       selectedVersion = saved.version
       formMode = null
-      mutationSuccess = `Saved ${saved.profile_id}@${saved.version}.`
+      mutationSuccess = $t('profiles.saved', { id: saved.profile_id, version: saved.version })
     } catch (error) {
       mutationError = error instanceof Error ? error.message : String(error)
     }
@@ -176,7 +177,7 @@
     mutationSuccess = null
     try {
       const result = await deleteProfileMutation.mutateAsync(selectedProfile.profile_id)
-      mutationSuccess = `Archived ${result.archived_versions} version(s) for ${result.profile_id}.`
+      mutationSuccess = $t('profiles.archivedCount', { id: result.profile_id, count: result.archived_versions })
       selectedProfileId = ''
       selectedVersion = ''
     } catch (error) {
@@ -190,7 +191,7 @@
     mutationSuccess = null
     try {
       const archived = await deleteVersionMutation.mutateAsync({ profileId: selectedVersionProfile.profile_id, version: selectedVersionProfile.version })
-      mutationSuccess = `Archived ${archived.profile_id}@${archived.version}.`
+      mutationSuccess = $t('profiles.archivedVersion', { id: archived.profile_id, version: archived.version })
     } catch (error) {
       mutationError = error instanceof Error ? error.message : String(error)
     }
@@ -212,24 +213,24 @@
   }
 
   function templateSummary(value: string | null): string {
-    if (!value?.trim()) return 'Not configured'
+    if (!value?.trim()) return $t('common.notConfigured')
     return value.length > 180 ? `${value.slice(0, 180)}…` : value
   }
 </script>
 
 <section class="space-y-6">
   <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-    <h2 class="text-3xl font-semibold tracking-tight">Agent Profiles</h2>
+    <h2 class="text-3xl font-semibold tracking-tight">{$t('profiles.title')}</h2>
     <div class="flex flex-wrap gap-2">
-      <Button onclick={startCreate}><PlusIcon class="size-4" /> Create profile</Button>
-      <Button variant="outline" onclick={() => void refreshAll()}><ArrowsClockwiseIcon class="size-4" /> Refresh</Button>
+      <Button onclick={startCreate}><PlusIcon class="size-4" /> {$t('profiles.create')}</Button>
+      <Button variant="outline" onclick={() => void refreshAll()}><ArrowsClockwiseIcon class="size-4" /> {$t('common.refresh')}</Button>
     </div>
   </div>
 
   {#if profilesQuery.error}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />
-      <Alert.Title>Unable to load profiles</Alert.Title>
+      <Alert.Title>{$t('profiles.loadFailed')}</Alert.Title>
       <Alert.Description>{queryErrorMessage(profilesQuery.error)}</Alert.Description>
     </Alert.Root>
   {/if}
@@ -237,7 +238,7 @@
   {#if versionsQuery.error}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />
-      <Alert.Title>Unable to load versions</Alert.Title>
+      <Alert.Title>{$t('profiles.versionsFailed')}</Alert.Title>
       <Alert.Description>{queryErrorMessage(versionsQuery.error)}</Alert.Description>
     </Alert.Root>
   {/if}
@@ -245,14 +246,14 @@
   {#if mutationError}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />
-      <Alert.Title>Profile operation failed</Alert.Title>
+      <Alert.Title>{$t('profiles.operationFailed')}</Alert.Title>
       <Alert.Description>{mutationError}</Alert.Description>
     </Alert.Root>
   {/if}
 
   {#if mutationSuccess}
     <Alert.Root>
-      <Alert.Title>Success</Alert.Title>
+      <Alert.Title>{$t('common.success')}</Alert.Title>
       <Alert.Description>{mutationSuccess}</Alert.Description>
     </Alert.Root>
   {/if}
@@ -260,23 +261,23 @@
   {#if formMode}
     <Card.Root>
       <Card.Header>
-        <Card.Title>{formMode === 'create' ? 'Create profile' : formMode === 'new-version' ? 'Create profile version' : 'Edit profile version'}</Card.Title>
-        <Card.Description>Required fields are profile ID, version, and name. JSON fields must be objects.</Card.Description>
+        <Card.Title>{formMode === 'create' ? $t('profiles.create') : formMode === 'new-version' ? $t('profiles.createVersion') : $t('profiles.editVersion')}</Card.Title>
+        <Card.Description>{$t('profiles.requiredFields')}</Card.Description>
       </Card.Header>
       <Card.Content class="space-y-5">
         <div class="grid gap-4 md:grid-cols-3">
           <div class="space-y-2">
-            <Label for="profile-id">Profile ID</Label>
+            <Label for="profile-id">{$t('profiles.id')}</Label>
             <Input id="profile-id" bind:value={draft.profile_id} disabled={formMode !== 'create'} />
             {#if draftErrors.profile_id}<p class="text-xs text-destructive">{draftErrors.profile_id}</p>{/if}
           </div>
           <div class="space-y-2">
-            <Label for="profile-version">Version</Label>
+            <Label for="profile-version">{$t('common.version')}</Label>
             <Input id="profile-version" bind:value={draft.version} disabled={formMode === 'edit'} />
             {#if draftErrors.version}<p class="text-xs text-destructive">{draftErrors.version}</p>{/if}
           </div>
           <div class="space-y-2">
-            <Label for="profile-name">Name</Label>
+            <Label for="profile-name">{$t('common.name')}</Label>
             <Input id="profile-name" bind:value={draft.name} />
             {#if draftErrors.name}<p class="text-xs text-destructive">{draftErrors.name}</p>{/if}
           </div>
@@ -284,92 +285,92 @@
 
         <div class="grid gap-4 md:grid-cols-2">
           <div class="space-y-2">
-            <Label for="profile-description">Description</Label>
+            <Label for="profile-description">{$t('common.description')}</Label>
             <Textarea id="profile-description" bind:value={draft.description} rows={3} />
           </div>
           <div class="space-y-2">
-            <Label for="profile-clients">Supported client types</Label>
+            <Label for="profile-clients">{$t('profiles.supportedClients')}</Label>
             <Input id="profile-clients" bind:value={draft.supported_client_types_text} placeholder={defaultClientType} />
             {#if draftErrors.supported_client_types_text}<p class="text-xs text-destructive">{draftErrors.supported_client_types_text}</p>{/if}
           </div>
           <div class="space-y-2">
-            <Label for="profile-agent-kind">Agent kind</Label>
+            <Label for="profile-agent-kind">{$t('profiles.agentKind')}</Label>
             <select id="profile-agent-kind" bind:value={draft.agent_kind} class="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-none">
               <option value="executor">executor</option>
             </select>
           </div>
           <div class="space-y-2">
-            <Label for="profile-role">Default session role</Label>
+            <Label for="profile-role">{$t('profiles.sessionRole')}</Label>
             <Input id="profile-role" bind:value={draft.default_session_role} />
           </div>
           <div class="space-y-2">
-            <Label for="profile-handle">Handle prefix</Label>
+            <Label for="profile-handle">{$t('profiles.handlePrefix')}</Label>
             <Input id="profile-handle" bind:value={draft.handle_prefix} />
           </div>
           <div class="space-y-2 md:col-span-2">
-            <Label for="profile-session-description">Default session description</Label>
+            <Label for="profile-session-description">{$t('profiles.sessionDescription')}</Label>
             <Input id="profile-session-description" bind:value={draft.default_session_description} />
           </div>
         </div>
 
         <div class="grid gap-4 xl:grid-cols-2">
           <div class="space-y-2">
-            <Label for="profile-system-prompt">System prompt template</Label>
+            <Label for="profile-system-prompt">{$t('profiles.systemTemplate')}</Label>
             <Textarea id="profile-system-prompt" bind:value={draft.system_prompt_template} rows={8} class="font-mono text-xs" />
           </div>
           <div class="space-y-2">
-            <Label for="profile-turn-prompt">Turn prompt template</Label>
+            <Label for="profile-turn-prompt">{$t('profiles.turnTemplate')}</Label>
             <Textarea id="profile-turn-prompt" bind:value={draft.turn_prompt_template} rows={8} class="font-mono text-xs" />
           </div>
           <div class="space-y-2 xl:col-span-2">
-            <Label for="profile-output-schema">Expected output schema</Label>
+            <Label for="profile-output-schema">{$t('profiles.outputSchema')}</Label>
             <Textarea id="profile-output-schema" bind:value={draft.expected_output_schema} rows={4} class="font-mono text-xs" />
           </div>
         </div>
 
         <div class="grid gap-4 xl:grid-cols-2">
           <div class="space-y-2">
-            <Label for="artifact_contract_text">Artifact contract</Label>
+            <Label for="artifact_contract_text">{$t('profiles.artifactContract')}</Label>
             <Textarea id="artifact_contract_text" bind:value={draft.artifact_contract_text} rows={7} class="font-mono text-xs" />
             {#if draftErrors.artifact_contract_text}<p class="text-xs text-destructive">{draftErrors.artifact_contract_text}</p>{/if}
           </div>
           <div class="space-y-2">
-            <Label for="default_execution_policy_text">Default execution policy</Label>
+            <Label for="default_execution_policy_text">{$t('profiles.defaultExecutionPolicy')}</Label>
             <Textarea id="default_execution_policy_text" bind:value={draft.default_execution_policy_text} rows={7} class="font-mono text-xs" />
             {#if draftErrors.default_execution_policy_text}<p class="text-xs text-destructive">{draftErrors.default_execution_policy_text}</p>{/if}
           </div>
           <div class="space-y-2">
-            <Label for="default_review_policy_text">Default review policy</Label>
+            <Label for="default_review_policy_text">{$t('profiles.defaultReviewPolicy')}</Label>
             <Textarea id="default_review_policy_text" bind:value={draft.default_review_policy_text} rows={7} class="font-mono text-xs" />
             {#if draftErrors.default_review_policy_text}<p class="text-xs text-destructive">{draftErrors.default_review_policy_text}</p>{/if}
           </div>
           <div class="space-y-2">
-            <Label for="metadata_text">Metadata</Label>
+            <Label for="metadata_text">{$t('common.metadata')}</Label>
             <Textarea id="metadata_text" bind:value={draft.metadata_text} rows={7} class="font-mono text-xs" />
             {#if draftErrors.metadata_text}<p class="text-xs text-destructive">{draftErrors.metadata_text}</p>{/if}
           </div>
         </div>
       </Card.Content>
       <Card.Footer class="flex flex-wrap justify-end gap-2">
-        <Button variant="outline" onclick={cancelForm} disabled={saving}>Cancel</Button>
-        <Button onclick={() => void submitForm()} disabled={saving}>{saving ? 'Saving…' : 'Save profile'}</Button>
+        <Button variant="outline" onclick={cancelForm} disabled={saving}>{$t('common.cancel')}</Button>
+        <Button onclick={() => void submitForm()} disabled={saving}>{saving ? $t('common.saving') : $t('profiles.save')}</Button>
       </Card.Footer>
     </Card.Root>
   {/if}
 
   <div class="flex flex-wrap gap-4 text-sm text-muted-foreground">
-    <label class="flex items-center gap-2"><input type="checkbox" bind:checked={includeArchivedProfiles} /> Show archived profiles</label>
-    <label class="flex items-center gap-2"><input type="checkbox" bind:checked={includeArchivedVersions} /> Show archived versions</label>
+    <label class="flex items-center gap-2"><input type="checkbox" bind:checked={includeArchivedProfiles} /> {$t('profiles.showArchived')}</label>
+    <label class="flex items-center gap-2"><input type="checkbox" bind:checked={includeArchivedVersions} /> {$t('profiles.showArchivedVersions')}</label>
   </div>
 
   {#if profilesQuery.isPending}
     <div class="grid gap-4 lg:grid-cols-[22rem_1fr]"><Skeleton class="h-96 w-full" /><Skeleton class="h-96 w-full" /></div>
   {:else if !sortedProfiles.length}
-    <Empty.Root><Empty.Header><Empty.Title>No agent profiles</Empty.Title><Empty.Description>No execution profiles are available from /api/v1/agent-profiles.</Empty.Description></Empty.Header></Empty.Root>
+    <Empty.Root><Empty.Header><Empty.Title>{$t('profiles.empty')}</Empty.Title><Empty.Description>{$t('profiles.noneAvailable')}</Empty.Description></Empty.Header></Empty.Root>
   {:else}
     <div class="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
       <Card.Root>
-        <Card.Header><Card.Title class="flex items-center gap-2"><RobotIcon class="size-5" /> Profiles</Card.Title><Card.Description>{sortedProfiles.length} configured profiles.</Card.Description></Card.Header>
+        <Card.Header><Card.Title class="flex items-center gap-2"><RobotIcon class="size-5" /> {$t('profiles.list')}</Card.Title><Card.Description>{sortedProfiles.length} {$t('profiles.configuredCountSuffix')}</Card.Description></Card.Header>
         <Card.Content class="space-y-2">
           {#each sortedProfiles as profile}
             <button
@@ -381,7 +382,7 @@
                   <div class="font-medium">{profile.name}</div>
                   <div class="truncate text-xs text-muted-foreground">{profile.profile_id} · v{profile.version}</div>
                 </div>
-                {#if !profile.active}<Badge variant="outline">Archived</Badge>{/if}
+                {#if !profile.active}<Badge variant="outline">{$t('common.archived')}</Badge>{/if}
               </div>
               <div class="mt-2 flex flex-wrap gap-1">
                 <Badge>{profile.agent_kind}</Badge>
@@ -401,26 +402,26 @@
               <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
                   <Card.Title>{selectedVersionProfile.name}</Card.Title>
-                  <Card.Description>{selectedVersionProfile.description ?? 'No description provided.'}</Card.Description>
+                  <Card.Description>{selectedVersionProfile.description ?? $t('common.noDescription')}</Card.Description>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                  <Button variant="outline" onclick={() => startNewVersion(selectedVersionProfile)} disabled={saving || builtinSelected}><CopySimpleIcon class="size-4" /> New version</Button>
-                  <Button variant="outline" onclick={() => startEdit(selectedVersionProfile)} disabled={saving || builtinSelected || !selectedVersionProfile.active}><PencilSimpleIcon class="size-4" /> Edit</Button>
-                  <Button variant="outline" onclick={requestArchiveSelectedVersion} disabled={saving || builtinSelected || !selectedVersionProfile.active}><TrashIcon class="size-4" /> Delete version</Button>
-                  <Button variant="destructive" onclick={requestArchiveSelectedProfile} disabled={saving || builtinSelected}><TrashIcon class="size-4" /> Delete profile</Button>
+                  <Button variant="outline" onclick={() => startNewVersion(selectedVersionProfile)} disabled={saving || builtinSelected}><CopySimpleIcon class="size-4" /> {$t('profiles.newVersion')}</Button>
+                  <Button variant="outline" onclick={() => startEdit(selectedVersionProfile)} disabled={saving || builtinSelected || !selectedVersionProfile.active}><PencilSimpleIcon class="size-4" /> {$t('common.edit')}</Button>
+                  <Button variant="outline" onclick={requestArchiveSelectedVersion} disabled={saving || builtinSelected || !selectedVersionProfile.active}><TrashIcon class="size-4" /> {$t('profiles.deleteVersion')}</Button>
+                  <Button variant="destructive" onclick={requestArchiveSelectedProfile} disabled={saving || builtinSelected}><TrashIcon class="size-4" /> {$t('profiles.delete')}</Button>
                 </div>
               </div>
             </Card.Header>
             <Card.Content class="space-y-4">
               <div class="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
                 {#each [
-                  ['Profile ID', selectedVersionProfile.profile_id],
-                  ['Version', selectedVersionProfile.version],
-                  ['Agent kind', selectedVersionProfile.agent_kind],
-                  ['Session role', selectedVersionProfile.default_session_role ?? '—'],
-                  ['Handle prefix', selectedVersionProfile.handle_prefix ?? '—'],
-                  ['State', selectedVersionProfile.active ? 'Active' : 'Archived'],
-                  ['Updated', formatDateTime(selectedVersionProfile.updated_at)],
+                  [$t('profiles.id'), selectedVersionProfile.profile_id],
+                  [$t('common.version'), selectedVersionProfile.version],
+                  [$t('profiles.agentKind'), selectedVersionProfile.agent_kind],
+                  [$t('profiles.role'), selectedVersionProfile.default_session_role ?? '—'],
+                  [$t('profiles.handlePrefix'), selectedVersionProfile.handle_prefix ?? '—'],
+                  [$t('common.state'), selectedVersionProfile.active ? $t('common.active') : $t('common.archived')],
+                  [$t('common.updated'), formatDateTime(selectedVersionProfile.updated_at, $currentLocale)],
                 ] as [label, value]}
                   <div class="rounded-lg border p-3">
                     <div class="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
@@ -432,50 +433,50 @@
           </Card.Root>
 
           <Card.Root>
-            <Card.Header><Card.Title>Versions</Card.Title><Card.Description>{versionsQuery.isFetching ? 'Loading versions…' : `${sortedVersions.length} version(s) for this profile.`}</Card.Description></Card.Header>
+            <Card.Header><Card.Title>{$t('common.versions')}</Card.Title><Card.Description>{versionsQuery.isFetching ? $t('profiles.loadingVersions') : $t('profiles.versionCount', { count: sortedVersions.length })}</Card.Description></Card.Header>
             <Card.Content class="space-y-2">
               {#each sortedVersions as version}
                 <button class="w-full rounded-lg border p-3 text-left transition hover:bg-muted {selectedVersionProfile?.version === version.version ? 'border-primary bg-muted' : ''}" onclick={() => selectedVersion = version.version}>
                   <div class="flex items-center justify-between gap-2">
                     <span class="font-medium">v{version.version}</span>
-                    <span class="text-xs text-muted-foreground">{formatDateTime(version.updated_at)}</span>
+                    <span class="text-xs text-muted-foreground">{formatDateTime(version.updated_at, $currentLocale)}</span>
                   </div>
                   <div class="mt-2 flex flex-wrap gap-1">
-                    {#if version.active}<Badge>Active</Badge>{:else}<Badge variant="outline">Archived</Badge>{/if}
-                    {#if version.metadata?.builtin}<Badge variant="secondary">Builtin</Badge>{/if}
+                    {#if version.active}<Badge>{$t('common.active')}</Badge>{:else}<Badge variant="outline">{$t('common.archived')}</Badge>{/if}
+                    {#if version.metadata?.builtin}<Badge variant="secondary">{$t('profiles.builtin')}</Badge>{/if}
                   </div>
                 </button>
               {:else}
-                <p class="text-sm text-muted-foreground">No versions returned for this profile.</p>
+                <p class="text-sm text-muted-foreground">{$t('profiles.noVersions')}</p>
               {/each}
             </Card.Content>
           </Card.Root>
 
           <Card.Root>
-            <Card.Header><Card.Title>Client support</Card.Title><Card.Description>Client-specific behavior stays behind adapter/runtime capability boundaries.</Card.Description></Card.Header>
+            <Card.Header><Card.Title>{$t('profiles.clientSupport')}</Card.Title><Card.Description>{$t('profiles.clientSupportDescription')}</Card.Description></Card.Header>
             <Card.Content class="flex flex-wrap gap-2">
               {#each selectedVersionProfile.supported_client_types as client}
                 <Badge>{clientDisplayName(client)}</Badge>
               {:else}
-                <span class="text-sm text-muted-foreground">No supported client types listed.</span>
+                <span class="text-sm text-muted-foreground">{$t('profiles.noClients')}</span>
               {/each}
             </Card.Content>
           </Card.Root>
 
           <Card.Root>
-            <Card.Header><Card.Title>Prompt templates</Card.Title><Card.Description>Selected profile version detail.</Card.Description></Card.Header>
+            <Card.Header><Card.Title>{$t('profiles.promptTemplates')}</Card.Title><Card.Description>{$t('profiles.versionDetail')}</Card.Description></Card.Header>
             <Card.Content class="grid gap-4 xl:grid-cols-2">
-              <div class="space-y-2"><div class="text-sm font-medium">System prompt</div><pre class="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.system_prompt_template)}</pre></div>
-              <div class="space-y-2"><div class="text-sm font-medium">Turn prompt</div><pre class="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.turn_prompt_template)}</pre></div>
+              <div class="space-y-2"><div class="text-sm font-medium">{$t('profiles.systemPrompt')}</div><pre class="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.system_prompt_template)}</pre></div>
+              <div class="space-y-2"><div class="text-sm font-medium">{$t('profiles.turnPrompt')}</div><pre class="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{templateSummary(selectedVersionProfile.turn_prompt_template)}</pre></div>
             </Card.Content>
           </Card.Root>
 
           <Card.Root>
-            <Card.Header><Card.Title>Policies and metadata</Card.Title><Card.Description>External API projection values.</Card.Description></Card.Header>
+            <Card.Header><Card.Title>{$t('profiles.policiesMetadata')}</Card.Title><Card.Description>{$t('profiles.projectionValues')}</Card.Description></Card.Header>
             <Card.Content>
               <div class="overflow-x-auto">
                 <Table.Root>
-                  <Table.Header><Table.Row><Table.Head>Field</Table.Head><Table.Head>Value</Table.Head></Table.Row></Table.Header>
+                  <Table.Header><Table.Row><Table.Head>{$t('common.field')}</Table.Head><Table.Head>{$t('common.value')}</Table.Head></Table.Row></Table.Header>
                   <Table.Body>
                     {#each profileRows as row}
                       <Table.Row><Table.Cell class="font-medium">{row.label}</Table.Cell><Table.Cell><pre class="max-h-44 overflow-auto whitespace-pre-wrap text-xs">{row.value}</pre></Table.Cell></Table.Row>
@@ -499,9 +500,9 @@
         <AlertDialog.Description>{archiveDialogDescription}</AlertDialog.Description>
       </AlertDialog.Header>
       <AlertDialog.Footer>
-        <AlertDialog.Cancel disabled={saving}>Cancel</AlertDialog.Cancel>
+        <AlertDialog.Cancel disabled={saving}>{$t('common.cancel')}</AlertDialog.Cancel>
         <AlertDialog.Action variant="destructive" onclick={() => void confirmPendingArchive()} disabled={saving}>
-          {saving ? 'Archiving…' : 'Archive'}
+          {saving ? $t('common.archiving') : $t('common.archive')}
         </AlertDialog.Action>
       </AlertDialog.Footer>
     </AlertDialog.Content>

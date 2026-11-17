@@ -1,3 +1,4 @@
+import { translate } from "$lib/i18n";
 const CHUNK_SIZE = 1 << 20;
 import { writable } from "svelte/store";
 
@@ -88,11 +89,11 @@ export function createUploadDrafts(device: DeviceRuntime) {
         if (file) {
           item.status = "hashing";
           emit();
-          if (file.size > 1 << 30) throw new Error("Files must be 1 GiB or smaller");
+          if (file.size > 1 << 30) throw new Error(translate("files.uploadLimit"));
           const digest = await fileDigest(file, signal);
           active(item, signal);
           if (item.record && (item.record.size !== file.size || item.record.sha256 !== digest)) {
-            throw new Error("Select the original file: size and SHA-256 must match");
+            throw new Error(translate("files.originalRequired"));
           }
           item.file = file;
           if (!item.record) {
@@ -109,9 +110,8 @@ export function createUploadDrafts(device: DeviceRuntime) {
           }
         }
         active(item, signal);
-        if (!item.record) throw new Error("Select the file again");
-        if (item.recreate)
-          throw new Error("Checksum mismatch. Remove this attachment and upload the file again");
+        if (!item.record) throw new Error(translate("files.selectAgain"));
+        if (item.recreate) throw new Error(translate("files.checksumMismatch"));
         item.status = "uploading";
         emit();
         const record = item.record;

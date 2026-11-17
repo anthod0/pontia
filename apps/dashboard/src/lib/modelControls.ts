@@ -1,9 +1,12 @@
+import { translate as defaultTranslate, type Translator } from "$lib/i18n";
 import type { SessionView } from "../api/types";
 
-export function modelPickerDisabledReason(session: SessionView): string | undefined {
-  if (session.capabilities.list_models !== true)
-    return "This client does not support model listing.";
+export function modelPickerDisabledReason(
+  session: SessionView,
+  translate: Translator = defaultTranslate,
+): string | undefined {
+  if (session.capabilities.list_models !== true) return translate("model.listUnavailable");
   if (!["idle", "busy", "waiting_for_interaction"].includes(session.state))
-    return "The session must be running to choose a model.";
+    return translate("model.sessionNotRunning");
   return session.model_control_unavailable_reason ?? undefined;
 }

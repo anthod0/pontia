@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import FileIcon from 'phosphor-svelte/lib/FileIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import * as Tooltip from '$lib/components/ui/tooltip/index.js'
@@ -20,7 +21,7 @@
         {...props}
         variant="secondary"
         class="h-auto max-w-full cursor-default rounded-sm px-1.5 py-0.5 align-baseline text-sm font-normal"
-        aria-label={`${kind === 'directory' ? 'Directory' : 'File'} ${path}`}
+        aria-label={`${kind === 'directory' ? $t('files.directory') : $t('files.file')} ${path}`}
       >
         {#if kind === 'directory'}
           <FolderIcon class="size-3 shrink-0" aria-hidden="true" />

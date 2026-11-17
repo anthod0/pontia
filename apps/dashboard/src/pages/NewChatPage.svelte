@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../device/context';
   import { onDestroy, onMount, type Snippet } from 'svelte'
   import { defaultClientType } from '../clients'
@@ -71,11 +72,11 @@
   $: errorMessage = actionError ?? passiveErrorMessage
   $: {
     if (errorMessage && errorMessage !== lastToastedError) {
-      toast.error(actionError ? 'Could not start session' : $creationOptionsQuery.isError ? 'Could not load agents' : 'Could not load workspaces', {
+      toast.error(actionError ? $t('chat.startFailed') : $creationOptionsQuery.isError ? $t('clients.loadFailed') : $t('workspaces.loadFailed'), {
         description: errorMessage,
         ...(!actionError ? {
           action: {
-            label: 'Retry',
+            label: $t('common.retry'),
             onClick: () => {
               lastToastedError = null
               if ($creationOptionsQuery.isError) void $creationOptionsQuery.refetch()
@@ -190,7 +191,7 @@
 {#if workspaceOnboardingActive && !workspaceSetupLoading}
   <WorkspaceOnboarding canContinue={workspaces.length > 0} onContinue={completeWorkspaceOnboarding} />
 {:else}
-  <NewChatLayout status={workspaceSetupLoading ? { mood: 'loading', title: 'Loading workspaces…', description: 'This usually takes a few seconds.' } : undefined}>
+  <NewChatLayout status={workspaceSetupLoading ? { mood: 'loading', title: $t('workspaces.loading'), description: $t('common.fewSeconds') } : undefined}>
     {#if workspaceSetupLoading}
       <NewChatComposerPlaceholder {deviceSelector} />
     {:else}

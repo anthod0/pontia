@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { tick, type ComponentProps } from 'svelte'
   import FileMentionEditor from '$lib/components/file-picker/FileMentionEditor.svelte'
   import * as Popover from '$lib/components/ui/popover/index.js'
@@ -103,7 +104,7 @@
       onCloseAutoFocus={(event) => event.preventDefault()}
       onInteractOutside={(event) => { if (anchor?.contains(event.target as Node)) event.preventDefault() }}
     >
-      <div id={listId} role="listbox" aria-label="Chat commands">
+      <div id={listId} role="listbox" aria-label={$t('chat.commands')}>
         {#each matches as command, index (command.name)}
           <Button
             id={`${listId}-${index}`}

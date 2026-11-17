@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte'
   import { base } from '$app/paths'
   import GearIcon from 'phosphor-svelte/lib/GearIcon'
@@ -51,9 +52,9 @@
         <Sidebar.GroupContent>
           <Sidebar.Menu>
             <Sidebar.MenuItem>
-              <Sidebar.MenuButton class="h-9 text-[13px] text-sidebar-foreground/70" tooltipContent="Back to chat" onclick={onNewChat}>
+              <Sidebar.MenuButton class="h-9 text-[13px] text-sidebar-foreground/70" tooltipContent={$t('nav.backToChat')} onclick={onNewChat}>
                 <ArrowLeftIcon />
-                <span>Back to chat</span>
+                <span>{$t('nav.backToChat')}</span>
               </Sidebar.MenuButton>
             </Sidebar.MenuItem>
           </Sidebar.Menu>
@@ -61,17 +62,17 @@
       </Sidebar.Group>
       {@render deviceSwitcher?.()}
       <Sidebar.Group>
-        <Sidebar.GroupLabel class="h-8 px-2">Settings</Sidebar.GroupLabel>
+        <Sidebar.GroupLabel class="h-8 px-2">{$t('settings.title')}</Sidebar.GroupLabel>
         <Sidebar.GroupContent>
-          <Sidebar.Menu aria-label="Settings sections">
+          <Sidebar.Menu aria-label={$t('settings.sections')}>
             {#each settingsSections as section (section.path)}
               {@const active = isSettingsSectionActive(section, currentPath)}
               <Sidebar.MenuItem>
-                <Sidebar.MenuButton isActive={active} tooltipContent={section.label}>
+                <Sidebar.MenuButton isActive={active} tooltipContent={$t(section.label)}>
                   {#snippet child({ props })}
                     <a {...props} href={dashboardPath(section.path)} aria-current={active ? 'page' : undefined} onclick={(event) => openSection(event, section.path)}>
                       <section.icon />
-                      <span>{section.label}</span>
+                      <span>{$t(section.label)}</span>
                     </a>
                   {/snippet}
                 </Sidebar.MenuButton>
@@ -88,11 +89,11 @@
               <Sidebar.MenuButton
                 isActive={currentPath === '/'}
                 class="mb-2 h-10 justify-center bg-primary-solid text-[13px] font-semibold text-primary-foreground hover:bg-primary-solid-hover hover:text-primary-foreground active:bg-primary-solid-active data-[active=true]:bg-primary-solid data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary-solid-hover group-data-[collapsible=icon]:mb-0 group-data-[collapsible=icon]:bg-transparent! group-data-[collapsible=icon]:text-sidebar-foreground! group-data-[collapsible=icon]:hover:bg-sidebar-accent! group-data-[collapsible=icon]:hover:text-sidebar-accent-foreground!"
-                tooltipContent="New Chat"
+                tooltipContent={$t('nav.newChat')}
                 onclick={onNewChat}
               >
                 <NotePencilIcon />
-                <span class="group-data-[collapsible=icon]:hidden">New Chat</span>
+                <span class="group-data-[collapsible=icon]:hidden">{$t('nav.newChat')}</span>
                 <ShortcutKeys keys={chatShortcuts.newChat.keys} class="ml-auto shrink-0 border border-primary-foreground/40 bg-transparent px-1 py-0 text-[10px] text-primary-foreground/80 group-data-[collapsible=icon]:hidden" aria-hidden="true" />
               </Sidebar.MenuButton>
             </Sidebar.MenuItem>
@@ -109,17 +110,17 @@
       <Sidebar.MenuItem>
         <Sidebar.MenuButton
           class="h-9 px-3 text-[13px]"
-          tooltipContent="Settings"
+          tooltipContent={$t('settings.title')}
           disabled={settingsDisabled}
           onclick={onSettings}
         >
           <GearIcon />
-          <span>Settings</span>
+          <span>{$t('settings.title')}</span>
         </Sidebar.MenuButton>
         <Sidebar.MenuAction
           class="peer-data-[size=default]/menu-button:top-2 hidden md:flex"
-          aria-label="Keyboard shortcuts"
-          title={`Keyboard shortcuts (${formatShortcutKeys(chatShortcuts.showHelp.keys)})`}
+          aria-label={$t('shortcuts.title')}
+          title={$t('shortcuts.withKeys', { keys: formatShortcutKeys(chatShortcuts.showHelp.keys) })}
           onclick={() => document.dispatchEvent(new CustomEvent('pontia:open-chat-shortcuts'))}
         >
           <QuestionIcon />

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import KeyIcon from 'phosphor-svelte/lib/KeyIcon'
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
@@ -15,7 +16,7 @@
   async function continueToDashboard(): Promise<void> {
     const trimmed = draftToken.trim()
     if (!trimmed) {
-      error = 'Enter a token to continue.'
+      error = $t('auth.tokenRequired')
       return
     }
 
@@ -25,7 +26,7 @@
       await validateExternalApiToken(trimmed)
       token.set(trimmed)
     } catch {
-      error = 'Invalid token.'
+      error = $t('auth.invalidToken')
     } finally {
       validating = false
     }
@@ -39,25 +40,25 @@
         <KeyIcon class="size-6" />
       </div>
       <div class="space-y-1">
-        <h1 class="text-2xl font-semibold">Enter External API token</h1>
-        <Card.Description>Access to /dashboard requires a bearer token.</Card.Description>
+        <h1 class="text-2xl font-semibold">{$t('auth.enterToken')}</h1>
+        <Card.Description>{$t('auth.accessDescription')}</Card.Description>
       </div>
     </Card.Header>
     <Card.Content>
       <form class="space-y-4" onsubmit={(event) => { event.preventDefault(); continueToDashboard() }}>
         <div class="space-y-2">
-          <Label for="dashboard-auth-token">Bearer token</Label>
+          <Label for="dashboard-auth-token">{$t('auth.bearerToken')}</Label>
           <Input
             id="dashboard-auth-token"
             type="password"
-            placeholder="Paste External API token"
+            placeholder={$t('auth.pasteToken')}
             bind:value={draftToken}
             autocomplete="off"
           />
-          <p class="text-xs text-muted-foreground">The token is stored only in this browser's localStorage.</p>
+          <p class="text-xs text-muted-foreground">{$t('auth.localStorageDescription')}</p>
         </div>
         {#if error}<p class="text-sm text-destructive">{error}</p>{/if}
-        <Button type="submit" class="w-full" disabled={validating}>{validating ? 'Validating…' : 'Continue'}</Button>
+        <Button type="submit" class="w-full" disabled={validating}>{validating ? $t('auth.validating') : $t('common.continue')}</Button>
       </form>
     </Card.Content>
   </Card.Root>

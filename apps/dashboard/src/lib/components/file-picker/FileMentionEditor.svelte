@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../../device/context';
   import { onMount, tick } from 'svelte'
   import { Editor, Extension, type Extensions } from '@tiptap/core'
@@ -179,7 +180,7 @@
         Paragraph,
         Text,
         HardBreak,
-        Placeholder.configure({ placeholder }),
+        Placeholder.configure({ placeholder: () => placeholder }),
         ...extensions,
         Extension.create({
           name: 'promptKeyboard',
@@ -260,6 +261,15 @@
   })
 
   $effect(() => {
+    const nextPlaceholder = placeholder
+    const editor = editorState.editor
+    if (!editor) return
+    editor.view.dom.setAttribute('aria-placeholder', nextPlaceholder)
+    editor.view.dom.setAttribute('placeholder', nextPlaceholder)
+    editor.view.dispatch(editor.state.tr)
+  })
+
+  $effect(() => {
     const editor = editorState.editor
     if (!editor) return
     for (const [name, value] of [['aria-controls', suggestionListId], ['aria-activedescendant', activeSuggestionId]] as const) {
@@ -293,11 +303,11 @@
   <div bind:this={editorElement}></div>
 
   {#if open}
-    <div bind:this={listbox} class="absolute bottom-full left-2 z-50 mb-2 max-h-64 w-[min(36rem,calc(100vw-3rem))] overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-none" role="listbox" aria-label="File suggestions">
+    <div bind:this={listbox} class="absolute bottom-full left-2 z-50 mb-2 max-h-64 w-[min(36rem,calc(100vw-3rem))] overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-none" role="listbox" aria-label={$t('files.suggestions')}>
       {#if loading && files.length === 0}
-        <div class="px-3 py-2 text-sm text-muted-foreground">Searching files…</div>
+        <div class="px-3 py-2 text-sm text-muted-foreground">{$t('files.searching')}</div>
       {:else if files.length === 0}
-        <div class="px-3 py-2 text-sm text-muted-foreground">No matching files</div>
+        <div class="px-3 py-2 text-sm text-muted-foreground">{$t('files.noMatches')}</div>
       {:else}
         {#each files as file, index (file.path)}
           <button

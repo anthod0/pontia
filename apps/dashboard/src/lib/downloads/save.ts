@@ -1,3 +1,4 @@
+import { translate } from "$lib/i18n";
 const MEMORY_LIMIT = 64 * 1024 * 1024;
 const DOWNLOAD_DIRECTORY = "pontia-downloads";
 const LOCK_PREFIX = "pontia-download:";
@@ -77,7 +78,7 @@ async function receive(
   writer?: FileSystemWritableFileStream,
 ): Promise<{ blob: Blob; size: number }> {
   const total = responseSize(response);
-  if (total !== null && total > MAX_SIZE) throw new Error("File exceeds the 1 GiB download limit");
+  if (total !== null && total > MAX_SIZE) throw new Error(translate("files.downloadLimit"));
   const chunks: ArrayBuffer[] = [];
   let received = 0;
   onProgress({ received, total });
@@ -87,7 +88,7 @@ async function receive(
       const { done, value } = await reader.read();
       if (done) break;
       received += value.byteLength;
-      if (received > MAX_SIZE) throw new Error("File exceeds the 1 GiB download limit");
+      if (received > MAX_SIZE) throw new Error(translate("files.downloadLimit"));
       if (writer) await writer.write(value as Uint8Array<ArrayBuffer>);
       else chunks.push(value.slice().buffer);
       onProgress({ received, total });

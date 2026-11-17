@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import * as Tooltip from '$lib/components/ui/tooltip/index.js'
   import type { TurnView } from '../../../api/types'
   import type { ChatMessageRole } from '../../session-chat/sessionChat'
@@ -54,11 +55,11 @@
         if (typeof message === 'string' && message.trim()) return message.trim()
       }
     }
-    return role === 'user' ? 'No user summary available.' : 'No assistant summary available.'
+    return role === 'user' ? $t('chat.noUserSummary') : $t('chat.noAssistantSummary')
   }
 
   function roleLabel(role: ChatMessageRole): string {
-    return role === 'user' ? 'User' : 'Assistant'
+    return role === 'user' ? $t('chat.user') : $t('chat.assistant')
   }
 
   function activate(turn: TurnView, role: ChatMessageRole): void {
@@ -71,7 +72,7 @@
   <Tooltip.Provider delayDuration={120}>
   <aside
     class="fixed right-4 top-1/2 z-30 hidden -translate-y-1/2 xl:block"
-    aria-label="Conversation ruler"
+    aria-label={$t('chat.ruler')}
     data-chat-ruler
   >
     <div class="relative max-h-[calc(100svh-14rem)] overflow-y-auto px-2 py-2">
@@ -89,7 +90,7 @@
                       type="button"
                       {...props}
                       class="group relative z-10 flex h-full w-full cursor-pointer items-center justify-end focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      aria-label={`${roleLabel(role)} message: ${summary}`}
+                      aria-label={$t('chat.messageSummary', { role: roleLabel(role), summary })}
                       data-chat-ruler-mark
                       data-turn-id={turn.turn_id}
                       data-role={role}

@@ -1,17 +1,22 @@
+import { translate as defaultTranslate, type Translator } from "$lib/i18n";
 import type { EventView, SessionView } from "../../api/types";
 
 export function compactionDisabledReason(
   session: SessionView,
   pending: boolean,
+  translate: Translator = defaultTranslate,
 ): string | undefined {
-  if (pending) return "Context compaction is already in progress";
-  if (!session.capabilities.manual_compaction)
-    return "Context compaction is unavailable for this session";
+  if (pending) return translate("compaction.inProgress");
+  if (!session.capabilities.manual_compaction) return translate("compaction.unavailable");
   if (session.state !== "idle" && session.state !== "interrupted")
-    return "Wait for the session to become idle before compacting";
+    return translate("compaction.waitIdle");
 }
 
-export function compactionStatus(events: EventView[], requestedOperation: string | null) {
+export function compactionStatus(
+  events: EventView[],
+  requestedOperation: string | null,
+  translate: Translator = defaultTranslate,
+) {
   const operations = new Map<string, EventView>();
   for (const event of events) {
     if (
@@ -29,7 +34,7 @@ export function compactionStatus(events: EventView[], requestedOperation: string
   if (requestedOperation && !operations.has(requestedOperation)) {
     return {
       phase: "accepted",
-      message: "Compaction requested. Waiting for the client…",
+      message: translate("compaction.requested"),
       busy: true,
     };
   }
@@ -38,23 +43,23 @@ export function compactionStatus(events: EventView[], requestedOperation: string
     .at(-1);
   if (!event) return null;
   if (event.type === "session.compaction_started")
-    return { phase: "running", message: "Compacting context…", busy: true };
+    return { phase: "running", message: translate("compaction.running"), busy: true };
   if (event.type === "session.compaction_failed") {
     return {
       phase: "failed",
       message:
         (event.payload.error_message as string | null) ||
         (event.payload.aborted
-          ? "Context compaction was cancelled."
-          : "Context compaction failed."),
+          ? translate("compaction.cancelled")
+          : translate("compaction.failed")),
       busy: false,
     };
   }
   const before = event.payload.tokens_before;
   const after = event.payload.tokens_after;
-  const usage =
+  const message =
     typeof before === "number" && typeof after === "number"
-      ? ` (${before.toLocaleString()} → ${after.toLocaleString()} tokens)`
-      : "";
-  return { phase: "completed", message: `Context compacted${usage}`, busy: false };
+      ? translate("compaction.tokenChange", { before, after })
+      : translate("compaction.completed");
+  return { phase: "completed", message, busy: false };
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import type { SessionFilesStore } from '../../stores/sessionFiles'
   import type { InboxMessageView, SessionView, WorkspaceGitStatusView } from '../../api/types'
   import { canSendSessionMessage } from '$lib/session-chat/sessionChat'
@@ -76,14 +77,14 @@
   let composerDisabled = $derived(submitting || actionBusy)
   let interruptMode = $derived(isExecutingSessionState(session.state) && session.capabilities?.interrupt === true && input.trim() === '')
   const commands: ChatCommand[] = $derived([
-    { name: '/model', description: 'Choose a model', disabledReason: modelPickerDisabledReason(session), run: () => { modelDialogSessionId = session.session_id; input = '' } },
-    { name: '/compact', description: 'Summarize older context', disabledReason: compactionDisabledReason(session, compaction?.busy ?? false), run: onCompact },
-    { name: '/new', description: 'Start a new chat in this workspace', run: onNewChat },
-    { name: '/rename', description: 'Rename the current session', run: onRename },
+    { name: '/model', description: $t('model.chooseCommand'), disabledReason: modelPickerDisabledReason(session, $t), run: () => { modelDialogSessionId = session.session_id; input = '' } },
+    { name: '/compact', description: $t('compaction.description'), disabledReason: compactionDisabledReason(session, compaction?.busy ?? false, $t), run: onCompact },
+    { name: '/new', description: $t('chat.newInWorkspace'), run: onNewChat },
+    { name: '/rename', description: $t('chat.renameCurrent'), run: onRename },
     {
       name: '/exit',
-      description: 'End the current session',
-      disabledReason: isTerminalSession(session) ? 'Session has already ended' : undefined,
+      description: $t('chat.endCurrent'),
+      disabledReason: isTerminalSession(session) ? $t('chat.alreadyEnded') : undefined,
       run: onExit,
     },
   ])
@@ -109,7 +110,7 @@
       {#snippet menuItems()}
         <DropdownMenu.Item onSelect={() => { sharedFilesOpen = true }}>
           <FilesIcon class="size-4" />
-          <span class="min-w-0 flex-1">Shared files</span>
+          <span class="min-w-0 flex-1">{$t('files.shared')}</span>
           <span class="text-xs text-muted-foreground">{$sharedFiles.files.length}</span>
         </DropdownMenu.Item>
       {/snippet}
@@ -118,7 +119,7 @@
       {/snippet}
     </MessageComposer>
     {#if canSendSessionMessage(session, 'x') === false}
-      <p class="mt-2 text-xs text-muted-foreground">This session cannot accept new messages.</p>
+      <p class="mt-2 text-xs text-muted-foreground">{$t('chat.cannotAcceptMessages')}</p>
     {/if}
   </div>
 </div>

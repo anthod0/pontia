@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../device/context';
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
@@ -17,7 +18,7 @@
   let pendingModel = $state<string | null>(null)
   let error = $state<string | null>(null)
   const currentModel = $derived(session.model ?? modelsQuery.data?.current_model)
-  const unavailable = $derived(modelPickerDisabledReason(session))
+  const unavailable = $derived(modelPickerDisabledReason(session, $t))
   const readonly = $derived(session.capabilities.set_model !== true)
   const models = $derived(modelsQuery.data?.models.filter((model) => `${model.name} ${model.id}`.toLowerCase().includes(query.trim().toLowerCase())) ?? [])
 
@@ -47,19 +48,19 @@
 <Dialog.Root open onOpenChange={(open) => { if (!open) onClose() }}>
   <Dialog.Content class="sm:max-w-lg">
     <Dialog.Header>
-      <Dialog.Title>Choose model</Dialog.Title>
-      <Dialog.Description>{readonly ? 'Available models for this session. Model changes are not supported.' : 'Applies to subsequent turns in this session.'}</Dialog.Description>
+      <Dialog.Title>{$t('model.choose')}</Dialog.Title>
+      <Dialog.Description>{readonly ? $t('model.readonlyDescription') : $t('model.description')}</Dialog.Description>
     </Dialog.Header>
-    <Input aria-label="Search models" placeholder="Search models…" bind:value={query} />
-    {#if currentModel}<p class="text-xs text-muted-foreground">Current model: {currentModel}</p>{/if}
+    <Input aria-label={$t('model.search')} placeholder={$t('model.searchPlaceholder')} bind:value={query} />
+    {#if currentModel}<p class="text-xs text-muted-foreground">{$t('model.currentPrefix')} {currentModel}</p>{/if}
     {#if unavailable}<p role="status" class="text-sm text-muted-foreground">{unavailable}</p>{/if}
     {#if error || modelsQuery.error}<p role="alert" class="text-sm text-destructive">{error ?? modelsQuery.error?.message}</p>{/if}
     {#if modelsQuery.isPending}
-      <p role="status">Loading models…</p>
+      <p role="status">{$t('model.loading')}</p>
     {:else if pendingModel}
-      <p role="status">Model change requested. Waiting for confirmation from the agent…</p>
+      <p role="status">{$t('model.pending')}</p>
     {:else if modelsQuery.data}
-      <ul aria-label="Available models" class="max-h-80 space-y-1 overflow-y-auto">
+      <ul aria-label={$t('model.available')} class="max-h-80 space-y-1 overflow-y-auto">
         {#each models as model (model.id)}
           <li>
             <Button variant="ghost" class="h-auto w-full justify-start gap-3 px-3 py-2 text-left" aria-label={model.name} disabled={readonly || Boolean(unavailable) || submitting || model.id === currentModel} onclick={() => void choose(model.id)}>
@@ -68,11 +69,11 @@
                 <span class="block text-xs text-muted-foreground">{model.id}</span>
                 {#if model.description}<span class="block text-xs text-muted-foreground">{model.description}</span>{/if}
               </span>
-              {#if model.id === currentModel}<CheckIcon class="size-4 shrink-0" aria-label="Current model" />{/if}
+              {#if model.id === currentModel}<CheckIcon class="size-4 shrink-0" aria-label={$t('model.current')} />{/if}
             </Button>
           </li>
         {:else}
-          <li class="py-3 text-sm text-muted-foreground">No models found.</li>
+          <li class="py-3 text-sm text-muted-foreground">{$t('model.empty')}</li>
         {/each}
       </ul>
     {/if}

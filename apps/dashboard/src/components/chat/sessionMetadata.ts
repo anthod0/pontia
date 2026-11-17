@@ -1,3 +1,4 @@
+import { translate as defaultTranslate, type Translator } from "$lib/i18n";
 import { clientSessionLabel } from "../../clients";
 import { contextUsageSummary } from "$lib/contextUsage";
 import type {
@@ -18,16 +19,23 @@ export function workspaceTitle(workspace: WorkspaceView): string {
   return workspace.name ?? workspace.display_path ?? workspace.workspace_id;
 }
 
-export function clientTitle(clientType: string): string {
-  return clientType || "Client";
+export function clientTitle(clientType: string, translate: Translator = defaultTranslate): string {
+  return clientType || translate("clients.client");
 }
 
-export function sessionContextUsageLabel(session: SessionView): string | null {
+export function sessionContextUsageLabel(
+  session: SessionView,
+  translate: Translator = defaultTranslate,
+): string | null {
   if ((session.capabilities?.context_usage ?? "unsupported") === "unsupported") return null;
   const summary = session.context_usage
-    ? contextUsageSummary(session.context_usage, { includeConfidence: false })
-    : "Context waiting…";
-  return summary.replace(/^Context\s+/, "");
+    ? contextUsageSummary(
+        session.context_usage,
+        { includeConfidence: false, includeLabel: false },
+        translate,
+      )
+    : translate("context.waitingShort");
+  return summary;
 }
 
 export function sessionProfileTitle(session: SessionView): string | null {
@@ -50,36 +58,50 @@ export function sessionWorkspace(
   return workspaces.find((workspace) => workspace.workspace_id === session.workspace_id) ?? null;
 }
 
-export function sessionWorkspaceTitle(session: SessionView, workspaces: WorkspaceView[]): string {
+export function sessionWorkspaceTitle(
+  session: SessionView,
+  workspaces: WorkspaceView[],
+  translate: Translator = defaultTranslate,
+): string {
   const workspace = sessionWorkspace(session, workspaces);
   return (
     workspace?.name ??
     workspace?.display_path ??
     session.workspace ??
     session.workspace_id ??
-    "No workspace"
+    translate("workspaces.noWorkspace")
   );
 }
 
-export function sessionWorkspacePath(session: SessionView, workspaces: WorkspaceView[]): string {
+export function sessionWorkspacePath(
+  session: SessionView,
+  workspaces: WorkspaceView[],
+  translate: Translator = defaultTranslate,
+): string {
   const workspace = sessionWorkspace(session, workspaces);
   return (
     workspace?.canonical_path ??
     workspace?.display_path ??
     session.workspace ??
     session.workspace_id ??
-    "No workspace"
+    translate("workspaces.noWorkspace")
   );
 }
 
-export function gitStatusLabel(status: WorkspaceGitStatusView | undefined): string {
-  if (!status || status.state === "unknown") return "Git unknown";
-  if (status.state === "error") return "Git error";
-  return status.clean ? "clean" : "dirty";
+export function gitStatusLabel(
+  status: WorkspaceGitStatusView | undefined,
+  translate: Translator = defaultTranslate,
+): string {
+  if (!status || status.state === "unknown") return translate("git.unknown");
+  if (status.state === "error") return translate("git.error");
+  return status.clean ? translate("git.clean") : translate("git.dirty");
 }
 
-export function gitBranchLabel(status: WorkspaceGitStatusView | undefined): string {
-  return status?.branch ?? "No branch";
+export function gitBranchLabel(
+  status: WorkspaceGitStatusView | undefined,
+  translate: Translator = defaultTranslate,
+): string {
+  return status?.branch ?? translate("git.noBranch");
 }
 
 export function hasGitChangeCounts(status: WorkspaceGitStatusView | undefined): boolean {
@@ -94,9 +116,12 @@ export function hasGitChangeCounts(status: WorkspaceGitStatusView | undefined): 
   );
 }
 
-export function gitStatusCompactText(status: WorkspaceGitStatusView | undefined): string | null {
+export function gitStatusCompactText(
+  status: WorkspaceGitStatusView | undefined,
+  translate: Translator = defaultTranslate,
+): string | null {
   if (!status) return null;
-  const parts = [gitBranchLabel(status)];
+  const parts = [gitBranchLabel(status, translate)];
   if (status.ahead) parts.push(`↑${status.ahead}`);
   if (status.behind) parts.push(`↓${status.behind}`);
   if (hasGitChangeCounts(status)) {
@@ -108,17 +133,24 @@ export function gitStatusCompactText(status: WorkspaceGitStatusView | undefined)
   return parts.join(" ");
 }
 
-export function gitStatusAriaLabel(status: WorkspaceGitStatusView | undefined): string {
-  return `Git status: ${gitBranchLabel(status)}, ${gitStatusLabel(status)}`;
+export function gitStatusAriaLabel(
+  status: WorkspaceGitStatusView | undefined,
+  translate: Translator = defaultTranslate,
+): string {
+  return translate("git.status", {
+    branch: gitBranchLabel(status, translate),
+    status: gitStatusLabel(status, translate),
+  });
 }
 
 export function gitStatusTitle(
   session: SessionView,
   status: WorkspaceGitStatusView | undefined,
   gitStatusErrors: Record<string, string | null | undefined>,
+  translate: Translator = defaultTranslate,
 ): string {
   const error = session.workspace_id ? gitStatusErrors[session.workspace_id] : null;
-  return status?.failure ?? error ?? gitStatusAriaLabel(status);
+  return status?.failure ?? error ?? gitStatusAriaLabel(status, translate);
 }
 
 export function gitStatusToneClass(status: WorkspaceGitStatusView | undefined): string {
@@ -132,49 +164,68 @@ export function sessionMetadataItems(
   workspaces: WorkspaceView[],
   gitStatus: WorkspaceGitStatusView | undefined,
   gitStatusErrors: Record<string, string | null | undefined>,
+  translate: Translator = defaultTranslate,
 ): SessionMetadataItem[] {
   const items: SessionMetadataItem[] = [
     {
       key: "workspace",
-      label: "Workspace",
-      value: sessionWorkspaceTitle(session, workspaces),
-      title: sessionWorkspacePath(session, workspaces),
+      label: translate("workspace.title"),
+      value: sessionWorkspaceTitle(session, workspaces, translate),
+      title: sessionWorkspacePath(session, workspaces, translate),
     },
     {
       key: "client",
-      label: "Client",
+      label: translate("clients.client"),
       value: clientSessionLabel(session),
       title: clientSessionLabel(session),
     },
   ];
   if (session.model)
-    items.push({ key: "model", label: "Model", value: session.model, title: session.model });
+    items.push({
+      key: "model",
+      label: translate("model.title"),
+      value: session.model,
+      title: session.model,
+    });
   if (gitStatus)
     items.push({
       key: "git",
       label: "Git",
-      value: `${gitBranchLabel(gitStatus)} · ${gitStatusLabel(gitStatus)}`,
-      title: gitStatusTitle(session, gitStatus, gitStatusErrors),
+      value: `${gitBranchLabel(gitStatus, translate)} · ${gitStatusLabel(gitStatus, translate)}`,
+      title: gitStatusTitle(session, gitStatus, gitStatusErrors, translate),
     });
-  const contextUsageLabel = sessionContextUsageLabel(session);
+  const contextUsageLabel = sessionContextUsageLabel(session, translate);
   if (contextUsageLabel)
     items.push({
       key: "context",
-      label: "Usage",
+      label: translate("context.label"),
       value: contextUsageLabel,
-      title: `Context usage: ${contextUsageLabel}`,
+      title: translate("context.usage", { usage: contextUsageLabel }),
     });
   const profileTitle = sessionProfileTitle(session);
   if (profileTitle)
-    items.push({ key: "profile", label: "Profile", value: profileTitle, title: profileTitle });
+    items.push({
+      key: "profile",
+      label: translate("profiles.profile"),
+      value: profileTitle,
+      title: profileTitle,
+    });
   const handleTitle = sessionHandleTitle(session);
   if (handleTitle)
-    items.push({ key: "handle", label: "Handle", value: handleTitle, title: handleTitle });
+    items.push({
+      key: "handle",
+      label: translate("chat.handle"),
+      value: handleTitle,
+      title: handleTitle,
+    });
   return items;
 }
 
-export function sessionMetadataSummary(items: SessionMetadataItem[]): string {
-  if (!items.length) return "Session details";
+export function sessionMetadataSummary(
+  items: SessionMetadataItem[],
+  translate: Translator = defaultTranslate,
+): string {
+  if (!items.length) return translate("chat.details");
   return items.map((item) => item.value).join(" · ");
 }
 

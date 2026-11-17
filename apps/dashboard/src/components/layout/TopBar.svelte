@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../device/context';
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
@@ -46,10 +47,10 @@
   const session = $derived(sessionId
     ? ($sessionDetail?.session.session_id === sessionId ? $sessionDetail.session : ($sessionDetailError ? null : overviewSession))
     : null)
-  const title = $derived(session ? sessionChatTitle(session) : '')
+  const title = $derived(session ? sessionChatTitle(session, $t) : '')
   const chatPath = $derived(isChatPath(currentPath))
   const settingsPath = $derived(isSettingsPath(currentPath))
-  const settingsTitle = $derived(settingsSections.find((section) => isSettingsSectionActive(section, currentPath))?.label ?? 'Settings')
+  const settingsTitle = $derived($t(settingsSections.find((section) => isSettingsSectionActive(section, currentPath))?.label ?? 'settings.title'))
   const groupClass = $derived(['flex min-w-0 items-center gap-1', chatPath && 'pointer-events-auto h-8 rounded-lg bg-popover px-1 ring-1 ring-foreground/10', chatPath && !title && 'md:hidden'])
 
   function openRenameDialog(): void {
@@ -85,7 +86,7 @@
   {:else}
   <div class={groupClass}>
     <Sidebar.Trigger class="md:hidden" />
-    <Button variant="ghost" size="icon-sm" class="md:hidden" aria-label="New Chat" onclick={onNewChat}>
+    <Button variant="ghost" size="icon-sm" class="md:hidden" aria-label={$t('nav.newChat')} onclick={onNewChat}>
       <NotePencilIcon />
     </Button>
     {#if title}
@@ -93,7 +94,7 @@
         <button
           type="button"
           class="group flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-0.5 text-left text-sm font-normal text-heading focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          title={`Rename ${title}`}
+          title={$t('common.renameNamed', { name: title })}
           onclick={openRenameDialog}
         >
           <span class="min-w-0 truncate">{title}</span>

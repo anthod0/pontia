@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { statusLabel } from '$lib/i18n/status';
+  import { t, currentLocale } from '$lib/i18n';
+  import { formatDateTime } from '$lib/format';
   import { useDeviceRuntime } from '../device/context';
   import { onMount } from 'svelte'
   import WorkflowVersions from './workflows/WorkflowVersions.svelte'
@@ -73,7 +76,7 @@
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     const rest = seconds % 60
-    return hours ? `${hours}h ${minutes}m ${rest}s` : `${minutes}m ${rest}s`
+    return hours ? $t('chat.hoursMinutesSeconds', { hours, minutes, seconds: rest }) : $t('chat.minutesSeconds', { minutes, seconds: rest })
   }
 
   async function runControl(action: 'pause' | 'resume' | 'retry'): Promise<void> {
@@ -110,52 +113,52 @@
 <section class="space-y-6">
   <div class="flex items-start justify-between gap-4">
     <div class="min-w-0 space-y-2">
-      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><TreeStructureIcon class="size-7 shrink-0" /> <span class="truncate">{snapshot?.title ?? 'Workflow'}</span></h2>
-      {#if snapshot}<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Badge variant={snapshot.state === 'failed' ? 'destructive' : 'secondary'}>{snapshot.state}</Badge><Badge variant="outline">Current v{snapshot.current_revision}</Badge><span>{snapshot.agent_submitted_count}/{snapshot.agent_total_count} agents</span><span>·</span><span>{formatElapsed(snapshot.elapsed_ms)}</span><span>·</span><span class="font-mono text-xs">{snapshot.workflow_id}</span></div>{/if}
+      <h2 class="flex items-center gap-2 text-3xl font-semibold tracking-tight"><TreeStructureIcon class="size-7 shrink-0" /> <span class="truncate">{snapshot?.title ?? $t('workflow.title')}</span></h2>
+      {#if snapshot}<div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Badge variant={snapshot.state === 'failed' ? 'destructive' : 'secondary'}>{statusLabel(snapshot.state, $t)}</Badge><Badge variant="outline">{$t('workflow.currentVersionPrefix')}{snapshot.current_revision}</Badge><span>{snapshot.agent_submitted_count}/{snapshot.agent_total_count} {$t('workflow.agentsSuffix')}</span><span>·</span><span>{formatElapsed(snapshot.elapsed_ms)}</span><span>·</span><span class="font-mono text-xs">{snapshot.workflow_id}</span></div>{/if}
     </div>
     <div class="flex shrink-0 gap-2">
       {#if snapshot?.state === 'running'}
-        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('pause')}><PauseIcon class="size-4" /> Pause</Button>
+        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('pause')}><PauseIcon class="size-4" /> {$t('common.pause')}</Button>
       {:else if snapshot?.state === 'paused'}
-        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('resume')}><PlayIcon class="size-4" /> Resume</Button>
+        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('resume')}><PlayIcon class="size-4" /> {$t('common.resume')}</Button>
       {:else if snapshot?.state === 'failed' && snapshot.retry_failure_event_id}
-        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('retry')}><PlayIcon class="size-4" /> Retry</Button>
+        <Button variant="outline" disabled={actionBusy} onclick={() => void runControl('retry')}><PlayIcon class="size-4" /> {$t('common.retry')}</Button>
       {/if}
     </div>
   </div>
 
   {#if workflowError}
-    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>Workflow error</Alert.Title><Alert.Description>{workflowError.message}</Alert.Description></Alert.Root>
-    <Button variant="outline" onclick={() => void workflowQuery.refetch()}>Reload workflow</Button>
+    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>{$t('workflow.error')}</Alert.Title><Alert.Description>{workflowError.message}</Alert.Description></Alert.Root>
+    <Button variant="outline" onclick={() => void workflowQuery.refetch()}>{$t('workflow.reload')}</Button>
   {/if}
 
   {#if snapshot?.retry_unavailable_reason}
     <p class="text-sm text-muted-foreground">{snapshot.retry_unavailable_reason}</p>
   {:else if snapshot?.state === 'failed' && snapshot.retry_failure_event_id}
-    <p class="text-sm text-muted-foreground">Retry continues the same conversation. Completed agents stay complete; unsubmitted output is archived and must be submitted again. Existing workspace changes are retained.</p>
+    <p class="text-sm text-muted-foreground">{$t('workflow.retryDescription')}</p>
   {/if}
   {#if snapshot && snapshot.recoveries.length > 0}
     <Card.Root class="p-4 space-y-3">
-      <h3 class="font-semibold">Recovery history</h3>
+      <h3 class="font-semibold">{$t('workflow.recoveryHistory')}</h3>
       {#each snapshot.recoveries as recovery (recovery.recovery_id)}
         <div class="text-sm space-y-1">
-          <p>{recovery.created_at} · {recovery.state === 'completed' ? 'Recovery input delivered' : recovery.state}</p>
-          {#if recovery.original_failure_message}<p class="text-muted-foreground">Original failure: {recovery.original_failure_message}</p>{/if}
+          <p>{formatDateTime(recovery.created_at, $currentLocale)} · {recovery.state === 'completed' ? $t('workflow.recoveryDelivered') : statusLabel(recovery.state, $t)}</p>
+          {#if recovery.original_failure_message}<p class="text-muted-foreground">{$t('workflow.originalFailure')} {recovery.original_failure_message}</p>{/if}
           {#if recovery.failure_message}<p class="text-destructive">{recovery.failure_message}</p>{/if}
         </div>
       {/each}
     </Card.Root>
   {/if}
   {#if snapshot?.failure_message}
-    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>{snapshot.state === 'recovering' ? 'Recovering from failure' : 'Workflow failed'}</Alert.Title><Alert.Description>{snapshot.failure_message}</Alert.Description></Alert.Root>
+    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Title>{snapshot.state === 'recovering' ? $t('workflow.recovering') : $t('workflow.failed')}</Alert.Title><Alert.Description>{snapshot.failure_message}</Alert.Description></Alert.Root>
   {/if}
 
   <div class="space-y-3">
     {#if snapshot}
-      <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Workflow versions">
+      <div class="flex flex-wrap items-center gap-2" role="group" aria-label={$t('workflow.versions')}>
         {#each workflowRevisions(snapshot.current_revision) as version}
           <Button variant={revision === version ? 'secondary' : 'ghost'} aria-pressed={revision === version} onclick={() => selectRevision(version)}>
-            v{version} {#if version === snapshot.current_revision}<Badge variant="outline">Current</Badge>{/if}
+            v{version} {#if version === snapshot.current_revision}<Badge variant="outline">{$t('common.current')}</Badge>{/if}
           </Button>
         {/each}
       </div>
@@ -168,7 +171,7 @@
     <Card.Root class="overflow-hidden">
       <div class="grid min-h-[28rem] md:grid-cols-[17rem_1fr]">
         <aside class="border-b bg-muted/20 p-3 md:border-r md:border-b-0">
-          <div class="px-2 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Phases</div>
+          <div class="px-2 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{$t('workflow.phases')}</div>
           <div class="space-y-1">
             {#each phases as phase (phase.ordinal)}
               <Button
@@ -199,8 +202,8 @@
                 onclick={() => node.session_id && navigate(`/chat/${node.session_id}`)}
               >
                 <span class={cn('w-4 shrink-0 text-center text-lg leading-none', statusClass(node.status))}>{statusGlyph(node.status)}</span>
-                <span class="min-w-0 flex-1"><span class="block truncate font-medium">{node.title}</span><span class="block text-xs text-muted-foreground">{node.status}{node.session_state ? ` · session ${node.session_state}` : ''}</span></span>
-                {#if node.session_id}<span class="text-xs text-muted-foreground">Open chat →</span>{/if}
+                <span class="min-w-0 flex-1"><span class="block truncate font-medium">{node.title}</span><span class="block text-xs text-muted-foreground">{statusLabel(node.status, $t)}{node.session_state ? $t('workflow.sessionState', { state: statusLabel(node.session_state, $t) }) : ''}</span></span>
+                {#if node.session_id}<span class="text-xs text-muted-foreground">{$t('chat.openArrow')}</span>{/if}
               </button>
             {/each}
           </div>
@@ -208,9 +211,9 @@
       </div>
     </Card.Root>
   {:else if snapshot}
-    <Card.Root><Empty.Root><Empty.Header><Empty.Title>No agents in this workflow</Empty.Title></Empty.Header></Empty.Root></Card.Root>
+    <Card.Root><Empty.Root><Empty.Header><Empty.Title>{$t('workflow.noAgents')}</Empty.Title></Empty.Header></Empty.Root></Card.Root>
   {:else if !workflowQuery.isPending && !workflowError}
-    <Empty.Root><Empty.Header><Empty.Title>Workflow unavailable</Empty.Title><Empty.Description>No observable Workflow snapshot was returned.</Empty.Description></Empty.Header></Empty.Root>
+    <Empty.Root><Empty.Header><Empty.Title>{$t('workflow.unavailable')}</Empty.Title><Empty.Description>{$t('workflow.noSnapshot')}</Empty.Description></Empty.Header></Empty.Root>
   {/if}
   </div>
 

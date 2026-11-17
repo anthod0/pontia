@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
@@ -8,22 +9,22 @@
 
   let { onCheck, checking }: { onCheck: () => void; checking: boolean } = $props()
 
-  const steps = [
+  const steps = $derived([
     {
-      title: 'Install Pontia on your device',
-      description: 'Run the signed installer on the Linux or macOS machine where your coding agents run.',
+      title: $t('devices.install'),
+      description: $t('devices.installDescription'),
       command: 'curl -fsSL https://get.pontia.dev/install.sh | sh',
     },
     {
-      title: 'Initialize and register the device',
-      description: 'Choose your agent clients, then accept the remote access prompt and approve the device in your browser.',
+      title: $t('devices.initialize'),
+      description: $t('devices.initializeDescription'),
       command: '"$HOME/.local/bin/pontia" init',
     },
     {
-      title: 'Open it here',
-      description: 'When setup finishes, your device appears in this Dashboard and you can start a session.',
+      title: $t('devices.openHere'),
+      description: $t('devices.openDescription'),
     },
-  ]
+  ])
   let copied = $state<number | null>(null)
 
   async function copy(index: number, command: string): Promise<void> {
@@ -36,9 +37,9 @@
 <section class="flex min-h-[calc(100svh-3rem)] items-center justify-center p-4 sm:p-8" aria-labelledby="onboarding-title">
   <div class="w-full max-w-xl">
     <header class="mb-8 space-y-2">
-      <h1 id="onboarding-title" class="text-2xl font-medium tracking-tight text-heading">Connect your first device</h1>
+      <h1 id="onboarding-title" class="text-2xl font-medium tracking-tight text-heading">{$t('devices.connectFirst')}</h1>
       <p class="text-sm leading-relaxed text-muted-foreground">
-        Pontia runs agents on your own machine. Connect it once, then follow and steer sessions from any browser.
+        {$t('devices.onboardingDescription')}
       </p>
     </header>
 
@@ -60,14 +61,14 @@
                   <span class="mr-2 text-[#928374] select-none">$</span>{step.command}
                 </code>
                 <Button variant="ghost" size="icon-sm" class="text-[#bdae93] hover:bg-[#3c3836] hover:text-[#ebdbb2]"
-                  aria-label={`Copy ${step.command}`} title="Copy" onclick={() => void copy(index, step.command!)}>
+                  aria-label={$t('common.copyNamed', { value: step.command })} title={$t('common.copy')} onclick={() => void copy(index, step.command!)}>
                   {#if copied === index}<CheckIcon />{:else}<CopyIcon />{/if}
                 </Button>
               </div>
             {:else}
               <Button variant="outline" size="sm" onclick={onCheck} disabled={checking}>
                 <ArrowClockwiseIcon class={checking ? 'animate-spin' : undefined} />
-                {checking ? 'Checking…' : 'Check for devices'}
+                {checking ? $t('common.checking') : $t('devices.check')}
               </Button>
             {/if}
           </div>
@@ -77,13 +78,13 @@
 
     <footer class="mt-10 flex flex-wrap gap-x-5 gap-y-2 border-t border-border pt-5 text-xs text-muted-foreground">
       <a class="inline-flex items-center gap-1 hover:text-primary" href="https://pontia.dev/docs/getting-started" target="_blank" rel="noreferrer">
-        Setup guide <ArrowSquareOutIcon class="size-3" />
+        {$t('devices.setupGuide')} <ArrowSquareOutIcon class="size-3" />
       </a>
       <a class="inline-flex items-center gap-1 hover:text-primary" href="https://pontia.dev/docs/troubleshooting" target="_blank" rel="noreferrer">
-        Troubleshooting <ArrowSquareOutIcon class="size-3" />
+        {$t('devices.troubleshooting')} <ArrowSquareOutIcon class="size-3" />
       </a>
       <a class="inline-flex items-center gap-1 hover:text-primary" href="https://pontia.dev/settings/devices" target="_blank" rel="noreferrer">
-        Manage devices <ArrowSquareOutIcon class="size-3" />
+        {$t('devices.manage')} <ArrowSquareOutIcon class="size-3" />
       </a>
     </footer>
   </div>

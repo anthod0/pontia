@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import FileTextIcon from 'phosphor-svelte/lib/FileTextIcon'
@@ -21,13 +22,13 @@
   let open = $state(false)
 
   const Icon = $derived(operation === 'read' ? FileMagnifyingGlassIcon : operation === 'write' ? FilePlusIcon : FileTextIcon)
-  const label = $derived(`${operation === 'read' ? 'Read' : operation === 'write' ? 'Write' : operation === 'change' ? 'Change' : 'Edit'} ${files.length} ${files.length === 1 ? 'file' : 'files'}`)
+  const label = $derived($t('chat.fileCount', { operation: operation === 'read' ? $t('files.read') : operation === 'write' ? $t('files.write') : operation === 'change' ? $t('files.change') : $t('common.edit'), count: files.length }))
 </script>
 
 <Collapsible.Root bind:open class="relative min-w-0">
   <Collapsible.Trigger
     class="group/file-step flex w-full min-w-0 gap-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    aria-label={open ? `Hide ${label} details` : `Show ${label} details`}
+    aria-label={open ? $t('chat.hideDetails', { title: label }) : $t('chat.showDetails', { title: label })}
   >
     <span class="relative z-10 flex size-6 shrink-0 items-center justify-center bg-background text-muted-foreground">
       <Icon class="size-4 group-hover/file-step:hidden" aria-hidden="true" />
@@ -45,7 +46,7 @@
       {#each changes as change, index (`${change.path}:${index}`)}
         <div class="mb-2 ml-9 min-w-0 text-sm text-muted-foreground">
           <div class="break-words py-1">
-            {change.operation === 'add' ? 'Add' : change.operation === 'delete' ? 'Delete' : 'Update'} {change.path}{change.move_path ? ` → ${change.move_path}` : ''}
+            {change.operation === 'add' ? $t('common.add') : change.operation === 'delete' ? $t('common.delete') : $t('common.update')} {change.path}{change.move_path ? ` → ${change.move_path}` : ''}
           </div>
           {#if change.diff}
             <pre class="max-w-full overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere] px-2 py-1 font-mono text-xs leading-relaxed">{change.diff}</pre>

@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { currentLocale } from '$lib/i18n';
   let { value }: { value: string } = $props()
 
   const date = $derived(new Date(value))
   const label = $derived(
     date.toDateString() === new Date().toDateString()
-      ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      : date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      ? date.toLocaleTimeString($currentLocale, { hour: '2-digit', minute: '2-digit' })
+      : date.toLocaleString($currentLocale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
   )
 </script>
 
-<time datetime={value} title={date.toLocaleString()} class="px-1 text-xs tabular-nums">{label}</time>
+<time datetime={value} title={date.toLocaleString($currentLocale)} class="px-1 text-xs tabular-nums">{label}</time>

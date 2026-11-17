@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { t } from '$lib/i18n';
   import { cn, type WithElementRef } from '$lib/utils.js'
   import type { Snippet } from 'svelte'
   import type { HTMLAttributes } from 'svelte/elements'
@@ -13,8 +14,8 @@
 <script lang="ts">
   let {
     class: className,
-    title = 'No messages yet',
-    description = 'Start a conversation to see messages here.',
+    title = $t('chat.noMessages'),
+    description = $t('chat.startConversation'),
     children,
     ref = $bindable(null),
     ...restProps

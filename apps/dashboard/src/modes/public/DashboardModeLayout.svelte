@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { onMount, type Snippet } from 'svelte';
   import { writable } from 'svelte/store';
   import DeviceSessionList from '../../components/layout/DeviceSessionList.svelte';
@@ -57,19 +58,19 @@
   const deviceStatus = $derived.by((): DeviceStatusView | null => {
     if (dashboardState === 'connecting' && (!checkingDevices || activeHandle)) return {
       mood: 'loading',
-      title: $loading ? 'Loading devices…' : `Connecting to ${active?.name ?? activeHandle}…`,
-      description: 'This usually takes a few seconds.',
+      title: $loading ? $t('devices.loading') : $t('devices.connectingNamed', { name: active?.name ?? activeHandle }),
+      description: $t('common.fewSeconds'),
     };
     if (dashboardState !== 'unavailable' || !activeHandle) return null;
     if (active?.state === 'offline') return {
       mood: 'offline',
-      title: `${active.name} is offline`,
-      description: 'Make sure Pontia is running on this device, then try again.',
+      title: $t('devices.offlineNamed', { name: active.name }),
+      description: $t('devices.checkRunning'),
     };
     return {
       mood: 'offline',
-      title: `${active?.name ?? activeHandle} is unavailable`,
-      description: $error ?? moduleError ?? 'Pontia could not connect to this device.',
+      title: $t('devices.unavailableNamed', { name: active?.name ?? activeHandle }),
+      description: $error ?? moduleError ?? $t('devices.connectionFailed'),
     };
   });
 
@@ -111,7 +112,7 @@
       connections = createDeviceConnections(access);
       await connections.refreshDevices();
     } catch {
-      if (!disposed) moduleError = 'Could not load remote device access.';
+      if (!disposed) moduleError = $t('devices.remoteAccessFailed');
     } finally {
       loadingModule = false;
     }
@@ -146,7 +147,7 @@
 }} />
 
 {#snippet statusAction()}
-  {#if deviceStatus?.mood === 'offline'}<Button variant="outline" onclick={retry}>Try again</Button>{/if}
+  {#if deviceStatus?.mood === 'offline'}<Button variant="outline" onclick={retry}>{$t('common.tryAgain')}</Button>{/if}
 {/snippet}
 
 {#snippet deviceSelector(disabled: boolean)}
@@ -172,12 +173,12 @@
           {/key}
         {:else if active?.state === 'offline'}
           <div class="flex items-center justify-between gap-2 px-4 py-2 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
-            <span>{active.name} is offline.</span>
-            <Button variant="outline" size="xs" onclick={() => connections?.retry(active.handle)}>Retry</Button>
+            <span>{active.name} {$t('devices.offlineSuffix')}</span>
+            <Button variant="outline" size="xs" onclick={() => connections?.retry(active.handle)}>{$t('common.retry')}</Button>
           </div>
         {:else if dashboardState === 'connecting'}
           <Sidebar.Group class="group-data-[collapsible=icon]:hidden">
-            {#if !$loading}<Sidebar.GroupLabel role="status">Connecting…</Sidebar.GroupLabel>{/if}
+            {#if !$loading}<Sidebar.GroupLabel role="status">{$t('connection.connecting')}</Sidebar.GroupLabel>{/if}
             <Sidebar.GroupContent>
               <Sidebar.MenuSkeleton />
               <Sidebar.MenuSkeleton />
@@ -208,8 +209,8 @@
     {:else if signInUrl}
       <div class="flex min-h-96 flex-col items-center justify-center gap-3 bg-surface p-4" role="status">
         <SpinnerGapIcon class="size-6 animate-spin text-primary" aria-hidden="true" />
-        <p class="text-sm text-muted-foreground">Redirecting to sign in…</p>
-        <Button size="sm" variant="outline" href={signInUrl}>Sign in</Button>
+        <p class="text-sm text-muted-foreground">{$t('auth.redirecting')}</p>
+        <Button size="sm" variant="outline" href={signInUrl}>{$t('auth.signIn')}</Button>
       </div>
     {:else if deviceStatus}
       {#if currentPath === '/'}
@@ -227,7 +228,7 @@
     {:else if $error ?? moduleError}
       <div role="alert" class="flex items-center gap-3 py-4 text-sm">
         <span>{$error ?? moduleError}</span>
-        <Button variant="outline" onclick={retry}>Try again</Button>
+        <Button variant="outline" onclick={retry}>{$t('common.tryAgain')}</Button>
       </div>
     {:else}
       <DeviceOnboarding checking={checkingDevices} onCheck={checkDevices} />

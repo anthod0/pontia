@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { parseUploadMessage } from '$lib/uploads/message'
   import { onDestroy, tick } from 'svelte'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
@@ -353,7 +354,7 @@
     >
       {#if uploadParts?.files.length && editingMessageId !== chatMessage.id}
         <ul class="flex flex-wrap justify-end gap-2" data-user-message-uploads>
-          {#each uploadParts.files as file}<li class="rounded-md border bg-background px-2 py-1 text-xs" title={file.path}>Uploaded File: {file.name}</li>{/each}
+          {#each uploadParts.files as file}<li class="rounded-md border bg-background px-2 py-1 text-xs" title={file.path}>{$t('files.uploadedPrefix')} {file.name}</li>{/each}
         </ul>
       {/if}
       {#if !uploadParts || uploadParts.text.trim() || editingMessageId === chatMessage.id}
@@ -373,7 +374,7 @@
           {#if chatMessage.role === 'user' && editingMessageId === chatMessage.id}
             <div class="w-full space-y-3">
               <textarea
-                aria-label="Edit historical message"
+                aria-label={$t('chat.editHistoricalMessage')}
                 bind:value={editedInput}
                 class="field-sizing-content block w-full resize-none border-0 bg-transparent p-0 text-base leading-relaxed outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={branchActionBusy}
@@ -381,7 +382,7 @@
               ></textarea>
               <div class="flex justify-end gap-2">
                 <Button type="button" variant="ghost" size="sm" disabled={branchActionBusy} onclick={cancelEditing}>
-                  Cancel
+                  {$t('common.cancel')}
                 </Button>
                 <Button
                   type="button"
@@ -389,7 +390,7 @@
                   disabled={branchActionBusy || !editedInput.trim()}
                   onclick={() => void submitEdit(chatMessage)}
                 >
-                  Save
+                  {$t('common.save')}
                 </Button>
               </div>
             </div>
@@ -411,8 +412,8 @@
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                aria-label={isCopied ? 'Assistant reply copied' : 'Copy assistant reply'}
-                title={isCopied ? 'Copied' : 'Copy assistant reply'}
+                aria-label={isCopied ? $t('chat.replyCopied') : $t('chat.copyReply')}
+                title={isCopied ? $t('common.copied') : $t('chat.copyReply')}
                 onclick={() => copyMessage(chatMessage)}
               >
                 {#if isCopied}
@@ -439,8 +440,8 @@
               variant="ghost"
               size="icon-sm"
               disabled={branchActionBusy}
-              aria-label={`Edit message: ${chatMessage.content}`}
-              title="Edit message"
+              aria-label={$t('chat.editMessageNamed', { message: chatMessage.content })}
+              title={$t('chat.editMessage')}
               onclick={() => beginEditing(chatMessage)}
             >
               <PencilSimpleIcon class="size-3.5" />
@@ -450,8 +451,8 @@
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label={isCopied ? `User message copied: ${chatMessage.content}` : `Copy user message: ${chatMessage.content}`}
-            title={isCopied ? 'Copied' : 'Copy message'}
+            aria-label={isCopied ? $t('chat.userMessageCopied', { message: chatMessage.content }) : $t('chat.copyUserMessage', { message: chatMessage.content })}
+            title={isCopied ? $t('common.copied') : $t('chat.copyMessage')}
             onclick={() => copyMessage(chatMessage)}
           >
             {#if isCopied}
@@ -474,8 +475,8 @@
     <Empty.Root class="h-full">
       <Empty.Header>
         <Empty.Media><RobotIcon class="size-6" /></Empty.Media>
-        <Empty.Title>No messages yet</Empty.Title>
-        <Empty.Description>This session has no turn history yet.</Empty.Description>
+        <Empty.Title>{$t('chat.noMessages')}</Empty.Title>
+        <Empty.Description>{$t('chat.noTurns')}</Empty.Description>
       </Empty.Header>
     </Empty.Root>
   {:else}
@@ -484,10 +485,10 @@
         <div aria-hidden="true" class="h-px w-px" data-chat-history-top-sentinel use:observeTopHistorySentinel></div>
       {/if}
       {#if hasMoreHistory && historyLoading}
-        <div class="pb-2 text-center text-xs text-muted-foreground" role="status" aria-live="polite">Loading earlier messages…</div>
+        <div class="pb-2 text-center text-xs text-muted-foreground" role="status" aria-live="polite">{$t('chat.loadingEarlier')}</div>
       {:else if historyObserverEnabled && hasMoreHistory && topHistorySentinelVisible}
         <div class="pb-2 text-center text-xs text-muted-foreground" role="status" aria-live="polite" data-chat-history-pull-hint>
-          {topHistoryPullDistance >= TOP_HISTORY_PULL_THRESHOLD_PX ? 'Release to load earlier messages' : 'Keep scrolling up to load earlier messages'}
+          {topHistoryPullDistance >= TOP_HISTORY_PULL_THRESHOLD_PX ? $t('chat.releaseToLoad') : $t('chat.scrollToLoad')}
         </div>
       {/if}
       {#each displayTurns as displayTurn, index (displayTurn.id)}
@@ -509,7 +510,7 @@
             {/if}
           {/each}
           {#if displayTurn.turnId && sharedFilesByTurn.get(displayTurn.turnId)?.length}
-            <ul class="max-w-md space-y-2" aria-label="Shared files in this turn" data-chat-turn-files>
+            <ul class="max-w-md space-y-2" aria-label={$t('files.sharedInTurn')} data-chat-turn-files>
               {#each sharedFilesByTurn.get(displayTurn.turnId) ?? [] as file (file.file_id)}<li><SharedFileCard {file} {sessionId} /></li>{/each}
             </ul>
           {/if}

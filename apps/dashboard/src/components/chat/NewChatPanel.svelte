@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte'
   import { useDeviceRuntime } from '../../device/context';
   import type { SessionCreationOption, WorkspaceView } from '../../api/types'
@@ -45,21 +46,21 @@
     onStartChat,
   }: Props = $props()
 
-  const commands: ChatCommand[] = [
+  const commands: ChatCommand[] = $derived([
     {
       name: '/new',
-      description: 'Start a new chat in this workspace',
+      description: $t('chat.newInWorkspace'),
       run: () => {
         prompt = ''
         clearChatDraft()
         void navigate('/', { workspace: workspaceId })
       },
     },
-    { name: '/rename', description: 'Rename the current session', disabledReason: 'No current session', run: () => {} },
-    { name: '/model', description: 'Choose a model', disabledReason: 'No current session', run: () => {} },
-    { name: '/compact', description: 'Summarize older context', disabledReason: 'No current session', run: () => {} },
-    { name: '/exit', description: 'End the current session', disabledReason: 'No current session', run: () => {} },
-  ]
+    { name: '/rename', description: $t('chat.renameCurrent'), disabledReason: $t('chat.noCurrent'), run: () => {} },
+    { name: '/model', description: $t('model.chooseCommand'), disabledReason: $t('chat.noCurrent'), run: () => {} },
+    { name: '/compact', description: $t('compaction.description'), disabledReason: $t('chat.noCurrent'), run: () => {} },
+    { name: '/exit', description: $t('chat.endCurrent'), disabledReason: $t('chat.noCurrent'), run: () => {} },
+  ])
 </script>
 
 <div data-testid="new-chat-panel" class:justify-center={placement === 'center'} class:justify-end={placement === 'bottom'} class={`flex min-h-0 shrink-0 flex-col ${placement === 'bottom' ? 'pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-[max(1.25rem,env(safe-area-inset-bottom))]' : ''}`}>
@@ -74,11 +75,11 @@
       inputId="chat-prompt"
       fullscreen
       {autofocus}
-      placeholder="Describe a task…"
+      placeholder={$t('chat.taskPlaceholder')}
       disabled={promptDisabled}
       submitDisabled={!canCreate}
       busy={creating}
-      submitLabel={creating ? 'Starting session' : 'Start session'}
+      submitLabel={creating ? $t('chat.starting') : $t('chat.startSession')}
       startSession
       onSubmit={onStartChat}
     />

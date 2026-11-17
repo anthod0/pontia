@@ -1,3 +1,4 @@
+import { translate } from "$lib/i18n";
 import type {
   AgentKind,
   AgentProfileView,
@@ -82,9 +83,9 @@ export function createAgentProfileDraftFromProfile(
 export function buildAgentProfileInput(draft: AgentProfileDraft): BuildAgentProfileInputResult {
   const errors: AgentProfileDraftErrors = {};
 
-  if (!draft.profile_id.trim()) errors.profile_id = "Profile ID is required.";
-  if (!draft.version.trim()) errors.version = "Version is required.";
-  if (!draft.name.trim()) errors.name = "Name is required.";
+  if (!draft.profile_id.trim()) errors.profile_id = translate("profiles.idRequired");
+  if (!draft.version.trim()) errors.version = translate("profiles.versionRequired");
+  if (!draft.name.trim()) errors.name = translate("profiles.nameRequired");
 
   const artifactContract = parseJsonObject(
     "artifact_contract_text",
@@ -157,12 +158,14 @@ function parseJsonObject(
   try {
     const parsed = JSON.parse(source) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      errors[field] = "Value must be a JSON object.";
+      errors[field] = translate("profiles.jsonObjectRequired");
       return {};
     }
     return parsed as JsonObject;
   } catch (error) {
-    errors[field] = `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`;
+    errors[field] = translate("profiles.invalidJson", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return {};
   }
 }

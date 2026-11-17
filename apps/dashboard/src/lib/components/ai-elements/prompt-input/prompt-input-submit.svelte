@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { t } from '$lib/i18n';
   import type { ButtonProps } from '$lib/components/ui/button/index.js'
   import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon'
   export interface PromptInputSubmitProps extends ButtonProps {
@@ -14,10 +15,10 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon'
 
-  let { children, disabled, busy = false, label = 'Send', startSession = false, icon: Icon = ArrowUpIcon, labelClass, ...restProps }: PromptInputSubmitProps = $props()
+  let { children, disabled, busy = false, label = $t('common.send'), startSession = false, icon: Icon = ArrowUpIcon, labelClass, ...restProps }: PromptInputSubmitProps = $props()
 </script>
 
-<Button type="submit" class="h-8 gap-1.5 px-4 text-xs font-semibold" disabled={disabled || busy} aria-busy={busy} aria-label={busy && !startSession ? 'Sending message' : label} {...restProps}>
+<Button type="submit" class="h-8 gap-1.5 px-4 text-xs font-semibold" disabled={disabled || busy} aria-busy={busy} aria-label={busy && !startSession ? $t('chat.sending') : label} {...restProps}>
   {#if children}
     {@render children()}
   {:else}

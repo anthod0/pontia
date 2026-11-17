@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../device/context';
   import { onMount } from 'svelte'
   import { toast } from 'svelte-sonner'
@@ -80,7 +81,7 @@
 
   $: {
     if (error && error !== lastToastedError) {
-      toast.error('Agent interaction failed', { description: error })
+      toast.error($t('interaction.failed'), { description: error })
       lastToastedError = error
     }
     if (!error) lastToastedError = null
@@ -115,7 +116,7 @@
 </script>
 
 {#if interactions.length}
-  <section aria-label="Agent interactions" class="mx-auto w-full max-w-[760px] px-4 pb-4">
+  <section aria-label={$t('interaction.title')} class="mx-auto w-full max-w-[760px] px-4 pb-4">
     {#each interactions as interaction (interaction.interaction_id)}
       <Alert.Root class="mb-3">
         <Alert.Title>{interaction.title}</Alert.Title>
@@ -128,11 +129,11 @@
               {/each}
             </div>
           {:else if interaction.state === 'resolved'}
-            <p role="status">Response sent: {interaction.options.find(o => o.key === interaction.response?.option_key)?.label}</p>
+            <p role="status">{$t('interaction.responseSent')} {interaction.options.find(o => o.key === interaction.response?.option_key)?.label}</p>
           {:else if interaction.state === 'expired'}
-            <p role="status">This interaction is no longer available.</p>
+            <p role="status">{$t('interaction.unavailable')}</p>
           {:else}
-            <p role="status">A response is being sent.</p>
+            <p role="status">{$t('interaction.sending')}</p>
           {/if}
         </Alert.Description>
       </Alert.Root>

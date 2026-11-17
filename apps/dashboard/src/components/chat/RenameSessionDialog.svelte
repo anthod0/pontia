@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
@@ -22,7 +23,7 @@
   $effect(() => {
     if (open && session?.session_id !== editingSessionId) {
       editingSessionId = session?.session_id ?? null
-      title = session ? (session.title ?? sessionChatTitle(session)) : ''
+      title = session ? (session.title ?? sessionChatTitle(session, $t)) : ''
     }
     if (!open) editingSessionId = null
   })
@@ -42,23 +43,23 @@
   <Dialog.Content class="max-w-md">
     <form onsubmit={(event) => { event.preventDefault(); submit() }}>
       <Dialog.Header>
-        <Dialog.Title>Rename session</Dialog.Title>
+        <Dialog.Title>{$t('chat.rename')}</Dialog.Title>
         <Dialog.Description>
-          Update the display title for this session.
+          {$t('chat.renameDescription')}
         </Dialog.Description>
       </Dialog.Header>
 
       <div class="mt-4 grid gap-2">
-        <Label for="rename-session-title">Session title</Label>
-        <Input id="rename-session-title" bind:value={title} placeholder={session ? sessionChatTitle(session) : 'Session title'} disabled={busy || !session} />
+        <Label for="rename-session-title">{$t('chat.sessionTitle')}</Label>
+        <Input id="rename-session-title" bind:value={title} placeholder={session ? sessionChatTitle(session, $t) : $t('chat.sessionTitle')} disabled={busy || !session} />
         {#if error}
           <p class="text-sm text-destructive">{error}</p>
         {/if}
       </div>
 
       <Dialog.Footer class="mt-5">
-        <Button type="button" variant="outline" onclick={cancel} disabled={busy}>Cancel</Button>
-        <Button type="submit" disabled={busy || !session}>{busy ? 'Saving…' : 'Rename session'}</Button>
+        <Button type="button" variant="outline" onclick={cancel} disabled={busy}>{$t('common.cancel')}</Button>
+        <Button type="submit" disabled={busy || !session}>{busy ? $t('common.saving') : $t('chat.rename')}</Button>
       </Dialog.Footer>
     </form>
   </Dialog.Content>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { onMount } from 'svelte';
   import ArrowSquareOutIcon from 'phosphor-svelte/lib/ArrowSquareOutIcon';
   import DesktopIcon from 'phosphor-svelte/lib/DesktopIcon';
@@ -38,10 +39,10 @@
 
   <section class="space-y-4" aria-labelledby="settings-account-title">
     <div class="flex items-center justify-between gap-4">
-      <h2 id="settings-account-title" class="text-sm font-semibold text-heading">Account</h2>
+      <h2 id="settings-account-title" class="text-sm font-semibold text-heading">{$t('account.title')}</h2>
       {#if accountUrl}
         <Button variant="outline" size="sm" href={accountUrl} target="_blank" rel="noopener">
-          Manage account <ArrowSquareOutIcon class="size-4" />
+          {$t('account.manage')} <ArrowSquareOutIcon class="size-4" />
         </Button>
       {/if}
     </div>
@@ -52,14 +53,14 @@
           <Avatar.Fallback><UserIcon class="size-5" /></Avatar.Fallback>
         </Avatar.Root>
         <div class="min-w-0">
-          <p class="truncate font-medium text-heading">{profile.displayName ?? 'Pontia user'}</p>
-          <p class="text-xs text-muted-foreground">Signed in to Pontia Cloud</p>
+          <p class="truncate font-medium text-heading">{profile.displayName ?? $t('account.defaultName')}</p>
+          <p class="text-xs text-muted-foreground">{$t('account.signedIn')}</p>
         </div>
       {:else if failed}
-        <p class="text-sm text-muted-foreground">Could not load your Pontia Cloud account.</p>
+        <p class="text-sm text-muted-foreground">{$t('account.loadFailed')}</p>
       {:else}
         <Skeleton class="size-10 rounded-full" />
-        <div class="space-y-1.5" role="status" aria-label="Loading account">
+        <div class="space-y-1.5" role="status" aria-label={$t('account.loading')}>
           <Skeleton class="h-4 w-32" />
           <Skeleton class="h-3 w-24" />
         </div>
@@ -69,14 +70,14 @@
 
   <section class="space-y-4" aria-labelledby="settings-devices-title">
     <div class="flex items-center justify-between gap-4">
-      <h2 id="settings-devices-title" class="text-sm font-semibold text-heading">Devices</h2>
+      <h2 id="settings-devices-title" class="text-sm font-semibold text-heading">{$t('devices.title')}</h2>
       {#if devicesUrl}
         <Button variant="outline" size="sm" href={devicesUrl} target="_blank" rel="noopener">
-          Manage devices <ArrowSquareOutIcon class="size-4" />
+          {$t('devices.manage')} <ArrowSquareOutIcon class="size-4" />
         </Button>
       {/if}
     </div>
-    <ul class="-mx-3" aria-label="Devices">
+    <ul class="-mx-3" aria-label={$t('devices.title')}>
       {#each devices as device (device.handle)}
         <li class="flex items-center gap-3 px-3 py-2.5">
           <DesktopIcon class="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -84,13 +85,13 @@
             <p class="truncate font-medium text-heading">{device.name}</p>
             <p class="truncate font-mono text-xs text-muted-foreground">{device.handle}</p>
           </div>
-          <span class="shrink-0 text-xs text-muted-foreground">{deviceStateLabel[device.state]}</span>
+          <span class="shrink-0 text-xs text-muted-foreground">{$t(deviceStateLabel[device.state])}</span>
           {#if device.state === 'offline'}
-            <Button variant="outline" size="sm" aria-label={`Retry ${device.name}`} onclick={() => deviceList.retry(device.handle)}>Retry</Button>
+            <Button variant="outline" size="sm" aria-label={$t('devices.retryNamed', { name: device.name })} onclick={() => deviceList.retry(device.handle)}>{$t('common.retry')}</Button>
           {/if}
         </li>
       {:else}
-        <li class="px-3 py-2.5 text-sm text-muted-foreground">No devices registered.</li>
+        <li class="px-3 py-2.5 text-sm text-muted-foreground">{$t('devices.empty')}</li>
       {/each}
     </ul>
   </section>

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { statusLabel } from '$lib/i18n/status';
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../device/context';
   import { onMount } from 'svelte'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -55,53 +57,53 @@
   {#if !$token.trim()}
     <Alert.Root variant="destructive">
       <WarningCircleIcon class="size-4" />
-      <Alert.Title>Missing bearer token</Alert.Title>
-      <Alert.Description>API requests and SSE updates need an External API token. Paste it below; it is stored only in this browser's localStorage.</Alert.Description>
+      <Alert.Title>{$t('auth.missingToken')}</Alert.Title>
+      <Alert.Description>{$t('auth.tokenDescription')}</Alert.Description>
     </Alert.Root>
   {/if}
 
   <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.75fr)]">
     <Card.Root>
       <Card.Header>
-        <Card.Title class="flex items-center gap-2"><KeyIcon class="size-5" /> External API token</Card.Title>
-        <Card.Description>Sent as Authorization: Bearer &lt;token&gt; to /api/v1/*.</Card.Description>
+        <Card.Title class="flex items-center gap-2"><KeyIcon class="size-5" /> {$t('auth.externalToken')}</Card.Title>
+        <Card.Description>{$t('auth.sentAs')}</Card.Description>
       </Card.Header>
       <Card.Content class="space-y-4">
         <div class="space-y-2">
-          <Label for="api-token">Bearer token</Label>
-          <Input id="api-token" type="password" placeholder="Paste External API token" bind:value={draftToken} autocomplete="off" />
-          <p class="text-xs text-muted-foreground">Current status: {$token.trim() ? 'token saved' : 'no token saved'}.</p>
+          <Label for="api-token">{$t('auth.bearerToken')}</Label>
+          <Input id="api-token" type="password" placeholder={$t('auth.pasteToken')} bind:value={draftToken} autocomplete="off" />
+          <p class="text-xs text-muted-foreground">{$t('settings.tokenStatus', { status: $token.trim() ? $t('auth.tokenSaved') : $t('auth.noToken') })}</p>
         </div>
         <div class="flex flex-wrap gap-2">
-          <Button onclick={saveToken}>Save token</Button>
-          <Button variant="outline" onclick={clearToken}>Clear</Button>
+          <Button onclick={saveToken}>{$t('auth.saveToken')}</Button>
+          <Button variant="outline" onclick={clearToken}>{$t('common.clear')}</Button>
         </div>
-        {#if saved}<p class="text-sm text-muted-foreground">Token saved. Data refreshes will use the new value.</p>{/if}
+        {#if saved}<p class="text-sm text-muted-foreground">{$t('auth.savedDescription')}</p>{/if}
       </Card.Content>
     </Card.Root>
 
     <Card.Root>
       <Card.Header>
-        <Card.Title class="flex items-center gap-2"><BroadcastIcon class="size-5" /> Live stream</Card.Title>
-        <Card.Description>Dashboard SSE connection state.</Card.Description>
+        <Card.Title class="flex items-center gap-2"><BroadcastIcon class="size-5" /> {$t('connection.liveStream')}</Card.Title>
+        <Card.Description>{$t('connection.streamDescription')}</Card.Description>
       </Card.Header>
       <Card.Content class="space-y-3 text-sm">
         <div class="flex items-center justify-between gap-3">
-          <span class="text-muted-foreground">Status</span>
-          <Badge variant={$sseStatus === 'open' ? 'default' : 'secondary'}>{$sseStatus}</Badge>
+          <span class="text-muted-foreground">{$t('common.status')}</span>
+          <Badge variant={$sseStatus === 'open' ? 'default' : 'secondary'}>{statusLabel($sseStatus, $t)}</Badge>
         </div>
         <div class="flex items-center justify-between gap-3">
-          <span class="text-muted-foreground">Reconnect attempts</span>
+          <span class="text-muted-foreground">{$t('connection.attempts')}</span>
           <span>{$reconnectCount}</span>
         </div>
         <div class="flex items-center justify-between gap-3">
-          <span class="text-muted-foreground">Last cursor</span>
+          <span class="text-muted-foreground">{$t('connection.cursor')}</span>
           <span class="max-w-48 truncate" title={$dashboardStreamCursor ?? ''}>{$dashboardStreamCursor ?? '—'}</span>
         </div>
         {#if $lastConnectionError}<p class="rounded-md bg-destructive/10 p-2 text-destructive">{$lastConnectionError}</p>{/if}
         <div class="flex flex-wrap gap-2 pt-2">
-          <Button variant="outline" onclick={reconnect} disabled={!$token.trim()}>Reconnect</Button>
-          <Button variant="ghost" onclick={stopEventStream}>Disconnect</Button>
+          <Button variant="outline" onclick={reconnect} disabled={!$token.trim()}>{$t('connection.reconnect')}</Button>
+          <Button variant="ghost" onclick={stopEventStream}>{$t('connection.disconnect')}</Button>
         </div>
       </Card.Content>
     </Card.Root>
@@ -109,12 +111,12 @@
 
   <Card.Root>
     <Card.Header>
-      <Card.Title>Dashboard source</Card.Title>
-      <Card.Description>Use the SvelteKit static SPA build as the configured dashboard source.</Card.Description>
+      <Card.Title>{$t('settings.source')}</Card.Title>
+      <Card.Description>{$t('settings.sourceDescription')}</Card.Description>
     </Card.Header>
     <Card.Content class="space-y-2 text-sm text-muted-foreground">
-      <p>Build this app with <code class="rounded-sm bg-muted px-1 py-0.5">bun run --cwd apps/dashboard build</code>.</p>
-      <p>Serve it with <code class="rounded-sm bg-muted px-1 py-0.5">[dashboard].source = "apps/dashboard/dist"</code> or <code class="rounded-sm bg-muted px-1 py-0.5">PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist</code>.</p>
+      <p>{$t('settings.buildWith')} <code class="rounded-sm bg-muted px-1 py-0.5">bun run --cwd apps/dashboard build</code>.</p>
+      <p>{$t('settings.serveWith')} <code class="rounded-sm bg-muted px-1 py-0.5">[dashboard].source = "apps/dashboard/dist"</code> {$t('common.or')} <code class="rounded-sm bg-muted px-1 py-0.5">PONTIA_DASHBOARD_SOURCE=apps/dashboard/dist</code>.</p>
     </Card.Content>
   </Card.Root>
 </section>

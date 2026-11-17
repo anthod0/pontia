@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { statusLabel } from '$lib/i18n/status';
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../device/context';
   import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon'
   import ArrowUpRightIcon from 'phosphor-svelte/lib/ArrowUpRightIcon'
@@ -161,16 +163,16 @@
 
 {#snippet sessionMenuItem(session: SessionView, actionKey: string)}
   <Sidebar.MenuItem>
-    <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session)} · ${session.state}`} onclick={() => openSession(session.session_id)}>
+    <Sidebar.MenuButton class="group-has-data-[sidebar=menu-action]/menu-item:pr-8" isActive={isSessionActive(session.session_id)} tooltipContent={`${sessionChatTitle(session, $t)} · ${statusLabel(session.state, $t)}`} onclick={() => openSession(session.session_id)}>
       {#if session.pinned_at}
-        <PushPinIcon class="size-3.5 shrink-0" aria-label="Pinned session" />
+        <PushPinIcon class="size-3.5 shrink-0" aria-label={$t('sessions.pinnedSession')} />
       {/if}
-      <span class="line-clamp-1">{sessionChatTitle(session)}</span>
+      <span class="line-clamp-1">{sessionChatTitle(session, $t)}</span>
     </Sidebar.MenuButton>
     {#if isSessionVisibleState(session.state)}
       <span
         class={cn('pointer-events-none absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center transition-opacity group-has-[:focus-visible]/menu-item:opacity-0 group-hover/menu-item:opacity-0 group-data-[collapsible=icon]:hidden', sessionActionMenuOpenKey === actionKey ? 'opacity-0' : 'opacity-100')}
-        aria-label={`${session.state} session`}
+        aria-label={$t('sessions.state', { state: statusLabel(session.state, $t) })}
       >
         <span class={`size-2 rounded-full ${sessionStateDotClass(session.state)}`}></span>
       </span>
@@ -178,8 +180,8 @@
     <DropdownMenu.Root bind:open={() => sessionActionMenuOpenKey === actionKey, (open) => setSessionActionMenuOpen(actionKey, open)}>
       <Sidebar.MenuAction
         showOnHover
-        aria-label={`Open session actions for ${sessionChatTitle(session)}`}
-        title="Session actions"
+        aria-label={$t('sessions.actionsFor', { name: sessionChatTitle(session, $t) })}
+        title={$t('sessions.actions')}
         disabled={renamingSessionId === session.session_id || sessionManagementBusyId === session.session_id}
         onclick={(event) => event.stopPropagation()}
       >
@@ -191,22 +193,22 @@
       </Sidebar.MenuAction>
       <DropdownMenu.Content side="right" align="start" class="w-44">
         <DropdownMenu.Item onclick={() => startRenamingSession(session)}>
-          <PencilSimpleIcon class="size-4" /> Rename
+          <PencilSimpleIcon class="size-4" /> {$t('common.rename')}
         </DropdownMenu.Item>
         <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void togglePinSessionFromMenu(session)}>
           {#if session.pinned_at}
-            <PushPinSlashIcon class="size-4" /> Unpin
+            <PushPinSlashIcon class="size-4" /> {$t('sessions.unpin')}
           {:else}
-            <PushPinIcon class="size-4" /> Pin
+            <PushPinIcon class="size-4" /> {$t('sessions.pin')}
           {/if}
         </DropdownMenu.Item>
         <DropdownMenu.Item disabled={sessionManagementBusyId === session.session_id} onclick={() => void archiveSessionFromMenu(session)}>
-          <ArchiveIcon class="size-4" /> Archive
+          <ArchiveIcon class="size-4" /> {$t('common.archive')}
         </DropdownMenu.Item>
         {#if !isTerminalSessionState(session.state)}
           <DropdownMenu.Separator />
           <DropdownMenu.Item variant="destructive" disabled={sessionManagementBusyId === session.session_id} onclick={() => void exitSessionFromMenu(session)}>
-            <SignOutIcon class="size-4" /> Exit
+            <SignOutIcon class="size-4" /> {$t('common.exit')}
           </DropdownMenu.Item>
         {/if}
       </DropdownMenu.Content>
@@ -216,7 +218,7 @@
 
 <div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden" onscroll={handleSessionListScroll}>
   {#if overviewQuery.error}
-    <p role="alert" class="px-4 py-2 text-xs text-destructive">Sidebar refresh failed. {overviewQuery.error.message}</p>
+    <p role="alert" class="px-4 py-2 text-xs text-destructive">{$t('sessions.sidebarFailed')} {overviewQuery.error.message}</p>
   {/if}
   {#if overview.pinned.length}
     <Sidebar.Group>
@@ -227,7 +229,7 @@
           aria-expanded={pinnedSessionsOpen}
           onclick={() => (pinnedSessionsOpen = !pinnedSessionsOpen)}
         >
-          <span>Pinned Sessions</span>
+          <span>{$t('sessions.pinnedTitle')}</span>
           <CaretRightIcon class={cn('size-3 transition-transform', pinnedSessionsOpen && 'rotate-90')} />
         </button>
       </Sidebar.GroupLabel>
@@ -250,7 +252,7 @@
         aria-expanded={recentSessionsOpen}
         onclick={() => (recentSessionsOpen = !recentSessionsOpen)}
       >
-        <span>Recent Sessions</span>
+        <span>{$t('sessions.recentTitle')}</span>
         <CaretRightIcon class={cn('size-3 transition-transform', recentSessionsOpen && 'rotate-90')} />
       </button>
       <span class="flex-1"></span>
@@ -258,8 +260,8 @@
         <button
           type="button"
           class="rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
-          aria-label="Open all sessions"
-          title="All sessions"
+          aria-label={$t('sessions.openAll')}
+          title={$t('sessions.all')}
           onclick={() => go('/sessions')}
         >
           <ArrowUpRightIcon class="size-4" />
@@ -267,15 +269,15 @@
         <DropdownMenu.Root>
           <DropdownMenu.Trigger
             class={cn('rounded-sm hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden', $selectedWorkspaceId && 'text-primary')}
-            aria-label="Filter recent sessions by workspace"
-            title={$selectedWorkspaceId ? `Workspace: ${selectedWorkspace?.name || selectedWorkspace?.display_path || $selectedWorkspaceId}` : 'All workspaces'}
+            aria-label={$t('sessions.filterWorkspace')}
+            title={$selectedWorkspaceId ? `Workspace: ${selectedWorkspace?.name || selectedWorkspace?.display_path || $selectedWorkspaceId}` : $t('workspaces.all')}
           >
             <FunnelIcon class="size-4" weight={$selectedWorkspaceId ? 'fill' : 'regular'} />
           </DropdownMenu.Trigger>
           <DropdownMenu.Content side="right" align="start" class="max-h-80 w-72 overflow-y-auto">
-            <DropdownMenu.Label>Workspace</DropdownMenu.Label>
+            <DropdownMenu.Label>{$t('workspace.title')}</DropdownMenu.Label>
             <DropdownMenu.RadioGroup bind:value={$selectedWorkspaceId}>
-              <DropdownMenu.RadioItem value="">All workspaces</DropdownMenu.RadioItem>
+              <DropdownMenu.RadioItem value="">{$t('workspaces.all')}</DropdownMenu.RadioItem>
               <DropdownMenu.Separator />
               {#each workspacesQuery.data ?? [] as workspace (workspace.workspace_id)}
                 <DropdownMenu.RadioItem value={workspace.workspace_id}>
@@ -289,12 +291,12 @@
               {/each}
             </DropdownMenu.RadioGroup>
             {#if workspacesQuery.error}
-              <p role="alert" class="px-2 py-1 text-xs text-destructive">Could not load workspaces.</p>
-              <DropdownMenu.Item onclick={() => void workspacesQuery.refetch()}>Retry</DropdownMenu.Item>
+              <p role="alert" class="px-2 py-1 text-xs text-destructive">{$t('workspaces.loadFailedMessage')}</p>
+              <DropdownMenu.Item onclick={() => void workspacesQuery.refetch()}>{$t('common.retry')}</DropdownMenu.Item>
             {:else if workspacesQuery.isPending}
-              <p role="status" class="px-2 py-1 text-xs text-muted-foreground">Loading workspaces…</p>
+              <p role="status" class="px-2 py-1 text-xs text-muted-foreground">{$t('workspaces.loading')}</p>
             {:else if !workspacesQuery.data?.length}
-              <p class="px-2 py-1 text-xs text-muted-foreground">No workspaces</p>
+              <p class="px-2 py-1 text-xs text-muted-foreground">{$t('workspaces.empty')}</p>
             {/if}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
@@ -312,7 +314,7 @@
           {/each}
         {:else if !overviewQuery.error}
           <Sidebar.MenuItem>
-            <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">No recent sessions</div>
+            <div class="px-2 py-1 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">{$t('sessions.noRecent')}</div>
           </Sidebar.MenuItem>
         {/if}
         {#if overviewQuery.isFetchingNextPage}

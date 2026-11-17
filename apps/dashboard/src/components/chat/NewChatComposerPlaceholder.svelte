@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon'
@@ -18,10 +19,10 @@
     <div class="py-1 pl-1">
       <span class="flex size-8 items-center justify-center text-muted-foreground opacity-50"><PlusIcon class="size-4" /></span>
     </div>
-    <div class="py-2 text-base text-muted-foreground sm:text-[13.5px]">Describe a task…</div>
+    <div class="py-2 text-base text-muted-foreground sm:text-[13.5px]">{$t('chat.taskPlaceholder')}</div>
     <div class="p-1">
       <span class="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground opacity-50 max-sm:w-7 max-sm:justify-center max-sm:px-0">
-        <span class="max-sm:sr-only">Start session</span>
+        <span class="max-sm:sr-only">{$t('chat.startSession')}</span>
         <ArrowUpIcon class="size-3.5" />
       </span>
     </div>

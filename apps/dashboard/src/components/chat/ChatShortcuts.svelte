@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../device/context';
   import { onMount } from 'svelte'
   import { navigate } from '$lib/navigation'
@@ -85,14 +86,14 @@
 <Dialog.Root bind:open={shortcutsOpen}>
   <Dialog.Content class="sm:max-w-lg">
     <Dialog.Header>
-      <Dialog.Title>Keyboard shortcuts</Dialog.Title>
-      <Dialog.Description>Chat shortcuts work on New Chat and session chat pages. The sidebar shortcut works on every page.</Dialog.Description>
+      <Dialog.Title>{$t('shortcuts.title')}</Dialog.Title>
+      <Dialog.Description>{$t('shortcuts.description')}</Dialog.Description>
     </Dialog.Header>
 
     <div class="space-y-1">
       {#each helpShortcuts as shortcut}
         <div class="flex items-center justify-between gap-4 py-1.5">
-          <div class="min-w-0 text-sm">{shortcut.label}</div>
+          <div class="min-w-0 text-sm">{$t(shortcut.label)}</div>
           <ShortcutKeys keys={shortcut.keys} class="shrink-0 border border-border bg-transparent" />
         </div>
       {/each}

@@ -1,3 +1,4 @@
+import { translate } from "$lib/i18n";
 import { writable } from "svelte/store";
 
 import type { InboxMessageView, SubmitInboxMessageInput } from "../api/types";
@@ -13,7 +14,7 @@ export interface UnconfirmedSubmission {
 
 export class SubmissionUnconfirmedError extends Error {
   constructor() {
-    super("Submission receipt unknown. Use Check / recover submission to resume this same input.");
+    super(translate("inbox.unknownSubmission"));
   }
 }
 export function createInboxRecovery(device: DeviceRuntime) {
@@ -34,9 +35,7 @@ export function createInboxRecovery(device: DeviceRuntime) {
           typeof item.input?.input !== "string",
       )
     ) {
-      throw new Error(
-        "Saved Inbox submissions could not be read. Preserve browser storage to recover them.",
-      );
+      throw new Error(translate("inbox.storageUnreadable"));
     }
     return items;
   }

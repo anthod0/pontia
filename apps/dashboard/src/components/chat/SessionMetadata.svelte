@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import AtIcon from 'phosphor-svelte/lib/AtIcon'
   import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
@@ -38,7 +39,7 @@
 
 <div data-testid="session-metadata" class="relative min-w-0 flex-1">
   <Popover.Root bind:open={sessionDetailsOpen}>
-    <Popover.Trigger class="flex h-7 w-fit max-w-full min-w-0 items-center rounded-md px-1.5 text-left font-mono text-[11px] outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Session details: ${metadataSummary}`}>
+    <Popover.Trigger class="flex h-7 w-fit max-w-full min-w-0 items-center rounded-md px-1.5 text-left font-mono text-[11px] outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring" aria-label={$t('chat.detailsSummary', { summary: metadataSummary })}>
       <span data-chat-session-details-summary class="block min-w-0 flex-1 truncate">
         {#each visibleFields as field, index (field.key)}
           {#if index > 0}<span class="mx-1.5 inline-block h-2.5 border-l align-middle" aria-hidden="true"></span>{/if}
@@ -53,7 +54,7 @@
         {/each}
       </span>
     </Popover.Trigger>
-    <Popover.Content side="top" align="start" role="dialog" aria-label="Session details" class="w-[min(24rem,calc(100vw-2rem))] p-3">
+    <Popover.Content side="top" align="start" role="dialog" aria-label={$t('chat.details')} class="w-[min(24rem,calc(100vw-2rem))] p-3">
       <dl class="space-y-3 text-sm">
         {#each visibleFields as field (field.key)}
           <div class="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2">

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import { useDeviceRuntime } from '../../device/context';
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon'
@@ -111,7 +112,7 @@
   function pathBreadcrumbs(path: string): { label: string, path: string }[] {
     const segments = path.split('/').filter(Boolean)
     return [
-      { label: selectedRoot?.label ?? 'Root', path: '' },
+      { label: selectedRoot?.label ?? $t('workspaces.root'), path: '' },
       ...segments.map((segment, index) => ({ label: segment, path: segments.slice(0, index + 1).join('/') })),
     ]
   }
@@ -139,14 +140,14 @@
   }
 
   function workspaceAvailabilityLabel(availability: WorkspaceAvailability): string {
-    if (availability.status === 'available') return 'Available'
+    if (availability.status === 'available') return $t('common.available')
     const labels = {
-      outside_root: 'Outside root',
-      missing_directory: 'Missing directory',
-      not_directory: 'Not a directory',
-      permission_denied: 'Permission denied',
-      root_unavailable: 'Cannot check: root unavailable',
-      check_failed: 'Cannot check directory',
+      outside_root: $t('workspaces.outsideRoot'),
+      missing_directory: $t('workspaces.missingDirectory'),
+      not_directory: $t('workspaces.notDirectory'),
+      permission_denied: $t('workspaces.permissionDenied'),
+      root_unavailable: $t('workspaces.rootUnavailable'),
+      check_failed: $t('workspaces.cannotCheck'),
     }
     return labels[availability.reason]
   }
@@ -174,7 +175,7 @@
 
   function workspaceName(path: string): string {
     const segments = path.split('/').filter(Boolean)
-    return segments.at(-1) ?? selectedRoot?.label ?? 'Workspace'
+    return segments.at(-1) ?? selectedRoot?.label ?? $t('workspace.title')
   }
 
   async function togglePath(path: string, workspace: WorkspaceView | null): Promise<void> {
@@ -276,7 +277,7 @@
       <Empty.Description>{message}</Empty.Description>
     </Empty.Header>
     <Empty.Content>
-      <Button size="sm" variant="outline" onclick={onretry}><ArrowsClockwiseIcon class="size-4" /> Retry</Button>
+      <Button size="sm" variant="outline" onclick={onretry}><ArrowsClockwiseIcon class="size-4" /> {$t('common.retry')}</Button>
     </Empty.Content>
   </Empty.Root>
 {/snippet}
@@ -284,10 +285,10 @@
 <div class="mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-lg border bg-background text-sm shadow-sm">
   {#if browserLoadError}
     <div class="flex min-h-56 flex-col">
-      {@render loadError('Workspace browser unavailable', browserLoadError.message, () => void refreshAll())}
+      {@render loadError($t('workspaces.browserUnavailable'), browserLoadError.message, () => void refreshAll())}
     </div>
   {:else if workspacesLoading || rootsQuery.isPending}
-    <div class="space-y-3 p-4" aria-label="Loading workspace browser">
+    <div class="space-y-3 p-4" aria-label={$t('workspaces.loadingBrowser')}>
       <Skeleton class="h-8 w-full" />
       <Skeleton class="h-72 w-full" />
     </div>
@@ -295,22 +296,22 @@
     <Empty.Root class="min-h-56">
       <Empty.Header>
         <Empty.Media variant="icon"><FolderIcon class="size-4" /></Empty.Media>
-        <Empty.Title>No workspace roots configured</Empty.Title>
-        <Empty.Description>Run <code class="rounded-sm bg-muted px-1 py-0.5 text-foreground">pontia init</code> on the Pontia host, configure at least one workspace root, then restart Pontia.</Empty.Description>
+        <Empty.Title>{$t('workspaces.noRoots')}</Empty.Title>
+        <Empty.Description>{$t('workspaces.runPrefix')} <code class="rounded-sm bg-muted px-1 py-0.5 text-foreground">pontia init</code> {$t('workspaces.initSuffix')}</Empty.Description>
       </Empty.Header>
     </Empty.Root>
   {:else}
     <Tooltip.Provider delayDuration={300}>
       <div class="flex items-center gap-1 border-b px-2 py-1.5">
-        {@render toolbarButton({ label: 'Open parent directory', disabled: view !== 'directory' || parentPath === null, onclick: () => openPath(parentPath ?? ''), icon: ArrowUpIcon })}
-        <nav aria-label="Current path" class="min-w-0 flex-1">
+        {@render toolbarButton({ label: $t('workspaces.parentDirectory'), disabled: view !== 'directory' || parentPath === null, onclick: () => openPath(parentPath ?? ''), icon: ArrowUpIcon })}
+        <nav aria-label={$t('workspaces.currentPath')} class="min-w-0 flex-1">
           <ol class="flex min-w-0 items-center overflow-x-auto rounded-md bg-muted/60 px-1 py-0.5 whitespace-nowrap">
             {#if view !== 'directory'}
               {@const ViewIcon = view === 'active' ? StarIcon : WarningCircleIcon}
               <li>
                 <span class="flex h-6 items-center gap-1.5 px-1.5 font-medium text-foreground" aria-current="page">
                   <ViewIcon class="size-3.5" aria-hidden="true" />
-                  {view === 'active' ? 'Active' : 'Unavailable workspaces'}
+                  {view === 'active' ? $t('common.active') : $t('workspaces.unavailable')}
                 </span>
               </li>
             {:else}
@@ -334,20 +335,20 @@
         </nav>
         {#if view === 'directory'}
           {@render toolbarButton({
-            label: 'Show hidden',
-            tooltip: showHiddenDirectories ? 'Hide hidden directories' : 'Show hidden directories',
+            label: $t('workspaces.showHidden'),
+            tooltip: showHiddenDirectories ? $t('workspaces.hideHiddenDirectories') : $t('workspaces.showHiddenDirectories'),
             pressed: showHiddenDirectories,
             class: 'text-muted-foreground aria-pressed:text-foreground',
             onclick: () => { showHiddenDirectories = !showHiddenDirectories },
             icon: showHiddenDirectories ? EyeIcon : EyeSlashIcon,
           })}
         {/if}
-        {@render toolbarButton({ label: 'Refresh', onclick: () => void refreshAll(), icon: ArrowsClockwiseIcon })}
+        {@render toolbarButton({ label: $t('common.refresh'), onclick: () => void refreshAll(), icon: ArrowsClockwiseIcon })}
         {#if view === 'directory' && listing}
           {@const name = currentWorkspace?.name ?? workspaceName(listing.path)}
           {@render toolbarButton({
-            label: currentWorkspace ? `Deactivate ${name}` : `Activate ${name}`,
-            tooltip: registeringPath === listing.path ? 'Activating…' : currentWorkspace ? 'Deactivate current directory' : 'Activate current directory',
+            label: currentWorkspace ? $t('workspaces.deactivateNamed', { name: name }) : $t('workspaces.activateNamed', { name: name }),
+            tooltip: registeringPath === listing.path ? $t('workspaces.activating') : currentWorkspace ? $t('workspaces.deactivateCurrent') : $t('workspaces.activateCurrent'),
             class: currentWorkspace ? 'text-primary hover:text-primary' : undefined,
             disabled: actionsDisabled,
             onclick: () => void togglePath(listing?.path ?? '', currentWorkspace),
@@ -362,12 +363,12 @@
       <div class="flex items-center gap-2 border-b px-3 py-1.5 text-xs text-destructive" role="alert">
         <WarningCircleIcon class="size-3.5 shrink-0" aria-hidden="true" />
         <span class="min-w-0 flex-1 truncate" title={actionError}>{actionError}</span>
-        <Button size="icon-xs" variant="ghost" class="text-muted-foreground" aria-label="Dismiss error" onclick={() => { actionError = null }}><XIcon /></Button>
+        <Button size="icon-xs" variant="ghost" class="text-muted-foreground" aria-label={$t('common.dismissError')} onclick={() => { actionError = null }}><XIcon /></Button>
       </div>
     {/if}
 
     <div class="flex min-h-0 flex-col md:h-[30rem] md:flex-row">
-      <nav aria-label="Workspace browser locations" class="flex shrink-0 gap-1 overflow-x-auto border-b p-2 md:w-52 md:flex-col md:gap-3 md:border-r md:border-b-0">
+      <nav aria-label={$t('workspaces.browserLocations')} class="flex shrink-0 gap-1 overflow-x-auto border-b p-2 md:w-52 md:flex-col md:gap-3 md:border-r md:border-b-0">
         <button
           type="button"
           class={sidebarItemClass}
@@ -375,7 +376,7 @@
           onclick={() => navigate({ view: 'active' })}
         >
           <StarIcon class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span class="truncate">Active</span>
+          <span class="truncate">{$t('common.active')}</span>
           <span class="ml-auto pl-2 text-xs font-normal text-muted-foreground">{workspacesLoading ? '…' : activeWorkspaces.length}</span>
         </button>
         {#if unavailableWorkspaces.length}
@@ -386,13 +387,13 @@
             onclick={() => navigate({ view: 'unavailable' })}
           >
             <WarningCircleIcon class="size-4 shrink-0 text-warning" aria-hidden="true" />
-            <span class="truncate">Unavailable</span>
+            <span class="truncate">{$t('common.unavailable')}</span>
             <span class="ml-auto pl-2 text-xs font-normal text-muted-foreground">{unavailableWorkspaces.length}</span>
           </button>
         {/if}
         <div class="flex gap-1 md:flex-col">
-          <p class="hidden px-2 text-xs font-medium text-muted-foreground md:block">Roots</p>
-          <ul class="flex gap-1 md:flex-col" aria-label="Workspace roots">
+          <p class="hidden px-2 text-xs font-medium text-muted-foreground md:block">{$t('workspaces.roots')}</p>
+          <ul class="flex gap-1 md:flex-col" aria-label={$t('workspaces.workspaceRoots')}>
             {#each workspaceRoots as root (root.root_id)}
               <li>
                 <button
@@ -416,7 +417,7 @@
           {#if workspacesLoading}
             <div class="space-y-1 p-2"><Skeleton class="h-10 w-full" /><Skeleton class="h-10 w-full" /></div>
           {:else if activeWorkspaces.length}
-            <ul class="flex-1 overflow-auto p-1" aria-label="Active workspaces">
+            <ul class="flex-1 overflow-auto p-1" aria-label={$t('workspaces.active')}>
               {#each activeWorkspaces as workspace (workspace.workspace_id)}
                 {@const location = workspaceLocation(workspace)}
                 {@const title = workspace.name ?? workspace.display_path}
@@ -424,7 +425,7 @@
                   <button
                     type="button"
                     class="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left outline-none disabled:cursor-default"
-                    aria-label="Open workspace {title}"
+                    aria-label={$t('workspaces.openNamed', { name: title })}
                     title={location ? workspace.canonical_path : `${workspace.canonical_path}: ${workspaceAvailabilityLabel(workspace.availability)}`}
                     disabled={!location}
                     onclick={() => { if (location) navigate(location) }}
@@ -436,17 +437,17 @@
                     </span>
                   </button>
                   <div class="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100 group-has-focus-visible:opacity-100">
-                    <Button size="icon-xs" variant="ghost" aria-label={`Rename ${title}`} title="Rename workspace" onclick={() => startRenamingWorkspace(workspace)}><PencilSimpleIcon /></Button>
-                    <Button size="xs" variant="ghost" aria-label={`Deactivate ${title}`} title="Remove workspace registration" onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id)} disabled={actionsDisabled}>Deactivate</Button>
+                    <Button size="icon-xs" variant="ghost" aria-label={$t('workspaces.renameNamed', { name: title })} title={$t('workspaces.rename')} onclick={() => startRenamingWorkspace(workspace)}><PencilSimpleIcon /></Button>
+                    <Button size="xs" variant="ghost" aria-label={$t('workspaces.deactivateNamed', { name: title })} title={$t('workspaces.removeRegistration')} onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id)} disabled={actionsDisabled}>{$t('workspaces.deactivate')}</Button>
                   </div>
                 </li>
               {/each}
             </ul>
           {:else}
-            <Empty.Root class="flex-1"><Empty.Header><Empty.Media variant="icon"><StarIcon class="size-4" /></Empty.Media><Empty.Title>No active workspaces</Empty.Title><Empty.Description>Activate a directory from a root to add it here.</Empty.Description></Empty.Header></Empty.Root>
+            <Empty.Root class="flex-1"><Empty.Header><Empty.Media variant="icon"><StarIcon class="size-4" /></Empty.Media><Empty.Title>{$t('workspaces.noActive')}</Empty.Title><Empty.Description>{$t('workspaces.activateHint')}</Empty.Description></Empty.Header></Empty.Root>
           {/if}
         {:else if view === 'unavailable'}
-          <ul class="flex-1 overflow-auto p-1" aria-label="Unavailable workspaces">
+          <ul class="flex-1 overflow-auto p-1" aria-label={$t('workspaces.unavailable')}>
             {#each unavailableWorkspaces as workspace (workspace.workspace_id)}
               {@const title = workspace.name ?? workspace.display_path}
               <li class="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted">
@@ -459,12 +460,12 @@
                   size="xs"
                   variant="ghost"
                   class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                  aria-label={`Revoke ${title}`}
-                  title="Remove workspace registration"
+                  aria-label={$t('workspaces.revokeNamed', { name: title })}
+                  title={$t('workspaces.removeRegistration')}
                   onclick={() => void deleteRegisteredWorkspace(workspace.workspace_id)}
                   disabled={actionsDisabled}
                 >
-                  Revoke
+                  {$t('workspaces.revoke')}
                 </Button>
               </li>
             {/each}
@@ -474,16 +475,16 @@
           {#if entriesQuery.isFetching && !listing}
             <div class="space-y-1 p-2"><Skeleton class="h-8 w-full" /><Skeleton class="h-8 w-full" /><Skeleton class="h-8 w-full" /></div>
           {:else if entriesQuery.error}
-            {@render loadError('Cannot open this directory', entriesQuery.error.message, () => void retryDirectory())}
+            {@render loadError($t('workspaces.cannotOpen'), entriesQuery.error.message, () => void retryDirectory())}
           {:else if listing && visibleEntries.length}
-            <ul class="flex-1 overflow-auto p-1" aria-label="Directories">
+            <ul class="flex-1 overflow-auto p-1" aria-label={$t('workspaces.directories')}>
               {#each visibleEntries as entry (entry.path)}
                 {@const entryWorkspace = workspaceForEntry(entry)}
                 <li class="group flex items-center gap-2 rounded-md pr-1 hover:bg-muted">
                   <button
                     type="button"
                     class="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left outline-none"
-                    aria-label="Open directory {entry.name}"
+                    aria-label={$t('workspaces.openDirectoryNamed', { name: entry.name })}
                     onclick={() => openPath(entry.path)}
                   >
                     {#if entry.is_workspace}<FolderStarIcon weight="fill" class="size-4.5 shrink-0 text-primary" aria-hidden="true" />{:else}<FolderIcon weight="fill" class="size-4.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />{/if}
@@ -494,26 +495,26 @@
                   </button>
                   <div class="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100 group-has-focus-visible:opacity-100">
                     {#if entryWorkspace}
-                      <Button size="icon-xs" variant="ghost" aria-label={`Rename ${entryWorkspace.name ?? entry.name}`} title="Rename workspace" onclick={() => startRenamingWorkspace(entryWorkspace)}><PencilSimpleIcon /></Button>
+                      <Button size="icon-xs" variant="ghost" aria-label={$t('workspaces.renameNamed', { name: entryWorkspace.name ?? entry.name })} title={$t('workspaces.rename')} onclick={() => startRenamingWorkspace(entryWorkspace)}><PencilSimpleIcon /></Button>
                     {/if}
                     <Button
                       size="xs"
                       variant={entry.is_workspace ? 'ghost' : 'outline'}
-                      aria-label={entry.is_workspace ? `Deactivate ${entry.name}` : `Activate ${entry.name}`}
-                      title={entry.is_workspace ? 'Remove workspace registration' : 'Register as workspace'}
+                      aria-label={entry.is_workspace ? $t('workspaces.deactivateNamed', { name: entry.name }) : $t('workspaces.activateNamed', { name: entry.name })}
+                      title={entry.is_workspace ? $t('workspaces.removeRegistration') : $t('workspaces.register')}
                       onclick={() => void togglePath(entry.path, entryWorkspace)}
                       disabled={actionsDisabled}
                     >
-                      {registeringPath === entry.path ? 'Activating…' : entry.is_workspace ? 'Deactivate' : 'Activate'}
+                      {registeringPath === entry.path ? $t('workspaces.activating') : entry.is_workspace ? $t('workspaces.deactivate') : $t('workspaces.activate')}
                     </Button>
                   </div>
                 </li>
               {/each}
             </ul>
           {:else if listing}
-            <Empty.Root class="flex-1"><Empty.Header><Empty.Media variant="icon"><FolderOpenIcon class="size-4" /></Empty.Media><Empty.Title>No subdirectories</Empty.Title><Empty.Description>{hiddenEntryCount ? `${hiddenEntryCount} hidden director${hiddenEntryCount === 1 ? 'y' : 'ies'}.` : 'This directory is empty.'}</Empty.Description></Empty.Header></Empty.Root>
+            <Empty.Root class="flex-1"><Empty.Header><Empty.Media variant="icon"><FolderOpenIcon class="size-4" /></Empty.Media><Empty.Title>{$t('workspaces.noSubdirectories')}</Empty.Title><Empty.Description>{hiddenEntryCount ? $t('workspaces.hiddenCount', { count: hiddenEntryCount }) : $t('workspaces.emptyDirectory')}</Empty.Description></Empty.Header></Empty.Root>
           {:else}
-            <Empty.Root class="flex-1"><Empty.Header><Empty.Title>No root opened</Empty.Title><Empty.Description>Select a workspace root to browse.</Empty.Description></Empty.Header></Empty.Root>
+            <Empty.Root class="flex-1"><Empty.Header><Empty.Title>{$t('workspaces.noRootOpen')}</Empty.Title><Empty.Description>{$t('workspaces.selectRoot')}</Empty.Description></Empty.Header></Empty.Root>
         {/if}
         {/if}
       </div>
@@ -526,18 +527,18 @@
     <Dialog.Content class="max-w-md">
       <form onsubmit={(event) => { event.preventDefault(); void confirmRenameWorkspace() }}>
         <Dialog.Header>
-          <Dialog.Title>Confirm workspace rename</Dialog.Title>
-          <Dialog.Description>Rename <span class="font-medium text-foreground">{renamingWorkspace.name ?? renamingWorkspace.display_path}</span>.</Dialog.Description>
+          <Dialog.Title>{$t('workspaces.confirmRename')}</Dialog.Title>
+          <Dialog.Description>{$t('common.rename')} <span class="font-medium text-foreground">{renamingWorkspace.name ?? renamingWorkspace.display_path}</span>.</Dialog.Description>
         </Dialog.Header>
         <div class="mt-4 space-y-2">
-          <Label for="rename-workspace-name">Display name</Label>
+          <Label for="rename-workspace-name">{$t('workspaces.displayName')}</Label>
           <Input id="rename-workspace-name" bind:value={renamingWorkspaceName} placeholder={renamingWorkspace.display_path} />
-          <p class="text-xs text-muted-foreground">Clear the name to display the workspace path.</p>
+          <p class="text-xs text-muted-foreground">{$t('workspaces.clearNameHint')}</p>
           {#if renameError}<p class="text-xs text-destructive" role="alert">{renameError}</p>{/if}
         </div>
         <Dialog.Footer class="mt-5">
-          <Button type="button" variant="outline" onclick={cancelRenamingWorkspace} disabled={savingRename}>Cancel</Button>
-          <Button type="submit" disabled={savingRename}>{savingRename ? 'Saving…' : 'Rename workspace'}</Button>
+          <Button type="button" variant="outline" onclick={cancelRenamingWorkspace} disabled={savingRename}>{$t('common.cancel')}</Button>
+          <Button type="submit" disabled={savingRename}>{savingRename ? $t('common.saving') : $t('workspaces.rename')}</Button>
         </Dialog.Footer>
       </form>
     </Dialog.Content>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import LightbulbIcon from 'phosphor-svelte/lib/LightbulbIcon'
   import * as Message from '$lib/components/ai-elements/message/index.js'
@@ -10,6 +11,7 @@
   import ThoughtExecution from './ThoughtExecution.svelte'
   import ThoughtFallbackStep from './ThoughtFallbackStep.svelte'
   import ThoughtFileStep from './ThoughtFileStep.svelte'
+  import { managedToolUseTitle } from '../../session-chat/sessionChat'
   import type { SessionChatThoughtStep } from '../../session-chat/sessionChat'
 
   interface Props {
@@ -88,7 +90,7 @@
   <Collapsible.Root bind:open class={cn('not-prose min-w-0', className)}>
     <Collapsible.Trigger
       class="group inline-flex min-w-0 items-center gap-1.5 py-2.5 pr-3 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label={open ? 'Hide agent work steps' : 'Show agent work steps'}
+      aria-label={open ? $t('chat.hideSteps') : $t('chat.showSteps')}
     >
       <span class="truncate"><TurnDuration {turn} {active} /></span>
       <CaretRightIcon class={cn('size-4 shrink-0 transition-transform', open && 'rotate-90')} aria-hidden="true" />
@@ -102,7 +104,7 @@
               <Message.Response content={step.content} markdown streamId={step.id} />
             </div>
           {:else if step.kind === 'tool_call' && step.managedToolUse?.input.type === 'bash'}
-            <ThoughtCommandStep title={step.title} command={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)}>
+            <ThoughtCommandStep title={step.managedToolUse ? managedToolUseTitle(step.managedToolUse, $t) : step.title} command={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)}>
               {#if step.executionStatus}
                 <ThoughtExecution {step} />
               {/if}
@@ -125,18 +127,18 @@
               {/each}
             </ThoughtFileStep>
           {:else if step.kind === 'tool_call'}
-            <ThoughtFallbackStep title={step.title} content={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)}>
+            <ThoughtFallbackStep title={step.managedToolUse ? managedToolUseTitle(step.managedToolUse, $t) : step.title} content={step.content} result={step.executionStatus ? undefined : step.result?.content} error={step.result?.status === 'error'} connected={hasConnectorAfter(index)}>
               {#if step.executionStatus}
                 <ThoughtExecution {step} />
               {/if}
             </ThoughtFallbackStep>
           {:else if step.kind === 'tool_result'}
-            <ThoughtFallbackStep title={step.title} content={step.content} detailsLabel="result" error={step.status === 'error'} connected={hasConnectorAfter(index)} />
+            <ThoughtFallbackStep title={step.managedToolUse ? managedToolUseTitle(step.managedToolUse, $t) : step.title} content={step.content} detailsLabel="result" error={step.status === 'error'} connected={hasConnectorAfter(index)} />
           {:else}
             <div class="relative flex min-w-0 gap-3 py-1.5">
               <span
                 class="relative z-10 flex size-6 shrink-0 items-center justify-center bg-background text-muted-foreground"
-                aria-label="Thinking"
+                aria-label={$t('chat.thinking')}
               >
                 <LightbulbIcon class="size-4" aria-hidden="true" />
               </span>
@@ -146,14 +148,14 @@
               <div class="min-w-0 flex-1 pt-0.5 text-sm leading-5">
                 <span class="break-words font-medium text-foreground/75">{step.content}</span>
                 {#if step.truncated}
-                  <span class="block text-xs text-muted-foreground">Truncated · remaining thinking not shown</span>
+                  <span class="block text-xs text-muted-foreground">{$t('chat.thinkingTruncated')}</span>
                 {/if}
               </div>
             </div>
           {/if}
         {/each}
         {#if !visibleSteps.length}
-          <p class="py-2 text-sm text-muted-foreground">Working…</p>
+          <p class="py-2 text-sm text-muted-foreground">{$t('chat.working')}</p>
         {/if}
       </div>
     </Collapsible.Content>

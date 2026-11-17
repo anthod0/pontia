@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte'
   import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
   import WrenchIcon from 'phosphor-svelte/lib/WrenchIcon'
@@ -32,13 +33,13 @@
 <Collapsible.Root bind:open class="relative min-w-0">
   <Collapsible.Trigger
     class="group/fallback-step flex w-full min-w-0 gap-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    aria-label={open ? `Hide ${title} ${detailsLabel}` : `Show ${title} ${detailsLabel}`}
+    aria-label={open ? $t('chat.hideToolDetails', { title, details: detailsLabel }) : $t('chat.showToolDetails', { title, details: detailsLabel })}
   >
     <span class="relative z-10 flex size-6 shrink-0 items-center justify-center bg-background text-muted-foreground">
       <WrenchIcon class="size-4 group-hover/fallback-step:hidden" aria-hidden="true" />
       <CaretRightIcon class={cn('hidden size-4 transition-transform group-hover/fallback-step:block', open && 'rotate-90')} aria-hidden="true" />
     </span>
-    <span class={cn("min-w-0 flex-1 break-words pt-0.5 text-sm font-medium leading-5", error ? "text-destructive" : "text-foreground/75")}>{title}{detailsLabel === 'result' ? ' · Result' : ''}</span>
+    <span class={cn("min-w-0 flex-1 break-words pt-0.5 text-sm font-medium leading-5", error ? "text-destructive" : "text-foreground/75")}>{title}{detailsLabel === 'result' ? $t('chat.resultSuffix') : ''}</span>
   </Collapsible.Trigger>
 
   {#if connected}
