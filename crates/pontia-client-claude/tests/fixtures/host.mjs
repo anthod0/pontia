@@ -7,7 +7,7 @@ import { createInterface } from "node:readline";
 import { execFileSync } from "node:child_process";
 
 const lines = createInterface({ input: process.stdin });
-const [line] = await Promise.all([new Promise((resolve) => lines.once("line", resolve))]);
+const line = await new Promise((resolve) => lines.once("line", resolve));
 lines.close();
 const config = JSON.parse(line);
 if (process.argv[2] === "history") {

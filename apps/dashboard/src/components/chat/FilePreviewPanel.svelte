@@ -54,7 +54,7 @@
 
   $effect(() => {
     const { device, sessionId, path } = target
-    attempt
+    void attempt
     const controller = new AbortController()
     text = null
     failure = null

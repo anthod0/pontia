@@ -2,7 +2,7 @@ import { writable } from "svelte/store";
 import type { DeviceRuntime } from "../device/runtime";
 
 export type SseStatus = "idle" | "connecting" | "open" | "reconnecting" | "closed" | "error";
-export function createConnection(device: DeviceRuntime) {
+export function createConnection(_device: DeviceRuntime) {
   const sseStatus = writable<SseStatus>("idle");
 
   const reconnectCount = writable(0);

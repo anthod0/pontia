@@ -11,7 +11,7 @@
 
   let { sessionId, snapshot }: { sessionId: string; snapshot: WorkflowDetailView } = $props()
   const sessionQuery = createSessionQuery(() => sessionId, () => false)
-  $effect(() => { snapshot; sessionId; untrack(() => void sessionQuery.refetch()) })
+  $effect(() => { void snapshot; void sessionId; untrack(() => void sessionQuery.refetch()) })
 </script>
 
 <div class="flex flex-wrap items-center gap-2 text-sm">

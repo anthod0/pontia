@@ -4,11 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 import MultiDeviceDashboardHarness from "../components/MultiDeviceDashboardHarness.svelte";
 import { createRemoteAccessFixture } from "./fixtures/remoteConnections";
-import {
-  saveUploadRecord,
-  loadUploadRecords,
-  removeUploadRecord,
-} from "../../src/lib/uploads/records";
+import { loadUploadRecords, removeUploadRecord } from "../../src/lib/uploads/records";
 
 let fixture: ReturnType<typeof createRemoteAccessFixture>;
 const goto = vi.hoisted(() => vi.fn(async (url: string) => window.history.pushState({}, "", url)));

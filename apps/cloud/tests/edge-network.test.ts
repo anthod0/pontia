@@ -3,7 +3,6 @@ import {
   CloudflareDnsProvider,
   configureEdgeNetwork,
   edgeHostname,
-  edgeApiOrigin,
   isGlobalUnicastIpv4,
   verifyEdgeHealth,
   type DnsProvider,

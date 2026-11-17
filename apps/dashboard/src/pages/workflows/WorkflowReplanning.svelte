@@ -22,8 +22,8 @@
   } = $props()
   const patchesQuery = createWorkflowPatchesQuery(() => snapshot.workflow_id, () => false)
   let workflowId = $derived(snapshot.workflow_id)
-  $effect(() => { workflowId; return () => { selectedWorkflowHistorySessionIds.set([]) } })
-  $effect(() => { snapshot; untrack(() => void patchesQuery.refetch()) })
+  $effect(() => { void workflowId; return () => { selectedWorkflowHistorySessionIds.set([]) } })
+  $effect(() => { void snapshot; untrack(() => void patchesQuery.refetch()) })
   let patches = $derived((patchesQuery.data ?? []).filter(patch => patch.base_revision === revision))
   $effect(() => { selectedWorkflowHistorySessionIds.set(patches.flatMap(patch => patch.replanner_session_id ? [patch.replanner_session_id] : [])) })
   function time(value: string | null): string { return value ? formatDateTime(value, $currentLocale) : $t('common.notRecorded') }

@@ -1,6 +1,6 @@
 import { testDevice } from "../../deviceFixture";
 import { cleanup } from "@testing-library/svelte";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import type { SessionConsoleDetail } from "../../../src/stores/sessions";
 import type { TimelineState } from "../../../src/stores/timeline";
 import type {
@@ -108,7 +108,7 @@ const mocks = vi.hoisted(() => {
     terminateSession: vi.fn(),
     updateSessionTitle: vi.fn(),
     createSession: vi.fn(),
-    loadSessionTimeline: vi.fn(async (sessionId: string) => null),
+    loadSessionTimeline: vi.fn(async (_sessionId: string) => null),
     refreshSessionTimeline: vi.fn(async () => true),
     restoreSessionTimeline: vi.fn(async () => false),
     resetTimelineState: vi.fn((sessionId = "") => {
@@ -210,7 +210,7 @@ vi.mock("../../../src/stores/sessions", async (importOriginal) => {
       queryClient.setQueryData<Record<string, OptimisticInboxSubmission[]>>(
         sessionKeys.optimisticInbox(),
         (submissions) => ({
-          ...(submissions ?? {}),
+          ...submissions,
           [sessionId]: [...(submissions?.[sessionId] ?? []), optimistic],
         }),
       );
@@ -222,7 +222,7 @@ vi.mock("../../../src/stores/sessions", async (importOriginal) => {
         queryClient.setQueryData<Record<string, OptimisticInboxSubmission[]>>(
           sessionKeys.optimisticInbox(),
           (submissions) => ({
-            ...(submissions ?? {}),
+            ...submissions,
             [sessionId]: (submissions?.[sessionId] ?? []).filter(
               (submission) => submission.localId !== localId,
             ),
@@ -246,7 +246,7 @@ vi.mock("../../../src/stores/sessions", async (importOriginal) => {
         queryClient.setQueryData<
           Record<string, import("../../../src/lib/session-chat/sessionChat").SessionChatMessage[]>
         >(sessionKeys.optimisticChat(), (messages) => ({
-          ...(messages ?? {}),
+          ...messages,
           [result.session.session_id]: [
             ...(messages?.[result.session.session_id] ?? []),
             {

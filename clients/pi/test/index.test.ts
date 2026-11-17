@@ -32,7 +32,7 @@ function fakePi() {
                   ...ctx,
                   sessionManager: {
                     getSessionFile: () => "/tmp/pi/default-session.jsonl",
-                    ...(ctx.sessionManager ?? {}),
+                    ...ctx.sessionManager,
                   },
                 })
             : event === "agent_start"
@@ -42,7 +42,7 @@ function fakePi() {
                     ...ctx,
                     sessionManager: {
                       getLeafId: () => entryId,
-                      ...(ctx.sessionManager ?? {}),
+                      ...ctx.sessionManager,
                     },
                   });
                 }
@@ -96,7 +96,7 @@ function install(
   let turnSequence = 0;
   const env: Record<string, string | undefined> = {
     PONTIA_HOME: defaultPontiaHome,
-    ...(overrides.env ?? {}),
+    ...overrides.env,
   };
   const managedRuntime =
     env.PONTIA_SESSION_ID && env.PONTIA_RUNTIME_INSTANCE_ID

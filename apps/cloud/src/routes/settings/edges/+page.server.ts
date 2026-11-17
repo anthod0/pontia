@@ -54,6 +54,7 @@ export const actions: Actions = {
       return fail(400, { error: m.edges_error_name_required() });
     }
     const name = nameValue.trim();
+    // oxlint-disable-next-line no-control-regex -- Names must reject control characters.
     if (!name || name.length > 100 || /[\u0000-\u001f\u007f-\u009f]/.test(name)) {
       return fail(400, { error: m.edges_error_name_invalid() });
     }

@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, within } from "@testing-library/svelte";
-import { tick } from "svelte";
 import { beforeEach, expect, test, vi } from "vitest";
 import AppSidebarHost from "./components/layout/AppSidebarHost.svelte";
 import AppShellHost from "./components/layout/AppShellHost.svelte";

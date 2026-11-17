@@ -354,7 +354,3 @@ function textFromUnknown(value: unknown): string {
 function turnTimestamp(turn: TurnView): string {
   return turn.created_at || turn.started_at || turn.completed_at || "";
 }
-
-function shortId(id: string): string {
-  return id.split("_").at(-1)?.slice(0, 10) || id.slice(0, 10);
-}

@@ -36,6 +36,7 @@ export type DeviceUpdate =
   | { status: "invalid_request" | "not_found" | "handle_conflict" };
 
 export function isValidDeviceName(value: string) {
+  // oxlint-disable-next-line no-control-regex -- Names must reject control characters.
   return value.trim() === value && value.length > 0 && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
 }
 

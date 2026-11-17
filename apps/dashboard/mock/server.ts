@@ -862,7 +862,7 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
           lineage: null,
           created_at: timestamp,
           updated_at: timestamp,
-          metadata: { ...(option?.metadata ?? {}), model },
+          metadata: { ...option?.metadata, model },
         },
         turns: [],
         items: new Map(),

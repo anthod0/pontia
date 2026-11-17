@@ -46,7 +46,7 @@ function historyEntry(entry: Record<string, unknown>): Record<string, unknown> {
       // Timeline readers use text and image metadata, not inline image bytes.
       content: message.content.map((block) => {
         if (block?.type !== "image") return block;
-        const { data, ...image } = block;
+        const { data: _data, ...image } = block;
         return image;
       }),
     },

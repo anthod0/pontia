@@ -1,0 +1,13 @@
+{
+  "$schema": "./apps/dashboard/node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error"
+  },
+  "ignorePatterns": [
+    // Oxlint misparses <script> strings inside Svelte {@html} JSON-LD templates.
+    "apps/cloud/src/lib/components/BlogPost.svelte",
+    "apps/cloud/src/lib/components/HomeFaq.svelte",
+    "apps/cloud/src/routes/+page.svelte"
+  ]
+}

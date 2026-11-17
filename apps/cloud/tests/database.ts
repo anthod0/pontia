@@ -26,6 +26,7 @@ export function testDatabase() {
       await runtime?.dispose();
     } finally {
       if (!testRoot || !resolve(testRoot).startsWith(resolve(tmpdir()) + sep))
+        // oxlint-disable-next-line no-unsafe-finally -- An unsafe cleanup path must abort deletion.
         throw new Error("Invalid test root");
       await rm(testRoot, { recursive: true, force: true });
     }

@@ -29,7 +29,9 @@ test("uses a Bearer-authenticated fetch stream and parses live output events", a
     sequence: 1,
     items: [],
   };
-  const fetchMock = vi.fn(async () => new Response(eventStream(snapshot), { status: 200 }));
+  const fetchMock = vi.fn<typeof fetch>(
+    async () => new Response(eventStream(snapshot), { status: 200 }),
+  );
   vi.stubGlobal("fetch", fetchMock);
   token.set("secret");
   const onEvent = vi.fn();
@@ -38,7 +40,7 @@ test("uses a Bearer-authenticated fetch stream and parses live output events", a
 
   await vi.waitFor(() => expect(onEvent).toHaveBeenCalledWith(snapshot));
   expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/sessions/session%2F1/live-output/stream");
-  expect((fetchMock.mock.calls[0][1]?.headers as Headers).get("Authorization")).toBe(
+  expect((fetchMock.mock.calls[0][1]!.headers as Headers).get("Authorization")).toBe(
     "Bearer secret",
   );
   close();
@@ -52,7 +54,7 @@ test("cancels the active connection and pending reconnect when closed", async ()
     return new Response(
       new ReadableStream({
         start(controller) {
-          (init?.signal as AbortSignal).addEventListener("abort", () =>
+          (init!.signal as AbortSignal).addEventListener("abort", () =>
             controller.error(new DOMException("Aborted", "AbortError")),
           );
         },

@@ -51,6 +51,7 @@ export const actions: Actions = {
     }
     const name = nameValue.trim();
     const handle = handleValue.trim();
+    // oxlint-disable-next-line no-control-regex -- Names must reject control characters.
     if (!name || /[\u0000-\u001f\u007f-\u009f]/.test(name)) {
       return fail(400, { error: m.devices_error_name_invalid() });
     }

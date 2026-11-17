@@ -9,13 +9,16 @@
     "fmt:check": "oxfmt --check",
     "check": "bun check --no-script && wrangler deploy --dry-run",
     "test": "bun test tests",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "lint": "oxlint --deny-warnings",
+    "lint:fix": "oxlint --deny-warnings --fix"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260927.1",
     "@types/bun": "latest",
     "miniflare": "5.20260926.0-alpha",
     "oxfmt": "^0.70.0",
+    "oxlint": "^1.93.0",
     "typescript": "6.0.3",
     "wrangler": "^4.97.0"
   }

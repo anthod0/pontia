@@ -41,7 +41,7 @@ export function createLiveOutput(device: DeviceRuntime) {
         }
         await readSse(response.body, handlers.onEvent);
         if (!stopped) scheduleReconnect();
-      } catch (error) {
+      } catch {
         if (stopped || controller?.signal.aborted) return;
         scheduleReconnect();
       }

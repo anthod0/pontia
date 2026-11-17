@@ -19,6 +19,7 @@ async function withCloud(run: (root: string) => Promise<void>) {
       testRoot === homedir() ||
       homedir().startsWith(`${testRoot}${sep}`)
     )
+      // oxlint-disable-next-line no-unsafe-finally -- An unsafe cleanup path must abort deletion.
       throw new Error("Unsafe test cleanup path");
     await rm(testRoot, { recursive: true, force: true });
   }

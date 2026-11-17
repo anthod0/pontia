@@ -40,6 +40,14 @@ fmt-check:
 sqlx-prepare:
     ./scripts/sqlx-prepare.sh
 
+lint:
+    bun run --cwd apps/dashboard lint
+    bun run --cwd apps/cloud lint
+    bun run --cwd apps/cron lint
+    bun run --cwd clients/pi lint
+    bun run --cwd clients/claude lint
+    ./apps/dashboard/node_modules/.bin/oxlint --deny-warnings crates npm scripts
+
 sqlx-prepare-check:
     ./scripts/sqlx-prepare.sh --check
 
@@ -100,4 +108,4 @@ claude-delivery-test:
     bash scripts/pack-claude-client.sh "$test_root/claude-client.tgz"
     PONTIA_CLAUDE_TEST_PACKAGE="$test_root/claude-client.tgz" SQLX_OFFLINE=true cargo test -p pontia-client-claude --test delivery -- --ignored
 
-check: fmt-check sqlx-check clippy test ts-check dashboard-test pi-client-test claude-client-test npm-cli-test
+check: fmt-check lint sqlx-check clippy test ts-check dashboard-test pi-client-test claude-client-test npm-cli-test

@@ -33,12 +33,15 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "test": "vitest run",
-    "check": "bun check --no-script"
+    "check": "bun check --no-script",
+    "lint": "oxlint --deny-warnings",
+    "lint:fix": "oxlint --deny-warnings --fix"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^1.5.0",
     "@types/node": "^22.15.3",
     "oxfmt": "^0.70.0",
+    "oxlint": "^1.93.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.2"
   },

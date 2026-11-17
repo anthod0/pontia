@@ -1,7 +1,7 @@
 import { writable } from "svelte/store";
 import type { DeviceRuntime } from "../device/runtime";
 
-export function createChatDraft(device: DeviceRuntime) {
+export function createChatDraft(_device: DeviceRuntime) {
   const chatDraft = writable("");
 
   function setChatDraft(value: string): void {
