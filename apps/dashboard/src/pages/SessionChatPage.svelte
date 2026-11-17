@@ -1092,6 +1092,7 @@
                 <SessionConversation
                   {messages}
                   timelineItems={$timelineState.sessionId === selectedSessionId ? $timelineState.items : []}
+                  compactionBusy={selectedCompaction?.busy ?? false}
                   sessionId={selectedSessionId}
                   sharedFiles={$sharedFiles?.files ?? []}
                   turns={selectedTurns}

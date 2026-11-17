@@ -24,6 +24,7 @@
   interface Props {
     messages: SessionChatMessage[]
     timelineItems?: TimelineItem[]
+    compactionBusy?: boolean
     turns?: TurnView[]
     sessionId?: string
     sharedFiles?: SharedFile[]
@@ -42,6 +43,7 @@
   let {
     messages,
     timelineItems = [],
+    compactionBusy = false,
     turns = [],
     sessionId = '',
     sharedFiles = [],
@@ -62,7 +64,7 @@
   let editedInput = $state('')
   let copiedMessageResetTimer: ReturnType<typeof setTimeout> | null = null
   const displayMessages = $derived(messages)
-  const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState, activeTurnId, timelineItems))
+  const displayItems = $derived(conversationDisplayItems(displayMessages, sessionState, activeTurnId, timelineItems, compactionBusy))
   const displayTurns = $derived(conversationDisplayTurns(displayItems))
   const sharedFilesByTurn = $derived(groupFilesByTurn(sharedFiles))
   const turnsById = $derived(new Map(turns.map((turn) => [turn.turn_id, turn])))
@@ -157,7 +159,7 @@
 
   type ConversationDisplayItem =
     | { kind: 'message'; id: string; message: SessionChatMessage; showAgentStatus: boolean }
-    | { kind: 'compaction'; id: string; checkpoint: TimelineItem }
+    | { kind: 'compaction'; id: string; checkpoint: TimelineItem | null }
     | { kind: 'agent_status'; id: string }
     | { kind: 'agent_bottom_status'; id: string }
 
@@ -166,7 +168,7 @@
     | { kind: 'compaction'; id: string; item: Extract<ConversationDisplayItem, { kind: 'compaction' }> }
     | { kind: 'assistant_group'; id: string; items: ConversationDisplayItem[] }
 
-  function conversationDisplayItems(chatMessages: SessionChatMessage[], state: string | null, turnId: string | null, nativeItems: TimelineItem[]): ConversationDisplayItem[] {
+  function conversationDisplayItems(chatMessages: SessionChatMessage[], state: string | null, turnId: string | null, nativeItems: TimelineItem[], compacting: boolean): ConversationDisplayItem[] {
     const showBottomStatus = state === 'starting' || state === 'exited' || state === 'interrupted'
     const showStatus = Boolean(state && state !== 'idle' && !showBottomStatus)
     const latestAssistantId = chatMessages.at(-1)?.role === 'assistant' ? chatMessages.at(-1)?.id : null
@@ -189,6 +191,7 @@
       })
       items.splice(nextIndex < 0 ? items.length : nextIndex, 0, { kind: 'compaction', id: `compaction:${checkpoint.item_id}`, checkpoint })
     }
+    if (compacting) items.push({ kind: 'compaction', id: 'compaction:pending', checkpoint: null })
     if (showBottomStatus) return [...items, { kind: 'agent_bottom_status', id: `agent-bottom-status:${state}` }]
     if (!showStatus || latestAssistantId || (state === 'busy' && activePendingAssistantMessageId(chatMessages, turnId))) return items
     return [...items, { kind: 'agent_status', id: `agent-status:${state}` }]
@@ -204,7 +207,7 @@
     const turns: ConversationDisplayTurn[] = []
     for (const item of items) {
       let turn = turns.at(-1)
-      const itemTurnId = item.kind === 'message' ? item.message.turnId : item.kind === 'compaction' ? item.checkpoint.turn_id ?? null : turn?.turnId ?? null
+      const itemTurnId = item.kind === 'message' ? item.message.turnId : item.kind === 'compaction' ? item.checkpoint?.turn_id ?? null : turn?.turnId ?? null
       if (!turn || itemTurnId !== turn.turnId) {
         turn = { id: item.id, turnId: itemTurnId, items: [] }
         turns.push(turn)
@@ -329,7 +332,7 @@
 
 {#snippet conversationItem(displayItem: ConversationDisplayItem)}
   {#if displayItem.kind === 'compaction'}
-    <CompactionCheckpoint item={displayItem.checkpoint} />
+    <CompactionCheckpoint item={displayItem.checkpoint} busy={displayItem.checkpoint === null} />
   {:else if displayItem.kind === 'agent_status'}
     <Message.Root from="assistant" data-chat-agent-status>
       <Message.Content>
@@ -472,7 +475,7 @@
 <Conversation.Root class="h-auto min-h-0 min-w-0 flex-1 overflow-visible">
   {#if loading}
     <SessionConversationSkeleton class="min-h-80" />
-  {:else if !displayMessages.length && !timelineItems.some(item => item.kind === 'context_compaction')}
+  {:else if !displayMessages.length && !compactionBusy && !timelineItems.some(item => item.kind === 'context_compaction')}
     <Empty.Root class="h-full">
       <Empty.Header>
         <Empty.Media><RobotIcon class="size-6" /></Empty.Media>
