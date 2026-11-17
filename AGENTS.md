@@ -4,7 +4,7 @@ Read `../pontia-docs/AGENTS.local.md` if it exists and treat it as part of this 
 
 ## Rules
 
-- Major changes are allowed if necessary. Obsolete branches or approaches should be deprecated and removed promptly; backward compatibility is not required unless explicitly requested.
+- Delete unused code and replaced implementations in the same change; no fallbacks or compatibility layers. If a change breaks a released external contract (CLI, config, DB schema, APIs), ask the user whether to keep compatibility.
 - When a new basic UI primitive is needed, first check the shadcn-svelte component catalog and add the component through the shadcn-svelte CLI instead of hand-rolling it.
 - Prefer extending or composing existing `ui/` components before writing one-off markup for common primitives.
 - In `apps/dashboard`, shared modules must never import directly from `src/modes/local/` or `src/modes/public/`. Always import mode-specific dependencies through `$dashboard-mode` so local-only code cannot enter the Public build.
