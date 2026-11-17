@@ -67,6 +67,7 @@ beforeEach(async () => {
   Element.prototype.hasPointerCapture = () => false;
   Element.prototype.releasePointerCapture = () => {};
   localStorage.clear();
+  sessionStorage.clear();
   goto.mockClear();
   window.history.replaceState({}, "", "/");
   fixture = createRemoteAccessFixture();
@@ -176,6 +177,26 @@ test("sidebar device switcher scopes the session list, actions, filters, and hig
   await userEvent.click(screen.getByRole("button", { name: "Open all sessions" }));
   await waitFor(() => expect(location.pathname).toBe("/travel-laptop/sessions"));
   expect(fixture.connect).toHaveBeenCalledTimes(2);
+});
+
+test("switching devices restores each device's last opened chat after a reload", async () => {
+  window.history.replaceState({}, "", "/office-mac/chat/older");
+  render(MultiDeviceDashboardHarness);
+  await userEvent.click(await sidebar().findByRole("button", { name: "office-mac chat" }));
+  await waitFor(() => expect(location.pathname).toBe("/office-mac/chat/same"));
+  await chooseSidebarDevice("Travel Laptop");
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
+  await userEvent.click(await sidebar().findByRole("button", { name: "travel-laptop chat" }));
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/same"));
+  await userEvent.click(sidebar().getByRole("button", { name: /New Chat/ }));
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
+  cleanup();
+  render(MultiDeviceDashboardHarness);
+  await sidebar().findByRole("button", { name: "travel-laptop chat" });
+  await chooseSidebarDevice("Office Mac");
+  await waitFor(() => expect(location.pathname).toBe("/office-mac/chat/same"));
+  await chooseSidebarDevice("Travel Laptop");
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/chat/same"));
 });
 
 test("sidebar follows the routed device after navigation", async () => {

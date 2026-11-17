@@ -7,7 +7,7 @@
   import ComposerDeviceSelect from './ComposerDeviceSelect.svelte';
   import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
   import { Button } from '$lib/components/ui/button/index.js';
-  import { dashboardRelativePath, navigate } from '$lib/navigation';
+  import { dashboardRelativePath, dashboardScope, navigate } from '$lib/navigation';
   import DeviceStatus, { type DeviceStatusView } from '../../components/devices/DeviceStatus.svelte';
   import AppShell from '../../components/layout/AppShell.svelte';
   import AppSidebar from '../../components/layout/AppSidebar.svelte';
@@ -41,7 +41,8 @@
   let loadingModule = false;
   const lastDeviceStorageKey = 'pontia.lastDeviceHandle';
   let lastHandle = $state<string | null>(null);
-  let currentPath = $state(dashboardRelativePath());
+  let currentLocation = $state(window.location.pathname);
+  const currentPath = $derived(dashboardRelativePath(currentLocation));
   // The routed device is active; the root uses the last routed device, then the first listed one.
   const activeHandle = $derived(handle ||
     ($devices.some(target => target.handle === lastHandle) ? lastHandle! : $devices[0]?.handle));
@@ -93,9 +94,28 @@
     try { window.localStorage.setItem(lastDeviceStorageKey, target); } catch { /* Storage is optional. */ }
   }
 
+  $effect(() => {
+    const sessionId = currentPath.match(/^\/chat\/([^/]+)$/)?.[1];
+    const target = $devices.find(target => `/${target.handle}` === dashboardScope(currentLocation));
+    if (!sessionId || !target) return;
+    try {
+      window.sessionStorage.setItem(`pontia.lastSession:${target.deviceId}`, sessionId);
+    } catch (error) {
+      if (!(error instanceof DOMException)) throw error;
+    }
+  });
+
   function selectDevice(target: string): void {
     const path = dashboardRelativePath();
-    void navigate(handle && path.startsWith('/settings/') ? path : '/', undefined, { scope: `/${target}` });
+    const targetDevice = $devices.find(device => device.handle === target)!;
+    let sessionId: string | null = null;
+    try {
+      sessionId = window.sessionStorage.getItem(`pontia.lastSession:${targetDevice.deviceId}`);
+    } catch (error) {
+      if (!(error instanceof DOMException)) throw error;
+    }
+    const destination = handle && path.startsWith('/settings/') ? path : sessionId ? `/chat/${sessionId}` : '/';
+    void navigate(destination, undefined, { scope: `/${target}` });
   }
 
   function openNewChat(): void {
@@ -141,7 +161,7 @@
   });
 </script>
 
-<svelte:window onpopstate={() => currentPath = dashboardRelativePath()} onfocus={() => connections?.focus()} ononline={() => connections?.focus()} />
+<svelte:window onpopstate={() => currentLocation = window.location.pathname} onfocus={() => connections?.focus()} ononline={() => connections?.focus()} />
 <svelte:document onvisibilitychange={() => {
   if (document.visibilityState === 'visible') connections?.focus();
 }} />
