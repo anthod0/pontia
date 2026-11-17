@@ -50,7 +50,6 @@ pub fn registration_with_host(host: Option<PathBuf>) -> ClientRegistration {
         in_process: None,
         session: Some(adapter.clone()),
         prepare_on_input: true,
-        steer: true,
         spec: &spec::SPEC,
         data: Some(adapter),
         launcher: None,

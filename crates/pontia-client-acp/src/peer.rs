@@ -43,6 +43,7 @@ pub(crate) struct SessionState {
     pub current: bool,
     pub ready: bool,
     pub blocked: bool,
+    pub steer: bool,
     reconnect_needed: bool,
     pub native: Option<SessionId>,
     pub capabilities: Option<pontia_core::client_capabilities::AgentClientCapabilities>,
@@ -68,6 +69,7 @@ impl SessionState {
         self.capabilities = (self.current && self.ready && self.native.is_some() && !self.closing)
             .then(|| {
                 let mut capabilities = ACP_MAX_CAPABILITIES;
+                capabilities.steer = self.steer;
                 capabilities.interrupt = self.active.is_some();
                 capabilities.timeline = self.history_error.is_none() && self.replay.is_none();
                 capabilities.accept_task = self.replay.is_none() && !self.blocked;
@@ -226,6 +228,7 @@ impl Peer {
             reconnect_needed: false,
             native: None,
             capabilities: None,
+            steer: false,
             models: None,
             active: None,
             closing: false,
@@ -430,6 +433,11 @@ impl Peer {
                 "ACP peer did not negotiate protocol v1".into(),
             ));
         }
+        self.state.lock().await.steer = initialize
+            .meta
+            .as_ref()
+            .and_then(|meta| meta.get("steering"))
+            .is_some_and(|steering| steering["supported"] == true);
         let caps = serde_json::to_value(&initialize.agent_capabilities)?;
         let mut missing = Vec::new();
         if caps["loadSession"] != true {

@@ -39,9 +39,6 @@ impl ClientAdapter {
         if self.spec.adapter.dispatch == DispatchMode::None {
             return ControlResult::Unsupported("client has no input channel".into());
         }
-        if matches!(intent, InputIntent::Steer { .. }) && !self.supports_steer() {
-            return ControlResult::Unsupported("This client does not support steer".into());
-        }
         let result = self
             .input_inner(target, input, metadata, intent, turn)
             .await;

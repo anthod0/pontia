@@ -51,6 +51,12 @@ impl SqliteInboxRepository {
         Ok(())
     }
 
+    pub async fn wait_after_idle(&self, message_id: &str) -> Result<()> {
+        sqlx::query("UPDATE inbox_messages SET state='pending',delivery_policy='after_idle',steer_target_turn_id=NULL,failure_message=NULL,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE message_id=? AND state='dispatching'")
+            .bind(message_id).execute(&self.pool).await?;
+        Ok(())
+    }
+
     pub async fn mark_unknown(&self, message_id: &str, reason: &str) -> Result<u64> {
         Ok(sqlx::query("UPDATE inbox_messages SET state=CASE WHEN turn_id IS NULL THEN 'unknown' ELSE 'dispatched' END,failure_message=CASE WHEN turn_id IS NULL THEN ? ELSE NULL END,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE message_id=? AND state IN ('pending','dispatching')")
             .bind(reason).bind(message_id).execute(&self.pool).await?.rows_affected())

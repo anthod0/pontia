@@ -5,6 +5,7 @@ pub(crate) fn writable_capabilities(
     writable: bool,
 ) -> SessionCapabilities {
     capabilities.accept_task = writable;
+    capabilities.steer = capabilities.steer && writable;
     capabilities.interrupt = writable;
     capabilities.manual_compaction = capabilities.manual_compaction && writable;
     capabilities.fork_session = capabilities.fork_session && writable;

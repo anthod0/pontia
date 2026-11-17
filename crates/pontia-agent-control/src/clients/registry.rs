@@ -19,7 +19,6 @@ pub struct ClientRegistration {
     pub in_process: Option<Arc<dyn InProcessClient>>,
     pub session: Option<Arc<dyn ClientSession>>,
     pub prepare_on_input: bool,
-    pub steer: bool,
     pub spec: &'static AgentClientSpec,
     pub data: Option<Arc<dyn ClientData>>,
     pub launcher: Option<Arc<dyn ClientLauncher>>,

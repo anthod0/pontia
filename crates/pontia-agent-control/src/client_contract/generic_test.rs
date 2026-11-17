@@ -17,6 +17,7 @@ use crate::client_contract::{
 
 pub const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     accept_task: true,
+    steer: false,
     report_turn_started: true,
     report_turn_finished: true,
     interrupt: false,
@@ -142,7 +143,6 @@ pub fn registration() -> crate::clients::ClientRegistration {
         launcher: None,
         session: None,
         prepare_on_input: false,
-        steer: false,
         in_process: Some(std::sync::Arc::new(GenericTestClient)),
     }
 }

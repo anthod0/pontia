@@ -344,6 +344,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     assert_eq!(detail["session"]["acp"]["agent_id"], "company-id");
     assert_eq!(detail["session"]["acp"]["agent_info"]["name"], "fixture");
     assert_eq!(detail["session"]["capabilities"]["timeline"], true);
+    assert_eq!(detail["session"]["capabilities"]["steer"], false);
     assert_eq!(detail["session"]["capabilities"]["topology"], false);
     let models = get(&app, &format!("{path}/models")).await;
     assert_eq!(models["current_model"], "fast");

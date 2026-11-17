@@ -145,6 +145,7 @@ for line in sys.stdin:
         if os.environ.get("ACP_NO_CLOSE") != "1":
             caps["sessionCapabilities"]["close"] = {}
         response(request, {"protocolVersion": 1, "agentCapabilities": caps,
+                           **({"_meta": {"steering": {"supported": os.environ["ACP_STEERING"] == "1"}}} if "ACP_STEERING" in os.environ else {}),
                            "agentInfo": {"name": "fixture", "title": "Test Agent", "version": "arbitrary-release", "_meta": {"build": "fixture-build"}}})
     elif method == "session/new":
         if os.environ.get("ACP_HOLD_NEW") == "1":
@@ -203,6 +204,13 @@ for line in sys.stdin:
         threading.Thread(target=prompt, args=(request, number, active), daemon=True).start()
         if os.environ.get("ACP_REPLY_BACKPRESSURE") == "1":
             wait_for(f"drain-input-{number}")
+    elif method == "_session/steering":
+        outcome = os.environ.get("ACP_STEERING_OUTCOME", "injected")
+        if outcome == "disconnect":
+            os._exit(0)
+        if outcome == "injected":
+            remember({"sessionUpdate": "user_message_chunk", "content": request["params"]["prompt"][0]})
+        response(request, {"outcome": outcome, **({"reason": "noRunningTurn"} if outcome == "promptRequired" else {})})
     elif method == "session/cancel":
         if active is not None:
             active.set()

@@ -20,6 +20,7 @@ pub struct AgentInput {
 #[serde(default)]
 pub struct AgentClientCapabilities {
     pub accept_task: bool,
+    pub steer: bool,
     pub report_turn_started: bool,
     pub report_turn_finished: bool,
     pub interrupt: bool,
@@ -41,6 +42,7 @@ impl AgentClientCapabilities {
     pub fn intersection(&self, upper: &Self) -> Self {
         Self {
             accept_task: self.accept_task && upper.accept_task,
+            steer: self.steer && upper.steer,
             report_turn_started: self.report_turn_started && upper.report_turn_started,
             report_turn_finished: self.report_turn_finished && upper.report_turn_finished,
             interrupt: self.interrupt && upper.interrupt,
@@ -69,6 +71,7 @@ impl AgentClientCapabilities {
     pub fn generic_default() -> Self {
         Self {
             accept_task: true,
+            steer: false,
             report_turn_started: true,
             report_turn_finished: true,
             interrupt: false,

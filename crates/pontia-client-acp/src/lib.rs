@@ -9,6 +9,7 @@ mod models;
 mod peer;
 pub mod registry;
 mod spec;
+mod steering;
 mod transport;
 
 pub use adapter::{registration, registration_from_sources, registration_with_registry};

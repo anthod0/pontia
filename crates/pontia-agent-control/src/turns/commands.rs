@@ -101,7 +101,7 @@ impl TurnCommandService {
                 }
             }
             InputIntent::Steer { turn_id } => {
-                if !adapter.supports_steer() {
+                if !session.capabilities.steer {
                     return Ok((
                         None,
                         ControlResult::Unsupported("This client does not support steer".into()),

@@ -5,6 +5,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
     default_for_creation: false,
     capabilities: AgentClientCapabilities {
         accept_task: true,
+        steer: true,
         report_turn_started: true,
         report_turn_finished: true,
         interrupt: true,

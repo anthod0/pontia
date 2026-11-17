@@ -23,6 +23,9 @@ mod models;
 #[path = "control_loop/permission_blocking.rs"]
 mod permission_blocking;
 
+#[path = "control_loop/steering.rs"]
+mod steering;
+
 #[path = "control_loop/session_environment.rs"]
 mod session_environment;
 

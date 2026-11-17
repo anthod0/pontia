@@ -165,6 +165,15 @@ async fn idle_after_idle_inbox_message_dispatches_immediately() {
 
 #[tokio::test]
 async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
+    busy_inbox_waits_until_idle("after_idle").await;
+}
+
+#[tokio::test]
+async fn unsupported_steer_is_accepted_and_waits_until_idle_without_a_failure() {
+    busy_inbox_waits_until_idle("steer").await;
+}
+
+async fn busy_inbox_waits_until_idle(policy: &str) {
     let _scope = GenericClientTestScope::new().await;
     let state = test_state().await;
     let session_id = create_session(state.clone()).await;
@@ -180,7 +189,7 @@ async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
         state.clone(),
         &format!("/api/v1/sessions/{session_id}/inbox/messages"),
         None,
-        json!({"input":"second"}),
+        json!({"input":"second", "delivery_policy":policy}),
     )
     .await;
 
@@ -190,6 +199,14 @@ async fn busy_after_idle_inbox_message_waits_until_terminal_event_drains_it() {
         .unwrap()
         .to_string();
     assert_eq!(body["data"]["inbox_message"]["state"], "pending");
+    assert_eq!(
+        body["data"]["inbox_message"]["delivery_policy"],
+        "after_idle"
+    );
+    assert_eq!(
+        body["data"]["inbox_message"]["failure_message"],
+        Value::Null
+    );
     assert_eq!(body["data"]["inbox_message"]["turn_id"], Value::Null);
 
     let (turns_status, turns_body) = get_json(

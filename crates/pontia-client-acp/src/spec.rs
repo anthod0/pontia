@@ -2,6 +2,7 @@ use pontia_agent_control::client_contract::*;
 
 pub const ACP_MAX_CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     accept_task: true,
+    steer: true,
     report_turn_started: true,
     report_turn_finished: true,
     interrupt: true,

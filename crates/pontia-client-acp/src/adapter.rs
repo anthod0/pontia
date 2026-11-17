@@ -86,7 +86,6 @@ fn register(
         in_process: None,
         session: Some(adapter.clone()),
         prepare_on_input: false,
-        steer: false,
         spec: &SPEC,
         data: Some(adapter),
         launcher: None,
@@ -108,9 +107,6 @@ pub(crate) struct AcpAdapter {
 
 fn unavailable() -> Error {
     Error::CapabilityUnavailable("ACP control connection is unavailable".into())
-}
-fn unsupported() -> Error {
-    Error::CapabilityUnavailable("Operation is not implemented by the ACP adapter".into())
 }
 
 impl AcpAdapter {
@@ -379,8 +375,9 @@ impl ClientSession for AcpAdapter {
         intent: &'a InputIntent,
     ) -> ClientOperation<'a, InputReceipt> {
         Box::pin(async move {
-            if !matches!(intent, InputIntent::Start) {
-                return Err(unsupported());
+            if let InputIntent::Steer { turn_id } = intent {
+                let peer = self.peer(&target.session_id).await?;
+                return crate::steering::send(&peer, &events, target, turn_id, input).await;
             }
             let turn = turn.ok_or_else(|| {
                 Error::Domain("ACP input requires explicit Pontia Turn identity".into())

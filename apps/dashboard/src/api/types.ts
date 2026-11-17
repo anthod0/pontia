@@ -198,6 +198,7 @@ export interface SessionCompactionAccepted {
 }
 
 export interface SessionCapabilities {
+  steer?: boolean;
   accept_task?: boolean;
   interrupt?: boolean;
   stream_output?: boolean;

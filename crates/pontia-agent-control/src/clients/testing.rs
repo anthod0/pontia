@@ -34,7 +34,6 @@ pub(crate) fn clients() -> super::ClientRegistry {
         in_process: None,
         session: None,
         prepare_on_input: false,
-        steer: false,
         spec,
         data: None,
         launcher: None,

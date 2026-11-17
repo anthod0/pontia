@@ -77,11 +77,6 @@ impl ClientAdapter {
             .and_then(|entry| entry.session.clone())
     }
 
-    pub fn supports_steer(&self) -> bool {
-        self.registry
-            .get(self.spec.client_type)
-            .is_some_and(|entry| entry.steer)
-    }
     pub fn prepares_on_input(&self) -> bool {
         self.registry
             .get(self.spec.client_type)

@@ -448,7 +448,13 @@ async fn connected_inbox() -> (
     run_migrations(&pool).await.unwrap();
     let mut clients = crate::clients::testing::clients();
     let mut registration = clients.get("test-channel").unwrap().clone();
-    registration.steer = true;
+    static SPEC: std::sync::OnceLock<crate::client_contract::AgentClientSpec> =
+        std::sync::OnceLock::new();
+    registration.spec = SPEC.get_or_init(|| {
+        let mut spec = registration.spec.clone();
+        spec.capabilities.steer = true;
+        spec
+    });
     clients.register(registration);
     let state = crate::AgentControl::builder(pool.clone(), root.path().into())
         .clients(clients)

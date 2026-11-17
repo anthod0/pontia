@@ -2179,6 +2179,9 @@ test("shows delivery loading on the submit button instead of below the optimisti
 });
 
 test.each([
+  ["acp", { key: "Enter" }, "steer"],
+  ["acp", { key: "Tab" }, "after_idle"],
+  ["acp", { key: "Enter", altKey: true }, "after_idle"],
   ["claude-agent", { key: "Enter" }, "steer"],
   ["claude-agent", { key: "Tab" }, "after_idle"],
   ["claude-agent", { key: "Enter", altKey: true }, "after_idle"],
@@ -2192,7 +2195,7 @@ test.each([
     const user = userEvent.setup();
     const selected = session({
       session_id: "session-2",
-      state: clientType === "claude-agent" ? "running" : "idle",
+      state: ["claude-agent", "acp"].includes(clientType) ? "running" : "idle",
       client_type: clientType,
     });
     window.history.pushState({}, "", "/dashboard/chat/session-2");

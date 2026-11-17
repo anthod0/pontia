@@ -41,7 +41,6 @@ pub fn registration() -> ClientRegistration {
         launcher: None,
         session: Some(Arc::new(CodexClient)),
         prepare_on_input: true,
-        steer: true,
     }
 }
 

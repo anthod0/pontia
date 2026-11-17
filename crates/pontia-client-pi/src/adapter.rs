@@ -33,7 +33,6 @@ pub fn registration(tui_command: Option<String>) -> ClientRegistration {
         in_process: None,
         session: None,
         prepare_on_input: false,
-        steer: true,
         spec: &crate::SPEC,
         data: Some(Arc::new(PiData)),
         launcher: Some(Arc::new(PiLauncher { tui_command })),

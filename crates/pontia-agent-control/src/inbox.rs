@@ -178,18 +178,12 @@ impl InboxCommandService {
         let active_turn = SqliteTurnRepository::new(self.pool.clone())
             .active_turn(session_id)
             .await?;
-        if request.delivery_policy == "steer"
-            && active_turn.is_some()
-            && !self
-                .clients
-                .for_client(&session.client_type)?
-                .supports_steer()
-        {
-            return Err(Error::CapabilityUnavailable(
-                "This client does not support steer".into(),
-            ));
-        }
-        let steer_target = if request.delivery_policy == "steer" {
+        let delivery_policy = if request.delivery_policy == "steer" && !session.capabilities.steer {
+            "after_idle"
+        } else {
+            request.delivery_policy.as_str()
+        };
+        let steer_target = if delivery_policy == "steer" {
             active_turn.as_ref().map(|turn| turn.turn_id.as_str())
         } else {
             None
@@ -199,7 +193,7 @@ impl InboxCommandService {
                 pontia_storage_sqlite::repositories::inbox::NewInboxMessage {
                     message_id,
                     session_id,
-                    delivery_policy: &request.delivery_policy,
+                    delivery_policy,
                     input: &request.input,
                     metadata: &metadata,
                     branch_target: request.branch_target_turn_id.as_deref(),
@@ -219,7 +213,7 @@ impl InboxCommandService {
             session_id,
             &session.client_type,
             PontiaEventType::InboxMessageQueued,
-            json!({ "message_id": message_id, "delivery_policy": request.delivery_policy }),
+            json!({ "message_id": message_id, "delivery_policy": delivery_policy }),
         )
         .await?;
 
@@ -482,6 +476,13 @@ impl InboxCommandService {
                     payload,
                 )
                 .await?;
+                self.notify_available(session_id);
+            }
+            Err(Error::Conflict {
+                code: "steer_requires_prompt",
+                ..
+            }) if delivery_policy == "steer" => {
+                inbox_repository.wait_after_idle(&message_id).await?;
                 self.notify_available(session_id);
             }
             Err(Error::Conflict {
