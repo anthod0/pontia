@@ -36,7 +36,6 @@
   <Dialog.Content class="w-[calc(100%_-_2rem)] gap-0 overflow-hidden p-0 sm:w-full sm:max-w-lg">
     <Dialog.Header class="gap-1 border-b px-5 py-4 pr-12">
       <Dialog.Title>{$t('downloads.title')}</Dialog.Title>
-      <Dialog.Description>{$t('downloads.description')}</Dialog.Description>
     </Dialog.Header>
     {#if $downloads.length}
       <ul class="max-h-[min(60svh,28rem)] divide-y overflow-y-auto px-5" aria-label={$t('downloads.title')}>

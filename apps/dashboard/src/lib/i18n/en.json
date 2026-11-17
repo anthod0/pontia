@@ -726,7 +726,6 @@
   "devices.signInToContinue": "Sign in to Pontia to continue.",
   "devices.unreachable": "Could not reach Pontia to load devices.",
   "downloads.title": "Downloads",
-  "downloads.description": "Downloads continue while you browse Pontia. Keep this tab open.",
   "downloads.localDevice": "Local device",
   "downloads.activeCount": "{count} downloading",
   "downloads.noActive": "No active downloads",

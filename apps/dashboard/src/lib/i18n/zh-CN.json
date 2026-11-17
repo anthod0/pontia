@@ -726,7 +726,6 @@
   "devices.signInToContinue": "请登录 Pontia 以继续。",
   "devices.unreachable": "无法连接 Pontia 以加载设备。",
   "downloads.title": "下载",
-  "downloads.description": "站内切换不影响下载，请保持此标签页打开。",
   "downloads.localDevice": "本机",
   "downloads.activeCount": "{count} 项正在下载",
   "downloads.noActive": "没有进行中的下载",
