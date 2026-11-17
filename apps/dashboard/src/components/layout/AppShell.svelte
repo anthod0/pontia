@@ -13,6 +13,7 @@
   import { installVisualViewportCssVars } from '$lib/visualViewport'
   import { provideFilePreview } from '../chat/filePreviewContext'
   import FilePreviewPanel from '../chat/FilePreviewPanel.svelte'
+  import { filePreviewWidth } from '../chat/filePreviewWidth'
 
   let { children, sidebar, topbar, settingsEnabled = true }: {
     children: Snippet
@@ -56,7 +57,7 @@
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
-<Sidebar.Provider class="file-preview-layout" data-preview-open={$filePreview ? 'true' : 'false'}>
+<Sidebar.Provider class="file-preview-layout" data-preview-open={$filePreview ? 'true' : 'false'} style={$filePreviewWidth === null ? undefined : `--file-preview-saved-width: ${$filePreviewWidth}px`}>
   {#if sidebar}
     {@render sidebar()}
   {:else}
@@ -98,7 +99,12 @@
   }
   @media (min-width: 1024px) {
     :global(.file-preview-layout[data-preview-open='true']) {
-      --file-preview-width: clamp(360px, 40vw, 640px);
+      /* Keep in sync with FILE_PREVIEW_MIN_WIDTH and FILE_PREVIEW_RESERVED_WIDTH. */
+      --file-preview-width: clamp(
+        320px,
+        var(--file-preview-saved-width, clamp(360px, 40vw, 640px)),
+        calc(100vw - 480px)
+      );
     }
   }
 </style>

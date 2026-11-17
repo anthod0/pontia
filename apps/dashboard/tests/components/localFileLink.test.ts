@@ -117,7 +117,7 @@ test("allows retry after a missing file becomes available", async () => {
   );
   message("/tmp/report.txt");
   await fireEvent.click(screen.getByRole("button", { name: "Preview report.txt" }));
-  await screen.findByRole("alert");
+  expect(await screen.findByRole("alert")).toHaveTextContent("File no longer exists");
   expect(screen.getByRole("button", { name: "Copy", exact: true })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Download report.txt" })).toBeEnabled();
   await fireEvent.click(screen.getByRole("button", { name: "Retry", exact: true }));
@@ -132,9 +132,9 @@ test("keeps downloads available for a binary file without displaying its content
   );
   message("/tmp/data.bin");
   await fireEvent.click(screen.getByRole("button", { name: "Preview data.bin" }));
-  await screen.findByRole("alert");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Cannot preview this file");
   expect(screen.getByRole("button", { name: "Copy", exact: true })).toBeDisabled();
-  await fireEvent.click(screen.getByRole("button", { name: "Download data.bin" }));
+  await fireEvent.click(screen.getByRole("button", { name: "Download", exact: true }));
   await waitFor(() => expect(saved).toHaveLength(1));
   expect(new Uint8Array(await saved[0].blob.arrayBuffer())).toEqual(new Uint8Array([0, 1, 2]));
 });
@@ -147,3 +147,34 @@ test.each(["https://example.com/file.md", "//example.com/file.md", "docs/file.md
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   },
 );
+
+test("shows a loading placeholder and an empty-file state", async () => {
+  let resolve!: (response: Response) => void;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockReturnValue(new Promise<Response>((done) => (resolve = done))),
+  );
+  message("/tmp/empty.txt");
+  await fireEvent.click(screen.getByRole("button", { name: "Preview empty.txt" }));
+  expect(screen.getByRole("status", { name: "Loading preview…" })).toBeInTheDocument();
+  resolve(new Response(""));
+  await screen.findByText("This file is empty");
+  expect(screen.queryByRole("status", { name: "Loading preview…" })).not.toBeInTheDocument();
+});
+
+test("resizes the preview with the keyboard and remembers the width", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("content")));
+  localStorage.removeItem("pontia.filePreviewWidth");
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+    width: 400,
+  } as DOMRect);
+  vi.stubGlobal("innerWidth", 1440);
+  message("/tmp/report.txt");
+  await fireEvent.click(screen.getByRole("button", { name: "Preview report.txt" }));
+  const handle = screen.getByRole("separator", { name: "Resize preview" });
+  await fireEvent.keyDown(handle, { key: "ArrowLeft" });
+  expect(localStorage.getItem("pontia.filePreviewWidth")).toBe("432");
+  expect(handle).toHaveAttribute("aria-valuenow", "432");
+  await fireEvent.dblClick(handle);
+  expect(localStorage.getItem("pontia.filePreviewWidth")).toBeNull();
+});

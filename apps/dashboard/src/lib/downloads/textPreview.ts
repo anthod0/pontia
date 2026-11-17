@@ -1,12 +1,17 @@
-import { translate } from "$lib/i18n";
 import { responseSize } from "./save";
 
 export const TEXT_PREVIEW_LIMIT = 1024 * 1024;
 
+export class TextPreviewError extends Error {
+  constructor(readonly reason: "tooLarge" | "notText") {
+    super(reason === "tooLarge" ? "Text preview limit exceeded" : "File is not UTF-8 text");
+  }
+}
+
 export async function readTextPreview(response: Response): Promise<string> {
   if ((responseSize(response) ?? 0) > TEXT_PREVIEW_LIMIT) {
     await response.body?.cancel();
-    throw new Error(translate("files.previewTooLarge"));
+    throw new TextPreviewError("tooLarge");
   }
   if (!response.body) return "";
   const reader = response.body.getReader();
@@ -17,7 +22,7 @@ export async function readTextPreview(response: Response): Promise<string> {
     try {
       return decoder.decode(value, { stream });
     } catch {
-      throw new Error(translate("files.previewNotText"));
+      throw new TextPreviewError("notText");
     }
   }
   try {
@@ -28,9 +33,9 @@ export async function readTextPreview(response: Response): Promise<string> {
         break;
       }
       received += value.byteLength;
-      if (received > TEXT_PREVIEW_LIMIT) throw new Error(translate("files.previewTooLarge"));
+      if (received > TEXT_PREVIEW_LIMIT) throw new TextPreviewError("tooLarge");
       const chunk = decode(value, true);
-      if (chunk.includes("\0")) throw new Error(translate("files.previewNotText"));
+      if (chunk.includes("\0")) throw new TextPreviewError("notText");
       text += chunk;
     }
     return text;

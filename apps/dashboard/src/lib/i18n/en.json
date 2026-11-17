@@ -740,8 +740,14 @@
   "files.previewNamed": "Preview {name}",
   "files.loadingPreview": "Loading preview…",
   "files.previewTooLarge": "Text preview is limited to 1 MiB. Download the file to read it.",
-  "files.previewNotText": "This file cannot be previewed as UTF-8 text. You can download it instead.",
+  "files.previewNotText": "This file is not UTF-8 text. Download it to open it.",
   "files.source": "Source",
   "files.previewMode": "File view",
-  "files.copyFailed": "Could not copy. Select the text and copy it manually."
+  "files.copyFailed": "Could not copy. Select the text and copy it manually.",
+  "files.previewMissingDescription": "It may have been moved or deleted.",
+  "files.previewTooLargeTitle": "File too large",
+  "files.previewNotTextTitle": "Cannot preview this file",
+  "files.previewFailedTitle": "Could not load preview",
+  "files.emptyFile": "This file is empty",
+  "files.resizePreview": "Resize preview"
 }

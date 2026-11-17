@@ -5,24 +5,47 @@
   import * as Tabs from '$lib/components/ui/tabs/index.js'
   import MessageResponse from '$lib/components/ai-elements/message/message-response.svelte'
   import { highlightMarkdownCode } from '$lib/components/ai-elements/message/markdownHighlighter'
-  import { readTextPreview, textFileLanguage } from '$lib/downloads/textPreview'
+  import * as Alert from '$lib/components/ui/alert/index.js'
+  import * as Empty from '$lib/components/ui/empty/index.js'
+  import { Skeleton } from '$lib/components/ui/skeleton/index.js'
+  import { readTextPreview, textFileLanguage, TextPreviewError } from '$lib/downloads/textPreview'
   import { downloads, downloadKey } from '$lib/downloads/manager'
   import { copyText } from '$lib/copyText'
   import { ApiError } from '../../api/errors'
   import DeviceProvider from '../../device/DeviceProvider.svelte'
   import type { FilePreviewTarget } from './filePreviewContext'
+  import FilePreviewResizer from './FilePreviewResizer.svelte'
+  import { toast } from 'svelte-sonner'
+  import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
+  import BinaryIcon from 'phosphor-svelte/lib/BinaryIcon'
+  import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
+  import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
+  import FileArrowDownIcon from 'phosphor-svelte/lib/FileArrowDownIcon'
+  import FileDashedIcon from 'phosphor-svelte/lib/FileDashedIcon'
+  import FileXIcon from 'phosphor-svelte/lib/FileXIcon'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import XIcon from 'phosphor-svelte/lib/XIcon'
+
+  type PreviewFailure = { kind: 'missing' | 'tooLarge' | 'notText' } | { kind: 'failed'; message: string }
+
+  const failureStates = {
+    missing: { icon: FileXIcon, title: 'files.missing', description: 'files.previewMissingDescription' },
+    tooLarge: { icon: FileArrowDownIcon, title: 'files.previewTooLargeTitle', description: 'files.previewTooLarge' },
+    notText: { icon: BinaryIcon, title: 'files.previewNotTextTitle', description: 'files.previewNotText' },
+    failed: { icon: WarningCircleIcon, title: 'files.previewFailedTitle', description: null },
+  } as const
+  const skeletonLines = [42, 68, 55, 0, 74, 61, 83, 36, 0, 58, 70, 47, 64, 29]
 
   let { target, onclose }: { target: FilePreviewTarget; onclose: () => void } = $props()
   const name = $derived(target.path.slice(target.path.lastIndexOf('/') + 1))
   const language = $derived(textFileLanguage(target.path))
   const key = $derived(downloadKey(target.device.id, target.sessionId, { kind: 'path', path: target.path }))
   const task = $derived($downloads.find(task => task.key === key))
+  const receiving = $derived(task?.status === 'receiving')
   let text = $state<string | null>(null)
-  let error = $state<string | null>(null)
-  let copyError = $state(false)
+  let failure = $state<PreviewFailure | null>(null)
   let copied = $state(false)
   let copyTimer: ReturnType<typeof setTimeout> | undefined
   let attempt = $state(0)
@@ -34,16 +57,14 @@
     attempt
     const controller = new AbortController()
     text = null
-    error = null
-    copyError = false
+    failure = null
     copied = false
     view = 'preview'
     void device.fileApi.pathFileContent(sessionId, path, controller.signal)
       .then(readTextPreview)
       .then(content => { if (!controller.signal.aborted) text = content })
       .catch(cause => {
-        if (!controller.signal.aborted) error = cause instanceof ApiError && cause.status === 404
-          ? $t('files.missing') : cause instanceof Error ? cause.message : String(cause)
+        if (!controller.signal.aborted) failure = previewFailure(cause)
       })
     return () => controller.abort()
   })
@@ -53,9 +74,19 @@
   async function copy() {
     if (text === null) return
     copied = await copyText(text)
-    copyError = !copied
     clearTimeout(copyTimer)
     if (copied) copyTimer = setTimeout(() => { copied = false }, 1600)
+    else toast.error($t('files.copyFailed'))
+  }
+
+  function download() {
+    downloads.start(target.device.id, target.sessionId, { kind: 'path', path: target.path }, name)
+  }
+
+  function previewFailure(cause: unknown): PreviewFailure {
+    if (cause instanceof ApiError && cause.status === 404) return { kind: 'missing' }
+    if (cause instanceof TextPreviewError) return { kind: cause.reason }
+    return { kind: 'failed', message: cause instanceof Error ? cause.message : String(cause) }
   }
 </script>
 
@@ -64,26 +95,58 @@
 {/snippet}
 
 <aside aria-label={$t('files.preview')} data-file-preview class="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-l bg-surface lg:w-[var(--file-preview-width)]">
+  <FilePreviewResizer />
   <header class="flex shrink-0 items-center gap-2 border-b px-4 py-3">
     <div class="min-w-0 flex-1">
       <h2 class="truncate text-sm font-medium" title={target.path}>{name}</h2>
       <p class="truncate text-xs text-muted-foreground" title={target.path}>{target.path}</p>
     </div>
-    <Button variant="ghost" size="icon-sm" disabled={text === null} onclick={copy} aria-label={$t('common.copy')} title={copied ? $t('common.copied') : $t('common.copy')}><CopyIcon class="size-4" /></Button>
-    <Button variant="ghost" size="icon-sm" disabled={task?.status === 'receiving'} onclick={() => downloads.start(target.device.id, target.sessionId, { kind: 'path', path: target.path }, name)} aria-label={$t('files.downloadNamed', { name })} title={$t('files.download')}><DownloadSimpleIcon class="size-4" /></Button>
+    <Button variant="ghost" size="icon-sm" disabled={text === null} onclick={copy} aria-label={$t('common.copy')} title={copied ? $t('common.copied') : $t('common.copy')}>
+      {#if copied}<CheckIcon class="size-4 text-primary" />{:else}<CopyIcon class="size-4" />{/if}
+    </Button>
+    <Button variant="ghost" size="icon-sm" disabled={receiving} onclick={download} aria-label={$t('files.downloadNamed', { name })} title={receiving ? $t('files.receiving') : $t('files.download')}>
+      {#if receiving}<CircleNotchIcon class="size-4 animate-spin" />{:else}<DownloadSimpleIcon class="size-4" />{/if}
+    </Button>
     <Button variant="ghost" size="icon-sm" onclick={onclose} aria-label={$t('common.close')} title={$t('common.close')}><XIcon class="size-4" /></Button>
   </header>
-  {#if copied}<p role="status" class="px-4 pt-2 text-xs text-muted-foreground">{$t('common.copied')}</p>{/if}
-  {#if copyError}<p role="alert" class="px-4 pt-2 text-sm text-destructive">{$t('files.copyFailed')}</p>{/if}
-  {#if task?.error}<p role="alert" class="px-4 pt-2 text-sm text-destructive">{task.error}</p>{/if}
-  {#if task?.status === 'receiving'}<p role="status" class="px-4 pt-2 text-xs text-muted-foreground">{$t('files.receiving')}</p>{/if}
-  {#if error}
-    <div class="space-y-3 p-4">
-      <p role="alert" class="text-sm text-destructive">{error}</p>
-      <Button variant="outline" size="sm" onclick={() => attempt++}>{$t('common.retry')}</Button>
-    </div>
+  <span class="sr-only" role="status">{copied ? $t('common.copied') : receiving ? $t('files.receiving') : ''}</span>
+  {#if task?.error}
+    <Alert.Root variant="destructive" class="mx-4 mt-3 w-auto">
+      <WarningCircleIcon />
+      <Alert.Description class="break-words">{task.error}</Alert.Description>
+    </Alert.Root>
+  {/if}
+  {#if failure}
+    {@const state = failureStates[failure.kind]}
+    <Empty.Root role="alert" class="min-h-0 p-8">
+      <Empty.Header>
+        <Empty.Media class={['size-12 rounded-xl', failure.kind === 'missing' || failure.kind === 'failed' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground']}>
+          <state.icon class="size-6" />
+        </Empty.Media>
+        <Empty.Title>{$t(state.title)}</Empty.Title>
+        <Empty.Description class="break-words">{state.description ? $t(state.description) : failure.kind === 'failed' && failure.message}</Empty.Description>
+      </Empty.Header>
+      <Empty.Content>
+        {#if failure.kind === 'tooLarge' || failure.kind === 'notText'}
+          <Button size="sm" disabled={receiving} onclick={download}><DownloadSimpleIcon data-icon="inline-start" />{$t('files.download')}</Button>
+        {:else}
+          <Button variant="outline" size="sm" onclick={() => attempt++}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.retry')}</Button>
+        {/if}
+      </Empty.Content>
+    </Empty.Root>
   {:else if text === null}
-    <p role="status" class="p-4 text-sm text-muted-foreground">{$t('files.loadingPreview')}</p>
+    <div role="status" aria-label={$t('files.loadingPreview')} class="min-h-0 flex-1 space-y-2.5 overflow-hidden p-4">
+      {#each skeletonLines as width, index (index)}
+        <Skeleton class="h-3 rounded-sm" style="width: {width}%" />
+      {/each}
+    </div>
+  {:else if text === ''}
+    <Empty.Root class="min-h-0 p-8">
+      <Empty.Header>
+        <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FileDashedIcon class="size-6" /></Empty.Media>
+        <Empty.Title>{$t('files.emptyFile')}</Empty.Title>
+      </Empty.Header>
+    </Empty.Root>
   {:else}
     {#if language === 'markdown'}
       <Tabs.Root bind:value={view} class="min-h-0 flex-1 gap-0">
