@@ -8,6 +8,7 @@
   import ClientIcon from './ClientIcon.svelte'
   import { matchChatShortcut } from '$lib/shortcuts/definitions'
   import { adjacentValue } from '$lib/shortcuts/sessionNavigation'
+  import { targetSegmentClass, targetToolbarClass } from './targetSegment'
 
   interface Props {
     workspaceId: string
@@ -77,10 +78,10 @@
     </Select.Root>
   </div>
 {:else}
-  <div class="flex min-w-0 items-center gap-2">
+  <div class={targetToolbarClass}>
     {@render deviceSelector?.(disabled)}
     <Select.Root type="single" bind:value={creationOptionId} disabled={clientSelectDisabled}>
-      <Select.Trigger class="h-[34px] max-w-48 shrink-0 gap-1.5 bg-background px-3 text-[13px] font-medium text-heading hover:bg-muted data-[state=open]:border-primary data-[state=open]:bg-selected" aria-label={$t('clients.agentClient')}>
+      <Select.Trigger class={targetSegmentClass} aria-label={$t('clients.agentClient')}>
         <ClientIcon clientType={selectedOption?.client_type} acpAgentId={selectedOption?.metadata.acp_agent_id} class="size-3.5 text-foreground" />
         <span class="min-w-0 truncate">{selectedOption?.name ?? $t('clients.agentClient')}</span>
       </Select.Trigger>
@@ -94,7 +95,7 @@
       </Select.Content>
     </Select.Root>
     <Select.Root type="single" bind:value={workspaceId} disabled={workspaceSelectDisabled}>
-      <Select.Trigger class="h-[34px] max-w-48 shrink-0 gap-1.5 bg-background px-3 text-[13px] font-medium text-heading hover:bg-muted data-[state=open]:border-primary data-[state=open]:bg-selected" aria-label={$t('workspace.title')} title={selectedWorkspace?.canonical_path}>
+      <Select.Trigger class={targetSegmentClass} aria-label={$t('workspace.title')} title={selectedWorkspace?.canonical_path}>
         <FolderIcon class="size-3.5 text-muted-foreground" aria-hidden="true" />
         <span class="min-w-0 truncate">{selectedWorkspace ? workspaceTitle(selectedWorkspace) : workspacesLoading ? $t('common.loading') : $t('workspace.title')}</span>
       </Select.Trigger>

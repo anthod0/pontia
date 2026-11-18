@@ -4,15 +4,17 @@
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
+  import { targetToolbarClass } from './targetSegment'
 
   let { deviceSelector }: { deviceSelector?: Snippet<[boolean]> } = $props()
 </script>
 
 <div class="mx-auto w-full max-w-[760px] space-y-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-  <div class="flex min-w-0 items-center gap-2">
+  <div class={targetToolbarClass}>
     {@render deviceSelector?.(false)}
-    <Skeleton class="h-[34px] w-28" />
-    <Skeleton class="h-[34px] w-32" />
+    <Skeleton class="h-7 w-16" />
+    <Skeleton class="h-7 w-24" />
+    <Skeleton class="h-7 w-32" />
   </div>
   <!-- Decorative placeholder matching the compact composer; the page heading announces the loading state. -->
   <div class="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center rounded-lg border bg-background" aria-hidden="true" inert>

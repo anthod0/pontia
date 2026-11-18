@@ -47,7 +47,7 @@
 <Dialog.Root bind:open>
   <Dialog.Trigger {id} type="button" class={buttonVariants({ variant: 'outline', class: className })} {disabled}
     onclick={() => { search = '' }}>
-    <span class="truncate">{selected?.name ?? (current || (allowDefault ? $t('model.default') : $t('model.choose')))}</span>
+    <span class="min-w-0 truncate">{selected?.name ?? (current || (allowDefault ? $t('model.default') : $t('model.choose')))}</span>
     <CaretDownIcon class="size-4 shrink-0 text-muted-foreground" />
   </Dialog.Trigger>
   {#if !allowDefault}

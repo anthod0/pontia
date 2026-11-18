@@ -4,6 +4,7 @@
   import { useDeviceRuntime } from '../../device/context';
   import type { SessionCreationOption, WorkspaceView } from '../../api/types'
   import ClientModelSelect from './ClientModelSelect.svelte'
+  import { targetSegmentClass } from './targetSegment'
   import MessageComposer from './MessageComposer.svelte'
   import SessionTargetSelector from './SessionTargetSelector.svelte'
   import { navigate } from '$lib/navigation'
@@ -72,7 +73,7 @@
     <SessionTargetSelector bind:workspaceId bind:creationOptionId {workspaces} {workspacesLoading} {selectedWorkspace} {creationOptions} {fixedWorkspace} {deviceSelector} disabled={creating}>
       {#if selectedOption?.model_catalog_key}
         <ClientModelSelect id="session-model" client={{ name: selectedOption.name, client_type: selectedOption.client_type, client_key: selectedOption.model_catalog_key }} bind:value={model} allowDefault disabled={creating}
-          class="h-[34px] min-w-0 max-w-48 shrink gap-1.5 px-3 text-[13px] text-heading" />
+          class={targetSegmentClass} />
       {/if}
     </SessionTargetSelector>
     <MessageComposer
