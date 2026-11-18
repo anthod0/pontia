@@ -65,6 +65,12 @@ pub(super) fn continuation(endpoint: &str, input: &Value, data: &Value) -> Optio
     let (mut command, query) = if endpoint == "session-messages" {
         let next = data.get("next").filter(|next| !next.is_null())?;
         ("pontia bot session-messages".to_owned(), next.clone())
+    } else if endpoint == "helper" && input["action"] == "check" {
+        let next = data
+            .get("messages")?
+            .get("next")
+            .filter(|next| !next.is_null())?;
+        ("pontia bot helper check".to_owned(), next.clone())
     } else if endpoint == "memory" && input["action"] == "neighbors" {
         let cursor = data.get("next_cursor").filter(|cursor| !cursor.is_null())?;
         let mut next = input["input"].clone();

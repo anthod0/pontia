@@ -110,6 +110,7 @@ fn external_api_router(state: HttpState) -> Router {
         .route("/api/v1/bot/user", post(api::update_user))
         .route("/api/v1/bot/workspace", post(api::workspace_command))
         .route("/api/v1/bot/send-to-user", post(api::bots::reply))
+        .route("/api/v1/bot/helper", post(api::helper_command))
         .route("/api/v1/bots", get(api::bots::list).post(api::bots::create))
         .route("/api/v1/bots/clients", get(api::bots::clients))
         .route(

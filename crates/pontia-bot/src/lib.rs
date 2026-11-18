@@ -1,5 +1,6 @@
 pub mod conversation;
 pub mod handoff;
+pub mod helpers;
 pub mod identity;
 pub mod memory;
 pub mod messages;

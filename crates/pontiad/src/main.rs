@@ -51,6 +51,7 @@ async fn main() -> Result<()> {
     info!(url = %dashboard_url(bound_addr), "dashboard available");
 
     let shutdown = state.app().control().shutdown();
+    tokio::spawn(state.helpers().clone().run(shutdown.subscribe()));
     let cleanup_shutdown = shutdown.clone();
     let http_entrypoints = http::HttpEntrypoints::new(state);
     let remote = config

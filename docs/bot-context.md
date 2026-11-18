@@ -45,3 +45,25 @@ pontia bot workspace describe --workspace-id '<workspace-id>' --description '项
 ```
 
 Use `--clear-description` instead of `--description` to clear the description. One of these options is required. Changing it preserves the Workspace ID and activation state.
+
+## Work with helpers
+
+Assign work from a Bot Session:
+
+```bash
+pontia bot helper create --description 'Review the checkout' --message 'Review /path/to/project and report the findings.'
+pontia bot helper list
+pontia bot helper send --session-id '<helper-session-id>' --message 'Also check the migration.'
+pontia bot helper check --session-id '<helper-session-id>' --limit 10
+pontia bot helper close --session-id '<helper-session-id>'
+```
+
+Creation uses the Bot's default helper Profile. Choose another registered Profile with `--profile-id` and optionally `--profile-version`. The selected Profile supplies the client and model. Pass the working directory and task details in the assignment.
+
+A helper reports to its Bot with `pontia bot helper reply --message '…'`. Reports reach the Bot's current Session, including after its previous Session exited. Helpers communicate through their Bot.
+
+Sending returns `accepted`, `failed`, or `unknown`. Acceptance means the client accepted the input; it does not confirm execution or completion. Original messages are not automatically resent. Failed or uncertain helper reports also produce a system notification for the Bot, retained until it can be delivered.
+
+Checking reads existing state and paginated native messages without waking or interrupting the helper. Tools are excluded by default; select them with `--category tool_call --category tool_result`. Use the returned continuation command for further pages. If native history is unavailable, the result still includes the Session state and identifies the history as unavailable.
+
+Idle helpers remain available for more work. Closing requests Session exit and releases its runtime resources; after exit is confirmed, it disappears from the active helper list while its history remains available. Exit alone does not establish task failure or termination of a client's shared process.

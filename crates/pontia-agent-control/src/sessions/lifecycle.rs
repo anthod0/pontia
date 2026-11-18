@@ -56,6 +56,50 @@ impl SessionCommandService {
             .get_session_control(session_id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+        if session.state == "error" {
+            let _guard = self.control.lock_identity().await;
+            let current = query
+                .session_snapshot(session_id)
+                .await?
+                .ok_or_else(|| Error::NotFound(format!("session {session_id} not found")))?;
+            let runtimes = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).list(session_id).await?;
+            if current.state == "error" && runtimes.iter().all(|runtime| runtime.state == "exited")
+            {
+                let target = crate::runtime::ControlTarget::resolve(
+                    &self.pool,
+                    self.clients.registry(),
+                    session_id,
+                    expected_runtime,
+                )
+                .await?;
+                for runtime in runtimes
+                    .iter()
+                    .filter(|runtime| Some(&runtime.runtime_id) == target.runtime_id.as_ref())
+                {
+                    if let Some((socket, pane)) = runtime
+                        .tmux_socket_path
+                        .as_deref()
+                        .zip(runtime.tmux_pane_id.as_deref())
+                    {
+                        pontia_runtime::GenericRuntimeManager.kill_tmux_pane(socket, pane)?;
+                    }
+                }
+                self.event_ingest
+                    .ingest_pontia_event(PontiaEvent::new(
+                        session_id,
+                        None,
+                        PontiaEventSource::ExternalApi,
+                        &session.client_type,
+                        PontiaEventType::SessionExited,
+                        json!({"reason":"management_exit", "runtime_id":target.runtime_id}),
+                    ))
+                    .await?;
+                return Ok(ControlCommandOutcome {
+                    data: json!({"session":query.get_session(session_id).await?}),
+                    duplicate: false,
+                });
+            }
+        }
         let target = crate::runtime::ControlTarget::resolve(
             &self.pool,
             self.clients.registry(),
@@ -63,7 +107,7 @@ impl SessionCommandService {
             expected_runtime,
         )
         .await?;
-        if !matches!(session.state.as_str(), "exited" | "error") {
+        if session.state != "exited" {
             let outcome = self
                 .clients
                 .for_client(&session.client_type)?

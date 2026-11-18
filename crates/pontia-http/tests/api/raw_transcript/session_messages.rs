@@ -307,3 +307,111 @@ async fn reading_active_runtime_history_leaves_turn_and_pending_input_unchanged(
     assert_eq!(pending, ("pending".into(), None));
     peer.close();
 }
+
+#[tokio::test]
+async fn helper_check_reads_paginated_native_history_without_changing_execution() {
+    let f = fixture().await;
+    seed_session(&f.state, "caller").await;
+    let pool = f.state.db();
+    sqlx::query("INSERT INTO bots(bot_id,name,client_type,client_key,model,current_session_id) VALUES ('bot-check','Bot','pi','default','test','caller')").execute(&pool).await.unwrap();
+    sqlx::query("UPDATE sessions SET application_id='bot', application_ref='bot-check:launch', runtime_environment=? WHERE session_id='caller'")
+        .bind(json!({"PONTIA_BOT_TOOL_TOKEN":"caller-credential"}).to_string()).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES ('helper:check','bot-check','sess_messages')").execute(&pool).await.unwrap();
+    let state = http::HttpState::from(f.state.clone());
+    let before = f
+        .state
+        .control()
+        .queries()
+        .session_snapshot("sess_messages")
+        .await
+        .unwrap()
+        .unwrap();
+    let request =
+        |input: Value| json!({"session_id":"caller", "command":{"action":"check", "input":input}});
+    let input = request(json!({"session_id":"sess_messages", "limit":1}));
+    let (status, _) = post(state.clone(), "/api/v1/bot/helper", input.clone()).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let send = |input: Value| {
+        let state = state.clone();
+        async move {
+            let response = http::router(state)
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/bot/helper")
+                        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .header("x-pontia-bot-tool-token", "caller-credential")
+                        .body(Body::from(input.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status();
+            let body: Value =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .unwrap();
+            assert_eq!(status, StatusCode::OK, "{body}");
+            body["data"].clone()
+        }
+    };
+    let recent = send(input).await;
+    assert_eq!(recent["session"]["state"], before.state);
+    assert_eq!(recent["messages"]["items"].as_array().unwrap().len(), 2);
+    let middle = send(request(recent["messages"]["next"].clone())).await;
+    assert_eq!(middle["messages"]["items"], json!([]));
+    assert_eq!(middle["messages"]["has_more"], true);
+    let details = send(request(json!({"session_id":"sess_messages", "turn_id":"turn_2", "limit":1, "categories":["tool_call","tool_result"]}))).await;
+    assert_eq!(details["messages"]["items"].as_array().unwrap().len(), 2);
+    let after = f
+        .state
+        .control()
+        .queries()
+        .session_snapshot("sess_messages")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(before.event_position, after.event_position);
+    assert_eq!(before.current_turn_id, after.current_turn_id);
+    assert_eq!(before.inbox.len(), after.inbox.len());
+}
+
+#[tokio::test]
+async fn startup_failure_can_be_checked_without_history_and_closed_without_a_control_channel() {
+    use pontia_agent_control::{PontiaEvent, PontiaEventSource, PontiaEventType};
+    let state = test_state().await;
+    seed_session(&state, "caller").await;
+    seed_session(&state, "failed-helper").await;
+    let pool = state.db();
+    sqlx::query("INSERT INTO bots(bot_id,name,client_type,client_key,model,current_session_id) VALUES ('bot-check','Bot','pi','default','test','caller')").execute(&pool).await.unwrap();
+    sqlx::query("UPDATE sessions SET application_id='bot', application_ref='bot-check:launch' WHERE session_id='caller'").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES ('helper:check','bot-check','failed-helper')").execute(&pool).await.unwrap();
+    state.control().event_ingest_service().ingest_pontia_event(PontiaEvent::new(
+        "failed-helper", None, PontiaEventSource::RuntimeManager, "pi", PontiaEventType::SessionError,
+        json!({"runtime_id":"runtime_failed-helper", "reason":"startup_failed", "failure":{"message":"launch failed"}})
+    )).await.unwrap();
+    let http_state =
+        http::HttpState::from(state.clone()).with_bot_identity(Arc::new(Identity(BotRole::Bot)));
+    let (status, body) = post(http_state.clone(), "/api/v1/bot/helper", json!({"session_id":"caller", "command":{"action":"check","input":{"session_id":"failed-helper"}}})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["data"]["session"]["state"], "error");
+    assert!(body["data"]["messages"].is_null());
+    assert!(body["data"]["messages_unavailable"].is_string());
+    let (status, body) = post(http_state.clone(), "/api/v1/bot/helper", json!({"session_id":"caller", "command":{"action":"check","input":{"session_id":"failed-helper", "limit":0}}})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    let (status, body) = post(http_state, "/api/v1/bot/helper", json!({"session_id":"caller", "command":{"action":"close","input":{"session_id":"failed-helper"}}})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["data"]["session"]["state"], "exited");
+    let events = state
+        .control()
+        .queries()
+        .list_session_events("failed-helper")
+        .await
+        .unwrap();
+    let exited = events
+        .iter()
+        .find(|event| event.event_type == "session.exited")
+        .unwrap();
+    assert_eq!(exited.source, "external_api");
+    assert_eq!(exited.payload["reason"], "management_exit");
+}

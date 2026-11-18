@@ -284,19 +284,7 @@ impl ConversationService {
                 }
                 return Ok(session_id);
             }
-            if snapshot.has_agent_binding {
-                if snapshot.state == "exited" {
-                    self.control
-                        .session_commands()
-                        .resume_session(&session_id, self.control.pontia_home())
-                        .await?;
-                    if bot.current_session_id.is_none() {
-                        self.records
-                            .set_current_session(&bot.bot_id, Some(&session_id))
-                            .await?;
-                    }
-                    return Ok(session_id);
-                }
+            if snapshot.has_agent_binding && snapshot.state == "error" {
                 return Err(Error::StateConflict(
                     "The current Bot Session is in error".into(),
                 ));
@@ -309,6 +297,7 @@ impl ConversationService {
         }
         self.records.initialize(&bot.bot_id).await?;
         let directory = self.records.directory(&bot.bot_id).await?;
+        crate::helpers::seed_workspaces(&self.control, &bot.bot_id).await?;
         let handoff = {
             let _recording = activity.recording.lock().await;
             let pending: Vec<_> = activity
@@ -319,7 +308,11 @@ impl ConversationService {
                 .cloned()
                 .collect();
             self.handoff
-                .generate_for_input(&bot.bot_id, &[], &pending)
+                .generate_for_input(
+                    &bot.bot_id,
+                    &crate::helpers::contexts(&self.control, &bot.bot_id).await?,
+                    &pending,
+                )
                 .await
                 .map_err(|error| Error::Domain(format!("Cannot prepare Bot handoff: {error}")))?
         };
@@ -375,7 +368,8 @@ impl ConversationService {
         let Some(ownership) = self.control.queries().session_ownership(session_id).await? else {
             return Ok(None);
         };
-        if ownership.application_id != APPLICATION_ID {
+        if ownership.application_id != APPLICATION_ID || ownership.reference.starts_with("helper:")
+        {
             return Ok(None);
         }
         let Some((bot_id, _)) = ownership.reference.split_once(':') else {
@@ -383,6 +377,15 @@ impl ConversationService {
         };
         let bot = self.records.get(bot_id).await?;
         Ok((bot.current_session_id.as_deref() == Some(session_id)).then_some(bot))
+    }
+
+    pub(crate) async fn require_bot(&self, session_id: &str) -> Result<Bot> {
+        self.bot_for_session(session_id)
+            .await?
+            .ok_or_else(|| Error::Conflict {
+                code: "bot_session_required",
+                message: IdentityError.to_string(),
+            })
     }
 
     pub async fn send_to_user(&self, request: ReplyRequest) -> Result<BotMessage> {
@@ -436,6 +439,26 @@ impl BotIdentity for ConversationService {
         Box<dyn Future<Output = std::result::Result<BotAccess, IdentityError>> + Send + 'a>,
     > {
         Box::pin(async move {
+            if crate::helpers::helper_bot(&self.control.db(), session_id)
+                .await
+                .map_err(|_| IdentityError)?
+                .is_some()
+            {
+                let session = self
+                    .control
+                    .queries()
+                    .session_snapshot(session_id)
+                    .await
+                    .map_err(|_| IdentityError)?
+                    .ok_or(IdentityError)?;
+                if session.state == "exited" {
+                    return Err(IdentityError);
+                }
+                return Ok(BotAccess {
+                    role: BotRole::Helper,
+                    workspace_id: None,
+                });
+            }
             self.bot_for_session(session_id)
                 .await
                 .map_err(|_| IdentityError)?

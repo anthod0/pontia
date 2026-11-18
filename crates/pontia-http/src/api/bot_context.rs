@@ -100,3 +100,27 @@ pub(super) async fn authorize_tool(
         .await
         .map_err(|error| ApiError::custom(StatusCode::FORBIDDEN, "forbidden", error.to_string()))
 }
+
+pub async fn helper_command(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    request: Result<Json<pontia_bot::helpers::HelperRequest>, JsonRejection>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
+    authorize_tool(&state, &headers, &request.session_id).await?;
+    let result = state
+        .helpers()
+        .execute(request)
+        .await
+        .map_err(|error| match error {
+            pontia_bot::helpers::HelperError::Control(pontia_core::Error::Conflict {
+                code: "bot_session_required",
+                message,
+            }) => ApiError::custom(StatusCode::FORBIDDEN, "forbidden", message),
+            pontia_bot::helpers::HelperError::Control(error) => error.into(),
+            pontia_bot::helpers::HelperError::Timeline(error) => {
+                super::timeline::turn_timeline_service_error(error)
+            }
+        })?;
+    Ok(ok(result))
+}

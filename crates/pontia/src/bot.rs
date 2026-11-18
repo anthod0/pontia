@@ -29,6 +29,7 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
         .filter(|id| !id.trim().is_empty())
         .ok_or("Missing PONTIA_SESSION_ID; run bot tools inside a Pontia Session")?;
     let (endpoint, input, grouped) = match command.command {
+        BotTool::Helper(input) => ("helper", json!(input), true),
         BotTool::Memory(input) => ("memory", json!(input), true),
         BotTool::Workspace(input) => ("workspace", json!(input), true),
         BotTool::SessionMessages(input) => ("session-messages", json!(input), false),

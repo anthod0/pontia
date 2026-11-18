@@ -135,6 +135,8 @@ impl ProjectionState {
             && session.state.is_terminal()
             && !(session.state == SessionState::Exited
                 && event.event_type == EventType::SessionResuming)
+            && !(session.state == SessionState::Error
+                && event.event_type == EventType::SessionExited)
             && event.event_type != EventType::SessionFileShared
             && event.event_type != EventType::SessionTitleUpdated
             && event.event_type != EventType::SessionContextUsageUpdated

@@ -258,3 +258,48 @@ async fn named_arguments_reject_incomplete_or_invalid_operations_before_sending_
     }
     assert!(f.requests.try_recv().is_err());
 }
+
+#[tokio::test]
+async fn helper_commands_preserve_target_source_and_message_arguments() {
+    let mut f = Fixture::new(json!({"delivery":{"status":"accepted"}})).await;
+    for action in ["create", "send", "reply", "list", "close"] {
+        let mut args = vec!["helper", action, "--json"];
+        if matches!(action, "send" | "close") {
+            args.extend(["--session-id", "helper-session"]);
+        }
+        if matches!(action, "create" | "send" | "reply") {
+            args.extend(["--message", "new\nrequirements"]);
+        }
+        if action == "create" {
+            args.extend(["--description", "Task", "--profile-id", "selected-profile"]);
+        }
+        let output = f.cli(&args).await;
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let request = f.requests.recv().await.unwrap();
+        assert_eq!(request["session_id"], "caller-session");
+        assert_eq!(request["command"]["action"], action);
+        if matches!(action, "send" | "close") {
+            assert_eq!(request["command"]["input"]["session_id"], "helper-session");
+        }
+        if matches!(action, "create" | "send" | "reply") {
+            assert_eq!(request["command"]["input"]["message"], "new\nrequirements");
+        }
+    }
+}
+
+#[tokio::test]
+async fn helper_check_continuation_preserves_the_native_history_query() {
+    let next = json!({"session_id":"helper", "turn_id":"opaque ' anchor", "direction":"backward", "limit":1, "categories":["assistant"], "history_source":"file"});
+    let mut f = Fixture::new(json!({"session":{"state":"busy"},"messages":{"next":next}})).await;
+    let output = f.cli(&["helper", "check", "--session-id", "helper"]).await;
+    let _ = f.requests.recv().await.unwrap();
+    let continuation = f.continue_page(&output).await;
+    assert!(continuation.status.success());
+    let request = f.requests.recv().await.unwrap();
+    assert_eq!(request["command"]["action"], "check");
+    assert_eq!(request["command"]["input"], next);
+}

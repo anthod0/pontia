@@ -12,6 +12,9 @@ pub(crate) struct BotCommand {
 
 #[derive(Debug, Subcommand)]
 pub(super) enum BotTool {
+    /// Create, message, inspect, or close helpers; helpers use reply to report to their Bot
+    #[command(subcommand)]
+    Helper(HelperCommand),
     /// Read Session messages without changing execution state
     SessionMessages(SessionMessages),
     /// Update shared USER.md (at most 2,000 characters)
@@ -208,4 +211,41 @@ pub(super) enum MemoryCommand {
     },
     /// Record memories actually used in a response or decision (Bot)
     Use(MemoryIds),
+}
+
+#[derive(Debug, Subcommand, Serialize)]
+#[serde(tag = "action", content = "input", rename_all = "snake_case")]
+pub(super) enum HelperCommand {
+    /// Start a helper using an Agent Profile (defaults to this Bot's helper Profile)
+    Create {
+        #[arg(long)]
+        profile_id: Option<String>,
+        #[arg(long)]
+        profile_version: Option<String>,
+        #[arg(long, allow_hyphen_values = true)]
+        description: String,
+        #[arg(long, allow_hyphen_values = true)]
+        message: String,
+    },
+    /// List associated Sessions that have not exited, including idle helpers
+    List,
+    /// Send additional instructions to one of your helpers
+    Send {
+        #[arg(long)]
+        session_id: String,
+        #[arg(long, allow_hyphen_values = true)]
+        message: String,
+    },
+    /// Report to your Bot's current Session (helper only)
+    Reply {
+        #[arg(long, allow_hyphen_values = true)]
+        message: String,
+    },
+    /// Read status and paginated messages without affecting execution
+    Check(SessionMessages),
+    /// Exit a helper Session and release its runtime resources, retaining history
+    Close {
+        #[arg(long)]
+        session_id: String,
+    },
 }
