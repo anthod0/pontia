@@ -16,7 +16,7 @@
 <p align="center">
   <img src="apps/cloud/static/client-logos/pi.svg" height="28" alt="pi">
   &nbsp;&nbsp;
-  <picture><source media="(prefers-color-scheme: dark)" srcset="assets/clients/codex-dark.svg"><img src="apps/cloud/static/client-logos/codex.svg" height="28" alt="Codex"></picture>
+  <picture><source media="(prefers-color-scheme: dark)" srcset="apps/cloud/static/client-logos/codex-dark.svg"><img src="apps/cloud/static/client-logos/codex.svg" height="28" alt="Codex"></picture>
   &nbsp;&nbsp;
   <img src="apps/cloud/static/client-logos/claude-code.svg" height="28" alt="Claude Code">
   &nbsp;&nbsp;

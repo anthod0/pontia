@@ -36,9 +36,9 @@
   // ACP history branching remains a planned investigation; its feasibility and
   // scope depend on the individual agent, not ACP alone.
   type Coverage = keyof typeof states;
-  const clients: { name: string; logo: string; monochrome?: boolean; darkLogo?: string; coverage: Coverage[] }[] = [
+  const clients: { name: string; logo: string; darkLogo?: string; coverage: Coverage[] }[] = [
     { name: 'Pi', logo: '/client-logos/pi.svg', coverage: ['supported', 'supported', 'notApplicable', 'supported', 'supported', 'supported'] },
-    { name: 'Codex', logo: '/client-logos/codex.svg', monochrome: true, coverage: ['supported', 'supported', 'supported', 'supported', 'supported', 'supported'] },
+    { name: 'Codex', logo: '/client-logos/codex.svg', darkLogo: '/client-logos/codex-dark.svg', coverage: ['supported', 'supported', 'supported', 'supported', 'supported', 'supported'] },
     { name: 'Claude Code', logo: '/client-logos/claude-code.svg', coverage: ['supported', 'planning', 'supported', 'planning', 'planning', 'supported'] },
     { name: 'Grok Build', logo: '/client-logos/grok-build.svg', coverage: ['supported', 'unsupported', 'supported', 'planning', 'planning', 'supported'] },
     { name: 'OpenCode', logo: '/client-logos/opencode.svg', darkLogo: '/client-logos/opencode-dark.svg', coverage: ['supported', 'unsupported', 'supported', 'planning', 'planning', 'supported'] },
@@ -69,7 +69,7 @@
         {#each clients as client, index}
           <Table.Row class="reveal" style={`--i: ${index + 2}`}>
             <Table.Head scope="row" class="client-cell">
-              <span class="client-identity"><img class="client-mark" class:monochrome={client.monochrome} class:light-logo={client.darkLogo} src={client.logo} alt="" width="32" height="32" loading="lazy" />{#if client.darkLogo}<img class="client-mark dark-logo" src={client.darkLogo} alt="" width="32" height="32" loading="lazy" />{/if}<span>{client.name}</span></span>
+              <span class="client-identity"><img class="client-mark" class:light-logo={client.darkLogo} src={client.logo} alt="" width="32" height="32" loading="lazy" />{#if client.darkLogo}<img class="client-mark dark-logo" src={client.darkLogo} alt="" width="32" height="32" loading="lazy" />{/if}<span>{client.name}</span></span>
             </Table.Head>
             {#each client.coverage as status}
               {@const Icon = states[status].icon}
@@ -106,8 +106,6 @@
   .client-mark.dark-logo { display: none; }
   :global(.dark) .client-mark.light-logo { display: none; }
   :global(.dark) .client-mark.dark-logo { display: block; }
-  /* Black monochrome logos are inverted to stay visible on dark surfaces. */
-  :global(.dark) .client-mark.monochrome { filter: invert(1); }
   .coverage-table :global(.coverage-cell) { padding: 22px 10px; text-align: center; }
   .coverage-status { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; color: var(--muted-foreground); }
   .coverage-legend { display: flex; flex-wrap: wrap; gap: 12px 24px; list-style: none; padding: 0; margin: 0; }

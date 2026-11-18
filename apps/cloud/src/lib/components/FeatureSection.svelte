@@ -7,7 +7,7 @@
 
 	const clients = [
 		{ name: 'Pi', logo: '/client-logos/pi.svg' },
-		{ name: 'Codex', logo: '/client-logos/codex.svg', monochrome: true },
+		{ name: 'Codex', logo: '/client-logos/codex.svg', darkLogo: '/client-logos/codex-dark.svg' },
 		{ name: 'Claude Code', logo: '/client-logos/claude-code.svg' },
 		{ name: 'Grok Build', logo: '/client-logos/grok-build.svg' },
 		{ name: 'OpenCode', logo: '/client-logos/opencode.svg', darkLogo: '/client-logos/opencode-dark.svg' }
@@ -30,7 +30,7 @@
 				<div class="marquee">
 					{#each [0, 1] as copy}
 						<ul class:duplicate={copy === 1}>
-							{#each clients as client}<li><img class:monochrome={client.monochrome} class:light-logo={client.darkLogo} src={client.logo} alt="" width="24" height="24" loading="lazy" />{#if client.darkLogo}<img class="dark-logo" src={client.darkLogo} alt="" width="24" height="24" loading="lazy" />{/if}{client.name}</li>{/each}
+							{#each clients as client}<li><img class:light-logo={client.darkLogo} src={client.logo} alt="" width="24" height="24" loading="lazy" />{#if client.darkLogo}<img class="dark-logo" src={client.darkLogo} alt="" width="24" height="24" loading="lazy" />{/if}{client.name}</li>{/each}
 						</ul>
 					{/each}
 				</div>
@@ -161,8 +161,6 @@
 	.marquee img.dark-logo { display: none; }
 	:global(.dark) .marquee img.light-logo { display: none; }
 	:global(.dark) .marquee img.dark-logo { display: block; }
-	/* Black monochrome logos are inverted to stay visible on dark surfaces. */
-	:global(.dark) .marquee img.monochrome { filter: invert(1); }
 
 
 	/* On every wire, one dot leaves each end at once and they cross midway. */
