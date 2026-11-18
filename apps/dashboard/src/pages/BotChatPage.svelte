@@ -3,8 +3,8 @@
   import { onMount, tick } from 'svelte'
   import { t } from '$lib/i18n'
   import { Button } from '$lib/components/ui/button/index.js'
-  import { Textarea } from '$lib/components/ui/textarea/index.js'
-  import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon'
+  import MessageComposer from '../components/chat/MessageComposer.svelte'
+  import { parseUploadMessage } from '$lib/uploads/message'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { useDeviceRuntime } from '../device/context'
   import { openBotChatStream } from '../services/botChatStream'
@@ -52,17 +52,18 @@
     await device.queryClient.invalidateQueries({ queryKey: ['bot-chat', botId] })
   }
 
-  async function send() {
-    const content = draft.trim()
-    if (!content) return
+  async function send(content: string): Promise<boolean> {
+    const text = draft
     draft = ''
     actionError = ''
     follow = true
     try {
       await device.api.sendBotMessage(botId, content)
+      return true
     } catch (failure) {
-      draft = draft ? content + '\n\n' + draft : content
+      draft = draft ? text + '\n\n' + draft : text
       actionError = failure instanceof Error ? failure.message : String(failure)
+      return false
     } finally {
       await refresh()
     }
@@ -80,13 +81,6 @@
       await refresh()
     }
   }
-
-  function onComposerKey(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-      event.preventDefault()
-      void send()
-    }
-  }
 </script>
 
 {#if chat.data}
@@ -99,9 +93,17 @@
       role="log" aria-label={$t('bots.messages')}>
       {#each entries as entry (entry.id)}
         {#if 'content' in entry}
+          {@const parts = entry.kind === 'user_input' ? parseUploadMessage(entry.content) : { text: entry.content, files: [] }}
           <div class={['flex', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']}>
-            <div class="max-w-[90%] min-w-0">
-              <p class={['rounded-2xl px-4 py-3 text-sm leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]', entry.kind === 'user_input' ? 'border border-border bg-background' : 'bg-muted']}>{entry.content}</p>
+            <div class="max-w-[90%] min-w-0 space-y-2">
+              {#if parts.files.length}
+                <ul class="flex flex-wrap justify-end gap-2" data-user-message-uploads>
+                  {#each parts.files as file}<li class="rounded-md border bg-background px-2 py-1 text-xs [overflow-wrap:anywhere]" title={file.path}>{$t('files.uploadedPrefix')} {file.name}</li>{/each}
+                </ul>
+              {/if}
+              {#if parts.text}
+                <p class={['rounded-2xl px-4 py-3 text-sm leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]', entry.kind === 'user_input' ? 'border border-border bg-background' : 'bg-muted']}>{parts.text}</p>
+              {/if}
               {#if entry.status === 'failed'}
                 <div class="mt-1 flex items-center justify-end gap-2 text-xs text-destructive">
                   <span>{$t('bots.sendFailed')}</span>
@@ -124,7 +126,7 @@
       {/if}
     </div>
 
-    <form class="shrink-0 px-1 pt-2 pb-4" onsubmit={(event) => { event.preventDefault(); void send() }}>
+    <div class="shrink-0 px-1 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
       {#if chat.data.bot.working_on}
         <p class="mb-2 flex items-start gap-2 px-2 text-xs text-muted-foreground" role="status">
           <span class="mt-1 size-1.5 shrink-0 rounded-full bg-primary-solid"></span>
@@ -132,14 +134,8 @@
         </p>
       {/if}
       {#if actionError}<p role="alert" class="mb-2 text-sm text-destructive">{actionError}</p>{/if}
-      <div class="flex items-end gap-2 rounded-xl border border-border bg-background p-2">
-        <Textarea rows={2} bind:value={draft} onkeydown={onComposerKey} aria-label={$t('bots.message')}
-          placeholder={$t('bots.message')} class="min-h-14 flex-1 resize-none border-0 shadow-none focus-visible:ring-0" />
-        <Button size="icon" type="submit" disabled={!draft.trim()} aria-label={$t('common.send')} title={$t('common.send')}>
-          <ArrowUpIcon class="size-5" />
-        </Button>
-      </div>
-    </form>
+      <MessageComposer draftId={`bot:${botId}`} bind:value={draft} placeholder={$t('bots.message')} fullscreen onSubmit={send} />
+    </div>
   </section>
 {:else if chat.isError}
   <p role="alert" class="mx-auto max-w-3xl text-sm text-destructive">{chat.error.message}</p>
