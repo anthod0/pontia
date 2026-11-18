@@ -89,9 +89,59 @@ fn configuration(name: &str, key: &str, model: &str) -> BotConfiguration {
     BotConfiguration {
         name: name.into(),
         description: Some(format!("{name} description")),
+        avatar_shape: None,
+        avatar_color: None,
         client_type: "generic".into(),
         client_key: key.into(),
         model: model.into(),
+    }
+}
+
+#[tokio::test]
+async fn avatar_selection_persists_across_updates_and_session_changes() {
+    let f = Fixture::new().await;
+    let mut input = configuration("A", "a", "model");
+    input.avatar_shape = Some(AvatarShape::Mochi);
+    input.avatar_color = Some(AvatarColor::Rose);
+    let bot = f.bots.create(input.clone()).await.unwrap();
+    assert_eq!(bot.avatar_shape, AvatarShape::Mochi);
+    assert_eq!(bot.avatar_color, AvatarColor::Rose);
+    input.avatar_shape = Some(AvatarShape::Onigiri);
+    input.avatar_color = Some(AvatarColor::Indigo);
+    f.bots.update(&bot.bot_id, input).await.unwrap();
+    f.bots
+        .update(&bot.bot_id, configuration("Renamed", "a", "model"))
+        .await
+        .unwrap();
+    f.bots
+        .set_current_session(&bot.bot_id, Some("next-generation"))
+        .await
+        .unwrap();
+    let saved = f.bots.get(&bot.bot_id).await.unwrap();
+    assert_eq!(saved.avatar_shape, AvatarShape::Onigiri);
+    assert_eq!(saved.avatar_color, AvatarColor::Indigo);
+    assert_eq!(f.bots.list().await.unwrap(), vec![saved]);
+}
+
+#[tokio::test]
+async fn omitted_avatar_uses_creation_defaults() {
+    let f = Fixture::new().await;
+    let input = serde_json::from_value(json!({
+        "name": "A", "description": null,
+        "client_type": "generic", "client_key": "a", "model": "model"
+    }))
+    .unwrap();
+    let bot = f.bots.create(input).await.unwrap();
+    assert_eq!(bot.avatar_shape, AvatarShape::Classic);
+    assert_eq!(bot.avatar_color, AvatarColor::Blue);
+}
+
+#[test]
+fn bot_configuration_rejects_unknown_avatar_options() {
+    for (field, value) in [("avatar_shape", "triangle"), ("avatar_color", "#458588")] {
+        let mut input = serde_json::to_value(configuration("A", "a", "model")).unwrap();
+        input[field] = json!(value);
+        assert!(serde_json::from_value::<BotConfiguration>(input).is_err());
     }
 }
 

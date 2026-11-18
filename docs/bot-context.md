@@ -2,6 +2,8 @@
 
 In the Dashboard sidebar, select **Create Bot**. Enter a name and an optional description, choose Pi, and enter a model ID available in that Pi installation. Each Bot has its own conversation. You can send another message while a Bot is running.
 
+Choose an avatar from nine shapes and nine colors when creating a Bot. To change it later, click the Bot's name at the top of its chat, choose a shape and color, and save. The avatar appears in the sidebar and chat title and stays with the Bot across Sessions.
+
 Use **Retry** on a failed message to send it again. You can keep sending new messages while a failed message remains in the chat. Edits to the client or model take effect when the Bot starts a new Session.
 
 Bots start a fresh Session when their context exceeds the smaller of 258,000 tokens and 80% of the model's context window, after the current Session becomes idle. Above 75,000 tokens, five minutes of continuous idle ends the current Session; the next user message or helper report starts a new one. Helpers continue their work across this change. The new Session receives user information, Workspaces, recent memories, active helpers, and recent visible chat. Historical messages are not resent as tasks.

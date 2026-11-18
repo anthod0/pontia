@@ -1,8 +1,31 @@
 export type JsonObject = Record<string, unknown>;
 
+export type BotAvatarShape =
+  | "classic"
+  | "mochi"
+  | "cloud"
+  | "drop"
+  | "blob"
+  | "ghost"
+  | "onigiri"
+  | "egg"
+  | "pudding";
+export type BotAvatarColor =
+  | "blue"
+  | "aqua"
+  | "green"
+  | "yellow"
+  | "orange"
+  | "purple"
+  | "indigo"
+  | "brown"
+  | "rose";
+
 export interface BotConfiguration {
   name: string;
   description: string | null;
+  avatar_shape: BotAvatarShape;
+  avatar_color: BotAvatarColor;
   client_type: string;
   client_key: string;
   model: string;

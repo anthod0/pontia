@@ -9,7 +9,7 @@
 </script>
 
 <Dialog.Root open onOpenChange={(open) => { if (!open && !saving) onclose() }}>
-  <Dialog.Content class="max-w-md" aria-describedby={undefined}>
+  <Dialog.Content class="max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-md" aria-describedby={undefined}>
     <Dialog.Header><Dialog.Title>{$t(bot ? 'bots.edit' : 'bots.create')}</Dialog.Title></Dialog.Header>
     <BotSettingsForm {bot} bind:saving oncancel={onclose} {onsaved} />
   </Dialog.Content>

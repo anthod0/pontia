@@ -17,6 +17,8 @@ async function openChat() {
       bot_id: botId,
       name: "Bot",
       description: null,
+      avatar_shape: "classic",
+      avatar_color: "blue",
       client_type: "pi",
       client_key: "default",
       model: "test",

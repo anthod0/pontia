@@ -1,0 +1,2 @@
+ALTER TABLE bots ADD COLUMN avatar_shape TEXT NOT NULL DEFAULT 'classic';
+ALTER TABLE bots ADD COLUMN avatar_color TEXT NOT NULL DEFAULT 'blue';

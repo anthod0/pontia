@@ -5,7 +5,7 @@
   import { dashboardPath, navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
-  import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
+  import BotAvatar from './BotAvatar.svelte'
   import { useDeviceRuntime } from '../../device/context'
   import BotSettingsDialog from './BotSettingsDialog.svelte'
 
@@ -33,11 +33,11 @@
         {@const path = `/bots/${encodeURIComponent(bot.bot_id)}`}
         {@const active = page.params.botId === bot.bot_id && (handle === undefined || handle === page.params.handle)}
         <Sidebar.MenuItem>
-          <Sidebar.MenuButton isActive={active} tooltipContent={bot.name}>
+          <Sidebar.MenuButton isActive={active} tooltipContent={bot.name} class="[&_svg]:size-5">
             {#snippet child({ props })}
               <a {...props} href={scope ? scope + path : dashboardPath(path)} aria-current={active ? 'page' : undefined}
                 onclick={(event) => { event.preventDefault(); void navigate(path, undefined, { scope }) }}>
-                <RobotIcon /><span>{bot.name}</span>
+                <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-5" /><span>{bot.name}</span>
               </a>
             {/snippet}
           </Sidebar.MenuButton>

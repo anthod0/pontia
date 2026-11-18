@@ -12,6 +12,8 @@ const bot: Bot = {
   client_key: "default",
   model: "provider/first",
   working_on: null,
+  avatar_shape: "classic",
+  avatar_color: "blue",
 };
 const models = [
   { id: "provider/first", name: "First model", description: "provider" },
@@ -41,6 +43,8 @@ test("searches the catalog and saves the selected model ID when editing a Bot", 
   await waitFor(() =>
     expect(save).toHaveBeenCalledWith(
       {
+        avatar_shape: "classic",
+        avatar_color: "blue",
         name: "Bot",
         description: null,
         client_type: "pi",
@@ -78,6 +82,8 @@ test("switching clients clears the selection and loads that client catalog", asy
         client_type: "another",
         client_key: "custom",
         model: "other-model",
+        avatar_shape: "classic",
+        avatar_color: "blue",
       },
       "bot-one",
     ),

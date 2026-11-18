@@ -3,6 +3,8 @@
   import { t } from '$lib/i18n'
   import { useDeviceRuntime } from '../../device/context'
   import type { Bot } from '../../api/types'
+  import BotAvatarPicker from './BotAvatarPicker.svelte'
+  import { randomAvatar } from './avatar'
   import ClientIcon from '../chat/ClientIcon.svelte'
   import BotModelSelect from './BotModelSelect.svelte'
   import * as Select from '$lib/components/ui/select/index.js'
@@ -29,6 +31,9 @@
   )
   let name = $derived(bot?.name ?? (onboarding ? 'Pontia' : ''))
   let description = $derived(bot?.description ?? '')
+  const initialAvatar = randomAvatar()
+  let avatarShape = $derived(bot?.avatar_shape ?? initialAvatar.shape)
+  let avatarColor = $derived(bot?.avatar_color ?? initialAvatar.color)
   let model = $derived(bot?.model ?? '')
   let modelAvailable = $state(false)
   let clientId = $state('')
@@ -52,6 +57,8 @@
       const saved = await device.api.saveBot({
         name: name.trim(),
         description: description.trim() || null,
+        avatar_shape: avatarShape,
+        avatar_color: avatarColor,
         client_type: selected.client_type,
         client_key: selected.client_key,
         model: model.trim(),
@@ -67,6 +74,7 @@
 </script>
 
 <form class="grid gap-4" onsubmit={save}>
+  <BotAvatarPicker bind:shape={avatarShape} bind:color={avatarColor} disabled={saving} />
   {#if !onboarding}
     <div class="grid gap-2">
       <Label for={`${id}-name`}>{$t('bots.name')}</Label>

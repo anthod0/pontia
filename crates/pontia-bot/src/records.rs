@@ -14,11 +14,45 @@ mod initialization;
 
 pub const DREAMING_PROFILE_ID: &str = "bot-dreaming";
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, sqlx::Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
+pub enum AvatarShape {
+    #[default]
+    Classic,
+    Mochi,
+    Cloud,
+    Drop,
+    Blob,
+    Ghost,
+    Onigiri,
+    Egg,
+    Pudding,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, sqlx::Type, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
+pub enum AvatarColor {
+    #[default]
+    Blue,
+    Aqua,
+    Green,
+    Yellow,
+    Orange,
+    Purple,
+    Indigo,
+    Brown,
+    Rose,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, sqlx::FromRow, PartialEq, Eq)]
 pub struct Bot {
     pub bot_id: String,
     pub name: String,
     pub description: Option<String>,
+    pub avatar_shape: AvatarShape,
+    pub avatar_color: AvatarColor,
     pub client_type: String,
     pub client_key: String,
     pub model: String,
@@ -33,6 +67,8 @@ pub struct Bot {
 pub struct BotConfiguration {
     pub name: String,
     pub description: Option<String>,
+    pub avatar_shape: Option<AvatarShape>,
+    pub avatar_color: Option<AvatarColor>,
     pub client_type: String,
     pub client_key: String,
     pub model: String,
@@ -78,12 +114,14 @@ impl BotService {
     ) -> std::result::Result<Bot, CreateError> {
         self.validate(&configuration).await?;
         let bot: Bot = sqlx::query_as(
-            "INSERT INTO bots (bot_id, name, description, client_type, client_key, model)
-             VALUES (?, ?, ?, ?, ?, ?) RETURNING *",
+            "INSERT INTO bots (bot_id, name, description, avatar_shape, avatar_color, client_type, client_key, model)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
         )
         .bind(format!("bot_{}", uuid::Uuid::now_v7()))
         .bind(configuration.name)
         .bind(configuration.description)
+        .bind(configuration.avatar_shape.unwrap_or_default())
+        .bind(configuration.avatar_color.unwrap_or_default())
         .bind(configuration.client_type)
         .bind(configuration.client_key)
         .bind(configuration.model)
@@ -121,6 +159,7 @@ impl BotService {
         self.initialize(bot_id).await?;
         Ok(sqlx::query_as(
             "UPDATE bots SET name = ?, description = ?, client_type = ?, client_key = ?, model = ?,
+             avatar_shape = COALESCE(?, avatar_shape), avatar_color = COALESCE(?, avatar_color),
              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE bot_id = ? RETURNING *",
         )
         .bind(configuration.name)
@@ -128,6 +167,8 @@ impl BotService {
         .bind(configuration.client_type)
         .bind(configuration.client_key)
         .bind(configuration.model)
+        .bind(configuration.avatar_shape)
+        .bind(configuration.avatar_color)
         .bind(bot_id)
         .fetch_one(&self.pool)
         .await?)

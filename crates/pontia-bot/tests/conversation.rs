@@ -143,6 +143,8 @@ fn bot_configuration(name: &str, model: &str) -> BotConfiguration {
     BotConfiguration {
         name: name.into(),
         description: None,
+        avatar_shape: None,
+        avatar_color: None,
         client_type: "generic".into(),
         client_key: "default".into(),
         model: model.into(),

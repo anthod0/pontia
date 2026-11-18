@@ -13,7 +13,9 @@ CREATE TABLE bots (
         DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL
         DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    working_on TEXT
+    working_on TEXT,
+    avatar_shape TEXT NOT NULL DEFAULT 'classic',
+    avatar_color TEXT NOT NULL DEFAULT 'blue'
 );
 
 CREATE TABLE bot_messages (

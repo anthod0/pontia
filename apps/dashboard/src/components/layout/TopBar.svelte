@@ -4,7 +4,7 @@
   import { useDeviceRuntime } from '../../device/context';
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
-  import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
+  import BotAvatar from '../bots/BotAvatar.svelte'
   import { Button } from '$lib/components/ui/button/index.js'
   import { navigate } from '$lib/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
@@ -116,7 +116,7 @@
           aria-haspopup="dialog"
           onclick={() => { botSettingsOpen = true }}
         >
-          <RobotIcon aria-hidden="true" class="size-4 shrink-0" />
+          <BotAvatar shape={botChat.data.bot.avatar_shape} color={botChat.data.bot.avatar_color} class="size-5" />
           <span class="min-w-0 truncate">{botChat.data.bot.name}</span>
         </button>
       </h1>
