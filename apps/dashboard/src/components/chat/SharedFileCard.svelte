@@ -5,19 +5,22 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { Progress } from '$lib/components/ui/progress/index.js'
   import * as Card from '$lib/components/ui/card/index.js'
-  import ImageLightbox from './ImageLightbox.svelte'
   import FileIcon from 'phosphor-svelte/lib/FileIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
-  import { PREVIEW_LIMIT, PREVIEW_TYPES } from "$lib/downloads/preview";
+  import { canPreviewImage } from "$lib/downloads/preview";
   import { downloads, downloadKey } from '$lib/downloads/manager'
   import { ApiError } from '../../api/errors'
   import type { SharedFile } from '../../api/types'
   const device = useDeviceRuntime();
-  const { filePreview } = device.previews;
 
-  let { file, sessionId, variant = 'card' }: { file: SharedFile; sessionId: string; variant?: 'card' | 'row' } = $props()
+  let { file, sessionId, variant = 'card', onenlarge }: {
+    file: SharedFile
+    sessionId: string
+    variant?: 'card' | 'row'
+    /** Opens the image viewer at this file. */
+    onenlarge?: () => void
+  } = $props()
   let previewUrl = $state<string | null>(null)
-  let enlarged = $state(false)
   const key = $derived(downloadKey(device.id, sessionId, { kind: 'shared', fileId: file.file_id }))
   const task = $derived($downloads.find(task => task.key === key))
   const downloading = $derived(task?.status === 'receiving')
@@ -27,7 +30,6 @@
 
   onDestroy(() => {
     destroyed = true
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
   })
 
   function showError(cause: unknown) {
@@ -37,12 +39,12 @@
   }
 
   function observePreview(node: HTMLElement) {
-    if (file.size > PREVIEW_LIMIT || !PREVIEW_TYPES.has(file.media_type)) return
+    if (!canPreviewImage(file)) return
     const observer = new IntersectionObserver(entries => {
       if (!entries.some(entry => entry.isIntersecting)) return
       observer.disconnect()
-      void filePreview(sessionId, file.file_id).then(blob => {
-        if (blob && !destroyed) previewUrl = URL.createObjectURL(blob)
+      void device.previews.sharedImageUrl(sessionId, file.file_id).then(url => {
+        if (!destroyed) previewUrl = url
       }).catch(showError)
     })
     observer.observe(node)
@@ -62,8 +64,8 @@
 
 {#snippet body(thumb: string)}
   <div class="flex items-center gap-2">
-    {#if previewUrl}
-      <button type="button" class="shrink-0" onclick={() => { enlarged = true }} aria-label={$t('files.enlargeNamed', { name: file.name })}>
+    {#if previewUrl && onenlarge}
+      <button type="button" class="shrink-0" onclick={onenlarge} aria-label={$t('files.enlargeNamed', { name: file.name })}>
         <img src={previewUrl} alt={file.name} class="{thumb} rounded object-cover" />
       </button>
     {:else}
@@ -97,5 +99,3 @@
     <Card.Root size="sm" class="gap-2 px-2 py-2">{@render body('size-10')}</Card.Root>
   {/if}
 </div>
-
-<ImageLightbox bind:open={enlarged} src={previewUrl} name={file.name} label={$t('files.sharedImage')} />

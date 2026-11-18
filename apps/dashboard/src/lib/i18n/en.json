@@ -312,6 +312,8 @@
   "files.receiving": "Receiving…",
   "files.download": "Download",
   "files.receptionProgress": "File reception progress",
+  "files.previousImage": "Previous image",
+  "files.nextImage": "Next image",
   "files.toggleZoom": "Toggle zoom",
   "files.sharedImage": "Shared image",
   "files.missing": "File no longer exists",

@@ -1,7 +1,7 @@
 import { testDevice } from "./deviceFixture";
 import { Blob } from "node:buffer";
 import { beforeEach, afterEach, expect, test, vi } from "vitest";
-const { filePreview } = testDevice.previews;
+const { sharedImageUrl } = testDevice.previews;
 const { sharedFileContent } = testDevice.fileApi;
 testDevice.access.uploadStorageScope = async () => "test-device";
 vi.mock("../src/api/sessionFiles", async (importOriginal) => {
@@ -17,10 +17,12 @@ vi.mock("../src/api/sessionFiles", async (importOriginal) => {
 });
 beforeEach(() => {
   vi.stubGlobal("Blob", Blob);
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview");
 });
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 test("preview trusts the response type and refuses active content", async () => {
@@ -28,7 +30,7 @@ test("preview trusts the response type and refuses active content", async () => 
     vi.mocked(sharedFileContent).mockResolvedValueOnce(
       new Response("<svg/>", { headers: { "Content-Type": type } }),
     );
-    expect(await filePreview("s", type)).toBeNull();
+    expect(await sharedImageUrl("s", type)).toBeNull();
   }
 });
 
@@ -38,16 +40,18 @@ test("preview rejects files that grew beyond the preview limit", async () => {
       headers: { "Content-Type": "image/png", "Content-Length": String(20 * 1024 * 1024 + 1) },
     }),
   );
-  expect(await filePreview("s", "grew")).toBeNull();
+  expect(await sharedImageUrl("s", "grew")).toBeNull();
 });
 
-test("preview caches allowed image bytes for the page lifetime", async () => {
+test("preview caches one object URL per shared image for the page lifetime", async () => {
   vi.mocked(sharedFileContent).mockResolvedValueOnce(
     new Response("png-bytes", { headers: { "Content-Type": "image/png" } }),
   );
-  const first = await filePreview("s", "cached");
-  const second = await filePreview("s", "cached");
-  expect(await first!.text()).toBe("png-bytes");
+  const first = await sharedImageUrl("s", "cached");
+  const second = await sharedImageUrl("s", "cached");
+  expect(first).toBe("blob:preview");
   expect(second).toBe(first);
+  expect(await vi.mocked(URL.createObjectURL).mock.calls[0][0].text()).toBe("png-bytes");
+  expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   expect(sharedFileContent).toHaveBeenCalledTimes(1);
 });

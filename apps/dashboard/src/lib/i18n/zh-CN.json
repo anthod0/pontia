@@ -312,6 +312,8 @@
   "files.receiving": "正在接收…",
   "files.download": "下载",
   "files.receptionProgress": "文件接收进度",
+  "files.previousImage": "上一张",
+  "files.nextImage": "下一张",
   "files.toggleZoom": "切换缩放",
   "files.sharedImage": "共享图片",
   "files.missing": "文件已不存在",

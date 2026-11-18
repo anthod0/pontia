@@ -85,7 +85,7 @@
 </Button>
 
 {#if image}
-  <ImageLightbox bind:open={enlarged} src={imageUrl} {name}>
+  <ImageLightbox bind:open={enlarged} images={[{ name, src: imageUrl }]}>
     {#if failure}
       <p role="alert" class="max-w-md break-words">
         {failure.kind === 'failed' ? failure.message : $t(failure.kind === 'missing' ? 'files.missing' : 'files.previewNotImage')}

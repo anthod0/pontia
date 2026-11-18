@@ -21,6 +21,8 @@
   import MessageTime from './MessageTime.svelte'
   import QuestionReplyCard from './QuestionReplyCard.svelte'
   import SharedFileCard from '../../../components/chat/SharedFileCard.svelte'
+  import SharedImageViewer from '../../../components/chat/SharedImageViewer.svelte'
+  import { canPreviewImage } from '$lib/downloads/preview'
   import type { SharedFile, TurnView, TimelineItem } from '../../../api/types'
   import type { SessionChatMessage } from '../../session-chat/sessionChat'
 
@@ -73,6 +75,9 @@
   const displayItems = $derived(conversationDisplayItems(displayMessages, timelineItems, compactionBusy))
   const displayTurns = $derived(conversationDisplayTurns(displayItems))
   const sharedFilesByTurn = $derived(groupFilesByTurn(sharedFiles))
+  const sharedImages = $derived(displayTurns.flatMap((turn) => (turn.turnId && sharedFilesByTurn.get(turn.turnId)) || []).filter(canPreviewImage))
+  let imageViewerOpen = $state(false)
+  let imageViewerIndex = $state(0)
   const turnsById = $derived(new Map(turns.map((turn) => [turn.turn_id, turn])))
   const busy = $derived(sessionState === 'busy')
   const showBottomStatus = $derived(sessionState === 'starting' || sessionState === 'exited' || sessionState === 'interrupted')
@@ -93,6 +98,11 @@
       if (file.turn_id) groups.set(file.turn_id, [...(groups.get(file.turn_id) ?? []), file])
     }
     return groups
+  }
+
+  function openImage(file: SharedFile) {
+    imageViewerIndex = sharedImages.indexOf(file)
+    imageViewerOpen = true
   }
 
   onDestroy(() => {
@@ -466,7 +476,7 @@
           {/each}
           {#if displayTurn.turnId && sharedFilesByTurn.get(displayTurn.turnId)?.length}
             <ul class="max-w-md space-y-2" aria-label={$t('files.sharedInTurn')} data-chat-turn-files>
-              {#each sharedFilesByTurn.get(displayTurn.turnId) ?? [] as file (file.file_id)}<li><SharedFileCard {file} {sessionId} /></li>{/each}
+              {#each sharedFilesByTurn.get(displayTurn.turnId) ?? [] as file (file.file_id)}<li><SharedFileCard {file} {sessionId} onenlarge={() => openImage(file)} /></li>{/each}
             </ul>
           {/if}
           {@render turnFooter(displayTurn, showProgress)}
@@ -478,6 +488,8 @@
     </Conversation.Content>
   {/if}
 </Conversation.Root>
+
+<SharedImageViewer {sessionId} files={sharedImages} bind:open={imageViewerOpen} bind:index={imageViewerIndex} />
 
 <style>
   .latest-turn {

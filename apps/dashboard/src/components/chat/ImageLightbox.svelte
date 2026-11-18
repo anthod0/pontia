@@ -6,35 +6,38 @@
   import 'picola/picola.css'
   import XIcon from 'phosphor-svelte/lib/XIcon'
 
-  let { open = $bindable(false), src, name, label = name, children }: {
+  export type LightboxImage = { name: string; src: string | null }
+
+  let { open = $bindable(false), index = $bindable(0), images, label, children }: {
     open?: boolean
-    src: string | null
-    name: string
+    index?: number
+    images: LightboxImage[]
     label?: string
-    /** Shown instead of the image while `src` is null, such as a loading or error state. */
+    /** Shown over the active image while its `src` is null, such as a loading or error state. */
     children?: Snippet
   } = $props()
+
+  const active = $derived(images[index])
+  const slides = $derived(images.map(image => ({ src: image.src ?? '', alt: image.name })))
 </script>
 
 <Dialog.Root bind:open>
   <Dialog.Content class="inset-0 block max-w-none translate-none rounded-none bg-black/90 p-0 text-white ring-0 sm:max-w-none" showCloseButton={false}>
-    <Dialog.Title class="sr-only">{name}</Dialog.Title>
-    {#if src}
-      <Lightbox
-        inline
-        slides={[{ src, alt: name }]}
-        zoom={{ max: 8 }}
-        counter={false}
-        labels={{ dialog: label, zoom: $t('files.toggleZoom') }}
-      >
-        {#snippet toolbar()}
-          <Dialog.Close class="pcl__button" aria-label={$t('common.close')}><XIcon class="size-5" /></Dialog.Close>
-        {/snippet}
-      </Lightbox>
-    {:else}
-      <div class="flex size-full flex-col items-center justify-center gap-4 p-8 text-center">
-        <Dialog.Close class="absolute top-3 right-3 rounded-md p-2 hover:bg-white/10" aria-label={$t('common.close')}><XIcon class="size-5" /></Dialog.Close>
-        {@render children?.()}
+    <Dialog.Title class="sr-only">{active.name}</Dialog.Title>
+    <Lightbox
+      inline
+      bind:index
+      {slides}
+      zoom={{ max: 8 }}
+      labels={{ dialog: label ?? active.name, zoom: $t('files.toggleZoom'), prev: $t('files.previousImage'), next: $t('files.nextImage') }}
+    >
+      {#snippet toolbar()}
+        <Dialog.Close class="pcl__button" aria-label={$t('common.close')}><XIcon class="size-5" /></Dialog.Close>
+      {/snippet}
+    </Lightbox>
+    {#if !active.src}
+      <div class="pointer-events-none absolute inset-0 flex items-center justify-center p-8 text-center">
+        <div class="pointer-events-auto flex flex-col items-center gap-4">{@render children?.()}</div>
       </div>
     {/if}
   </Dialog.Content>
