@@ -1,5 +1,8 @@
 use std::{future::Future, pin::Pin};
 
+pub const TOOL_TOKEN_HEADER: &str = "x-pontia-bot-tool-token";
+pub const TOOL_TOKEN_ENV: &str = "PONTIA_BOT_TOOL_TOKEN";
+
 /// Roles and scope come from trusted Session bindings, never from command input.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BotRole {
@@ -24,17 +27,12 @@ pub trait BotIdentity: Send + Sync {
         &'a self,
         session_id: &'a str,
     ) -> Pin<Box<dyn Future<Output = std::result::Result<BotAccess, IdentityError>> + Send + 'a>>;
-}
 
-/// No Session has Bot privileges until the Bot application binds its identity.
-pub struct UnboundBotIdentity;
-
-impl BotIdentity for UnboundBotIdentity {
-    fn resolve<'a>(
+    fn authenticate_tool<'a>(
         &'a self,
-        _session_id: &'a str,
-    ) -> Pin<Box<dyn Future<Output = std::result::Result<BotAccess, IdentityError>> + Send + 'a>>
-    {
-        Box::pin(async { Err(IdentityError) })
+        session_id: &'a str,
+        _token: Option<&'a str>,
+    ) -> Pin<Box<dyn Future<Output = std::result::Result<(), IdentityError>> + Send + 'a>> {
+        Box::pin(async move { self.resolve(session_id).await.map(|_| ()) })
     }
 }

@@ -232,7 +232,10 @@ test("saves the entered token and opens the requested dashboard route after vali
 test("opens dashboard immediately when a saved token exists without startup validation", async () => {
   localStorage.setItem("pontia.externalApiToken", "saved-token");
   token.set("saved-token");
-  const fetchMock = mockValidateToken(401);
+  const fetchMock = vi.fn(
+    async () => new Response(JSON.stringify({ data: { bots: [] }, error: null }), { status: 200 }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
 
   render(AppLayoutHost);
 
@@ -241,6 +244,6 @@ test("opens dashboard immediately when a saved token exists without startup vali
   ).not.toBeInTheDocument();
   expect(screen.getByText("Pontia")).toBeInTheDocument();
   expect(localStorage.getItem("pontia.externalApiToken")).toBe("saved-token");
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(fetchMock).not.toHaveBeenCalledWith("/api/v1/auth/validate", expect.anything());
   expect(mocks.startEventStream).toHaveBeenCalled();
 });

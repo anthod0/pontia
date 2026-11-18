@@ -43,11 +43,55 @@ impl TurnCommandService {
         input: String,
         metadata: Value,
     ) -> Result<Option<TurnView>> {
-        let (turn, result) = self
+        let (turn_id, result) = self
             .submit_input(session_id, input, metadata, InputIntent::Start, None)
             .await?;
         result.into_result()?;
-        Ok(turn)
+        let Some(turn_id) = turn_id else {
+            return Ok(None);
+        };
+        let mut turn = self
+            .queries
+            .get_turn(session_id, &turn_id)
+            .await?
+            .ok_or_else(|| Error::Domain("submitted turn missing".into()))?;
+        self.queries.enrich_turn_view(&mut turn).await?;
+        Ok(Some(turn))
+    }
+
+    /// Selects the current native input entry point without creating an Inbox message.
+    pub async fn submit_live_input(&self, session_id: &str, input: String) -> Result<()> {
+        use std::time::Duration;
+        use tokio::time::{Instant, sleep};
+
+        let lock = self.scheduler.session_lock(session_id);
+        let _guard = lock.lock().await;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let metadata = json!({});
+        loop {
+            let active = SqliteTurnRepository::new(self.pool.clone())
+                .active_turn(session_id)
+                .await?;
+            let intent = match active {
+                Some(turn) => InputIntent::Steer {
+                    turn_id: turn.turn_id,
+                },
+                None => InputIntent::Start,
+            };
+            let result = self
+                .submit_input(session_id, input.clone(), metadata.clone(), intent, None)
+                .await
+                .and_then(|(_, receipt)| receipt.into_result());
+            match result {
+                Err(Error::Conflict {
+                    code: "input_busy" | "steer_target_changed",
+                    ..
+                }) if Instant::now() < deadline => {
+                    sleep(Duration::from_millis(25)).await;
+                }
+                result => return result.map(|_| ()),
+            }
+        }
     }
 
     pub(crate) async fn submit_input(
@@ -57,7 +101,7 @@ impl TurnCommandService {
         metadata: Value,
         intent: InputIntent,
         required_runtime_id: Option<&str>,
-    ) -> Result<(Option<TurnView>, ControlResult<InputReceipt>)> {
+    ) -> Result<(Option<String>, ControlResult<InputReceipt>)> {
         if input.trim().is_empty() {
             return Err(Error::Domain("input must not be blank".into()));
         }
@@ -108,9 +152,10 @@ impl TurnCommandService {
                     ));
                 }
                 if active.as_ref().map(|turn| &turn.turn_id) != Some(turn_id) {
-                    return Err(Error::StateConflict(
-                        "steer target is not the current Turn".into(),
-                    ));
+                    return Err(Error::Conflict {
+                        code: "steer_target_changed",
+                        message: "steer target is not the current Turn".into(),
+                    });
                 }
             }
         }
@@ -130,7 +175,7 @@ impl TurnCommandService {
             let receipt = adapter
                 .input(&target, input, &metadata, &intent, None)
                 .await;
-            return Ok((query.get_turn(session_id, turn_id).await?, receipt));
+            return Ok((Some(turn_id.clone()), receipt));
         }
         let turn_id = self
             .prepare_initial(session_id, &input, &metadata)
@@ -139,27 +184,21 @@ impl TurnCommandService {
         let receipt = adapter
             .input(&target, input, &metadata, &intent, turn_id.as_deref())
             .await;
-        if let Some(turn_id) = turn_id {
-            if let ControlResult::Rejected(error) = &receipt {
-                self.event_ingest
-                    .ingest_pontia_event(PontiaEvent::new(
-                        session_id,
-                        Some(turn_id.clone()),
-                        PontiaEventSource::RuntimeManager,
-                        &session.client_type,
-                        PontiaEventType::TurnDispatchFailed,
-                        json!({"failure":{"message":error.to_string()}}),
-                    ))
-                    .await?;
-            }
-            let mut turn = query
-                .get_turn(session_id, &turn_id)
-                .await?
-                .ok_or_else(|| Error::Domain("submitted turn missing".into()))?;
-            query.enrich_turn_view(&mut turn).await?;
-            return Ok((Some(turn), receipt));
+        if let Some(turn_id) = &turn_id
+            && let ControlResult::Rejected(error) = &receipt
+        {
+            self.event_ingest
+                .ingest_pontia_event(PontiaEvent::new(
+                    session_id,
+                    Some(turn_id.clone()),
+                    PontiaEventSource::RuntimeManager,
+                    &session.client_type,
+                    PontiaEventType::TurnDispatchFailed,
+                    json!({"failure":{"message":error.to_string()}}),
+                ))
+                .await?;
         }
-        Ok((None, receipt))
+        Ok((turn_id, receipt))
     }
 
     pub(crate) async fn prepare_initial(

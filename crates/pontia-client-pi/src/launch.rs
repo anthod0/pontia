@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+use pontia_agent_control::client_contract::ApplicationLaunchSettings;
 use pontia_agent_control::clients::{ClientLaunchRequest, ClientLauncher};
 use pontia_core::{Error, Result};
 
@@ -11,6 +12,42 @@ pub(crate) struct PiLauncher {
     pub tui_command: Option<String>,
 }
 impl ClientLauncher for PiLauncher {
+    fn supports_application_launch(&self) -> bool {
+        true
+    }
+
+    fn application_command(
+        &self,
+        configuration: &serde_json::Value,
+        settings: &ApplicationLaunchSettings,
+    ) -> Result<String> {
+        let command = crate::config::command(configuration)?;
+        let project_settings = settings.directory.join(".pi");
+        std::fs::create_dir_all(&project_settings)?;
+        let settings_file = project_settings.join("settings.json");
+        let mut local: serde_json::Map<String, serde_json::Value> =
+            match std::fs::read(&settings_file) {
+                Ok(content) => serde_json::from_slice(&content)?,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Default::default(),
+                Err(error) => return Err(error.into()),
+            };
+        if local
+            .get("steeringMode")
+            .and_then(serde_json::Value::as_str)
+            != Some("all")
+        {
+            local.insert("steeringMode".into(), "all".into());
+            let file = tempfile::NamedTempFile::new_in(&project_settings)?;
+            serde_json::to_writer_pretty(file.as_file(), &local)?;
+            file.persist(&settings_file).map_err(|error| error.error)?;
+        }
+        Ok(format!(
+            "export PONTIA_PI_MANAGED_SESSION=1; {command} --approve --model {} --tools read,bash --no-mcp --append-system-prompt {}",
+            quote(&settings.model),
+            quote(&settings.instructions_file.to_string_lossy()),
+        ))
+    }
+
     fn launch_configured(
         &self,
         request: ClientLaunchRequest<'_>,

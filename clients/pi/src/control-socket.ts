@@ -65,7 +65,7 @@ class RpcSocket {
   private failed = false;
 
   private socket: Socket;
-  private onSubmit: (input: ControlInput) => void;
+  private onSubmit: (input: ControlInput) => void | Promise<void>;
   private models?: ModelControl;
   private lifecycle?: LifecycleControl;
   private history?: () => HistoryContext;
@@ -74,7 +74,7 @@ class RpcSocket {
 
   constructor(
     socket: Socket,
-    onSubmit: (input: ControlInput) => void,
+    onSubmit: (input: ControlInput) => void | Promise<void>,
     models?: ModelControl,
     onReplay?: (inboxMessageId: string) => void,
     lifecycle?: LifecycleControl,
@@ -298,19 +298,22 @@ class RpcSocket {
         error(-32602, "submit requires non-empty input and optional inbox_message_id");
         return;
       }
-      try {
-        this.onSubmit({
+      const submit = async () => {
+        await this.onSubmit({
           input: params.input,
           inboxMessageId: params.inbox_message_id ?? undefined,
           ...(message.method === "steer" ? { steerTargetTurnId: params.turn_id } : {}),
         });
         respond({ result: { accepted: true } });
-      } catch (failure) {
-        error(
-          failure instanceof RpcError ? failure.code : -32006,
-          failure instanceof Error ? failure.message : String(failure),
-        );
-      }
+      };
+      void submit()
+        .catch((failure) => {
+          error(
+            failure instanceof RpcError ? failure.code : -32006,
+            failure instanceof Error ? failure.message : String(failure),
+          );
+        })
+        .catch((failure) => this.fail(failure));
       return;
     }
     if (
@@ -334,7 +337,7 @@ class RpcSocket {
 export async function connectPi(
   pontiaHome: string,
   onError: (error: Error) => void,
-  onSubmit: (input: ControlInput) => void,
+  onSubmit: (input: ControlInput) => void | Promise<void>,
   models?: ModelControl,
   onReplay?: (inboxMessageId: string) => void,
   lifecycle?: LifecycleControl,

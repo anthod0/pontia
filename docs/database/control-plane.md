@@ -12,7 +12,8 @@ CREATE TABLE bots (
     created_at TEXT NOT NULL
         DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL
-        DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    working_on TEXT
 );
 
 CREATE TABLE bot_messages (
@@ -21,7 +22,9 @@ CREATE TABLE bot_messages (
     kind TEXT NOT NULL CHECK (kind IN ('user_input', 'bot_reply')),
     content TEXT NOT NULL,
     created_at TEXT NOT NULL
-        DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    status TEXT NOT NULL DEFAULT 'normal'
+        CHECK (status = 'normal' OR (status = 'failed' AND kind = 'user_input'))
 );
 
 CREATE INDEX idx_bot_messages_bot_created

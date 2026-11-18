@@ -68,7 +68,28 @@ pub struct ClientLaunchRequest<'a> {
     pub native_session_file: Option<&'a Path>,
 }
 
+pub struct ApplicationLaunchSettings {
+    pub client_key: String,
+    pub directory: std::path::PathBuf,
+    pub model: String,
+    pub instructions_file: std::path::PathBuf,
+}
+
 pub trait ClientLauncher: Send + Sync {
+    fn supports_application_launch(&self) -> bool {
+        false
+    }
+
+    fn application_command(
+        &self,
+        _configuration: &Value,
+        _settings: &ApplicationLaunchSettings,
+    ) -> Result<String> {
+        Err(pontia_core::Error::CapabilityUnavailable(
+            "Client cannot launch a Session with application instructions".into(),
+        ))
+    }
+
     fn validate_resume(
         &self,
         native_session_key: &str,

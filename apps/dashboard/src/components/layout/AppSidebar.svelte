@@ -13,6 +13,7 @@
   import { chatShortcuts } from '$lib/shortcuts/definitions'
   import { formatShortcutKeys } from '$lib/shortcuts/format'
   import DeviceSessionList from './DeviceSessionList.svelte'
+  import DeviceBotList from '../bots/DeviceBotList.svelte'
   import { isSettingsPath, isSettingsSectionActive, settingsSections } from '../settings/sections'
 
   let { groups, deviceSwitcher, onNewChat = () => void navigate('/'), onSettings = () => void navigate('/settings/common'), settingsDisabled = false }: {
@@ -104,7 +105,7 @@
       </Sidebar.Group>
 
       {@render deviceSwitcher?.()}
-      {#if groups}{@render groups()}{:else}<DeviceSessionList />{/if}
+      {#if groups}{@render groups()}{:else}<DeviceBotList /><DeviceSessionList />{/if}
     {/if}
   </Sidebar.Content>
   <Sidebar.Footer>

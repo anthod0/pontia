@@ -3,7 +3,7 @@ use pontia_agent_control::WorkspaceView;
 use super::HelperContext;
 use crate::{
     memory::Memory,
-    messages::{BotMessage, MessageKind},
+    messages::{BotMessage, MessageKind, MessageStatus},
 };
 
 const NONE: &str = "None yet.\n\n";
@@ -95,8 +95,12 @@ pub(super) fn document(
                 MessageKind::UserInput => "User",
                 MessageKind::BotReply => "Bot (sendToUser)",
             };
+            let delivery = match message.status {
+                MessageStatus::Normal => "",
+                MessageStatus::Failed => "\nDelivery failed. This is history only.",
+            };
             let metadata = format!(
-                "Historical message ID: {}\nCreated at: {}\nSpeaker: {speaker}",
+                "Historical message ID: {}\nCreated at: {}\nSpeaker: {speaker}{delivery}",
                 message.id, message.created_at
             );
             (

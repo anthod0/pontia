@@ -16,12 +16,27 @@ pub(super) enum BotTool {
     SessionMessages(SessionMessages),
     /// Update shared USER.md (at most 2,000 characters)
     UpdateUser(UpdateUser),
+    /// Send one complete reply and set the Bot's work status
+    SendToUser(SendToUser),
     /// Register an existing directory or change a Workspace description
     #[command(subcommand)]
     Workspace(WorkspaceCommand),
     /// Read or maintain device memories
     #[command(subcommand)]
     Memory(MemoryCommand),
+}
+
+#[derive(Debug, Args, Serialize)]
+#[command(
+    after_help = "Example: pontia bot send-to-user --message 'I received your request.' --working-on 'Checking the logs'"
+)]
+pub(super) struct SendToUser {
+    /// Complete user-visible reply
+    #[arg(long, allow_hyphen_values = true)]
+    message: String,
+    /// Current background work; omit when no work remains
+    #[arg(long, allow_hyphen_values = true)]
+    working_on: Option<String>,
 }
 
 #[derive(Debug, Args, Serialize)]

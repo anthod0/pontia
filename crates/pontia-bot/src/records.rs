@@ -25,6 +25,7 @@ pub struct Bot {
     pub current_session_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub working_on: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

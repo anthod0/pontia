@@ -3,6 +3,7 @@ mod output;
 
 use std::{env, time::Duration};
 
+use pontia_bot::identity::{TOOL_TOKEN_ENV, TOOL_TOKEN_HEADER};
 use pontia_config::AppConfig;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -32,6 +33,7 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
         BotTool::Workspace(input) => ("workspace", json!(input), true),
         BotTool::SessionMessages(input) => ("session-messages", json!(input), false),
         BotTool::UpdateUser(input) => ("user", json!(input), false),
+        BotTool::SendToUser(input) => ("send-to-user", json!(input), false),
     };
     let request = if grouped {
         json!({"session_id": session_id, "command": input})
@@ -43,13 +45,17 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
         .as_deref()
         .ok_or("Pontia local API token is not configured")?;
     let addr = pontia::lifecycle::local_health_addr(config.bind_addr);
-    let response = reqwest::Client::builder()
+    let mut request = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|err| err.to_string())?
         .post(format!("http://{addr}/api/v1/bot/{endpoint}"))
         .bearer_auth(token)
-        .json(&request)
+        .json(&request);
+    if let Ok(credential) = env::var(TOOL_TOKEN_ENV) {
+        request = request.header(TOOL_TOKEN_HEADER, credential);
+    }
+    let response = request
         .send()
         .await
         .map_err(|err| format!("Cannot reach pontiad: {err}"))?;

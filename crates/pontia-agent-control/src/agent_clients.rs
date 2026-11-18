@@ -181,7 +181,15 @@ impl AgentClientService {
             Some(configuration) => configuration.key(metadata)?,
             None => "default".into(),
         };
-        let record = self.repository.get(client, &key).await?;
+        self.for_creation_key(client, &key).await
+    }
+
+    pub(crate) async fn for_creation_key(&self, client: &str, key: &str) -> Result<Option<Value>> {
+        let entry = self
+            .clients
+            .get(client)
+            .ok_or_else(|| Error::CapabilityUnavailable(format!("Unknown client: {client}")))?;
+        let record = self.repository.get(client, key).await?;
         if record.as_ref().is_none_or(|row| !row.enabled) {
             return Err(Error::CapabilityUnavailable(format!(
                 "Client {client}/{key} is disabled"
@@ -190,7 +198,7 @@ impl AgentClientService {
         entry
             .configuration
             .as_ref()
-            .map(|configuration| effective_configuration(configuration.as_ref(), &key, record))
+            .map(|configuration| effective_configuration(configuration.as_ref(), key, record))
             .transpose()
     }
 }

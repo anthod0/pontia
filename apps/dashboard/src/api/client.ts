@@ -5,6 +5,10 @@ import type {
   ForkSessionOutcome,
   AgentClientView,
   AgentClientSetupOperation,
+  Bot,
+  BotChat,
+  BotClient,
+  BotConfiguration,
   JsonObject,
   AgentProfileView,
   ApiEnvelope,
@@ -78,6 +82,48 @@ export type GetSessionOverviewOptions = {
 };
 export function createApi(device: DeviceRuntime) {
   const API_BASE = "/api/v1";
+
+  function botPath(id: string): string {
+    return `/bots/${encodeURIComponent(id)}`;
+  }
+
+  async function listBots(signal?: AbortSignal): Promise<Bot[]> {
+    return (await request<{ bots: Bot[] }>("/bots", { signal })).bots;
+  }
+
+  async function listBotClients(signal?: AbortSignal): Promise<BotClient[]> {
+    return (await request<{ clients: BotClient[] }>("/bots/clients", { signal })).clients;
+  }
+
+  function getBotChat(id: string, signal?: AbortSignal): Promise<BotChat> {
+    return request(botPath(id), { signal });
+  }
+
+  async function saveBot(input: BotConfiguration, id?: string): Promise<Bot> {
+    const path = id ? botPath(id) : "/bots";
+    return (
+      await request<{ bot: Bot }>(path, {
+        method: id ? "PUT" : "POST",
+        body: input,
+        retryNetworkErrors: false,
+      })
+    ).bot;
+  }
+
+  async function sendBotMessage(id: string, content: string): Promise<void> {
+    await request(`${botPath(id)}/messages`, {
+      method: "POST",
+      body: { content },
+      retryNetworkErrors: false,
+    });
+  }
+
+  async function retryBotMessage(id: string, messageId: string): Promise<void> {
+    await request(`${botPath(id)}/messages/${encodeURIComponent(messageId)}/retry`, {
+      method: "POST",
+      retryNetworkErrors: false,
+    });
+  }
 
   function agentClientPath(target: Pick<AgentClientView, "client_type" | "client_key">): string {
     return `/agent-clients/${encodeURIComponent(target.client_type)}/${encodeURIComponent(target.client_key)}`;
@@ -859,6 +905,12 @@ export function createApi(device: DeviceRuntime) {
     });
   }
   return {
+    listBots,
+    listBotClients,
+    getBotChat,
+    saveBot,
+    sendBotMessage,
+    retryBotMessage,
     listAgentClients,
     patchAgentClient,
     resetAgentClient,

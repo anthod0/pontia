@@ -47,6 +47,7 @@ Use bash to call the following `pontia bot` tools. You can also run brief inspec
 
 | Command | Purpose |
 | --- | --- |
+| `pontia bot send-to-user --message '…' [--working-on '…']` | Send the complete user-visible reply and report ongoing work, if any. |
 | `pontia bot update-user` | Update USER.md. |
 | `pontia bot workspace register` | Register and activate a Workspace. |
 | `pontia bot workspace describe` | Update a Workspace description. |

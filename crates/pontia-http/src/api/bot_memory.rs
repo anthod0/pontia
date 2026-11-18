@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::{State, rejection::JsonRejection},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
 };
 use pontia_bot::memory::{Error, MemoryRequest};
 use serde_json::{Value, json};
@@ -11,9 +11,11 @@ use crate::HttpState;
 
 pub async fn memory_command(
     State(state): State<HttpState>,
+    headers: HeaderMap,
     request: Result<Json<MemoryRequest>, JsonRejection>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|err| ApiError::invalid_request(err.body_text()))?;
+    super::bot_context::authorize_tool(&state, &headers, &request.session_id).await?;
     let response = state
         .memory_commands()
         .execute(request)

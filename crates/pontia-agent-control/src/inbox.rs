@@ -453,21 +453,20 @@ impl InboxCommandService {
                 .await
         };
         let delivery = match delivery {
-            Ok((turn, result)) => result.into_result().map(|receipt| (turn, receipt)),
+            Ok((turn_id, result)) => result.into_result().map(|receipt| (turn_id, receipt)),
             Err(error) => Err(error),
         };
         match delivery {
-            Ok((turn, receipt)) => {
+            Ok((turn_id, receipt)) => {
                 InboxAssociations::new(self.pool.clone(), self.clients.registry().clone())
                     .record_receipt(session_id, &message_id, &receipt)
                     .await?;
-                let turn_id = turn.as_ref().map(|turn| turn.turn_id.as_str());
                 inbox_repository
-                    .mark_dispatched(&message_id, turn_id)
+                    .mark_dispatched(&message_id, turn_id.as_deref())
                     .await?;
                 let mut payload = json!({ "message_id": message_id });
-                if let Some(turn) = turn {
-                    payload["turn_id"] = json!(turn.turn_id);
+                if let Some(turn_id) = turn_id {
+                    payload["turn_id"] = json!(turn_id);
                 }
                 self.audit(
                     session_id,

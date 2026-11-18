@@ -66,8 +66,6 @@ impl RuntimeBindingUpsertService {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .ok_or_else(|| Error::Domain("launch_cwd or client_cwd is required".to_string()))?;
-        let workspace = require_active_workspace(&self.pool, launch_cwd).await?;
-
         let existing_session_id = if let Some(session_id) = non_empty(request.session_id.as_deref())
         {
             self.ensure_requested_session(&session_id, &request).await?;
@@ -81,6 +79,24 @@ impl RuntimeBindingUpsertService {
                 None => self.unbound_session_id_for_client_session(&request).await?,
             }
         };
+        let application_directory = match &existing_session_id {
+            Some(session_id) => {
+                crate::ControlQueryService::new(self.pool.clone())
+                    .application_launch_directory(session_id)
+                    .await?
+            }
+            None => None,
+        };
+        let workspace = if let Some(directory) = &application_directory {
+            if std::fs::canonicalize(launch_cwd)? != std::path::Path::new(directory) {
+                return Err(Error::StateConflict(
+                    "Runtime launch directory differs from its Session".into(),
+                ));
+            }
+            None
+        } else {
+            Some(require_active_workspace(&self.pool, launch_cwd).await?)
+        };
         let created_session = existing_session_id.is_none();
         let session_id = match existing_session_id {
             Some(session_id) => {
@@ -92,25 +108,38 @@ impl RuntimeBindingUpsertService {
                     .await?;
                 session_id
             }
-            None => self.create_bound_session(&request, &workspace).await?,
+            None => {
+                self.create_bound_session(
+                    &request,
+                    workspace
+                        .as_ref()
+                        .expect("new runtime requires a Workspace"),
+                )
+                .await?
+            }
         };
 
         if is_fork_start(&request) {
             self.upsert_fork_lineage(&session_id, &request).await?;
         }
 
-        SqliteSessionRepository::new(self.pool.clone())
-            .update_session_workspace(
-                &session_id,
-                Some(&workspace.canonical_path),
-                Some(&workspace.workspace_id),
-            )
-            .await?;
+        let launch_cwd = if let Some(workspace) = workspace {
+            SqliteSessionRepository::new(self.pool.clone())
+                .update_session_workspace(
+                    &session_id,
+                    Some(&workspace.canonical_path),
+                    Some(&workspace.workspace_id),
+                )
+                .await?;
+            workspace.canonical_path
+        } else {
+            application_directory.expect("dedicated launch directory")
+        };
 
         self.confirm_binding(
             &session_id,
             &request,
-            &workspace,
+            &launch_cwd,
             client_spec,
             created_session,
             &process,

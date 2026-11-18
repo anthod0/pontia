@@ -1,6 +1,7 @@
 import type { LiveOutputEvent } from "../lib/session-chat/liveOutput";
 import { isAuthenticationFailure } from "../api/client";
 import type { DeviceRuntime } from "../device/runtime";
+import { readSse } from "./readSse";
 
 export interface LiveOutputStreamHandlers {
   onEvent: (event: LiveOutputEvent) => void;
@@ -39,7 +40,7 @@ export function createLiveOutput(device: DeviceRuntime) {
           }
           throw new Error(`Live output stream failed: ${response.status} ${response.statusText}`);
         }
-        await readSse(response.body, handlers.onEvent);
+        await readSse(response.body, (data) => handleFrame(data, handlers.onEvent));
         if (!stopped) scheduleReconnect();
       } catch {
         if (stopped || controller?.signal.aborted) return;
@@ -66,35 +67,7 @@ export function createLiveOutput(device: DeviceRuntime) {
     };
   }
 
-  async function readSse(
-    body: ReadableStream<Uint8Array>,
-    onEvent: (event: LiveOutputEvent) => void,
-  ): Promise<void> {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let boundary = buffer.search(/\r?\n\r?\n/);
-      while (boundary !== -1) {
-        const frame = buffer.slice(0, boundary);
-        buffer = buffer.slice(buffer[boundary] === "\r" ? boundary + 4 : boundary + 2);
-        parseFrame(frame, onEvent);
-        boundary = buffer.search(/\r?\n\r?\n/);
-      }
-    }
-  }
-
-  function parseFrame(frame: string, onEvent: (event: LiveOutputEvent) => void): void {
-    const data = frame
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).trimStart())
-      .join("\n");
-    if (!data) return;
+  function handleFrame(data: string, onEvent: (event: LiveOutputEvent) => void): void {
     try {
       const event = JSON.parse(data) as LiveOutputEvent;
       if (event.type === "snapshot" || event.type === "updates" || event.type === "closed")

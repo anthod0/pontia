@@ -184,6 +184,12 @@ impl PiRpcPeer {
                         message: error["message"].as_str().unwrap().into(),
                     });
                 }
+                if error["code"] == -32011 {
+                    return Err(Error::Conflict {
+                        code: "steer_target_changed",
+                        message: error["message"].as_str().unwrap().into(),
+                    });
+                }
                 if error["code"] == -32007 {
                     return Err(Error::ControlUnknown(
                         error["message"].as_str().unwrap().into(),

@@ -1,5 +1,38 @@
 export type JsonObject = Record<string, unknown>;
 
+export interface BotConfiguration {
+  name: string;
+  description: string | null;
+  client_type: string;
+  client_key: string;
+  model: string;
+}
+
+export interface Bot extends BotConfiguration {
+  bot_id: string;
+  working_on: string | null;
+}
+
+export type BotClient = Pick<AgentClientView, "id" | "name" | "client_type" | "client_key">;
+
+export interface BotMessage {
+  id: string;
+  kind: "user_input" | "bot_reply";
+  content: string;
+  status: "normal" | "failed";
+  created_at: string;
+}
+
+export interface BotChat {
+  bot: Bot;
+  messages: BotMessage[];
+  notices: {
+    id: string;
+    kind: "turn.failed" | "session.error" | "session.exited";
+    created_at: string;
+  }[];
+}
+
 export interface AgentClientView {
   id: string;
   client_type: string;

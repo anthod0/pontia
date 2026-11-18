@@ -124,10 +124,18 @@ impl SessionCommandService {
                 session.state
             )));
         }
-        let workspace_id = session.workspace_id.as_deref().ok_or_else(|| {
-            Error::StateConflict("An active registered Workspace is required".into())
-        })?;
-        crate::workspaces::require_active_workspace_id(&self.pool, workspace_id).await?;
+        if let Some(workspace_id) = session.workspace_id.as_deref() {
+            crate::workspaces::require_active_workspace_id(&self.pool, workspace_id).await?;
+        } else if self
+            .queries
+            .application_launch_directory(session_id)
+            .await?
+            .is_none()
+        {
+            return Err(Error::StateConflict(
+                "An active registered Workspace is required".into(),
+            ));
+        }
         let adapter = self.clients.for_client(&session.client_type)?;
         let target = crate::runtime::ControlTarget::resolve(
             &self.pool,

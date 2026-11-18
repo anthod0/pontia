@@ -1,8 +1,18 @@
-# Bot user information and Workspaces
+# Bot conversations and tools
 
-These tools require a Pontia Session authorized as a Bot. Production access remains closed until Bot Session bindings are connected. Helpers and dreaming cannot use them.
+In the Dashboard sidebar, select **Create Bot**. Enter a name and an optional description, choose Pi, and enter a model ID available in that Pi installation. Each Bot has its own conversation. You can send another message while a Bot is running.
 
-Run commands inside the Bot Session; `PONTIA_SESSION_ID` supplies its identity. Pass values through named arguments. Successful commands print plain text; add `--json` for a JSON result. Failures exit nonzero and print an error to stderr.
+Use **Retry** on a failed message to send it again. You can keep sending new messages while a failed message remains in the chat. Edits to the client or model take effect when the Bot starts a new Session.
+
+Run the commands below inside a Bot Session. Pass values through named arguments. Successful commands print plain text. Add `--json` for a JSON result.
+
+## Send a reply
+
+```bash
+pontia bot send-to-user --message 'I found the source of the error.' --working-on 'Checking the remaining cases'
+```
+
+The Dashboard shows the complete reply at once. Include `--working-on` to show ongoing work. Omit it to clear the working status.
 
 ## Update user information
 

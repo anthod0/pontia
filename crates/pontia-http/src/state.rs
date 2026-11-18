@@ -1,7 +1,8 @@
 use axum::extract::FromRef;
 use pontia_agent_control::TurnTimelineService;
 use pontia_agent_control::workspaces::WorkspaceService;
-use pontia_bot::identity::{BotIdentity, UnboundBotIdentity};
+use pontia_bot::conversation::ConversationService;
+use pontia_bot::identity::BotIdentity;
 use pontia_bot::memory::{MemoryCommands, MemoryService};
 use pontia_bot::session_messages::SessionMessages;
 use pontia_bot::{
@@ -23,21 +24,24 @@ pub struct HttpState {
     user_commands: UserCommands,
     workspace_commands: WorkspaceCommands,
     session_messages: SessionMessages,
+    bots: ConversationService,
+    bot_identity: Arc<dyn BotIdentity>,
 }
 
 impl HttpState {
     pub fn new(app: AppState, dashboard: ResolvedDashboard) -> Self {
-        let memory_commands =
-            MemoryCommands::new(MemoryService::new(app.db()), Arc::new(UnboundBotIdentity));
+        let bots = ConversationService::new(app.control().clone());
+        let identity: Arc<dyn BotIdentity> = Arc::new(bots.clone());
+        let memory_commands = MemoryCommands::new(MemoryService::new(app.db()), identity.clone());
         let user_service = UserService::new(app.pontia_home());
-        let user_commands = UserCommands::new(user_service.clone(), Arc::new(UnboundBotIdentity));
+        let user_commands = UserCommands::new(user_service.clone(), identity.clone());
         let workspace_commands = WorkspaceCommands::new(
             WorkspaceService::new(app.db(), app.workspace_browser()),
-            Arc::new(UnboundBotIdentity),
+            identity.clone(),
         );
         let session_messages = SessionMessages::new(
             TurnTimelineService::new(app.control().event_ingest_service()),
-            Arc::new(UnboundBotIdentity),
+            identity.clone(),
         );
         Self {
             session_messages,
@@ -47,6 +51,8 @@ impl HttpState {
             app,
             dashboard,
             memory_commands,
+            bots,
+            bot_identity: identity,
         }
     }
 
@@ -60,13 +66,22 @@ impl HttpState {
         );
         self.workspace_commands = WorkspaceCommands::new(
             WorkspaceService::new(self.app.db(), self.app.workspace_browser()),
-            identity,
+            identity.clone(),
         );
+        self.bot_identity = identity;
         self
     }
 
     pub fn memory_commands(&self) -> &MemoryCommands {
         &self.memory_commands
+    }
+
+    pub fn bots(&self) -> &ConversationService {
+        &self.bots
+    }
+
+    pub(crate) fn bot_identity(&self) -> &dyn BotIdentity {
+        self.bot_identity.as_ref()
     }
 
     pub fn user_commands(&self) -> &UserCommands {

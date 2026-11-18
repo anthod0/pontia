@@ -12,6 +12,7 @@ use super::{
 };
 use crate::{
     PontiaEvent, PontiaEventSource, PontiaEventType,
+    client_contract::ApplicationLaunchSettings,
     workspaces::{require_active_workspace, require_active_workspace_id},
 };
 
@@ -28,7 +29,38 @@ impl SessionCommandService {
     }
     pub async fn create_session(
         &self,
+        request: CreateSessionRequest,
+    ) -> Result<CreateSessionOutcome> {
+        self.create(request, None).await
+    }
+
+    pub async fn create_application_session(
+        &self,
+        request: CreateSessionRequest,
+        mut settings: ApplicationLaunchSettings,
+    ) -> Result<CreateSessionOutcome> {
+        if request.ownership.is_none()
+            || request.workspace.is_some()
+            || request.workspace_id.is_some()
+            || request.initial_task.is_some()
+        {
+            return Err(Error::Domain(
+                "An application launch requires Session ownership and a dedicated directory".into(),
+            ));
+        }
+        settings.directory = std::fs::canonicalize(settings.directory)?;
+        if !settings.directory.is_dir() {
+            return Err(Error::Domain(
+                "Application Session launch path must be a directory".into(),
+            ));
+        }
+        self.create(request, Some(settings)).await
+    }
+
+    async fn create(
+        &self,
         mut request: CreateSessionRequest,
+        application: Option<ApplicationLaunchSettings>,
     ) -> Result<CreateSessionOutcome> {
         let _creation_guard = if request.ownership.is_some() {
             Some(self.creation_gate.lock().await)
@@ -52,12 +84,34 @@ impl SessionCommandService {
             request.client_type = self.clients.registry().default_client_type()?.to_string();
         }
         self.clients.for_client(&request.client_type)?;
-        let configuration = crate::agent_clients::AgentClientService::new(
+        let client_settings = crate::agent_clients::AgentClientService::new(
             self.pool.clone(),
             self.clients.registry().clone(),
-        )
-        .for_creation(&request.client_type, &request.metadata)
-        .await?;
+        );
+        let (configuration, start_command) = if let Some(settings) = &application {
+            let resolved = client_settings
+                .for_creation_key(&request.client_type, &settings.client_key)
+                .await?;
+            let command = self
+                .clients
+                .registry()
+                .get(&request.client_type)
+                .and_then(|entry| entry.launcher.as_ref())
+                .ok_or_else(|| {
+                    Error::CapabilityUnavailable(
+                        "Client cannot launch an application Session".into(),
+                    )
+                })?
+                .application_command(&resolved.unwrap_or(Value::Null), settings)?;
+            (None, Some(command))
+        } else {
+            (
+                client_settings
+                    .for_creation(&request.client_type, &request.metadata)
+                    .await?,
+                None,
+            )
+        };
 
         let profile = crate::AgentProfileService::new(self.pool.clone())
             .with_clients(self.clients.registry().clone())
@@ -92,21 +146,33 @@ impl SessionCommandService {
             )));
         }
 
-        let workspace_record = if let Some(workspace_id) = request.workspace_id.as_deref() {
-            require_active_workspace_id(&self.pool, workspace_id).await?
+        let workspace_record = if application.is_some() {
+            None
+        } else if let Some(workspace_id) = request.workspace_id.as_deref() {
+            Some(require_active_workspace_id(&self.pool, workspace_id).await?)
         } else if let Some(workspace) = request.workspace.as_deref() {
-            require_active_workspace(&self.pool, workspace).await?
+            Some(require_active_workspace(&self.pool, workspace).await?)
         } else {
             return Err(Error::Domain(
                 "An active registered Workspace is required".into(),
             ));
         };
-        if let Some(handle) = handle {
+        if let (Some(handle), Some(workspace_record)) = (handle, &workspace_record) {
             self.ensure_handle_available(&workspace_record.workspace_id, handle)
                 .await?;
         }
-        let runtime_workspace = Some(workspace_record.canonical_path.clone());
-        let runtime_workspace_name = workspace_record.name.clone();
+        let application_directory = application.as_ref().map(|settings| &settings.directory);
+        let runtime_workspace = application_directory
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned())
+            .or_else(|| {
+                workspace_record
+                    .as_ref()
+                    .map(|record| record.canonical_path.clone())
+            });
+        let runtime_workspace_name = workspace_record
+            .as_ref()
+            .and_then(|record| record.name.clone());
 
         let session_id = new_session_id().to_string();
         let runtime_id = pontia_core::ids::new_runtime_id().to_string();
@@ -126,6 +192,7 @@ impl SessionCommandService {
                 PontiaEventType::SessionCreated,
                 json!({
                     "workspace": runtime_workspace,
+                    "application_launch_directory": application_directory,
                     "title": request.title,
                     "handle": request.handle,
                     "role": request.role,
@@ -165,7 +232,7 @@ impl SessionCommandService {
                     workspace_name: runtime_workspace_name,
                     handle: request.handle.clone(),
                     role: request.role.clone(),
-                    start_command: None,
+                    start_command,
                     environment: request.runtime_environment.clone(),
                 },
                 configuration,
@@ -181,8 +248,10 @@ impl SessionCommandService {
         };
         let Some(runtime) = runtime else {
             drop(initial_slot);
-            self.update_session_workspace(&session_id, Some(&workspace_record))
-                .await?;
+            if let Some(workspace_record) = &workspace_record {
+                self.update_session_workspace(&session_id, Some(workspace_record))
+                    .await?;
+            }
             if let Some(task) = request.initial_task {
                 self.inbox
                     .submit_message(
@@ -207,8 +276,10 @@ impl SessionCommandService {
             adapter.spec.adapter.control_runtime_role,
         )
         .await?;
-        self.update_session_workspace(&session_id, Some(&workspace_record))
-            .await?;
+        if let Some(workspace_record) = &workspace_record {
+            self.update_session_workspace(&session_id, Some(workspace_record))
+                .await?;
+        }
 
         ingest
             .ingest_pontia_event(PontiaEvent::new(

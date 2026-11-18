@@ -11,6 +11,7 @@
   import DeviceStatus, { type DeviceStatusView } from '../../components/devices/DeviceStatus.svelte';
   import AppShell from '../../components/layout/AppShell.svelte';
   import AppSidebar from '../../components/layout/AppSidebar.svelte';
+  import DeviceBotList from '../../components/bots/DeviceBotList.svelte';
   import TopBar from '../../components/layout/TopBar.svelte';
   import ChatShortcuts from '../../components/chat/ChatShortcuts.svelte';
   import ConnectionNotice from '../../components/layout/ConnectionNotice.svelte';
@@ -189,7 +190,10 @@
       {#snippet groups()}
         {#if active?.state === 'online' && active.runtime}
           {#key active.runtime}
-            <DeviceProvider device={active.runtime}><DeviceSessionList handle={active.handle} /></DeviceProvider>
+            <DeviceProvider device={active.runtime}>
+              <DeviceBotList handle={active.handle} />
+              <DeviceSessionList handle={active.handle} />
+            </DeviceProvider>
           {/key}
         {:else if active?.state === 'offline'}
           <div class="flex items-center justify-between gap-2 px-4 py-2 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">

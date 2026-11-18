@@ -5,8 +5,7 @@ use super::{
 };
 use crate::client_contract::AgentClientSpec;
 use crate::{
-    ControlQueryService, PontiaEvent, PontiaEventSource, PontiaEventType,
-    UpsertAgentBindingRequest, WorkspaceRecord,
+    ControlQueryService, PontiaEvent, PontiaEventSource, PontiaEventType, UpsertAgentBindingRequest,
 };
 use pontia_core::{Error, Result, ids::new_runtime_id, time::utc_now};
 use pontia_storage_sqlite::repositories::session_runtimes::{
@@ -19,7 +18,7 @@ impl RuntimeBindingUpsertService {
         &self,
         session_id: &str,
         request: &RuntimeBindingUpsertRequest,
-        workspace: &WorkspaceRecord,
+        launch_cwd: &str,
         client_spec: &AgentClientSpec,
         created_session: bool,
         process: &pontia_runtime::ProcessFingerprint,
@@ -97,7 +96,7 @@ impl RuntimeBindingUpsertService {
             UpsertAgentBindingRequest {
                 session_id: session_id.into(),
                 client_type: request.client_type.clone(),
-                launch_cwd: workspace.canonical_path.clone(),
+                launch_cwd: launch_cwd.into(),
                 client_session_key: request.client_session_key.clone(),
                 client_session_file: non_empty(request.client_session_file.as_deref()),
                 metadata: agent_binding_metadata(request),

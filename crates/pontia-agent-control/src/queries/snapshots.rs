@@ -142,6 +142,66 @@ impl ControlQueryService {
         .await?)
     }
 
+    pub async fn session_ownership(&self, session_id: &str) -> Result<Option<SessionOwnership>> {
+        let owner: Option<(String, String)> = sqlx::query_as(
+            "SELECT application_id, application_ref FROM sessions WHERE session_id = ? AND application_id IS NOT NULL",
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(owner.map(|(application_id, reference)| SessionOwnership {
+            application_id,
+            reference,
+        }))
+    }
+
+    pub async fn verify_session_credential(
+        &self,
+        session_id: &str,
+        environment_key: &str,
+        credential: &str,
+    ) -> Result<bool> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM sessions
+             WHERE session_id = ? AND json_extract(runtime_environment, ?) = ?)",
+        )
+        .bind(session_id)
+        .bind(format!("$.{environment_key}"))
+        .bind(credential)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    pub async fn latest_owned_session(
+        &self,
+        application_id: &str,
+        reference_prefix: &str,
+    ) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar(
+            "SELECT session_id FROM sessions
+             WHERE application_id = ? AND substr(application_ref, 1, length(?)) = ?
+             ORDER BY application_ref DESC LIMIT 1",
+        )
+        .bind(application_id)
+        .bind(reference_prefix)
+        .bind(reference_prefix)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub(crate) async fn application_launch_directory(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<String>> {
+        Ok(sqlx::query_scalar(
+            "SELECT workspace_ref FROM sessions
+             WHERE session_id = ? AND application_id IS NOT NULL AND workspace_id IS NULL AND workspace_ref IS NOT NULL",
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
     pub async fn list_owned_sessions(&self, application_id: &str) -> Result<Vec<String>> {
         Ok(sqlx::query_scalar(
             "SELECT session_id FROM sessions WHERE application_id=? ORDER BY application_ref",

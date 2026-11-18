@@ -47,6 +47,15 @@ impl HandoffService {
     /// Reads historical context only. Deliver the current input separately, including retries.
     /// The caller supplies helper associations; native conversations are never queried.
     pub async fn generate(&self, bot_id: &str, helpers: &[HelperContext]) -> Result<String, Error> {
+        self.generate_for_input(bot_id, helpers, &[]).await
+    }
+
+    pub(crate) async fn generate_for_input(
+        &self,
+        bot_id: &str,
+        helpers: &[HelperContext],
+        pending_message_ids: &[String],
+    ) -> Result<String, Error> {
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bots WHERE bot_id = ?)")
             .bind(bot_id)
             .fetch_one(&self.pool)
@@ -69,9 +78,11 @@ impl HandoffService {
         .await?;
         let messages: Vec<BotMessage> = sqlx::query_as(
             "SELECT * FROM bot_messages WHERE bot_id = ?
+             AND id NOT IN (SELECT value FROM json_each(?))
              ORDER BY created_at DESC, id DESC LIMIT 60",
         )
         .bind(bot_id)
+        .bind(serde_json::json!(pending_message_ids).to_string())
         .fetch_all(&self.pool)
         .await?;
         let mut helpers: Vec<_> = helpers
