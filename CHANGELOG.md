@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The Cloud site slogan is translated into Simplified Chinese, Japanese, and Portuguese.
+
 - New chat has keyboard shortcuts to switch the device (`Alt+M`), Agent Client (`Alt+A`), and Workspace (`Alt+W`). Add `Shift` to go back.
 - Local file links in the Dashboard file preview open in the same sidebar, with a back button that restores the previous reading position. Relative links resolve against the previewed file, or against the session Workspace in chat messages. Heading anchors scroll to the heading, and local image links open in the image viewer.
 

@@ -33,6 +33,8 @@
   "home_description": "Controle remoto de código aberto para agentes de programação. Execute Pi, Codex, Claude Code e outros no seu próprio dispositivo e acompanhe e direcione-os de qualquer navegador.",
   "home_closing_title": "Seus agentes, onde quer que você esteja.",
   "home_closing_text": "Gratuito e de código aberto.",
+  "hero_title_first": "A nuvem,",
+  "hero_title_second": "no seu próprio computador.",
   "hero_description": "Saia da sua mesa, não dos seus agentes. Acompanhe, aprove e direcione cada Session, de qualquer lugar.",
   "hero_copy_failed": "Não foi possível copiar. Selecione o comando para copiá-lo.",
   "hero_requirements": "Linux e macOS",

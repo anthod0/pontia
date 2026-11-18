@@ -33,6 +33,8 @@
   "home_description": "コーディングエージェント向けのオープンソースのリモートコントロールです。Pi、Codex、Claude Code などを自分のデバイスで実行し、任意のブラウザーから状況を確認して指示できます。",
   "home_closing_title": "どこにいても、あなたのエージェントを。",
   "home_closing_text": "無料のオープンソースです。",
+  "hero_title_first": "クラウドを、",
+  "hero_title_second": "自分のPCに。",
   "hero_description": "デスクを離れても、エージェントは手放さない。すべての Session を、どこからでも確認、承認、指示できます。",
   "hero_copy_failed": "コピーできませんでした。コマンドを選択してコピーしてください。",
   "hero_requirements": "Linux と macOS",
