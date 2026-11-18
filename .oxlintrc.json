@@ -4,10 +4,64 @@
   "categories": {
     "correctness": "error"
   },
+  "rules": {
+    "typescript/ban-ts-comment": "error",
+    "typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false }]
+  },
   "overrides": [
     {
       "files": ["apps/dashboard/src/**"],
-      "excludeFiles": ["apps/dashboard/src/modes/**"],
+      "excludeFiles": [
+        "apps/dashboard/src/modes/local/apiAccess.ts",
+        "apps/dashboard/src/modes/public/remote-access/**",
+        "apps/dashboard/src/service-worker.ts"
+      ],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          {
+            "globals": [
+              { "name": "fetch", "message": "Send device requests through ApiAccess." },
+              { "name": "WebSocket", "message": "Send device requests through ApiAccess." },
+              { "name": "EventSource", "message": "Send device requests through ApiAccess." }
+            ],
+            "checkGlobalObject": true
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/dashboard/src/modes/**", "apps/cloud/src/**"],
+      "excludeFiles": ["apps/cloud/src/lib/components/ui/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [{ "name": "bits-ui", "message": "Use $lib/components/ui primitives." }]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/dashboard/src/**"],
+      "excludeFiles": ["apps/dashboard/src/modes/**", "apps/dashboard/src/lib/components/ui/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [{ "name": "bits-ui", "message": "Use $lib/components/ui primitives." }],
+            "patterns": [
+              {
+                "regex": "(^|/)modes/(local|public)(/|$|[?#])",
+                "message": "Shared code must reference mode dependencies through $dashboard-mode."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/dashboard/src/lib/components/ui/**"],
       "rules": {
         "no-restricted-imports": [
           "error",

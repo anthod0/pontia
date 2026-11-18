@@ -1,5 +1,5 @@
 import { Extension } from "@tiptap/core";
-import { PluginKey } from "@tiptap/pm/state";
+import type { PluginKey } from "@tiptap/pm/state";
 import Suggestion, {
   exitSuggestion,
   type SuggestionOptions,
