@@ -25,7 +25,10 @@ beforeEach(() => {
     { id: "pi", name: "Pi", client_type: "pi", client_key: "default" },
     { id: "another", name: "Another client", client_type: "another", client_key: "custom" },
   ]);
-  vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue(models);
+  vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
+    models,
+    default_model: null,
+  });
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -58,7 +61,12 @@ test("searches the catalog and saves the selected model ID when editing a Bot", 
 
 test("switching clients clears the selection and loads that client catalog", async () => {
   vi.mocked(testDevice.api.listAgentClientModels).mockImplementation(async (client) =>
-    client === "pi" ? models : [{ id: "other-model", name: "Other model", description: "" }],
+    client === "pi"
+      ? { models, default_model: null }
+      : {
+          models: [{ id: "other-model", name: "Other model", description: "" }],
+          default_model: null,
+        },
   );
   const save = vi.spyOn(testDevice.api, "saveBot").mockResolvedValue(bot);
   render(BotSettingsForm, { bot, onsaved: vi.fn() });
@@ -93,7 +101,7 @@ test("switching clients clears the selection and loads that client catalog", asy
 test("retries a failed catalog request and requires an available model before saving", async () => {
   vi.mocked(testDevice.api.listAgentClientModels)
     .mockRejectedValueOnce(new Error("Offline"))
-    .mockResolvedValueOnce(models);
+    .mockResolvedValueOnce({ models, default_model: null });
   render(BotSettingsForm, { bot, onsaved: vi.fn() });
   await screen.findByRole("alert");
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
@@ -104,13 +112,34 @@ test("retries a failed catalog request and requires an available model before sa
 test.each([{ catalog: [] }, { catalog: models.slice(1) }])(
   "does not save an unavailable model",
   async ({ catalog }) => {
-    vi.mocked(testDevice.api.listAgentClientModels).mockResolvedValue(catalog);
+    vi.mocked(testDevice.api.listAgentClientModels).mockResolvedValue({
+      models: catalog,
+      default_model: catalog[0]?.id ?? null,
+    });
     render(BotSettingsForm, { bot, onsaved: vi.fn() });
     await waitFor(() =>
-      expect(testDevice.queryClient.getQueryData(["agent-client-models", "pi", "default"])).toEqual(
-        catalog,
-      ),
+      expect(
+        testDevice.queryClient.getQueryData(["agent-client-models", "pi", "default"]),
+      ).toBeDefined(),
     );
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   },
 );
+
+test("preselects the client default model for a new Bot", async () => {
+  vi.mocked(testDevice.api.listAgentClientModels).mockResolvedValue({
+    models,
+    default_model: "provider/second",
+  });
+  const save = vi.spyOn(testDevice.api, "saveBot").mockResolvedValue(bot);
+  render(BotSettingsForm, { onsaved: vi.fn() });
+  await fireEvent.input(screen.getByLabelText("Name"), { target: { value: "New" } });
+  await waitFor(() => expect(screen.getByLabelText("Model")).toHaveTextContent("Second model"));
+  await fireEvent.click(screen.getByRole("button", { name: "Create Bot" }));
+  await waitFor(() =>
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ client_type: "pi", model: "provider/second" }),
+      undefined,
+    ),
+  );
+});

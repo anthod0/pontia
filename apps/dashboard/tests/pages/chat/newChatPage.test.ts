@@ -1,20 +1,25 @@
 import { mocks, session, turn, workspace } from "./fixtures";
 import { testDevice } from "../../deviceFixture";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import type { CreateSessionResult } from "../../../src/api/types";
 
 const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).default;
 
-test.each([undefined, '/office-mac'])('opens Bot setup from workspace onboarding in the same device scope: %s', async (routeScope) => {
-  mocks.workspaces.set([]);
-  render(NewChatPage, { routeScope });
-  const link = await screen.findByRole('link', { name: 'Get started with a Bot' });
-  expect(link).toHaveAttribute('href', `${routeScope ?? '/dashboard'}/bot`);
-  await fireEvent.click(link);
-  await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/bot', undefined, { scope: routeScope }));
-});
+test.each([undefined, "/office-mac"])(
+  "opens Bot setup from workspace onboarding in the same device scope: %s",
+  async (routeScope) => {
+    mocks.workspaces.set([]);
+    render(NewChatPage, { routeScope });
+    const link = await screen.findByRole("link", { name: "Get started with a Bot" });
+    expect(link).toHaveAttribute("href", `${routeScope ?? "/dashboard"}/bot`);
+    await fireEvent.click(link);
+    await waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith("/bot", undefined, { scope: routeScope }),
+    );
+  },
+);
 
 test("keeps first-time users in workspace setup until they continue explicitly", async () => {
   const user = userEvent.setup();
@@ -208,9 +213,10 @@ test("remembers the selected agent client for the next new chat", async () => {
 
 test("switching clients clears the selected startup model", async () => {
   const user = userEvent.setup();
-  const catalog = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue([
-    { id: "pi-only", name: "Pi model", description: "" },
-  ]);
+  const catalog = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
+    models: [{ id: "pi-only", name: "Pi model", description: "" }],
+    default_model: null,
+  });
   try {
     render(NewChatPage);
     await user.click(await screen.findByRole("button", { name: "Client default model" }));
@@ -219,6 +225,43 @@ test("switching clients clears the selected startup model", async () => {
     await waitFor(() => expect(screen.getByLabelText("Agent client")).toHaveTextContent("codex"));
     await fireEvent.keyDown(window, { code: "KeyC", altKey: true, shiftKey: true });
     await waitFor(() => expect(screen.getByLabelText("Agent client")).toHaveTextContent("Pi"));
+    await user.type(screen.getByPlaceholderText("Describe a task…"), "Use the default");
+    await user.click(screen.getByRole("button", { name: /start session/i }));
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledOnce());
+    expect(mocks.createSession.mock.calls[0][0]).not.toHaveProperty("model");
+  } finally {
+    catalog.mockRestore();
+  }
+});
+
+test("selects the client default model without sending it on creation", async () => {
+  const user = userEvent.setup();
+  const catalog = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
+    models: [
+      { id: "provider/other", name: "Other model", description: "" },
+      { id: "provider/default", name: "Default model", description: "" },
+    ],
+    default_model: "provider/default",
+  });
+  try {
+    render(NewChatPage);
+    await waitFor(() =>
+      expect(document.getElementById("session-model")).toHaveTextContent("Default model"),
+    );
+    await user.click(document.getElementById("session-model")!);
+    const list = await screen.findByRole("list", { name: "Available models" });
+    expect(within(list).getByRole("button", { name: "Default model" })).toContainElement(
+      within(list).getByLabelText("Current model"),
+    );
+    expect(screen.queryByRole("button", { name: "Client default model" })).not.toBeInTheDocument();
+    await user.click(within(list).getByRole("button", { name: "Other model" }));
+    await waitFor(() =>
+      expect(document.getElementById("session-model")).toHaveTextContent("Other model"),
+    );
+    document.body.style.pointerEvents = "";
+    await user.click(document.getElementById("session-model")!);
+    await user.click(await screen.findByRole("button", { name: "Default model" }));
+    document.body.style.pointerEvents = "";
     await user.type(screen.getByPlaceholderText("Describe a task…"), "Use the default");
     await user.click(screen.getByRole("button", { name: /start session/i }));
     await waitFor(() => expect(mocks.createSession).toHaveBeenCalledOnce());
@@ -278,9 +321,10 @@ test("creates a session with initial prompt, workspace, and client then opens it
     session: created,
     initial_turn: turn({ session_id: "session-new" }),
   } satisfies CreateSessionResult);
-  const catalog = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue([
-    { id: "provider/model", name: "Selected model", description: "" },
-  ]);
+  const catalog = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
+    models: [{ id: "provider/model", name: "Selected model", description: "" }],
+    default_model: null,
+  });
   render(NewChatPage);
   await user.type(
     await screen.findByPlaceholderText("Describe a task…"),

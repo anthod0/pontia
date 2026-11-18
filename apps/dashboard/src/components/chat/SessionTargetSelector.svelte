@@ -18,6 +18,7 @@
     creationOptions: SessionCreationOption[]
     fixedWorkspace?: boolean
     deviceSelector?: Snippet<[boolean]>
+    children?: Snippet
     disabled?: boolean
   }
 
@@ -30,6 +31,7 @@
     creationOptions,
     fixedWorkspace = false,
     deviceSelector,
+    children,
     disabled = false,
   }: Props = $props()
 
@@ -107,5 +109,6 @@
         {/each}
       </Select.Content>
     </Select.Root>
+    {@render children?.()}
   </div>
 {/if}

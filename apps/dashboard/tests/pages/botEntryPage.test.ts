@@ -25,9 +25,10 @@ beforeEach(() => {
   vi.spyOn(testDevice.api, "listBotClients").mockResolvedValue([
     { id: "pi", name: "Pi", client_type: "pi", client_key: "default" },
   ]);
-  vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue([
-    { id: "provider/model", name: "Test model", description: "provider" },
-  ]);
+  vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
+    models: [{ id: "provider/model", name: "Test model", description: "provider" }],
+    default_model: null,
+  });
 });
 afterEach(() => vi.restoreAllMocks());
 

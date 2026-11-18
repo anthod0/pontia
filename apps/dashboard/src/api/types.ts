@@ -672,6 +672,11 @@ export interface SessionModel {
   description: string;
 }
 
+export interface AgentClientModels {
+  models: SessionModel[];
+  default_model: string | null;
+}
+
 export interface ForkSessionOutcome {
   stage: "fork_unconfirmed" | "fork_failed" | "session_pending" | "session_created";
   session_id: string | null;

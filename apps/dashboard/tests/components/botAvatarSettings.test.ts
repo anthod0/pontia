@@ -22,9 +22,10 @@ test("edits an avatar, retains the selection after a failed save, and saves it o
   vi.spyOn(testDevice.api, "listBotClients").mockResolvedValue([
     { id: "pi", name: "Pi", client_type: "pi", client_key: "default" },
   ]);
-  vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue([
-    { id: "provider/model", name: "Test model" },
-  ]);
+  vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
+    models: [{ id: "provider/model", name: "Test model" }],
+    default_model: null,
+  });
   const saved = { ...bot, avatar_shape: "onigiri", avatar_color: "indigo" } as const;
   const save = vi
     .spyOn(testDevice.api, "saveBot")

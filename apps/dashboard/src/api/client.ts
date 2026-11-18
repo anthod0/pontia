@@ -3,6 +3,7 @@ import { ApiError } from "./errors";
 import type {
   Interaction,
   ForkSessionOutcome,
+  AgentClientModels,
   AgentClientView,
   AgentClientSetupOperation,
   Bot,
@@ -21,7 +22,6 @@ import type {
   SessionView,
   SessionCompactionAccepted,
   SessionCreationOption,
-  SessionModel,
   SessionOverviewSection,
   SessionOverviewView,
   SubmitInboxMessageInput,
@@ -99,13 +99,11 @@ export function createApi(device: DeviceRuntime) {
     clientType: string,
     clientKey: string,
     signal?: AbortSignal,
-  ): Promise<SessionModel[]> {
-    return (
-      await request<{ models: SessionModel[] }>(
-        `/agent-clients/${encodeURIComponent(clientType)}/${encodeURIComponent(clientKey)}/models`,
-        { signal },
-      )
-    ).models;
+  ): Promise<AgentClientModels> {
+    return request(
+      `/agent-clients/${encodeURIComponent(clientType)}/${encodeURIComponent(clientKey)}/models`,
+      { signal },
+    );
   }
 
   function getBotChat(id: string, signal?: AbortSignal): Promise<BotChat> {

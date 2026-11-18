@@ -9,8 +9,9 @@
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
 
-  let { id, client, value = $bindable(''), available = $bindable(false), allowDefault = false, disabled = false }: {
+  let { id, client, value = $bindable(''), available = $bindable(false), allowDefault = false, disabled = false, class: className = 'w-full justify-between' }: {
     id: string
+    class?: string
     client: Pick<AgentClientView, "name" | "client_type" | "client_key">
     value?: string
     available?: boolean
@@ -23,31 +24,38 @@
     () => ({
       queryKey: ['agent-client-models', client.client_type, client.client_key],
       queryFn: ({ signal }) => device.api.listAgentClientModels(client.client_type, client.client_key, signal),
-      enabled: !allowDefault || open,
       retry: false,
     }),
     () => device.queryClient,
   )
   let search = $state('')
-  const selected = $derived(catalog.data?.find((model) => model.id === value))
-  const models = $derived(catalog.data?.filter((model) =>
+  const defaultModel = $derived(catalog.data?.models.find((model) => model.id === catalog.data?.default_model))
+  const current = $derived(value || (allowDefault ? catalog.data?.default_model : '') || '')
+  const selected = $derived(catalog.data?.models.find((model) => model.id === current))
+  const models = $derived(catalog.data?.models.filter((model) =>
     `${model.name} ${model.id}`.toLowerCase().includes(search.trim().toLowerCase()),
   ) ?? [])
+  $effect(() => { if (!allowDefault && !value && defaultModel) value = defaultModel.id })
   $effect(() => { available = catalog.isSuccess && Boolean(selected) })
+
+  function choose(id: string) {
+    value = allowDefault && id === catalog.data?.default_model ? '' : id
+    open = false
+  }
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Trigger {id} type="button" class={buttonVariants({ variant: 'outline', class: 'w-full justify-between' })} {disabled}
+  <Dialog.Trigger {id} type="button" class={buttonVariants({ variant: 'outline', class: className })} {disabled}
     onclick={() => { search = '' }}>
-    <span class="truncate">{selected?.name ?? (value || (allowDefault ? $t('model.default') : $t('model.choose')))}</span>
-    <CaretDownIcon class="size-4 shrink-0" />
+    <span class="truncate">{selected?.name ?? (current || (allowDefault ? $t('model.default') : $t('model.choose')))}</span>
+    <CaretDownIcon class="size-4 shrink-0 text-muted-foreground" />
   </Dialog.Trigger>
   {#if !allowDefault}
     {#if catalog.isPending}<p role="status" class="text-sm text-muted-foreground">{$t('model.loading')}</p>
     {:else if catalog.isError}
       <p role="alert" class="text-sm text-destructive">{catalog.error.message}</p>
       <Button type="button" variant="outline" disabled={catalog.isFetching} onclick={() => void catalog.refetch()}>{$t('common.retry')}</Button>
-    {:else if !catalog.data?.length}<p role="status" class="text-sm text-muted-foreground">{$t('model.empty')}</p>
+    {:else if !catalog.data?.models.length}<p role="status" class="text-sm text-muted-foreground">{$t('model.empty')}</p>
     {:else if value && !selected}<p role="status" class="text-sm text-muted-foreground">{$t('bots.modelUnavailable')}</p>{/if}
   {/if}
 
@@ -57,8 +65,8 @@
       <Dialog.Description>{client.name}</Dialog.Description>
     </Dialog.Header>
     <Input aria-label={$t('model.search')} placeholder={$t('model.searchPlaceholder')} bind:value={search} />
-    {#if allowDefault}
-      <Button type="button" variant="ghost" onclick={() => { value = ''; open = false }}>{$t('model.default')}</Button>
+    {#if allowDefault && !defaultModel}
+      <Button type="button" variant="ghost" onclick={() => choose('')}>{$t('model.default')}</Button>
     {/if}
     {#if catalog.isPending}<p role="status">{$t('model.loading')}</p>
     {:else if catalog.isError}
@@ -69,12 +77,12 @@
         {#each models as model (model.id)}
           <li>
             <Button type="button" variant="ghost" class="h-auto w-full justify-start gap-3 px-3 py-2 text-left"
-              aria-label={model.name} onclick={() => { value = model.id; open = false }}>
+              aria-label={model.name} onclick={() => choose(model.id)}>
               <span class="min-w-0 flex-1 whitespace-normal">
-                <span class="block font-medium">{model.name}</span>
+                <span class="block font-medium">{model.name}{#if model.id === defaultModel?.id}<span class="ml-2 text-xs font-normal text-muted-foreground">{$t('model.defaultTag')}</span>{/if}</span>
                 <span class="block text-xs text-muted-foreground">{model.id}</span>
               </span>
-              {#if model.id === value}<CheckIcon class="size-4 shrink-0" aria-label={$t('model.current')} />{/if}
+              {#if model.id === current}<CheckIcon class="size-4 shrink-0" aria-label={$t('model.current')} />{/if}
             </Button>
           </li>
         {:else}<li class="py-3 text-sm text-muted-foreground">{$t('model.empty')}</li>{/each}
