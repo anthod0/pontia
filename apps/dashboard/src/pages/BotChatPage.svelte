@@ -5,10 +5,7 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { Textarea } from '$lib/components/ui/textarea/index.js'
   import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon'
-  import GearIcon from 'phosphor-svelte/lib/GearIcon'
-  import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
-  import BotSettingsDialog from '../components/bots/BotSettingsDialog.svelte'
   import { useDeviceRuntime } from '../device/context'
   import { openBotChatStream } from '../services/botChatStream'
 
@@ -26,7 +23,6 @@
     .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id)))
   let draft = $state('')
   let typing = $state(false)
-  let editing = $state(false)
   let actionError = $state('')
   let retrying = $state<string[]>([])
   let feed = $state<HTMLDivElement>()
@@ -94,24 +90,7 @@
 </script>
 
 {#if chat.data}
-  <section class="mx-auto flex h-[calc(100dvh-3.5rem)] max-w-3xl flex-col" aria-label={chat.data.bot.name}>
-    <header class="flex shrink-0 items-start gap-3 border-b border-border px-1 pb-4">
-      <div class="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-foreground">
-        <RobotIcon class="size-5" />
-      </div>
-      <div class="min-w-0 flex-1">
-        <h1 class="break-words text-lg font-semibold text-heading">{chat.data.bot.name}</h1>
-        {#if chat.data.bot.description}<p class="break-words text-sm text-muted-foreground">{chat.data.bot.description}</p>{/if}
-        <p class="mt-1 flex items-start gap-2 text-xs text-muted-foreground" role="status">
-          <span class={['mt-1 size-1.5 shrink-0 rounded-full', typing ? 'animate-pulse bg-primary-solid' : chat.data.bot.working_on ? 'bg-primary-solid' : 'bg-muted-foreground/50']}></span>
-          {typing ? $t('bots.typing') : chat.data.bot.working_on ?? $t('bots.idle')}
-        </p>
-      </div>
-      <Button variant="ghost" size="icon" aria-label={$t('bots.edit')} title={$t('bots.edit')} onclick={() => { editing = true }}>
-        <GearIcon class="size-5" />
-      </Button>
-    </header>
-
+  <section class="mx-auto flex h-[calc(100dvh-3rem)] max-w-3xl flex-col" aria-label={chat.data.bot.name}>
     <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-1 py-5" bind:this={feed}
       onscroll={(event) => {
         const element = event.currentTarget
@@ -122,7 +101,7 @@
         {#if 'content' in entry}
           <div class={['flex', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']}>
             <div class="max-w-[90%] min-w-0">
-              <p class={['rounded-2xl px-4 py-3 text-sm leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]', entry.kind === 'user_input' ? 'bg-muted' : 'border border-border bg-background']}>{entry.content}</p>
+              <p class={['rounded-2xl px-4 py-3 text-sm leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]', entry.kind === 'user_input' ? 'border border-border bg-background' : 'bg-muted']}>{entry.content}</p>
               {#if entry.status === 'failed'}
                 <div class="mt-1 flex items-center justify-end gap-2 text-xs text-destructive">
                   <span>{$t('bots.sendFailed')}</span>
@@ -139,13 +118,19 @@
         {/if}
       {/each}
       {#if typing}
-        <div aria-hidden="true" class="w-fit rounded-2xl border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+        <div aria-hidden="true" class="w-fit rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">
           <span class="animate-pulse">•••</span>
         </div>
       {/if}
     </div>
 
     <form class="shrink-0 px-1 pt-2 pb-4" onsubmit={(event) => { event.preventDefault(); void send() }}>
+      {#if chat.data.bot.working_on}
+        <p class="mb-2 flex items-start gap-2 px-2 text-xs text-muted-foreground" role="status">
+          <span class="mt-1 size-1.5 shrink-0 rounded-full bg-primary-solid"></span>
+          <span class="min-w-0 [overflow-wrap:anywhere]">{chat.data.bot.working_on}</span>
+        </p>
+      {/if}
       {#if actionError}<p role="alert" class="mb-2 text-sm text-destructive">{actionError}</p>{/if}
       <div class="flex items-end gap-2 rounded-xl border border-border bg-background p-2">
         <Textarea rows={2} bind:value={draft} onkeydown={onComposerKey} aria-label={$t('bots.message')}
@@ -156,13 +141,6 @@
       </div>
     </form>
   </section>
-
-  {#if editing}
-    <BotSettingsDialog bot={chat.data.bot} onclose={() => { editing = false }} onsaved={() => {
-      editing = false
-      void refresh()
-    }} />
-  {/if}
 {:else if chat.isError}
   <p role="alert" class="mx-auto max-w-3xl text-sm text-destructive">{chat.error.message}</p>
 {:else}

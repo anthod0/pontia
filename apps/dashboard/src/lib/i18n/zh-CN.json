@@ -6,8 +6,6 @@
   "bots.description": "描述",
   "bots.model": "模型",
   "bots.noClients": "请在设置中启用可运行 Bot 的 Agent Client。",
-  "bots.idle": "空闲",
-  "bots.typing": "正在输入…",
   "bots.messages": "聊天记录",
   "bots.message": "输入消息",
   "bots.sendFailed": "消息发送失败",

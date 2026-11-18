@@ -6,8 +6,6 @@
   "bots.description": "Description",
   "bots.model": "Model",
   "bots.noClients": "Enable a Bot-capable Agent Client in Settings to continue.",
-  "bots.idle": "Idle",
-  "bots.typing": "Typing…",
   "bots.messages": "Messages",
   "bots.message": "Message",
   "bots.sendFailed": "Message failed to send",
