@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import textwrap
 import unittest
 import uuid
 
@@ -13,6 +14,59 @@ import test_setup
 
 @unittest.skipUnless(os.environ.get("PONTIA_DOCKER_SMOKE") == "1", "Set PONTIA_DOCKER_SMOKE=1 after building images")
 class ContainerSmokeTests(unittest.TestCase):
+    def test_local_d1_commands_exit_when_registry_does_not_respond(self):
+        probe = textwrap.dedent('''
+            import json
+            import os
+            from pathlib import Path
+            import socketserver
+            import subprocess
+            import tempfile
+            import threading
+
+            release = threading.Event()
+
+            class Registry(socketserver.BaseRequestHandler):
+                def handle(self):
+                    release.wait()
+
+            class Server(socketserver.ThreadingTCPServer):
+                daemon_threads = True
+
+            with tempfile.TemporaryDirectory(prefix="d1-registry-test-") as root, \
+                    Server(("127.0.0.1", 0), Registry) as registry:
+                threading.Thread(target=registry.serve_forever, daemon=True).start()
+                env = dict(os.environ, TMPDIR=root,
+                           npm_registry=f"http://127.0.0.1:{registry.server_address[1]}")
+                prefix = ["bun", "x", "--no-install", "wrangler", "d1"]
+                local = ["DB", "--local", "--persist-to", str(Path(root) / "state")]
+
+                def run(*args):
+                    return subprocess.run([*prefix, *args], env=env, capture_output=True,
+                                          text=True, timeout=30)
+
+                try:
+                    for _ in range(2):
+                        migrated = run("migrations", "apply", *local)
+                        assert migrated.returncode == 0, migrated.stdout + migrated.stderr
+                    seeded = run("execute", *local, "--file", "/app/e2e-seed.sql")
+                    assert seeded.returncode == 0, seeded.stdout + seeded.stderr
+                    queried = run("execute", *local, "--json", "--command",
+                                  "SELECT count(*) AS count FROM hero_name_heroes;")
+                    assert queried.returncode == 0, queried.stdout + queried.stderr
+                    assert json.loads(queried.stdout)[0]["results"][0]["count"] > 0
+                    invalid = run("execute", *local, "--command", "SELECT * FROM missing_table;")
+                    assert invalid.returncode != 0
+                finally:
+                    release.set()
+                    registry.shutdown()
+        ''')
+        result = subprocess.run([
+            "docker", "run", "--rm", "--init", "--network", "none",
+            "--entrypoint", "python3", "pontia-e2e-docker-cloud:latest", "-c", probe,
+        ], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_local_stack_bootstraps_public_edge_and_discards_run_data(self):
         existing = subprocess.run([
             "docker", "network", "ls", "--filter", "label=com.docker.compose.project=pontia-e2e-docker",

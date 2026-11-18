@@ -47,7 +47,8 @@ COPY apps/cloud ./
 RUN bun install --frozen-lockfile && bun run build
 COPY docker/e2e/cloud-entrypoint /usr/local/bin/cloud-entrypoint
 COPY docker/e2e/cloud-seed.sql /app/e2e-seed.sql
-ENV WRANGLER_SEND_METRICS=false CI=true
+# The banner's npm update check can keep a socket alive after local D1 commands finish.
+ENV WRANGLER_HIDE_BANNER=true WRANGLER_SEND_METRICS=false CI=true
 ENTRYPOINT ["bash", "/usr/local/bin/cloud-entrypoint"]
 
 FROM base AS dashboard
@@ -85,7 +86,7 @@ ENTRYPOINT ["bash", "/usr/local/bin/device-entrypoint"]
 
 FROM base AS browser
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium xvfb x11vnc novnc websockify openbox dbus-x11 x11-utils fonts-liberation \
+    chromium xvfb x11vnc novnc websockify openbox dbus-x11 x11-utils fonts-liberation fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/* \
     && usermod --login e2e --home /home/e2e --move-home node \
     && groupmod --new-name e2e node \
