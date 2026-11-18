@@ -80,13 +80,33 @@ async fn observe(
             };
             let session = &binding.session_id;
             let _operation = runtime.lock_session(session).await;
-            if !matches!(
-                runtime.subscription(session).await,
-                Some(SubscriptionState::Available | SubscriptionState::ExitPending)
-            ) && !service.reload_suspended(session).await?
-                && !CodexService::has_confirmed_exit(session).await
-                && service.session_accepts_control(session).await?
+            let subscription = runtime.subscription(session).await;
+            let accepts_turn: bool = sqlx::query_scalar("SELECT state IN ('idle','busy','waiting_for_interaction','interrupted') FROM sessions WHERE session_id=?")
+                .bind(session).fetch_one(&service.pool).await?;
+            if subscription == Some(SubscriptionState::ExitPending)
+                || CodexService::has_confirmed_exit(session).await
+                || !accepts_turn
             {
+                return Ok(());
+            }
+            let suspended = service.reload_suspended(session).await?
+                || connection
+                    .unloaded_threads
+                    .lock()
+                    .await
+                    .contains_key(&native);
+            if suspended {
+                let boundary = service.confirm_loaded_thread(&runtime, &native).await?;
+                service
+                    .reconcile_proxy_archive(&runtime, session, &native, Some(boundary))
+                    .await?;
+                if CodexService::has_confirmed_exit(session).await {
+                    return Ok(());
+                }
+                sqlx::query("UPDATE sessions SET metadata=json_remove(metadata,'$.codex_observation_unloaded') WHERE session_id=?")
+                    .bind(session).execute(&service.pool).await?;
+            }
+            if suspended || subscription != Some(SubscriptionState::Available) {
                 service
                     .subscribe_opened_thread(&runtime, session, &native)
                     .await?;

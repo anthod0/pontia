@@ -17,6 +17,61 @@ async fn wait_unobserved(fixture: &Fixture) {
 }
 
 #[tokio::test]
+async fn external_turn_after_interruption_resumes_session_and_live_output() {
+    let fixture = Fixture::new(turn(json!([])), Vec::new()).await;
+    let previous = fixture.turn_id().await;
+    fixture.complete_native("interrupted").await;
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while fixture.session_state().await != "interrupted" {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+
+    let mut next = turn(json!([]));
+    next["id"] = json!("next-turn");
+    fixture.server_state.turns.lock().await.push(next.clone());
+    fixture
+        .notify(json!({"method":"turn/started","params":{"threadId":"thread","turn":next}}))
+        .await;
+    let snapshot = fixture
+        .wait_snapshot(|snapshot| snapshot.identity.turn_id != previous)
+        .await;
+    assert_eq!(fixture.session_state().await, "busy");
+    fixture
+        .notify(delta("thread", "next-turn", "answer", json!("continued")))
+        .await;
+    fixture
+        .wait_snapshot(|snapshot| snapshot.items == vec![text("answer", "continued")])
+        .await;
+    assert_eq!(fixture.turn_state().await, "interrupted");
+    next["status"] = json!("completed");
+    fixture
+        .notify(json!({"method":"turn/completed","params":{"threadId":"thread","turn":next}}))
+        .await;
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while fixture.session_state().await != "idle" {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let session = fixture
+        .app
+        .queries()
+        .get_session(&fixture.session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        session.current_turn_id.as_deref(),
+        Some(snapshot.identity.turn_id.as_str())
+    );
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
 async fn quiet_connections_and_missing_subscriptions_do_not_trigger_recovery() {
     let fixture = Fixture::new(turn(json!([])), Vec::new()).await;
     let methods = fixture.server_state.methods.lock().await.clone();

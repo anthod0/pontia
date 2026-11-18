@@ -109,6 +109,39 @@ impl CodexService {
             let _ = observation_changes().send((runtime.root.clone(), session.clone()));
             return Ok((session, operation_guard));
         }
+        let boundary = self.confirm_loaded_thread(runtime, native).await?;
+        self.reconcile_proxy_archive(runtime, &session, native, Some(boundary))
+            .await?;
+        let state: String = sqlx::query_scalar("SELECT state FROM sessions WHERE session_id=?")
+            .bind(&session)
+            .fetch_one(&self.pool)
+            .await?;
+        if state == "exited" {
+            self.event_ingest
+                .ingest_pontia_event(PontiaEvent::new(
+                    &session,
+                    None,
+                    PontiaEventSource::RuntimeManager,
+                    "codex",
+                    PontiaEventType::SessionResuming,
+                    json!({}),
+                ))
+                .await?;
+        }
+        confirmed_exits().lock().await.remove(&session);
+        sqlx::query("UPDATE sessions SET metadata=json_remove(metadata,'$.codex_observation_unloaded') WHERE session_id=?")
+                .bind(&session).execute(&self.pool).await?;
+        self.subscribe_opened_thread(runtime, &session, native)
+            .await?;
+        Ok((session, operation_guard))
+    }
+
+    pub(super) async fn confirm_loaded_thread(
+        &self,
+        runtime: &CodexRuntime,
+        native: &str,
+    ) -> Result<u64> {
+        let connection = runtime.connection().await?;
         // A queued proxy receipt must not resurrect a thread unloaded since the operation.
         let (snapshot, boundary) = connection
             .call_observed(
@@ -140,31 +173,9 @@ impl CodexService {
             }
             unloaded.remove(native);
         }
-        self.reconcile_proxy_archive(runtime, &session, native, Some(boundary))
-            .await?;
-        let state: String = sqlx::query_scalar("SELECT state FROM sessions WHERE session_id=?")
-            .bind(&session)
-            .fetch_one(&self.pool)
-            .await?;
-        if state == "exited" {
-            self.event_ingest
-                .ingest_pontia_event(PontiaEvent::new(
-                    &session,
-                    None,
-                    PontiaEventSource::RuntimeManager,
-                    "codex",
-                    PontiaEventType::SessionResuming,
-                    json!({}),
-                ))
-                .await?;
-        }
-        confirmed_exits().lock().await.remove(&session);
-        sqlx::query("UPDATE sessions SET metadata=json_remove(metadata,'$.codex_observation_unloaded') WHERE session_id=?")
-                .bind(&session).execute(&self.pool).await?;
-        self.subscribe_opened_thread(runtime, &session, native)
-            .await?;
-        Ok((session, operation_guard))
+        Ok(boundary)
     }
+
     pub(super) async fn subscribe_opened_thread(
         &self,
         runtime: &CodexRuntime,

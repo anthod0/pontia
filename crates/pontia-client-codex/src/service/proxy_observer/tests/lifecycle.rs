@@ -3,6 +3,84 @@ use pontia_storage_sqlite::repositories::session_runtimes::{
     SessionRuntimeRecord, SqliteSessionRuntimeRepository,
 };
 
+#[tokio::test]
+async fn tui_continuation_recovers_interrupted_session_after_native_reload() {
+    let f = Fixture::new().await;
+    let mut cli = f.client().await;
+    let opened = rpc(&mut cli, "thread/fork", json!({})).await;
+    let native = opened["result"]["thread"]["id"].as_str().unwrap();
+    let session = f.session(native, "idle").await;
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    f.session(native, "busy").await;
+    {
+        let mut threads = f.threads.lock().await;
+        let thread = threads.get_mut(native).unwrap();
+        thread.turns[0]["status"] = json!("interrupted");
+        thread.notify(
+            json!({"method":"turn/completed","params":{"threadId":native,"turn":thread.turns[0]}}),
+        );
+    }
+    f.session(native, "interrupted").await;
+    {
+        let mut threads = f.threads.lock().await;
+        let thread = threads.get_mut(native).unwrap();
+        thread.value["status"]["type"] = json!("notLoaded");
+        thread.notify(json!({"method":"thread/status/changed","params":{"threadId":native,"status":{"type":"notLoaded"}}}));
+    }
+    let runtime = CodexRuntime::existing(f.root.path()).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while runtime.subscription(&session).await.is_some() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+
+    // A stale start notification alone must not reload native execution.
+    let resumes_before = f
+        .calls
+        .lock()
+        .await
+        .iter()
+        .filter(|(pontia, method, thread)| *pontia && method == "thread/resume" && thread == native)
+        .count();
+    f.threads.lock().await[native].notify(
+        json!({"method":"turn/started","params":{"threadId":native,"turn":{"id":"turn-0"}}}),
+    );
+    let barrier = rpc(&mut cli, "thread/fork", json!({})).await;
+    f.session(barrier["result"]["thread"]["id"].as_str().unwrap(), "idle")
+        .await;
+    assert_eq!(f.session(native, "interrupted").await, session);
+    assert_eq!(
+        f.calls
+            .lock()
+            .await
+            .iter()
+            .filter(|(pontia, method, thread)| *pontia
+                && method == "thread/resume"
+                && thread == native)
+            .count(),
+        resumes_before
+    );
+
+    // Codex can reload execution within the existing TUI connection.
+    f.threads.lock().await.get_mut(native).unwrap().value["status"]["type"] = json!("active");
+    rpc(&mut cli, "turn/start", json!({"threadId":native})).await;
+    assert_eq!(f.session(native, "busy").await, session);
+    f.complete(native).await;
+    f.session(native, "idle").await;
+    let states: Vec<String> =
+        sqlx::query_scalar("SELECT state FROM turns WHERE session_id=? ORDER BY turn_id")
+            .bind(&session)
+            .fetch_all(&f.app.db())
+            .await
+            .unwrap();
+    assert_eq!(states, ["interrupted", "completed"]);
+    assert_eq!(f.exit_events(&session).await, 0);
+    f.runtimes(&session, 1, 0).await;
+    f.stop().await;
+}
+
 impl Fixture {
     async fn runtimes(
         &self,
