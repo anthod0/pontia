@@ -160,6 +160,10 @@ fn external_api_router(state: HttpState) -> Router {
         )
         .route("/api/v1/agent-clients", get(api::list_agent_clients))
         .route(
+            "/api/v1/agent-clients/{client_type}/{client_key}/models",
+            get(api::list_agent_client_models),
+        )
+        .route(
             "/api/v1/agent-clients/{client_type}/{client_key}",
             get(api::get_agent_client)
                 .patch(api::patch_agent_client)

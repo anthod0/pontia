@@ -12,6 +12,7 @@
   "bots.name": "名称",
   "bots.description": "描述",
   "bots.model": "模型",
+  "bots.modelUnavailable": "已保存的模型不再可用，请重新选择模型。",
   "bots.noClients": "请在设置中启用可运行 Bot 的 Agent Client。",
   "bots.messages": "聊天记录",
   "bots.message": "输入消息",

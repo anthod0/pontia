@@ -4,6 +4,7 @@
   import { useDeviceRuntime } from '../../device/context'
   import type { Bot } from '../../api/types'
   import ClientIcon from '../chat/ClientIcon.svelte'
+  import BotModelSelect from './BotModelSelect.svelte'
   import * as Select from '$lib/components/ui/select/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
@@ -29,6 +30,7 @@
   let name = $derived(bot?.name ?? (onboarding ? 'Pontia' : ''))
   let description = $derived(bot?.description ?? '')
   let model = $derived(bot?.model ?? '')
+  let modelAvailable = $state(false)
   let clientId = $state('')
   let error = $state('')
   const selected = $derived(clients.data?.find((client) => client.id === clientId))
@@ -43,7 +45,7 @@
 
   async function save(event: SubmitEvent) {
     event.preventDefault()
-    if (!selected || !name.trim() || !model.trim() || saving) return
+    if (!selected || !name.trim() || !modelAvailable || saving) return
     saving = true
     error = ''
     try {
@@ -77,7 +79,11 @@
   {/if}
   <div class="grid gap-2">
     <Label for={`${id}-client`}>{$t('clients.agentClient')}</Label>
-    <Select.Root type="single" bind:value={clientId} disabled={!clients.data?.length}>
+    <Select.Root type="single" value={clientId} onValueChange={(value) => {
+      clientId = value
+      model = ''
+      modelAvailable = false
+    }} disabled={saving || !clients.data?.length}>
       <Select.Trigger id={`${id}-client`} class="w-full">
         <span class="flex min-w-0 items-center gap-2">
           {#if selected}<ClientIcon clientType={selected.client_type} acpAgentId={selected.client_key} class="size-4 text-foreground" />{/if}
@@ -98,12 +104,18 @@
   </div>
   <div class="grid gap-2">
     <Label for={`${id}-model`}>{$t('bots.model')}</Label>
-    <Input id={`${id}-model`} bind:value={model} required placeholder="provider/model" />
+    {#if selected}
+      {#key clientId}
+        <BotModelSelect id={`${id}-model`} client={selected} bind:value={model} bind:available={modelAvailable} disabled={saving} />
+      {/key}
+    {:else}
+      <Button id={`${id}-model`} variant="outline" type="button" disabled>{$t('model.choose')}</Button>
+    {/if}
   </div>
   {#if error}<p class="text-sm text-destructive" role="alert">{error}</p>{/if}
   <div class="flex justify-end gap-2">
     {#if oncancel}<Button variant="outline" type="button" disabled={saving} onclick={oncancel}>{$t('common.cancel')}</Button>{/if}
-    <Button type="submit" disabled={saving || !selected || !name.trim() || !model.trim()}>
+    <Button type="submit" disabled={saving || !selected || !name.trim() || !modelAvailable}>
       {$t(bot ? 'common.save' : onboarding ? 'bots.startChat' : 'bots.create')}
     </Button>
   </div>

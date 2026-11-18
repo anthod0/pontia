@@ -133,6 +133,20 @@ impl AgentClientService {
         )
     }
 
+    pub async fn list_models(
+        &self,
+        client: &str,
+        key: &str,
+        directory: &std::path::Path,
+    ) -> Result<Vec<crate::sessions::SessionModel>> {
+        let configuration = self.configuration(client)?;
+        let effective = self
+            .for_creation_key(client, key)
+            .await?
+            .expect("client has configuration");
+        configuration.list_models(&effective, directory).await
+    }
+
     /// Validate the final configuration, not the partial database layer. Disabled entries
     /// must still be valid. Each write replaces the supplied database object atomically.
     pub async fn save(

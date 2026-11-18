@@ -18,6 +18,9 @@ beforeEach(() => {
   vi.spyOn(testDevice.api, 'listBotClients').mockResolvedValue([
     { id: 'pi', name: 'Pi', client_type: 'pi', client_key: 'default' },
   ]);
+  vi.spyOn(testDevice.api, 'listAgentClientModels').mockResolvedValue([
+    { id: 'provider/model', name: 'Test model', description: 'provider' },
+  ]);
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -33,13 +36,13 @@ test('creates the first Bot from client and model and opens it on the selected d
   vi.spyOn(testDevice.api, 'listBots').mockResolvedValue([]);
   const save = vi.spyOn(testDevice.api, 'saveBot').mockRejectedValueOnce(new Error('Offline')).mockResolvedValue(first);
   render(BotEntryPage, { routeScope: '/office-mac' });
-  const model = await screen.findByLabelText('Model');
-  await fireEvent.input(model, { target: { value: 'provider/model' } });
+  await waitFor(() => expect(screen.getByLabelText('Model')).toBeEnabled());
+  await fireEvent.click(screen.getByLabelText('Model'));
+  await fireEvent.click(await screen.findByRole('button', { name: 'Test model' }));
   const submit = screen.getByRole('button', { name: 'Start chatting' });
   await waitFor(() => expect(submit).toBeEnabled());
   await fireEvent.click(submit);
   await screen.findByRole('alert');
-  expect(model).toHaveValue('provider/model');
   expect(goto).not.toHaveBeenCalled();
   await fireEvent.click(submit);
   await waitFor(() => expect(goto).toHaveBeenCalledWith('/office-mac/bots/first', { replaceState: true }));

@@ -22,6 +22,7 @@ import type {
   SessionCompactionAccepted,
   SessionCreationOption,
   SessionModels,
+  SessionModel,
   SessionOverviewSection,
   SessionOverviewView,
   SubmitInboxMessageInput,
@@ -93,6 +94,19 @@ export function createApi(device: DeviceRuntime) {
 
   async function listBotClients(signal?: AbortSignal): Promise<BotClient[]> {
     return (await request<{ clients: BotClient[] }>("/bots/clients", { signal })).clients;
+  }
+
+  async function listAgentClientModels(
+    clientType: string,
+    clientKey: string,
+    signal?: AbortSignal,
+  ): Promise<SessionModel[]> {
+    return (
+      await request<{ models: SessionModel[] }>(
+        `/agent-clients/${encodeURIComponent(clientType)}/${encodeURIComponent(clientKey)}/models`,
+        { signal },
+      )
+    ).models;
   }
 
   function getBotChat(id: string, signal?: AbortSignal): Promise<BotChat> {
@@ -907,6 +921,7 @@ export function createApi(device: DeviceRuntime) {
   return {
     listBots,
     listBotClients,
+    listAgentClientModels,
     getBotChat,
     saveBot,
     sendBotMessage,

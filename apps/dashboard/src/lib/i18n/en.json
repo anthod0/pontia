@@ -12,6 +12,7 @@
   "bots.name": "Name",
   "bots.description": "Description",
   "bots.model": "Model",
+  "bots.modelUnavailable": "The saved model is no longer available. Choose another model.",
   "bots.noClients": "Enable a Bot-capable Agent Client in Settings to continue.",
   "bots.messages": "Messages",
   "bots.message": "Message",

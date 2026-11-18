@@ -3,6 +3,18 @@ use serde_json::Value;
 
 /// Client-owned interpretation of management identities and effective configuration.
 pub trait ClientConfiguration: Send + Sync {
+    fn list_models<'a>(
+        &'a self,
+        _effective: &'a Value,
+        _directory: &'a std::path::Path,
+    ) -> super::ClientOperation<'a, Vec<crate::sessions::SessionModel>> {
+        Box::pin(async {
+            Err(pontia_core::Error::CapabilityUnavailable(
+                "This client does not support model listing before Session creation".into(),
+            ))
+        })
+    }
+
     fn detect(
         &self,
         _effective: &Value,

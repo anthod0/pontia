@@ -286,7 +286,9 @@ fn encode(value: &Value) -> Result<Vec<u8>> {
     Ok(encoded)
 }
 
-async fn read_frame<R: tokio::io::AsyncBufRead + Unpin>(stream: &mut R) -> Result<Vec<u8>> {
+pub(crate) async fn read_frame<R: tokio::io::AsyncBufRead + Unpin>(
+    stream: &mut R,
+) -> Result<Vec<u8>> {
     let mut frame = Vec::new();
     loop {
         let available = stream.fill_buf().await?;

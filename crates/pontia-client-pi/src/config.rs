@@ -20,6 +20,17 @@ impl PiConfiguration {
 }
 
 impl ClientConfiguration for PiConfiguration {
+    fn list_models<'a>(
+        &'a self,
+        effective: &'a Value,
+        directory: &'a std::path::Path,
+    ) -> pontia_agent_control::client_contract::ClientOperation<
+        'a,
+        Vec<pontia_agent_control::sessions::SessionModel>,
+    > {
+        Box::pin(async move { crate::models::list(&command(effective)?, directory).await })
+    }
+
     fn detect(
         &self,
         effective: &Value,

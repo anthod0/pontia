@@ -8,6 +8,17 @@ use serde_json::{Value, json};
 
 use super::response::{ApiError, ApiResponse, ok};
 
+pub async fn list_agent_client_models(
+    State(state): State<AppState>,
+    Path((client, key)): Path<(String, String)>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let service = AgentClientService::new(state.db(), state.control().clients());
+    let models = service
+        .list_models(&client, &key, state.pontia_home())
+        .await?;
+    Ok(ok(json!({"models": models})))
+}
+
 pub async fn list_agent_clients(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
