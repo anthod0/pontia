@@ -2,32 +2,39 @@
   <img src="assets/brand/logo-idle.svg" width="120" alt="Pontia logo">
   <h1>Pontia</h1>
   <p><strong>Your device. Your agent cloud.</strong></p>
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache-2.0"></a>
+    <a href="https://www.npmjs.com/package/@pontia/cli"><img src="https://img.shields.io/npm/v/@pontia/cli" alt="npm"></a>
+    <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey" alt="Platform: Linux | macOS">
+  </p>
   <p><a href="https://pontia.dev">🌐 Website</a> · <a href="https://app.pontia.dev">🖥️ Dashboard</a></p>
+  <p>English · <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
-Pontia is a remote control plane for coding agents such as Claude Code, Codex, pi, and OpenCode. Your agents, development tools, and project files stay on your device while you view and control agent sessions from a web dashboard wherever you are.
+Leave your desk, not your agents. Pontia lets you run coding agents such as pi, Codex, Claude Code, and OpenCode on your own device, then check in, approve, and steer every session from any browser, including your phone. Pontia is free and open source.
+
+<p align="center">
+  <img src="apps/cloud/static/client-logos/pi.svg" height="28" alt="pi">
+  &nbsp;&nbsp;
+  <picture><source media="(prefers-color-scheme: dark)" srcset="assets/clients/codex-dark.svg"><img src="apps/cloud/static/client-logos/codex.svg" height="28" alt="Codex"></picture>
+  &nbsp;&nbsp;
+  <img src="apps/cloud/static/client-logos/claude-code.svg" height="28" alt="Claude Code">
+  &nbsp;&nbsp;
+  <picture><source media="(prefers-color-scheme: dark)" srcset="apps/cloud/static/client-logos/opencode-dark.svg"><img src="apps/cloud/static/client-logos/opencode.svg" height="28" alt="OpenCode"></picture>
+  &nbsp;&nbsp;
+  <img src="apps/cloud/static/client-logos/grok-build.svg" height="28" alt="Grok Build">
+</p>
 
 ![Pontia Dashboard showing recent sessions, a coding conversation, tool execution, and test results.](https://files.pontia.dev/cloud/dashboard-1280-9a7dd255904a.webp)
 
-Pontia provides:
+## Why Pontia
 
-- 🎮 **Remote control** — create, view, continue, interrupt, and manage agent sessions remotely.
-- 🔒 **End-to-end encrypted access** — traffic between the remote dashboard and your device is encrypted end to end.
-- 🛰️ **Your choice of relay** — use an official Pontia Edge or deploy your own Edge for remote connectivity.
-- 💻 **Local-first execution** — agents continue to run with the tools and files on your own device; the cloud provides access, not the execution environment.
-- 🔄 **Real-time session synchronization** — move between the agent TUI, local dashboard, and remote dashboard without starting over.
-- 📊 **Observable long-running tasks** — monitor and control dynamic Workflows that break large tasks into manageable steps.
+- 📱 **In your pocket** — add the Dashboard to your phone's home screen. Follow progress, answer approvals, and send the next instruction away from your desk.
+- 💳 **Bring your own subscriptions** — Pontia doesn't sell models or tokens. Your agents run on the accounts and plans you already pay for.
+- 💻 **Keep your terminal** — agents run on your device with your tools and files. Keep using the pi or Codex TUI; conversations sync to the Dashboard automatically, so you can switch between them without starting over.
+- 🔒 **Encrypted end to end** — only your browser and your device can read a session. Use an official Edge or run your own; either way, the Edge only relays ciphertext.
 
-## Current status
-
-Pontia currently supports:
-
-- pi, Codex, and Claude Code;
-- ACP agents such as OpenCode, Kimi CLI, and Grok Build;
-- local and remote web dashboards;
-- end-to-end encrypted remote access through official or self-hosted Edges;
-- two-way session control and real-time synchronization between clients and the dashboard;
-- multi-step Workflows with history, pause, resume, retry, and replanning support.
+Pontia supports pi, Codex, Claude Code, and ACP agents such as OpenCode and Grok Build, on Linux and macOS.
 
 ## Quick start
 
@@ -44,21 +51,45 @@ Install the clients you plan to use before initialization:
 - **Claude Code:** Node.js LTS with npm, and a signed-in Claude Code. See the [Claude Code guide](docs/claude-agent.md);
 - **ACP agents:** the agent itself, enabled after initialization as described in [Agent Clients](https://pontia.dev/docs/agent-clients#enable-an-acp-agent).
 
-### Install and initialize
+### Initialize
 
 ```bash
 npx @pontia/cli init
 ```
 
-This installs Pontia to `$HOME/.local/bin` and starts the initializer. Add that directory to your `PATH`. To install without initializing, run `npx @pontia/cli install`.
+This one command completes the whole setup:
 
-The initializer sets up your agent integrations, starts the Pontia service, and connects the device for remote access.
+1. Installs Pontia to `$HOME/.local/bin`. Add that directory to your `PATH`.
+2. Lets you select clients and installs their integrations.
+3. Starts the Pontia service.
+4. Signs you in to Pontia Cloud and registers the device for remote access.
 
-To install or repair one integration later, run `pontia setup` and select a client, or name it directly:
+Pontia opens the [remote dashboard](https://app.pontia.dev) when setup succeeds. If Pontia is already installed, run `pontia init` directly. Rerunning it checks and repairs the installation while keeping your existing configuration.
+
+### Common commands
+
+Check whether Pontia is working:
 
 ```bash
-pontia setup codex
+pontia status
 ```
+
+It shows the service health, the signed-in user, and the remote registration and edge of this device.
+
+Configure or repair a client connection, for example after installing a new client or when a client stops connecting:
+
+```bash
+pontia setup          # select clients
+pontia setup codex    # or name one: pi, codex, claude
+```
+
+When something is wrong, run a detailed check:
+
+```bash
+pontia doctor
+```
+
+`pontia doctor` checks the service, configuration, login, and remote registration. Each failed check includes a repair hint. For a registered device, the report also shows its remote dashboard address. See [Troubleshooting](https://pontia.dev/docs/troubleshooting) for more help.
 
 ### Install with the shell script
 
@@ -69,61 +100,42 @@ curl -fsSL https://get.pontia.dev/install.sh | sh
 "$HOME/.local/bin/pontia" init
 ```
 
-## Configuration and management
+## Manual configuration
 
-### Start and stop
+`pontia init` covers everything above. Use the following commands to run one step on its own, or to set up without prompts from a script or agent. See [Initialization](https://pontia.dev/docs/initialization#non-interactive-initialization) for the full step-by-step sequence and the [CLI reference](https://pontia.dev/docs/cli) for all commands.
 
-After setup, use the following commands to manage Pontia:
+| Command | Purpose |
+| --- | --- |
+| `pontia up` / `pontia down` | Start or stop the Pontia service |
+| `pontia login` | Sign in to Pontia Cloud |
+| `pontia remote enable` | Register this device and enable remote access |
+| `pontia update` | Update the CLI and service to the latest signed stable release |
 
-```bash
-pontia up
-pontia status
-pontia down
-```
+### Shell completion
 
-### Remote access
-
-Pontia connects your local service to the public dashboard through an official or self-hosted Edge. Dashboard traffic between the browser and your device is end-to-end encrypted, and the Edge relays only ciphertext. Your agents, development tools, and project files remain on your device.
-
-`pontia init` sets up remote access when you accept its prompt. To connect an existing installation instead, first sign in to Pontia:
+Add the line for your shell, then open a new terminal:
 
 ```bash
-pontia login
+# bash: ~/.bashrc
+source <(pontia completions bash)
+
+# zsh: ~/.zshrc, after compinit
+source <(pontia completions zsh)
+
+# fish: run once
+mkdir -p ~/.config/fish/completions
+pontia completions fish > ~/.config/fish/completions/pontia.fish
 ```
 
-Then register the current device and enable remote access:
+Elvish and PowerShell are also supported. See the [CLI reference](https://pontia.dev/docs/cli).
 
-```bash
-pontia remote enable
-```
+### Local dashboard
 
-Once connected, [open the remote dashboard](https://app.pontia.dev). To manage your Pontia Cloud account, [open settings](https://pontia.dev/settings).
+Open the local dashboard on the device running Pontia at <http://127.0.0.1:8080/dashboard>. Its access token is `external_api_token` in `$HOME/.pontia/config.toml`, generated by `pontia init`.
 
-Check the service status with:
+### Configuration directory
 
-```bash
-pontia status
-```
-
-### Local access
-
-Open the local dashboard on the device running Pontia. The default address is:
-
-<http://127.0.0.1:8080/dashboard>
-
-`pontia init` automatically generates an access token. To view it, check `external_api_token` in `$HOME/.pontia/config.toml`.
-
-### Updates
-
-Update the CLI and background service to the latest signed stable release:
-
-```bash
-pontia update
-```
-
-### Configuration
-
-Pontia stores its configuration in `$HOME/.pontia/config.toml` by default. To use another directory, set `PONTIA_HOME` to an absolute path before running the initializer and subsequent commands.
+Pontia stores its configuration in `$HOME/.pontia/config.toml` by default. To use another directory, set `PONTIA_HOME` to an absolute path before running `pontia init` and later commands.
 
 ## License
 
