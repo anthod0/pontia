@@ -242,7 +242,7 @@ test("workspace selection filters recent sessions but keeps global pins and does
   await fireEvent.click(screen.getByRole("menuitemradio", { name: "All workspaces" }));
 
   expect(screen.getByText("second-active")).toBeInTheDocument();
-  expect(screen.getAllByText("second-pinned")).toHaveLength(2);
+  expect(screen.getAllByText("second-pinned")).toHaveLength(1);
 });
 
 test("sidebar renders active sessions before paged recent sessions without duplicating active sessions", () => {
@@ -512,7 +512,7 @@ test("sidebar session actions menu archives sessions without opening them", asyn
 });
 
 test("sidebar session actions menu unpins pinned sessions", async () => {
-  mocks.sessions.set([
+  mocks.sidebarPinnedSessions.set([
     {
       session_id: "session-pinned",
       client_type: "pi",
