@@ -3,7 +3,7 @@ import { eq, or } from "drizzle-orm";
 import { currentLogin, environment } from "$lib/server/auth/http";
 import { database } from "$lib/server/db";
 import { edges } from "$lib/server/db/schema";
-import { verifyEdgeHealth } from "$lib/server/edge-network";
+import { probeEdgeHealth } from "$lib/server/edge-network";
 import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async (event) => {
@@ -16,15 +16,8 @@ export const GET: RequestHandler = async (event) => {
     .where(or(eq(edges.userId, user.user_id), eq(edges.accessScope, "public")));
 
   const results = await Promise.all(
-    visibleEdges.map(async (edge) => [edge.id, await verifyEdgeHealth(edge, fetch)] as const),
+    visibleEdges.map(async (edge) => [edge.id, await probeEdgeHealth(edge, fetch)] as const),
   );
 
-  return json(
-    {
-      edges: Object.fromEntries(
-        results.map(([edgeId, healthy]) => [edgeId, healthy ? "healthy" : "unreachable"]),
-      ),
-    },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  return json({ edges: Object.fromEntries(results) }, { headers: { "Cache-Control": "no-store" } });
 };

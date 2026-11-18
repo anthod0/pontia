@@ -4,7 +4,7 @@ import {
   configureEdgeNetwork,
   edgeHostname,
   isGlobalUnicastIpv4,
-  verifyEdgeHealth,
+  probeEdgeHealth,
   type DnsProvider,
 } from "../src/lib/server/edge-network";
 
@@ -138,13 +138,28 @@ test("does not touch DNS when the TCP probe has a bad status, mismatches, or is 
 
 test("health verification requires trusted HTTPS and the fixed response", async () => {
   expect(
-    await verifyEdgeHealth(identity, async (input, init) => {
+    await probeEdgeHealth(identity, async (input, init) => {
       expect(input).toBe("https://brave-atlas.edge.pontia.dev/healthz");
       expect(init.redirect).toBe("manual");
       return new Response("ok");
     }),
-  ).toBeTrue();
-  expect(await verifyEdgeHealth(identity, async () => new Response("almost ok"))).toBeFalse();
+  ).toEqual({ status: "healthy", version: null });
+  const headers = { "Pontia-Edge-Version": "1.2.3" };
+  expect(
+    await probeEdgeHealth(identity, async () => new Response("almost ok", { headers })),
+  ).toEqual({ status: "unreachable" });
+});
+
+test("an invalid Edge version does not affect health", async () => {
+  expect(
+    await probeEdgeHealth(
+      identity,
+      async () =>
+        new Response("ok", {
+          headers: { "Pontia-Edge-Version": "1.2.3, 2.3.4" },
+        }),
+    ),
+  ).toEqual({ status: "healthy", version: null });
 });
 
 test("Cloudflare DNS adapter rejects a public IPv4 address change", async () => {

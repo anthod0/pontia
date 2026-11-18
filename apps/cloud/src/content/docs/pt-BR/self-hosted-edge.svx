@@ -67,7 +67,7 @@ sudo systemctl status pontia-edge.service
 sudo journalctl -u pontia-edge.service --no-pager -n 200
 ```
 
-O endpoint público de saúde é `https://HOST[:PORT]/healthz` e retorna `ok` quando o serviço está acessível.
+O endpoint público de saúde `https://HOST[:PORT]/healthz` retorna `ok` e informa a versão em execução no cabeçalho de resposta `Pontia-Edge-Version`. A versão também aparece nas [configurações de Edges](/settings/edges).
 
 Atualize manualmente:
 

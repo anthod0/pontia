@@ -11,12 +11,11 @@
   import { ParaglideMessage } from "@inlang/paraglide-js-svelte";
   import { m } from "$lib/paraglide/messages";
   import { getLocale, localizeHref } from "$lib/paraglide/runtime";
+  import type { EdgeHealth } from "$lib/server/edge-network";
   import type { ActionData, PageData } from "./$types";
 
-  type HealthStatus = "checking" | "healthy" | "unreachable";
-
   let { data, form }: { data: PageData; form: ActionData } = $props();
-  let healthByEdge = $state<Record<string, HealthStatus>>({});
+  let healthByEdge = $state<Partial<Record<string, EdgeHealth>>>({});
 
   onMount(() => {
     const controller = new AbortController();
@@ -28,16 +27,14 @@
     })
       .then(async (response) => {
         if (!response.ok) throw new Error("Health request failed");
-        const result = (await response.json()) as {
-          edges?: Record<string, "healthy" | "unreachable">;
-        };
+        const result = (await response.json()) as { edges: Partial<Record<string, EdgeHealth>> };
         for (const edgeId of edgeIds) {
-          healthByEdge[edgeId] = result.edges?.[edgeId] ?? "unreachable";
+          healthByEdge[edgeId] = result.edges[edgeId] ?? { status: "unreachable" };
         }
       })
       .catch(() => {
         if (controller.signal.aborted) return;
-        for (const edgeId of edgeIds) healthByEdge[edgeId] = "unreachable";
+        for (const edgeId of edgeIds) healthByEdge[edgeId] = { status: "unreachable" };
       });
 
     return () => controller.abort();
@@ -54,7 +51,7 @@
 </script>
 
 {#snippet healthBadge(edgeId: string)}
-  {@const status = healthByEdge[edgeId] ?? "checking"}
+  {@const status = healthByEdge[edgeId]?.status ?? "checking"}
   <Badge
     variant={status === "unreachable" ? "destructive" : status === "healthy" ? "secondary" : "outline"}
     class={status === "healthy" ? "health-healthy" : undefined}
@@ -62,6 +59,14 @@
   >
     {status === "checking" ? m.edges_health_checking() : status === "healthy" ? m.edges_health_healthy() : m.edges_health_unreachable()}
   </Badge>
+{/snippet}
+
+{#snippet versionCell(edgeId: string)}
+  {@const health = healthByEdge[edgeId]}
+  {@const version = health?.status === "healthy" ? health.version : null}
+  <Table.Cell class="max-w-0">
+    <div class="truncate" title={version ?? undefined}>{version ?? "—"}</div>
+  </Table.Cell>
 {/snippet}
 
 <svelte:head>
@@ -83,6 +88,7 @@
           <Table.Head>{m.edges_address()}</Table.Head>
           <Table.Head class="w-28">{m.edges_created()}</Table.Head>
           <Table.Head class="w-28">{m.edges_health()}</Table.Head>
+          <Table.Head class="w-24">{m.edges_version()}</Table.Head>
           <Table.Head class="w-20"><span class="visually-hidden">{m.edges_manage()}</span></Table.Head>
         </Table.Row>
       </Table.Header>
@@ -97,6 +103,7 @@
             </Table.Cell>
             <Table.Cell>{new Date(edge.createdAt).toLocaleDateString(getLocale())}</Table.Cell>
             <Table.Cell>{@render healthBadge(edge.id)}</Table.Cell>
+            {@render versionCell(edge.id)}
             <Table.Cell>
               <div class="row-actions">
                 <Dialog.Root>
@@ -178,6 +185,7 @@
           <Table.Head class="w-[30%]">{m.edges_name()}</Table.Head>
           <Table.Head>{m.edges_address()}</Table.Head>
           <Table.Head class="w-28">{m.edges_health()}</Table.Head>
+          <Table.Head class="w-24">{m.edges_version()}</Table.Head>
         </Table.Row>
       </Table.Header>
       <Table.Body>
@@ -190,6 +198,7 @@
               <div class="truncate" title={edge.tunnelUrl}>{edge.tunnelUrl}</div>
             </Table.Cell>
             <Table.Cell>{@render healthBadge(edge.id)}</Table.Cell>
+            {@render versionCell(edge.id)}
           </Table.Row>
         {/each}
       </Table.Body>

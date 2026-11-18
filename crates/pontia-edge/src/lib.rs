@@ -79,7 +79,10 @@ impl Edge {
 
     pub fn router(&self) -> Router {
         Router::new()
-            .route("/healthz", get(|| async { "ok" }))
+            .route(
+                "/healthz",
+                get(|| async { ([("pontia-edge-version", pontia_version::version())], "ok") }),
+            )
             .route("/tunnel", get(connection::upgrade))
             .merge(
                 Router::new()

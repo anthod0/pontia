@@ -203,6 +203,7 @@
   "edges_address": "アドレス",
   "edges_created": "作成日",
   "edges_health": "状態",
+  "edges_version": "バージョン",
   "edges_manage": "管理",
   "edges_rename": "名前を変更",
   "edges_rename_named": "{name} の名前を変更",

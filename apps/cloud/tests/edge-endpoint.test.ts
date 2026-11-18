@@ -3,7 +3,7 @@ import { isEdgePort } from "../src/lib/edge-port";
 import {
   configureEdgeNetwork,
   edgeApiOrigin,
-  verifyEdgeHealth,
+  probeEdgeHealth,
 } from "../src/lib/server/edge-network";
 
 const hostname = "brave-atlas.edge.pontia.dev";
@@ -72,11 +72,11 @@ for (const customPort of [false, true]) {
       const endpoint = { tunnelUrl: `wss://${authority}/tunnel` };
       expect(edgeApiOrigin(endpoint.tunnelUrl)).toBe(`https://${authority}`);
       expect(
-        await verifyEdgeHealth(endpoint, async (url) => {
+        await probeEdgeHealth(endpoint, async (url) => {
           expect(url).toBe(`https://${authority}/healthz`);
           return new Response("ok");
         }),
-      ).toBeTrue();
+      ).toEqual({ status: "healthy", version: null });
     });
   }
 }

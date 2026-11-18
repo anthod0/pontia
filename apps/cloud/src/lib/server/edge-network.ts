@@ -10,10 +10,14 @@ const PROBE_TIMEOUT_MS = 5_000;
 const MAX_PROBE_BYTES = 128;
 const MAX_PROBE_RESPONSE_BYTES = 4_096;
 const HEALTH_RESPONSE = "ok";
+const RELEASE_VERSION =
+  /^\d+\.\d+\.\d+(?:-[\da-z-]+(?:\.[\da-z-]+)*)?(?:\+[\da-z-]+(?:\.[\da-z-]+)*)?$/i;
 
 export type EdgeNetworkIdentity = {
   tunnelUrl: string;
 };
+
+export type EdgeHealth = { status: "healthy"; version: string | null } | { status: "unreachable" };
 
 export interface DnsProvider {
   ensureA(hostname: string, address: string): Promise<void>;
@@ -216,10 +220,12 @@ export async function configureEdgeNetwork(
   return { status: "configured" as const, hostname };
 }
 
-export async function verifyEdgeHealth(identity: EdgeNetworkIdentity, fetcher: HttpFetcher) {
-  const hostname = edgeHostname(identity.tunnelUrl);
+export async function probeEdgeHealth(
+  identity: EdgeNetworkIdentity,
+  fetcher: HttpFetcher,
+): Promise<EdgeHealth> {
   const origin = edgeApiOrigin(identity.tunnelUrl);
-  if (!hostname || !origin) return false;
+  if (!origin) return { status: "unreachable" };
   try {
     const response = await fetcher(`${origin}/healthz`, {
       method: "GET",
@@ -227,11 +233,19 @@ export async function verifyEdgeHealth(identity: EdgeNetworkIdentity, fetcher: H
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       headers: { Accept: "text/plain" },
     });
-    return (
-      response.status === 200 && (await boundedText(response, MAX_PROBE_BYTES)) === HEALTH_RESPONSE
-    );
+    if (
+      response.status !== 200 ||
+      (await boundedText(response, MAX_PROBE_BYTES)) !== HEALTH_RESPONSE
+    ) {
+      return { status: "unreachable" };
+    }
+    const version = response.headers.get("Pontia-Edge-Version");
+    return {
+      status: "healthy",
+      version: version && version.length <= 128 && RELEASE_VERSION.test(version) ? version : null,
+    };
   } catch {
-    return false;
+    return { status: "unreachable" };
   }
 }
 

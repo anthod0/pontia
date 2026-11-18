@@ -12,6 +12,24 @@ use uuid::Uuid;
 const ORIGIN: &str = "https://app.pontia.dev";
 
 #[tokio::test]
+async fn health_check_reports_the_running_version() {
+    let server = TestEdge::start().await;
+    let response = server
+        .http
+        .get(format!("{}/healthz", server.edge_origin))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()["pontia-edge-version"],
+        include_str!("../../../VERSION").trim()
+    );
+    assert_eq!(response.text().await.unwrap(), "ok");
+}
+
+#[tokio::test]
 async fn edge_relays_only_fixed_ciphertext_transports() {
     let server = TestEdge::start().await;
     let device_id = Uuid::now_v7();

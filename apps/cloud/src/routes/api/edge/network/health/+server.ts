@@ -2,7 +2,7 @@ import { isEdgePort } from "$lib/edge-port";
 import { json } from "@sveltejs/kit";
 import { confirmEdgeDeployment, type DeploymentIdentity } from "$lib/server/edge-deployment";
 import { logDeploymentEvent } from "$lib/server/deployment-observability";
-import { edgeHostname, verifyEdgeHealth } from "$lib/server/edge-network";
+import { edgeHostname, probeEdgeHealth } from "$lib/server/edge-network";
 import { remoteDatabase } from "$lib/server/remote-access/http";
 import type { RequestHandler } from "./$types";
 
@@ -38,7 +38,8 @@ export const POST: RequestHandler = async (event) => {
       input.ticket,
       input.service_credential,
       async (identity) => {
-        const healthy = await verifyEdgeHealth(identity, fetch);
+        const { status } = await probeEdgeHealth(identity, fetch);
+        const healthy = status === "healthy";
         logDeploymentEvent(healthy ? "info" : "warn", {
           event: healthy ? "edge_health_verification_succeeded" : "edge_health_verification_failed",
           stage: "health_verification",

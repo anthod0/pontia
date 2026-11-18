@@ -152,7 +152,7 @@ test("the health endpoint checks only edges visible to the signed-in user", asyn
     const url = String(input);
     requested.push(url);
     return url.includes("owned-edge")
-      ? new Response("ok")
+      ? new Response("ok", { headers: { "Pontia-Edge-Version": "1.2.3-rc.1+build" } })
       : new Response("unavailable", { status: 503 });
   }) as typeof fetch);
 
@@ -160,7 +160,10 @@ test("the health endpoint checks only edges visible to the signed-in user", asyn
 
   expect(response.status).toBe(200);
   expect((await response.json()) as unknown).toEqual({
-    edges: { "edge-owned": "healthy", "edge-public": "unreachable" },
+    edges: {
+      "edge-owned": { status: "healthy", version: "1.2.3-rc.1+build" },
+      "edge-public": { status: "unreachable" },
+    },
   });
   expect(requested.sort()).toEqual([
     "https://owned-edge.edge.pontia.dev/healthz",

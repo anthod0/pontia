@@ -203,6 +203,7 @@
   "edges_address": "Address",
   "edges_created": "Created",
   "edges_health": "Health",
+  "edges_version": "Version",
   "edges_manage": "Manage",
   "edges_rename": "Rename",
   "edges_rename_named": "Rename {name}",
