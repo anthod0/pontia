@@ -78,6 +78,28 @@ test("renders Markdown, switches to source, copies the original and downloads on
   expect(await saved[0].blob.text()).toBe(source);
 });
 
+test("refreshes the open file and keeps its source view and scroll position", async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(new Response("# Original"))
+    .mockResolvedValueOnce(new Response("# Updated"));
+  vi.stubGlobal("fetch", fetch);
+  const scrollTo = vi.fn();
+  HTMLElement.prototype.scrollTo = scrollTo;
+  message("/tmp/report.md");
+  await fireEvent.click(screen.getByRole("button", { name: "Preview report.md" }));
+  await fireEvent.click(await screen.findByRole("tab", { name: "Source" }));
+  const source = await screen.findByRole("tabpanel", { name: "Source" });
+  source.scrollTop = 80;
+  await fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+  await waitFor(() =>
+    expect(screen.getByRole("tabpanel", { name: "Source" })).toHaveTextContent("# Updated"),
+  );
+  expect(requestedPath(fetch.mock.calls[1])).toBe("/tmp/report.md");
+  await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 80 }));
+});
+
 test("cancels an old preview when another link is opened, ignores late results, and cancels on close", async () => {
   let first!: (response: Response) => void;
   const fetch = vi
@@ -231,9 +253,7 @@ test("follows links inside a previewed file and returns to the previous reading 
   await fireEvent.click(within(panel).getByRole("button", { name: "Preview setup.md" }));
   const target = await within(panel).findByRole("heading", { name: "Install steps" });
   await waitFor(() => expect(scrollIntoView.mock.contexts).toContain(target));
-  expect(
-    within(panel).getByText("/repo/docs/guide/setup.md", { selector: "p" }),
-  ).toBeInTheDocument();
+  expect(within(panel).getByRole("heading", { name: "setup.md" })).toBeInTheDocument();
 
   const scrollTo = vi.fn();
   HTMLElement.prototype.scrollTo = scrollTo;

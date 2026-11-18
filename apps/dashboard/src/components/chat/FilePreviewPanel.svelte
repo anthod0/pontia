@@ -21,8 +21,10 @@
   import BinaryIcon from 'phosphor-svelte/lib/BinaryIcon'
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CircleNotchIcon from 'phosphor-svelte/lib/CircleNotchIcon'
+  import CodeIcon from 'phosphor-svelte/lib/CodeIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
+  import EyeIcon from 'phosphor-svelte/lib/EyeIcon'
   import FileArrowDownIcon from 'phosphor-svelte/lib/FileArrowDownIcon'
   import FileDashedIcon from 'phosphor-svelte/lib/FileDashedIcon'
   import FileXIcon from 'phosphor-svelte/lib/FileXIcon'
@@ -56,7 +58,6 @@
   let failure = $state<PreviewFailure | null>(null)
   let copied = $state(false)
   let copyTimer: ReturnType<typeof setTimeout> | undefined
-  let attempt = $state(0)
   let view = $state('preview')
   let panel: HTMLElement
   const highlighted = $derived(text === null || (language === 'markdown' && view === 'preview') ? '' : highlightMarkdownCode(text, language))
@@ -76,7 +77,6 @@
   $effect(() => {
     const { device, sessionId } = target
     const entry = current
-    void attempt
     const controller = new AbortController()
     text = null
     failure = null
@@ -116,6 +116,13 @@
     history.pop()
   }
 
+  function refresh() {
+    const content = scroller()
+    history[history.length - 1] = content
+      ? { path, anchor: null, view, scrollTop: content.scrollTop }
+      : { ...current }
+  }
+
   async function copy() {
     if (text === null) return
     copied = await copyText(text)
@@ -141,86 +148,82 @@
 
 <aside bind:this={panel} aria-label={$t('files.preview')} data-file-preview class="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-l bg-surface lg:w-[var(--file-preview-width)]">
   <FilePreviewResizer />
-  <header class="flex shrink-0 items-center gap-2 border-b px-4 py-3">
-    {#if history.length > 1}
-      <Button variant="ghost" size="icon-sm" onclick={back} aria-label={$t('files.previewBack')} title={$t('files.previewBack')}><ArrowLeftIcon class="size-4" /></Button>
+  <Tabs.Root bind:value={view} class="min-h-0 flex-1 gap-0">
+    <header class="flex shrink-0 items-center gap-1 border-b px-2 py-2">
+      {#if history.length > 1}
+        <Button variant="ghost" size="icon-sm" onclick={back} aria-label={$t('files.previewBack')} title={$t('files.previewBack')}><ArrowLeftIcon class="size-4" /></Button>
+      {/if}
+      <h2 class="min-w-0 flex-1 truncate text-sm font-medium" title={name}>{name}</h2>
+      {#if language === 'markdown' && text}
+        <Tabs.List aria-label={$t('files.previewMode')} class="shrink-0">
+          <Tabs.Trigger value="preview" aria-label={$t('files.preview')} title={$t('files.preview')}><EyeIcon class="size-4" /></Tabs.Trigger>
+          <Tabs.Trigger value="source" aria-label={$t('files.source')} title={$t('files.source')}><CodeIcon class="size-4" /></Tabs.Trigger>
+        </Tabs.List>
+      {/if}
+      <Button variant="ghost" size="icon-sm" disabled={text === null && !failure} onclick={refresh} aria-label={$t('common.refresh')} title={$t('common.refresh')}><ArrowClockwiseIcon class="size-4" /></Button>
+      <Button variant="ghost" size="icon-sm" disabled={text === null} onclick={copy} aria-label={$t('common.copy')} title={copied ? $t('common.copied') : $t('common.copy')}>
+        {#if copied}<CheckIcon class="size-4 text-primary" />{:else}<CopyIcon class="size-4" />{/if}
+      </Button>
+      <Button variant="ghost" size="icon-sm" disabled={receiving} onclick={download} aria-label={$t('files.downloadNamed', { name })} title={receiving ? $t('files.receiving') : $t('files.download')}>
+        {#if receiving}<CircleNotchIcon class="size-4 animate-spin" />{:else}<DownloadSimpleIcon class="size-4" />{/if}
+      </Button>
+      <Button variant="ghost" size="icon-sm" onclick={onclose} aria-label={$t('common.close')} title={$t('common.close')}><XIcon class="size-4" /></Button>
+    </header>
+    <span class="sr-only" role="status">{copied ? $t('common.copied') : receiving ? $t('files.receiving') : ''}</span>
+    {#if task?.error}
+      <Alert.Root variant="destructive" class="mx-4 mt-3 w-auto">
+        <WarningCircleIcon />
+        <Alert.Description class="break-words">{task.error}</Alert.Description>
+      </Alert.Root>
     {/if}
-    <div class="min-w-0 flex-1">
-      <h2 class="truncate text-sm font-medium" title={path}>{name}</h2>
-      <p class="truncate text-xs text-muted-foreground" title={path}>{path}</p>
-    </div>
-    <Button variant="ghost" size="icon-sm" disabled={text === null} onclick={copy} aria-label={$t('common.copy')} title={copied ? $t('common.copied') : $t('common.copy')}>
-      {#if copied}<CheckIcon class="size-4 text-primary" />{:else}<CopyIcon class="size-4" />{/if}
-    </Button>
-    <Button variant="ghost" size="icon-sm" disabled={receiving} onclick={download} aria-label={$t('files.downloadNamed', { name })} title={receiving ? $t('files.receiving') : $t('files.download')}>
-      {#if receiving}<CircleNotchIcon class="size-4 animate-spin" />{:else}<DownloadSimpleIcon class="size-4" />{/if}
-    </Button>
-    <Button variant="ghost" size="icon-sm" onclick={onclose} aria-label={$t('common.close')} title={$t('common.close')}><XIcon class="size-4" /></Button>
-  </header>
-  <span class="sr-only" role="status">{copied ? $t('common.copied') : receiving ? $t('files.receiving') : ''}</span>
-  {#if task?.error}
-    <Alert.Root variant="destructive" class="mx-4 mt-3 w-auto">
-      <WarningCircleIcon />
-      <Alert.Description class="break-words">{task.error}</Alert.Description>
-    </Alert.Root>
-  {/if}
-  {#if failure}
-    {@const state = failureStates[failure.kind]}
-    <Empty.Root role="alert" class="min-h-0 p-8">
-      <Empty.Header>
-        <Empty.Media class={['size-12 rounded-xl', failure.kind === 'missing' || failure.kind === 'failed' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground']}>
-          <state.icon class="size-6" />
-        </Empty.Media>
-        <Empty.Title>{$t(state.title)}</Empty.Title>
-        <Empty.Description class="break-words">{state.description ? $t(state.description) : failure.kind === 'failed' && failure.message}</Empty.Description>
-      </Empty.Header>
-      <Empty.Content>
-        {#if failure.kind === 'tooLarge' || failure.kind === 'notText'}
-          <Button size="sm" disabled={receiving} onclick={download}><DownloadSimpleIcon data-icon="inline-start" />{$t('files.download')}</Button>
-        {:else}
-          <Button variant="outline" size="sm" onclick={() => attempt++}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.retry')}</Button>
-        {/if}
-      </Empty.Content>
-    </Empty.Root>
-  {:else if text === null}
-    <div role="status" aria-label={$t('files.loadingPreview')} class="min-h-0 flex-1 space-y-2.5 overflow-hidden p-4">
-      {#each skeletonLines as width, index (index)}
-        <Skeleton class="h-3 rounded-sm" style="width: {width}%" />
-      {/each}
-    </div>
-  {:else if text === ''}
-    <Empty.Root class="min-h-0 p-8">
-      <Empty.Header>
-        <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FileDashedIcon class="size-6" /></Empty.Media>
-        <Empty.Title>{$t('files.emptyFile')}</Empty.Title>
-      </Empty.Header>
-    </Empty.Root>
-  {:else}
-    {#if language === 'markdown'}
-      <Tabs.Root bind:value={view} class="min-h-0 flex-1 gap-0">
-        <div class="shrink-0 border-b px-4 py-2">
-          <Tabs.List aria-label={$t('files.previewMode')}>
-            <Tabs.Trigger value="preview">{$t('files.preview')}</Tabs.Trigger>
-            <Tabs.Trigger value="source">{$t('files.source')}</Tabs.Trigger>
-          </Tabs.List>
-        </div>
-        <Tabs.Content value="preview" class="min-h-0 flex-1 overflow-auto overscroll-contain p-4" data-file-preview-content>
-          {#key target.device}
-            <DeviceProvider device={target.device}>
-              <MessageResponse content={text} markdown sessionId={target.sessionId} linkBase={path} class="h-auto" />
-            </DeviceProvider>
-          {/key}
-        </Tabs.Content>
-        <Tabs.Content value="source" class="min-h-0 flex-1 overflow-auto overscroll-contain p-4" data-file-preview-content>
-          {@render sourceContent()}
-        </Tabs.Content>
-      </Tabs.Root>
+    {#if failure}
+      {@const state = failureStates[failure.kind]}
+      <Empty.Root role="alert" class="min-h-0 p-8">
+        <Empty.Header>
+          <Empty.Media class={['size-12 rounded-xl', failure.kind === 'missing' || failure.kind === 'failed' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground']}>
+            <state.icon class="size-6" />
+          </Empty.Media>
+          <Empty.Title>{$t(state.title)}</Empty.Title>
+          <Empty.Description class="break-words">{state.description ? $t(state.description) : failure.kind === 'failed' && failure.message}</Empty.Description>
+        </Empty.Header>
+        <Empty.Content>
+          {#if failure.kind === 'tooLarge' || failure.kind === 'notText'}
+            <Button size="sm" disabled={receiving} onclick={download}><DownloadSimpleIcon data-icon="inline-start" />{$t('files.download')}</Button>
+          {:else}
+            <Button variant="outline" size="sm" onclick={refresh}><ArrowClockwiseIcon data-icon="inline-start" />{$t('common.retry')}</Button>
+          {/if}
+        </Empty.Content>
+      </Empty.Root>
+    {:else if text === null}
+      <div role="status" aria-label={$t('files.loadingPreview')} class="min-h-0 flex-1 space-y-2.5 overflow-hidden p-4">
+        {#each skeletonLines as width, index (index)}
+          <Skeleton class="h-3 rounded-sm" style="width: {width}%" />
+        {/each}
+      </div>
+    {:else if text === ''}
+      <Empty.Root class="min-h-0 p-8">
+        <Empty.Header>
+          <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><FileDashedIcon class="size-6" /></Empty.Media>
+          <Empty.Title>{$t('files.emptyFile')}</Empty.Title>
+        </Empty.Header>
+      </Empty.Root>
+    {:else if language === 'markdown'}
+      <Tabs.Content value="preview" class="min-h-0 flex-1 overflow-auto overscroll-contain p-4" data-file-preview-content>
+        {#key target.device}
+          <DeviceProvider device={target.device}>
+            <MessageResponse content={text} markdown sessionId={target.sessionId} linkBase={path} class="h-auto" />
+          </DeviceProvider>
+        {/key}
+      </Tabs.Content>
+      <Tabs.Content value="source" class="min-h-0 flex-1 overflow-auto overscroll-contain p-4" data-file-preview-content>
+        {@render sourceContent()}
+      </Tabs.Content>
     {:else}
       <div class="min-h-0 flex-1 overflow-auto overscroll-contain p-4" data-file-preview-content>
         {@render sourceContent()}
       </div>
     {/if}
-  {/if}
+  </Tabs.Root>
 </aside>
 
 <style>
