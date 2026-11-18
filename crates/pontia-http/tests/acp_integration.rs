@@ -324,6 +324,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
             ("ACP_FIXTURE_ROOT".into(), root.path().display().to_string()),
             ("ACP_PERMISSION".into(), "1".into()),
             ("ACP_MODELS".into(), "grouped".into()),
+            ("ACP_SYSTEM_PROMPT".into(), "1".into()),
             ("PRIVATE_SECRET".into(), "never-expose".into()),
         ]),
     };
@@ -365,6 +366,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     assert!(!options.to_string().contains("never-expose"));
     let (status, result) = call(&app, "POST", "/api/v1/sessions", json!({
         "client_type":option["client_type"], "metadata":option["metadata"], "workspace":root.path(),
+        "additional_instructions":"http-instruction-marker",
     })).await;
     assert_eq!(status, StatusCode::CREATED, "{result}");
     let session = result["data"]["session"]["session_id"].as_str().unwrap();
@@ -372,6 +374,26 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     let detail = get(&app, &path).await;
     assert_eq!(detail["session"]["acp"]["agent_id"], "company-id");
     assert_eq!(detail["session"]["acp"]["agent_info"]["name"], "fixture");
+    assert_eq!(detail["session"]["acp"]["system_prompt_injected"], true);
+    let wire = std::fs::read_to_string(root.path().join("wire.jsonl")).unwrap();
+    for request in wire
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .filter(|request| {
+            matches!(
+                request["method"].as_str(),
+                Some("session/new" | "session/load")
+            )
+        })
+    {
+        assert_eq!(request["params"]["systemPrompt"]["mode"], "append");
+        assert!(
+            request["params"]["systemPrompt"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .ends_with("\n\nhttp-instruction-marker")
+        );
+    }
     assert_eq!(detail["session"]["capabilities"]["timeline"], true);
     assert_eq!(detail["session"]["capabilities"]["steer"], false);
     assert_eq!(detail["session"]["capabilities"]["topology"], false);

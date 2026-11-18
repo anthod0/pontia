@@ -40,7 +40,11 @@ impl ClientProfile for Profile {
     fn validate_templates(&self, _: Option<&str>, _: Option<&str>) -> Result<()> {
         Ok(())
     }
-    fn bind(&self, profile: &pontia_agent_control::ExecutionProfileView) -> Result<Value> {
+    fn bind(
+        &self,
+        profile: &pontia_agent_control::ExecutionProfileView,
+        _instructions_required: bool,
+    ) -> Result<Value> {
         Ok(json!({"system": profile.system_prompt_template}))
     }
 }

@@ -13,7 +13,7 @@ impl ClientProfile for ProfilePolicy {
     fn validate_templates(&self, _: Option<&str>, _: Option<&str>) -> Result<()> {
         Ok(())
     }
-    fn bind(&self, profile: &ExecutionProfileView) -> Result<Value> {
+    fn bind(&self, profile: &ExecutionProfileView, _instructions_required: bool) -> Result<Value> {
         Ok(json!({"system_prompt": profile.system_prompt_template}))
     }
 }

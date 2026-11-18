@@ -1,5 +1,5 @@
 use crate::peer::SessionState;
-use agent_client_protocol::schema::v1::{
+use agent_client_protocol::v1::schema::{
     SessionConfigKind, SessionConfigOption, SessionConfigOptionCategory,
 };
 use pontia_agent_control::EventIngestService;

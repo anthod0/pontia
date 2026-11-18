@@ -7,6 +7,7 @@ mod interactions;
 mod live_output;
 mod models;
 mod peer;
+mod profiles;
 pub mod registry;
 mod spec;
 mod steering;

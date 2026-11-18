@@ -144,14 +144,22 @@ for line in sys.stdin:
         caps = {"loadSession": os.environ.get("ACP_NO_LOAD") != "1" and not (root / "no-load").exists(), "sessionCapabilities": {}}
         if os.environ.get("ACP_NO_CLOSE") != "1":
             caps["sessionCapabilities"]["close"] = {}
+        if (os.environ.get("ACP_SYSTEM_PROMPT") == "1" or (root / "system-prompt").exists()) and not (root / "no-system-prompt").exists():
+            caps["sessionCapabilities"]["systemPrompt"] = {}
         response(request, {"protocolVersion": 1, "agentCapabilities": caps,
                            **({"_meta": {"steering": {"supported": os.environ["ACP_STEERING"] == "1"}}} if "ACP_STEERING" in os.environ else {}),
                            "agentInfo": {"name": "fixture", "title": "Test Agent", "version": "arbitrary-release", "_meta": {"build": "fixture-build"}}})
     elif method == "session/new":
+        if os.environ.get("ACP_REJECT_SYSTEM_PROMPT") == "new" and request["params"].get("systemPrompt"):
+            send({"id": request["id"], "error": {"code": -32602, "message": "Instructions rejected"}})
+            continue
         if os.environ.get("ACP_HOLD_NEW") == "1":
             wait_for("release-new")
         response(request, {"sessionId": native_id, **model_config()})
     elif method == "session/load":
+        if os.environ.get("ACP_REJECT_SYSTEM_PROMPT") == "load" and request["params"].get("systemPrompt"):
+            send({"id": request["id"], "error": {"code": -32602, "message": "Instructions rejected"}})
+            continue
         gate = os.environ.get("ACP_LOAD_GATE")
         if gate and (root / gate).exists():
             wait_for(f"release-{gate}")

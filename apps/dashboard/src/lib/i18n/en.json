@@ -638,6 +638,8 @@
   "inbox.removeMessage": "Remove inbox message {summary}",
   "inbox.retryMessage": "Retry inbox message {summary}",
   "chat.detailsSummary": "Session details: {summary}",
+  "chat.instructionsInjected": "Pontia instructions are enabled for this session.",
+  "chat.instructionsNotInjected": "Pontia instructions are not enabled for this session.",
   "files.enlargeNamed": "Enlarge {name}",
   "files.receivingNamed": "Receiving {name}",
   "files.downloadNamed": "Download {name}",

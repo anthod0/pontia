@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use agent_client_protocol::{Responder, schema::v1::*};
+use agent_client_protocol::v1::{Responder, schema::*};
 use pontia_agent_control::interactions::{
     ChoiceInteractionRequest, InteractionIntent, InteractionOption, InteractionService,
 };

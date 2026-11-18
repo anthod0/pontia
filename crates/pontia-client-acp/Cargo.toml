@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-agent-client-protocol = "3.3.0"
+agent-client-protocol = "5.4.0"
 bzip2 = "0.5"
 flate2 = "1"
 pontia-agent-control.workspace = true

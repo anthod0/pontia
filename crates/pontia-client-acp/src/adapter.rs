@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{AcpAgentConfig, AcpConfig};
-use agent_client_protocol::schema::v1::{
+use agent_client_protocol::v1::schema::{
     CancelNotification, ContentBlock, PromptRequest, TextContent,
 };
 use pontia_agent_control::{
@@ -81,7 +81,7 @@ fn register(
         interactions: Some(adapter.clone()),
         events: None,
         service: Some(adapter.clone()),
-        profile: None,
+        profile: Some(Arc::new(crate::profiles::ProfilePolicy)),
         in_process: None,
         session: Some(adapter.clone()),
         prepare_on_input: false,
@@ -315,7 +315,11 @@ impl ClientSession for AcpAdapter {
             peers.insert(request.session_id.clone(), peer.clone());
             drop(peers);
             let setup = async {
-                let (native, metadata) = peer.initialize(&cwd, bound_identity.as_ref().map(|identity| identity[1].as_str())).await?;
+                let (native, metadata) = peer.initialize(
+                    &cwd,
+                    bound_identity.as_ref().map(|identity| identity[1].as_str()),
+                    binding.as_ref().map(|binding| binding.metadata["system_prompt_injected"] == true),
+                ).await?;
                 let key = identity::encode(selected, &native.to_string())?;
                 let mut state = peer.state.lock().await;
                 if !state.current || self.stopped.load(Ordering::Acquire) {
@@ -551,12 +555,13 @@ impl ClientSession for AcpAdapter {
             let binding = AgentBindingService::new(pool)
                 .binding_for_session(session)
                 .await?;
-            let (agent_id, agent_info) = match binding {
+            let (agent_id, agent_info, system_prompt_injected) = match binding {
                 Some(binding) => (
                     Some(identity::decode(&binding.client_session_key)?[0].clone()),
                     binding.metadata["agent_info"].clone(),
+                    Some(binding.metadata["system_prompt_injected"] == true),
                 ),
-                None => (None, serde_json::Value::Null),
+                None => (None, serde_json::Value::Null, None),
             };
             // Session inspection must not depend on live Registry availability.
             let name = agent_id.as_ref().map(|id| {
@@ -568,7 +573,7 @@ impl ClientSession for AcpAdapter {
                     .unwrap_or_else(|| id.clone())
             });
             Ok(ClientSessionDetails {
-                data: json!({"agent_id":agent_id,"name":name,"agent_info":agent_info}),
+                data: json!({"agent_id":agent_id,"name":name,"agent_info":agent_info,"system_prompt_injected":system_prompt_injected}),
             })
         })
     }

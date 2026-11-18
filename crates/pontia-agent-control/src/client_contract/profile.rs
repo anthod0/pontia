@@ -11,7 +11,8 @@ pub trait ClientProfile: Send + Sync {
         true
     }
     fn validate_templates(&self, system: Option<&str>, turn: Option<&str>) -> Result<()>;
-    fn bind(&self, profile: &ExecutionProfileView) -> Result<Value>;
+    /// `instructions_required` distinguishes caller-requested instructions from builtin defaults.
+    fn bind(&self, profile: &ExecutionProfileView, instructions_required: bool) -> Result<Value>;
 }
 
 pub struct ResolvedClientProfile {

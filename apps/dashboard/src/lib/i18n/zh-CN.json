@@ -638,6 +638,8 @@
   "inbox.removeMessage": "移除待处理消息 {summary}",
   "inbox.retryMessage": "重试待处理消息 {summary}",
   "chat.detailsSummary": "会话详情：{summary}",
+  "chat.instructionsInjected": "此会话已启用 Pontia 指令注入。",
+  "chat.instructionsNotInjected": "此会话未启用 Pontia 指令注入。",
   "files.enlargeNamed": "放大 {name}",
   "files.receivingNamed": "正在接收 {name}",
   "files.downloadNamed": "下载 {name}",

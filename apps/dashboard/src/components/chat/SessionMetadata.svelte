@@ -22,6 +22,7 @@
 
   let { session, gitStatus, metadataItems, metadataSummary, onRefreshGitStatus }: Props = $props()
   const acpAgentId = $derived((session.acp as { agent_id?: string } | undefined)?.agent_id)
+  const systemPromptInjected = $derived((session.acp as { system_prompt_injected?: boolean } | undefined)?.system_prompt_injected)
   let sessionDetailsOpen = $state(false)
   const fields = [
     { key: 'client', icon: null },
@@ -78,6 +79,11 @@
           </div>
         {/each}
       </dl>
+      {#if systemPromptInjected !== undefined && systemPromptInjected !== null}
+        <p class="mt-3 text-xs text-muted-foreground">
+          {$t(systemPromptInjected ? 'chat.instructionsInjected' : 'chat.instructionsNotInjected')}
+        </p>
+      {/if}
     </Popover.Content>
   </Popover.Root>
 </div>

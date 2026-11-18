@@ -55,7 +55,7 @@ impl Receipts {
 
     // Only observed response writes need a receipt. Unsupported requests and
     // already-cancelled prompts can send protocol replies without retaining keys.
-    pub fn response(&self, id: &agent_client_protocol::schema::v1::RequestId) -> Result<String> {
+    pub fn response(&self, id: &agent_client_protocol::v1::schema::RequestId) -> Result<String> {
         let key = format!("response:{}", serde_json::to_string(id)?);
         self.state.lock().unwrap().responses.insert(key.clone());
         Ok(key)

@@ -124,6 +124,10 @@ impl AgentProfileService {
             None
         };
         let selected_version = explicit.as_ref().map(|profile| profile.version.clone());
+        let instructions_required = additional_instructions.is_some()
+            || explicit
+                .as_ref()
+                .is_some_and(|profile| profile.system_prompt_template.is_some());
         let mut profile = match (&explicit, &builtin) {
             (Some(profile), _) | (None, Some(profile)) => profile.clone(),
             (None, None) => {
@@ -155,7 +159,7 @@ impl AgentProfileService {
         }
         Ok(Some(ResolvedClientProfile {
             version: selected_version,
-            binding: policy.bind(&profile)?,
+            binding: policy.bind(&profile, instructions_required)?,
         }))
     }
 

@@ -20,7 +20,11 @@ impl ClientProfile for CodexProfilePolicy {
     fn validate_templates(&self, system: Option<&str>, turn: Option<&str>) -> Result<()> {
         validate_codex_templates(system, turn)
     }
-    fn bind(&self, profile: &ExecutionProfileView) -> Result<serde_json::Value> {
+    fn bind(
+        &self,
+        profile: &ExecutionProfileView,
+        _instructions_required: bool,
+    ) -> Result<serde_json::Value> {
         Ok(serde_json::to_value(CodexProfileBinding {
             contract_version: 1,
             profile_id: profile.profile_id.clone(),

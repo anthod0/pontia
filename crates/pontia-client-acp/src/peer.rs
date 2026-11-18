@@ -7,8 +7,9 @@ use std::{
 
 use crate::AcpAgentConfig;
 use agent_client_protocol::{
-    Agent, ByteStreams, ConnectionTo, JsonRpcRequest,
-    schema::{ProtocolVersion, v1::*},
+    Agent, ByteStreams, JsonRpcRequest,
+    schema::ProtocolVersion,
+    v1::{ConnectionTo, schema::*},
 };
 use pontia_agent_control::{
     EventIngestService, PontiaEvent, PontiaEventSource, PontiaEventType, ReportedFact,
@@ -44,6 +45,7 @@ pub(crate) struct SessionState {
     pub ready: bool,
     pub blocked: bool,
     pub steer: bool,
+    pub system_prompt: Option<SystemPrompt>,
     reconnect_needed: bool,
     pub native: Option<SessionId>,
     pub capabilities: Option<pontia_core::client_capabilities::AgentClientCapabilities>,
@@ -227,6 +229,7 @@ impl Peer {
             native: None,
             capabilities: None,
             steer: false,
+            system_prompt: None,
             current_model: None,
             active: None,
             closing: false,
@@ -259,7 +262,7 @@ impl Peer {
         tokio::spawn(async move {
             {
                 let io = agent_client_protocol::Client
-                .builder()
+                .v1()
                 .on_receive_request(
                     async move |request: RequestPermissionRequest, responder, _cx| {
                         if let Err(error) = crate::interactions::register(
@@ -422,6 +425,7 @@ impl Peer {
         &self,
         cwd: &Path,
         existing: Option<&str>,
+        previously_injected: Option<bool>,
     ) -> Result<(SessionId, Value)> {
         let initialize = self
             .call(InitializeRequest::new(ProtocolVersion::V1))
@@ -453,10 +457,43 @@ impl Peer {
                 missing.join(", ")
             )));
         }
+        let instructions = pontia_agent_control::AgentProfileService::new(self.events.db())
+            .session_binding(&self.session)
+            .await?
+            .map(serde_json::from_value::<crate::profiles::Instructions>)
+            .transpose()?
+            .unwrap_or_default();
+        let supported = initialize
+            .agent_capabilities
+            .session_capabilities
+            .system_prompt
+            .is_some();
+        let inject = match previously_injected {
+            Some(injected) => injected,
+            None => instructions.system_prompt.is_some() && (supported || instructions.required),
+        };
+        if inject && !supported {
+            return Err(Error::CapabilityUnavailable(
+                "ACP Agent lacks sessionCapabilities.systemPrompt; create a Session without explicit Profile instructions or additional_instructions".into(),
+            ));
+        }
+        let system_prompt = if inject {
+            let text = instructions.system_prompt.ok_or_else(|| {
+                Error::StateConflict("ACP Session is missing its bound instructions".into())
+            })?;
+            Some(SystemPrompt::new(vec![ContentBlock::Text(
+                TextContent::new(text),
+            )]))
+        } else {
+            None
+        };
+        self.state.lock().await.system_prompt = system_prompt.clone();
         let native = match existing {
             Some(id) => SessionId::new(id.to_owned()),
             None => {
-                let response = self.call(NewSessionRequest::new(cwd.to_path_buf())).await?;
+                let mut request = NewSessionRequest::new(cwd.to_path_buf());
+                request.system_prompt = system_prompt;
+                let response = self.call(request).await?;
                 if let Some(options) = response.config_options {
                     crate::models::replace(
                         &mut *self.state.lock().await,
@@ -475,7 +512,7 @@ impl Peer {
                 "ACP session/new returned an empty sessionId".into(),
             ));
         }
-        let metadata = if let Some(info) = initialize.agent_info {
+        let mut metadata = if let Some(info) = initialize.agent_info {
             let mut info = serde_json::to_value(info)?;
             info.as_object_mut()
                 .expect("implementation is an object")
@@ -485,6 +522,7 @@ impl Peer {
         } else {
             json!({})
         };
+        metadata["system_prompt_injected"] = json!(inject);
         {
             let mut state = self.state.lock().await;
             if !state.current {
@@ -497,7 +535,7 @@ impl Peer {
     }
 
     pub async fn load(&self) -> Result<()> {
-        let (native, cwd) = {
+        let (native, cwd, system_prompt) = {
             let mut state = self.state.lock().await;
             if !state.current || state.closing {
                 return Err(crate::history::unavailable());
@@ -518,11 +556,11 @@ impl Peer {
             state.replay = Some(Vec::new());
             state.history_error = None;
             state.refresh_capabilities();
-            (native, state.cwd.clone())
+            (native, state.cwd.clone(), state.system_prompt.clone())
         };
-        let request = self
-            .connection
-            .prepare_request(LoadSessionRequest::new(native, cwd));
+        let mut load = LoadSessionRequest::new(native, cwd);
+        load.system_prompt = system_prompt;
+        let request = self.connection.prepare_request(load);
         let key = serde_json::to_string(request.id())?;
         let shared = self.state.clone();
         let events = self.events.clone();

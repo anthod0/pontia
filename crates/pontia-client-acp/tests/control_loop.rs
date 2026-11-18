@@ -29,6 +29,9 @@ mod steering;
 #[path = "control_loop/session_environment.rs"]
 mod session_environment;
 
+#[path = "control_loop/profiles.rs"]
+mod profiles;
+
 struct Harness {
     app: AgentControl,
     tasks: Option<ClientServiceTasks>,
@@ -693,7 +696,7 @@ async fn creation_immediately_initializes_peer_and_persists_one_identity_and_run
     assert_eq!(binding.client_session_key, r#"["first","native-id"]"#);
     assert_eq!(
         binding.metadata,
-        json!({"agent_info":{"name":"fixture","title":"Test Agent","version":"arbitrary-release","_meta":{"build":"fixture-build"}}})
+        json!({"agent_info":{"name":"fixture","title":"Test Agent","version":"arbitrary-release","_meta":{"build":"fixture-build"}},"system_prompt_injected":false})
     );
     let startup = h
         .wire()
