@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import FileIcon from 'phosphor-svelte/lib/FileIcon'
   import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon'
@@ -13,6 +14,11 @@
   import { t, number } from '$lib/i18n'
 
   let open = $state(false)
+  onMount(() => {
+    const openDownloads = () => { open = true }
+    document.addEventListener('pontia:open-downloads', openDownloads)
+    return () => document.removeEventListener('pontia:open-downloads', openDownloads)
+  })
   const activeCount = $derived($downloads.filter(task => task.status === 'receiving').length)
   const hasFinished = $derived($downloads.some(task => task.status !== 'receiving'))
 
@@ -26,7 +32,7 @@
 <Dialog.Root bind:open>
   <Dialog.Trigger>
     {#snippet child({ props })}
-      <Button {...props} variant="ghost" size="sm" class="pointer-events-auto h-10 gap-1.5 bg-popover px-2.5 ring-1 ring-foreground/10 md:h-8 md:px-2 [&_svg:not([class*=size-])]:size-5 md:[&_svg:not([class*=size-])]:size-3.5" aria-label={$t('downloads.title')} title={$t('downloads.title')}>
+      <Button {...props} variant="ghost" size="sm" class="pointer-events-auto hidden md:inline-flex h-10 gap-1.5 bg-popover px-2.5 ring-1 ring-foreground/10 md:h-8 md:px-2 [&_svg:not([class*=size-])]:size-5 md:[&_svg:not([class*=size-])]:size-3.5" aria-label={$t('downloads.title')} title={$t('downloads.title')}>
         <DownloadSimpleIcon class={activeCount ? 'text-primary' : ''} />
         {#if activeCount}<span class="text-xs tabular-nums">{$number(activeCount)}</span>{/if}
         <span class="sr-only" role="status">{activeCount ? $t('downloads.activeCount', { count: activeCount }) : ''}</span>

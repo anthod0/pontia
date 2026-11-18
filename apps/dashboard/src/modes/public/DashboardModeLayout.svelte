@@ -14,6 +14,7 @@
   import AppShell from '../../components/layout/AppShell.svelte';
   import AppSidebar from '../../components/layout/AppSidebar.svelte';
   import DeviceBotList from '../../components/bots/DeviceBotList.svelte';
+  import TopBarMoreMenu from '../../components/layout/TopBarMoreMenu.svelte'
   import TopBar from '../../components/layout/TopBar.svelte';
   import ChatShortcuts from '../../components/chat/ChatShortcuts.svelte';
   import ConnectionNotice from '../../components/layout/ConnectionNotice.svelte';
@@ -233,7 +234,7 @@
     {#if device}
       {#key device}<DeviceProvider {device}><TopBar onNewChat={openNewChat} /></DeviceProvider>{/key}
     {:else}
-      <header class={['flex items-center px-3', currentPath === '/' || currentPath.startsWith('/chat/') ? 'h-12' : 'h-8']}><Sidebar.Trigger class="size-9 md:hidden [&_svg:not([class*=size-])]:size-5" /></header>
+      <header class="flex h-12 items-center px-3"><Sidebar.Trigger class="size-11 md:hidden [&_svg:not([class*=size-])]:size-5" /><TopBarMoreMenu /></header>
     {/if}
   {/snippet}
   {#snippet children()}

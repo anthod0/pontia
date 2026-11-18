@@ -74,7 +74,7 @@
           <TopBar />
         {/if}
       </div>
-      <div class="shrink-0 pr-3 md:pr-4"><DownloadCenter /></div>
+      <div class="shrink-0 md:pr-4"><DownloadCenter /></div>
     </div>
     <main class={mainClass}>
       <div class={contentClass}>

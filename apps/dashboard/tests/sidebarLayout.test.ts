@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { beforeEach, expect, test, vi } from "vitest";
 import AppSidebarHost from "./components/layout/AppSidebarHost.svelte";
 import AppShellHost from "./components/layout/AppShellHost.svelte";
@@ -618,9 +618,8 @@ test("top bar new chat button opens a new chat", async () => {
   window.history.pushState({}, "", "/dashboard/chat/session-active");
   render(TopBarHost);
 
-  await fireEvent.click(
-    within(screen.getByRole("banner")).getByRole("button", { name: "New Chat" }),
-  );
+  await fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: "More" }));
+  await fireEvent.click(screen.getByRole("menuitem", { name: "New Chat" }));
 
   expect(mocks.navigate).toHaveBeenCalledWith("/");
 });
@@ -877,4 +876,59 @@ test("shows a sidebar loading failure instead of claiming there are no sessions"
   render(AppSidebarHost);
   expect(screen.getByRole("alert")).toHaveTextContent("Sidebar refresh failed");
   expect(screen.queryByText("No active sessions")).not.toBeInTheDocument();
+});
+
+async function openMobileSidebar() {
+  vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+    matches: query.includes("max-width: 767px"),
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+  render(AppSidebarHost);
+  await fireEvent.click(screen.getByRole("button", { name: "Open sidebar" }));
+  return screen.getByRole("dialog", { name: "Sidebar" });
+}
+
+test("mobile sidebar closes with its close button", async () => {
+  const sidebar = await openMobileSidebar();
+  await fireEvent.click(within(sidebar).getByRole("button", { name: "Close", exact: true }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "Sidebar" })).not.toBeInTheDocument(),
+  );
+});
+
+test("mobile sidebar closes on a right swipe", async () => {
+  const sidebar = await openMobileSidebar();
+  await fireEvent.touchStart(sidebar, { touches: [{ clientX: 40, clientY: 200 }] });
+  await fireEvent.touchMove(sidebar, { touches: [{ clientX: 150, clientY: 210 }] });
+  await fireEvent.touchEnd(sidebar, { changedTouches: [{ clientX: 180, clientY: 215 }] });
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "Sidebar" })).not.toBeInTheDocument(),
+  );
+});
+
+test.each([
+  { name: "a short drag", x: 65, y: 205, cancel: false },
+  { name: "a left swipe", x: -80, y: 205, cancel: false },
+  { name: "a vertical scroll", x: 150, y: 400, cancel: false },
+  { name: "a cancelled gesture", x: 180, y: 210, cancel: true },
+])("mobile sidebar stays open after $name", async ({ x, y, cancel }) => {
+  const sidebar = await openMobileSidebar();
+  await fireEvent.touchStart(sidebar, { touches: [{ clientX: 40, clientY: 200 }] });
+  await fireEvent.touchMove(sidebar, { touches: [{ clientX: x, clientY: y }] });
+  if (cancel) await fireEvent.touchCancel(sidebar);
+  await fireEvent.touchEnd(sidebar, { changedTouches: [{ clientX: x, clientY: y }] });
+  expect(screen.getByRole("dialog", { name: "Sidebar" })).toHaveAttribute("data-state", "open");
+});
+
+test("mobile more menu opens the download center", async () => {
+  render(AppShellHost);
+  await fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: "More" }));
+  await fireEvent.click(screen.getByRole("menuitem", { name: "Downloads" }));
+  expect(screen.getByRole("dialog", { name: "Downloads" })).toBeInTheDocument();
 });

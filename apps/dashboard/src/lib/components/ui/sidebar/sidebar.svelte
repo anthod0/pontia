@@ -21,6 +21,30 @@
 	} = $props();
 
 	const sidebar = useSidebar();
+	let swipeStart: { x: number; y: number } | null = null;
+
+	function startSwipe(event: TouchEvent): void {
+		swipeStart = event.touches.length === 1
+			? { x: event.touches[0].clientX, y: event.touches[0].clientY }
+			: null;
+	}
+
+	function moveSwipe(event: TouchEvent): void {
+		if (!swipeStart) return;
+		const dx = event.touches[0].clientX - swipeStart.x;
+		const dy = Math.abs(event.touches[0].clientY - swipeStart.y);
+		if (event.touches.length !== 1 || (dy > 10 && dy > Math.abs(dx))) {
+			swipeStart = null;
+		}
+	}
+
+	function endSwipe(event: TouchEvent): void {
+		if (!swipeStart) return;
+		const dx = event.changedTouches[0].clientX - swipeStart.x;
+		const dy = Math.abs(event.changedTouches[0].clientY - swipeStart.y);
+		swipeStart = null;
+		if (dx >= 64 && dx > dy * 2) sidebar.setOpenMobile(false);
+	}
 </script>
 
 {#if collapsible === "none"}
@@ -44,8 +68,13 @@
 			data-sidebar="sidebar"
 			data-slot="sidebar"
 			data-mobile="true"
+			showCloseButton={false}
+			ontouchstart={startSwipe}
+			ontouchmove={moveSwipe}
+			ontouchend={endSwipe}
+			ontouchcancel={() => { swipeStart = null }}
 			class={cn(
-				"bg-sidebar text-sidebar-foreground border-none p-0 data-[side=left]:w-(--sidebar-width) data-[side=right]:w-(--sidebar-width) data-[side=left]:sm:max-w-none data-[side=right]:sm:max-w-none [&>button]:hidden",
+				"bg-sidebar text-sidebar-foreground touch-pan-y touch-pinch-zoom border-none p-0 data-[side=left]:w-(--sidebar-width) data-[side=right]:w-(--sidebar-width) data-[side=left]:sm:max-w-none data-[side=right]:sm:max-w-none",
 				className
 			)}
 			style="--sidebar-width: {SIDEBAR_WIDTH_MOBILE};"

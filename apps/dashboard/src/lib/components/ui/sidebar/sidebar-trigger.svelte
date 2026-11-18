@@ -1,6 +1,8 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
 	import { Button } from "$lib/components/ui/button/index.js";
+	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon';
+	import XIcon from 'phosphor-svelte/lib/XIcon';
 	import SidebarSimpleIcon from 'phosphor-svelte/lib/SidebarSimpleIcon';
 	import { cn } from "$lib/utils.js";
 	import type { ComponentProps } from "svelte";
@@ -32,6 +34,10 @@
 	}}
 	{...restProps}
 >
-	<SidebarSimpleIcon  />
-	<span class="sr-only">{$t('nav.toggleSidebar')}</span>
+	{#if sidebar.isMobile}
+		{#if sidebar.openMobile}<XIcon />{:else}<CaretLeftIcon />{/if}
+	{:else}
+		<SidebarSimpleIcon />
+	{/if}
+	<span class="sr-only">{$t(sidebar.isMobile && sidebar.openMobile ? 'common.close' : 'nav.toggleSidebar')}</span>
 </Button>
