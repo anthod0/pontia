@@ -74,7 +74,7 @@ Chat pages provide these shortcuts:
 | `Alt+1` … `Alt+9` | Open an active chat by sidebar position |
 | `Alt+N` | Open New chat |
 | `Alt+L` | Focus the composer |
-| `Alt+M` / `Alt+A` / `Alt+W` | On New chat, switch to the next device, Agent Client, or Workspace; add `Shift` to go back |
+| `Alt+M` / `Alt+C` / `Alt+W` | On New chat, switch to the next device, Agent Client, or Workspace. Add `Shift` to go back. |
 | `Alt+?` | Show the shortcut reference |
 | `Ctrl+B` (`Cmd+B` on macOS) | Toggle the sidebar |
 

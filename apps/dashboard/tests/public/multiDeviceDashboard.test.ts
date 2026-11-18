@@ -292,13 +292,19 @@ test("the root composer device selector switches devices like the sidebar", asyn
   expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent("Travel Laptop");
 });
 
-test("Alt+M switches the root composer to the next device", async () => {
-  render(MultiDeviceDashboardHarness);
-  await screen.findByRole("textbox");
-  await fireEvent.keyDown(window, { key: "m", code: "KeyM", altKey: true });
-  await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
-  expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent("Travel Laptop");
-});
+test.each(["/", "/office-mac"])(
+  "Alt+M switches to the next device from New Chat at %s",
+  async (path) => {
+    window.history.replaceState({}, "", path);
+    render(MultiDeviceDashboardHarness);
+    const composer = await screen.findByRole("textbox");
+    await fireEvent.keyDown(composer, { key: "m", code: "KeyM", altKey: true });
+    await waitFor(() => expect(location.pathname).toBe("/travel-laptop"));
+    expect(screen.getByRole("button", { name: "Sidebar device" })).toHaveTextContent(
+      "Travel Laptop",
+    );
+  },
+);
 
 test.each(["handshake", "workspaces"])(
   "the composer can switch to another device while the active device waits for %s",

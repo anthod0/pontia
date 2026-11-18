@@ -34,7 +34,7 @@ export const chatShortcuts: Record<ChatShortcutAction, ShortcutDefinition> = {
   newChat: { keys: ["Alt", "N"], label: "chat.new" },
   focusInput: { keys: ["Alt", "L"], label: "shortcuts.focusInput" },
   switchDevice: { keys: ["Alt", "M"], label: "shortcuts.switchDevice" },
-  switchAgentClient: { keys: ["Alt", "A"], label: "shortcuts.switchAgentClient" },
+  switchAgentClient: { keys: ["Alt", "C"], label: "shortcuts.switchAgentClient" },
   switchWorkspace: { keys: ["Alt", "W"], label: "shortcuts.switchWorkspace" },
   showHelp: { keys: ["Alt", "?"], label: "shortcuts.title" },
 };
@@ -70,7 +70,7 @@ const letterActions: Record<
 // Shift reverses the direction.
 const switchActions: Record<string, SwitchAction> = {
   KeyM: "switchDevice",
-  KeyA: "switchAgentClient",
+  KeyC: "switchAgentClient",
   KeyW: "switchWorkspace",
 };
 

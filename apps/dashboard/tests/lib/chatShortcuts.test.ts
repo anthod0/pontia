@@ -34,7 +34,7 @@ describe("matchChatShortcut", () => {
       direction: 1,
     });
     expect(
-      matchChatShortcut(keydown({ altKey: true, shiftKey: true, code: "KeyA", key: "A" })),
+      matchChatShortcut(keydown({ altKey: true, shiftKey: true, code: "KeyC", key: "C" })),
     ).toEqual({ action: "switchAgentClient", direction: -1 });
     expect(matchChatShortcut(keydown({ altKey: true, code: "KeyW", key: "∑" }))).toEqual({
       action: "switchWorkspace",

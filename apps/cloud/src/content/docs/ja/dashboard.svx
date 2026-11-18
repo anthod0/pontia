@@ -74,7 +74,7 @@ Inbox は、配信待ちのメッセージや Agent Client がキューに入れ
 | `Alt+1` … `Alt+9` | サイドバーの位置でアクティブなチャットを開きます |
 | `Alt+N` | New chat を開きます |
 | `Alt+L` | コンポーザーにフォーカスします |
-| `Alt+M` / `Alt+A` / `Alt+W` | New chat で次のデバイス、Agent Client、Workspace に切り替えます。`Shift` を加えると前に戻ります |
+| `Alt+M` / `Alt+C` / `Alt+W` | New chat で次のデバイス、Agent Client、Workspace に切り替えます。`Shift` を加えると前に戻ります |
 | `Alt+?` | ショートカット一覧を表示します |
 | `Ctrl+B`（macOS では `Cmd+B`） | サイドバーの表示を切り替えます |
 

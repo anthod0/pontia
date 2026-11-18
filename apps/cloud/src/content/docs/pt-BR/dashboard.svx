@@ -74,7 +74,7 @@ As páginas de chat oferecem estes atalhos:
 | `Alt+1` … `Alt+9` | Abrir um chat ativo pela posição na barra lateral |
 | `Alt+N` | Abrir New chat |
 | `Alt+L` | Focar o compositor |
-| `Alt+M` / `Alt+A` / `Alt+W` | No New chat, alternar para o próximo dispositivo, Agent Client ou Workspace; adicione `Shift` para voltar |
+| `Alt+M` / `Alt+C` / `Alt+W` | No New chat, alterne para o próximo dispositivo, Agent Client ou Workspace. Adicione `Shift` para voltar. |
 | `Alt+?` | Mostrar a referência de atalhos |
 | `Ctrl+B` (`Cmd+B` no macOS) | Mostrar ou ocultar a barra lateral |
 

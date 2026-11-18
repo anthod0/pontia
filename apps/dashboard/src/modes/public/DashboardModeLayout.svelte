@@ -8,6 +8,8 @@
   import SpinnerGapIcon from 'phosphor-svelte/lib/SpinnerGapIcon';
   import { Button } from '$lib/components/ui/button/index.js';
   import { dashboardRelativePath, dashboardScope, navigate } from '$lib/navigation';
+  import { matchChatShortcut } from '$lib/shortcuts/definitions';
+  import { adjacentValue } from '$lib/shortcuts/sessionNavigation';
   import DeviceStatus, { type DeviceStatusView } from '../../components/devices/DeviceStatus.svelte';
   import AppShell from '../../components/layout/AppShell.svelte';
   import AppSidebar from '../../components/layout/AppSidebar.svelte';
@@ -119,6 +121,16 @@
     void navigate(destination, undefined, { scope: `/${target}` });
   }
 
+  function handleDeviceShortcut(event: KeyboardEvent): void {
+    if (dashboardRelativePath() !== '/' || $devices.length < 2) return;
+    const shortcut = matchChatShortcut(event);
+    if (shortcut?.action !== 'switchDevice') return;
+    const target = adjacentValue($devices.map(device => device.handle), activeHandle ?? null, shortcut.direction);
+    if (!target) return;
+    event.preventDefault();
+    selectDevice(target);
+  }
+
   function openNewChat(): void {
     void navigate('/', undefined, { scope: activeHandle ? `/${activeHandle}` : '' });
   }
@@ -162,7 +174,7 @@
   });
 </script>
 
-<svelte:window onpopstate={() => currentLocation = window.location.pathname} onfocus={() => connections?.focus()} ononline={() => connections?.focus()} />
+<svelte:window onkeydown={handleDeviceShortcut} onpopstate={() => currentLocation = window.location.pathname} onfocus={() => connections?.focus()} ononline={() => connections?.focus()} />
 <svelte:document onvisibilitychange={() => {
   if (document.visibilityState === 'visible') connections?.focus();
 }} />
