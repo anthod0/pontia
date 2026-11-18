@@ -3,6 +3,7 @@
 	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import FeatureSection from '$lib/components/FeatureSection.svelte';
+	import BotSection from '$lib/components/BotSection.svelte';
 	import HomeFaq from '$lib/components/HomeFaq.svelte';
 	import OpenSourceSection from '$lib/components/OpenSourceSection.svelte';
 	import IntegrationProgress from '$lib/components/IntegrationProgress.svelte';
@@ -63,6 +64,7 @@
 <main id="main">
 	<HeroSection />
 
+	<BotSection />
 	<FeatureSection />
 	<OpenSourceSection />
 	<IntegrationProgress />

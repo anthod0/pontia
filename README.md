@@ -32,6 +32,7 @@ Leave your desk, not your agents. Pontia lets you run coding agents such as pi, 
 - 📱 **In your pocket** — add the Dashboard to your phone's home screen. Follow progress, answer approvals, and send the next instruction away from your desk.
 - 💳 **Bring your own subscriptions** — Pontia doesn't sell models or tokens. Your agents run on the accounts and plans you already pay for.
 - 💻 **Keep your terminal** — agents run on your device with your tools and files. Keep using the pi or Codex TUI; conversations sync to the Dashboard automatically, so you can switch between them without starting over.
+- 🤖 **Hand off work to a Bot** — chat with a Bot on your device the way you would with an assistant. It starts Sessions for each task, runs several at once, reports back, and remembers your projects across long conversations.
 - 🔒 **Encrypted end to end** — only your browser and your device can read a session. Use an official Edge or run your own; either way, the Edge only relays ciphertext.
 
 Pontia supports pi, Codex, Claude Code, and ACP agents such as OpenCode and Grok Build, on Linux and macOS.
