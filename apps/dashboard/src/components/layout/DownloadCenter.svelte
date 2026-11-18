@@ -26,7 +26,7 @@
 <Dialog.Root bind:open>
   <Dialog.Trigger>
     {#snippet child({ props })}
-      <Button {...props} variant="ghost" size="sm" class="pointer-events-auto h-8 gap-1.5 bg-popover px-2 ring-1 ring-foreground/10" aria-label={$t('downloads.title')} title={$t('downloads.title')}>
+      <Button {...props} variant="ghost" size="sm" class="pointer-events-auto h-10 gap-1.5 bg-popover px-2.5 ring-1 ring-foreground/10 md:h-8 md:px-2 [&_svg:not([class*=size-])]:size-5 md:[&_svg:not([class*=size-])]:size-3.5" aria-label={$t('downloads.title')} title={$t('downloads.title')}>
         <DownloadSimpleIcon class={activeCount ? 'text-primary' : ''} />
         {#if activeCount}<span class="text-xs tabular-nums">{$number(activeCount)}</span>{/if}
         <span class="sr-only" role="status">{activeCount ? $t('downloads.activeCount', { count: activeCount }) : ''}</span>

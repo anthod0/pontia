@@ -51,7 +51,10 @@
   const chatPath = $derived(isChatPath(currentPath))
   const settingsPath = $derived(isSettingsPath(currentPath))
   const settingsTitle = $derived($t(settingsSections.find((section) => isSettingsSectionActive(section, currentPath))?.label ?? 'settings.title'))
-  const groupClass = $derived(['flex min-w-0 items-center gap-1', chatPath && 'pointer-events-auto h-8 rounded-lg bg-popover px-1 ring-1 ring-foreground/10', chatPath && !title && 'md:hidden'])
+  const pillClass = 'pointer-events-auto h-10 rounded-lg bg-popover px-0.5 ring-1 ring-foreground/10 md:h-8 md:px-1'
+  const groupClass = $derived(['flex min-w-0 items-center gap-1', chatPath && pillClass, chatPath && !title && 'md:hidden'])
+  // Phones get larger touch targets; wider screens keep the compact bar.
+  const mobileIconClass = 'size-9 md:size-7 [&_svg:not([class*=size-])]:size-5 md:[&_svg:not([class*=size-])]:size-4'
 
   function openRenameDialog(): void {
     renameError = null
@@ -79,16 +82,13 @@
   {#if settingsPath}
     <!-- Phones switch sections here; wider screens list them in the sidebar and show the current one as the title. -->
     <div class="flex min-w-0 items-center gap-2 px-3 md:hidden">
-      <Sidebar.Trigger />
+      <Sidebar.Trigger class={mobileIconClass} />
       <SettingsSectionNav />
     </div>
     <h1 class="hidden px-6 text-base font-semibold text-heading md:block">{settingsTitle}</h1>
   {:else}
   <div class={groupClass}>
-    <Sidebar.Trigger class="md:hidden" />
-    <Button variant="ghost" size="icon-sm" class="md:hidden" aria-label={$t('nav.newChat')} onclick={onNewChat}>
-      <NotePencilIcon />
-    </Button>
+    <Sidebar.Trigger class={[mobileIconClass, 'md:hidden']} />
     {#if title}
       <h1 class="mx-1 hidden min-w-0 max-w-80 md:block">
         <button
@@ -102,6 +102,11 @@
         </button>
       </h1>
     {/if}
+  </div>
+  <div class={['ml-auto flex items-center md:hidden', chatPath && pillClass]}>
+    <Button variant="ghost" size="icon-sm" class={mobileIconClass} aria-label={$t('nav.newChat')} onclick={onNewChat}>
+      <NotePencilIcon />
+    </Button>
   </div>
   {/if}
 </header>

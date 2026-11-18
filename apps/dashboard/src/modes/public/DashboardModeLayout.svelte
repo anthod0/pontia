@@ -216,7 +216,7 @@
     {#if device}
       {#key device}<DeviceProvider {device}><TopBar onNewChat={openNewChat} /></DeviceProvider>{/key}
     {:else}
-      <header class={['flex items-center px-3', currentPath === '/' || currentPath.startsWith('/chat/') ? 'h-12' : 'h-8']}><Sidebar.Trigger class="md:hidden" /></header>
+      <header class={['flex items-center px-3', currentPath === '/' || currentPath.startsWith('/chat/') ? 'h-12' : 'h-8']}><Sidebar.Trigger class="size-9 md:hidden [&_svg:not([class*=size-])]:size-5" /></header>
     {/if}
   {/snippet}
   {#snippet children()}

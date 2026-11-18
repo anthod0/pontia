@@ -66,13 +66,15 @@
     <AppSidebar />
   {/if}
   <Sidebar.Inset class="bg-surface lg:mr-[var(--file-preview-width)]">
-    <div class={['sticky z-10 pr-20', !chatPath && 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">
-      {#if topbar}
-        {@render topbar()}
-      {:else}
-        <TopBar />
-      {/if}
-      <div class="absolute inset-y-0 right-3 flex items-center md:right-4"><DownloadCenter /></div>
+    <div class={['sticky z-10 flex items-center', !chatPath && 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">
+      <div class="min-w-0 flex-1">
+        {#if topbar}
+          {@render topbar()}
+        {:else}
+          <TopBar />
+        {/if}
+      </div>
+      <div class="shrink-0 pr-3 md:pr-4"><DownloadCenter /></div>
     </div>
     <main class={mainClass}>
       <div class={contentClass}>
