@@ -7,12 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+## [0.7.16] - 2026-11-18
 
-- The Cloud site slogan is translated into Simplified Chinese, Japanese, and Portuguese.
+### Added
 
 - New chat has keyboard shortcuts to switch the device (`Alt+M`), Agent Client (`Alt+A`), and Workspace (`Alt+W`). Add `Shift` to go back.
 - Local file links in the Dashboard file preview open in the same sidebar, with a back button that restores the previous reading position. Relative links resolve against the previewed file, or against the session Workspace in chat messages. Heading anchors scroll to the heading, and local image links open in the image viewer.
+- The file preview sidebar can be resized and has a refresh button.
+- The image viewer pages between the images shared in a Session.
+- Codex answers to agent questions appear as answered questions in the conversation.
+- Edge settings in Cloud show the version each Edge is running. The Edge `/healthz` endpoint reports it in the `Pontia-Edge-Version` response header.
+- The Cloud site slogan is translated into Simplified Chinese, Japanese, and Portuguese.
+
+### Changed
+
+- On phones, the sidebar opens full screen and closes after navigation. The top bar buttons are larger, and New Chat sits next to downloads.
+- The shortcut help shows alternative keys for the same message input action on one line.
+- The file preview shows clearer loading, empty, and error states.
+
+### Fixed
+
+- Pinned Sessions no longer also appear in the recent list.
+- The agent status stays next to the latest Turn instead of below the conversation.
 
 ## [0.7.15] - 2026-11-18
 
