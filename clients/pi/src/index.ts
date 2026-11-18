@@ -189,7 +189,6 @@ export function createPontiaPiExtension(
   let controlSocket: PiConnection | undefined;
   let controlGeneration = 0;
   let piContext: ExtensionContext | undefined;
-  let changingModel = false;
   const compaction = () => {
     const context = boundSessionContext;
     if (!context || reportingDisabled || !readyReported) return undefined;
@@ -345,53 +344,11 @@ export function createPontiaPiExtension(
         queuedControlInput = { id, submission };
         if (idle) dispatchQueuedInput();
       },
-      {
-        listModels() {
-          if (
-            generation !== controlGeneration ||
-            reportingDisabled ||
-            !boundSessionContext ||
-            !piContext ||
-            !readyReported
-          ) {
-            throw new Error("Pi model control session is no longer current");
-          }
-          return piContext.modelRegistry.getAvailable().map((model) => ({
-            id: modelId(model),
-            name: model.name,
-            description: model.provider,
-          }));
-        },
-        async setModel(id) {
-          this.listModels();
-          if (changingModel) throw new Error("Pi already has a model change in progress");
-          const model = piContext!.modelRegistry
-            .getAvailable()
-            .find((model) => modelId(model) === id);
-          if (!model) throw new Error("The selected model is not available");
-          changingModel = true;
-          try {
-            if (!(await pi.setModel(model)))
-              throw new RpcError(-32006, "Pi could not authenticate the selected model");
-            this.listModels();
-            // Selecting the current model does not emit model_select; observe it again.
-            await reportModel();
-          } catch (error) {
-            if (error instanceof RpcError) throw error;
-            throw new RpcError(
-              -32007,
-              `Pi model change outcome is unknown: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          } finally {
-            changingModel = false;
-          }
-        },
-        async onReconnect() {
-          if (generation !== controlGeneration)
-            throw new Error("Pi session changed during reconnect");
-          await reportModel();
-          await compaction()?.reconnect();
-        },
+      async () => {
+        if (generation !== controlGeneration)
+          throw new Error("Pi session changed during reconnect");
+        await reportModel();
+        await compaction()?.reconnect();
       },
       (inboxMessageId) => {
         if (generation !== controlGeneration || reportingDisabled || !boundSessionContext) {
@@ -431,7 +388,7 @@ export function createPontiaPiExtension(
           if (ctx.sessionManager.getSessionId() !== boundSessionContext?.clientSessionKey)
             throw new RpcError(-32006, "Pi compaction native Session identity changed");
           const observation = compaction()!;
-          if (!ctx.isIdle() || ctx.hasPendingMessages() || queuedControlInput || changingModel)
+          if (!ctx.isIdle() || ctx.hasPendingMessages() || queuedControlInput)
             throw new RpcError(-32006, "Pi is busy; compaction was not requested");
           observation.request(operationId, () =>
             ctx.compact({

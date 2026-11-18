@@ -47,7 +47,7 @@ pub(crate) struct SessionState {
     reconnect_needed: bool,
     pub native: Option<SessionId>,
     pub capabilities: Option<pontia_core::client_capabilities::AgentClientCapabilities>,
-    pub models: Option<crate::models::Models>,
+    pub current_model: Option<String>,
     pub active: Option<Prompt>,
     pub closing: bool,
     pub permissions: HashMap<String, crate::interactions::Permission>,
@@ -73,8 +73,6 @@ impl SessionState {
                 capabilities.interrupt = self.active.is_some();
                 capabilities.timeline = self.history_error.is_none() && self.replay.is_none();
                 capabilities.accept_task = self.replay.is_none() && !self.blocked;
-                capabilities.list_models = self.models.is_some();
-                capabilities.set_model = self.models.is_some() && self.replay.is_none();
                 capabilities
             });
     }
@@ -229,7 +227,7 @@ impl Peer {
             native: None,
             capabilities: None,
             steer: false,
-            models: None,
+            current_model: None,
             active: None,
             closing: false,
             permissions: HashMap::new(),

@@ -1,7 +1,6 @@
 import { testDevice } from "./deviceFixture";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const {
-  setSessionModel,
   getSessionOverview,
   getTurnTimeline,
   getTurnTreeHistory,
@@ -226,20 +225,4 @@ test("clears the saved token when an API request is unauthorized", async () => {
   });
 
   expect(localStorage.getItem("pontia.externalApiToken")).toBe("");
-});
-
-test("does not replay an uncertain model change after a network failure", async () => {
-  const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-  vi.stubGlobal("fetch", fetchMock);
-  await expect(setSessionModel("session-1", "model-b", "runtime-1")).rejects.toThrow(
-    "Failed to fetch",
-  );
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(fetchMock).toHaveBeenCalledWith(
-    "/api/v1/sessions/session-1/model",
-    expect.objectContaining({
-      method: "PATCH",
-      body: JSON.stringify({ model: "model-b", runtime_id: "runtime-1" }),
-    }),
-  );
 });

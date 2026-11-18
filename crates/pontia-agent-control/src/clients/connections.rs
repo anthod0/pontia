@@ -316,17 +316,6 @@ impl ClientControlService {
         .await
     }
 
-    pub async fn list_models(
-        &self,
-        session_id: &str,
-        runtime_id: &str,
-    ) -> Result<Vec<crate::sessions::SessionModel>> {
-        self.request(session_id, runtime_id, false, |channel| async move {
-            channel.list_models().await
-        })
-        .await
-    }
-
     pub async fn compact(
         &self,
         session_id: &str,
@@ -335,13 +324,6 @@ impl ClientControlService {
     ) -> Result<()> {
         self.request(session_id, runtime_id, false, |channel| async move {
             channel.compact(operation_id).await
-        })
-        .await
-    }
-
-    pub async fn set_model(&self, session_id: &str, runtime_id: &str, model: &str) -> Result<()> {
-        self.request(session_id, runtime_id, false, |channel| async move {
-            channel.set_model(model).await
         })
         .await
     }

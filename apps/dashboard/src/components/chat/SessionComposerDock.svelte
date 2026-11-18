@@ -3,8 +3,6 @@
   import type { SessionFilesStore } from '../../stores/sessionFiles'
   import type { InboxDeliveryPolicy, InboxMessageView, SessionView, WorkspaceGitStatusView } from '../../api/types'
   import { canSendSessionMessage } from '$lib/session-chat/sessionChat'
-  import ModelPicker from './ModelPicker.svelte'
-  import { modelPickerDisabledReason } from '$lib/modelControls'
   import MessageComposer from './MessageComposer.svelte'
   import QueuedMessages from './QueuedMessages.svelte'
   import InboxSubmissionRecovery from './InboxSubmissionRecovery.svelte'
@@ -73,13 +71,11 @@
     onCompact,
   }: Props = $props()
 
-  let modelDialogSessionId = $state<string | null>(null)
   let sharedFilesOpen = $state(false)
 
   let composerDisabled = $derived(submitting || actionBusy)
   let interruptMode = $derived(isExecutingSessionState(session.state) && session.capabilities?.interrupt === true && input.trim() === '')
   const commands: ChatCommand[] = $derived([
-    { name: '/model', description: $t('model.chooseCommand'), disabledReason: modelPickerDisabledReason(session, $t), run: () => { modelDialogSessionId = session.session_id; input = '' } },
     { name: '/compact', description: $t('compaction.description'), disabledReason: compactionDisabledReason(session, compaction?.busy ?? false, $t), run: onCompact },
     { name: '/new', description: $t('chat.newInWorkspace'), run: onNewChat },
     { name: '/rename', description: $t('chat.renameCurrent'), run: onRename },
@@ -125,8 +121,3 @@
     {/if}
   </div>
 </div>
-
-
-{#if modelDialogSessionId === session.session_id}
-  <ModelPicker {session} onClose={() => { modelDialogSessionId = null }} />
-{/if}

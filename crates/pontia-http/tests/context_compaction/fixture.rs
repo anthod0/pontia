@@ -88,14 +88,6 @@ impl ClientControlChannel for Channel {
     fn invalidate(&self) {
         self.closed.store(true, Ordering::SeqCst);
     }
-    fn list_models(
-        &self,
-    ) -> ClientControlOperation<'_, Vec<pontia_agent_control::sessions::SessionModel>> {
-        Box::pin(async { Ok(vec![]) })
-    }
-    fn set_model<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
-        Box::pin(async { Ok(()) })
-    }
     fn interrupt(&self) -> ClientControlOperation<'_> {
         Box::pin(async {
             self.operations.lock().unwrap().push("interrupt".into());

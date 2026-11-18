@@ -51,7 +51,7 @@ Dashboard の **Settings → Agent Clients** で Pi、Codex、Claude Code を選
 
 ## Client によってケイパビリティは異なる
 
-Dashboard には、中断、モデルの変更、履歴の分岐、キューに入れた配信など、選択した Client が対応している操作が表示されます。
+Dashboard には、中断、履歴の分岐、キューに入れた配信など、選択した Client が対応している操作が表示されます。
 
 Pontia の Session は、バインド後、クライアントネイティブの会話 ID のひとつと永続的に関連付けられます。同じネイティブの会話を再び開くと既存の Session が続き、新しいネイティブの会話は新しい Session に属します。
 

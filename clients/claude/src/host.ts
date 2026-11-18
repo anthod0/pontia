@@ -1,5 +1,4 @@
 import { query, type Options, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { modelOptions } from "./models.js";
 import { Input } from "./input.js";
 import { Permissions } from "./permissions.js";
 import { FactError, InputFacts, type Emit, type ResultDiagnostic } from "./facts.js";
@@ -8,7 +7,7 @@ export type QueryFactory = (
   args: Parameters<typeof query>[0],
 ) => Pick<
   Query,
-  typeof Symbol.asyncIterator | "interrupt" | "close" | "supportedModels" | "setModel"
+  typeof Symbol.asyncIterator | "interrupt" | "close" | "supportedModels"
 >;
 export class ControlError extends Error {
   constructor(
@@ -32,7 +31,6 @@ export class Host {
   private closing = false;
   private closed = false;
   private usedInputs = new Set<string>();
-  private changingModel = false;
 
   constructor(
     private readonly options: {
@@ -134,27 +132,6 @@ export class Host {
       throw new ControlError("rejected", "invalid_input");
     }
     if (this.usedInputs.has(id)) throw new ControlError("rejected", "input_already_submitted");
-  }
-
-  async listModels() {
-    if (!this.acceptsControl() || !this.execution || !this.native)
-      throw new ControlError("rejected", "execution_unavailable");
-    return modelOptions(this.execution);
-  }
-
-  async setModel(model: string): Promise<void> {
-    if (this.changingModel) throw new ControlError("rejected", "model_change_busy");
-    this.changingModel = true;
-    try {
-      if (!(await this.listModels()).some((entry) => entry.id === model))
-        throw new ControlError("rejected", "model_unavailable");
-      if (!this.acceptsControl()) throw new ControlError("rejected", "execution_unavailable");
-      await this.execution!.setModel(model);
-      if (!this.acceptsControl()) throw new ControlError("unknown", "model_change_unconfirmed");
-      this.emit({ kind: "model", model });
-    } finally {
-      this.changingModel = false;
-    }
   }
 
   async interrupt(id: string): Promise<void> {

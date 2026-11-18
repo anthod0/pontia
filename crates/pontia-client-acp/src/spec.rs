@@ -12,8 +12,6 @@ pub const ACP_MAX_CAPABILITIES: AgentClientCapabilities = AgentClientCapabilitie
     topology: false,
     branch_control: false,
     fork_session: false,
-    list_models: true,
-    set_model: true,
     manual_compaction: false,
     compaction_events: false,
     compaction_history: false,

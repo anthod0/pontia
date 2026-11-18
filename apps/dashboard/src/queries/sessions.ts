@@ -36,7 +36,6 @@ export function createSessionQueries(device: DeviceRuntime) {
     optimisticInbox: () => [...sessionKeys.all, "optimistic-inbox"] as const,
     optimisticChat: () => [...sessionKeys.all, "optimistic-chat"] as const,
     events: (sessionId: string) => [...sessionKeys.detail(sessionId), "events"] as const,
-    models: (sessionId: string) => [...sessionKeys.detail(sessionId), "models"] as const,
   };
 
   function sessionOptions(sessionId: string, enabled = true) {
@@ -80,14 +79,6 @@ export function createSessionQueries(device: DeviceRuntime) {
     });
   }
 
-  function sessionModelsOptions(sessionId: string) {
-    return queryOptions({
-      queryKey: sessionKeys.models(sessionId),
-      enabled: sessionId.length > 0,
-      queryFn: ({ signal }) => device.api.listSessionModels(sessionId, { signal }),
-    });
-  }
-
   function createSessionQuery(sessionId: () => string, enabled: () => boolean = () => true) {
     return createQuery(
       () => sessionOptions(sessionId(), enabled()),
@@ -115,13 +106,6 @@ export function createSessionQueries(device: DeviceRuntime) {
   function createSessionEventsQuery(sessionId: () => string, enabled: () => boolean = () => true) {
     return createQuery(
       () => sessionEventsOptions(sessionId(), enabled()),
-      () => device.queryClient,
-    );
-  }
-
-  function createSessionModelsQuery(sessionId: () => string) {
-    return createQuery(
-      () => sessionModelsOptions(sessionId()),
       () => device.queryClient,
     );
   }
@@ -157,17 +141,13 @@ export function createSessionQueries(device: DeviceRuntime) {
     return { session, turns, inboxMessages, events };
   }
 
-  function invalidateSessionDetail(
-    sessionId: string,
-    { includeModels = true }: { includeModels?: boolean } = {},
-  ): Promise<void> {
+  function invalidateSessionDetail(sessionId: string): Promise<void> {
     // Invalidating a query does not supersede an older fetchQuery already in flight.
     for (const read of sessionSnapshotReads) {
       if (read.sessionId === sessionId) read.invalidated = true;
     }
     return device.queryClient.invalidateQueries({
       queryKey: sessionKeys.detail(sessionId),
-      predicate: (query) => includeModels || query.queryKey[4] !== "models",
     });
   }
 
@@ -264,20 +244,6 @@ export function createSessionQueries(device: DeviceRuntime) {
     onSuccess: async (_result: unknown, sessionId: string) => invalidateAfterControl(sessionId),
   });
 
-  const setSessionModelMutationOptions = () => ({
-    mutationFn: ({
-      sessionId,
-      model,
-      runtimeId,
-    }: {
-      sessionId: string;
-      model: string;
-      runtimeId: string | null;
-    }) => device.api.setSessionModel(sessionId, model, runtimeId),
-    onSuccess: async (_result: void, { sessionId }: { sessionId: string }) =>
-      invalidateSessionDetail(sessionId),
-  });
-
   function createCreateSessionMutation() {
     return createMutation(createSessionMutationOptions, () => device.queryClient);
   }
@@ -308,10 +274,6 @@ export function createSessionQueries(device: DeviceRuntime) {
 
   function createTerminateSessionMutation() {
     return createMutation(terminateSessionMutationOptions, () => device.queryClient);
-  }
-
-  function createSetSessionModelMutation() {
-    return createMutation(setSessionModelMutationOptions, () => device.queryClient);
   }
 
   async function executeMutation<TData, TVariables>(
@@ -367,7 +329,6 @@ export function createSessionQueries(device: DeviceRuntime) {
     createSessionTurnsQuery,
     createSessionInboxMessagesQuery,
     createSessionEventsQuery,
-    createSessionModelsQuery,
     fetchSessionDetail,
     invalidateSessionDetail,
     clearSessionQueries,
@@ -381,7 +342,6 @@ export function createSessionQueries(device: DeviceRuntime) {
     createInterruptSessionMutation,
     createResumeSessionMutation,
     createTerminateSessionMutation,
-    createSetSessionModelMutation,
     mutateCreateSession,
     mutateUpdateSession,
     mutatePinSession,

@@ -27,7 +27,7 @@ Pontia keeps the native Pi TUI. When you start a session from the Dashboard, Pon
 - start a Pi session in a project directory and follow replies and tool output as they stream;
 - send messages, queue them while Pi works, or interrupt the current turn;
 - edit an earlier message to branch the conversation from that point;
-- change the model with `/model`, compact with `/compact`, and see estimated context usage;
+- Compact context with `/compact` and see estimated context usage;
 - reference files with `@`.
 
 The session is a real Pi process, so you can also attach to it from a terminal at any time. Messages from the TUI and from the Dashboard go to the same conversation, and history stays in Pi's own session files:

@@ -26,8 +26,6 @@ pub trait ClientControlChannel: Send + Sync {
         None
     }
     fn invalidate(&self);
-    fn list_models(&self) -> ClientControlOperation<'_, Vec<crate::sessions::SessionModel>>;
-    fn set_model<'a>(&'a self, model: &'a str) -> ClientControlOperation<'a>;
     fn interrupt(&self) -> ClientControlOperation<'_>;
     fn shutdown(&self) -> ClientControlOperation<'_>;
     fn shutdown_if_idle(&self) -> ClientControlOperation<'_, bool> {

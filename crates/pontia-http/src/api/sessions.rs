@@ -220,27 +220,6 @@ pub async fn resume_session(
     Ok((StatusCode::OK, ok(outcome.data)).into_response())
 }
 
-pub async fn list_session_models(
-    State(state): State<AppState>,
-    Path(session_id): Path<String>,
-) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    let service = state.control().session_commands();
-    Ok(ok(serde_json::to_value(
-        service.list_session_models(&session_id).await?,
-    )
-    .map_err(pontia_core::Error::from)?))
-}
-
-pub async fn set_session_model(
-    State(state): State<AppState>,
-    Path(session_id): Path<String>,
-    Json(request): Json<pontia_agent_control::sessions::SetSessionModelRequest>,
-) -> Result<Response, ApiError> {
-    let service = state.control().session_commands();
-    service.set_session_model(&session_id, request).await?;
-    Ok((StatusCode::ACCEPTED, ok(json!({"accepted":true}))).into_response())
-}
-
 pub async fn fork_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,

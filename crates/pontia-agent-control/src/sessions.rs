@@ -19,7 +19,7 @@ mod fork;
 pub use fork::{ForkSessionOutcome, ForkSessionRequest};
 mod models;
 pub use compaction::CompactionAccepted;
-pub use models::{SessionModel, SessionModels, SetSessionModelRequest};
+pub use models::SessionModel;
 mod lifecycle;
 mod runtime_binding;
 

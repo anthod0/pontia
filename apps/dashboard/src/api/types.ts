@@ -263,8 +263,6 @@ export interface SessionCapabilities {
   topology?: boolean;
   branch_control?: boolean;
   fork_session?: boolean;
-  list_models?: boolean;
-  set_model?: boolean;
   manual_compaction: boolean;
   compaction_events: boolean;
   compaction_history: boolean;
@@ -371,7 +369,6 @@ export interface SessionView {
   capabilities: SessionCapabilities;
   timeline_unavailable_reason?: string | null;
   model: string | null;
-  model_control_unavailable_reason?: string | null;
   context_usage: ContextUsageView | null;
   lineage: SessionLineageView | null;
   created_at: string;
@@ -671,12 +668,6 @@ export interface SessionModel {
   id: string;
   name: string;
   description: string;
-}
-
-export interface SessionModels {
-  models: SessionModel[];
-  current_model: string | null;
-  runtime_id: string | null;
 }
 
 export interface ForkSessionOutcome {

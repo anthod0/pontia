@@ -86,12 +86,6 @@ impl ClientControlChannel for Channel {
             Ok(())
         })
     }
-    fn list_models(&self) -> ClientControlOperation<'_, Vec<crate::sessions::SessionModel>> {
-        Box::pin(async { Ok(vec![]) })
-    }
-    fn set_model<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
-        Box::pin(async { Ok(()) })
-    }
     fn interrupt(&self) -> ClientControlOperation<'_> {
         Box::pin(async { Ok(()) })
     }

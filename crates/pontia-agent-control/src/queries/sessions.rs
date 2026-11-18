@@ -58,7 +58,6 @@ impl ControlQueryService {
             let details = client
                 .details(self.pool.clone(), &session.session_id)
                 .await?;
-            session.model_control_unavailable_reason = details.model_control_unavailable_reason;
             session
                 .client_details
                 .insert(session.client_type.clone(), details.data);

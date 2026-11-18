@@ -39,7 +39,6 @@ The chat page streams the conversation and work steps exposed by the Agent Clien
 - interrupt the current Turn when the Client supports interruption;
 - answer tool and permission requests, such as command approvals, when the Client asks for them;
 - retry or dismiss Inbox messages whose delivery failed;
-- use `/model` to change the model for later Turns when the Client supports model changes;
 - type `@` to find files and directories in the active Workspace;
 - attach files with the **+** button in the composer, up to 1 GiB each;
 - edit an eligible earlier user message to branch from that point in the native conversation history.
@@ -58,7 +57,6 @@ Type `/` in the composer to see commands available in the current context:
 | --- | --- |
 | `/new` | Start a new Session, keeping the current Workspace when possible |
 | `/rename` | Rename the current Session |
-| `/model` | Choose a model for subsequent Turns, when supported |
 | `/compact` | Summarize older context while the Session is idle, when supported |
 | `/exit` | End Pontia's active control of the current Session |
 

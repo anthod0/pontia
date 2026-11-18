@@ -4,9 +4,9 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/sve
 import userEvent from "@testing-library/user-event";
 import { get } from "svelte/store";
 import { afterEach, expect, test, vi } from "vitest";
+const api = testDevice.api;
 const { chatDraft } = testDevice.chatDraft;
 import type { SessionView } from "../../../src/api/types";
-const api = testDevice.api;
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -141,7 +141,6 @@ test.each(["exited", "error"])(
 test.each([
   ["/exit", "Exit"],
   ["/rename New title", "Rename"],
-  ["/model", "Choose model"],
 ])(
   "new chat disables %s and /new clears the prompt while preserving workspace selection",
   async (value, label) => {
@@ -180,22 +179,6 @@ test("file mentions keep their keyboard selection before ordinary message submis
       }),
     ),
   );
-});
-
-test.each([
-  { capabilities: { list_models: false, set_model: false } },
-  {
-    capabilities: { list_models: true, set_model: true },
-    model_control_unavailable_reason: "Disconnected",
-  },
-  { capabilities: { list_models: true, set_model: true }, state: "exited" },
-])("/model is handled locally when unavailable: %j", async (overrides) => {
-  const list = vi.spyOn(api, "listSessionModels");
-  renderChat("/model", overrides);
-  expect(await screen.findByRole("button", { name: "Choose model" })).toBeDisabled();
-  await fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
-  expect(list).not.toHaveBeenCalled();
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 });
 
 test("new chat hides chat actions while keeping slash commands available", async () => {
@@ -247,116 +230,14 @@ test("chat actions prepares rename and focuses the input without executing it", 
 test.each([
   { state: "exited" },
   { state: "error" },
-  { capabilities: { list_models: false, set_model: false } },
 ])("chat actions hides unavailable operations: %j", async (overrides) => {
   renderChat("", overrides);
   await openChatActions();
   const menu = within(await screen.findByRole("menu", { hidden: true }));
-  expect(menu.queryByText("Choose model")).not.toBeInTheDocument();
   if (overrides.state) expect(menu.queryByText("Exit")).not.toBeInTheDocument();
   await fireEvent.click(menu.getByText("New chat"));
   expect(mocks.navigate).toHaveBeenCalledWith("/", { workspace: "workspace-1" });
   expect(mocks.terminateSession).not.toHaveBeenCalled();
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
-});
-
-const modelCatalog = {
-  runtime_id: "runtime-1",
-  current_model: "model-a",
-  models: [
-    { id: "model-a", name: "Model A", description: "First model" },
-    { id: "model-b", name: "Model B", description: "Second model" },
-  ],
-};
-
-test("chat actions opens the model picker and changes the model", async () => {
-  vi.spyOn(api, "listSessionModels").mockResolvedValue(modelCatalog);
-  const change = vi.spyOn(api, "setSessionModel").mockResolvedValue();
-  const selected = renderChat("", {
-    model: "model-a",
-    capabilities: { list_models: true, set_model: true },
-  });
-  await openChatActions();
-  await fireEvent.click(
-    within(await screen.findByRole("menu", { hidden: true })).getByText("Choose model"),
-  );
-  await userEvent.click(await screen.findByRole("button", { name: "Model B" }));
-  await waitFor(() =>
-    expect(change).toHaveBeenCalledExactlyOnceWith(selected.session_id, "model-b", "runtime-1"),
-  );
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
-});
-
-test.each(["codex", "pi"])(
-  "/model searches and changes the %s model, waiting for a client fact before updating",
-  async (client_type) => {
-    vi.spyOn(api, "listSessionModels").mockResolvedValue({
-      ...modelCatalog,
-      runtime_id: client_type === "codex" ? null : modelCatalog.runtime_id,
-    });
-    const change = vi.spyOn(api, "setSessionModel").mockResolvedValue();
-    const selected = renderChat("/model", {
-      client_type,
-      model: "model-a",
-      state: "busy",
-      capabilities: { list_models: true, set_model: true },
-    });
-    await fireEvent.click(await screen.findByRole("button", { name: "Choose model" }));
-    expect(await screen.findByRole("button", { name: "Model A" })).toBeDisabled();
-    await fireEvent.input(screen.getByRole("textbox", { name: "Search models" }), {
-      target: { value: "model-b" },
-    });
-    expect(screen.queryByRole("button", { name: "Model A" })).not.toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("button", { name: "Model B" }));
-    await waitFor(() =>
-      expect(change).toHaveBeenCalledExactlyOnceWith(
-        selected.session_id,
-        "model-b",
-        client_type === "codex" ? null : "runtime-1",
-      ),
-    );
-    expect(mocks.sessionDetail.get()?.session.model).toBe("model-a");
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    mocks.sessionDetail.set({
-      session: { ...selected, model: "model-b" },
-      turns: [],
-      inboxMessages: [],
-      events: [],
-    });
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
-  },
-);
-
-test("/model exposes a read-only catalog when selection is unsupported", async () => {
-  vi.spyOn(api, "listSessionModels").mockResolvedValue(modelCatalog);
-  const change = vi.spyOn(api, "setSessionModel");
-  renderChat("/model", { capabilities: { list_models: true, set_model: false } });
-  await fireEvent.click(await screen.findByRole("button", { name: "Choose model" }));
-  expect(await screen.findByRole("button", { name: "Model B" })).toBeDisabled();
-  expect(change).not.toHaveBeenCalled();
-});
-
-test("/model keeps the confirmed model when selection fails and permits an explicit retry", async () => {
-  vi.spyOn(api, "listSessionModels").mockResolvedValue(modelCatalog);
-  const change = vi
-    .spyOn(api, "setSessionModel")
-    .mockRejectedValueOnce(new Error("Model unavailable"))
-    .mockResolvedValue();
-  renderChat("/model", { model: "model-a", capabilities: { list_models: true, set_model: true } });
-  await fireEvent.click(await screen.findByRole("button", { name: "Choose model" }));
-  await fireEvent.click(await screen.findByRole("button", { name: "Model B" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Model unavailable");
-  expect(mocks.sessionDetail.get()?.session.model).toBe("model-a");
-  await fireEvent.click(screen.getByRole("button", { name: "Model B" }));
-  await waitFor(() => expect(change).toHaveBeenCalledTimes(2));
-});
-
-test("/model shows catalog failures without sending a message", async () => {
-  vi.spyOn(api, "listSessionModels").mockRejectedValue(new Error("Connection lost"));
-  renderChat("/model", { capabilities: { list_models: true, set_model: true } });
-  await fireEvent.click(await screen.findByRole("button", { name: "Choose model" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Connection lost");
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 });
 

@@ -57,7 +57,6 @@
       },
     },
     { name: '/rename', description: $t('chat.renameCurrent'), disabledReason: $t('chat.noCurrent'), run: () => {} },
-    { name: '/model', description: $t('model.chooseCommand'), disabledReason: $t('chat.noCurrent'), run: () => {} },
     { name: '/compact', description: $t('compaction.description'), disabledReason: $t('chat.noCurrent'), run: () => {} },
     { name: '/exit', description: $t('chat.endCurrent'), disabledReason: $t('chat.noCurrent'), run: () => {} },
   ])

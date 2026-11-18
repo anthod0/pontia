@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 
-use crate::runtime::{CodexRuntime, SubscriptionState, protocol::Connection};
+use crate::runtime::{CodexRuntime, protocol::Connection};
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 
 use super::{CodexService, string};
 use pontia_agent_control::agent_clients::AgentClientModels;
-use pontia_agent_control::{AgentBindingService, runtime::ControlTarget, sessions::SessionModel};
+use pontia_agent_control::sessions::SessionModel;
 
 impl CodexService {
     pub(crate) async fn available_models(root: &std::path::Path) -> Result<AgentClientModels> {
@@ -23,52 +23,6 @@ impl CodexService {
         }
         runtime.current_guard().await?;
         Ok(models)
-    }
-
-    pub(crate) async fn list_models(&self, target: &ControlTarget) -> Result<Vec<SessionModel>> {
-        let runtime = self.runtime(&target.session_id).await?;
-        let _operation = runtime.lock_session(&target.session_id).await;
-        self.model_target(target, &runtime).await?;
-        let connection = runtime.connection().await?;
-        let models = list_models(&connection).await?;
-        runtime.current_guard().await?;
-        Ok(models.models)
-    }
-
-    pub(crate) async fn set_model(&self, target: &ControlTarget, model: &str) -> Result<()> {
-        let runtime = self.runtime(&target.session_id).await?;
-        let _operation = runtime.lock_session(&target.session_id).await;
-        let thread = self.model_target(target, &runtime).await?;
-        let connection = runtime.connection().await?;
-        if !list_models(&connection)
-            .await?
-            .models
-            .iter()
-            .any(|entry| entry.id == model)
-        {
-            return Err(Error::Domain("The selected model is not available.".into()));
-        }
-        update_model(&connection, &thread, model).await?;
-        runtime.current_guard().await?;
-        Ok(())
-    }
-
-    async fn model_target(&self, target: &ControlTarget, runtime: &CodexRuntime) -> Result<String> {
-        self.confirm_control_connection(target, runtime).await?;
-        if !self.session_accepts_control(&target.session_id).await?
-            || runtime.subscription(&target.session_id).await != Some(SubscriptionState::Available)
-        {
-            return Err(Error::CapabilityUnavailable(
-                "Codex model control is unavailable".into(),
-            ));
-        }
-        AgentBindingService::new(self.pool.clone())
-            .binding_for_session(&target.session_id)
-            .await?
-            .map(|binding| binding.client_session_key)
-            .ok_or_else(|| {
-                Error::CapabilityUnavailable("Codex session has no native thread".into())
-            })
     }
 
     pub(super) async fn model_fact(&self, session: &str, settings: &Value) -> Result<()> {
@@ -92,21 +46,6 @@ impl CodexService {
         runtime.current_guard().await?;
         self.model_fact(session, settings).await
     }
-}
-
-async fn update_model(connection: &Connection, thread: &str, model: &str) -> Result<()> {
-    let response = connection
-        .call(
-            "thread/settings/update",
-            json!({"threadId":thread,"model":model}),
-        )
-        .await?;
-    if response != json!({}) {
-        return Err(Error::ControlUnknown(
-            "Invalid Codex model change acknowledgement".into(),
-        ));
-    }
-    Ok(())
 }
 
 async fn list_models(connection: &Connection) -> Result<AgentClientModels> {
@@ -150,3 +89,6 @@ async fn list_models(connection: &Connection) -> Result<AgentClientModels> {
         default_model,
     })
 }
+
+#[cfg(test)]
+mod tests;

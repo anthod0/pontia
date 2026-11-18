@@ -21,7 +21,6 @@ import type {
   SessionView,
   SessionCompactionAccepted,
   SessionCreationOption,
-  SessionModels,
   SessionModel,
   SessionOverviewSection,
   SessionOverviewView,
@@ -897,27 +896,6 @@ export function createApi(device: DeviceRuntime) {
     });
   }
 
-  async function listSessionModels(
-    sessionId: string,
-    options: ReadRequestOptions = {},
-  ): Promise<SessionModels> {
-    return boundedReadRequest<SessionModels>(
-      `/sessions/${encodeURIComponent(sessionId)}/models`,
-      options,
-    );
-  }
-
-  async function setSessionModel(
-    sessionId: string,
-    model: string,
-    runtimeId: string | null,
-  ): Promise<void> {
-    await request<{ accepted: boolean }>(`/sessions/${encodeURIComponent(sessionId)}/model`, {
-      method: "PATCH",
-      body: runtimeId ? { model, runtime_id: runtimeId } : { model },
-      retryNetworkErrors: false,
-    });
-  }
   return {
     listBots,
     listBotClients,
@@ -982,7 +960,5 @@ export function createApi(device: DeviceRuntime) {
     compactSession,
     resumeSession,
     terminateSession,
-    listSessionModels,
-    setSessionModel,
   };
 }

@@ -39,7 +39,6 @@ A página do chat transmite a conversa e as etapas de trabalho expostas pelo Age
 - interromper o Turn atual quando o Client suportar interrupção;
 - responder a pedidos de ferramentas e de permissão, como aprovações de comandos, quando o Client solicitar;
 - tentar de novo ou descartar mensagens do Inbox cuja entrega falhou;
-- usar `/model` para trocar o modelo dos próximos Turns quando o Client suportar troca de modelo;
 - digitar `@` para encontrar arquivos e diretórios na Workspace ativa;
 - anexar arquivos com o botão **+** no compositor, até 1 GiB cada;
 - editar uma mensagem anterior elegível do usuário para ramificar a partir daquele ponto no histórico da conversa nativa.
@@ -58,7 +57,6 @@ Digite `/` no compositor para ver os comandos disponíveis no contexto atual:
 | --- | --- |
 | `/new` | Inicia uma nova Session, mantendo a Workspace atual quando possível |
 | `/rename` | Renomeia a Session atual |
-| `/model` | Escolhe um modelo para os próximos Turns, quando suportado |
 | `/compact` | Resume o contexto mais antigo enquanto a Session está ociosa, quando suportado |
 | `/exit` | Encerra o controle ativo do Pontia sobre a Session atual |
 

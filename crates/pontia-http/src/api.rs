@@ -49,9 +49,8 @@ pub use live_output::stream_live_output;
 pub use response::{ApiError, ApiResponse};
 pub use sessions::{
     archive_session, compact_session, create_session, exit_session, fork_session, get_session,
-    interrupt_session, list_session_models, pin_session, restart_session, resume_session,
-    session_creation_options, session_overview, set_session_model, unarchive_session,
-    unpin_session, update_session,
+    interrupt_session, pin_session, restart_session, resume_session, session_creation_options,
+    session_overview, unarchive_session, unpin_session, update_session,
 };
 pub use timeline::{
     get_turn_timeline, get_turn_tree_history, get_turn_tree_updates, read_session_messages,

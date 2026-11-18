@@ -51,7 +51,7 @@ args = ["--acp"]
 
 ## 各 Client 的能力不同
 
-Dashboard 会显示所选 Client 支持的控制功能，例如中断、模型切换、历史分支和排队投递。
+Dashboard 会显示所选 Client 支持的控制功能，例如中断、历史分支和排队投递。
 
 Pontia Session 在绑定后会与一个客户端原生对话身份持久关联。重新打开同一个原生对话会继续现有的 Session；新的原生对话则属于新的 Session。
 

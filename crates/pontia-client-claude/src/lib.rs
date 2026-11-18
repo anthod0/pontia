@@ -12,7 +12,7 @@ mod transport;
 use peer::{Input, Peer};
 use pontia_agent_control::{
     AgentControl, EventIngestService, client_contract::*, clients::ClientRegistration,
-    control::InputReceipt, runtime::ControlTarget, sessions::SessionModel, turns::InputIntent,
+    control::InputReceipt, runtime::ControlTarget, turns::InputIntent,
 };
 use pontia_core::{Error, Result};
 use pontia_runtime::RuntimeStartRequest;
@@ -376,31 +376,18 @@ impl ClientSession for Adapter {
         session: &'a str,
     ) -> ClientOperation<'a, ClientSessionDetails> {
         Box::pin(async move {
-            let (reason, model_reason) = match self.peer(session).await {
+            let reason = match self.peer(session).await {
                 Ok(peer) => {
                     let state = peer.state.lock().await;
-                    let reason = state
+                    state
                         .unavailable
                         .clone()
-                        .or_else(|| state.retry_reason.clone());
-                    let model_reason =
-                        if state.unavailable.is_some() || state.closed || state.closing {
-                            Some("Claude Code host is unavailable".into())
-                        } else if state.native.is_none() {
-                            Some("Claude Code is initializing".into())
-                        } else {
-                            None
-                        };
-                    (reason, model_reason)
+                        .or_else(|| state.retry_reason.clone())
                 }
-                Err(_) => (
-                    Some("host_unavailable".into()),
-                    Some("Claude Code host is unavailable".into()),
-                ),
+                Err(_) => Some("host_unavailable".into()),
             };
             Ok(ClientSessionDetails {
                 data: json!({"unavailable_reason":reason}),
-                model_control_unavailable_reason: model_reason,
             })
         })
     }
@@ -410,34 +397,6 @@ impl ClientSession for Adapter {
         target: &'a ControlTarget,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move { self.resume_bound(events, target).await })
-    }
-    fn list_models<'a>(
-        &'a self,
-        events: EventIngestService,
-        target: &'a ControlTarget,
-    ) -> ClientOperation<'a, Vec<SessionModel>> {
-        Box::pin(async move {
-            let peer = self.target(&events, target).await?;
-            let response = peer
-                .connection()?
-                .request(json!({"method":"list_models"}))
-                .await?;
-            Ok(serde_json::from_value(response["models"].clone())?)
-        })
-    }
-    fn set_model<'a>(
-        &'a self,
-        events: EventIngestService,
-        target: &'a ControlTarget,
-        model: &'a str,
-    ) -> ClientOperation<'a, ()> {
-        Box::pin(async move {
-            let peer = self.target(&events, target).await?;
-            peer.connection()?
-                .request(json!({"method":"set_model","model":model}))
-                .await?;
-            Ok(())
-        })
     }
 }
 impl ClientInteractions for Adapter {

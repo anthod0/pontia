@@ -8,7 +8,6 @@
   import StopIcon from 'phosphor-svelte/lib/StopIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
-  import CpuIcon from 'phosphor-svelte/lib/CpuIcon'
   import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon'
   import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
@@ -101,7 +100,6 @@
     '/new': { label: $t('chat.new'), icon: NotePencilIcon },
     '/rename': { label: $t('common.rename'), icon: PencilSimpleIcon },
     '/exit': { label: $t('common.exit'), icon: SignOutIcon },
-    '/model': { label: $t('model.choose'), icon: CpuIcon },
     '/compact': { label: $t('compaction.action'), icon: StackSimpleIcon },
   })
   const mentionIdentities = new Map<string, FilePickerFileView>()

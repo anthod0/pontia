@@ -51,7 +51,6 @@ test("a session event invalidates its session snapshots and every overview varia
     { includeArchived: false, workspaceId: "workspace-1" },
   ] as const;
   const affectedDetailKey = sessionKeys.detail("session-1");
-  const affectedModelsKey = sessionKeys.models("session-1");
   const affectedTimelineKey = timelineKeys.snapshot("session-1");
   const otherDetailKey = sessionKeys.detail("session-2");
   const otherTimelineKey = timelineKeys.snapshot("session-2");
@@ -62,7 +61,6 @@ test("a session event invalidates its session snapshots and every overview varia
     archivedOverviewKey,
     workspaceOverviewKey,
     affectedDetailKey,
-    affectedModelsKey,
     affectedTimelineKey,
     otherDetailKey,
     otherTimelineKey,
@@ -77,24 +75,12 @@ test("a session event invalidates its session snapshots and every overview varia
   expect(isInvalidated(archivedOverviewKey)).toBe(true);
   expect(isInvalidated(workspaceOverviewKey)).toBe(true);
   expect(isInvalidated(affectedDetailKey)).toBe(true);
-  expect(isInvalidated(affectedModelsKey)).toBe(false);
   expect(isInvalidated(affectedTimelineKey)).toBe(true);
   expect(isInvalidated(otherDetailKey)).toBe(false);
   expect(isInvalidated(otherTimelineKey)).toBe(false);
   expect(isInvalidated(workflowRevisionKey)).toBe(false);
 });
 
-test("a model event also invalidates the affected Session model query", async () => {
-  const modelsKey = sessionKeys.models("session-1");
-  const otherModelsKey = sessionKeys.models("session-2");
-  queryClient.setQueryData(modelsKey, {});
-  queryClient.setQueryData(otherModelsKey, {});
-
-  await invalidateQueriesForDashboardEvent(sessionEvent("session.model_updated"));
-
-  expect(isInvalidated(modelsKey)).toBe(true);
-  expect(isInvalidated(otherModelsKey)).toBe(false);
-});
 
 test("connection recovery invalidates mutable snapshots without expiring immutable or optimistic data", async () => {
   const sessionKey = sessionKeys.detail("session-1");

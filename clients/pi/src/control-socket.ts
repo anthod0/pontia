@@ -20,16 +20,6 @@ export interface ControlInput {
   inboxMessageId?: string;
   steerTargetTurnId?: string;
 }
-export interface PiModel {
-  id: string;
-  name: string;
-  description: string;
-}
-export interface ModelControl {
-  listModels(): PiModel[];
-  setModel(model: string): Promise<void>;
-  onReconnect(): Promise<void>;
-}
 export interface LifecycleControl {
   interrupt(): void;
   shutdown(): void;
@@ -67,7 +57,6 @@ class RpcSocket {
 
   private socket: Socket;
   private onSubmit: (input: ControlInput) => void | Promise<void>;
-  private models?: ModelControl;
   private lifecycle?: LifecycleControl;
   private history?: () => HistoryContext;
   private compaction?: CompactionControl;
@@ -76,7 +65,6 @@ class RpcSocket {
   constructor(
     socket: Socket,
     onSubmit: (input: ControlInput) => void | Promise<void>,
-    models?: ModelControl,
     onReplay?: (inboxMessageId: string) => void,
     lifecycle?: LifecycleControl,
     history?: () => HistoryContext,
@@ -84,7 +72,6 @@ class RpcSocket {
   ) {
     this.socket = socket;
     this.onSubmit = onSubmit;
-    this.models = models;
     this.onReplay = onReplay;
     this.lifecycle = lifecycle;
     this.history = history;
@@ -265,33 +252,6 @@ class RpcSocket {
         }
         return;
       }
-      if (this.models && (message.method === "models.list" || message.method === "model.set")) {
-        const models = this.models;
-        if (
-          message.method === "model.set" &&
-          (typeof params.model !== "string" || !params.model.trim())
-        ) {
-          error(-32602, "model.set requires a non-empty model");
-          return;
-        }
-        // Keep reading responses while setModel emits an acknowledged model fact.
-        void (async () => {
-          try {
-            if (message.method === "models.list")
-              respond({ result: { models: models.listModels() } });
-            else {
-              await models.setModel(params.model);
-              respond({ result: { accepted: true } });
-            }
-          } catch (failure) {
-            error(
-              failure instanceof RpcError ? failure.code : -32006,
-              failure instanceof Error ? failure.message : String(failure),
-            );
-          }
-        })().catch((failure) => this.fail(failure));
-        return;
-      }
       if (message.method !== "submit" && message.method !== "steer") {
         error(-32601, "Unknown Pi control method");
         return;
@@ -350,7 +310,7 @@ export async function connectPi(
   pontiaHome: string,
   onError: (error: Error) => void,
   onSubmit: (input: ControlInput) => void | Promise<void>,
-  models?: ModelControl,
+  onReconnect?: () => Promise<void>,
   onReplay?: (inboxMessageId: string) => void,
   lifecycle?: LifecycleControl,
   history?: () => HistoryContext,
@@ -422,7 +382,6 @@ export async function connectPi(
             throw new Error("Pi reporting connection cannot accept input");
           }
         : onSubmit,
-      reportingOnly ? undefined : models,
       reportingOnly ? undefined : onReplay,
       reportingOnly ? undefined : lifecycle,
       reportingOnly ? undefined : history,
@@ -461,7 +420,7 @@ export async function connectPi(
         }
         attached = true;
         wakeRequests();
-        await models?.onReconnect();
+        await onReconnect?.();
       } catch (error) {
         onError(error instanceof Error ? error : new Error(String(error)));
         // A rejected identity cannot be repaired by repeating registration.

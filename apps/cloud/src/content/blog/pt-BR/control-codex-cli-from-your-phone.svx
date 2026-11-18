@@ -26,7 +26,7 @@ O Codex CLI inclui um daemon app-server. O app desktop do ChatGPT também o usa 
 - iniciar uma Session do Codex em um diretório de projeto;
 - acompanhar mensagens, chamadas de ferramentas e a saída de comandos em tempo real;
 - responder a pedidos de aprovação para comandos, alterações de arquivos e permissões extras com **Allow** ou **Deny**;
-- enviar ou enfileirar mensagens de acompanhamento, interromper um turno e trocar de modelo com `/model`;
+- enviar ou enfileirar mensagens de acompanhamento e interromper um turno;
 - referenciar arquivos do projeto com `@`.
 
 O Codex roda na sua máquina com suas próprias credenciais, sandbox e política de aprovação. As Sessions persistem, então você pode começar uma tarefa na sua mesa e continuá-la pelo celular. O navegador e a sua máquina estabelecem uma sessão criptografada de ponta a ponta pelo relay do Pontia, que apenas encaminha texto cifrado. Sua máquina se conecta para fora, então não precisa de nenhuma porta de entrada aberta.

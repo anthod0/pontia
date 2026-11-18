@@ -36,8 +36,6 @@ export function sdk() {
   let interrupts = 0;
   let onInterrupt: (() => Promise<void>) | undefined;
   let onClose: (() => void) | undefined;
-  let onSetModel: (() => Promise<void>) | undefined;
-  let model = "sonnet";
   const models = [
     { value: "sonnet", displayName: "Sonnet", description: "Balanced" },
     { value: "haiku", displayName: "Haiku", description: "Fast" },
@@ -50,10 +48,6 @@ export function sdk() {
     return {
       [Symbol.asyncIterator]: () => messages[Symbol.asyncIterator](),
       supportedModels: async () => models,
-      setModel: async (value) => {
-        await onSetModel?.();
-        model = value!;
-      },
       interrupt: async () => {
         interrupts += 1;
         await onInterrupt?.();
@@ -67,12 +61,6 @@ export function sdk() {
   return {
     factory,
     messages,
-    get model() {
-      return model;
-    },
-    onSetModel: (fn: () => Promise<void>) => {
-      onSetModel = fn;
-    },
     get calls() {
       return calls;
     },

@@ -1,4 +1,4 @@
-use super::{list_models, update_model};
+use super::list_models;
 use crate::runtime::protocol::Connection;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
@@ -6,7 +6,7 @@ use tokio::net::UnixListener;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 #[tokio::test]
-async fn model_control_uses_native_catalog_and_settings_protocol() {
+async fn model_catalog_follows_pagination_and_filters_hidden_models() {
     let root = tempfile::tempdir().unwrap();
     let socket = root.path().join("models.sock");
     let listener = UnixListener::bind(&socket).unwrap();
@@ -48,33 +48,19 @@ async fn model_control_uses_native_catalog_and_settings_protocol() {
             .await
             .unwrap();
         }
-        let request: Value =
-            serde_json::from_str(wire.next().await.unwrap().unwrap().to_text().unwrap()).unwrap();
-        assert_eq!(request["method"], "thread/settings/update");
-        assert_eq!(
-            request["params"],
-            json!({"threadId":"thread-a","model":"model-b"})
-        );
-        wire.send(Message::Text(
-            json!({"id":request["id"],"result":{}}).to_string().into(),
-        ))
-        .await
-        .unwrap();
     });
     let connection = Connection::connect(&socket).await.unwrap();
     let models = list_models(&connection).await.unwrap();
     assert_eq!(
         models
+            .models
             .iter()
             .map(|model| model.id.as_str())
             .collect::<Vec<_>>(),
         ["model-a", "model-b"]
     );
-    assert_eq!(models[0].name, "Model A");
-    assert_eq!(models[0].description, "First");
-    update_model(&connection, "thread-a", "model-b")
-        .await
-        .unwrap();
+    assert_eq!(models.models[0].name, "Model A");
+    assert_eq!(models.models[0].description, "First");
     server.await.unwrap();
 }
 

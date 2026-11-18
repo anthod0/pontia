@@ -1,6 +1,5 @@
 use crate::{
-    EventIngestService, control::InputReceipt, runtime::ControlTarget, sessions::SessionModel,
-    turns::InputIntent,
+    EventIngestService, control::InputReceipt, runtime::ControlTarget, turns::InputIntent,
 };
 use pontia_core::Result;
 use pontia_runtime::RuntimeStartRequest;
@@ -75,17 +74,6 @@ pub trait ClientSession: Send + Sync {
         events: EventIngestService,
         target: &'a ControlTarget,
     ) -> ClientOperation<'a, ()>;
-    fn list_models<'a>(
-        &'a self,
-        events: EventIngestService,
-        target: &'a ControlTarget,
-    ) -> ClientOperation<'a, Vec<SessionModel>>;
-    fn set_model<'a>(
-        &'a self,
-        events: EventIngestService,
-        target: &'a ControlTarget,
-        model: &'a str,
-    ) -> ClientOperation<'a, ()>;
     fn fork_session<'a>(
         &'a self,
         _events: EventIngestService,
@@ -146,7 +134,6 @@ pub trait ClientSession: Send + Sync {
 
 pub struct ClientSessionDetails {
     pub data: Value,
-    pub model_control_unavailable_reason: Option<String>,
 }
 
 pub trait InProcessClient: Send + Sync {

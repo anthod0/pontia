@@ -8,24 +8,16 @@ export function createInvalidation(device: DeviceRuntime) {
     if (streamEvent.kind !== "session_event") return;
 
     const sessionId = streamEvent.event.session_id;
-    const invalidations = [
+    await Promise.all([
       device.queryClient.invalidateQueries({
         queryKey: device.sessionOverview.sessionOverviewKeys.all,
       }),
-      device.sessionQueries.invalidateSessionDetail(sessionId, { includeModels: false }),
+      device.sessionQueries.invalidateSessionDetail(sessionId),
       device.queryClient.invalidateQueries({
         queryKey: device.timelineQueries.timelineKeys.snapshot(sessionId),
         refetchType: "none" as const,
       }),
-    ];
-    if (streamEvent.event.type === "session.model_updated") {
-      invalidations.push(
-        device.queryClient.invalidateQueries({
-          queryKey: device.sessionQueries.sessionKeys.models(sessionId),
-        }),
-      );
-    }
-    await Promise.all(invalidations);
+    ]);
   }
 
   function isMutableDashboardQuery(queryKey: readonly unknown[]): boolean {

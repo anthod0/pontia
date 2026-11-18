@@ -3,7 +3,6 @@ use crate::{
     client_contract::{ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails},
     control::InputReceipt,
     runtime::ControlTarget,
-    sessions::SessionModel,
     turns::InputIntent,
 };
 use pontia_core::{Error, Result};
@@ -81,21 +80,6 @@ impl ClientSession for Client {
         _: &'a ControlTarget,
     ) -> ClientOperation<'a, ()> {
         panic!("unexpected resume")
-    }
-    fn list_models<'a>(
-        &'a self,
-        _: EventIngestService,
-        _: &'a ControlTarget,
-    ) -> ClientOperation<'a, Vec<SessionModel>> {
-        panic!("unexpected model query")
-    }
-    fn set_model<'a>(
-        &'a self,
-        _: EventIngestService,
-        _: &'a ControlTarget,
-        _: &'a str,
-    ) -> ClientOperation<'a, ()> {
-        panic!("unexpected model change")
     }
 }
 

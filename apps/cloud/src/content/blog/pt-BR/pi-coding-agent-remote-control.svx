@@ -27,7 +27,7 @@ O Pontia mantém a TUI nativa do Pi. Quando você inicia uma sessão pelo Dashbo
 - iniciar uma sessão do Pi em um diretório de projeto e acompanhar as respostas e a saída das ferramentas em tempo real;
 - enviar mensagens, enfileirá-las enquanto o Pi trabalha ou interromper o turno atual;
 - editar uma mensagem anterior para ramificar a conversa a partir daquele ponto;
-- trocar o modelo com `/model`, compactar com `/compact` e ver o uso estimado de contexto;
+- compactar com `/compact` e ver o uso estimado de contexto;
 - referenciar arquivos com `@`.
 
 A sessão é um processo real do Pi, então você também pode se conectar a ela por um terminal a qualquer momento. Mensagens da TUI e do Dashboard vão para a mesma conversa, e o histórico fica nos próprios arquivos de sessão do Pi:

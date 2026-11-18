@@ -124,23 +124,6 @@ if (process.argv[2] === "history") {
           delta: request.text,
         });
         send({ type: "response", id: request.id, status: "accepted" });
-      } else if (request.method === "list_models") {
-        send({
-          type: "response",
-          id: request.id,
-          status: "accepted",
-          models: [
-            { id: "sonnet", name: "Sonnet", description: "Balanced" },
-            { id: "haiku", name: "Haiku", description: "Fast" },
-          ],
-        });
-      } else if (request.method === "set_model") {
-        if (!["sonnet", "haiku"].includes(request.model)) {
-          send({ type: "response", id: request.id, status: "rejected" });
-          return;
-        }
-        event({ kind: "model", model: request.model });
-        send({ type: "response", id: request.id, status: "accepted" });
       } else if (request.method === "permission") {
         if (active?.text === "approval-lost") process.exit(0);
         if (

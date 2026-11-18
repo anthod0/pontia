@@ -855,12 +855,9 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
             timeline: true,
             topology: true,
             interrupt: true,
-            list_models: true,
-            set_model: true,
           },
           timeline_unavailable_reason: null,
           model,
-          model_control_unavailable_reason: null,
           context_usage: contextUsage(6_000),
           lineage: null,
           created_at: timestamp,
@@ -1124,27 +1121,6 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
         });
       }, 1_500);
       return { accepted: true, operation_id: operationId };
-    },
-  ],
-  [
-    "GET",
-    "/sessions/:id/models",
-    ({ device, params: [id] }) => ({
-      models: device.data.models,
-      current_model: findSession(device, id).view.model,
-      runtime_id: "runtime_mock",
-    }),
-  ],
-  [
-    "PATCH",
-    "/sessions/:id/model",
-    ({ device, params: [id], body }) => {
-      const session = findSession(device, id);
-      session.view.model = String(body.model);
-      session.view.metadata = { ...session.view.metadata, model: session.view.model };
-      touch(session);
-      emit(device, session, "session.model_updated", null, { model: session.view.model });
-      return { accepted: true };
     },
   ],
   [

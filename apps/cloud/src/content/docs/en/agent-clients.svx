@@ -51,7 +51,7 @@ In the Dashboard, open **Settings → Agent Clients**, select Pi, Codex, or Clau
 
 ## Client capabilities differ
 
-The Dashboard presents the controls supported by the selected Client, such as interruption, model changes, history branching, and queued delivery.
+The Dashboard presents the controls supported by the selected Client, such as interruption, history branching, and queued delivery.
 
 A Pontia Session is durably associated with one client-native conversation identity after binding. Reopening the same native conversation continues the existing Session; a new native conversation belongs to a new Session.
 

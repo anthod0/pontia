@@ -51,7 +51,7 @@ No Dashboard, abra **Settings → Agent Clients**, selecione Pi, Codex ou Claude
 
 ## Os recursos variam entre Clients
 
-O Dashboard apresenta os controles suportados pelo Client selecionado, como interrupção, troca de modelo, ramificação do histórico e entrega em fila.
+O Dashboard apresenta os controles suportados pelo Client selecionado, como interrupção, ramificação do histórico e entrega em fila.
 
 Depois da vinculação, uma Session do Pontia fica associada de forma permanente a uma identidade de conversa nativa do cliente. Reabrir a mesma conversa nativa continua a Session existente; uma nova conversa nativa pertence a uma nova Session.
 

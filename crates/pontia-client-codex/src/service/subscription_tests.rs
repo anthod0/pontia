@@ -121,7 +121,6 @@ impl Fixture {
                     "model/list" => {
                         json!({"data":[{"model":"model-one","displayName":"Model One","description":"test","hidden":false,"isDefault":true}],"nextCursor":null})
                     }
-                    "thread/settings/update" => json!({}),
                     "thread/archive" => {
                         materialized = true;
                         unloaded = true;
@@ -555,34 +554,6 @@ async fn active_native_turn_prevents_a_second_start_input() {
         }
     ));
     assert_eq!(fixture.inputs.lock().await.len(), 1);
-    fixture.shutdown().await;
-}
-
-#[tokio::test]
-async fn model_control_does_not_require_a_runtime_identity() {
-    let fixture = Fixture::new().await;
-    fixture.dispatch_first_input().await;
-
-    let models = fixture
-        .app
-        .session_commands()
-        .list_session_models(&fixture.session)
-        .await
-        .unwrap();
-    assert!(models.runtime_id.is_none());
-    assert_eq!(models.models[0].id, "model-one");
-    fixture
-        .app
-        .session_commands()
-        .set_session_model(
-            &fixture.session,
-            pontia_agent_control::sessions::SetSessionModelRequest {
-                model: "model-one".into(),
-                runtime_id: None,
-            },
-        )
-        .await
-        .unwrap();
     fixture.shutdown().await;
 }
 

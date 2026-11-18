@@ -245,12 +245,7 @@ test(
       assert.ok(JSON.stringify(toolResults[0]!.content).includes("isolated tool result marker"));
       const native = host.status().native_session_id;
       assert.ok(native);
-      const models = await host.listModels();
-      assert.ok(models.some((model) => model.id === "haiku"));
-      await host.setModel("haiku");
       await finish(host, randomUUID(), "Second isolated task", "fixture answer", "allow");
-      assert.ok(requests[2]!.model.includes("haiku"));
-      assert.notEqual(requests[2]!.model, requests[0]!.model);
       assert.equal(host.status().native_session_id, native);
       assert.equal(await readFile(join(cwd, "write-3.txt"), "utf8"), "approved write marker");
       await finish(host, randomUUID(), "Denied isolated task", "fixture answer", "deny");

@@ -14,7 +14,6 @@ use pontia_agent_control::{
     },
     control::InputReceipt,
     runtime::ControlTarget,
-    sessions::SessionModel,
     turns::InputIntent,
 };
 use pontia_core::{
@@ -258,21 +257,6 @@ impl ClientSession for CodexClient {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move { CodexService::new(events).resume(target).await })
     }
-    fn list_models<'a>(
-        &'a self,
-        events: EventIngestService,
-        target: &'a ControlTarget,
-    ) -> ClientOperation<'a, Vec<SessionModel>> {
-        Box::pin(async move { CodexService::new(events).list_models(target).await })
-    }
-    fn set_model<'a>(
-        &'a self,
-        events: EventIngestService,
-        target: &'a ControlTarget,
-        model: &'a str,
-    ) -> ClientOperation<'a, ()> {
-        Box::pin(async move { CodexService::new(events).set_model(target, model).await })
-    }
     fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
         Box::pin(async move {
             let root: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?")
@@ -363,11 +347,8 @@ impl ClientSession for CodexClient {
                     selected.map_or(Value::Null, |(profile_id, version)| json!({"profile_id":profile_id,"version":version,"status":"unverified"}))
                 }
             };
-            let model_control_unavailable_reason = (connection != "available")
-                .then(|| "The agent control connection is unavailable.".into());
             Ok(ClientSessionDetails {
                 data: json!({"thread_id":binding.map(|binding| binding.client_session_key),"profile":profile,"connection":connection}),
-                model_control_unavailable_reason,
             })
         })
     }
