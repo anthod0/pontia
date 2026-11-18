@@ -1,3 +1,4 @@
+pub mod handoff;
 pub mod identity;
 pub mod memory;
 pub mod messages;
