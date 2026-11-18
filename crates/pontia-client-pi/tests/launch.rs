@@ -37,6 +37,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         &config,
         tempdir.path().join("pontia-home").as_path(),
         RuntimeStartRequest {
+            model: Some("provider/model".into()),
             runtime_id: None,
             session_id: "sess_configured".to_string(),
             client_type: "pi".to_string(),
@@ -53,7 +54,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
     restore_fake_tmux(original_path);
     assert_eq!(
         started.metadata["start_command"],
-        "custom-pi --profile configured --approve"
+        "custom-pi --profile configured --approve --model 'provider/model'"
     );
 
     let pontia_home = tempdir.path().join("pontia-home");
@@ -74,7 +75,8 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         "{launch_script}"
     );
     assert!(
-        launch_script.contains("custom-pi --profile configured --approve --session-id"),
+        launch_script.contains("custom-pi --profile configured --approve --model")
+            && launch_script.contains("--session-id"),
         "{launch_script}"
     );
     assert!(launch_script.contains("sess_configured"), "{launch_script}");
@@ -104,6 +106,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
         &config,
         tempdir.path().join("pontia-home").as_path(),
         RuntimeStartRequest {
+            model: None,
             runtime_id: None,
             session_id: "sess_env_override".to_string(),
             client_type: "pi".to_string(),
@@ -399,6 +402,7 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
 
 fn launch_request(root: &Path, start_command: Option<String>) -> RuntimeStartRequest {
     RuntimeStartRequest {
+        model: None,
         runtime_id: None,
         session_id: "sess_launch".into(),
         client_type: "pi".into(),

@@ -159,7 +159,7 @@ impl ClientRegistry {
                 Some(configuration) => configuration.key(&serde_json::json!({}))?,
                 None => "default".into(),
             };
-            if !enabled.contains(&(client.into(), key)) {
+            if !enabled.contains(&(client.into(), key.clone())) {
                 continue;
             }
             let name = registration
@@ -172,6 +172,11 @@ impl ClientRegistry {
                 })
                 .unwrap_or_else(|| client.into());
             options.push(crate::client_contract::SessionCreationOption {
+                model_catalog_key: registration
+                    .configuration
+                    .as_ref()
+                    .filter(|c| c.supports_startup_model())
+                    .map(|_| key),
                 id: client.into(),
                 name,
                 client_type: client.into(),

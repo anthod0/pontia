@@ -289,6 +289,7 @@ impl SessionCommandService {
                 &target,
                 pontia_home,
                 RuntimeStartRequest {
+                    model: None,
                     runtime_id: target.runtime_id.clone(),
                     session_id: session_id.to_string(),
                     client_type: session.client_type.clone(),
@@ -452,6 +453,7 @@ impl SessionCommandService {
                 &target,
                 pontia_home,
                 RuntimeStartRequest {
+                    model: None,
                     runtime_id: target.runtime_id.clone(),
                     session_id: session_id.to_string(),
                     client_type: session.client_type.clone(),

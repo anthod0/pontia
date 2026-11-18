@@ -6,7 +6,7 @@
   import BotAvatarPicker from './BotAvatarPicker.svelte'
   import { randomAvatar } from './avatar'
   import ClientIcon from '../chat/ClientIcon.svelte'
-  import BotModelSelect from './BotModelSelect.svelte'
+  import ClientModelSelect from '../chat/ClientModelSelect.svelte'
   import * as Select from '$lib/components/ui/select/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { Input } from '$lib/components/ui/input/index.js'
@@ -114,7 +114,7 @@
     <Label for={`${id}-model`}>{$t('bots.model')}</Label>
     {#if selected}
       {#key clientId}
-        <BotModelSelect id={`${id}-model`} client={selected} bind:value={model} bind:available={modelAvailable} disabled={saving} />
+        <ClientModelSelect id={`${id}-model`} client={selected} bind:value={model} bind:available={modelAvailable} disabled={saving} />
       {/key}
     {:else}
       <Button id={`${id}-model`} variant="outline" type="button" disabled>{$t('model.choose')}</Button>

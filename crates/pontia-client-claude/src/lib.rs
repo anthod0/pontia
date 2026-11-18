@@ -61,6 +61,10 @@ struct Configuration {
     host: Option<PathBuf>,
 }
 impl ClientConfiguration for Configuration {
+    fn supports_startup_model(&self) -> bool {
+        true
+    }
+
     fn list_models<'a>(
         &'a self,
         _: &'a Value,
@@ -148,16 +152,6 @@ impl Adapter {
     }
 }
 impl ClientSession for Adapter {
-    fn creation_options(&self) -> ClientOperation<'_, Option<Vec<SessionCreationOption>>> {
-        Box::pin(async {
-            Ok(Some(vec![SessionCreationOption {
-                id: "claude-agent".into(),
-                name: "Claude Code".into(),
-                client_type: "claude-agent".into(),
-                metadata: json!({}),
-            }]))
-        })
-    }
     fn provision<'a>(
         &'a self,
         events: EventIngestService,
@@ -190,6 +184,7 @@ impl ClientSession for Adapter {
                 runtime,
                 cwd,
                 config_dir,
+                model: request.model,
                 resume: None,
                 interactions: self.interactions.get().cloned().ok_or_else(unavailable)?,
                 state: Default::default(),

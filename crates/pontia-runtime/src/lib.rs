@@ -69,6 +69,7 @@ mod tests {
             .start_in_process(
                 Path::new("/pontia-test-home"),
                 RuntimeStartRequest {
+                    model: None,
                     runtime_id: None,
                     session_id: session_id.clone(),
                     client_type: "generic".to_string(),
@@ -106,6 +107,7 @@ mod tests {
             .start_in_process(
                 Path::new("/pontia-test-home"),
                 RuntimeStartRequest {
+                    model: None,
                     runtime_id: Some("runtime_named".into()),
                     session_id,
                     client_type: "generic".to_string(),
@@ -128,6 +130,7 @@ mod tests {
     fn generic_runtime_registry_tracks_lifecycle_and_restart_identity() {
         let manager = GenericRuntimeManager;
         let request = RuntimeStartRequest {
+            model: None,
             runtime_id: Some("runtime_lifecycle".into()),
             session_id: "sess_runtime_lifecycle_abcdef12".to_string(),
             client_type: "generic".to_string(),
@@ -197,6 +200,7 @@ mod tests {
             .start_tmux(
                 dir.path(),
                 RuntimeStartRequest {
+                    model: None,
                     runtime_id: None,
                     session_id: session_id.clone(),
                     client_type: "pi".to_string(),

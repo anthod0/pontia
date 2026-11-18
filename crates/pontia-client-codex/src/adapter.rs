@@ -204,7 +204,13 @@ impl ClientSession for CodexClient {
                 .map(std::path::PathBuf::from)
                 .unwrap_or(std::env::current_dir()?);
             CodexService::new(events)
-                .provision(&request.session_id, root, &cwd, &request.environment)
+                .provision(
+                    &request.session_id,
+                    root,
+                    &cwd,
+                    request.model.as_deref(),
+                    &request.environment,
+                )
                 .await
         })
     }

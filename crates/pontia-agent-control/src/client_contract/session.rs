@@ -17,6 +17,7 @@ pub enum ClientExitOutcome {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SessionCreationOption {
+    pub model_catalog_key: Option<String>,
     pub id: String,
     pub name: String,
     pub client_type: String,

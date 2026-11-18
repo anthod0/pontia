@@ -161,6 +161,7 @@ where
                 );
                 self.sessions
                     .create_session(CreateSessionRequest {
+                        model: None,
                         ownership: Some(ownership),
                         client_type: self.sessions.default_client_type()?,
                         title: Some(format!("Re-plan {}", workflow.title)),

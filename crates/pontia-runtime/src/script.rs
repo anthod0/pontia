@@ -117,6 +117,7 @@ mod tests {
             log_path: &log_path,
         };
         let request = RuntimeStartRequest {
+            model: None,
             runtime_id: None,
             session_id: "sess_resume_1".to_string(),
             client_type: "pi".to_string(),
@@ -176,6 +177,7 @@ mod tests {
             log_path: &tempdir.path().join("runtime.log"),
         };
         let request = RuntimeStartRequest {
+            model: None,
             runtime_id: None,
             session_id: "sess_explicit_start".to_string(),
             client_type: "pi".to_string(),

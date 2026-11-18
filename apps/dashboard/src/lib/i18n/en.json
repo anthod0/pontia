@@ -299,6 +299,7 @@
   "chat.new": "New chat",
   "common.rename": "Rename",
   "common.exit": "Exit",
+  "model.default": "Client default model",
   "model.choose": "Choose model",
   "compaction.action": "Compact context",
   "model.search": "Search models",

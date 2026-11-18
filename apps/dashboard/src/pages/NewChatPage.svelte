@@ -27,6 +27,12 @@
   const LAST_NEW_CHAT_CLIENT_STORAGE_KEY = `pontia.chat.lastCreationOptionId:${device.id}`
   let createWorkspaceId = ''
   let creationOptionId = readStoredValue(LAST_NEW_CHAT_CLIENT_STORAGE_KEY) ?? defaultClientType
+  let model = ''
+  let modelOptionId = creationOptionId
+  $: if (creationOptionId !== modelOptionId) {
+    modelOptionId = creationOptionId
+    model = ''
+  }
   let creating = false
   let actionError: string | null = null
   let lastToastedError: string | null = null
@@ -170,6 +176,7 @@
     try {
       const result = await createSession({
         client_type: selectedCreationOption.client_type,
+        ...(selectedCreationOption.model_catalog_key && model ? { model } : {}),
         workspace_id: workspaceId,
         title: titleFromInitialPrompt(initialPrompt),
         initial_task: { input: initialPrompt, metadata: { source: 'dashboard_chat' } },
@@ -208,6 +215,7 @@
       <NewChatPanel
         bind:prompt={$chatDraft}
         bind:workspaceId={createWorkspaceId}
+        bind:model
         bind:creationOptionId
         {creating}
         {deviceSelector}

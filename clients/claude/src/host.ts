@@ -36,6 +36,7 @@ export class Host {
     private readonly options: {
       session_id: string;
       cwd: string;
+      model?: string;
       resume?: string;
       system_prompt?: string;
     },
@@ -73,6 +74,7 @@ export class Host {
     if (!this.execution) {
       const options: Options = {
         cwd: this.options.cwd,
+        ...(this.options.model ? { model: this.options.model } : {}),
         ...(this.options.resume ? { resume: this.options.resume } : {}),
         ...(this.options.system_prompt
           ? {

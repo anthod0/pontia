@@ -34,6 +34,7 @@ pub(crate) struct Peer {
     pub runtime: String,
     pub cwd: PathBuf,
     pub config_dir: PathBuf,
+    pub model: Option<String>,
     pub resume: Option<String>,
     pub state: Mutex<State>,
     pub interactions: pontia_agent_control::interactions::InteractionService,
@@ -126,7 +127,7 @@ impl Peer {
                     return Err(invalid());
                 }
                 events.report_client_fact(&self.session, Some(&self.runtime), EventType::SessionReady,
-                    json!({"client_session_key":native,"launch_cwd":self.cwd,"binding_metadata":{"claude_config_dir":self.config_dir}})).await?;
+                    json!({"client_session_key":native,"launch_cwd":self.cwd,"binding_metadata":{"claude_config_dir":self.config_dir,"launch_model":self.model}})).await?;
                 self.runtime_event(events, PontiaEventType::RuntimeReady, json!({}))
                     .await?;
                 state.native = Some(native.into());

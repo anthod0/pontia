@@ -20,6 +20,10 @@ impl PiConfiguration {
 }
 
 impl ClientConfiguration for PiConfiguration {
+    fn supports_startup_model(&self) -> bool {
+        true
+    }
+
     fn list_models<'a>(
         &'a self,
         effective: &'a Value,

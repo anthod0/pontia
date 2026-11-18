@@ -299,6 +299,7 @@
   "chat.new": "新建聊天",
   "common.rename": "重命名",
   "common.exit": "结束会话",
+  "model.default": "客户端默认模型",
   "model.choose": "选择模型",
   "compaction.action": "压缩上下文",
   "model.search": "搜索模型",

@@ -156,7 +156,7 @@ test(
           strictMcpConfig: true,
           mcpServers: {},
           plugins: [],
-          model: "claude-sonnet-4-6",
+          model: args.options?.model ?? "claude-sonnet-4-6",
           maxTurns: 4,
         },
       });
@@ -179,7 +179,7 @@ test(
     }
     const create = (resume?: string) => {
       const host = new Host(
-        { session_id: "pontia-session", cwd, resume },
+        { session_id: "pontia-session", cwd, resume, model: "haiku" },
         (event) => events.push(event),
         factory,
       );
@@ -246,6 +246,8 @@ test(
       const native = host.status().native_session_id;
       assert.ok(native);
       await finish(host, randomUUID(), "Second isolated task", "fixture answer", "allow");
+      assert.ok(requests[2]!.model.includes("haiku"));
+      assert.ok(requests[0]!.model.includes("haiku"));
       assert.equal(host.status().native_session_id, native);
       assert.equal(await readFile(join(cwd, "write-3.txt"), "utf8"), "approved write marker");
       await finish(host, randomUUID(), "Denied isolated task", "fixture answer", "deny");

@@ -1,6 +1,10 @@
-# Choose a Bot model
+# Choose a model
 
 When creating or editing a Bot in Dashboard, choose an Agent Client, then open **Model** to search its available models by name or ID. Switching clients clears the selected model. If loading fails, use **Retry**; if a saved model is no longer available, select another before saving.
+
+When starting a Session in Dashboard, select a Workspace and an Agent Client. Pi, Codex, and Claude Code offer a model selector before the first message. Leave **Client default model** selected to use the client’s configured default.
+
+For API clients, a Session creation option with a non-null `model_catalog_key` offers startup model selection. Use its `client_type` and `model_catalog_key` to fetch the catalog, then pass the selected ID as the optional `model` in `POST /api/v1/sessions`.
 
 Pi provides model discovery before a Bot or Session exists. Enable Pi in Settings and configure its provider credentials through Pi.
 

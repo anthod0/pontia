@@ -156,6 +156,7 @@ impl ClientSession for AcpAdapter {
                 }
                 let name = self.display_name(id, &config);
                 options.push(SessionCreationOption {
+                    model_catalog_key: None,
                     id: serde_json::to_string(&["acp", id])?,
                     name,
                     client_type: "acp".into(),
@@ -583,6 +584,7 @@ impl ClientSession for AcpAdapter {
                 events,
                 self.root.get().ok_or_else(unavailable)?,
                 RuntimeStartRequest {
+                    model: None,
                     session_id: target.session_id.clone(),
                     runtime_id: target.runtime_id.clone(),
                     client_type: "acp".into(),

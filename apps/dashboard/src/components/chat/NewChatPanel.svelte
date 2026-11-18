@@ -3,6 +3,7 @@
   import type { Snippet } from 'svelte'
   import { useDeviceRuntime } from '../../device/context';
   import type { SessionCreationOption, WorkspaceView } from '../../api/types'
+  import ClientModelSelect from './ClientModelSelect.svelte'
   import MessageComposer from './MessageComposer.svelte'
   import SessionTargetSelector from './SessionTargetSelector.svelte'
   import { navigate } from '$lib/navigation'
@@ -13,6 +14,7 @@
   interface Props {
     prompt: string
     workspaceId: string
+    model: string
     creationOptionId: string
     creating?: boolean
     canCreate?: boolean
@@ -31,6 +33,7 @@
   let {
     prompt = $bindable(''),
     workspaceId = $bindable(''),
+    model = $bindable(''),
     creationOptionId = $bindable(''),
     creating = false,
     canCreate = false,
@@ -45,6 +48,8 @@
     placement = 'center',
     onStartChat,
   }: Props = $props()
+
+  const selectedOption = $derived(creationOptions.find(option => option.id === creationOptionId))
 
   const commands: ChatCommand[] = $derived([
     {
@@ -65,6 +70,9 @@
 <div data-testid="new-chat-panel" class:justify-center={placement === 'center'} class:justify-end={placement === 'bottom'} class={`flex min-h-0 shrink-0 flex-col ${placement === 'bottom' ? 'pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-[max(1.25rem,env(safe-area-inset-bottom))]' : ''}`}>
   <div class={`mx-auto w-full space-y-3 ${fixedWorkspace ? 'max-w-4xl' : 'max-w-[760px]'}`}>
     <SessionTargetSelector bind:workspaceId bind:creationOptionId {workspaces} {workspacesLoading} {selectedWorkspace} {creationOptions} {fixedWorkspace} {deviceSelector} disabled={creating} />
+    {#if selectedOption?.model_catalog_key}
+      <ClientModelSelect id="session-model" client={{ name: selectedOption.name, client_type: selectedOption.client_type, client_key: selectedOption.model_catalog_key }} bind:value={model} allowDefault disabled={creating} />
+    {/if}
     <MessageComposer
       bind:value={prompt}
       draftId={`new:${workspaceId}`}

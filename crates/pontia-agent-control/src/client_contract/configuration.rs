@@ -3,6 +3,10 @@ use serde_json::Value;
 
 /// Client-owned interpretation of management identities and effective configuration.
 pub trait ClientConfiguration: Send + Sync {
+    fn supports_startup_model(&self) -> bool {
+        false
+    }
+
     fn list_models<'a>(
         &'a self,
         _effective: &'a Value,

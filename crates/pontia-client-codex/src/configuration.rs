@@ -16,6 +16,10 @@ impl CodexConfiguration {
 }
 
 impl ClientConfiguration for CodexConfiguration {
+    fn supports_startup_model(&self) -> bool {
+        true
+    }
+
     fn list_models<'a>(
         &'a self,
         _: &'a Value,

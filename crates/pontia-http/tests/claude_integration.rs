@@ -168,7 +168,7 @@ impl Harness {
 #[tokio::test]
 async fn claude_http_exit_history_and_resume_preserve_the_conversation() {
     let h = Harness::new().await;
-    let (status, created) = call(&h.app, "POST", "/api/v1/sessions", json!({"client_type":"claude-agent","workspace":h.root.path(),"initial_task":{"input":"original conversation"}})).await;
+    let (status, created) = call(&h.app, "POST", "/api/v1/sessions", json!({"client_type":"claude-agent","workspace":h.root.path(),"model":"haiku","initial_task":{"input":"original conversation"}})).await;
     assert_eq!(status, StatusCode::CREATED);
     let session = created["data"]["session"]["session_id"].as_str().unwrap();
     h.gate(session, "start");
@@ -212,6 +212,8 @@ async fn claude_http_exit_history_and_resume_preserve_the_conversation() {
     std::fs::write(h.root.path().join(format!("start-{session}-2")), "").unwrap();
     let second = wait_turn(&h.app, session, "running").await;
     assert_ne!(first, second);
+    let (_, resumed) = call(&h.app, "GET", &base, Value::Null).await;
+    assert_eq!(resumed["data"]["session"]["model"], "haiku");
     std::fs::write(h.root.path().join(format!("finish-{session}-2")), "").unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
@@ -356,11 +358,19 @@ async fn claude_http_interrupt_remains_available_while_approvals_wait() {
 #[tokio::test]
 async fn claude_http_creation_inbox_live_output_interrupt_and_exit_share_application_facts() {
     let Harness { app, root, tasks } = Harness::new().await;
-    let (status, created) = call(&app, "POST", "/api/v1/sessions", json!({"client_type":"claude-agent","workspace":root.path(),"initial_task":{"input":"tool"}})).await;
+    let (status, created) = call(&app, "POST", "/api/v1/sessions", json!({"client_type":"claude-agent","workspace":root.path(),"model":"haiku","initial_task":{"input":"tool"}})).await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
     let session = created["data"]["session"]["session_id"].as_str().unwrap();
     std::fs::write(root.path().join(format!("start-{session}-1")), "").unwrap();
     let turn = wait_turn(&app, session, "running").await;
+    let (_, detail) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/sessions/{session}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(detail["data"]["session"]["model"], "haiku");
     let (_, queued) = call(
         &app,
         "POST",

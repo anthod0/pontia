@@ -63,6 +63,7 @@ impl Adapter {
             runtime: target.instance()?.into(),
             cwd: binding.launch_cwd.into(),
             config_dir,
+            model: metadata["launch_model"].as_str().map(str::to_owned),
             resume: Some(binding.client_session_key),
             interactions: self.interactions.get().cloned().ok_or_else(unavailable)?,
             state: Default::default(),

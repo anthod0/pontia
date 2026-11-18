@@ -344,6 +344,7 @@ export interface SessionLineageView {
 }
 
 export interface SessionCreationOption {
+  model_catalog_key?: string | null;
   id: string;
   name: string;
   client_type: string;
@@ -624,6 +625,7 @@ export interface Interaction {
 }
 
 export interface CreateSessionInput {
+  model?: string;
   client_type: string;
   workspace?: string | null;
   workspace_id?: string | null;

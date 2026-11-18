@@ -13,6 +13,7 @@ export interface Bootstrap {
   socket_path: string;
   token: string;
   cwd: string;
+  model?: string;
   resume?: string;
   system_prompt?: string;
 }
@@ -38,6 +39,7 @@ export function bootstrap(value: unknown): Bootstrap {
     cwd: string(data.cwd),
   };
   if (data.system_prompt !== undefined) result.system_prompt = string(data.system_prompt);
+  if (data.model !== undefined) result.model = string(data.model);
   if (data.resume !== undefined) result.resume = string(data.resume);
   if (!/^[0-9a-f]{64}$/.test(result.token)) throw new ControlError("rejected", "invalid_token");
   return result;

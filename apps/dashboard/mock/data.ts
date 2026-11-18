@@ -78,9 +78,9 @@ const models: SessionModel[] = [
 ];
 
 const creationOptions: SessionCreationOption[] = [
-  { id: "pi", name: "Pi", client_type: "pi", metadata: {} },
-  { id: "codex", name: "Codex", client_type: "codex", metadata: {} },
-  { id: "claude-agent", name: "Claude Code", client_type: "claude-agent", metadata: {} },
+  { id: "pi", name: "Pi", client_type: "pi", model_catalog_key: "default", metadata: {} },
+  { id: "codex", name: "Codex", client_type: "codex", model_catalog_key: "default", metadata: {} },
+  { id: "claude-agent", name: "Claude Code", client_type: "claude-agent", model_catalog_key: "default", metadata: {} },
   {
     id: '["acp","grok"]',
     name: "Grok Build",

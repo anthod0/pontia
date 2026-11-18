@@ -84,6 +84,22 @@ impl SessionCommandService {
             request.client_type = self.clients.registry().default_client_type()?.to_string();
         }
         self.clients.for_client(&request.client_type)?;
+        if let Some(model) = &request.model {
+            if model.trim().is_empty() {
+                return Err(Error::Domain("model must be non-empty".into()));
+            }
+            if !self
+                .clients
+                .registry()
+                .get(&request.client_type)
+                .and_then(|entry| entry.configuration.as_ref())
+                .is_some_and(|config| config.supports_startup_model())
+            {
+                return Err(Error::CapabilityUnavailable(
+                    "Model selection at startup is unavailable for this client".into(),
+                ));
+            }
+        }
         let client_settings = crate::agent_clients::AgentClientService::new(
             self.pool.clone(),
             self.clients.registry().clone(),
@@ -225,6 +241,7 @@ impl SessionCommandService {
             .start(
                 &self.pontia_home,
                 RuntimeStartRequest {
+                    model: request.model,
                     runtime_id: Some(runtime_id.clone()),
                     session_id: session_id.clone(),
                     client_type: request.client_type.clone(),

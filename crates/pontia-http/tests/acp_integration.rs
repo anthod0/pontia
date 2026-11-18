@@ -107,6 +107,14 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
         assert_eq!(options["options"].as_array().unwrap().len(), 1);
         assert_eq!(options["options"][0]["client_type"], client);
         assert_eq!(options["options"][0]["metadata"], metadata);
+        assert_eq!(
+            options["options"][0]["model_catalog_key"],
+            if client == "acp" {
+                Value::Null
+            } else {
+                json!(key)
+            }
+        );
 
         let (status, body) = call(&app, "PATCH", &path, json!({"enabled":false})).await;
         assert_eq!(status, StatusCode::OK, "{body}");

@@ -28,6 +28,7 @@ mod validation;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct CreateSessionRequest {
+    pub model: Option<String>,
     #[serde(default, deserialize_with = "deserialize_client_type")]
     pub client_type: String,
     pub title: Option<String>,

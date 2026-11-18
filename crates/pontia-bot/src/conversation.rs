@@ -361,6 +361,7 @@ impl ConversationService {
             .session_commands()
             .create_application_session(
                 CreateSessionRequest {
+                    model: None,
                     client_type: bot.client_type.clone(),
                     title: Some(bot.name.clone()),
                     description: bot.description.clone(),

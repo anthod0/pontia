@@ -134,6 +134,7 @@ fn session_request(
         workflow.workflow_id.clone(),
     )]);
     CreateSessionRequest {
+        model: None,
         ownership: Some(pontia_agent_control::SessionOwnership {
             application_id: "workflow".into(),
             reference: format!("node:{}", node.node_id),

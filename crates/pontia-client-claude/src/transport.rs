@@ -87,6 +87,9 @@ impl Connection {
             {
                 bootstrap["system_prompt"] = json!(prompt);
             }
+            if let Some(model) = &peer.model {
+                bootstrap["model"] = json!(model);
+            }
             if let Some(resume) = &peer.resume {
                 bootstrap["resume"] = json!(resume);
             }

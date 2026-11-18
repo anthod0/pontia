@@ -7,6 +7,7 @@ pub use pontia_core::client_capabilities::{AgentClientCapabilities, AgentInput};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeStartRequest {
+    pub model: Option<String>,
     pub session_id: String,
     pub runtime_id: Option<String>,
     pub client_type: String,

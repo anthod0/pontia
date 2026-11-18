@@ -244,6 +244,7 @@ impl HelperService {
             .session_commands()
             .create_application_session(
                 CreateSessionRequest {
+                    model: None,
                     client_type: profile.client_type,
                     title: None,
                     description: Some(input.description),

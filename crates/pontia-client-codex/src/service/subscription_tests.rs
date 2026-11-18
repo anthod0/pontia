@@ -239,11 +239,16 @@ async fn start_and_resume_preserve_environment_filters_and_override_session_iden
                 &fixture.session,
                 fixture.root.path(),
                 fixture.root.path(),
+                Some("model-two"),
                 &environment,
             )
             .await
             .unwrap();
         fixture.dispatch_first_input().await;
+        assert_eq!(
+            fixture.thread_requests.lock().await[0]["params"]["model"],
+            "model-two"
+        );
         fixture
             .app
             .session_commands()

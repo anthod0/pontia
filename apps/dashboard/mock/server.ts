@@ -570,6 +570,11 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
   ],
   [
     "GET",
+    "/agent-clients/:type/:key/models",
+    ({ device }) => ({ models: device.data.models, default_model: device.data.models[0]?.id ?? null }),
+  ],
+  [
+    "GET",
     "/session-creation-options",
     ({ device }) => ({
       options: device.data.creationOptions.filter((option) =>
@@ -831,7 +836,7 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
       );
       const timestamp = now();
       const initialTask = body.initial_task as { input: string } | null | undefined;
-      const model = device.data.models[0].id;
+      const model = String(body.model ?? device.data.models[0].id);
       const session: MockSession = {
         view: {
           session_id: device.data.nextId("sess"),

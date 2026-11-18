@@ -88,6 +88,7 @@ impl DreamingService {
             .session_commands()
             .create_application_session(
                 CreateSessionRequest {
+                    model: None,
                     client_type: profile.client_type,
                     title: Some("Dreaming".into()),
                     description: Some("Organize pending device memories".into()),

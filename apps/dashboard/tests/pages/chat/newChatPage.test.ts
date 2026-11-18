@@ -1,4 +1,5 @@
 import { mocks, session, turn, workspace } from "./fixtures";
+import { testDevice } from "../../deviceFixture";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
@@ -205,6 +206,28 @@ test("remembers the selected agent client for the next new chat", async () => {
   expect(await screen.findByLabelText("Agent client")).toHaveTextContent("codex");
 });
 
+test("switching clients clears the selected startup model", async () => {
+  const user = userEvent.setup();
+  const catalog = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue([
+    { id: "pi-only", name: "Pi model", description: "" },
+  ]);
+  try {
+    render(NewChatPage);
+    await user.click(await screen.findByRole("button", { name: "Client default model" }));
+    await user.click(await screen.findByRole("button", { name: "Pi model" }));
+    await fireEvent.keyDown(window, { code: "KeyC", altKey: true });
+    await waitFor(() => expect(screen.getByLabelText("Agent client")).toHaveTextContent("codex"));
+    await fireEvent.keyDown(window, { code: "KeyC", altKey: true, shiftKey: true });
+    await waitFor(() => expect(screen.getByLabelText("Agent client")).toHaveTextContent("Pi"));
+    await user.type(screen.getByPlaceholderText("Describe a task…"), "Use the default");
+    await user.click(screen.getByRole("button", { name: /start session/i }));
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledOnce());
+    expect(mocks.createSession.mock.calls[0][0]).not.toHaveProperty("model");
+  } finally {
+    catalog.mockRestore();
+  }
+});
+
 test("falls back to the first agent client when the remembered one is unavailable", async () => {
   window.localStorage.setItem("pontia.chat.lastCreationOptionId:local", "removed-client");
   render(NewChatPage);
@@ -255,18 +278,24 @@ test("creates a session with initial prompt, workspace, and client then opens it
     session: created,
     initial_turn: turn({ session_id: "session-new" }),
   } satisfies CreateSessionResult);
+  const catalog = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue([
+    { id: "provider/model", name: "Selected model", description: "" },
+  ]);
   render(NewChatPage);
-
   await user.type(
     await screen.findByPlaceholderText("Describe a task…"),
     "Implement the dashboard chat flow",
   );
+  await user.click(await screen.findByRole("button", { name: "Client default model" }));
+  await user.click(await screen.findByRole("button", { name: "Selected model" }));
+  catalog.mockRestore();
   await fireEvent.click(screen.getByRole("button", { name: /start session/i }));
 
   await waitFor(() =>
     expect(mocks.createSession).toHaveBeenCalledWith({
       client_type: "pi",
       workspace_id: "workspace-1",
+      model: "provider/model",
       title: "Implement the dashboard chat flow",
       initial_task: {
         input: "Implement the dashboard chat flow",

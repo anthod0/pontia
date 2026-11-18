@@ -82,6 +82,10 @@ impl ClientLauncher for PiLauncher {
                 .unwrap_or_else(|| "pi".into());
             format!("{command} --approve")
         });
+        let command = match &runtime.model {
+            Some(model) => format!("{command} --model {}", quote(model)),
+            None => command,
+        };
         let session_args = match request.native_session_key {
             Some(key) => {
                 self.validate_resume(key, request.native_session_file)?;

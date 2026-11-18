@@ -90,7 +90,7 @@ if (process.argv[2] === "history") {
         history({ type: "user", uuid: active.id, message: { role: "user", content: active.text } });
         if (!ready) {
           event({ kind: "ready", native_session_id: native });
-          event({ kind: "model", model: "sonnet" });
+          event({ kind: "model", model: config.model ?? "sonnet" });
           ready = true;
         }
         // Receipt is deliberately delivered before execution begins.
