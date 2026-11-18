@@ -177,7 +177,8 @@ async fn defaults_capture_creation_config_and_preserve_user_edits_and_shared_res
             .model,
         "model-a"
     );
-    for id in [&helper, DREAMING_PROFILE_ID] {
+    let retrieval = BotService::retrieval_profile_id(&a.bot_id);
+    for id in [&helper, &retrieval, DREAMING_PROFILE_ID] {
         let mut request = f.profile_request(id).await;
         request.default_client_key = Some("b".into());
         request.default_model = Some("custom-model".into());
@@ -202,7 +203,7 @@ async fn defaults_capture_creation_config_and_preserve_user_edits_and_shared_res
             .model,
         "model-b"
     );
-    for id in [&helper, DREAMING_PROFILE_ID] {
+    for id in [&helper, &retrieval, DREAMING_PROFILE_ID] {
         assert_eq!(
             f.profiles.launch_defaults(id, None).await.unwrap().model,
             "custom-model"

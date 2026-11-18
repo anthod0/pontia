@@ -415,3 +415,39 @@ async fn startup_failure_can_be_checked_without_history_and_closed_without_a_con
     assert_eq!(exited.source, "external_api");
     assert_eq!(exited.payload["reason"], "management_exit");
 }
+
+#[tokio::test]
+async fn retrieval_profile_reads_arbitrary_sessions_without_memory_associations() {
+    let f = fixture().await;
+    seed_session(&f.state, "retrieval-caller").await;
+    let pool = f.state.db();
+    sqlx::query("INSERT INTO bots(bot_id,name,client_type,client_key,model) VALUES ('reader-bot','Bot','pi','default','test')").execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES ('helper:reader','reader-bot','retrieval-caller')").execute(&pool).await.unwrap();
+    sqlx::query("UPDATE sessions SET execution_profile_id='reader-bot-retrieval', runtime_environment=? WHERE session_id='retrieval-caller'")
+        .bind(json!({"PONTIA_BOT_TOOL_TOKEN":"reader-credential"}).to_string()).execute(&pool).await.unwrap();
+    let request =
+        json!({"session_id":"retrieval-caller", "input":{"session_id":"sess_messages", "limit":1}});
+    let expected = read(&f.state, request["input"].clone()).await;
+    let response = http::router(http::HttpState::from(f.state.clone()))
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/bot/session-messages")
+                .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("x-pontia-bot-tool-token", "reader-credential")
+                .body(Body::from(request.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body["data"], expected);
+    let memories: i64 = sqlx::query_scalar("SELECT count(*) FROM bot_memories")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(memories, 0);
+}

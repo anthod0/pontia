@@ -46,11 +46,20 @@ pub struct HelperRequest {
 )]
 pub enum HelperCommand {
     Create(CreateHelper),
+    Retrieve(RetrieveMemories),
     List,
     Send { session_id: String, message: String },
     Reply { message: String },
     Check(SessionMessagesQuery),
     Close { session_id: String },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RetrieveMemories {
+    pub message: String,
+    pub workspace_id: Option<String>,
+    pub profile_version: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,6 +123,31 @@ impl HelperService {
         }
         let bot = self.conversation.require_bot(&request.session_id).await?;
         match request.command {
+            HelperCommand::Retrieve(input) => {
+                nonempty(&input.message)?;
+                let scope = match input.workspace_id {
+                    Some(workspace) => {
+                        nonempty(&workspace)?;
+                        format!(
+                            "Requested Workspace: {workspace}. Use --workspace-id on memory reads to focus this investigation. This is a task scope, not an access restriction."
+                        )
+                    }
+                    None => "Search all unarchived device memories as needed.".into(),
+                };
+                self.conversation.records().initialize(&bot.bot_id).await?;
+                self.create(
+                    &bot.bot_id,
+                    &request.session_id,
+                    CreateHelper {
+                        profile_id: Some(BotService::retrieval_profile_id(&bot.bot_id)),
+                        profile_version: input.profile_version,
+                        description: input.message.clone(),
+                        message: format!("{scope}\n\n{}", input.message),
+                    },
+                )
+                .await
+                .map_err(Into::into)
+            }
             HelperCommand::Create(input) => self
                 .create(&bot.bot_id, &request.session_id, input)
                 .await
@@ -339,7 +373,7 @@ pub(crate) async fn contexts(control: &AgentControl, bot_id: &str) -> Result<Vec
         helpers.push(HelperContext {
             bot_id: bot_id.into(),
             session_id: id,
-            role: BotRole::Helper,
+            role: helper_role(bot_id, &session),
             description: session.description,
             state: session
                 .state
@@ -348,6 +382,16 @@ pub(crate) async fn contexts(control: &AgentControl, bot_id: &str) -> Result<Vec
         });
     }
     Ok(helpers)
+}
+
+pub(crate) fn helper_role(bot_id: &str, session: &SessionView) -> BotRole {
+    if session.execution_profile_id.as_deref()
+        == Some(BotService::retrieval_profile_id(bot_id).as_str())
+    {
+        BotRole::Retrieval
+    } else {
+        BotRole::Helper
+    }
 }
 
 fn forbidden() -> Error {

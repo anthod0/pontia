@@ -216,6 +216,18 @@ pub(super) enum MemoryCommand {
 #[derive(Debug, Subcommand, Serialize)]
 #[serde(tag = "action", content = "input", rename_all = "snake_case")]
 pub(super) enum HelperCommand {
+    /// Start read-only deep retrieval and receive an asynchronous helper reply
+    Retrieve {
+        /// Question and context for the investigation
+        #[arg(long, allow_hyphen_values = true)]
+        message: String,
+        /// Ask the helper to focus on this Workspace; does not restrict its read access
+        #[arg(long)]
+        workspace_id: Option<String>,
+        /// Version of this Bot's deep retrieval Profile; omit for the latest version
+        #[arg(long)]
+        profile_version: Option<String>,
+    },
     /// Start a helper using an Agent Profile (defaults to this Bot's helper Profile)
     Create {
         #[arg(long)]

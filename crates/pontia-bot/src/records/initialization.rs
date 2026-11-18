@@ -43,6 +43,13 @@ impl BotService {
                 "Dreaming".into(),
             ))
             .await?;
+        let mut retrieval = default_profile(
+            &bot,
+            Self::retrieval_profile_id(&bot.bot_id),
+            format!("{} deep retrieval", bot.name),
+        );
+        retrieval.system_prompt_template = Some(include_str!("../helpers/retrieval.md").into());
+        self.profiles.initialize_profile(retrieval).await?;
         Ok(())
     }
 }

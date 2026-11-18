@@ -20,7 +20,7 @@ Supply 1–32 keywords, each containing 1–128 characters after normalization. 
 
 Each keyword matches as a whole. `中`, `中文`, `Rust项目`, `C++` and `agent client` are distinct keywords; querying `agent` does not match `agent client`. Include both a compound term and its useful component terms when both should be searchable. Punctuation is literal. Queries match any supplied keyword. Words found only in the body cannot retrieve a memory.
 
-Without `--workspace-id`, reads cover all active memories on the device. An explicit `--workspace-id` selects exactly that Workspace, excluding device-wide memories. A Session assigned to a specific Workspace remains restricted to it, including reads by ID and graph traversal.
+Without `--workspace-id`, reads cover all active memories on the device. An explicit `--workspace-id` selects exactly that Workspace, excluding device-wide memories. Deep retrieval helpers may change or omit this filter on each call, including ID reads and graph traversal.
 
 Search returns complete memories, relevance, score and whether more candidates remain. It defaults to 10 results and accepts limits from 1 to 30. `has_more` in JSON output describes unused results in the 100-candidate search set; it is not a pagination cursor. Scores are comparable within one query.
 
@@ -41,3 +41,20 @@ Archived memories are excluded from searches, ID reads and both ends of graph tr
 ID reads omit missing, archived and out-of-scope records. `use` reports how many active records in scope were updated. It refreshes `last_read_at` only; searches and other reads never refresh it. Report only memories actually used in a response or decision.
 
 For neighbors, plain-text output includes a command for the next page. In JSON mode, pass `next_cursor` as `--after`, keeping `--id`, `--workspace-id` and `--limit` unchanged. A null cursor means no further neighbors. Traversal returns one hop; the agent chooses whether to continue from another memory.
+
+## Deep retrieval
+
+From a Bot Session, delegate an investigation and continue handling other requests:
+
+```bash
+pontia bot helper retrieve --message 'Why did we postpone the release? Cite the decisions and original messages.'
+pontia bot helper retrieve --message 'Find the release decisions for this project.' --workspace-id WORKSPACE_ID
+```
+
+The command returns a helper Session ID and the initial input delivery result, without waiting for the investigation. Findings arrive through a helper reply identifying that Session. Use `pontia bot helper check --session-id ID` for progress and `pontia bot helper close --session-id ID` when the helper is no longer needed.
+
+Each Bot has a deep retrieval Profile initialized with its client and model. Profile edits apply to newly created helpers; `--profile-version` selects a specific version.
+
+The Workspace argument guides the investigation. The helper can read all device memories using the shared memory commands and any Session using `pontia bot session-messages`. Memory reads exclude archived entries. It cannot create or change memories, links, or usage timestamps. The Bot reports actual use with `pontia bot memory use` after adopting findings.
+
+Reports include supporting memory IDs, necessary original sources, and uncertainty. Conflicting evidence, unreadable sources, empty searches, and partial findings should be reported explicitly. Observed execution failures use the same notifications as other helpers.

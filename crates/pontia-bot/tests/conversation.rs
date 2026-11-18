@@ -904,3 +904,6 @@ async fn helper_launch_pins_the_selected_profile_and_keeps_the_initialized_model
         Some(default_id.as_str())
     );
 }
+
+#[path = "conversation/retrieval.rs"]
+mod retrieval;

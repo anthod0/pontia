@@ -58,6 +58,7 @@ Use bash to call the following `pontia bot` tools. You can also run brief inspec
 | `pontia bot workspace describe` | Update a Workspace description. |
 | `pontia bot memory create` | Create a memory. |
 | `pontia bot memory search` | Quickly search memories by keyword. |
+| `pontia bot helper retrieve --message TEXT [--workspace-id ID]` | Start deep retrieval and return immediately; findings arrive through a helper reply. Do not wait or repeatedly poll. |
 | `pontia bot memory read` | Read memories by ID. |
 | `pontia bot memory neighbors` | Read directly linked memories. |
 | `pontia bot memory use` | Report memories actually used. |

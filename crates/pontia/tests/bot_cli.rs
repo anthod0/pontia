@@ -262,13 +262,16 @@ async fn named_arguments_reject_incomplete_or_invalid_operations_before_sending_
 #[tokio::test]
 async fn helper_commands_preserve_target_source_and_message_arguments() {
     let mut f = Fixture::new(json!({"delivery":{"status":"accepted"}})).await;
-    for action in ["create", "send", "reply", "list", "close"] {
+    for action in ["create", "retrieve", "send", "reply", "list", "close"] {
         let mut args = vec!["helper", action, "--json"];
         if matches!(action, "send" | "close") {
             args.extend(["--session-id", "helper-session"]);
         }
-        if matches!(action, "create" | "send" | "reply") {
+        if matches!(action, "create" | "retrieve" | "send" | "reply") {
             args.extend(["--message", "new\nrequirements"]);
+        }
+        if action == "retrieve" {
+            args.extend(["--workspace-id", "project", "--profile-version", "2"]);
         }
         if action == "create" {
             args.extend(["--description", "Task", "--profile-id", "selected-profile"]);
@@ -285,8 +288,12 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
         if matches!(action, "send" | "close") {
             assert_eq!(request["command"]["input"]["session_id"], "helper-session");
         }
-        if matches!(action, "create" | "send" | "reply") {
+        if matches!(action, "create" | "retrieve" | "send" | "reply") {
             assert_eq!(request["command"]["input"]["message"], "new\nrequirements");
+        }
+        if action == "retrieve" {
+            assert_eq!(request["command"]["input"]["workspace_id"], "project");
+            assert_eq!(request["command"]["input"]["profile_version"], "2");
         }
     }
 }

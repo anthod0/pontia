@@ -439,15 +439,14 @@ impl BotIdentity for ConversationService {
         Box<dyn Future<Output = std::result::Result<BotAccess, IdentityError>> + Send + 'a>,
     > {
         Box::pin(async move {
-            if crate::helpers::helper_bot(&self.control.db(), session_id)
+            if let Some(bot_id) = crate::helpers::helper_bot(&self.control.db(), session_id)
                 .await
                 .map_err(|_| IdentityError)?
-                .is_some()
             {
                 let session = self
                     .control
                     .queries()
-                    .session_snapshot(session_id)
+                    .get_session(session_id)
                     .await
                     .map_err(|_| IdentityError)?
                     .ok_or(IdentityError)?;
@@ -455,7 +454,7 @@ impl BotIdentity for ConversationService {
                     return Err(IdentityError);
                 }
                 return Ok(BotAccess {
-                    role: BotRole::Helper,
+                    role: crate::helpers::helper_role(&bot_id, &session),
                     workspace_id: None,
                 });
             }

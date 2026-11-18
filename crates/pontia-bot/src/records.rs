@@ -151,6 +151,10 @@ impl BotService {
         format!("{bot_id}-helper")
     }
 
+    pub fn retrieval_profile_id(bot_id: &str) -> String {
+        format!("{bot_id}-retrieval")
+    }
+
     async fn validate(&self, configuration: &BotConfiguration) -> Result<()> {
         for (field, value) in [
             ("name", &configuration.name),
