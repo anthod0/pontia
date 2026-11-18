@@ -3,6 +3,16 @@ import type { SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sd
 export type HostEvent =
   | { kind: "ready"; native_session_id: string }
   | { kind: "model"; model: string }
+  | {
+      kind: "context_usage";
+      context_usage: {
+        used_tokens: number;
+        max_tokens: number;
+        remaining_tokens: number;
+        usage_ratio: number;
+        confidence: "estimated";
+      };
+    }
   | { kind: "started"; input_id: string }
   | { kind: "text"; input_id: string; item_id: string; delta: string }
   | { kind: "input"; input_id: string; item_id: string; text: string }

@@ -37,6 +37,8 @@ In Dashboard, choose a Workspace, create a **Claude Code** Session, and send you
 
 Once the Session has initialized, use the model picker in the composer to view available models and switch the model for subsequent responses in the same conversation. The current model updates after the change is confirmed.
 
+Dashboard shows estimated context usage and the current context window limit. Usage refreshes as Claude replies and after context compaction.
+
 Tool requests offer **Allow once** and **Deny once**. Interrupt requests cancellation of the current task; Exit closes the Session's execution. After exiting, you can still browse its history and send another message to resume the same conversation.
 
 Active execution may not continue across a Pontia service restart or update.

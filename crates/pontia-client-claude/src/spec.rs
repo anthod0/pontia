@@ -18,7 +18,7 @@ pub const SPEC: AgentClientSpec = AgentClientSpec {
         manual_compaction: false,
         compaction_events: false,
         compaction_history: false,
-        context_usage: ContextUsageCapability::Unsupported,
+        context_usage: ContextUsageCapability::Estimated,
     },
     adapter: AgentClientAdapter {
         lifecycle: SessionLifecycleBehavior::DEFAULT,

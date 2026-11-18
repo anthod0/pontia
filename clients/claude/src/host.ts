@@ -7,7 +7,7 @@ export type QueryFactory = (
   args: Parameters<typeof query>[0],
 ) => Pick<
   Query,
-  typeof Symbol.asyncIterator | "interrupt" | "close" | "supportedModels"
+  typeof Symbol.asyncIterator | "interrupt" | "close" | "supportedModels" | "getContextUsage"
 >;
 export class ControlError extends Error {
   constructor(
@@ -27,6 +27,8 @@ export class Host {
   private native?: string;
   private unavailable?: string;
   private retrying = false;
+  private usagePending = false;
+  private usageReading = false;
   private controlConnected = true;
   private closing = false;
   private closed = false;
@@ -205,6 +207,16 @@ export class Host {
       for await (const message of execution) {
         try {
           this.message(message);
+          if (
+            !this.unavailable &&
+            message.session_id === this.native &&
+            !("parent_tool_use_id" in message && message.parent_tool_use_id) &&
+            (message.type === "assistant" ||
+              message.type === "result" ||
+              (message.type === "system" &&
+                (message.subtype === "init" || message.subtype === "compact_boundary")))
+          )
+            void this.refreshContextUsage(execution);
         } catch (error) {
           this.fail(
             error instanceof Error ? error.message : "sdk_message_invalid",
@@ -220,6 +232,38 @@ export class Host {
       }
     } catch {
       this.fail("sdk_reader_failed");
+    }
+  }
+
+  private async refreshContextUsage(execution: ReturnType<QueryFactory>): Promise<void> {
+    this.usagePending = true;
+    if (this.usageReading) return;
+    this.usageReading = true;
+    try {
+      while (this.usagePending && !this.closing && !this.unavailable) {
+        this.usagePending = false;
+        const usage = await execution.getContextUsage({ detail: "summary" });
+        if (this.closing || this.unavailable) return;
+        const used = usage.totalTokens;
+        const max = usage.rawMaxTokens;
+        if (!Number.isSafeInteger(used) || used < 0 || !Number.isSafeInteger(max) || max <= 0)
+          continue;
+        this.emit({
+          kind: "context_usage",
+          context_usage: {
+            used_tokens: used,
+            max_tokens: max,
+            remaining_tokens: Math.max(0, max - used),
+            usage_ratio: Math.min(1, used / max),
+            confidence: "estimated",
+          },
+        });
+      }
+    } catch {
+      // Usage observation must not interrupt the task or expose SDK diagnostics.
+      if (!this.closing) console.error("Claude context usage query failed");
+    } finally {
+      this.usageReading = false;
     }
   }
 

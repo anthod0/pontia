@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import type { SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  SDKMessage,
+  SDKUserMessage,
+  SDKControlGetContextUsageResponse,
+} from "@anthropic-ai/claude-agent-sdk";
 import type { QueryFactory } from "../src/host.js";
 
 export class Messages implements AsyncIterable<SDKMessage> {
@@ -36,6 +40,7 @@ export function sdk() {
   let interrupts = 0;
   let onInterrupt: (() => Promise<void>) | undefined;
   let onClose: (() => void) | undefined;
+  let contextUsage = async () => usage(0, 0);
   const models = [
     { value: "sonnet", displayName: "Sonnet", description: "Balanced" },
     { value: "haiku", displayName: "Haiku", description: "Fast" },
@@ -48,6 +53,7 @@ export function sdk() {
     return {
       [Symbol.asyncIterator]: () => messages[Symbol.asyncIterator](),
       supportedModels: async () => models,
+      getContextUsage: async () => contextUsage(),
       interrupt: async () => {
         interrupts += 1;
         await onInterrupt?.();
@@ -61,6 +67,9 @@ export function sdk() {
   return {
     factory,
     messages,
+    onContextUsage: (fn: typeof contextUsage) => {
+      contextUsage = fn;
+    },
     get calls() {
       return calls;
     },
@@ -125,4 +134,24 @@ export function stream(event: unknown, input?: string) {
 }
 export async function settle() {
   await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+export function usage(
+  totalTokens: number,
+  rawMaxTokens = 200000,
+): SDKControlGetContextUsageResponse {
+  return {
+    categories: [],
+    totalTokens,
+    rawMaxTokens,
+    maxTokens: rawMaxTokens - 10000,
+    percentage: 0,
+    gridRows: [],
+    model: "sonnet",
+    memoryFiles: [],
+    mcpTools: [],
+    agents: [],
+    isAutoCompactEnabled: true,
+    apiUsage: null,
+  };
 }

@@ -214,6 +214,14 @@ async fn claude_http_exit_history_and_resume_preserve_the_conversation() {
     assert_ne!(first, second);
     let (_, resumed) = call(&h.app, "GET", &base, Value::Null).await;
     assert_eq!(resumed["data"]["session"]["model"], "haiku");
+    let session_view = &resumed["data"]["session"];
+    assert_eq!(session_view["capabilities"]["context_usage"], "estimated");
+    let usage = &session_view["context_usage"];
+    assert_eq!(usage["used_tokens"], 4000);
+    assert_eq!(usage["max_tokens"], 200000);
+    assert_eq!(usage["remaining_tokens"], 196000);
+    assert_eq!(usage["usage_ratio"], 0.02);
+    assert_eq!(usage["confidence"], "estimated");
     std::fs::write(h.root.path().join(format!("finish-{session}-2")), "").unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {

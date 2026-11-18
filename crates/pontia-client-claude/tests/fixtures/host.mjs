@@ -183,6 +183,16 @@ if (process.argv[2] === "history") {
         uuid: active.reply,
         message: { role: "assistant", content: [{ type: "text", text: active.text }] },
       });
+      event({
+        kind: "context_usage",
+        context_usage: {
+          used_tokens: 4000,
+          max_tokens: 200000,
+          remaining_tokens: 196000,
+          usage_ratio: 0.02,
+          confidence: "estimated",
+        },
+      });
       event({ kind: "started", input_id: active.id });
       event({ kind: "text", input_id: active.id, item_id: "reply", delta: active.text });
       if (active.text.startsWith("approval")) {

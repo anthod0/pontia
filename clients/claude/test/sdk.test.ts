@@ -239,6 +239,14 @@ test(
         events.filter((event) => event.kind === "tool" && event.call_id === "read-fixture").length,
         1,
       );
+      const usageDeadline = Date.now() + 5000;
+      while (!events.some((event) => event.kind === "context_usage")) {
+        assert.ok(Date.now() < usageDeadline, "real SDK did not report context usage");
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      const context = events.find((event) => event.kind === "context_usage")!.context_usage;
+      assert.ok(context.used_tokens > 0);
+      assert.ok(context.max_tokens > 0);
       const toolResults = events.filter((event) => event.kind === "tool_result");
       assert.equal(toolResults.length, 1);
       assert.equal(toolResults[0]!.failed, false);

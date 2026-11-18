@@ -2,7 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Host, ControlError } from "../src/host.js";
 import type { HostEvent } from "../src/facts.js";
-import { assistant, first, init, native, result, sdk, second, settle, stream } from "./fixture.js";
+import {
+  assistant,
+  first,
+  init,
+  native,
+  result,
+  sdk,
+  second,
+  settle,
+  stream,
+  usage,
+} from "./fixture.js";
 
 function setup(resume?: string) {
   const fixture = sdk();
@@ -486,4 +497,93 @@ test("multiple steering messages are delivered in order and all must resolve bef
   await settle();
   assert.equal(host.status().unavailable, null);
   assert.equal(events.filter((e) => e.kind === "finished").length, 1);
+});
+
+test("context snapshots refresh on init, replies, result and compaction without accumulating tokens", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
+  let snapshot = usage(40000);
+  fixture.onContextUsage(async () => snapshot);
+  host.submit(first, "task");
+  const observed = () => events.filter((e) => e.kind === "context_usage").at(-1)?.context_usage;
+  fixture.messages.push(init());
+  await settle();
+  assert.deepEqual(observed(), {
+    used_tokens: 40000,
+    max_tokens: 200000,
+    remaining_tokens: 160000,
+    usage_ratio: 0.2,
+    confidence: "estimated",
+  });
+  snapshot = usage(50000);
+  fixture.messages.push(assistant());
+  await settle();
+  assert.equal(observed()?.used_tokens, 50000);
+  snapshot = usage(210000);
+  fixture.messages.push(result(first, { usage: { input_tokens: 9000000 } }));
+  await settle();
+  assert.deepEqual(observed(), {
+    used_tokens: 210000,
+    max_tokens: 200000,
+    remaining_tokens: 0,
+    usage_ratio: 1,
+    confidence: "estimated",
+  });
+  snapshot = usage(10000);
+  fixture.messages.push({ type: "system", subtype: "compact_boundary", session_id: native });
+  await settle();
+  assert.equal(observed()?.used_tokens, 10000);
+  snapshot = usage(99000);
+  fixture.messages.push({ ...assistant(), parent_tool_use_id: "subagent" });
+  await settle();
+  assert.equal(observed()?.used_tokens, 10000);
+});
+
+test("invalid or failed context queries preserve usage and do not block task completion", async (t) => {
+  const { fixture, events, host } = setup();
+  t.after(() => host.close());
+  fixture.onContextUsage(async () => usage(100));
+  host.submit(first, "task");
+  fixture.messages.push(init());
+  await settle();
+  fixture.onContextUsage(async () => {
+    throw new Error("private SDK error");
+  });
+  fixture.messages.push(assistant());
+  await settle();
+  fixture.onContextUsage(async () => usage(NaN));
+  fixture.messages.push(result());
+  await settle();
+  assert.equal(host.status().unavailable, null);
+  assert.equal(host.status().finished, true);
+  assert.equal(events.filter((e) => e.kind === "context_usage").length, 1);
+  fixture.onContextUsage(async () => usage(200));
+  fixture.messages.push({ type: "system", subtype: "compact_boundary", session_id: native });
+  await settle();
+  assert.equal(
+    events.filter((e) => e.kind === "context_usage").at(-1)?.context_usage.used_tokens,
+    200,
+  );
+});
+
+test("slow context queries do not delay output or completion and cannot publish after close", async () => {
+  const { fixture, events, host } = setup();
+  let resolve!: (value: ReturnType<typeof usage>) => void;
+  fixture.onContextUsage(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  host.submit(first, "task");
+  fixture.messages.push(init());
+  fixture.messages.push(assistant());
+  fixture.messages.push(result());
+  await settle();
+  assert.equal(host.status().finished, true);
+  assert.equal(events.filter((e) => e.kind === "text").length, 1);
+  await host.close();
+  resolve(usage(100));
+  await settle();
+  assert.equal(events.filter((e) => e.kind === "context_usage").length, 0);
 });
