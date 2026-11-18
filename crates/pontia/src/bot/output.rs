@@ -71,11 +71,16 @@ pub(super) fn continuation(endpoint: &str, input: &Value, data: &Value) -> Optio
             .get("next")
             .filter(|next| !next.is_null())?;
         ("pontia bot helper check".to_owned(), next.clone())
-    } else if endpoint == "memory" && input["action"] == "neighbors" {
+    } else if endpoint == "memory"
+        && (input["action"] == "neighbors" || input["action"] == "pending")
+    {
         let cursor = data.get("next_cursor").filter(|cursor| !cursor.is_null())?;
         let mut next = input["input"].clone();
         next["after"] = cursor.clone();
-        ("pontia bot memory neighbors".to_owned(), next)
+        (
+            format!("pontia bot memory {}", input["action"].as_str().unwrap()),
+            next,
+        )
     } else {
         return None;
     };

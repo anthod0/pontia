@@ -36,7 +36,9 @@ impl MemoryService {
         let allowed = match &command {
             Create(_) => matches!(access.role, BotRole::Bot | BotRole::Dreaming),
             Use(_) => access.role == BotRole::Bot,
-            Update(_) | Archive(_) | Link(_) | Unlink(_) => access.role == BotRole::Dreaming,
+            Update(_) | Archive(_) | Link(_) | Unlink(_) | Pending { .. } | Organize { .. } => {
+                access.role == BotRole::Dreaming
+            }
             Read(_) | Search(_) | Neighbors(_) => access.role != BotRole::Helper,
         };
         if !allowed {
@@ -44,6 +46,36 @@ impl MemoryService {
         }
         let now = (self.clock)().to_offset(time::UtcOffset::UTC);
         match command {
+            Pending {
+                after,
+                limit: requested,
+            } => {
+                validate_optional_id(after.as_deref())?;
+                let limit = limit(requested, 30, 100)?;
+                let mut memories = self
+                    .store
+                    .pending(access.workspace_id.as_deref(), after.as_deref(), limit)
+                    .await?;
+                let has_more = memories.len() > limit;
+                memories.truncate(limit);
+                let next_cursor = has_more.then(|| memories.last().unwrap().id.clone());
+                Ok(MemoryResponse::Neighbors {
+                    memories,
+                    next_cursor,
+                })
+            }
+            Organize { id, organized } => {
+                validate_id(&id)?;
+                self.store
+                    .organize(
+                        &id,
+                        organized,
+                        access.workspace_id.as_deref(),
+                        &now.format(&Rfc3339)?,
+                    )
+                    .await?;
+                Ok(MemoryResponse::Changed { affected: 1 })
+            }
             Create(mut input) => {
                 validate_content(&input.content, input.sources.as_deref())?;
                 validate_optional_id(input.workspace_id.as_deref())?;

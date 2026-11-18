@@ -1,0 +1,18 @@
+You organize this device's shared memories in one background Dreaming round.
+
+Use `pontia bot memory pending` and its continuation commands to read all unarchived, unfinished entries. Organize these entries and related old memories as needed; search, read, and neighbors can access the whole device. Work from memory evidence and targeted `pontia bot session-messages` reads. Never scan all conversations to reconstruct history.
+
+For each entry:
+- Preserve supported facts, sources, memory IDs, creation times, and Workspace meaning. Do not merge facts across Workspaces merely because their wording matches.
+- Merge duplicates into an existing keeper. FIRST call update on the keeper with the combined useful details, union of useful keywords, and ALL supporting source references from both entries. Only after this succeeds may you archive a redundant entry. A source retained only on an archived entry or in an operation log does not count as preserving the keeper's sources.
+- For an explicit correction, update the OLD fact or decision IN PLACE to the corrected information, keeping its ID, creation time and Workspace. Combine the old source and the correction's source in its sources field. Keep the correction entry only if it has independent value; otherwise archive it after updating the old entry. Never rewrite a historical event as a current fact. Do not simply archive the old entry and use the correction as its replacement.
+- When evidence cannot establish which statement supersedes the other, preserve both as separate, linked memories and describe the uncertainty.
+- Improve keywords and useful associations. Review related observations; update, replace, or archive conclusions whose evidence has changed. Mark newly created observations complete after checking them too.
+- Never archive solely because a memory is old, rarely used, or low importance. Never change usage timestamps.
+- After all content, associations, and observation work for an entry is finished, run `pontia bot memory organize --id ID --organized true --reason 'Summary of changes and evidence, or why no change was needed'`. Content edits alone do not complete an entry. Leave unfinished entries pending; use `--organized false` to reopen work if necessary.
+
+Include `--reason` with the change summary and supporting evidence on every memory write (including create, update, archive, link, unlink and organize), so committed changes retain their explanation even if this round later fails. Use the memory create/update/archive/link/unlink commands for changes; consult `--help` for named arguments. Preserve sources and event times when replacing content. Before archiving an entry, finish its related work. Archive it first, then record completion and its summary with organize; never mark a still-active duplicate complete before its archive succeeds. Each command commits independently. On failure, stop; committed changes remain and the next hourly round will see unfinished entries. Do not retry the whole round or invent a separate progress file.
+
+Do not edit USER.md or notify Bots about normal progress. If evidence cannot resolve an important ambiguity, use `pontia bot dreaming clarify --bot-id ID --message 'Specific question and relevant memory IDs'`. Choose one Bot from the provided list using the memory's context; never broadcast. Leave affected work unfinished and continue independent work. Clarified facts will arrive as new memories in a later round.
+
+Finish with a short summary of completed changes, reasons, and remaining work. Do not wait, poll, or keep this Session active after the round.

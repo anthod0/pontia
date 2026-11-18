@@ -9,6 +9,31 @@ use super::{
 pub(super) struct Store(pub SqlitePool);
 
 impl Store {
+    pub async fn pending(
+        &self,
+        workspace: Option<&str>,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<Memory>> {
+        Ok(sqlx::query_as("SELECT * FROM bot_memories WHERE archived = 0 AND organized = 0 AND (? IS NULL OR workspace_id = ?) AND (? IS NULL OR id > ?) ORDER BY id LIMIT ?")
+            .bind(workspace).bind(workspace).bind(after).bind(after).bind((limit + 1) as i64).fetch_all(&self.0).await?)
+    }
+
+    pub async fn organize(
+        &self,
+        id: &str,
+        organized: bool,
+        workspace: Option<&str>,
+        now: &str,
+    ) -> Result<()> {
+        let result = sqlx::query("UPDATE bot_memories SET organized = ?, updated_at = ? WHERE id = ? AND (? IS NULL OR workspace_id = ?)")
+            .bind(organized).bind(now).bind(id).bind(workspace).bind(workspace).execute(&self.0).await?;
+        if result.rows_affected() == 0 {
+            return Err(Error::NotFound);
+        }
+        Ok(())
+    }
+
     pub async fn create(
         &self,
         input: CreateMemory,
@@ -49,7 +74,7 @@ impl Store {
         let mut tx = self.0.begin().await?;
         // Feedback owns last_read_at; never write a previously read copy of that field.
         let rowid: i64 = sqlx::query_scalar(
-            "UPDATE bot_memories SET kind = ?, content = ?, keywords = ?, importance = ?, occurred_at = ?, sources = ?, updated_at = ?
+            "UPDATE bot_memories SET organized = 0, kind = ?, content = ?, keywords = ?, importance = ?, occurred_at = ?, sources = ?, updated_at = ?
              WHERE id = ? AND (? IS NULL OR workspace_id = ?) RETURNING rowid"
         )
         .bind(input.kind).bind(input.content).bind(sqlx::types::Json(&keywords.words))
@@ -76,7 +101,7 @@ impl Store {
         now: &str,
     ) -> Result<()> {
         let result = sqlx::query(
-            "UPDATE bot_memories SET archived = ?, updated_at = ? WHERE id = ? AND (? IS NULL OR workspace_id = ?)"
+            "UPDATE bot_memories SET organized = 0, archived = ?, updated_at = ? WHERE id = ? AND (? IS NULL OR workspace_id = ?)"
         ).bind(input.archived).bind(now).bind(input.id).bind(workspace).bind(workspace)
             .execute(&self.0).await?;
         if result.rows_affected() == 0 {

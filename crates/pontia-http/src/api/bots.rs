@@ -176,3 +176,12 @@ fn update_event(update: ConversationUpdate) -> Event {
         .json_data(update)
         .expect("serializable conversation update")
 }
+
+/// Run one maintenance round without changing the hourly timer.
+pub async fn dream(State(state): State<HttpState>) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let service = state.dreaming().clone();
+    let session_id = tokio::spawn(async move { service.start().await })
+        .await
+        .map_err(|error| pontia_core::Error::Domain(error.to_string()))??;
+    Ok(ok(json!({"session_id": session_id})))
+}

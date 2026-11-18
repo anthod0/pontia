@@ -52,6 +52,7 @@ async fn main() -> Result<()> {
 
     let shutdown = state.app().control().shutdown();
     tokio::spawn(state.helpers().clone().run(shutdown.subscribe()));
+    tokio::spawn(state.dreaming().clone().run(shutdown.subscribe()));
     let cleanup_shutdown = shutdown.clone();
     let http_entrypoints = http::HttpEntrypoints::new(state);
     let remote = config

@@ -12,6 +12,9 @@ pub(crate) struct BotCommand {
 
 #[derive(Debug, Subcommand)]
 pub(super) enum BotTool {
+    /// Ask a Bot to clarify ambiguous memories (dreaming)
+    #[command(subcommand)]
+    Dreaming(DreamingCommand),
     /// Create, message, inspect, or close helpers; helpers use reply to report to their Bot
     #[command(subcommand)]
     Helper(HelperCommand),
@@ -25,8 +28,7 @@ pub(super) enum BotTool {
     #[command(subcommand)]
     Workspace(WorkspaceCommand),
     /// Read or maintain device memories
-    #[command(subcommand)]
-    Memory(MemoryCommand),
+    Memory(MemoryArgs),
 }
 
 #[derive(Debug, Args, Serialize)]
@@ -149,6 +151,20 @@ pub(super) struct MemoryEdge {
 #[derive(Debug, Subcommand, Serialize)]
 #[serde(tag = "action", content = "input", rename_all = "snake_case")]
 pub(super) enum MemoryCommand {
+    /// List unarchived memories still awaiting organization (dreaming)
+    Pending {
+        #[arg(long)]
+        after: Option<String>,
+        #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u32).range(1..=100))]
+        limit: u32,
+    },
+    /// Mark organization complete, or leave a memory pending (dreaming)
+    Organize {
+        #[arg(long)]
+        id: String,
+        #[arg(long, required = true, action = clap::ArgAction::Set)]
+        organized: bool,
+    },
     /// Create a memory (Bot or dreaming)
     Create {
         #[command(flatten)]
@@ -260,4 +276,24 @@ pub(super) enum HelperCommand {
         #[arg(long)]
         session_id: String,
     },
+}
+
+#[derive(Debug, Subcommand, Serialize)]
+#[serde(tag = "action", content = "input", rename_all = "snake_case")]
+pub(super) enum DreamingCommand {
+    Clarify {
+        #[arg(long)]
+        bot_id: String,
+        #[arg(long, allow_hyphen_values = true)]
+        message: String,
+    },
+}
+
+#[derive(Debug, Args)]
+pub(super) struct MemoryArgs {
+    /// Summary and evidence for a change (required for dreaming writes)
+    #[arg(long, global = true, allow_hyphen_values = true)]
+    pub reason: Option<String>,
+    #[command(subcommand)]
+    pub command: MemoryCommand,
 }

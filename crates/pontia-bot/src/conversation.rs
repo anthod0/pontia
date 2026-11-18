@@ -368,7 +368,9 @@ impl ConversationService {
         let Some(ownership) = self.control.queries().session_ownership(session_id).await? else {
             return Ok(None);
         };
-        if ownership.application_id != APPLICATION_ID || ownership.reference.starts_with("helper:")
+        if ownership.application_id != APPLICATION_ID
+            || (ownership.reference.starts_with("helper:")
+                || ownership.reference.starts_with("dreaming:"))
         {
             return Ok(None);
         }
@@ -439,6 +441,30 @@ impl BotIdentity for ConversationService {
         Box<dyn Future<Output = std::result::Result<BotAccess, IdentityError>> + Send + 'a>,
     > {
         Box::pin(async move {
+            if let Some(ownership) = self
+                .control
+                .queries()
+                .session_ownership(session_id)
+                .await
+                .map_err(|_| IdentityError)?
+                && ownership.application_id == APPLICATION_ID
+                && ownership.reference.starts_with("dreaming:")
+            {
+                let session = self
+                    .control
+                    .queries()
+                    .get_session(session_id)
+                    .await
+                    .map_err(|_| IdentityError)?
+                    .ok_or(IdentityError)?;
+                if matches!(session.state.as_str(), "exited" | "error") {
+                    return Err(IdentityError);
+                }
+                return Ok(BotAccess {
+                    role: BotRole::Dreaming,
+                    workspace_id: None,
+                });
+            }
             if let Some(bot_id) = crate::helpers::helper_bot(&self.control.db(), session_id)
                 .await
                 .map_err(|_| IdentityError)?

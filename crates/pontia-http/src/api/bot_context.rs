@@ -124,3 +124,24 @@ pub async fn helper_command(
         })?;
     Ok(ok(result))
 }
+
+pub async fn dreaming_command(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    request: Result<Json<pontia_bot::dreaming::DreamingRequest>, JsonRejection>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
+    authorize_tool(&state, &headers, &request.session_id).await?;
+    let result = state
+        .dreaming()
+        .execute(request)
+        .await
+        .map_err(|error| match error {
+            pontia_core::Error::Conflict {
+                code: "bot_session_required",
+                message,
+            } => ApiError::custom(StatusCode::FORBIDDEN, "forbidden", message),
+            error => error.into(),
+        })?;
+    Ok(ok(result))
+}

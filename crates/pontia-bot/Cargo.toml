@@ -21,4 +21,4 @@ uuid = { workspace = true, features = ["v4", "v7"] }
 pontia-agent-control = { workspace = true, features = ["generic-test-client"] }
 pontia-runtime.workspace = true
 pontia-storage-sqlite.workspace = true
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "test-util"] }

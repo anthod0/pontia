@@ -39,6 +39,7 @@ pub struct Memory {
     pub workspace_id: Option<String>,
     pub session_id: Option<String>,
     pub archived: bool,
+    pub organized: bool,
     pub importance: Importance,
     pub occurred_at: Option<String>,
     pub sources: Option<String>,
@@ -129,6 +130,14 @@ pub enum MemoryCommand {
     Search(SearchMemories),
     Neighbors(MemoryNeighbors),
     Use(ReadMemories),
+    Pending {
+        after: Option<String>,
+        limit: Option<usize>,
+    },
+    Organize {
+        id: String,
+        organized: bool,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -136,6 +145,7 @@ pub enum MemoryCommand {
 pub struct MemoryRequest {
     pub session_id: String,
     pub command: MemoryCommand,
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

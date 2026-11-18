@@ -907,3 +907,6 @@ async fn helper_launch_pins_the_selected_profile_and_keeps_the_initialized_model
 
 #[path = "conversation/retrieval.rs"]
 mod retrieval;
+
+#[path = "conversation/dreaming.rs"]
+mod dreaming;

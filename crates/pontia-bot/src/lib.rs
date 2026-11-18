@@ -1,4 +1,5 @@
 pub mod conversation;
+pub mod dreaming;
 pub mod handoff;
 pub mod helpers;
 pub mod identity;

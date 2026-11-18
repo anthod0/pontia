@@ -70,9 +70,13 @@ impl Fixture {
         self.seconds
             .store(1_800_000_000 + days * 86_400, Ordering::SeqCst);
     }
-    async fn call(&self, session: &str, action: &str, input: Value) -> Result<Value> {
+    async fn call(&self, session: &str, action: &str, mut input: Value) -> Result<Value> {
+        let reason = input
+            .as_object_mut()
+            .and_then(|input| input.remove("reason"))
+            .unwrap_or(json!("Test evidence"));
         let request = serde_json::from_value(
-            json!({"session_id": session, "command": {"action": action, "input": input}}),
+            json!({"session_id": session, "reason":reason, "command": {"action": action, "input": input}}),
         )
         .unwrap();
         Ok(serde_json::to_value(self.commands.execute(request).await?).unwrap())
@@ -692,4 +696,91 @@ async fn content_updates_and_feedback_preserve_each_other_in_both_orders_and_con
         f.search(&["before"], None, None).await["results"],
         json!([])
     );
+}
+
+#[tokio::test]
+async fn unfinished_entries_survive_partial_work_and_completion_does_not_change_usage() {
+    let f = Fixture::new().await;
+    let a = f.create(Some("a"), &["new"]).await;
+    let b = f.create(Some("b"), &["other"]).await;
+    let archived = f.create(None, &["archived"]).await;
+    f.archive(&archived["id"], true).await;
+    assert_eq!(a["organized"], false);
+    let first = f
+        .call("dreaming", "pending", json!({"limit":1}))
+        .await
+        .unwrap();
+    assert_eq!(first["memories"][0]["id"], a["id"]);
+    f.call("bot", "use", json!({"ids":[a["id"]]}))
+        .await
+        .unwrap();
+    let used = f.read(&a["id"]).await;
+    f.call("dreaming", "update", json!({"id":a["id"],"kind":"fact","content":"partially updated","keywords":["new"],"importance":"normal","sources":a["sources"]})).await.unwrap();
+    // A later invocation still sees the changed but unfinished item.
+    let pending = f.call("dreaming", "pending", json!({})).await.unwrap();
+    assert_eq!(pending["memories"].as_array().unwrap().len(), 2);
+    assert_eq!(pending["memories"][0]["content"], "partially updated");
+    f.call(
+        "dreaming",
+        "organize",
+        json!({"id":a["id"],"organized":true,"reason":"Checked evidence and observations"}),
+    )
+    .await
+    .unwrap();
+    let rest = f
+        .call("dreaming", "pending", json!({"after":first["next_cursor"]}))
+        .await
+        .unwrap();
+    assert_eq!(rest["memories"][0]["id"], b["id"]);
+    assert_eq!(rest["next_cursor"], Value::Null);
+    let completed = f.read(&a["id"]).await;
+    assert_eq!(completed["last_read_at"], used["last_read_at"]);
+    assert_eq!(completed["created_at"], a["created_at"]);
+    assert_eq!(completed["workspace_id"], a["workspace_id"]);
+    assert_eq!(completed["sources"], a["sources"]);
+    for caller in ["bot", "reader"] {
+        assert!(matches!(
+            f.call(caller, "pending", json!({})).await,
+            Err(Error::Forbidden)
+        ));
+        assert!(matches!(
+            f.call(
+                caller,
+                "organize",
+                json!({"id":b["id"],"organized":true,"reason":"done"})
+            )
+            .await,
+            Err(Error::Forbidden)
+        ));
+    }
+    f.call("dreaming", "update", json!({"id":a["id"],"kind":"fact","content":"new evidence","keywords":["new"],"importance":"normal","sources":a["sources"]})).await.unwrap();
+    assert_eq!(f.read(&a["id"]).await["organized"], false);
+    f.archive(&archived["id"], false).await;
+    assert_eq!(
+        f.call("dreaming", "pending", json!({})).await.unwrap()["memories"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+}
+
+#[tokio::test]
+async fn dreaming_writes_require_an_explanation_before_mutating_memory() {
+    let f = Fixture::new().await;
+    let memory = f.create(None, &["reason"]).await;
+    for reason in [Value::Null, json!("   ")] {
+        let result = f
+            .commands
+            .execute(
+                serde_json::from_value(json!({
+                    "session_id":"dreaming", "reason":reason,
+                    "command":{"action":"organize","input":{"id":memory["id"],"organized":true}}
+                }))
+                .unwrap(),
+            )
+            .await;
+        assert!(matches!(result, Err(Error::InvalidInput(_))));
+        assert_eq!(f.read(&memory["id"]).await["organized"], false);
+    }
 }

@@ -28,19 +28,27 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
         .ok()
         .filter(|id| !id.trim().is_empty())
         .ok_or("Missing PONTIA_SESSION_ID; run bot tools inside a Pontia Session")?;
+    let mut reason = None;
     let (endpoint, input, grouped) = match command.command {
+        BotTool::Dreaming(input) => ("dreaming", json!(input), true),
         BotTool::Helper(input) => ("helper", json!(input), true),
-        BotTool::Memory(input) => ("memory", json!(input), true),
+        BotTool::Memory(input) => {
+            reason = input.reason;
+            ("memory", json!(input.command), true)
+        }
         BotTool::Workspace(input) => ("workspace", json!(input), true),
         BotTool::SessionMessages(input) => ("session-messages", json!(input), false),
         BotTool::UpdateUser(input) => ("user", json!(input), false),
         BotTool::SendToUser(input) => ("send-to-user", json!(input), false),
     };
-    let request = if grouped {
+    let mut request = if grouped {
         json!({"session_id": session_id, "command": input})
     } else {
         json!({"session_id": session_id, "input": input})
     };
+    if endpoint == "memory" {
+        request["reason"] = json!(reason);
+    }
     let token = config
         .external_api_token
         .as_deref()

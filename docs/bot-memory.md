@@ -58,3 +58,20 @@ Each Bot has a deep retrieval Profile initialized with its client and model. Pro
 The Workspace argument guides the investigation. The helper can read all device memories using the shared memory commands and any Session using `pontia bot session-messages`. Memory reads exclude archived entries. It cannot create or change memories, links, or usage timestamps. The Bot reports actual use with `pontia bot memory use` after adopting findings.
 
 Reports include supporting memory IDs, necessary original sources, and uncertainty. Conflicting evidence, unreadable sources, empty searches, and partial findings should be reported explicitly. Observed execution failures use the same notifications as other helpers.
+
+## Dreaming
+
+Dreaming organizes unfinished memories every hour, sharing one Profile across the device's Bots. An active round prevents overlap. Failures retain committed changes, and unfinished entries are available at the next hourly run. Empty queues are skipped.
+
+New memories start with `organized: false`. Dreaming reads them with `pontia bot memory pending`; follow the continuation command to read further pages. Content updates reopen the entry. After checking its content, associations and related observations, Dreaming marks it complete:
+
+```bash
+pontia bot memory organize --id MEMORY_ID --organized true \
+  --reason 'Merged the duplicate and retained both source references.'
+```
+
+Every Dreaming write requires `--reason` with a summary and its supporting evidence, including writes made before an entry is complete. Use `--organized false` to leave further work pending. Completion and content changes preserve the last actual usage time. Dreaming can update, archive, link and unlink memories, including related older entries across the device. Its instructions preserve sources and Workspace meaning and retain unresolved conflicts.
+
+For an essential clarification, Dreaming uses `pontia bot dreaming clarify --bot-id BOT_ID --message 'Question and memory IDs'`. Only that Bot receives the question. Normal runs do not notify Bots or appear in their helper lists.
+
+Change summaries, reasons and known failures appear in the ordinary pontiad service log. A device administrator can request one round with an authenticated `POST /api/v1/bots/dreaming`; the result contains `session_id`, or null when there is no work or a previous round still owns the run.

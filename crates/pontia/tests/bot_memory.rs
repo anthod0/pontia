@@ -74,10 +74,13 @@ impl Fixture {
             let mut command = Command::new(env!("CARGO_BIN_EXE_pontia"));
             command
                 .args(["bot", "memory"])
-                .args(args)
+                .args(&args)
                 .env("PONTIA_HOME", &root)
                 .env_remove("PONTIA_SESSION_ID");
             if let Some(session) = session {
+                if session == "dreaming-session" && !args.iter().any(|arg| arg == "--reason") {
+                    command.args(["--reason", "Test evidence"]);
+                }
                 command.env("PONTIA_SESSION_ID", session);
             }
             command.output().unwrap()
@@ -331,4 +334,83 @@ async fn production_entrypoint_denies_unbound_and_caller_supplied_roles() {
         .await;
     assert!(!unbound.status.success());
     assert!(String::from_utf8_lossy(&unbound.stderr).contains("forbidden"));
+}
+
+#[tokio::test]
+async fn dreaming_cli_pages_pending_entries_and_marks_completion() {
+    let f = Fixture::new(true).await;
+    let a = f
+        .call(
+            "bot-session",
+            &[
+                "create",
+                "--kind",
+                "fact",
+                "--content",
+                "a",
+                "--keyword",
+                "a",
+            ],
+        )
+        .await;
+    let b = f
+        .call(
+            "bot-session",
+            &[
+                "create",
+                "--kind",
+                "fact",
+                "--content",
+                "b",
+                "--keyword",
+                "b",
+            ],
+        )
+        .await;
+    let a = a["memory"]["id"].as_str().unwrap();
+    let b = b["memory"]["id"].as_str().unwrap();
+    let first = f
+        .call("dreaming-session", &["pending", "--limit", "1"])
+        .await;
+    assert_eq!(first["memories"][0]["id"], a);
+    let second = f
+        .call(
+            "dreaming-session",
+            &["pending", "--after", first["next_cursor"].as_str().unwrap()],
+        )
+        .await;
+    assert_eq!(second["memories"][0]["id"], b);
+    f.call(
+        "dreaming-session",
+        &[
+            "organize",
+            "--id",
+            a,
+            "--organized",
+            "true",
+            "--reason",
+            "Checked source and observations",
+        ],
+    )
+    .await;
+    let pending = f.call("dreaming-session", &["pending"]).await;
+    assert_eq!(pending["memories"].as_array().unwrap().len(), 1);
+    assert_eq!(pending["memories"][0]["id"], b);
+    assert!(
+        !f.cli(
+            Some("bot-session"),
+            &[
+                "organize",
+                "--id",
+                b,
+                "--organized",
+                "true",
+                "--reason",
+                "not authorized"
+            ]
+        )
+        .await
+        .status
+        .success()
+    );
 }

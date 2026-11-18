@@ -49,6 +49,8 @@ CREATE TABLE bot_memories (
     workspace_id TEXT,
     session_id TEXT,
 
+    organized INTEGER NOT NULL DEFAULT 0 CHECK (organized IN (0, 1)),
+
     archived INTEGER NOT NULL DEFAULT 0
         CHECK (archived IN (0, 1)),
 
@@ -82,6 +84,9 @@ CREATE TABLE bot_memory_edges (
 
 CREATE INDEX idx_bot_memory_edges_b
     ON bot_memory_edges(memory_b_id);
+
+CREATE INDEX idx_bot_memories_pending
+    ON bot_memories(id) WHERE archived = 0 AND organized = 0;
 
 CREATE INDEX idx_bot_memories_active
     ON bot_memories(workspace_id, kind, updated_at DESC)

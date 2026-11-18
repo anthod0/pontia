@@ -26,6 +26,7 @@ pub struct HttpState {
     session_messages: SessionMessages,
     bots: ConversationService,
     helpers: pontia_bot::helpers::HelperService,
+    dreaming: pontia_bot::dreaming::DreamingService,
     bot_identity: Arc<dyn BotIdentity>,
 }
 
@@ -33,6 +34,8 @@ impl HttpState {
     pub fn new(app: AppState, dashboard: ResolvedDashboard) -> Self {
         let bots = ConversationService::new(app.control().clone());
         let helpers = pontia_bot::helpers::HelperService::new(app.control().clone(), bots.clone());
+        let dreaming =
+            pontia_bot::dreaming::DreamingService::new(app.control().clone(), bots.clone());
         let identity: Arc<dyn BotIdentity> = Arc::new(bots.clone());
         let memory_commands = MemoryCommands::new(MemoryService::new(app.db()), identity.clone());
         let user_service = UserService::new(app.pontia_home());
@@ -55,6 +58,7 @@ impl HttpState {
             memory_commands,
             bots,
             helpers,
+            dreaming,
             bot_identity: identity,
         }
     }
@@ -81,6 +85,10 @@ impl HttpState {
 
     pub fn helpers(&self) -> &pontia_bot::helpers::HelperService {
         &self.helpers
+    }
+
+    pub fn dreaming(&self) -> &pontia_bot::dreaming::DreamingService {
+        &self.dreaming
     }
 
     pub fn bots(&self) -> &ConversationService {
