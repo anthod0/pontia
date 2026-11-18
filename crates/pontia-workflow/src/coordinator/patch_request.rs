@@ -172,6 +172,7 @@ where
                         description: Some(format!("Resolve Workflow Patch {}", patch.patch_id)),
                         execution_profile_id: None,
                         execution_profile_version: None,
+                        additional_instructions: None,
                         metadata: json!({
                             "role": "workflow_replanner",
                             "workflow_id": patch.workflow_id,

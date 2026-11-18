@@ -371,6 +371,7 @@ impl ConversationService {
                     role: None,
                     execution_profile_id: None,
                     execution_profile_version: None,
+                    additional_instructions: None,
                     metadata: json!({}),
                     initial_task: None,
                     runtime_environment: [(

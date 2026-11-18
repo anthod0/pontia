@@ -635,6 +635,7 @@ export interface CreateSessionInput {
   description?: string | null;
   execution_profile_id?: string | null;
   execution_profile_version?: string | null;
+  additional_instructions?: string | null;
   metadata?: JsonObject;
   initial_task?: { input: string; metadata?: JsonObject } | null;
 }

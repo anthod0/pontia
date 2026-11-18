@@ -254,6 +254,7 @@ impl HelperService {
                     role: None,
                     execution_profile_id: Some(profile.profile_id),
                     execution_profile_version: Some(profile.version),
+                    additional_instructions: None,
                     metadata: json!({}),
                     initial_task: None,
                     runtime_environment: [(

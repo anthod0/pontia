@@ -148,6 +148,7 @@ fn session_request(
         description: None,
         execution_profile_id: node.execution_profile_id.clone(),
         execution_profile_version: node.execution_profile_version.clone(),
+        additional_instructions: None,
         metadata: json!({}),
         initial_task: Some(InitialTaskRequest {
             input: initial_task,

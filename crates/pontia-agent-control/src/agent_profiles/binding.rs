@@ -45,12 +45,24 @@ impl AgentProfileService {
         client_type: &str,
         id: Option<&str>,
         version: Option<&str>,
+        additional_instructions: Option<&str>,
     ) -> Result<Option<ResolvedClientProfile>> {
+        if additional_instructions.is_some_and(|instructions| instructions.trim().is_empty()) {
+            return Err(Error::Domain(
+                "additional_instructions cannot be empty; omit it for no additional instructions"
+                    .into(),
+            ));
+        }
         let Some(policy) = self
             .clients
             .get(client_type)
             .and_then(|client| client.profile.as_ref())
         else {
+            if additional_instructions.is_some() {
+                return Err(Error::CapabilityUnavailable(
+                    "Client cannot inject additional instructions".into(),
+                ));
+            }
             return Ok(None);
         };
         let explicit = if policy.supports_explicit() {
@@ -114,7 +126,14 @@ impl AgentProfileService {
         let selected_version = explicit.as_ref().map(|profile| profile.version.clone());
         let mut profile = match (&explicit, &builtin) {
             (Some(profile), _) | (None, Some(profile)) => profile.clone(),
-            (None, None) => return Ok(None),
+            (None, None) => {
+                if additional_instructions.is_some() {
+                    return Err(Error::CapabilityUnavailable(
+                        "Client has no Profile for instruction binding".into(),
+                    ));
+                }
+                return Ok(None);
+            }
         };
         if let (Some(builtin), Some(explicit)) = (&builtin, &explicit)
             && builtin.profile_id != explicit.profile_id
@@ -127,6 +146,12 @@ impl AgentProfileService {
                 (Some(default), None) => Some(default.clone()),
                 (None, selected) => selected.clone(),
             };
+        }
+        if let Some(instructions) = additional_instructions {
+            profile.system_prompt_template = Some(match profile.system_prompt_template {
+                Some(prompt) if !prompt.is_empty() => format!("{prompt}\n\n{instructions}"),
+                _ => instructions.to_owned(),
+            });
         }
         Ok(Some(ResolvedClientProfile {
             version: selected_version,

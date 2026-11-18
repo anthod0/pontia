@@ -39,6 +39,7 @@ pub struct CreateSessionRequest {
     pub description: Option<String>,
     pub execution_profile_id: Option<String>,
     pub execution_profile_version: Option<String>,
+    pub additional_instructions: Option<String>,
     #[serde(default)]
     pub metadata: Value,
     pub initial_task: Option<InitialTaskRequest>,

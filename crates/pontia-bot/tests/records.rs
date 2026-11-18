@@ -260,7 +260,7 @@ async fn defaults_capture_creation_config_and_preserve_user_edits_and_shared_res
         );
         let binding = f
             .profiles
-            .resolve_for_client("generic", Some(id), Some("1"))
+            .resolve_for_client("generic", Some(id), Some("1"), None)
             .await
             .unwrap()
             .unwrap();

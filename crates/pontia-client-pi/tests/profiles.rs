@@ -32,16 +32,26 @@ async fn profiles_compose_once_and_pin_the_selected_version() {
         (Some("default"), Some("2"), "builtin-marker", Some("2")),
     ] {
         let resolved = service
-            .resolve_for_client("pi", id, version)
+            .resolve_for_client("pi", id, version, None)
             .await
             .unwrap()
             .unwrap();
         assert_eq!(resolved.binding, json!({"system_prompt":expected}));
         assert_eq!(resolved.version.as_deref(), selected);
     }
+    let combined = service
+        .resolve_for_client("pi", Some("reviewer"), Some("1"), Some("caller-marker"))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        combined.binding["system_prompt"],
+        "builtin-marker\n\nfirst-marker\n\ncaller-marker"
+    );
+    assert_eq!(combined.version.as_deref(), Some("1"));
     let old_builtin = service.get_version("default", "1").await.unwrap().unwrap();
     let resolved = service
-        .resolve_for_client("pi", Some("default"), Some("1"))
+        .resolve_for_client("pi", Some("default"), Some("1"), None)
         .await
         .unwrap()
         .unwrap();

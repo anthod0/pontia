@@ -1244,7 +1244,7 @@ async fn default_instructions_are_fixed_before_input_and_survive_resume() {
     sqlx::query("UPDATE execution_profiles SET system_prompt_template='creation-marker' WHERE profile_id='default' AND version='2'")
         .execute(&h.app.db()).await.unwrap();
     let request =
-        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path()}))
+        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"additional_instructions":"caller-marker"}))
             .unwrap();
     let created = h
         .app
@@ -1278,7 +1278,10 @@ async fn default_instructions_are_fixed_before_input_and_survive_resume() {
         .collect();
     assert_eq!(
         prompts,
-        vec![json!("creation-marker"), json!("creation-marker")]
+        vec![
+            json!("creation-marker\n\ncaller-marker"),
+            json!("creation-marker\n\ncaller-marker")
+        ]
     );
     h.stop().await;
 }

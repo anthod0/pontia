@@ -24,6 +24,10 @@ struct Fixture {
 
 impl Fixture {
     async fn new() -> Self {
+        Self::with_instructions(None).await
+    }
+
+    async fn with_instructions(additional_instructions: Option<&str>) -> Self {
         let root = tempfile::tempdir().unwrap();
         let socket = root.path().join("app-server.sock");
         let listener = UnixListener::bind(&socket).unwrap();
@@ -171,7 +175,7 @@ impl Fixture {
             .session_commands()
             .create_session(
                 serde_json::from_value::<CreateSessionRequest>(
-                    json!({"client_type":"codex","workspace":root.path()}),
+                    json!({"client_type":"codex","workspace":root.path(),"additional_instructions":additional_instructions}),
                 )
                 .unwrap(),
             )
@@ -740,7 +744,7 @@ async fn creating_a_session_wakes_an_observer_with_no_active_sessions() {
 
 #[tokio::test]
 async fn profile_survives_first_input_and_resume_without_mutable_profiles() {
-    let fixture = Fixture::new().await;
+    let fixture = Fixture::with_instructions(Some("caller-marker")).await;
     *fixture.configuration.lock().await = json!({"developer_instructions":"native-marker"});
     sqlx::query("DROP TABLE execution_profiles")
         .execute(&fixture.app.db())
@@ -764,7 +768,7 @@ async fn profile_survives_first_input_and_resume_without_mutable_profiles() {
     for request in requests.iter() {
         assert_eq!(
             request["params"]["config"]["developer_instructions"],
-            "native-marker\n\ncreation-marker"
+            "native-marker\n\ncreation-marker\n\ncaller-marker"
         );
     }
     drop(requests);

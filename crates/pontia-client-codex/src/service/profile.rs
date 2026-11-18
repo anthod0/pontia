@@ -38,7 +38,7 @@ pub(crate) async fn prepare_proxy_request(
         ThreadOperation::Start => {
             let resolved = pontia_agent_control::AgentProfileService::new(state.db())
                 .with_clients(state.clients())
-                .resolve_for_client("codex", None, None)
+                .resolve_for_client("codex", None, None, None)
                 .await?;
             resolved
                 .map(|resolved| {

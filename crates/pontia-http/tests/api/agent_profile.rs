@@ -558,7 +558,7 @@ async fn codex_profile_binding_pins_content_before_first_input_and_rejects_inval
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{response}");
-    let request = json!({"client_type":"codex","workspace":app.workspace().path(),"execution_profile_id":"codex-reviewer"});
+    let request = json!({"client_type":"codex","workspace":app.workspace().path(),"execution_profile_id":"codex-reviewer","additional_instructions":"Keep {{literal}} unchanged.\nUse Chinese."});
     for invalid in [
         json!({"client_type":"codex","execution_profile_id":"missing"}),
         json!({"client_type":"codex","execution_profile_version":"1"}),
@@ -590,6 +590,9 @@ async fn codex_profile_binding_pins_content_before_first_input_and_rejects_inval
     );
     let profiles = pontia_client_codex::profiles::CodexProfiles::new(state.db());
     let pinned = profiles.codex_binding(session).await.unwrap().unwrap();
+    assert!(pinned.system_prompt.as_deref().unwrap().ends_with(
+        "Respond with the configured review marker.\n\nKeep {{literal}} unchanged.\nUse Chinese."
+    ));
     profile["system_prompt_template"] = json!("Changed after binding");
     let (status, response) = put_json(
         state.clone(),
@@ -677,4 +680,61 @@ async fn default_profile_is_fixed_at_creation_and_legacy_sessions_remain_unbound
     sqlx::query("UPDATE events SET payload=json_remove(payload,'$.execution_profile_binding') WHERE session_id=? AND event_type='session.created'")
         .bind(session).execute(&app.db).await.unwrap();
     assert!(reopened.codex_binding(session).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn additional_instructions_without_explicit_profile_are_isolated_per_session() {
+    let app = TestApp::new().await;
+    sqlx::query("UPDATE execution_profiles SET system_prompt_template='builtin-marker' WHERE profile_id='default' AND version='2'")
+        .execute(&app.db).await.unwrap();
+    let service = pontia_agent_control::AgentProfileService::new(app.db.clone());
+    for (extra, expected) in [
+        (Some("first caller"), "builtin-marker\n\nfirst caller"),
+        (Some("second caller"), "builtin-marker\n\nsecond caller"),
+        (None, "builtin-marker"),
+    ] {
+        let (status, created) = post_json(
+            app.state.clone(),
+            "/api/v1/sessions",
+            json!({
+                "client_type": "codex", "workspace": app.workspace().path(),
+                "additional_instructions": extra
+            }),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{created}");
+        let session = created["data"]["session"]["session_id"].as_str().unwrap();
+        assert_eq!(
+            service.session_binding(session).await.unwrap().unwrap()["system_prompt"],
+            expected
+        );
+    }
+}
+
+#[tokio::test]
+async fn invalid_additional_instructions_are_rejected_before_session_creation() {
+    let app = TestApp::new().await;
+    for (client, extra) in [
+        ("codex", json!("")),
+        ("codex", json!(" \n\t")),
+        ("generic", json!("caller instructions")),
+    ] {
+        let (status, response) = post_json(
+            app.state.clone(),
+            "/api/v1/sessions",
+            json!({
+                "client_type": client, "workspace": app.workspace().path(),
+                "additional_instructions": extra
+            }),
+            None,
+        )
+        .await;
+        assert!(status.is_client_error(), "{status}: {response}");
+    }
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
+        .fetch_one(&app.db)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
 }
