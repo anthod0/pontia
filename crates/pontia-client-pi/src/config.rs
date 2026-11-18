@@ -26,7 +26,7 @@ impl ClientConfiguration for PiConfiguration {
         directory: &'a std::path::Path,
     ) -> pontia_agent_control::client_contract::ClientOperation<
         'a,
-        Vec<pontia_agent_control::sessions::SessionModel>,
+        pontia_agent_control::agent_clients::AgentClientModels,
     > {
         Box::pin(async move { crate::models::list(&command(effective)?, directory).await })
     }

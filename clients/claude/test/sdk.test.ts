@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { spawn } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { listModels } from "../src/models.js";
 import { Host, type QueryFactory } from "../src/host.js";
 import type { HostEvent } from "../src/facts.js";
 
@@ -229,6 +230,9 @@ test(
       );
     }
     try {
+      const availableModels = await listModels(cwd, factory);
+      assert.ok(availableModels.length > 0);
+      assert.equal(requests.length, 0, "model listing must not run a task");
       const host = create();
       await finish(host, randomUUID(), "First isolated task", "readingfixture answer");
       assert.equal(

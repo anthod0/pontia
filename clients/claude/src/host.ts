@@ -1,4 +1,5 @@
 import { query, type Options, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { modelOptions } from "./models.js";
 import { Input } from "./input.js";
 import { Permissions } from "./permissions.js";
 import { FactError, InputFacts, type Emit, type ResultDiagnostic } from "./facts.js";
@@ -138,11 +139,7 @@ export class Host {
   async listModels() {
     if (!this.acceptsControl() || !this.execution || !this.native)
       throw new ControlError("rejected", "execution_unavailable");
-    return (await this.execution.supportedModels()).map((model) => ({
-      id: model.value,
-      name: model.displayName,
-      description: model.description,
-    }));
+    return modelOptions(this.execution);
   }
 
   async setModel(model: string): Promise<void> {

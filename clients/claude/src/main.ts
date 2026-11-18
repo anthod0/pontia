@@ -1,10 +1,15 @@
 import { bootstrap, serve } from "./server.js";
 import { readHistory } from "./history.js";
+import { listModels } from "./models.js";
 import { preflight } from "./preflight.js";
 
 async function main(): Promise<void> {
   if (process.argv[2] === "preflight") {
     await preflight();
+    return;
+  }
+  if (process.argv[2] === "models") {
+    process.stdout.write(JSON.stringify(await listModels(process.cwd())) + "\n");
     return;
   }
   let input = Buffer.alloc(0);
@@ -30,7 +35,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  if (process.argv[2] !== "preflight" && process.argv[2] !== "history") {
+  if (process.argv[2] !== "preflight" && process.argv[2] !== "history" && process.argv[2] !== "models") {
     const systemCode = error instanceof Error && "code" in error ? error.code : undefined;
     const code =
       typeof systemCode === "string" &&

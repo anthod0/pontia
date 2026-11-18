@@ -16,7 +16,7 @@ pub async fn list_agent_client_models(
     let models = service
         .list_models(&client, &key, state.pontia_home())
         .await?;
-    Ok(ok(json!({"models": models})))
+    Ok(ok(json!(models)))
 }
 
 pub async fn list_agent_clients(

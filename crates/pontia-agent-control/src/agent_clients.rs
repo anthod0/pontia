@@ -42,6 +42,12 @@ pub struct AgentClientDetails {
     pub updated_at: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct AgentClientModels {
+    pub models: Vec<crate::sessions::SessionModel>,
+    pub default_model: Option<String>,
+}
+
 /// Management settings are not evidence of client installation, connection, or execution.
 #[derive(Clone)]
 pub struct AgentClientService {
@@ -138,7 +144,7 @@ impl AgentClientService {
         client: &str,
         key: &str,
         directory: &std::path::Path,
-    ) -> Result<Vec<crate::sessions::SessionModel>> {
+    ) -> Result<AgentClientModels> {
         let configuration = self.configuration(client)?;
         let effective = self
             .for_creation_key(client, key)

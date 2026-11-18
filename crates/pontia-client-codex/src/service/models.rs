@@ -5,9 +5,26 @@ use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
 
 use super::{CodexService, string};
+use pontia_agent_control::agent_clients::AgentClientModels;
 use pontia_agent_control::{AgentBindingService, runtime::ControlTarget, sessions::SessionModel};
 
 impl CodexService {
+    pub(crate) async fn available_models(root: &std::path::Path) -> Result<AgentClientModels> {
+        let runtime = CodexRuntime::ensure(root).await?;
+        let connection = runtime.connection().await?;
+        let mut models = list_models(&connection).await?;
+        let configuration = connection
+            .call("config/read", json!({"cwd":root,"includeLayers":false}))
+            .await?;
+        let configured: Option<String> =
+            serde_json::from_value(configuration["config"]["model"].clone())?;
+        if configured.is_some() {
+            models.default_model = configured;
+        }
+        runtime.current_guard().await?;
+        Ok(models)
+    }
+
     pub(crate) async fn list_models(&self, target: &ControlTarget) -> Result<Vec<SessionModel>> {
         let runtime = self.runtime(&target.session_id).await?;
         let _operation = runtime.lock_session(&target.session_id).await;
@@ -15,7 +32,7 @@ impl CodexService {
         let connection = runtime.connection().await?;
         let models = list_models(&connection).await?;
         runtime.current_guard().await?;
-        Ok(models)
+        Ok(models.models)
     }
 
     pub(crate) async fn set_model(&self, target: &ControlTarget, model: &str) -> Result<()> {
@@ -25,6 +42,7 @@ impl CodexService {
         let connection = runtime.connection().await?;
         if !list_models(&connection)
             .await?
+            .models
             .iter()
             .any(|entry| entry.id == model)
         {
@@ -91,8 +109,9 @@ async fn update_model(connection: &Connection, thread: &str, model: &str) -> Res
     Ok(())
 }
 
-async fn list_models(connection: &Connection) -> Result<Vec<SessionModel>> {
+async fn list_models(connection: &Connection) -> Result<AgentClientModels> {
     let mut models = Vec::new();
+    let mut default_model = None;
     let mut cursor = Value::Null;
     let mut seen = HashSet::new();
     loop {
@@ -109,6 +128,9 @@ async fn list_models(connection: &Connection) -> Result<Vec<SessionModel>> {
             if model["hidden"] == true {
                 continue;
             }
+            if model["isDefault"] == true {
+                default_model = Some(string(model, "model")?.into());
+            }
             models.push(SessionModel {
                 id: string(model, "model")?.into(),
                 name: string(model, "displayName")?.into(),
@@ -123,5 +145,8 @@ async fn list_models(connection: &Connection) -> Result<Vec<SessionModel>> {
             return Err(Error::Domain("Invalid Codex model list cursor".into()));
         }
     }
-    Ok(models)
+    Ok(AgentClientModels {
+        models,
+        default_model,
+    })
 }

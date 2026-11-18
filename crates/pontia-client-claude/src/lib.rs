@@ -1,5 +1,6 @@
 mod history;
 mod interactions;
+mod models;
 mod output;
 mod peer;
 mod profiles;
@@ -60,6 +61,21 @@ struct Configuration {
     host: Option<PathBuf>,
 }
 impl ClientConfiguration for Configuration {
+    fn list_models<'a>(
+        &'a self,
+        _: &'a Value,
+        directory: &'a Path,
+    ) -> ClientOperation<'a, pontia_agent_control::agent_clients::AgentClientModels> {
+        Box::pin(async move {
+            let script = std::path::absolute(
+                self.host
+                    .clone()
+                    .unwrap_or_else(|| setup::host_path(directory)),
+            )?;
+            models::list(&script, directory).await
+        })
+    }
+
     fn detect(&self, _: &Value, context: &DetectionContext<'_>) -> ClientDetection {
         setup::detect(context, self.host.as_deref())
     }

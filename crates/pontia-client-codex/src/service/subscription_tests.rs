@@ -119,7 +119,7 @@ impl Fixture {
                         json!({"turn":{"id":"turn-one"}})
                     }
                     "model/list" => {
-                        json!({"data":[{"model":"model-one","displayName":"Model One","description":"test","hidden":false}],"nextCursor":null})
+                        json!({"data":[{"model":"model-one","displayName":"Model One","description":"test","hidden":false,"isDefault":true}],"nextCursor":null})
                     }
                     "thread/settings/update" => json!({}),
                     "thread/archive" => {
@@ -1017,4 +1017,26 @@ async fn wait_for(
     })
     .await
     .unwrap();
+}
+
+#[tokio::test]
+async fn client_catalog_reports_native_default_and_configuration_override() {
+    let fixture = Fixture::new().await;
+    let service = pontia_agent_control::agent_clients::AgentClientService::new(
+        fixture.app.db(),
+        fixture.app.clients(),
+    );
+    let catalog = service
+        .list_models("codex", "default", fixture.root.path())
+        .await
+        .unwrap();
+    assert_eq!(catalog.default_model.as_deref(), Some("model-one"));
+    *fixture.configuration.lock().await = json!({"model":"configured-model"});
+    let catalog = service
+        .list_models("codex", "default", fixture.root.path())
+        .await
+        .unwrap();
+    assert_eq!(catalog.default_model.as_deref(), Some("configured-model"));
+    assert_eq!(catalog.models[0].id, "model-one");
+    fixture.shutdown().await;
 }

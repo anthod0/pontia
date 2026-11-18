@@ -10,7 +10,10 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use tower::ServiceExt;
 
-async fn fixture(response: Value) -> (Router, sqlx::SqlitePool, tempfile::TempDir) {
+async fn fixture_with_state(
+    response: Value,
+    state: Value,
+) -> (Router, sqlx::SqlitePool, tempfile::TempDir) {
     let root = tempfile::tempdir().unwrap();
     let script = root.path().join("catalog.py");
     std::fs::write(
@@ -31,10 +34,17 @@ if response.get('hang'):
     sys.exit(0)
 response.update(type='response', id=request['id'])
 print(json.dumps(response), flush=True)
+if response.get('success'):
+    request = json.loads(sys.stdin.readline())
+    assert request['type'] == 'get_state'
+    state = json.loads({state:?})
+    state.update(type='response', id=request['id'])
+    print(json.dumps(state), flush=True)
 assert sys.stdin.read() == ''
 Path('closed').touch()
 "#,
-            response = response.to_string()
+            response = response.to_string(),
+            state = state.to_string()
         ),
     )
     .unwrap();
@@ -67,6 +77,10 @@ Path('closed').touch()
     (pontia_http::router(state), db, root)
 }
 
+async fn fixture(response: Value) -> (Router, sqlx::SqlitePool, tempfile::TempDir) {
+    fixture_with_state(response, json!({"success":true,"data":{}})).await
+}
+
 async fn request(app: &Router, client: &str, authorized: bool) -> (StatusCode, Value) {
     let mut request = Request::builder().uri(format!("/api/v1/agent-clients/{client}/models"));
     if authorized {
@@ -84,13 +98,17 @@ async fn request(app: &Router, client: &str, authorized: bool) -> (StatusCode, V
 
 #[tokio::test]
 async fn lists_configured_client_models_without_a_session_and_closes_the_process() {
-    let (app, db, root) = fixture(json!({"success":true,"data":{"models":[
-        {"provider":"one","id":"same","name":"First"},
-        {"provider":"two","id":"same","name":"Second"}
-    ]}}))
+    let (app, db, root) = fixture_with_state(
+        json!({"success":true,"data":{"models":[
+            {"provider":"one","id":"same","name":"First"},
+            {"provider":"two","id":"same","name":"Second"}
+        ]}}),
+        json!({"success":true,"data":{"model":{"provider":"two","id":"same","name":"Second"}}}),
+    )
     .await;
     let (status, response) = request(&app, "pi/default", true).await;
     assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["data"]["default_model"], "two/same");
     assert_eq!(
         response["data"]["models"],
         json!([
@@ -128,6 +146,7 @@ async fn returns_empty_catalog_and_propagates_native_failures() {
     let (status, response) = request(&app, "pi/default", true).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(response["data"]["models"], json!([]));
+    assert_eq!(response["data"].get("default_model"), Some(&Value::Null));
     for response in [
         json!({"success":false,"error":"Cannot load models"}),
         json!({"success":true,"data":{"models":[{"provider":"one","id":"","name":"Invalid"}]}}),
@@ -135,6 +154,18 @@ async fn returns_empty_catalog_and_propagates_native_failures() {
         let (app, _, _root) = fixture(response).await;
         assert!(!request(&app, "pi/default", true).await.0.is_success());
     }
+}
+
+#[tokio::test]
+async fn default_model_lookup_failure_is_not_reported_as_no_default() {
+    let (app, _, _root) = fixture_with_state(
+        json!({"success":true,"data":{"models":[]}}),
+        json!({"success":false,"error":"Cannot read state"}),
+    )
+    .await;
+    let (status, response) = request(&app, "pi/default", true).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response["error"]["code"], "capability_unavailable");
 }
 
 #[tokio::test]

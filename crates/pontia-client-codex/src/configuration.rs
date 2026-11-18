@@ -16,6 +16,17 @@ impl CodexConfiguration {
 }
 
 impl ClientConfiguration for CodexConfiguration {
+    fn list_models<'a>(
+        &'a self,
+        _: &'a Value,
+        directory: &'a std::path::Path,
+    ) -> pontia_agent_control::client_contract::ClientOperation<
+        'a,
+        pontia_agent_control::agent_clients::AgentClientModels,
+    > {
+        Box::pin(crate::CodexService::available_models(directory))
+    }
+
     fn detect(
         &self,
         _: &Value,
