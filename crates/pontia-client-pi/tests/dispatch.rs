@@ -126,3 +126,84 @@ async fn missing_pi_connection_rejects_delivery_without_creating_a_turn() {
         .unwrap();
     assert_eq!(count, 0);
 }
+
+#[tokio::test]
+async fn conditional_exit_uses_the_native_idle_decision_and_waits_for_exit_confirmation() {
+    let (pool, _root, state) = setup().await;
+    ready(&pool).await;
+    let (daemon, socket) = UnixStream::pair().unwrap();
+    let (peer, _requests) = pontia_client_pi::rpc::PiRpcPeer::new(daemon);
+    state
+        .client_control()
+        .attach("pi", "sess_pi", "rtinst_pi", "native_pi", peer)
+        .await
+        .unwrap();
+    let events = state.event_ingest_service();
+    let server = tokio::spawn(async move {
+        let mut stream = BufReader::new(socket);
+        for accepted in [false, true] {
+            let mut line = String::new();
+            stream.read_line(&mut line).await.unwrap();
+            let request: Value = serde_json::from_str(&line).unwrap();
+            // Native execution can resume after the daemon's idle snapshot.
+            assert_eq!(request["method"], "shutdown_if_idle");
+            stream
+                .get_mut()
+                .write_all(
+                    format!(
+                        "{}\n",
+                        json!({"jsonrpc":"2.0","id":request["id"],"result":{"accepted":accepted}})
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            if accepted {
+                events
+                    .report_client_fact(
+                        "sess_pi",
+                        Some("rtinst_pi"),
+                        EventType::SessionExited,
+                        json!({"reason":"idle shutdown"}),
+                    )
+                    .await
+                    .unwrap();
+            }
+        }
+    });
+    assert!(
+        !state
+            .session_commands()
+            .exit_if_idle("sess_pi")
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        state
+            .queries()
+            .session_snapshot("sess_pi")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "idle"
+    );
+    assert!(
+        state
+            .session_commands()
+            .exit_if_idle("sess_pi")
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        state
+            .queries()
+            .session_snapshot("sess_pi")
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "exited"
+    );
+    server.await.unwrap();
+}

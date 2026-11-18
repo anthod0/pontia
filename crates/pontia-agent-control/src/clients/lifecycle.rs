@@ -58,6 +58,30 @@ impl ClientAdapter {
         self.start_in_process(root, request, 0).map(Some)
     }
 
+    pub async fn exit_if_idle(&self, target: &ControlTarget) -> Result<bool> {
+        target.validate(&self.pool).await?;
+        match self.spec.adapter.terminate {
+            TerminateBehavior::Connected => {
+                self.control
+                    .shutdown_if_idle(&target.session_id, target.instance()?)
+                    .await
+            }
+            TerminateBehavior::RuntimeManager
+                if matches!(
+                    self.spec.adapter.runtime,
+                    crate::client_contract::RuntimeBehavior::InProcess
+                ) =>
+            {
+                // Backend-managed Turns are serialized by the caller's input reservation.
+                self.exit(target).await.into_result()?;
+                Ok(true)
+            }
+            _ => Err(Error::CapabilityUnavailable(
+                "Client cannot exit conditionally while idle".into(),
+            )),
+        }
+    }
+
     pub async fn exit(&self, target: &ControlTarget) -> ControlResult<ClientExitOutcome> {
         let result = async {
             target.validate(&self.pool.clone()).await?;

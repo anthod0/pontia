@@ -4,11 +4,13 @@ use serde::Deserialize;
 
 mod client_configuration;
 pub use client_configuration::{ClientConfigurationSources, ConfigurationLayers, merge};
+mod bot;
 mod environment;
 mod file_config;
 mod loading;
 mod paths;
 mod uploads;
+pub use bot::BotConfig;
 mod workspace_roots;
 pub use uploads::UploadsConfig;
 
@@ -34,6 +36,7 @@ pub struct AppConfig {
     pub workspace_browser: WorkspaceBrowserConfig,
     pub file_picker: FilePickerConfig,
     pub uploads: UploadsConfig,
+    pub bot: BotConfig,
     pub client_configuration: ClientConfigurationSources,
     pub dashboard: DashboardConfig,
     pub remote: Option<RemoteConfig>,

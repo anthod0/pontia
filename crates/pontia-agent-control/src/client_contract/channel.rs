@@ -30,6 +30,13 @@ pub trait ClientControlChannel: Send + Sync {
     fn set_model<'a>(&'a self, model: &'a str) -> ClientControlOperation<'a>;
     fn interrupt(&self) -> ClientControlOperation<'_>;
     fn shutdown(&self) -> ClientControlOperation<'_>;
+    fn shutdown_if_idle(&self) -> ClientControlOperation<'_, bool> {
+        Box::pin(async {
+            Err(pontia_core::Error::CapabilityUnavailable(
+                "Conditional shutdown is unavailable".into(),
+            ))
+        })
+    }
     fn ping(&self) -> ClientControlOperation<'_>;
     fn replay<'a>(&'a self, inbox_message_id: &'a str) -> ClientControlOperation<'a>;
     fn submit<'a>(

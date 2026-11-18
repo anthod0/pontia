@@ -130,6 +130,7 @@ impl AppConfig {
             workspace_browser,
             file_picker,
             uploads: file.and_then(|config| config.uploads).unwrap_or_default(),
+            bot: file.and_then(|config| config.bot).unwrap_or_default(),
             client_configuration,
             dashboard,
             remote: file.and_then(|config| config.remote.clone()),

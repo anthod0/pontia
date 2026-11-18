@@ -475,6 +475,9 @@ impl pontia_agent_control::ClientControlChannel for PiChannel {
     fn shutdown(&self) -> pontia_agent_control::ClientControlOperation<'_> {
         self.peer.shutdown()
     }
+    fn shutdown_if_idle(&self) -> pontia_agent_control::ClientControlOperation<'_, bool> {
+        self.peer.shutdown_if_idle()
+    }
     fn ping(&self) -> pontia_agent_control::ClientControlOperation<'_> {
         self.peer.ping()
     }
@@ -616,6 +619,20 @@ impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
                 ));
             }
             Ok(())
+        })
+    }
+    fn shutdown_if_idle(&self) -> pontia_agent_control::ClientControlOperation<'_, bool> {
+        Box::pin(async {
+            let response = self.call("shutdown_if_idle", json!({})).await?;
+            if response == json!({"accepted":true}) {
+                Ok(true)
+            } else if response == json!({"accepted":false}) {
+                Ok(false)
+            } else {
+                Err(Error::ControlUnknown(
+                    "Invalid Pi conditional shutdown acknowledgement".into(),
+                ))
+            }
         })
     }
     fn shutdown(&self) -> pontia_agent_control::ClientControlOperation<'_> {

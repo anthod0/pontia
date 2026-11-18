@@ -4,6 +4,18 @@ In the Dashboard sidebar, select **Create Bot**. Enter a name and an optional de
 
 Use **Retry** on a failed message to send it again. You can keep sending new messages while a failed message remains in the chat. Edits to the client or model take effect when the Bot starts a new Session.
 
+Bots start a fresh Session when their context exceeds the smaller of 258,000 tokens and 80% of the model's context window, after the current Session becomes idle. Above 75,000 tokens, five minutes of continuous idle ends the current Session; the next user message or helper report starts a new one. Helpers continue their work across this change. The new Session receives user information, Workspaces, recent memories, active helpers, and recent visible chat. Historical messages are not resent as tasks.
+
+Configure the upper thresholds in `$PONTIA_HOME/config.toml`:
+
+```toml
+[bot]
+context_token_limit = 258000
+context_window_percent = 80
+```
+
+The token limit must be positive; the percentage must be between 1 and 100. Context-based handoff requires the client to report context usage.
+
 Run the commands below inside a Bot Session. Pass values through named arguments. Successful commands print plain text. Add `--json` for a JSON result.
 
 ## Send a reply

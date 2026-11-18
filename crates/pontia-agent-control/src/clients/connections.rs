@@ -263,6 +263,13 @@ impl ClientControlService {
         .await
     }
 
+    pub async fn shutdown_if_idle(&self, session_id: &str, runtime_id: &str) -> Result<bool> {
+        self.request(session_id, runtime_id, true, |channel| async move {
+            channel.shutdown_if_idle().await
+        })
+        .await
+    }
+
     pub async fn ping(&self, session_id: &str, runtime_id: &str) -> Result<()> {
         self.request(session_id, runtime_id, false, |channel| async move {
             channel.ping().await

@@ -43,6 +43,8 @@ impl TurnCommandService {
         input: String,
         metadata: Value,
     ) -> Result<Option<TurnView>> {
+        let lock = self.scheduler.session_lock(session_id);
+        let _guard = lock.lock().await;
         let (turn_id, result) = self
             .submit_input(session_id, input, metadata, InputIntent::Start, None)
             .await?;

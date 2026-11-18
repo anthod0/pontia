@@ -14,6 +14,79 @@ use crate::{
 use pontia_core::domain::EventType;
 
 impl SessionCommandService {
+    pub async fn await_ready(&self, session_id: &str) -> Result<()> {
+        let session = self
+            .queries
+            .get_session_control(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Session {session_id} not found")))?;
+        let target = crate::runtime::ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            None,
+        )
+        .await?;
+        self.clients
+            .for_client(&session.client_type)?
+            .await_initial_ready(&target)
+            .await
+    }
+
+    /// Serialize with input delivery and reject an exit if execution has resumed.
+    pub async fn exit_if_idle(&self, session_id: &str) -> Result<bool> {
+        let _input = self.inbox.reserve_initial_input(session_id).await;
+        let snapshot = self
+            .queries
+            .session_snapshot(session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Session {session_id} not found")))?;
+        if snapshot.state == "exited" {
+            return Ok(true);
+        }
+        if snapshot.state != "idle"
+            || snapshot.has_unsettled_input
+            || snapshot
+                .turns
+                .iter()
+                .any(|turn| matches!(turn.state.as_str(), "queued" | "running"))
+        {
+            return Ok(false);
+        }
+        let target = crate::runtime::ControlTarget::resolve(
+            &self.pool,
+            self.clients.registry(),
+            session_id,
+            None,
+        )
+        .await?;
+        if !self
+            .clients
+            .for_client(&snapshot.client_type)?
+            .exit_if_idle(&target)
+            .await?
+        {
+            return Ok(false);
+        }
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            if self
+                .queries
+                .session_snapshot(session_id)
+                .await?
+                .is_some_and(|session| session.state == "exited")
+            {
+                return Ok(true);
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(Error::ControlUnknown(
+                    "Session exit has not been confirmed".into(),
+                ));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    }
+
     pub async fn ensure_current_runtime(&self, session_id: &str, runtime_id: &str) -> Result<()> {
         self.ensure_control_target(session_id, Some(runtime_id))
             .await

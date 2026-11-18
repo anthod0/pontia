@@ -548,7 +548,7 @@ test.each(["interrupt", "shutdown"] as const)(
       socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: "control", method })}\n`);
       reply(socket, message.id, {});
     });
-    const lifecycle = { interrupt: vi.fn(), shutdown: vi.fn() };
+    const lifecycle = { interrupt: vi.fn(), shutdown: vi.fn(), shutdownIfIdle: vi.fn() };
     const callback = lifecycle[method];
     const client = await connectPi(
       root,
@@ -642,4 +642,39 @@ test("serves large image history while branch.resolve awaits a reverse response"
   onTestFinished(() => client.close());
   await expect(client.request("branch.resolve", {})).resolves.toEqual({ target_entry_id: "user" });
   await expect(client.request("ping", {})).resolves.toEqual({});
+});
+
+test("conditional shutdown reports native rejection without terminating the channel", async () => {
+  const responses: any[] = [];
+  const root = await server((socket, message) => {
+    if (!message.method) {
+      responses.push(message);
+      return;
+    }
+    socket.write(
+      `${JSON.stringify({ jsonrpc: "2.0", id: "conditional", method: "shutdown_if_idle" })}\n`,
+    );
+    reply(socket, message.id, {});
+  });
+  let idle = false;
+  const client = await connectPi(
+    root,
+    () => {},
+    () => {},
+    undefined,
+    undefined,
+    {
+      interrupt: vi.fn(),
+      shutdown: vi.fn(),
+      shutdownIfIdle: () => idle,
+    },
+  );
+  onTestFinished(() => client.close());
+  await client.request("begin", {});
+  await vi.waitFor(() => expect(responses).toHaveLength(1));
+  expect(responses[0].result).toEqual({ accepted: false });
+  idle = true;
+  await client.request("begin", {});
+  await vi.waitFor(() => expect(responses).toHaveLength(2));
+  expect(responses[1].result).toEqual({ accepted: true });
 });

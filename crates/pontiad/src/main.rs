@@ -45,12 +45,13 @@ async fn main() -> Result<()> {
     tokio::spawn(workflow_coordinator.run(app_state.control().shutdown().subscribe()));
     let dashboard =
         http::dashboard::resolve_dashboard(&config.dashboard, &config.pontia_home).await;
-    let state = http::HttpState::new(app_state, dashboard);
+    let state = http::HttpState::new(app_state, dashboard).with_bot_config(config.bot)?;
 
     info!(addr = %bound_addr, "starting pontia control plane");
     info!(url = %dashboard_url(bound_addr), "dashboard available");
 
     let shutdown = state.app().control().shutdown();
+    tokio::spawn(state.bots().clone().run_generations(shutdown.subscribe()));
     tokio::spawn(state.helpers().clone().run(shutdown.subscribe()));
     tokio::spawn(state.dreaming().clone().run(shutdown.subscribe()));
     let cleanup_shutdown = shutdown.clone();

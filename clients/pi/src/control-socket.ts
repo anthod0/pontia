@@ -33,6 +33,7 @@ export interface ModelControl {
 export interface LifecycleControl {
   interrupt(): void;
   shutdown(): void;
+  shutdownIfIdle(): boolean;
 }
 export interface CompactionControl {
   compact(operationId: string): void;
@@ -214,6 +215,17 @@ class RpcSocket {
         try {
           this.compaction.compact(params.operation_id);
           respond({ result: { accepted: true } });
+        } catch (failure) {
+          error(
+            failure instanceof RpcError ? failure.code : -32006,
+            failure instanceof Error ? failure.message : String(failure),
+          );
+        }
+        return;
+      }
+      if (this.lifecycle && message.method === "shutdown_if_idle") {
+        try {
+          respond({ result: { accepted: this.lifecycle.shutdownIfIdle() } });
         } catch (failure) {
           error(
             failure instanceof RpcError ? failure.code : -32006,

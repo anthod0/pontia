@@ -63,6 +63,26 @@ impl HttpState {
         }
     }
 
+    pub fn with_bot_config(
+        mut self,
+        config: pontia_config::BotConfig,
+    ) -> pontia_core::Result<Self> {
+        self.bots =
+            self.bots
+                .with_generation_limits(pontia_bot::conversation::GenerationLimits::new(
+                    config.context_token_limit.get(),
+                    config.context_window_percent,
+                )?);
+        self.helpers =
+            pontia_bot::helpers::HelperService::new(self.app.control().clone(), self.bots.clone());
+        self.dreaming = pontia_bot::dreaming::DreamingService::new(
+            self.app.control().clone(),
+            self.bots.clone(),
+        );
+        let identity = Arc::new(self.bots.clone());
+        Ok(self.with_bot_identity(identity))
+    }
+
     pub fn with_bot_identity(mut self, identity: Arc<dyn BotIdentity>) -> Self {
         self.memory_commands =
             MemoryCommands::new(MemoryService::new(self.app.db()), identity.clone());

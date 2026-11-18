@@ -21,13 +21,12 @@ FROM rust:1-bookworm AS rust-build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock VERSION ./
 COPY crates ./crates
-COPY .sqlx ./.sqlx
 COPY scripts/build-dashboard-wasm ./scripts/build-dashboard-wasm
 RUN rustup target add wasm32-unknown-unknown
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/src/target \
-    SQLX_OFFLINE=true cargo build --locked --release -p pontia -p pontiad -p pontia-edge \
+    cargo build --locked --release -p pontia -p pontiad -p pontia-edge \
     && mkdir -p /out \
     && cp target/release/pontia target/release/pontiad target/release/pontia-edge /out/ \
     && bash scripts/build-dashboard-wasm --install-bindgen

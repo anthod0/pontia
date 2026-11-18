@@ -16,6 +16,7 @@ pub(super) struct FileConfig {
     pub(super) workspace_browser: Option<FileWorkspaceBrowserConfig>,
     pub(super) file_picker: Option<FilePickerConfig>,
     pub(super) uploads: Option<super::UploadsConfig>,
+    pub(super) bot: Option<super::BotConfig>,
     pub(super) dashboard: Option<DashboardConfig>,
     pub(super) remote: Option<RemoteConfig>,
 }

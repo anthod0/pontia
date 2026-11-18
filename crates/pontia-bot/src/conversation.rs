@@ -20,6 +20,9 @@ use crate::{
     user::UserService,
 };
 
+mod generation;
+pub use generation::GenerationLimits;
+
 const APPLICATION_ID: &str = "bot";
 
 #[derive(Clone, Copy, Serialize)]
@@ -35,6 +38,8 @@ struct Activity {
     reply: AsyncMutex<()>,
     pending_inputs: Mutex<HashSet<String>>,
     updates: broadcast::Sender<ConversationUpdate>,
+    switch_failure: Mutex<(u64, Option<generation::SwitchFailure>)>,
+    generation_notice: Mutex<Option<Notice>>,
 }
 
 impl Default for Activity {
@@ -45,6 +50,8 @@ impl Default for Activity {
             reply: AsyncMutex::default(),
             pending_inputs: Mutex::default(),
             updates: broadcast::channel(64).0,
+            switch_failure: Mutex::default(),
+            generation_notice: Mutex::default(),
         }
     }
 }
@@ -86,7 +93,7 @@ pub struct Conversation {
     pub notices: Vec<Notice>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Notice {
     pub id: String,
     pub kind: String,
@@ -114,6 +121,7 @@ pub struct ConversationService {
     messages: MessageService,
     handoff: HandoffService,
     activity: Arc<Mutex<HashMap<String, Arc<Activity>>>>,
+    generation_limits: GenerationLimits,
 }
 
 impl ConversationService {
@@ -127,6 +135,7 @@ impl ConversationService {
             handoff: HandoffService::new(pool, user, control.queries()),
             control,
             activity: Arc::default(),
+            generation_limits: GenerationLimits::default(),
         }
     }
 
@@ -166,7 +175,13 @@ impl ConversationService {
         let _guard = activity.reply.lock().await;
         let bot = self.records.get(bot_id).await?;
         let messages = self.messages.list(bot_id).await?;
-        let mut notices = Vec::new();
+        let mut notices: Vec<_> = activity
+            .generation_notice
+            .lock()
+            .unwrap()
+            .clone()
+            .into_iter()
+            .collect();
         if let Some(session_id) = &bot.current_session_id {
             for event in self
                 .control
@@ -227,8 +242,9 @@ impl ConversationService {
         drop(recording);
         activity.notify(ConversationUpdate::Changed);
         let input = format!("Source: User\n\n{}", message.content);
+        let revision = activity.switch_failure.lock().unwrap().0;
         let _delivery = activity.delivery.lock().await;
-        let result = self.deliver(bot_id, &input, &activity).await;
+        let result = self.deliver(bot_id, &input, &activity, revision).await;
         drop(pending);
         match result {
             Ok(()) => Ok(message),
@@ -245,13 +261,38 @@ impl ConversationService {
     pub async fn deliver_input(&self, bot_id: &str, input: &str) -> Result<()> {
         self.records.get(bot_id).await?;
         let activity = self.activity(bot_id);
+        let revision = activity.switch_failure.lock().unwrap().0;
         let _guard = activity.delivery.lock().await;
-        self.deliver(bot_id, input, &activity).await
+        self.deliver(bot_id, input, &activity, revision).await
     }
 
-    async fn deliver(&self, bot_id: &str, input: &str, activity: &Activity) -> Result<()> {
+    async fn deliver(
+        &self,
+        bot_id: &str,
+        input: &str,
+        activity: &Activity,
+        revision: u64,
+    ) -> Result<()> {
+        {
+            let failure = activity.switch_failure.lock().unwrap();
+            if failure.0 != revision {
+                return Err(failure
+                    .1
+                    .as_ref()
+                    .expect("failed switch has a reason")
+                    .error());
+            }
+        }
+        self.rotate(bot_id, activity, time::OffsetDateTime::now_utc())
+            .await?;
         let bot = self.records.get(bot_id).await?;
-        let session_id = self.current_session(bot, activity).await?;
+        let session_id = match self.current_session(bot, activity).await {
+            Ok(session) => session,
+            Err(error) => {
+                self.generation_error(bot_id, activity, &error);
+                return Err(error);
+            }
+        };
         self.control
             .turn_commands()
             .submit_live_input(&session_id, input.into())
@@ -259,30 +300,15 @@ impl ConversationService {
     }
 
     async fn current_session(&self, bot: Bot, activity: &Activity) -> Result<String> {
-        let queries = self.control.queries();
-        let ownership_prefix = format!("{}:", bot.bot_id);
-        let current = match &bot.current_session_id {
-            Some(session_id) => Some(session_id.clone()),
-            None => {
-                queries
-                    .latest_owned_session(APPLICATION_ID, &ownership_prefix)
-                    .await?
-            }
-        };
-        if let Some(session_id) = current {
+        if let Some(session_id) = &bot.current_session_id {
             let snapshot = self
                 .control
                 .queries()
-                .session_snapshot(&session_id)
+                .session_snapshot(session_id)
                 .await?
                 .ok_or_else(|| Error::NotFound(format!("Session {session_id} not found")))?;
             if !matches!(snapshot.state.as_str(), "exited" | "error") {
-                if bot.current_session_id.is_none() {
-                    self.records
-                        .set_current_session(&bot.bot_id, Some(&session_id))
-                        .await?;
-                }
-                return Ok(session_id);
+                return Ok(session_id.clone());
             }
             if snapshot.has_agent_binding && snapshot.state == "error" {
                 return Err(Error::StateConflict(
@@ -290,6 +316,17 @@ impl ConversationService {
                 ));
             }
         }
+        let session = self.start_session(&bot, activity).await?;
+        self.records
+            .set_current_session(&bot.bot_id, Some(&session))
+            .await?;
+        activity.generation_notice.lock().unwrap().take();
+        activity.notify(ConversationUpdate::Changed);
+        Ok(session)
+    }
+
+    async fn start_session(&self, bot: &Bot, activity: &Activity) -> Result<String> {
+        let ownership_prefix = format!("{}:", bot.bot_id);
         if !self.supports_client(&bot.client_type) {
             return Err(Error::CapabilityUnavailable(
                 "Client cannot run a Bot Session".into(),
@@ -324,9 +361,9 @@ impl ConversationService {
             .session_commands()
             .create_application_session(
                 CreateSessionRequest {
-                    client_type: bot.client_type,
-                    title: Some(bot.name),
-                    description: bot.description,
+                    client_type: bot.client_type.clone(),
+                    title: Some(bot.name.clone()),
+                    description: bot.description.clone(),
                     workspace: None,
                     workspace_id: None,
                     handle: None,
@@ -346,9 +383,9 @@ impl ConversationService {
                     }),
                 },
                 ApplicationLaunchSettings {
-                    client_key: bot.client_key,
+                    client_key: bot.client_key.clone(),
                     directory,
-                    model: bot.model,
+                    model: bot.model.clone(),
                     instructions_file,
                 },
             )
@@ -356,11 +393,10 @@ impl ConversationService {
         let session_id = outcome
             .session_id()
             .ok_or_else(|| Error::Domain("Bot Session creation returned no Session ID".into()))?;
-        self.records
-            .set_current_session(&bot.bot_id, Some(session_id))
+        self.control
+            .session_commands()
+            .await_ready(session_id)
             .await?;
-        self.activity(&bot.bot_id)
-            .notify(ConversationUpdate::Changed);
         Ok(session_id.into())
     }
 

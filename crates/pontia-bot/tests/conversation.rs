@@ -38,6 +38,12 @@ struct Client {
     inputs: Mutex<Vec<AgentInput>>,
     handoffs: Mutex<Vec<String>>,
     blocked: Mutex<Option<String>>,
+    launch_gate: Mutex<
+        Option<(
+            tokio::sync::oneshot::Sender<()>,
+            std::sync::mpsc::Receiver<()>,
+        )>,
+    >,
     tokens: Mutex<std::collections::HashMap<String, String>>,
 }
 
@@ -69,6 +75,11 @@ impl ClientLauncher for Client {
         _: &Value,
         settings: &ApplicationLaunchSettings,
     ) -> Result<String> {
+        let gate = self.launch_gate.lock().unwrap().take();
+        if let Some((entered, release)) = gate {
+            entered.send(()).unwrap();
+            release.recv().unwrap();
+        }
         if settings.model != MODEL {
             return Err(Error::CapabilityUnavailable("model unavailable".into()));
         }
@@ -910,3 +921,6 @@ mod retrieval;
 
 #[path = "conversation/dreaming.rs"]
 mod dreaming;
+
+#[path = "conversation/generation.rs"]
+mod generation;

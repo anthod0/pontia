@@ -404,6 +404,12 @@ export function createPontiaPiExtension(
         interrupt() {
           lifecycleContext().abort();
         },
+        shutdownIfIdle() {
+          const ctx = lifecycleContext();
+          if (!ctx.isIdle() || ctx.hasPendingMessages()) return false;
+          ctx.shutdown();
+          return true;
+        },
         shutdown() {
           const ctx = lifecycleContext();
           // Ordinary extension context: abort first, then exit after Pi settles.

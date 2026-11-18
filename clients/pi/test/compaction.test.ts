@@ -262,3 +262,20 @@ test("busy, stale Runtime and changed native Session controls never call compact
   expect(f.context.compact).not.toHaveBeenCalled();
   expect(f.context.abort).not.toHaveBeenCalled();
 });
+
+test("conditional shutdown rejects resumed execution and queued inputs without aborting", async () => {
+  const f = await fixture();
+  f.setIdle(false);
+  expect(f.lifecycle[0].shutdownIfIdle()).toBe(false);
+  expect(f.context.abort).not.toHaveBeenCalled();
+  expect(f.context.shutdown).not.toHaveBeenCalled();
+  f.setIdle(true);
+  f.context.hasPendingMessages = () => true;
+  expect(f.lifecycle[0].shutdownIfIdle()).toBe(false);
+  expect(f.context.shutdown).not.toHaveBeenCalled();
+  f.context.hasPendingMessages = () => false;
+  expect(f.lifecycle[0].shutdownIfIdle()).toBe(true);
+  expect(f.context.shutdown).toHaveBeenCalledOnce();
+  expect(f.context.abort).not.toHaveBeenCalled();
+  await f.handlers.session_shutdown({ reason: "quit" });
+});
