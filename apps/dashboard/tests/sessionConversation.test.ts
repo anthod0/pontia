@@ -783,6 +783,9 @@ test("conversation renders the starting status as a bottom status after the late
 
   expect(bottomStatus).toBeInTheDocument();
   expect(assistantMessage).not.toContainElement(status);
+  expect(bottomStatus?.parentElement).toBe(
+    document.querySelector("[data-chat-conversation-content]")?.lastElementChild,
+  );
   expect(response.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 

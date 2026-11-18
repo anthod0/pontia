@@ -470,11 +470,11 @@
             </ul>
           {/if}
           {@render turnFooter(displayTurn, showProgress)}
+          {#if showBottomStatus && index === displayTurns.length - 1}
+            <AgentBottomStatus state={sessionState} class="py-0" />
+          {/if}
         </div>
       {/each}
-      {#if showBottomStatus}
-        <AgentBottomStatus state={sessionState} />
-      {/if}
     </Conversation.Content>
   {/if}
 </Conversation.Root>
