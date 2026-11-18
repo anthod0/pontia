@@ -3,13 +3,16 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import PontiaMascot from '../chat/PontiaMascot.svelte'
   import WorkspaceBrowser from './WorkspaceBrowser.svelte'
+  import { navigate } from '$lib/navigation'
+  import { dashboardPath } from '$lib/dashboardRoutes'
 
   interface Props {
     canContinue: boolean
     onContinue: () => void
+    routeScope?: string
   }
 
-  let { canContinue, onContinue }: Props = $props()
+  let { canContinue, onContinue, routeScope }: Props = $props()
 </script>
 
 <section class="mx-auto flex min-h-[calc(100svh-5.5rem)] max-w-5xl flex-col justify-center gap-6 md:min-h-[calc(100svh-6.5rem)]" aria-labelledby="workspace-onboarding-title">
@@ -17,6 +20,14 @@
     <PontiaMascot class="size-12 shrink-0" />
     <h1 id="workspace-onboarding-title" class="text-xl font-medium leading-snug">{$t('workspaces.setupFirst')}</h1>
   </div>
+
+  <p class="px-1 text-sm text-muted-foreground">
+    {$t('workspaces.botHint')}
+    <a class="text-primary underline underline-offset-4" href={routeScope === undefined ? dashboardPath('/bot') : `${routeScope}/bot`}
+      onclick={(event) => { event.preventDefault(); void navigate('/bot', undefined, { scope: routeScope }) }}>
+      {$t('workspaces.openBotSetup')}
+    </a>
+  </p>
 
   <WorkspaceBrowser />
 

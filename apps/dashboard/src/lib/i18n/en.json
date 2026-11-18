@@ -1,4 +1,11 @@
 {
+  "bots.setupFirst": "Set up your first Bot",
+  "bots.setupDescription": "Choose an agent client and model to start chatting with Pontia. No workspace needed.",
+  "bots.startChat": "Start chatting",
+  "bots.workspaceHint": "Want to work in a project?",
+  "bots.openWorkspaceSetup": "Set up a workspace and start a Session",
+  "workspaces.botHint": "Want to chat without setting up a workspace?",
+  "workspaces.openBotSetup": "Get started with a Bot",
   "bots.title": "Bots",
   "bots.create": "Create Bot",
   "bots.edit": "Edit Bot",

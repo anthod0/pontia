@@ -1,4 +1,11 @@
 {
+  "bots.setupFirst": "设置第一个 Bot",
+  "bots.setupDescription": "选择客户端和模型，即可开始与 Pontia 聊天，无需创建工作区。",
+  "bots.startChat": "开始聊天",
+  "bots.workspaceHint": "想在项目中开展工作？",
+  "bots.openWorkspaceSetup": "设置工作区并开始 Session",
+  "workspaces.botHint": "想先聊天，暂时不设置工作区？",
+  "workspaces.openBotSetup": "开始使用 Bot",
   "bots.title": "Bot",
   "bots.create": "创建 Bot",
   "bots.edit": "编辑 Bot",

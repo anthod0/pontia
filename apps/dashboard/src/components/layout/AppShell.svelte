@@ -36,7 +36,7 @@
   }
 
   function isChatPath(path: string): boolean {
-    return path === '/' || path.startsWith('/chat/') || path.startsWith('/bots/')
+    return path === '/' || path === '/bot' || path.startsWith('/chat/') || path.startsWith('/bots/')
   }
 
   const settingsPath = $derived(isSettingsPath(currentPath))

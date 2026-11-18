@@ -9,7 +9,7 @@ export function validateDashboardRoute({
   handle?: string;
   routeId: string | null;
 }): void {
-  if (!handle && routeId !== rootRouteId) {
+  if (!handle && routeId !== rootRouteId && routeId !== `${rootRouteId}/bot`) {
     error(404, "Not found");
   }
 }

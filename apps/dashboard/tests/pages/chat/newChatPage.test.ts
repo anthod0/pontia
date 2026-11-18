@@ -6,6 +6,15 @@ import type { CreateSessionResult } from "../../../src/api/types";
 
 const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).default;
 
+test.each([undefined, '/office-mac'])('opens Bot setup from workspace onboarding in the same device scope: %s', async (routeScope) => {
+  mocks.workspaces.set([]);
+  render(NewChatPage, { routeScope });
+  const link = await screen.findByRole('link', { name: 'Get started with a Bot' });
+  expect(link).toHaveAttribute('href', `${routeScope ?? '/dashboard'}/bot`);
+  await fireEvent.click(link);
+  await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/bot', undefined, { scope: routeScope }));
+});
+
 test("keeps first-time users in workspace setup until they continue explicitly", async () => {
   const user = userEvent.setup();
   const firstWorkspace = workspace();

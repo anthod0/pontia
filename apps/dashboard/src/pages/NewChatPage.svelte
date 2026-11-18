@@ -199,7 +199,7 @@
 </script>
 
 {#if workspaceOnboardingActive && !workspaceSetupLoading}
-  <WorkspaceOnboarding canContinue={workspaces.length > 0} onContinue={completeWorkspaceOnboarding} />
+  <WorkspaceOnboarding canContinue={workspaces.length > 0} onContinue={completeWorkspaceOnboarding} {routeScope} />
 {:else}
   <NewChatLayout status={workspaceSetupLoading ? { mood: 'loading', title: $t('workspaces.loading'), description: $t('common.fewSeconds') } : undefined}>
     {#if workspaceSetupLoading}

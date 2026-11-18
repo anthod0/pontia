@@ -18,6 +18,7 @@
   import ChatShortcuts from '../../components/chat/ChatShortcuts.svelte';
   import ConnectionNotice from '../../components/layout/ConnectionNotice.svelte';
   import NewChatPage from '../../pages/NewChatPage.svelte';
+  import BotEntryPage from '../../pages/BotEntryPage.svelte';
   import NewChatLayout from '../../components/chat/NewChatLayout.svelte';
   import NewChatComposerPlaceholder from '../../components/chat/NewChatComposerPlaceholder.svelte';
   import * as Sidebar from '$lib/components/ui/sidebar/index.js';
@@ -239,7 +240,13 @@
     {#if device}
       {#key device}
         <DeviceProvider {device}>
-          {#if handle}{@render children()}{:else}<NewChatPage routeScope={`/${activeHandle}`} {deviceSelector} />{/if}
+          {#if handle}
+            {@render children()}
+          {:else if currentPath === '/bot'}
+            <BotEntryPage routeScope={`/${activeHandle}`} />
+          {:else}
+            <NewChatPage routeScope={`/${activeHandle}`} {deviceSelector} />
+          {/if}
         </DeviceProvider>
       {/key}
     {:else if signInUrl}
