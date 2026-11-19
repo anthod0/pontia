@@ -234,7 +234,7 @@ async fn builtin_upgrade_preserves_user_profiles_and_existing_versions() {
     assert_eq!(default.version, "2");
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&default.supported_client_types).unwrap(),
-        json!(["pi", "codex", "claude-agent"])
+        json!(["pi", "codex", "claude-agent", "acp"])
     );
     assert!(default.turn_prompt_template.is_none());
 }
