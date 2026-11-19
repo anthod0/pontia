@@ -3,6 +3,7 @@
   import { onMount, tick } from 'svelte'
   import { t } from '$lib/i18n'
   import { Button } from '$lib/components/ui/button/index.js'
+  import { MessageResponse } from '$lib/components/ai-elements/message/index.js'
   import MessageComposer from '../components/chat/MessageComposer.svelte'
   import { parseUploadMessage } from '$lib/uploads/message'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -85,7 +86,7 @@
 
 {#if chat.data}
   <section class="mx-auto flex h-[calc(100dvh-3rem)] max-w-3xl flex-col" aria-label={chat.data.bot.name}>
-    <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-1 py-5" bind:this={feed}
+    <div class="no-scrollbar min-h-0 flex-1 space-y-5 overflow-y-auto px-1 py-5" bind:this={feed}
       onscroll={(event) => {
         const element = event.currentTarget
         follow = element.scrollHeight - element.scrollTop - element.clientHeight < 64
@@ -102,7 +103,15 @@
                 </ul>
               {/if}
               {#if parts.text}
-                <p class={['rounded-2xl px-4 py-3 text-sm leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]', entry.kind === 'user_input' ? 'border border-border bg-background' : 'bg-muted']}>{parts.text}</p>
+                {#if entry.kind === 'bot_reply'}
+                  <MessageResponse
+                    content={parts.text}
+                    markdown
+                    class="size-auto rounded-2xl bg-muted px-4 py-3 break-words [&_code]:bg-background [&_th]:bg-background [&_[data-code-block]]:bg-background"
+                  />
+                {:else}
+                  <p class="rounded-2xl border border-border bg-background px-4 py-3 text-sm leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]">{parts.text}</p>
+                {/if}
               {/if}
               {#if entry.status === 'failed'}
                 <div class="mt-1 flex items-center justify-end gap-2 text-xs text-destructive">
