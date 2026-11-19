@@ -2,9 +2,6 @@
 set -euo pipefail
 umask 077
 mkdir -p "$PONTIA_HOME" "$HOME/.pi/agent" "$HOME/.codex" "$CLAUDE_CONFIG_DIR" "$HOME/workspace"
-if [[ ! -f "$HOME/.codex/auth.json" && -f /e2e-auth/codex.json ]]; then
-  cp /e2e-auth/codex.json "$HOME/.codex/auth.json"
-fi
 if [[ ! -f "$HOME/.pi/agent/auth.json" && -f /e2e-auth/pi.json ]]; then
   cp /e2e-auth/pi.json "$HOME/.pi/agent/auth.json"
 fi
@@ -26,6 +23,11 @@ if [[ ! -f "$HOME/.codex/config.toml" ]]; then
 fi
 if [[ ! -d "$HOME/workspace/.git" ]]; then
   git -C "$HOME/workspace" init --initial-branch=main
+fi
+if [[ -n "$(< /run/secrets/openai-api-key)" ]]; then
+  codex login --with-api-key < /run/secrets/openai-api-key
+elif [[ -f "$HOME/.codex/auth.json" ]]; then
+  codex logout
 fi
 codex app-server daemon start
 exec pontiad

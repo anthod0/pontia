@@ -68,14 +68,16 @@ Open the printed Dashboard URL in the container browser. Sign in and register a 
 
 ## 4. Validate real Agent calls
 
-Pi, Codex, and Claude Code are installed and enabled automatically, and existing test credentials are imported into the device. If a client needs authentication, use its own login flow inside the device container:
+Pi, Codex, and Claude Code are installed and enabled automatically. For Codex, put an OpenAI API key on a single line in `docker/e2e/.local/openai-api-key` before starting an instance. Leave the file empty to run tests that do not call Codex. To check the login method in a running instance, run `./scripts/docker-e2e compose exec -T device codex login status`.
+
+If Pi or Claude Code needs an account login, use the device container:
 
 ```bash
 ./scripts/docker-e2e compose exec device bash
 # Run the following commands inside the device container:
 cd /home/e2e/workspace
 tmux new -s e2e
-# Run pi, codex, or claude auth login and complete any required authentication.
+# Run pi or claude auth login and complete any required authentication.
 ```
 
 ### Claude authentication

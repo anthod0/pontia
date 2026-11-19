@@ -104,7 +104,6 @@ class ContainerSmokeTests(unittest.TestCase):
         fixture.oauth()
         fixture.certificates()
         state = fixture.state
-        test_setup.setup.write_private(state / "auth/device/codex.json", '{"test_credential":"retained"}')
         test_setup.setup.write_private(state / "auth/device/claude.json", '{"test_credential":"original"}')
         claude_settings = {"env": {
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:1",
@@ -174,8 +173,9 @@ class ContainerSmokeTests(unittest.TestCase):
             counts = json.loads(vocabulary.stdout)[0]["results"][0]
             self.assertGreater(counts["modifiers"], 0)
             self.assertGreater(counts["heroes"], 0)
-            compose("exec", "-T", "device", "sh", "-c",
-                    "test -f /home/e2e/.codex/auth.json && touch /home/e2e/workspace/discard-me")
+            with self.assertRaises(subprocess.CalledProcessError):
+                compose("exec", "-T", "device", "codex", "login", "status")
+            compose("exec", "-T", "device", "touch", "/home/e2e/workspace/discard-me")
             compose("exec", "-T", "cloud", "./node_modules/.bin/wrangler", "d1", "execute", "DB",
                     "--local", "--persist-to", "/state", "--command",
                     "INSERT INTO hero_name_modifiers (word) VALUES ('discard-me');")
@@ -206,10 +206,11 @@ class ContainerSmokeTests(unittest.TestCase):
             self.assertEqual(json.loads((state / "auth/device/claude.json").read_text()),
                              {"test_credential": "original"})
             self.assertEqual(json.loads((first.state / "auth/device/claude-settings.json").read_text()), claude_settings)
+            (state / "openai-api-key").write_text("sk-fixture-openai-test-key\n")
             first.up()
-            credentials = compose("exec", "-T", "device", "sh", "-c",
-                                  "test ! -e /home/e2e/workspace/discard-me && cat /home/e2e/.codex/auth.json")
-            self.assertEqual(json.loads(credentials.stdout), {"test_credential": "retained"})
+            compose("exec", "-T", "device", "test", "!", "-e", "/home/e2e/workspace/discard-me")
+            auth = compose("exec", "-T", "device", "codex", "login", "status")
+            self.assertIn(b"API key", auth.stdout + auth.stderr)
             credentials = compose("exec", "-T", "device", "sh", "-c",
                                   "test ! -e /home/e2e/.claude/projects/discard-me && "
                                   "cat /home/e2e/.claude/.credentials.json")

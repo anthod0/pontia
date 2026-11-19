@@ -30,7 +30,6 @@ EDGE_NAME = "docker-e2e"
 EDGE_HOST = f"{EDGE_NAME}.edge.pontia.dev"
 AUTH_FILES = {
     "device": {
-        "codex.json": "/home/e2e/.codex/auth.json",
         "pi.json": "/home/e2e/.pi/agent/auth.json",
         "claude.json": "/home/e2e/.claude/.credentials.json",
     },
@@ -77,6 +76,7 @@ def key_pair(algorithm):
 
 def initialize(state):
     state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    (state / "openai-api-key").touch(mode=0o600)
     (state / "tls").mkdir(exist_ok=True, mode=0o700)
     for service in AUTH_FILES:
         (state / "auth" / service).mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -194,6 +194,7 @@ class Lab:
                     f"label=com.docker.compose.project={self.project}"], capture_output=True).stdout.strip()
 
     def prepare_auth(self):
+        (self.config / "openai-api-key").touch(mode=0o600)
         for service, files in AUTH_FILES.items():
             for name in files:
                 source = self.config / "auth" / service / name

@@ -120,6 +120,12 @@ services:
     volumes:
       - device-home:/home/e2e
       - type: bind
+        source: ${E2E_CONFIG}/openai-api-key
+        target: /run/secrets/openai-api-key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
         source: ${E2E_STATE}/auth/device
         target: /e2e-auth
         read_only: true

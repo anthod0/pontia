@@ -81,8 +81,13 @@ class SetupTests(unittest.TestCase):
 
     def test_initialization_preserves_existing_keys_and_oauth_configuration(self):
         self.oauth()
+        api_key = self.state / "openai-api-key"
+        self.assertEqual(api_key.read_bytes(), b"")
+        self.assertEqual(api_key.stat().st_mode & 0o777, 0o600)
+        api_key.write_text("fixture-key")
         original = (self.state / "cloud.dev.vars").read_bytes()
         setup.initialize(self.state)
+        self.assertEqual(api_key.read_text(), "fixture-key")
         self.assertEqual((self.state / "cloud.dev.vars").read_bytes(), original)
         self.assertEqual((self.state / "cloud.dev.vars").stat().st_mode & 0o777, 0o600)
 
@@ -254,16 +259,16 @@ class SetupTests(unittest.TestCase):
                 setup.Lab(ROOT, self.state, name)
 
     def test_instance_credentials_are_seeded_once_and_never_overwrite_another_instance(self):
-        seed = self.state / "auth/device/codex.json"
+        seed = self.state / "auth/device/pi.json"
         setup.write_private(seed, '{"token":"seed"}')
         self.lab.prepare_auth()
-        refreshed = self.lab.state / "auth/device/codex.json"
+        refreshed = self.lab.state / "auth/device/pi.json"
         setup.write_private(refreshed, '{"token":"refreshed"}')
         other = setup.Lab(ROOT, self.state, "other")
         other.prepare_auth()
         self.lab.prepare_auth()
         self.assertEqual(json.loads(refreshed.read_text()), {"token": "refreshed"})
-        self.assertEqual(json.loads((other.state / "auth/device/codex.json").read_text()), {"token": "seed"})
+        self.assertEqual(json.loads((other.state / "auth/device/pi.json").read_text()), {"token": "seed"})
         self.assertEqual(json.loads(seed.read_text()), {"token": "seed"})
 
     def test_concurrent_operations_on_same_instance_are_rejected(self):
