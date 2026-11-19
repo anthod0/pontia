@@ -7,10 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-20
+
+### Added
+
+- Device Bots: create persistent, device-level Bots backed by Pi, Claude Code, or Codex, with customizable avatars, model selection, file uploads, and onboarding that does not require a Workspace first. Bots share device memory organized in hourly background dreaming rounds, coordinate work through durable asynchronous helpers, and rotate their underlying Session automatically at context and idle limits.
+- Choose the model when starting a new Session, with each Agent Client exposing its model catalog and default model. ACP Agents discover available models before Session creation.
+- Claude Code Sessions report context window usage and support custom Agent Profiles with static system prompts.
+- ACP Sessions inject Agent Profile instructions when the ACP Agent supports it.
+- Added a Claude Code guide to the Cloud documentation, introduced Bots on the Cloud homepage, and added a Simplified Chinese README (`README.zh-CN.md`).
+
 ### Changed
 
+- New chat displays the device, Agent Client, Workspace, and model selectors as an inline toolbar and selects the Agent Client's default model automatically.
 - In New chat, use `Alt+C` for the next Agent Client and `Alt+Shift+C` for the previous one. This avoids the `Alt+A` conflict with WeChat.
+- On phones, the Dashboard top bar groups chat actions (New Chat, rename Session, and edit Bot) into an overflow menu and enlarges header and sidebar touch targets.
 - `pontia status` and `pontia doctor` show a spinner while they check the cloud login and remote registration.
+- `pontia setup codex` writes shell `PATH` setup to `env.sh` or `env.fish` so Pontia's Codex launcher directory stays first in `PATH`, and `pontia doctor` warns when `PATH` precedence is shadowed.
+- Cloud and the README use a dedicated dark Codex logo.
+
+### Removed
+
+- Removed in-session model switching; choose the model when starting a new Session.
+
+### Fixed
+
+- `Alt+M` switches devices on device-scoped New chat pages.
+- Pressing the New Chat button in the sidebar preserves its text color.
+- Codex restores Session observation after an interrupted TUI continuation.
 
 ## [0.7.16] - 2026-11-18
 
