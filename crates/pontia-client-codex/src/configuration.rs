@@ -16,6 +16,18 @@ impl CodexConfiguration {
 }
 
 impl ClientConfiguration for CodexConfiguration {
+    fn validate_execution_policy(
+        &self,
+        policy: &pontia_core::execution_policy::ExecutionPolicy,
+    ) -> Result<()> {
+        if policy.tools.is_some() {
+            return Err(Error::CapabilityUnavailable(
+                "Codex cannot restrict its tools to the requested allowlist".into(),
+            ));
+        }
+        Ok(())
+    }
+
     fn supports_startup_model(&self) -> bool {
         true
     }

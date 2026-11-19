@@ -3,6 +3,11 @@ import { Input } from "./input.js";
 import { Permissions } from "./permissions.js";
 import { FactError, InputFacts, type Emit, type ResultDiagnostic } from "./facts.js";
 
+export interface ExecutionPolicy {
+  tools: ("read" | "bash")[] | null;
+  yolo: boolean;
+}
+
 export type QueryFactory = (
   args: Parameters<typeof query>[0],
 ) => Pick<
@@ -41,6 +46,7 @@ export class Host {
       model?: string;
       resume?: string;
       system_prompt?: string;
+      execution_policy?: ExecutionPolicy;
     },
     private readonly emit: Emit,
     private readonly createQuery: QueryFactory = query,
@@ -74,6 +80,8 @@ export class Host {
       message: { role: "user", content: text },
     });
     if (!this.execution) {
+      const policy = this.options.execution_policy;
+      const tools = policy?.tools?.map((tool) => ({ read: "Read", bash: "Bash" })[tool]);
       const options: Options = {
         cwd: this.options.cwd,
         ...(this.options.model ? { model: this.options.model } : {}),
@@ -88,13 +96,18 @@ export class Host {
             }
           : {}),
         includePartialMessages: true,
-        permissionMode: "default",
+        permissionMode: policy?.yolo ? "bypassPermissions" : "default",
+        ...(policy?.yolo ? { allowDangerouslySkipPermissions: true, sandbox: { enabled: false } } : {}),
+        ...(tools ? { tools, strictMcpConfig: true, mcpServers: {}, skills: [] } : {}),
         settingSources: ["user", "project", "local"],
         settings: { env: { PONTIA_SESSION_ID: this.options.session_id } },
-        disallowedTools: ["AskUserQuestion"],
+        disallowedTools: tools ? ["AskUserQuestion", "mcp__*"] : ["AskUserQuestion"],
         canUseTool: (tool, input, context) => {
           if (!this.acceptsControl())
             return Promise.resolve({ behavior: "deny", message: "Tool approval is unavailable." });
+          if (tools && !tools.includes(tool))
+            return Promise.resolve({ behavior: "deny", message: "Tool is outside the Session allowlist." });
+          if (policy?.yolo) return Promise.resolve({ behavior: "allow", updatedInput: input });
           return this.permissions.request(tool, input, context);
         },
         onElicitation: async () => ({ action: "decline" }),

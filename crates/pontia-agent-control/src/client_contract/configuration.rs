@@ -3,6 +3,18 @@ use serde_json::Value;
 
 /// Client-owned interpretation of management identities and effective configuration.
 pub trait ClientConfiguration: Send + Sync {
+    fn validate_execution_policy(
+        &self,
+        policy: &pontia_core::execution_policy::ExecutionPolicy,
+    ) -> Result<()> {
+        if policy != &Default::default() {
+            return Err(pontia_core::Error::CapabilityUnavailable(
+                "Client cannot enforce the requested execution policy".into(),
+            ));
+        }
+        Ok(())
+    }
+
     fn supports_startup_model(&self) -> bool {
         false
     }

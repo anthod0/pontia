@@ -289,6 +289,7 @@ impl SessionCommandService {
                 &target,
                 pontia_home,
                 RuntimeStartRequest {
+                    execution_policy: self.queries.session_execution_policy(session_id).await?,
                     model: None,
                     runtime_id: target.runtime_id.clone(),
                     session_id: session_id.to_string(),
@@ -427,6 +428,7 @@ impl SessionCommandService {
         .await?;
         let prior_restart_count = 0;
         let environment = self.runtime_environment(session_id).await?;
+        let execution_policy = self.queries.session_execution_policy(session_id).await?;
         let mut runtime_replacement_tx = self.pool.begin().await?;
         SqliteTurnRepository::serialize_session_turn_writes_in_tx(
             &mut runtime_replacement_tx,
@@ -453,6 +455,7 @@ impl SessionCommandService {
                 &target,
                 pontia_home,
                 RuntimeStartRequest {
+                    execution_policy,
                     model: None,
                     runtime_id: target.runtime_id.clone(),
                     session_id: session_id.to_string(),

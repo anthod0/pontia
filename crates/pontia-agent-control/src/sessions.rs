@@ -28,6 +28,8 @@ mod validation;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct CreateSessionRequest {
+    #[serde(default)]
+    pub execution_policy: pontia_core::execution_policy::ExecutionPolicy,
     pub model: Option<String>,
     #[serde(default, deserialize_with = "deserialize_client_type")]
     pub client_type: String,

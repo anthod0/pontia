@@ -14,6 +14,69 @@ fn path_env_lock() -> &'static Mutex<()> {
 }
 
 #[test]
+fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating_flags() {
+    use pontia_core::execution_policy::{ExecutionPolicy, ExecutionTool};
+    let _guard = path_env_lock().lock().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let log = root.path().join("tmux.log");
+    write_fake_tmux(&root.path().join("tmux"));
+    let original_path = install_fake_tmux(root.path(), &log);
+    let launcher = pontia_client_pi::registration(Some("test-pi".into()))
+        .launcher
+        .unwrap();
+    let native = root.path().join("session.jsonl");
+    let capture = root.path().join("capture.sh");
+    let args_file = root.path().join("args");
+    std::fs::write(
+        &capture,
+        format!("printf '%s\\n' \"$@\" > '{}'\n", args_file.display()),
+    )
+    .unwrap();
+    std::fs::write(&native, "{\"type\":\"session\",\"id\":\"native-policy\"}\n").unwrap();
+    for tools in [vec![ExecutionTool::Read, ExecutionTool::Bash], vec![]] {
+        let mut runtime = launch_request(
+            root.path(),
+            Some(format!("sh '{}' --approve", capture.display())),
+        );
+        runtime.execution_policy = ExecutionPolicy {
+            tools: Some(tools.clone()),
+            yolo: true,
+        };
+        for resume in [false, true] {
+            let result = launcher
+                .launch(pontia_agent_control::clients::ClientLaunchRequest {
+                    root: root.path(),
+                    runtime: runtime.clone(),
+                    restart_count: i64::from(resume),
+                    reuse_pane: None,
+                    native_session_key: resume.then_some("native-policy"),
+                    native_session_file: resume.then_some(native.as_path()),
+                })
+                .unwrap();
+            let text = std::fs::read_to_string(&log).unwrap();
+            assert!(
+                std::process::Command::new("sh")
+                    .arg(launch_script_path_from_tmux_log(&text))
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+            let args = std::fs::read_to_string(&args_file).unwrap();
+            let args: Vec<_> = args.lines().collect();
+            assert_eq!(args.iter().filter(|arg| **arg == "--no-mcp").count(), 1);
+            if tools.is_empty() {
+                assert!(args.contains(&"--no-tools"));
+            } else {
+                assert!(args.windows(2).any(|args| args == ["--tools", "read,bash"]));
+            }
+            runtime.start_command = result.metadata["start_command"].as_str().map(str::to_owned);
+            std::fs::write(&log, "").unwrap();
+        }
+    }
+    restore_fake_tmux(original_path);
+}
+
+#[test]
 fn start_session_uses_configured_tui_command_when_env_is_absent() {
     let _guard = path_env_lock().lock().expect("path env lock");
     let tempdir = tempfile::tempdir().expect("tempdir");
@@ -37,6 +100,7 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         &config,
         tempdir.path().join("pontia-home").as_path(),
         RuntimeStartRequest {
+            execution_policy: Default::default(),
             model: Some("provider/model".into()),
             runtime_id: None,
             session_id: "sess_configured".to_string(),
@@ -106,6 +170,7 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
         &config,
         tempdir.path().join("pontia-home").as_path(),
         RuntimeStartRequest {
+            execution_policy: Default::default(),
             model: None,
             runtime_id: None,
             session_id: "sess_env_override".to_string(),
@@ -402,6 +467,7 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
 
 fn launch_request(root: &Path, start_command: Option<String>) -> RuntimeStartRequest {
     RuntimeStartRequest {
+        execution_policy: Default::default(),
         model: None,
         runtime_id: None,
         session_id: "sess_launch".into(),

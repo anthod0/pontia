@@ -664,7 +664,9 @@ async fn attachment_retry_reuses_the_confirmed_native_fork_after_command_service
         .unwrap();
     assert_eq!(
         serde_json::to_value(&recovered).unwrap()["stage"],
-        "session_created"
+        "session_created",
+        "{}",
+        serde_json::to_string(&recovered).unwrap()
     );
     assert_eq!(recovered.session_id, partial.session_id);
     assert_eq!(f.threads.lock().await.len(), 2);

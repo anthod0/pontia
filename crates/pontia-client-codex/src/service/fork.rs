@@ -40,7 +40,8 @@ impl CodexService {
                 "The native Turn is not an editable completed Turn".into(),
             ));
         }
-        let params = json!({"threadId":binding.client_session_key,"beforeTurnId":native,"excludeTurns":true});
+        let mut params = json!({"threadId":binding.client_session_key,"beforeTurnId":native,"excludeTurns":true});
+        self.apply_execution_policy(session, &mut params).await?;
         let result = connection.call("thread/fork", params.clone()).await?;
         let native = string(&result["thread"], "id")
             .map_err(|error| Error::ControlUnknown(error.to_string()))?;
@@ -70,13 +71,9 @@ impl CodexService {
             .await?;
         let result = if snapshot["thread"]["status"]["type"] == "notLoaded" {
             // This is an explicit retry of a recorded fork, unlike a queued CLI receipt.
-            connection
-                .resume_thread(
-                    json!({"threadId":fork.client_session_key,"excludeTurns":true}),
-                    true,
-                )
-                .await?
-                .0
+            let mut params = json!({"threadId":fork.client_session_key,"excludeTurns":true});
+            self.apply_execution_policy(session, &mut params).await?;
+            connection.resume_thread(params, true).await?.0
         } else {
             fork.receipt["result"].clone()
         };

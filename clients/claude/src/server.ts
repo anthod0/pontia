@@ -2,7 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { chmod, lstat } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
-import { Host, ControlError, type QueryFactory } from "./host.js";
+import { Host, ControlError, type QueryFactory, type ExecutionPolicy } from "./host.js";
 import type { HostEvent } from "./facts.js";
 
 const MAX_FRAME = 1024 * 1024;
@@ -16,6 +16,7 @@ export interface Bootstrap {
   model?: string;
   resume?: string;
   system_prompt?: string;
+  execution_policy?: ExecutionPolicy;
 }
 
 type ObjectValue = Record<string, unknown>;
@@ -41,6 +42,15 @@ export function bootstrap(value: unknown): Bootstrap {
   if (data.system_prompt !== undefined) result.system_prompt = string(data.system_prompt);
   if (data.model !== undefined) result.model = string(data.model);
   if (data.resume !== undefined) result.resume = string(data.resume);
+  if (data.execution_policy !== undefined) {
+    const policy = object(data.execution_policy);
+    if (
+      typeof policy.yolo !== "boolean" ||
+      (policy.tools !== null &&
+        (!Array.isArray(policy.tools) || policy.tools.some((tool) => tool !== "read" && tool !== "bash")))
+    ) throw new ControlError("rejected", "invalid_execution_policy");
+    result.execution_policy = { tools: policy.tools as ExecutionPolicy["tools"], yolo: policy.yolo };
+  }
   if (!/^[0-9a-f]{64}$/.test(result.token)) throw new ControlError("rejected", "invalid_token");
   return result;
 }

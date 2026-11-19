@@ -59,4 +59,21 @@ A Pontia Session is durably associated with one client-native conversation ident
 
 Each Client uses its own credentials, sandbox, and local permissions. Sign in to each Client and verify that it can perform the intended work before starting the integration.
 
+When creating a Session through `POST /api/v1/sessions`, set `execution_policy` to choose its tools and permission mode:
+
+```json
+{
+  "client_type": "pi",
+  "workspace": "/path/to/registered/workspace",
+  "execution_policy": {
+    "tools": ["read", "bash"],
+    "yolo": true
+  }
+}
+```
+
+Pi and Claude Code accept a tool list containing `read`, `bash`, or both. An empty list disables tools; omitting the list keeps the Client's normal tool set. An explicit list also excludes MCP tools. This limits the tools available to the agent, not the commands it can run through `bash`.
+
+Pi, Claude Code, and Codex accept `yolo: true` to run without Client approval prompts or Client sandboxing. Pi already runs tools this way. Omitting `yolo` keeps the Client's normal permission behavior. These settings apply to the Session and persist across restart, resume, and history forks. Requests for a policy the selected Client cannot enforce are rejected before Session creation.
+
 See [Troubleshooting](/docs/troubleshooting) when a Client is missing, cannot start, or stops reporting output.

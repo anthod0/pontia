@@ -46,6 +46,14 @@ impl CodexService {
             .transpose()?
             .unwrap_or_default();
         let mut config = environment_config(session, &response["config"], environment)?;
+        if pontia_agent_control::ControlQueryService::new(self.pool.clone())
+            .session_execution_policy(session)
+            .await?
+            .yolo
+        {
+            config["approval_policy"] = json!("never");
+            config["sandbox_mode"] = json!("danger-full-access");
+        }
         if let Some(profile) = self.profiles().codex_binding(session).await?
             && let Some(prompt) = profile.system_prompt
         {

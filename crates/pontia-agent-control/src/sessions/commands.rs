@@ -84,6 +84,22 @@ impl SessionCommandService {
             request.client_type = self.clients.registry().default_client_type()?.to_string();
         }
         self.clients.for_client(&request.client_type)?;
+        match self
+            .clients
+            .registry()
+            .get(&request.client_type)
+            .and_then(|entry| entry.configuration.as_ref())
+        {
+            Some(configuration) => {
+                configuration.validate_execution_policy(&request.execution_policy)?
+            }
+            None if request.execution_policy != Default::default() => {
+                return Err(Error::CapabilityUnavailable(
+                    "Client cannot enforce the requested execution policy".into(),
+                ));
+            }
+            None => (),
+        }
         if let Some(model) = &request.model {
             if model.trim().is_empty() {
                 return Err(Error::Domain("model must be non-empty".into()));
@@ -217,6 +233,7 @@ impl SessionCommandService {
                     "metadata": request.metadata,
                     "ownership": request.ownership,
                     "runtime_environment": request.runtime_environment,
+                    "execution_policy": request.execution_policy,
                 }),
             ))
             .await?;
@@ -239,6 +256,7 @@ impl SessionCommandService {
             .start(
                 &self.pontia_home,
                 RuntimeStartRequest {
+                    execution_policy: request.execution_policy,
                     model: request.model,
                     runtime_id: Some(runtime_id.clone()),
                     session_id: session_id.clone(),

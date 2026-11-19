@@ -244,6 +244,7 @@ impl HelperService {
             .session_commands()
             .create_application_session(
                 CreateSessionRequest {
+                    execution_policy: crate::execution_policy(),
                     model: None,
                     client_type: profile.client_type,
                     title: None,

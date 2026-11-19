@@ -47,6 +47,12 @@ struct Client {
 }
 
 impl ClientConfiguration for Client {
+    fn validate_execution_policy(
+        &self,
+        _: &pontia_core::execution_policy::ExecutionPolicy,
+    ) -> Result<()> {
+        Ok(())
+    }
     fn supports_startup_model(&self) -> bool {
         true
     }
@@ -88,6 +94,10 @@ impl ClientLauncher for Client {
     }
 
     fn launch(&self, request: ClientLaunchRequest<'_>) -> Result<RuntimeStartResult> {
+        assert_eq!(
+            serde_json::to_value(&request.runtime.execution_policy).unwrap(),
+            json!({"tools":["read","bash"],"yolo":true})
+        );
         let gate = self.launch_gate.lock().unwrap().take();
         if let Some((entered, release)) = gate {
             entered.send(()).unwrap();

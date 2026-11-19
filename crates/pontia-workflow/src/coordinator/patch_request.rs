@@ -161,6 +161,7 @@ where
                 );
                 self.sessions
                     .create_session(CreateSessionRequest {
+                        execution_policy: Default::default(),
                         model: None,
                         ownership: Some(ownership),
                         client_type: self.sessions.default_client_type()?,

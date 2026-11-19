@@ -67,4 +67,5 @@ pub use workspaces::{WorkspaceRecord, get_workspace_record};
 
 pub mod client_contract;
 
+pub use pontia_core::execution_policy::{ExecutionPolicy, ExecutionTool};
 pub use views::WorkspaceView;

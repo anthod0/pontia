@@ -20,6 +20,13 @@ impl PiConfiguration {
 }
 
 impl ClientConfiguration for PiConfiguration {
+    fn validate_execution_policy(
+        &self,
+        _: &pontia_core::execution_policy::ExecutionPolicy,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     fn supports_startup_model(&self) -> bool {
         true
     }

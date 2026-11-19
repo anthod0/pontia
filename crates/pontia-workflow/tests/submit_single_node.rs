@@ -667,6 +667,7 @@ async fn submission_rejects_a_node_whose_workflow_is_not_running() {
     };
     sessions
         .create_session(CreateSessionRequest {
+            execution_policy: Default::default(),
             model: None,
             ownership: None,
             client_type: "pi".to_string(),

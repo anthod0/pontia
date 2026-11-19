@@ -28,6 +28,10 @@ impl Fixture {
     }
 
     async fn with_instructions(additional_instructions: Option<&str>) -> Self {
+        Self::with_policy(additional_instructions, json!({})).await
+    }
+
+    async fn with_policy(additional_instructions: Option<&str>, execution_policy: Value) -> Self {
         let root = tempfile::tempdir().unwrap();
         let socket = root.path().join("app-server.sock");
         let listener = UnixListener::bind(&socket).unwrap();
@@ -175,7 +179,7 @@ impl Fixture {
             .session_commands()
             .create_session(
                 serde_json::from_value::<CreateSessionRequest>(
-                    json!({"client_type":"codex","workspace":root.path(),"additional_instructions":additional_instructions}),
+                    json!({"client_type":"codex","workspace":root.path(),"additional_instructions":additional_instructions,"execution_policy":execution_policy}),
                 )
                 .unwrap(),
             )
@@ -211,6 +215,52 @@ impl Fixture {
         self.app.inbox_commands().stop_scheduling().await;
         CodexRuntime::shutdown(self.root.path()).await;
         self.server.abort();
+    }
+}
+
+#[tokio::test]
+async fn yolo_is_scoped_to_the_session_and_preserved_on_resume() {
+    for yolo in [false, true] {
+        let fixture = Fixture::with_policy(None, json!({"yolo":yolo})).await;
+        *fixture.configuration.lock().await =
+            json!({"approval_policy":"on-request","sandbox_mode":"workspace-write"});
+        fixture.dispatch_first_input().await;
+        fixture
+            .app
+            .session_commands()
+            .terminate_session(&fixture.session)
+            .await
+            .unwrap();
+        fixture
+            .app
+            .session_commands()
+            .resume_session(&fixture.session, fixture.root.path())
+            .await
+            .unwrap();
+        {
+            let requests = fixture.thread_requests.lock().await;
+            assert_eq!(requests.len(), 2);
+            for request in requests.iter() {
+                let config = &request["params"]["config"];
+                assert_eq!(
+                    config["approval_policy"],
+                    if yolo { json!("never") } else { Value::Null }
+                );
+                assert_eq!(
+                    config["sandbox_mode"],
+                    if yolo {
+                        json!("danger-full-access")
+                    } else {
+                        Value::Null
+                    }
+                );
+            }
+        }
+        assert_eq!(
+            fixture.configuration.lock().await["sandbox_mode"],
+            "workspace-write"
+        );
+        fixture.shutdown().await;
     }
 }
 

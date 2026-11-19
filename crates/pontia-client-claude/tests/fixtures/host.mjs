@@ -55,6 +55,7 @@ if (process.argv[2] === "history") {
   record({
     method: "spawn",
     system_prompt: config.system_prompt ?? null,
+    execution_policy: config.execution_policy,
     resume: config.resume ?? null,
     native,
     socket_path: config.socket_path,

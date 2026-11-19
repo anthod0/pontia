@@ -28,6 +28,36 @@ function setup(resume?: string) {
 const rejects = (reason: string) => (error: unknown) =>
   error instanceof ControlError && error.reason === reason;
 
+for (const tools of [null, [], ["read", "bash"]] as const) {
+  test(`YOLO applies the requested tool set and does not request approval (${tools})`, async (t) => {
+    const fixture = sdk();
+    const events: HostEvent[] = [];
+    const host = new Host(
+      { session_id: "policy-session", cwd: "/unused-fixture-workspace",
+        execution_policy: { tools: tools === null ? null : [...tools], yolo: true } },
+      (event) => events.push(event), fixture.factory,
+    );
+    t.after(() => host.close());
+    host.submit(first, "task");
+    const options = fixture.options!;
+    assert.equal(options.permissionMode, "bypassPermissions");
+    assert.equal(options.allowDangerouslySkipPermissions, true);
+    assert.equal(options.sandbox?.enabled, false);
+    assert.deepEqual(options.tools, tools === null ? undefined : tools.length ? ["Read", "Bash"] : []);
+    if (tools !== null) {
+      assert.equal(options.strictMcpConfig, true);
+      assert.deepEqual(options.mcpServers, {});
+      assert.deepEqual(options.skills, []);
+    }
+    const context = { signal: new AbortController().signal, toolUseID: "call", requestId: "permission" };
+    const bash = await options.canUseTool!("Bash", { command: "pwd" }, context);
+    assert.equal(bash?.behavior, tools?.length === 0 ? "deny" : "allow");
+    const write = await options.canUseTool!("Write", {}, context);
+    assert.equal(write?.behavior, tools === null ? "allow" : "deny");
+    assert.equal(events.some((event) => event.kind === "permission_requested"), false);
+  });
+}
+
 test("authentication retries are visible without fabricating a Turn and clear when SDK execution recovers", async (t) => {
   const { fixture, events, host } = setup();
   t.after(() => host.close());

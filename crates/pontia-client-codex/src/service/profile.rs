@@ -4,6 +4,22 @@ use pontia_core::Result;
 use serde_json::{Value, json};
 
 impl CodexService {
+    pub(super) async fn apply_execution_policy(
+        &self,
+        session: &str,
+        params: &mut Value,
+    ) -> Result<()> {
+        if pontia_agent_control::ControlQueryService::new(self.pool.clone())
+            .session_execution_policy(session)
+            .await?
+            .yolo
+        {
+            params["approvalPolicy"] = json!("never");
+            params["sandbox"] = json!("danger-full-access");
+        }
+        Ok(())
+    }
+
     pub(super) fn profiles(&self) -> CodexProfiles {
         CodexProfiles::new(self.pool.clone())
     }
@@ -33,6 +49,20 @@ pub(crate) async fn prepare_proxy_request(
     use crate::proxy::ThreadOperation;
     if params["ephemeral"] == true || operation == ThreadOperation::Fork {
         return Ok(None);
+    }
+    if operation == ThreadOperation::Resume
+        && let Some(thread) = params["threadId"].as_str()
+        && let Some(binding) = pontia_agent_control::AgentBindingService::new(state.db())
+            .binding_for_client_session("codex", thread)
+            .await?
+        && state
+            .queries()
+            .session_execution_policy(&binding.session_id)
+            .await?
+            .yolo
+    {
+        params["approvalPolicy"] = json!("never");
+        params["sandbox"] = json!("danger-full-access");
     }
     let mut profile = match operation {
         ThreadOperation::Start => {

@@ -42,7 +42,7 @@ impl ClientLauncher for PiLauncher {
             file.persist(&settings_file).map_err(|error| error.error)?;
         }
         Ok(format!(
-            "export PONTIA_PI_MANAGED_SESSION=1; {command} --approve --model {} --tools read,bash --no-mcp --append-system-prompt {}",
+            "export PONTIA_PI_MANAGED_SESSION=1; {command} --approve --model {} --append-system-prompt {}",
             quote(&settings.model),
             quote(&settings.instructions_file.to_string_lossy()),
         ))
@@ -86,6 +86,23 @@ impl ClientLauncher for PiLauncher {
             Some(model) => format!("{command} --model {}", quote(model)),
             None => command,
         };
+        // Pi runs tools without approval or sandboxing. --approve trusts project resources.
+        let policy_args = match &runtime.execution_policy.tools {
+            None => String::new(),
+            Some(tools) if tools.is_empty() => " --no-tools --no-mcp".into(),
+            Some(tools) => {
+                use pontia_core::execution_policy::ExecutionTool;
+                let tools = tools
+                    .iter()
+                    .map(|tool| match tool {
+                        ExecutionTool::Read => "read",
+                        ExecutionTool::Bash => "bash",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(" --tools {} --no-mcp", quote(&tools))
+            }
+        };
         let session_args = match request.native_session_key {
             Some(key) => {
                 self.validate_resume(key, request.native_session_file)?;
@@ -96,7 +113,7 @@ impl ClientLauncher for PiLauncher {
             }
             None => format!("--session-id {}", quote(&runtime.session_id)),
         };
-        runtime.start_command = Some(format!("{command} {session_args}"));
+        runtime.start_command = Some(format!("{command}{policy_args} {session_args}"));
         let mut result = pontia_runtime::GenericRuntimeManager.start_tmux(
             request.root,
             runtime,

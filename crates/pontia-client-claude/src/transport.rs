@@ -80,6 +80,11 @@ impl Connection {
         let setup = async {
             let mut stdin = child.stdin.take().expect("piped stdin");
             let mut bootstrap = json!({"session_id":peer.session,"runtime_id":peer.runtime,"cwd":peer.cwd,"socket_path":socket,"token":token});
+            bootstrap["execution_policy"] = serde_json::to_value(
+                pontia_agent_control::ControlQueryService::new(events.db())
+                    .session_execution_policy(&peer.session)
+                    .await?,
+            )?;
             if let Some(binding) = pontia_agent_control::AgentProfileService::new(events.db())
                 .session_binding(&peer.session)
                 .await?
