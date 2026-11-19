@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-20
+
+### Added
+
+- Bots can start helpers in an active Workspace with `pontia bot helper create --workspace-id`, and `pontia bot helper list` shows each helper's Workspace ID or unbound status. Bots reuse helpers only within the same Workspace.
+- Bot chat shows a processing status until the Bot replies.
+
+### Changed
+
+- Bot chat renders Bot replies as Markdown and hides the message feed scrollbar.
+
+### Fixed
+
+- Starting a Session in a Workspace whose directory is missing reports that the Workspace directory is unavailable.
+
 ## [0.8.0] - 2026-11-20
 
 ### Added
