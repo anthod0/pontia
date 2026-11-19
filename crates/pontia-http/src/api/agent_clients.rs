@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Path, State, rejection::JsonRejection},
+    extract::{Path, Query, State, rejection::JsonRejection},
 };
 use pontia_agent_control::{agent_clients::AgentClientService, client_contract::DetectionContext};
 use pontia_application::AppState;
@@ -8,14 +8,29 @@ use serde_json::{Value, json};
 
 use super::response::{ApiError, ApiResponse, ok};
 
+#[derive(serde::Deserialize)]
+pub struct ModelsQuery {
+    workspace_id: Option<String>,
+}
+
 pub async fn list_agent_client_models(
     State(state): State<AppState>,
     Path((client, key)): Path<(String, String)>,
+    Query(query): Query<ModelsQuery>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let directory = match query.workspace_id {
+        Some(id) => state
+            .control()
+            .queries()
+            .get_workspace(&id)
+            .await?
+            .ok_or_else(|| ApiError::not_found(format!("workspace {id} not found")))?
+            .canonical_path
+            .into(),
+        None => state.pontia_home().to_path_buf(),
+    };
     let service = AgentClientService::new(state.db(), state.control().clients());
-    let models = service
-        .list_models(&client, &key, state.pontia_home())
-        .await?;
+    let models = service.list_models(&client, &key, &directory).await?;
     Ok(ok(json!(models)))
 }
 

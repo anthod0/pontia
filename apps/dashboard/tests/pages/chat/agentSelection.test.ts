@@ -1,7 +1,8 @@
 import { mocks, session, turn, workspace } from "./fixtures";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import { testDevice } from "../../deviceFixture";
 
 const NewChatPage = (await import("../../../src/pages/NewChatPage.svelte")).default;
 
@@ -77,3 +78,51 @@ test("Alt+C and Alt+W switch the agent client and workspace, with Shift going ba
   await fireEvent.keyDown(window, { key: "w", code: "KeyW", altKey: true });
   expect(workspaceSelect).toHaveTextContent("first");
 });
+
+test.each([false, true])(
+  "selects a workspace model and resets it when the workspace changes: %s",
+  async (switchWorkspace) => {
+    const models = vi.spyOn(testDevice.api, "listAgentClientModels").mockResolvedValue({
+      default_model: "fast",
+      models: [
+        { id: "fast", name: "Fast", description: "" },
+        { id: "deep", name: "Deep", description: "" },
+      ],
+    });
+    mocks.listSessionCreationOptions.mockResolvedValue([
+      {
+        id: "company",
+        name: "Company Agent",
+        client_type: "acp",
+        model_catalog_key: "company-id",
+        metadata: { acp_agent_id: "company-id" },
+      },
+    ]);
+    mocks.workspaces.set([
+      workspace({ workspace_id: "ws-1", name: "first" }),
+      workspace({ workspace_id: "ws-2", name: "second" }),
+    ]);
+    mocks.createSession.mockResolvedValue({ session: session(), initial_turn: turn() });
+    const user = userEvent.setup();
+    render(NewChatPage);
+    await user.click(await screen.findByRole("button", { name: "Fast" }));
+    await user.click(await screen.findByRole("button", { name: "Deep" }));
+    document.body.style.pointerEvents = "";
+    await waitFor(() =>
+      expect(models).toHaveBeenCalledWith("acp", "company-id", expect.any(AbortSignal), "ws-1"),
+    );
+    if (switchWorkspace) {
+      await fireEvent.keyDown(window, { key: "w", code: "KeyW", altKey: true });
+      await waitFor(() =>
+        expect(models).toHaveBeenCalledWith("acp", "company-id", expect.any(AbortSignal), "ws-2"),
+      );
+    }
+    await user.type(screen.getByPlaceholderText("Describe a task…"), "Review the changes");
+    await user.click(screen.getByRole("button", { name: "Start session" }));
+    await waitFor(() => expect(mocks.createSession).toHaveBeenCalled());
+    const request = mocks.createSession.mock.lastCall?.[0];
+    expect(request.workspace_id).toBe(switchWorkspace ? "ws-2" : "ws-1");
+    expect(request.model).toBe(switchWorkspace ? undefined : "deep");
+    models.mockRestore();
+  },
+);

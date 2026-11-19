@@ -133,7 +133,7 @@ def prompt(request, ordinal, cancellation):
         os._exit(0)
 
 
-log({"startup": {"cwd": os.getcwd(), "executable": sys.executable, "argv": sys.argv[1:], "literal": os.environ.get("ACP_LITERAL")}})
+log({"startup": {"cwd": os.getcwd(), "pid": os.getpid(), "session": os.environ.get("PONTIA_SESSION_ID"), "executable": sys.executable, "argv": sys.argv[1:], "literal": os.environ.get("ACP_LITERAL")}})
 for line in sys.stdin:
     request = json.loads(line)
     log(request)
@@ -146,9 +146,18 @@ for line in sys.stdin:
             caps["sessionCapabilities"]["close"] = {}
         if (os.environ.get("ACP_SYSTEM_PROMPT") == "1" or (root / "system-prompt").exists()) and not (root / "no-system-prompt").exists():
             caps["sessionCapabilities"]["systemPrompt"] = {}
+        if os.environ.get("ACP_OPTIONS"):
+            caps["sessionCapabilities"]["options"] = {}
         response(request, {"protocolVersion": 1, "agentCapabilities": caps,
                            **({"_meta": {"steering": {"supported": os.environ["ACP_STEERING"] == "1"}}} if "ACP_STEERING" in os.environ else {}),
                            "agentInfo": {"name": "fixture", "title": "Test Agent", "version": "arbitrary-release", "_meta": {"build": "fixture-build"}}})
+    elif method == "session/options":
+        if os.environ.get("ACP_OPTIONS") == "error":
+            send({"id": request["id"], "error": {"code": -32000, "message": "Authentication required"}})
+        elif os.environ.get("ACP_OPTIONS") == "hold":
+            wait_for("release-options")
+        else:
+            response(request, model_config())
     elif method == "session/new":
         if os.environ.get("ACP_REJECT_SYSTEM_PROMPT") == "new" and request["params"].get("systemPrompt"):
             send({"id": request["id"], "error": {"code": -32602, "message": "Instructions rejected"}})
@@ -204,6 +213,8 @@ for line in sys.stdin:
                   "update": {"sessionUpdate": "config_option_update", **model_config()}}})
             send({"id": "model-barrier", "method": "_fixture_barrier", "params": {}})
     elif method == "session/prompt":
+        if os.environ.get("ACP_MODELS"):
+            log({"prompt_model": model_config()["configOptions"][1]["currentValue"]})
         remember({"sessionUpdate": "user_message_chunk", "content": request["params"]["prompt"][0]})
         if active is not None:
             log({"overlap": True})

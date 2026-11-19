@@ -10,6 +10,8 @@ use serde_json::{Value, json};
 pub struct AcpConfiguration {
     pub(crate) defaults: BTreeMap<String, Value>,
     pub(crate) file: BTreeMap<String, Value>,
+    pub(crate) registry: crate::registry::Registry,
+    pub(crate) root: std::sync::Arc<std::sync::OnceLock<std::path::PathBuf>>,
 }
 
 fn validate_agent_id(id: &str) -> Result<()> {
@@ -38,6 +40,8 @@ impl AcpConfiguration {
 
     pub(crate) fn with_defaults(defaults: AcpConfig, file: BTreeMap<String, Value>) -> Self {
         Self {
+            registry: Default::default(),
+            root: Default::default(),
             defaults: defaults
                 .agents
                 .into_iter()
@@ -49,6 +53,33 @@ impl AcpConfiguration {
 }
 
 impl ClientConfiguration for AcpConfiguration {
+    fn supports_startup_model(&self) -> bool {
+        true
+    }
+
+    fn list_models<'a>(
+        &'a self,
+        effective: &'a Value,
+        directory: &'a std::path::Path,
+    ) -> pontia_agent_control::client_contract::ClientOperation<
+        'a,
+        pontia_agent_control::agent_clients::AgentClientModels,
+    > {
+        Box::pin(async move {
+            let config: AcpAgentConfig = serde_json::from_value(effective.clone())?;
+            let root = self
+                .root
+                .get()
+                .ok_or_else(|| Error::CapabilityUnavailable("ACP service is not started".into()))?;
+            let cwd = std::path::absolute(directory)?;
+            let config = self
+                .registry
+                .resolve(&config, &root.join("acp/registry"), &cwd)
+                .await?;
+            crate::models::probe::list(&config, &cwd).await
+        })
+    }
+
     fn detect(
         &self,
         effective: &Value,

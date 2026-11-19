@@ -107,14 +107,7 @@ async fn creation_options_follow_enabled_settings_for_native_and_acp_clients() {
         assert_eq!(options["options"].as_array().unwrap().len(), 1);
         assert_eq!(options["options"][0]["client_type"], client);
         assert_eq!(options["options"][0]["metadata"], metadata);
-        assert_eq!(
-            options["options"][0]["model_catalog_key"],
-            if client == "acp" {
-                Value::Null
-            } else {
-                json!(key)
-            }
-        );
+        assert_eq!(options["options"][0]["model_catalog_key"], json!(key));
 
         let (status, body) = call(&app, "PATCH", &path, json!({"enabled":false})).await;
         assert_eq!(status, StatusCode::OK, "{body}");
@@ -364,14 +357,46 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     assert_eq!(option["client_type"], "acp");
     assert_eq!(option["metadata"], json!({"acp_agent_id":"company-id"}));
     assert!(!options.to_string().contains("never-expose"));
+    let workspace_path = root.path().join("project");
+    std::fs::create_dir(&workspace_path).unwrap();
+    let workspace = pontia_agent_control::workspaces::upsert_canonical_workspace(
+        &pool,
+        workspace_path.to_str().unwrap(),
+        None,
+    )
+    .await
+    .unwrap();
+    let catalog = get(
+        &app,
+        &format!(
+            "/api/v1/agent-clients/acp/company-id/models?workspace_id={}",
+            workspace.workspace_id,
+        ),
+    )
+    .await;
+    assert_eq!(catalog["default_model"], "fast");
+    assert_eq!(catalog["models"][1]["id"], "deep");
+    let probe_wire = std::fs::read_to_string(root.path().join("wire.jsonl")).unwrap();
+    let startup: Value = serde_json::from_str(probe_wire.lines().next().unwrap()).unwrap();
+    assert_eq!(startup["startup"]["cwd"], workspace_path.to_str().unwrap());
+    let (status, _) = call(
+        &app,
+        "GET",
+        "/api/v1/agent-clients/acp/company-id/models?workspace_id=missing",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    std::fs::write(root.path().join("wire.jsonl"), "").unwrap();
     let (status, result) = call(&app, "POST", "/api/v1/sessions", json!({
-        "client_type":option["client_type"], "metadata":option["metadata"], "workspace":root.path(),
+        "client_type":option["client_type"], "metadata":option["metadata"], "workspace_id":workspace.workspace_id, "model":"deep",
         "additional_instructions":"http-instruction-marker",
     })).await;
     assert_eq!(status, StatusCode::CREATED, "{result}");
     let session = result["data"]["session"]["session_id"].as_str().unwrap();
     let path = format!("/api/v1/sessions/{session}");
     let detail = get(&app, &path).await;
+    assert_eq!(detail["session"]["model"], "deep");
     assert_eq!(detail["session"]["acp"]["agent_id"], "company-id");
     assert_eq!(detail["session"]["acp"]["agent_info"]["name"], "fixture");
     assert_eq!(detail["session"]["acp"]["system_prompt_injected"], true);

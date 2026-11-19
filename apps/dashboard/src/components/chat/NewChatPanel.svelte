@@ -71,8 +71,8 @@
 <div data-testid="new-chat-panel" class:justify-center={placement === 'center'} class:justify-end={placement === 'bottom'} class={`flex min-h-0 shrink-0 flex-col ${placement === 'bottom' ? 'pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pb-[max(1.25rem,env(safe-area-inset-bottom))]' : ''}`}>
   <div class={`mx-auto w-full space-y-3 ${fixedWorkspace ? 'max-w-4xl' : 'max-w-[760px]'}`}>
     <SessionTargetSelector bind:workspaceId bind:creationOptionId {workspaces} {workspacesLoading} {selectedWorkspace} {creationOptions} {fixedWorkspace} {deviceSelector} disabled={creating}>
-      {#if selectedOption?.model_catalog_key}
-        <ClientModelSelect id="session-model" client={{ name: selectedOption.name, client_type: selectedOption.client_type, client_key: selectedOption.model_catalog_key }} bind:value={model} allowDefault disabled={creating}
+      {#if selectedOption?.model_catalog_key && selectedWorkspace}
+        <ClientModelSelect id="session-model" {workspaceId} client={{ name: selectedOption.name, client_type: selectedOption.client_type, client_key: selectedOption.model_catalog_key }} bind:value={model} allowDefault disabled={creating}
           class={targetSegmentClass} />
       {/if}
     </SessionTargetSelector>

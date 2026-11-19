@@ -60,9 +60,11 @@ pub fn registration_with_registry(
 }
 
 fn register(
-    config: crate::configuration::AcpConfiguration,
+    mut config: crate::configuration::AcpConfiguration,
     registry: crate::registry::Registry,
 ) -> ClientRegistration {
+    config.registry = registry.clone();
+    let root = config.root.clone();
     let config = Arc::new(config);
     let (reconnect, recovery) = tokio::sync::mpsc::unbounded_channel();
     let adapter = Arc::new(AcpAdapter {
@@ -71,7 +73,7 @@ fn register(
         config: config.clone(),
         pool: Arc::new(OnceLock::new()),
         registry,
-        root: Arc::new(OnceLock::new()),
+        root,
         peers: Arc::new(Mutex::new(HashMap::new())),
         stopped: Arc::new(AtomicBool::new(false)),
         interactions: Arc::new(OnceLock::new()),
@@ -156,7 +158,7 @@ impl ClientSession for AcpAdapter {
                 }
                 let name = self.display_name(id, &config);
                 options.push(SessionCreationOption {
-                    model_catalog_key: None,
+                    model_catalog_key: Some(id.clone()),
                     id: serde_json::to_string(&["acp", id])?,
                     name,
                     client_type: "acp".into(),
@@ -320,6 +322,9 @@ impl ClientSession for AcpAdapter {
                     bound_identity.as_ref().map(|identity| identity[1].as_str()),
                     binding.as_ref().map(|binding| binding.metadata["system_prompt_injected"] == true),
                 ).await?;
+                if binding.is_none() && let Some(model) = &request.model {
+                    crate::models::select(&peer, &events, &request.session_id, model).await?;
+                }
                 let key = identity::encode(selected, &native.to_string())?;
                 let mut state = peer.state.lock().await;
                 if !state.current || self.stopped.load(Ordering::Acquire) {
