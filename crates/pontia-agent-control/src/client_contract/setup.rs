@@ -27,6 +27,13 @@ pub trait ClientIntegration: Send + Sync {
         setup.install(runner, definitions)
     }
     fn skipped_summary(&self) -> Vec<String>;
+    fn setup_warning(
+        &self,
+        _pontia_home: &Path,
+        _vars: &HashMap<String, String>,
+    ) -> Option<String> {
+        None
+    }
     fn service_path_variables(&self) -> &'static [&'static str] {
         &[]
     }

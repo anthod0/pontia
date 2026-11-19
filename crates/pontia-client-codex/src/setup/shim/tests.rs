@@ -252,6 +252,56 @@ fn repeated_setup_repairs_missing_launcher_and_path_preserving_shell_content() {
         .unwrap();
     assert_eq!(fs::read_to_string(&rc).unwrap(), once);
     assert_eq!(fixture.args(&["--version"]), ["--version"]);
+    let override_path = format!(
+        "export PATH={}:\"$PATH\"\n",
+        quote(fixture.native.to_str().unwrap())
+    );
+    fs::write(&rc, format!("{once}{override_path}")).unwrap();
+    assert_eq!(
+        String::from_utf8(resolve().stdout).unwrap().trim(),
+        fixture.native.join("codex").to_str().unwrap()
+    );
+    setup.install().unwrap();
+    assert_eq!(
+        String::from_utf8(resolve().stdout).unwrap().trim(),
+        fixture.root.join("bin/codex").to_str().unwrap()
+    );
+    assert!(fs::read_to_string(&rc).unwrap().contains(&override_path));
+}
+
+#[test]
+fn doctor_warns_when_the_installed_launcher_directory_is_missing_or_not_first() {
+    let mut fixture = Fixture::new("bash");
+    let integration = crate::setup::integration();
+    let bin = fixture.root.join("bin");
+    fixture.vars.remove("PATH");
+    assert!(
+        integration
+            .setup_warning(&fixture.root, &fixture.vars)
+            .is_none()
+    );
+    fixture.enable();
+    assert!(
+        integration
+            .setup_warning(&fixture.root, &fixture.vars)
+            .is_some()
+    );
+    for (path, expect_warning) in [
+        (vec![&fixture.native], true),
+        (vec![&fixture.native, &bin], true),
+        (vec![&bin, &fixture.native], false),
+    ] {
+        fixture.vars.insert(
+            "PATH".into(),
+            std::env::join_paths(path).unwrap().into_string().unwrap(),
+        );
+        assert_eq!(
+            integration
+                .setup_warning(&fixture.root, &fixture.vars)
+                .is_some(),
+            expect_warning
+        );
+    }
 }
 
 #[test]
@@ -384,6 +434,17 @@ fn fish_startup_prioritizes_launcher_after_existing_user_path_configuration() {
     assert_eq!(
         String::from_utf8(output.stdout).unwrap().trim(),
         fixture.root.join("bin/codex").to_str().unwrap()
+    );
+    let rc = config.join("fish/config.fish");
+    let mut contents = fs::read_to_string(&rc).unwrap();
+    contents.push_str(&format!(
+        "set -gx PATH {} $PATH\n",
+        quote(fixture.native.to_str().unwrap())
+    ));
+    fs::write(&rc, contents).unwrap();
+    assert_eq!(
+        String::from_utf8(resolve().stdout).unwrap().trim(),
+        fixture.native.join("codex").to_str().unwrap()
     );
     setup.install().unwrap();
     assert_eq!(

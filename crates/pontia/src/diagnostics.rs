@@ -180,6 +180,16 @@ pub(crate) async fn run(
             " - Runtime messages are written to {}.",
             home.join("state/runtime.log").display()
         );
+        for integration in pontia_clients::integrations() {
+            if let Some(explanation) = integration.setup_warning(&home, &vars) {
+                Check {
+                    passed: Some(false),
+                    summary: String::new(),
+                    explanation,
+                }
+                .print(true);
+            }
+        }
         println!(
             " - The cloud login credential is stored at {}.",
             home.join("auth.json").display()

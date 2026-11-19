@@ -51,6 +51,19 @@ impl ClientIntegration for CodexIntegration {
     fn skipped_summary(&self) -> Vec<String> {
         vec!["Skip Codex".into()]
     }
+    fn setup_warning(&self, pontia_home: &Path, vars: &HashMap<String, String>) -> Option<String> {
+        let bin = pontia_home.join("bin");
+        if !bin.join("codex").is_file() {
+            return None;
+        }
+        let first = vars
+            .get("PATH")
+            .and_then(|path| env::split_paths(path).next());
+        (first.as_deref() != Some(bin.as_path())).then(|| format!(
+            "The Codex launcher directory {} must be first in PATH. Run `pontia setup codex`, then open a new terminal.",
+            bin.display()
+        ))
+    }
     fn service_path_variables(&self) -> &'static [&'static str] {
         &["CODEX_HOME"]
     }

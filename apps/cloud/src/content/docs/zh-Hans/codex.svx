@@ -28,7 +28,7 @@ pontia setup codex
 
 Codex 设置会安装 `$PONTIA_HOME/bin/codex`，并将其放在 bash、zsh 或 fish 启动文件的 `PATH` 最前面。请先[将项目目录激活为 Workspace](/docs/workspaces)。随后在该目录运行交互式 `codex` 会通过 Pontia 接入：新会话在首次输入时成为 Session，恢复和分叉的会话也可接入。在未注册或未激活的目录中，启动器原样运行原生 Codex。`codex exec`、`codex login` 等其他子命令仍原样运行原始可执行文件。
 
-打开一个新终端，或运行设置后打印的激活命令，即可使用启动器。如果启动器或其托管的 PATH 配置缺失，请重新运行 `pontia setup codex`。重复设置会保留无关的 shell 配置，并且不会重复添加托管的 PATH 块。原始的 Codex 可执行文件仍然可用。
+打开一个新终端，或运行设置后打印的激活命令，即可使用启动器。运行 `pontia doctor` 可检查已安装的启动器目录是否位于当前 `PATH` 首位。如果顺序有误，或启动器、PATH 配置缺失，请重新运行 `pontia setup codex`，然后打开新终端。重复设置会保留无关的 shell 配置，并且不会重复添加托管的 PATH 块。原始的 Codex 可执行文件仍然可用。
 
 ## 编辑之前的提示词
 

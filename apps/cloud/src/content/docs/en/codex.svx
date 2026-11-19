@@ -28,7 +28,7 @@ Both commands configure automatic startup, verify the daemon connection, save th
 
 Codex setup installs `$PONTIA_HOME/bin/codex` and adds it to the front of `PATH` in your bash, zsh, or fish startup files. First [activate the project directory as a Workspace](/docs/workspaces). Interactive `codex` commands in that directory then connect through Pontia: a new conversation appears as a Session on first input, and resumed or forked conversations can also connect. In unregistered or inactive directories, the launcher runs native Codex unchanged. Other subcommands, such as `codex exec` or `codex login`, run the original executable unchanged.
 
-Open a new terminal, or run the activation command printed after setup, to use the launcher. If the launcher or its managed PATH configuration is missing, rerun `pontia setup codex`. Repeated setup preserves unrelated shell configuration and does not duplicate the managed PATH block. The original Codex executable remains available.
+Open a new terminal, or run the activation command printed after setup, to use the launcher. Run `pontia doctor` to check whether the installed launcher’s directory is first in your current `PATH`. If doctor reports a different order, or the launcher or its PATH configuration is missing, rerun `pontia setup codex` and open a new terminal. Repeated setup preserves unrelated shell configuration and does not duplicate the managed PATH block. The original Codex executable remains available.
 
 ## Edit an earlier prompt
 

@@ -288,13 +288,6 @@ fn edit_shell(path: &Path, block: Option<&str>) -> Result<(), String> {
             + start
             + END.len();
         let end = end + usize::from(text[end..].starts_with('\n'));
-        if let Some(block) = block {
-            if &text[start..end] == block {
-                return Ok(());
-            }
-            text.replace_range(start..end, block);
-            return write_changed(path, &text);
-        }
         text.replace_range(start..end, "");
     }
     if let Some(block) = block {
