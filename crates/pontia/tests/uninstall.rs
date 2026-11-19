@@ -115,6 +115,7 @@ impl Fixture {
             &pontia.join("bin/codex"),
             "#!/bin/sh\n# Pontia Codex launcher\nexit 0\n",
         );
+        write(&pontia.join("env.sh"), "export PATH=/pontia/bin:$PATH\n");
         write(
             &pontia.join("state/codex-shim.json"),
             &serde_json::json!({"paths": [shell], "fish": false}).to_string(),
@@ -206,6 +207,7 @@ fn cleanup_removes_integrations_and_preserves_data_binaries_and_other_shell_cont
     );
     for path in [
         "bin/codex",
+        "env.sh",
         "state/codex-shim.json",
         "clients/claude-client",
     ] {

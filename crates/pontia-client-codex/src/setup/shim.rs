@@ -85,6 +85,8 @@ impl ShimUninstall {
             edit_shell(path, None)?;
         }
         pontia_runtime::local_service::remove_file_if_present(&self.root.join("bin/codex"))?;
+        pontia_runtime::local_service::remove_file_if_present(&self.root.join("env.sh"))?;
+        pontia_runtime::local_service::remove_file_if_present(&self.root.join("env.fish"))?;
         pontia_runtime::local_service::remove_file_if_present(
             &self.root.join("state/codex-shim.json"),
         )
@@ -131,14 +133,14 @@ impl ShimSetup {
         format!("Launcher: {}", self.root.join("bin/codex").display())
     }
 
+    fn env_script_path(&self) -> PathBuf {
+        self.root
+            .join(if self.shells.fish { "env.fish" } else { "env.sh" })
+    }
+
     pub(super) fn activation_command(&self) -> String {
-        let shells = &self.shells;
-        let path = &shells.paths[0];
-        let command = if path.file_name().unwrap() == ".profile" {
-            "."
-        } else {
-            "source"
-        };
+        let path = self.env_script_path();
+        let command = if self.shells.fish { "source" } else { "." };
         format!("{command} {}", quote(path.to_str().unwrap()))
     }
 
@@ -198,14 +200,26 @@ impl ShimSetup {
         }
         let bin = quote(absolute_utf8_path(&bin, "launcher directory")?);
         let executable = quote(absolute_utf8_path(&launcher, "launcher")?);
-        let block = if shells.fish {
+        let env_path = self.env_script_path();
+        let stale_env_path = self
+            .root
+            .join(if shells.fish { "env.sh" } else { "env.fish" });
+        let env_script = if shells.fish {
             format!(
-                "{BEGIN}\nif test -x {executable}\n    set -l pontia_codex_old_path $PATH\n    set -gx PATH {bin}\n    for directory in $pontia_codex_old_path\n        if test \"$directory\" != {bin}\n            set -a PATH \"$directory\"\n        end\n    end\nend\n{END}\n"
+                "if test -x {executable}\n    fish_add_path --path --move --prepend {bin}\nend\n"
             )
         } else {
             format!(
-                "{BEGIN}\nif [ -x {executable} ]; then\n    _pontia_codex_rest=$PATH\n    _pontia_codex_path={bin}\n    while :; do\n        _pontia_codex_dir=${{_pontia_codex_rest%%:*}}\n        if [ \"$_pontia_codex_dir\" != {bin} ]; then\n            _pontia_codex_path=$_pontia_codex_path:$_pontia_codex_dir\n        fi\n        case $_pontia_codex_rest in\n            *:*) _pontia_codex_rest=${{_pontia_codex_rest#*:}} ;;\n            *) break ;;\n        esac\n    done\n    export PATH=$_pontia_codex_path\n    unset _pontia_codex_rest _pontia_codex_path _pontia_codex_dir\nfi\n{END}\n"
+                "if [ -x {executable} ]; then\n    _pontia_bin={bin}\n    _pontia_path=:${{PATH-}}:\n    while :; do\n        case $_pontia_path in\n            *:\"$_pontia_bin\":*) _pontia_path=${{_pontia_path%%:\"$_pontia_bin\":*}}:${{_pontia_path#*:\"$_pontia_bin\":}} ;;\n            *) break ;;\n        esac\n    done\n    _pontia_path=${{_pontia_path#:}}\n    _pontia_path=${{_pontia_path%:}}\n    export PATH=\"$_pontia_bin${{_pontia_path:+:$_pontia_path}}\"\n    unset _pontia_bin _pontia_path\nfi\n"
             )
+        };
+        write_changed(&env_path, &env_script)?;
+        pontia_runtime::local_service::remove_file_if_present(&stale_env_path)?;
+        let env_quoted = quote(absolute_utf8_path(&env_path, "shell environment script")?);
+        let block = if shells.fish {
+            format!("{BEGIN}\nif test -f {env_quoted}; source {env_quoted}; end\n{END}\n")
+        } else {
+            format!("{BEGIN}\nif [ -f {env_quoted} ]; then . {env_quoted}; fi\n{END}\n")
         };
         for path in &shells.paths {
             edit_shell(path, Some(&block))?;

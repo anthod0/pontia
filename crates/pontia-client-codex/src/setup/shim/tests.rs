@@ -175,6 +175,7 @@ fn repeated_setup_repairs_missing_launcher_and_path_preserving_shell_content() {
     let files = [
         rc.clone(),
         fixture.root.join("bin/codex"),
+        fixture.root.join("env.sh"),
         fixture.root.join("state/codex-shim.json"),
     ];
     let modified = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(123456);
@@ -237,6 +238,15 @@ fn repeated_setup_repairs_missing_launcher_and_path_preserving_shell_content() {
         ]
     );
     fs::remove_file(fixture.root.join("bin/codex")).unwrap();
+    fs::remove_file(fixture.root.join("env.sh")).unwrap();
+    assert!(
+        Command::new("/bin/bash")
+            .args(["--noprofile", "--norc", "-ec", ". \"$1\"", "test"])
+            .arg(&rc)
+            .status()
+            .unwrap()
+            .success()
+    );
     ShimSetup::inspect(&fixture.vars, &fixture.home)
         .unwrap()
         .install()
