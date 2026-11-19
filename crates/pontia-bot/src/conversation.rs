@@ -152,6 +152,20 @@ impl ConversationService {
             })
     }
 
+    pub(crate) fn restricted_execution_policy(
+        &self,
+        client_type: &str,
+    ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
+        self.control
+            .clients()
+            .get(client_type)
+            .and_then(|entry| entry.configuration.as_ref())
+            .and_then(|config| config.restricted_execution_policy())
+            .ok_or_else(|| {
+                Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
+            })
+    }
+
     pub fn supports_bot_client(&self, client_type: &str) -> bool {
         self.control
             .clients()
@@ -161,9 +175,7 @@ impl ConversationService {
                     && entry.profile.is_some()
                     && entry.configuration.as_ref().is_some_and(|config| {
                         config.supports_startup_model()
-                            && config
-                                .validate_execution_policy(&crate::execution_policy(client_type))
-                                .is_ok()
+                            && config.restricted_execution_policy().is_some()
                     })
             })
     }
@@ -394,7 +406,7 @@ impl ConversationService {
             .control
             .session_commands()
             .create_session(CreateSessionRequest {
-                execution_policy: crate::execution_policy(&bot.client_type),
+                execution_policy: self.restricted_execution_policy(&bot.client_type)?,
                 model: Some(bot.model.clone()),
                 client_type: bot.client_type.clone(),
                 title: Some(bot.name.clone()),

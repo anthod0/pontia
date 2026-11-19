@@ -20,6 +20,17 @@ impl PiConfiguration {
 }
 
 impl ClientConfiguration for PiConfiguration {
+    fn restricted_execution_policy(
+        &self,
+    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
+        Some(pontia_core::execution_policy::ExecutionPolicy {
+            disabled_tools: ["edit", "write"].into_iter().map(str::to_owned).collect(),
+            disable_mcp: true,
+            yolo: true,
+            ..Default::default()
+        })
+    }
+
     fn validate_execution_policy(
         &self,
         policy: &pontia_core::execution_policy::ExecutionPolicy,

@@ -3,6 +3,13 @@ use serde_json::Value;
 
 /// Client-owned interpretation of management identities and effective configuration.
 pub trait ClientConfiguration: Send + Sync {
+    /// Native restrictions for sessions that delegate edits and agent orchestration.
+    fn restricted_execution_policy(
+        &self,
+    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
+        None
+    }
+
     fn validate_execution_policy(
         &self,
         policy: &pontia_core::execution_policy::ExecutionPolicy,

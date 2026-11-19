@@ -45,8 +45,10 @@ async fn tool_selection_denials_and_mcp_disabling_are_rejected_before_creation()
     use pontia_agent_control::client_contract::ClientConfiguration;
     CodexConfiguration::new(json!({}))
         .validate_execution_policy(
-            &serde_json::from_value(json!({"yolo":true,"disabled_tools":[],"disable_mcp":false}))
-                .unwrap(),
+            &serde_json::from_value(
+                json!({"yolo":true,"disabled_tools":["spawn_agent"],"disable_mcp":false}),
+            )
+            .unwrap(),
         )
         .unwrap();
 }

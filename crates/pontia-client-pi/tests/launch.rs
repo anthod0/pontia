@@ -47,7 +47,18 @@ fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating
     )
     .unwrap();
     std::fs::write(&native, "{\"type\":\"session\",\"id\":\"native-policy\"}\n").unwrap();
+    use pontia_agent_control::client_contract::ClientConfiguration;
+    let bot_policy = pontia_client_pi::config::PiConfiguration::new(
+        serde_json::json!({}),
+        serde_json::json!({}),
+    )
+    .restricted_execution_policy()
+    .unwrap();
     for (policy, expected) in [
+        (
+            serde_json::json!(bot_policy),
+            vec!["--exclude-tools", "edit,write", "--no-mcp"],
+        ),
         (
             serde_json::json!({"tools":["read","grep","custom_tool"],"disabled_tools":["custom_tool","mcp__remote__*"],"disable_mcp":true,"yolo":true}),
             vec![

@@ -3,6 +3,8 @@ use pontia_config::ConfigurationLayers;
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 
+pub(crate) const SPAWN_AGENT: &str = "spawn_agent";
+
 pub struct CodexConfiguration(pub ConfigurationLayers);
 
 impl CodexConfiguration {
@@ -16,6 +18,16 @@ impl CodexConfiguration {
 }
 
 impl ClientConfiguration for CodexConfiguration {
+    fn restricted_execution_policy(
+        &self,
+    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
+        Some(pontia_core::execution_policy::ExecutionPolicy {
+            disabled_tools: vec![SPAWN_AGENT.into()],
+            yolo: true,
+            ..Default::default()
+        })
+    }
+
     fn validate_execution_policy(
         &self,
         policy: &pontia_core::execution_policy::ExecutionPolicy,
@@ -25,10 +37,14 @@ impl ClientConfiguration for CodexConfiguration {
                 "Codex cannot restrict its tools to the requested allowlist".into(),
             ));
         }
-        if !policy.disabled_tools.is_empty() {
-            return Err(Error::CapabilityUnavailable(
-                "Codex cannot enforce a native tool denylist".into(),
-            ));
+        if let Some(name) = policy
+            .disabled_tools
+            .iter()
+            .find(|name| name.as_str() != SPAWN_AGENT)
+        {
+            return Err(Error::CapabilityUnavailable(format!(
+                "Codex cannot disable tool {name}"
+            )));
         }
         if policy.disable_mcp {
             return Err(Error::CapabilityUnavailable(

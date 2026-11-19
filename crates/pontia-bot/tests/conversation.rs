@@ -47,6 +47,17 @@ struct Client {
 }
 
 impl ClientConfiguration for Client {
+    fn restricted_execution_policy(
+        &self,
+    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
+        Some(pontia_core::execution_policy::ExecutionPolicy {
+            disabled_tools: ["edit", "write"].into_iter().map(str::to_owned).collect(),
+            disable_mcp: true,
+            yolo: true,
+            ..Default::default()
+        })
+    }
+
     fn validate_execution_policy(
         &self,
         _: &pontia_core::execution_policy::ExecutionPolicy,
@@ -96,7 +107,7 @@ impl ClientLauncher for Client {
     fn launch(&self, request: ClientLaunchRequest<'_>) -> Result<RuntimeStartResult> {
         assert_eq!(
             serde_json::to_value(&request.runtime.execution_policy).unwrap(),
-            json!({"tools":["read","bash"],"disabled_tools":[],"disable_mcp":true,"yolo":true})
+            json!({"tools":null,"disabled_tools":["edit","write"],"disable_mcp":true,"yolo":true})
         );
         let gate = self.launch_gate.lock().unwrap().take();
         if let Some((entered, release)) = gate {

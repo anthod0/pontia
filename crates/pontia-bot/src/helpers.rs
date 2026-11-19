@@ -218,6 +218,9 @@ impl HelperService {
                 "Client cannot run a helper Session".into(),
             ));
         }
+        let execution_policy = self
+            .conversation
+            .restricted_execution_policy(&profile.client_type)?;
         let reference = format!("helper:{bot_id}:{}", uuid::Uuid::now_v7());
         let directory = self
             .conversation
@@ -244,7 +247,7 @@ impl HelperService {
             .session_commands()
             .create_application_session(
                 CreateSessionRequest {
-                    execution_policy: crate::execution_policy(&profile.client_type),
+                    execution_policy,
                     model: None,
                     client_type: profile.client_type,
                     title: None,

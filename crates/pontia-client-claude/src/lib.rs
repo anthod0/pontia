@@ -61,6 +61,37 @@ struct Configuration {
     host: Option<PathBuf>,
 }
 impl ClientConfiguration for Configuration {
+    fn restricted_execution_policy(
+        &self,
+    ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
+        Some(pontia_core::execution_policy::ExecutionPolicy {
+            disabled_tools: [
+                "Edit",
+                "Write",
+                "NotebookEdit",
+                "Agent",
+                "Task",
+                "SendMessage",
+                "TeamCreate",
+                "TeamDelete",
+                "Workflow",
+                "EnterWorktree",
+                "ExitWorktree",
+                "CronCreate",
+                "CronDelete",
+                "ScheduleWakeup",
+                "RemoteTrigger",
+                "Monitor",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+            disable_mcp: true,
+            yolo: true,
+            ..Default::default()
+        })
+    }
+
     fn validate_execution_policy(
         &self,
         policy: &pontia_core::execution_policy::ExecutionPolicy,
