@@ -9,6 +9,7 @@
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
   import { useDeviceRuntime } from '../device/context'
   import { openBotChatStream } from '../services/botChatStream'
+  import BotAvatar from '../components/bots/BotAvatar.svelte'
 
   let { botId }: { botId: string } = $props()
   const device = useDeviceRuntime()
@@ -138,12 +139,12 @@
     <div class="shrink-0 px-1 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
       {#if chat.data.bot.working_on}
         <p class="mb-2 flex items-start gap-2 px-2 text-xs text-muted-foreground" role="status">
-          <span class="mt-1 size-1.5 shrink-0 rounded-full bg-primary-solid"></span>
+          <BotAvatar shape={chat.data.bot.avatar_shape} color={chat.data.bot.avatar_color} working class="size-4" />
           <span class="min-w-0 [overflow-wrap:anywhere]">{chat.data.bot.working_on}</span>
         </p>
       {:else if chat.data.processing && !typing}
         <p class="mb-2 flex items-start gap-2 px-2 text-xs text-muted-foreground" role="status">
-          <span class="mt-1 size-1.5 shrink-0 animate-pulse rounded-full bg-primary-solid"></span>
+          <BotAvatar shape={chat.data.bot.avatar_shape} color={chat.data.bot.avatar_color} working class="size-4" />
           <span class="min-w-0">{$t('bots.processing')}</span>
         </p>
       {/if}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createQuery } from '@tanstack/svelte-query'
+  import { createQueries, createQuery } from '@tanstack/svelte-query'
   import { page } from '$app/state'
   import { t } from '$lib/i18n'
   import { dashboardPath, navigate } from '$lib/navigation'
@@ -16,6 +16,18 @@
     () => ({ queryKey: ['bots'], queryFn: ({ signal }) => device.api.listBots(signal) }),
     () => device.queryClient,
   )
+  // Read the chats the Dashboard already keeps live without fetching them here; bots without
+  // a loaded chat fall back to the work description from the bot list.
+  const chats = createQueries(
+    () => ({
+      queries: (bots.data ?? []).map((bot) => ({
+        queryKey: ['bot-chat', bot.bot_id],
+        queryFn: ({ signal }: { signal: AbortSignal }) => device.api.getBotChat(bot.bot_id, signal),
+        enabled: false,
+      })),
+    }),
+    () => device.queryClient,
+  )
   const scope = $derived(handle ? `/${handle}` : undefined)
   let creating = $state(false)
 </script>
@@ -29,7 +41,9 @@
           <PlusIcon /><span>{$t('bots.create')}</span>
         </Sidebar.MenuButton>
       </Sidebar.MenuItem>
-      {#each bots.data ?? [] as bot (bot.bot_id)}
+      {#each bots.data ?? [] as bot, index (bot.bot_id)}
+        {@const chat = chats[index]?.data}
+        {@const working = chat ? !!chat.bot.working_on || chat.processing : !!bot.working_on}
         {@const path = `/bots/${encodeURIComponent(bot.bot_id)}`}
         {@const active = page.params.botId === bot.bot_id && (handle === undefined || handle === page.params.handle)}
         <Sidebar.MenuItem>
@@ -37,7 +51,7 @@
             {#snippet child({ props })}
               <a {...props} href={scope ? scope + path : dashboardPath(path)} aria-current={active ? 'page' : undefined}
                 onclick={(event) => { event.preventDefault(); void navigate(path, undefined, { scope }) }}>
-                <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-5" /><span>{bot.name}</span>
+                <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} {working} class="size-5" /><span>{bot.name}</span>
               </a>
             {/snippet}
           </Sidebar.MenuButton>

@@ -98,7 +98,7 @@ function chatWith(processing: boolean) {
 
 test("shows a status while the Bot processes an unanswered message", async () => {
   await chatWith(true);
-  expect(screen.getByRole("status")).toBeInTheDocument();
+  expect(screen.getByRole("status").querySelector("svg.bot")).toHaveClass("classic");
 });
 
 test("shows no status when the Bot is idle", async () => {
