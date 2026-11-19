@@ -87,6 +87,7 @@ impl PiIntegration {
             return Err(format!("pi list failed with exit code {}", packages.code));
         }
         let mut source = "npm:@pontia/pi-client-plugin".to_string();
+        let mut update_source = None;
         let mut current: Option<String> = None;
         for line in packages.stdout.lines() {
             if line == "Project packages:" {
@@ -105,18 +106,21 @@ impl PiIntegration {
                 if let Some(manifest) =
                     manifest.filter(|manifest| manifest["name"] == "@pontia/pi-client-plugin")
                 {
-                    if (!update || !candidate.starts_with("npm:"))
-                        && manifest["pi"]["extensions"]
-                            .as_array()
-                            .is_some_and(|extensions| {
-                                !extensions.is_empty()
-                                    && extensions.iter().all(|entry| {
-                                        entry
-                                            .as_str()
-                                            .is_some_and(|entry| path.join(entry).is_file())
-                                    })
-                            })
+                    if manifest["pi"]["extensions"]
+                        .as_array()
+                        .is_some_and(|extensions| {
+                            !extensions.is_empty()
+                                && extensions.iter().all(|entry| {
+                                    entry
+                                        .as_str()
+                                        .is_some_and(|entry| path.join(entry).is_file())
+                                })
+                        })
                     {
+                        if update && candidate.starts_with("npm:") {
+                            update_source = Some(candidate);
+                            continue;
+                        }
                         return Ok(());
                     }
                     source = candidate;
@@ -141,14 +145,21 @@ impl PiIntegration {
                 current = Some(candidate);
             }
         }
+        let args = if let Some(source) = update_source {
+            // Pi otherwise also updates matching packages in a trusted project.
+            vec!["update".into(), source, "--no-approve".into()]
+        } else {
+            vec!["install".into(), source]
+        };
         let code = runner
-            .run_interactive("pi", &["install".into(), source])
-            .map_err(|error| format!("failed to run pi install: {error}"))?;
+            .run_interactive("pi", &args)
+            .map_err(|error| format!("failed to run pi {}: {error}", args.join(" ")))?;
         if code == 0 {
             Ok(())
         } else {
             Err(format!(
-                "pi install npm:@pontia/pi-client-plugin failed with exit code {code}"
+                "pi {} failed with exit code {code}",
+                args.join(" ")
             ))
         }
     }

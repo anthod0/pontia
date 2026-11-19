@@ -1,5 +1,6 @@
 use pontia::client_maintenance::maintain_enabled;
 use pontia_agent_control::agent_clients::AgentClientDetails;
+use pontia_agent_control::client_contract::ClientDetection;
 use pontia_runtime::local_service::{CommandOutput, CommandRunner, DefinitionStore};
 use std::{cell::RefCell, collections::HashMap, path::Path};
 
@@ -43,7 +44,21 @@ impl DefinitionStore for Platform {
     }
 }
 fn entry(has_record: bool, enabled: bool) -> AgentClientDetails {
-    serde_json::from_value(serde_json::json!({"id":"opaque","client_type":"pi","client_key":"default","name":"Pi","short_id":"pi","has_record":has_record,"enabled":enabled,"config_overrides":{},"effective_config":{},"created_at":null,"updated_at":null})).unwrap()
+    AgentClientDetails {
+        id: "opaque".into(),
+        client_type: "pi".into(),
+        client_key: "default".into(),
+        name: "Pi".into(),
+        short_id: "pi".into(),
+        has_record,
+        enabled,
+        detection: ClientDetection::detected("pi"),
+        setup_command: None,
+        config_overrides: serde_json::json!({}),
+        effective_config: serde_json::json!({}),
+        created_at: None,
+        updated_at: None,
+    }
 }
 
 #[test]
@@ -81,7 +96,11 @@ fn only_explicitly_enabled_integrations_maintain_artifacts_not_client_binaries()
                     ("pi".into(), vec!["list".into()]),
                     (
                         "pi".into(),
-                        vec!["install".into(), "npm:@pontia/pi-client-plugin".into()]
+                        vec![
+                            "update".into(),
+                            "npm:@pontia/pi-client-plugin".into(),
+                            "--no-approve".into()
+                        ]
                     )
                 ]
             );
