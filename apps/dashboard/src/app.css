@@ -152,6 +152,48 @@
   background: transparent;
 }
 
+/* Text shimmer from shadcn-svelte's shared utilities. */
+@keyframes tw-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+@utility shimmer {
+  --_spread: calc(3ch + 40px);
+  --_base: currentColor;
+  --_highlight: oklch(from currentColor l c h / calc(alpha * 0.2));
+
+  background-image: linear-gradient(
+    90deg,
+    var(--_base) calc(50% - var(--_spread)),
+    color-mix(in oklch, var(--_highlight), var(--_base) 50%) calc(50% - var(--_spread) * 0.5),
+    var(--_highlight) 50%,
+    color-mix(in oklch, var(--_highlight), var(--_base) 50%) calc(50% + var(--_spread) * 0.5),
+    var(--_base) calc(50% + var(--_spread))
+  );
+  background-repeat: no-repeat;
+  background-size: calc(200% + var(--_spread) * 2) 100%;
+  background-position: 0 0;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: tw-shimmer 2s linear infinite;
+
+  @variant dark {
+    --_highlight: oklch(from currentColor max(0.8, calc(l + 0.4)) c h / calc(alpha + 0.4));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
 .no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;

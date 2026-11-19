@@ -140,12 +140,12 @@
       {#if chat.data.bot.working_on}
         <p class="mb-2 flex items-start gap-2 px-2 text-xs text-muted-foreground" role="status">
           <BotAvatar shape={chat.data.bot.avatar_shape} color={chat.data.bot.avatar_color} working class="size-4" />
-          <span class="min-w-0 [overflow-wrap:anywhere]">{chat.data.bot.working_on}</span>
+          <span class="shimmer min-w-0 [overflow-wrap:anywhere]">{chat.data.bot.working_on}</span>
         </p>
       {:else if chat.data.processing && !typing}
         <p class="mb-2 flex items-start gap-2 px-2 text-xs text-muted-foreground" role="status">
           <BotAvatar shape={chat.data.bot.avatar_shape} color={chat.data.bot.avatar_color} working class="size-4" />
-          <span class="min-w-0">{$t('bots.processing')}</span>
+          <span class="shimmer min-w-0">{$t('bots.processing')}</span>
         </p>
       {/if}
       {#if actionError}<p role="alert" class="mb-2 text-sm text-destructive">{actionError}</p>{/if}
