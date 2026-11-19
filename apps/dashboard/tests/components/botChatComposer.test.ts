@@ -26,6 +26,7 @@ async function openChat() {
     },
     messages: [],
     notices: [],
+    processing: false,
   });
   await saveUploadRecord({
     scope,

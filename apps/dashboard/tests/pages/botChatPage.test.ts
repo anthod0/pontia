@@ -44,6 +44,7 @@ test("renders Bot replies as markdown while keeping user messages as plain text"
       },
     ],
     notices: [],
+    processing: false,
   });
 
   const { container } = render(BotChatPage, { botId });
@@ -63,4 +64,44 @@ test("renders Bot replies as markdown while keeping user messages as plain text"
 
   expect(screen.queryByRole("link", { name: /literal/i })).not.toBeInTheDocument();
   expect(screen.getByText("Keep [literal](https://example.com/user) raw")).toBeInTheDocument();
+});
+
+function chatWith(processing: boolean) {
+  const botId = crypto.randomUUID();
+  vi.spyOn(testDevice.api, "getBotChat").mockResolvedValue({
+    bot: {
+      bot_id: botId,
+      name: "Bot",
+      description: null,
+      avatar_shape: "classic",
+      avatar_color: "blue",
+      client_type: "pi",
+      client_key: "default",
+      model: "test",
+      working_on: null,
+    },
+    messages: [
+      {
+        id: "msg-user",
+        kind: "user_input",
+        content: "Hello",
+        status: "normal",
+        created_at: "2026-11-20T00:00:00Z",
+      },
+    ],
+    notices: [],
+    processing,
+  });
+  render(BotChatPage, { botId });
+  return screen.findByText("Hello");
+}
+
+test("shows a status while the Bot processes an unanswered message", async () => {
+  await chatWith(true);
+  expect(screen.getByRole("status")).toBeInTheDocument();
+});
+
+test("shows no status when the Bot is idle", async () => {
+  await chatWith(false);
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
 });

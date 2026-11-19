@@ -80,7 +80,11 @@ impl ClientConfiguration for Client {
         &self,
         policy: &pontia_core::execution_policy::ExecutionPolicy,
     ) -> Result<()> {
-        if matches!(*self.policy_support.lock().unwrap(), PolicySupport::RejectYolo) && policy.yolo {
+        if matches!(
+            *self.policy_support.lock().unwrap(),
+            PolicySupport::RejectYolo
+        ) && policy.yolo
+        {
             return Err(Error::CapabilityUnavailable(
                 "Client cannot run approval-free".into(),
             ));
@@ -169,7 +173,9 @@ impl ClientInteractions for Client {
         let fail = *self.fail_interaction_response.lock().unwrap();
         Box::pin(async move {
             if fail {
-                return Err(Error::ControlUnknown("interaction channel unavailable".into()));
+                return Err(Error::ControlUnknown(
+                    "interaction channel unavailable".into(),
+                ));
             }
             events
                 .report_client_fact(
@@ -430,6 +436,83 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
             .iter()
             .all(|input| !input.input.contains("historical failure"))
     );
+}
+
+#[tokio::test]
+async fn failed_messages_show_processing_only_after_a_successful_retry() {
+    let (_root, _pool, _client, _control, service) = fixture().await;
+    let bot = service
+        .records()
+        .create(bot_configuration("Bot", "missing/model"))
+        .await
+        .unwrap();
+    let failed = service.send(&bot.bot_id, "hello").await.unwrap();
+    assert_eq!(failed.status, MessageStatus::Failed);
+    assert!(!service.chat(&bot.bot_id).await.unwrap().processing);
+
+    service
+        .records()
+        .update(&bot.bot_id, bot_configuration("Bot", MODEL))
+        .await
+        .unwrap();
+    service.retry(&bot.bot_id, &failed.id).await.unwrap();
+    assert!(service.chat(&bot.bot_id).await.unwrap().processing);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn processing_shows_until_the_bot_answers_or_its_turn_ends() {
+    let (_root, _pool, client, control, service) = fixture().await;
+    let bot = service
+        .records()
+        .create(bot_configuration("Bot", MODEL))
+        .await
+        .unwrap();
+    let id = bot.bot_id.clone();
+    let (entered, waiting) = tokio::sync::oneshot::channel();
+    let (release, released) = std::sync::mpsc::channel();
+    *client.launch_gate.lock().unwrap() = Some((entered, released));
+    let sender = service.clone();
+    let target = id.clone();
+    let sending = tokio::spawn(async move { sender.send(&target, "first").await.unwrap() });
+    waiting.await.unwrap();
+    assert!(service.chat(&id).await.unwrap().processing);
+    release.send(()).unwrap();
+    sending.await.unwrap();
+    assert!(service.chat(&id).await.unwrap().processing);
+
+    let session = service
+        .records()
+        .get(&id)
+        .await
+        .unwrap()
+        .current_session_id
+        .unwrap();
+    let reply = |text: &str, work: Option<&str>| ReplyRequest {
+        session_id: session.clone(),
+        input: Reply {
+            message: text.into(),
+            working_on: work.map(str::to_owned),
+        },
+    };
+    service.send_to_user(reply("Hi", None)).await.unwrap();
+    assert!(!service.chat(&id).await.unwrap().processing);
+
+    service.send(&id, "second").await.unwrap();
+    assert!(service.chat(&id).await.unwrap().processing);
+    service
+        .send_to_user(reply("On it", Some("Checking")))
+        .await
+        .unwrap();
+    service.send(&id, "third").await.unwrap();
+    let chat = service.chat(&id).await.unwrap();
+    assert!(!chat.processing);
+    assert_eq!(chat.bot.working_on.as_deref(), Some("Checking"));
+
+    service.send_to_user(reply("Done", None)).await.unwrap();
+    service.send(&id, "fourth").await.unwrap();
+    assert!(service.chat(&id).await.unwrap().processing);
+    finish(&control, &session, EventType::TurnCompleted).await;
+    assert!(!service.chat(&id).await.unwrap().processing);
 }
 
 async fn instructions(control: &AgentControl, session: &str) -> String {

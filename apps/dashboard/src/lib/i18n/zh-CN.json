@@ -40,6 +40,7 @@
   "bots.sendFailed": "消息发送失败",
   "bots.executionFailed": "Bot 执行失败",
   "bots.sessionExited": "Bot Session 已退出",
+  "bots.processing": "正在处理消息",
   "clients.detection.detected": "已检测到",
   "clients.detection.not_detected": "未检测到",
   "clients.detection.unknown": "无法判断",

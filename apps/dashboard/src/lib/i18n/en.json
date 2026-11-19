@@ -40,6 +40,7 @@
   "bots.sendFailed": "Message failed to send",
   "bots.executionFailed": "Bot execution failed",
   "bots.sessionExited": "Bot Session exited",
+  "bots.processing": "Working on your message",
   "clients.detection.detected": "Detected",
   "clients.detection.not_detected": "Not detected",
   "clients.detection.unknown": "Unable to determine",

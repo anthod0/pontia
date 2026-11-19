@@ -141,6 +141,11 @@
           <span class="mt-1 size-1.5 shrink-0 rounded-full bg-primary-solid"></span>
           <span class="min-w-0 [overflow-wrap:anywhere]">{chat.data.bot.working_on}</span>
         </p>
+      {:else if chat.data.processing && !typing}
+        <p class="mb-2 flex items-start gap-2 px-2 text-xs text-muted-foreground" role="status">
+          <span class="mt-1 size-1.5 shrink-0 animate-pulse rounded-full bg-primary-solid"></span>
+          <span class="min-w-0">{$t('bots.processing')}</span>
+        </p>
       {/if}
       {#if actionError}<p role="alert" class="mb-2 text-sm text-destructive">{actionError}</p>{/if}
       <MessageComposer draftId={`bot:${botId}`} bind:value={draft} placeholder={$t('bots.message')} fullscreen onSubmit={send} />

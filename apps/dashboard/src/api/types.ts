@@ -54,6 +54,7 @@ export interface BotChat {
     kind: "turn.failed" | "session.error" | "session.exited";
     created_at: string;
   }[];
+  processing: boolean;
 }
 
 export interface AgentClientView {

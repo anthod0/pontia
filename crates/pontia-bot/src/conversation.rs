@@ -4,14 +4,14 @@ use std::{
 };
 
 use pontia_agent_control::{AgentControl, CreateSessionRequest, SessionOwnership};
-use pontia_core::{Error, Result};
+use pontia_core::{Error, Result, domain::TurnState};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex as AsyncMutex, broadcast};
 
 use crate::{
     handoff::HandoffService,
     identity::{BotAccess, BotIdentity, BotRole, IdentityError, TOOL_TOKEN_ENV},
-    messages::{BotMessage, MessageKind, MessageService},
+    messages::{BotMessage, MessageKind, MessageService, MessageStatus},
     records::{Bot, BotService},
     user::UserService,
 };
@@ -87,6 +87,8 @@ pub struct Conversation {
     pub bot: Bot,
     pub messages: Vec<BotMessage>,
     pub notices: Vec<Notice>,
+    /// The user awaits a reply the Bot is receiving or working on, and no work description is set.
+    pub processing: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -256,6 +258,13 @@ impl ConversationService {
         let _guard = activity.reply.lock().await;
         let bot = self.records.get(bot_id).await?;
         let messages = self.messages.list(bot_id).await?;
+        let delivering = !activity.pending_inputs.lock().unwrap().is_empty();
+        let unanswered = messages
+            .iter()
+            .rev()
+            .take_while(|message| message.kind != MessageKind::BotReply)
+            .any(|message| message.status == MessageStatus::Normal);
+        let mut turn_active = false;
         let mut notices: Vec<_> = activity
             .generation_notice
             .lock()
@@ -264,6 +273,18 @@ impl ConversationService {
             .into_iter()
             .collect();
         if let Some(session_id) = &bot.current_session_id {
+            if unanswered && !delivering && bot.working_on.is_none() {
+                for turn in self
+                    .control
+                    .queries()
+                    .session_snapshot(session_id)
+                    .await?
+                    .map(|snapshot| snapshot.turns)
+                    .unwrap_or_default()
+                {
+                    turn_active |= turn.state.parse::<TurnState>()?.is_active();
+                }
+            }
             for event in self
                 .control
                 .queries()
@@ -282,10 +303,12 @@ impl ConversationService {
                 }
             }
         }
+        let processing = bot.working_on.is_none() && unanswered && (delivering || turn_active);
         Ok(Conversation {
             bot,
             messages,
             notices,
+            processing,
         })
     }
 
@@ -327,15 +350,15 @@ impl ConversationService {
         let _delivery = activity.delivery.lock().await;
         let result = self.deliver(bot_id, &input, &activity, revision).await;
         drop(pending);
-        match result {
-            Ok(()) => Ok(message),
+        let message = match result {
+            Ok(()) => message,
             Err(error) => {
                 tracing::warn!(%bot_id, message_id = %message.id, %error, "Bot input delivery failed");
-                let message = self.messages.fail(&message).await?;
-                activity.notify(ConversationUpdate::Changed);
-                Ok(message)
+                self.messages.fail(&message).await?
             }
-        }
+        };
+        activity.notify(ConversationUpdate::Changed);
+        Ok(message)
     }
 
     /// Routes input by stable Bot identity, resolving the current Session at delivery time.

@@ -150,7 +150,19 @@ pub async fn stream(
                     Err(RecvError::Closed) => break,
                 },
                 event = events.recv() => match event {
-                    Ok(event) if matches!(event.event_type, EventType::TurnFailed | EventType::SessionError | EventType::SessionExited) => {
+                    Ok(event) if matches!(
+                        event.event_type,
+                        EventType::TurnCreated
+                            | EventType::TurnQueued
+                            | EventType::TurnStarted
+                            | EventType::TurnCompleted
+                            | EventType::TurnFailed
+                            | EventType::TurnDispatchFailed
+                            | EventType::TurnAbandoned
+                            | EventType::TurnInterrupted
+                            | EventType::SessionError
+                            | EventType::SessionExited
+                    ) => {
                         match state.bots().records().get(&bot_id).await {
                             Ok(bot) if bot.current_session_id.as_deref() == Some(&event.session_id) =>
                                 yield Ok(update_event(ConversationUpdate::Changed)),
