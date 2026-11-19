@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - In New chat, use `Alt+C` for the next Agent Client and `Alt+Shift+C` for the previous one. This avoids the `Alt+A` conflict with WeChat.
+- `pontia status` and `pontia doctor` show a spinner while they check the cloud login and remote registration.
 
 ## [0.7.16] - 2026-11-18
 

@@ -1,12 +1,13 @@
 //! Shared styling for interactive command output. Colors turn off automatically when the
 //! stream is not a terminal or `NO_COLOR` is set.
 
-use std::fmt::Display;
+use std::{fmt::Display, time::Duration};
 
 use dialoguer::{
     console::{StyledObject, style},
     theme::ColorfulTheme,
 };
+use indicatif::{ProgressBar, ProgressStyle};
 
 pub fn theme() -> ColorfulTheme {
     ColorfulTheme::default()
@@ -57,6 +58,26 @@ pub fn summary_lines(lines: &[String], skipped: bool) -> Vec<String> {
             _ => format!("      {}", dim(line)),
         })
         .collect()
+}
+
+/// Shows a spinner on stderr until the returned guard is dropped. Nothing is drawn when
+/// stderr is not a terminal, so piped and captured output stay unchanged.
+pub fn spinner(message: &'static str) -> Spinner {
+    let bar = ProgressBar::new_spinner().with_message(message);
+    bar.set_style(
+        ProgressStyle::with_template("{spinner:.cyan} {msg:.dim}")
+            .expect("spinner template is valid"),
+    );
+    bar.enable_steady_tick(Duration::from_millis(80));
+    Spinner(bar)
+}
+
+pub struct Spinner(ProgressBar);
+
+impl Drop for Spinner {
+    fn drop(&mut self) {
+        self.0.finish_and_clear();
+    }
 }
 
 pub fn indent(text: &str) -> String {

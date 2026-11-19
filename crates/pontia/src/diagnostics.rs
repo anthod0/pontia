@@ -3,6 +3,7 @@ use std::{collections::HashMap, path::Path};
 use pontia::{
     lifecycle::{DefinitionStore, EnabledState, HealthProbe, RunState, ServiceManager},
     runtime_io::{FileDefinitionStore, HttpHealthProbe},
+    terminal::spinner,
 };
 
 use crate::{login, remote};
@@ -189,7 +190,10 @@ pub(crate) async fn run(
         }
     }
 
-    let account = match login::account(&vars).await {
+    let checking = spinner("Checking the cloud login...");
+    let account = login::account(&vars).await;
+    drop(checking);
+    let account = match account {
         Ok(Some(account)) => Check {
             passed: Some(true),
             summary: format!("account {}", account.name()),
@@ -214,6 +218,7 @@ pub(crate) async fn run(
     account.print(verbose);
 
     let registration = if config.is_ok() {
+        let _checking = spinner("Checking the remote device registration...");
         remote::registration_status(&vars).await
     } else {
         Err("configuration could not be loaded; fix config.toml and retry".into())
