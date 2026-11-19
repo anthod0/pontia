@@ -311,11 +311,14 @@ impl EventCommitter {
                 .bind(runtime_environment.unwrap_or_else(|| serde_json::json!({})).to_string())
                 .bind(&event.session_id).execute(&mut *tx).await?;
             if let Some(directory) = event.payload["workspace"].as_str() {
-                sqlx::query("UPDATE sessions SET workspace_ref=? WHERE session_id=?")
-                    .bind(directory)
-                    .bind(&event.session_id)
-                    .execute(&mut *tx)
-                    .await?;
+                sqlx::query(
+                    "UPDATE sessions SET workspace_ref=?, workspace_id=? WHERE session_id=?",
+                )
+                .bind(directory)
+                .bind(event.payload["workspace_id"].as_str())
+                .bind(&event.session_id)
+                .execute(&mut *tx)
+                .await?;
             }
         }
 

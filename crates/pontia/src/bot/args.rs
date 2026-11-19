@@ -246,6 +246,9 @@ pub(super) enum HelperCommand {
     },
     /// Start a helper using an Agent Profile (defaults to this Bot's helper Profile)
     Create {
+        /// Start in this active Workspace; omit to use a private helper directory
+        #[arg(long)]
+        workspace_id: Option<String>,
         #[arg(long)]
         profile_id: Option<String>,
         #[arg(long)]

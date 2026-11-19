@@ -295,6 +295,7 @@ async fn helpers_include_idle_and_error_but_exclude_exited_dreaming_and_other_bo
             bot_id: bot.into(),
             session_id: session.into(),
             role,
+            workspace_id: (session == "running").then(|| "project".into()),
             state,
             description: Some(format!("work-{session}")),
         });
@@ -307,6 +308,10 @@ async fn helpers_include_idle_and_error_but_exclude_exited_dreaming_and_other_bo
     assert_eq!(
         ids(section(&doc, "Helpers"), "State: "),
         ["error", "idle", "idle", "busy"]
+    );
+    assert_eq!(
+        ids(section(&doc, "Helpers"), "Workspace ID: "),
+        ["unbound", "unbound", "unbound", "project"]
     );
     assert!(section(&doc, "Helpers").contains("work-idle"));
     assert!(!section(&doc, "Recent chat").contains("work-"));

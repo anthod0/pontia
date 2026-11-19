@@ -112,7 +112,6 @@ impl DreamingService {
             .conversation
             .profile_session_request(
                 profile,
-                &directory,
                 SessionOwnership {
                     application_id: "bot".into(),
                     reference: format!("dreaming:{round}"),
@@ -121,6 +120,7 @@ impl DreamingService {
                 execution_policy,
             )
             .await?;
+        request.workspace = Some(directory.to_string_lossy().into_owned());
         request.title = Some("Dreaming".into());
         request.description = Some("Organize pending device memories".into());
         let outcome = self

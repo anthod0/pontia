@@ -5,7 +5,6 @@ use pontia_storage_sqlite::repositories::{
 };
 
 use super::SessionCommandService;
-use crate::WorkspaceRecord;
 
 impl SessionCommandService {
     pub(super) async fn ensure_handle_available(
@@ -45,19 +44,5 @@ impl SessionCommandService {
             crate::clients::discard_unbound_runtime(runtime);
         }
         result
-    }
-
-    pub(super) async fn update_session_workspace(
-        &self,
-        session_id: &str,
-        workspace: Option<&WorkspaceRecord>,
-    ) -> Result<()> {
-        SqliteSessionRepository::new(self.pool.clone())
-            .update_session_workspace(
-                session_id,
-                workspace.map(|workspace| workspace.canonical_path.as_str()),
-                workspace.map(|workspace| workspace.workspace_id.as_str()),
-            )
-            .await
     }
 }

@@ -53,6 +53,8 @@ struct Client {
     >,
     tokens: Mutex<std::collections::HashMap<String, String>>,
     policy_support: Mutex<PolicySupport>,
+    launch_directories: Mutex<std::collections::HashMap<String, String>>,
+    fail_next_launch: Mutex<bool>,
     launched_policies:
         Mutex<std::collections::HashMap<String, pontia_core::execution_policy::ExecutionPolicy>>,
     interaction_responses: Mutex<Vec<(String, String, String)>>,
@@ -125,6 +127,15 @@ impl ClientLauncher for Client {
             request.runtime.session_id.clone(),
             request.runtime.execution_policy.clone(),
         );
+        self.launch_directories.lock().unwrap().insert(
+            request.runtime.session_id.clone(),
+            request.runtime.workspace.clone().unwrap(),
+        );
+        if std::mem::take(&mut *self.fail_next_launch.lock().unwrap()) {
+            return Err(Error::CapabilityUnavailable(
+                "injected launch failure".into(),
+            ));
+        }
         let gate = self.launch_gate.lock().unwrap().take();
         if let Some((entered, release)) = gate {
             entered.send(()).unwrap();
@@ -643,6 +654,7 @@ async fn helper(service: &HelperService, session: &str) -> String {
         .execute(HelperRequest {
             session_id: session.into(),
             command: HelperCommand::Create(CreateHelper {
+                workspace_id: None,
                 profile_id: None,
                 profile_version: None,
                 description: "assigned work".into(),
@@ -900,6 +912,7 @@ async fn helper_remains_addressable_when_first_delivery_fails_or_is_unknown() {
             .execute(HelperRequest {
                 session_id: session.clone(),
                 command: HelperCommand::Create(CreateHelper {
+                    workspace_id: None,
                     profile_id: None,
                     profile_version: None,
                     description: task.into(),
@@ -1136,6 +1149,7 @@ async fn helper_launch_pins_the_selected_profile_and_keeps_the_initialized_model
         .execute(HelperRequest {
             session_id: session.clone(),
             command: HelperCommand::Create(CreateHelper {
+                workspace_id: None,
                 profile_id: Some("specialist".into()),
                 profile_version: Some("2".into()),
                 description: "specialized task".into(),
@@ -1188,3 +1202,6 @@ mod dreaming;
 
 #[path = "conversation/generation.rs"]
 mod generation;
+
+#[path = "conversation/workspaces.rs"]
+mod workspaces;

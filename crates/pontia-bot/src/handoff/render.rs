@@ -81,8 +81,9 @@ pub(super) fn document(
     }
     for helper in helpers {
         output.push_str(&data(&format!(
-            "Session ID: {}\nState: {}\nDescription: {}",
+            "Session ID: {}\nWorkspace ID: {}\nState: {}\nDescription: {}",
             helper.session_id,
+            helper.workspace_id.as_deref().unwrap_or("unbound"),
             helper.state,
             helper.description.as_deref().unwrap_or("None yet."),
         )));

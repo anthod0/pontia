@@ -14,6 +14,7 @@ pub struct HelperContext {
     pub bot_id: String,
     pub session_id: String,
     pub role: BotRole,
+    pub workspace_id: Option<String>,
     pub description: Option<String>,
     pub state: SessionState,
 }

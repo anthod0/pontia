@@ -178,7 +178,6 @@ impl ConversationService {
     pub(crate) async fn profile_session_request(
         &self,
         profile: pontia_agent_control::ProfileLaunchDefaults,
-        directory: &std::path::Path,
         ownership: SessionOwnership,
         instructions: &str,
         execution_policy: pontia_core::execution_policy::ExecutionPolicy,
@@ -201,7 +200,7 @@ impl ConversationService {
             client_type: profile.client_type,
             title: None,
             description: None,
-            workspace: Some(directory.to_string_lossy().into_owned()),
+            workspace: None,
             workspace_id: None,
             handle: None,
             role: None,

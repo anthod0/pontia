@@ -270,7 +270,7 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
         if matches!(action, "create" | "retrieve" | "send" | "reply") {
             args.extend(["--message", "new\nrequirements"]);
         }
-        if action == "retrieve" {
+        if matches!(action, "retrieve" | "create") {
             args.extend(["--workspace-id", "project", "--profile-version", "2"]);
         }
         if action == "create" {
@@ -291,7 +291,7 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
         if matches!(action, "create" | "retrieve" | "send" | "reply") {
             assert_eq!(request["command"]["input"]["message"], "new\nrequirements");
         }
-        if action == "retrieve" {
+        if matches!(action, "retrieve" | "create") {
             assert_eq!(request["command"]["input"]["workspace_id"], "project");
             assert_eq!(request["command"]["input"]["profile_version"], "2");
         }

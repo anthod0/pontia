@@ -129,6 +129,12 @@ impl SessionCommandService {
         let (runtime_directory, workspace_record) =
             if let Some(workspace_id) = request.workspace_id.as_deref() {
                 let workspace = require_active_workspace_id(&self.pool, workspace_id).await?;
+                if !std::path::Path::new(&workspace.canonical_path).is_dir() {
+                    return Err(Error::StateConflict(format!(
+                        "Workspace directory {} is unavailable",
+                        workspace.canonical_path
+                    )));
+                }
                 (workspace.canonical_path.clone(), Some(workspace))
             } else if let Some(directory) = request.workspace.as_deref() {
                 resolve_session_directory(&self.pool, &self.pontia_home, directory).await?
@@ -167,6 +173,7 @@ impl SessionCommandService {
                 PontiaEventType::SessionCreated,
                 json!({
                     "workspace": runtime_workspace,
+                    "workspace_id": workspace_record.as_ref().map(|record| &record.workspace_id),
                     "title": request.title,
                     "handle": request.handle,
                     "role": request.role,
@@ -225,10 +232,6 @@ impl SessionCommandService {
         };
         let Some(runtime) = runtime else {
             drop(initial_slot);
-            if let Some(workspace_record) = &workspace_record {
-                self.update_session_workspace(&session_id, Some(workspace_record))
-                    .await?;
-            }
             if let Some(task) = request.initial_task {
                 self.inbox
                     .submit_message(
@@ -253,10 +256,6 @@ impl SessionCommandService {
             adapter.spec.adapter.control_runtime_role,
         )
         .await?;
-        if let Some(workspace_record) = &workspace_record {
-            self.update_session_workspace(&session_id, Some(workspace_record))
-                .await?;
-        }
 
         ingest
             .ingest_pontia_event(PontiaEvent::new(

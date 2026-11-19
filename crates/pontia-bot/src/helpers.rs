@@ -63,6 +63,7 @@ pub struct RetrieveMemories {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateHelper {
+    pub workspace_id: Option<String>,
     pub profile_id: Option<String>,
     pub profile_version: Option<String>,
     pub description: String,
@@ -137,6 +138,7 @@ impl HelperService {
                     &bot.bot_id,
                     &request.session_id,
                     CreateHelper {
+                        workspace_id: None,
                         profile_id: Some(BotService::retrieval_profile_id(&bot.bot_id)),
                         profile_version: input.profile_version,
                         description: input.message.clone(),
@@ -241,15 +243,8 @@ impl HelperService {
             ));
         }
         let execution_policy = self.helper_execution_policy(&profile.client_type)?;
-        let reference = format!("helper:{bot_id}:{}", uuid::Uuid::now_v7());
-        let directory = self
-            .conversation
-            .records()
-            .directory(bot_id)
-            .await?
-            .join("helpers")
-            .join(reference.rsplit(':').next().unwrap());
-        tokio::fs::create_dir_all(&directory).await?;
+        let launch = uuid::Uuid::now_v7();
+        let reference = format!("helper:{bot_id}:{launch}");
         let ownership = SessionOwnership {
             application_id: "bot".into(),
             reference: reference.clone(),
@@ -258,12 +253,24 @@ impl HelperService {
             .conversation
             .profile_session_request(
                 profile,
-                &directory,
                 ownership.clone(),
                 include_str!("helpers/instructions.md"),
                 execution_policy,
             )
             .await?;
+        if let Some(id) = input.workspace_id {
+            request.workspace_id = Some(id);
+        } else {
+            let directory = self
+                .conversation
+                .records()
+                .directory(bot_id)
+                .await?
+                .join("helpers")
+                .join(launch.to_string());
+            tokio::fs::create_dir_all(&directory).await?;
+            request.workspace = Some(directory.to_string_lossy().into_owned());
+        }
         request.description = Some(input.description);
         // Save the unique creation reference first so recovery can find a Session even if launch fails.
         sqlx::query("INSERT INTO bot_helpers(reference, bot_id) VALUES (?, ?)")
@@ -283,6 +290,12 @@ impl HelperService {
             .await?
         {
             associate(&self.control.db(), &reference, &session).await?;
+        } else if outcome.is_err() {
+            // Validation can reject a launch before it creates any Session to recover.
+            sqlx::query("DELETE FROM bot_helpers WHERE reference = ? AND session_id IS NULL")
+                .bind(&reference)
+                .execute(&self.control.db())
+                .await?;
         }
         let outcome = outcome?;
         let session_id = outcome
@@ -380,6 +393,7 @@ pub(crate) async fn contexts(control: &AgentControl, bot_id: &str) -> Result<Vec
             bot_id: bot_id.into(),
             session_id: id,
             role: helper_role(bot_id, &session),
+            workspace_id: session.workspace_id,
             description: session.description,
             state: session
                 .state
