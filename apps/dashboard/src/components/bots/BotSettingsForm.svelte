@@ -80,10 +80,12 @@
       <Label for={`${id}-name`}>{$t('bots.name')}</Label>
       <Input id={`${id}-name`} bind:value={name} required />
     </div>
-    <div class="grid gap-2">
-      <Label for={`${id}-description`}>{$t('bots.description')}</Label>
-      <Textarea id={`${id}-description`} bind:value={description} rows={2} />
-    </div>
+    {#if bot}
+      <div class="grid gap-2">
+        <Label for={`${id}-description`}>{$t('bots.description')}</Label>
+        <Textarea id={`${id}-description`} bind:value={description} rows={2} />
+      </div>
+    {/if}
   {/if}
   <div class="grid gap-2">
     <Label for={`${id}-client`}>{$t('clients.agentClient')}</Label>
