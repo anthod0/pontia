@@ -29,8 +29,10 @@
   let creationOptionId = readStoredValue(LAST_NEW_CHAT_CLIENT_STORAGE_KEY) ?? defaultClientType
   let model = ''
   let modelOptionId = creationOptionId
-  $: if (creationOptionId !== modelOptionId) {
+  let modelWorkspaceId = createWorkspaceId
+  $: if (creationOptionId !== modelOptionId || createWorkspaceId !== modelWorkspaceId) {
     modelOptionId = creationOptionId
+    modelWorkspaceId = createWorkspaceId
     model = ''
   }
   let creating = false

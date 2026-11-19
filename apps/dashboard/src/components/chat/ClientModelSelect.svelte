@@ -9,10 +9,11 @@
   import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
 
-  let { id, client, value = $bindable(''), available = $bindable(false), allowDefault = false, disabled = false, class: className = 'w-full justify-between' }: {
+  let { id, client, workspaceId, value = $bindable(''), available = $bindable(false), allowDefault = false, disabled = false, class: className = 'w-full justify-between' }: {
     id: string
     class?: string
     client: Pick<AgentClientView, "name" | "client_type" | "client_key">
+    workspaceId?: string
     value?: string
     available?: boolean
     allowDefault?: boolean
@@ -22,9 +23,10 @@
   let open = $state(false)
   const catalog = createQuery(
     () => ({
-      queryKey: ['agent-client-models', client.client_type, client.client_key],
-      queryFn: ({ signal }) => device.api.listAgentClientModels(client.client_type, client.client_key, signal),
+      queryKey: ['agent-client-models', client.client_type, client.client_key, workspaceId],
+      queryFn: ({ signal }) => device.api.listAgentClientModels(client.client_type, client.client_key, signal, workspaceId),
       retry: false,
+      refetchOnWindowFocus: false,
     }),
     () => device.queryClient,
   )

@@ -99,9 +99,11 @@ export function createApi(device: DeviceRuntime) {
     clientType: string,
     clientKey: string,
     signal?: AbortSignal,
+    workspaceId?: string,
   ): Promise<AgentClientModels> {
+    const query = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
     return request(
-      `/agent-clients/${encodeURIComponent(clientType)}/${encodeURIComponent(clientKey)}/models`,
+      `/agent-clients/${encodeURIComponent(clientType)}/${encodeURIComponent(clientKey)}/models${query}`,
       { signal },
     );
   }
