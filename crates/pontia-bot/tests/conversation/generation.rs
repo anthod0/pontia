@@ -2,46 +2,6 @@ use super::*;
 use pontia_bot::conversation::GenerationLimits;
 use time::{Duration, OffsetDateTime};
 
-struct ExitReporter(tokio::task::JoinHandle<()>);
-impl Drop for ExitReporter {
-    fn drop(&mut self) {
-        self.0.abort();
-    }
-}
-
-fn report_exits(control: &AgentControl) -> ExitReporter {
-    let control = control.clone();
-    ExitReporter(tokio::spawn(async move {
-        loop {
-            for session in control.queries().list_owned_sessions("bot").await.unwrap() {
-                let snapshot = control
-                    .queries()
-                    .session_snapshot(&session)
-                    .await
-                    .unwrap()
-                    .unwrap();
-                if snapshot.state != "exited" {
-                    for runtime in &snapshot.runtimes {
-                        if !GenericRuntimeManager.is_alive(&runtime.runtime_id) {
-                            control
-                                .event_ingest_service()
-                                .report_client_fact(
-                                    &session,
-                                    Some(&runtime.runtime_id),
-                                    EventType::SessionExited,
-                                    json!({"reason":"test runtime exited"}),
-                                )
-                                .await
-                                .unwrap();
-                        }
-                    }
-                }
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-    }))
-}
-
 async fn usage(control: &AgentControl, session: &str, used: u64, window: u64) {
     let snapshot = control
         .queries()

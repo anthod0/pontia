@@ -434,6 +434,91 @@ async fn first_inbox_message_is_delivered_before_thread_history_exists() {
 }
 
 #[tokio::test]
+async fn native_user_message_recovers_a_lost_first_input_receipt() {
+    let fixture = Fixture::new().await;
+    let outcome = fixture
+        .app
+        .inbox_commands()
+        .submit_message(
+            &fixture.session,
+            serde_json::from_value(json!({"input":"hi"})).unwrap(),
+        )
+        .await
+        .unwrap();
+    let message = outcome.data["inbox_message"]["message_id"]
+        .as_str()
+        .unwrap();
+    // Persist exactly the uncertainty left when the native acknowledgement is lost.
+    sqlx::query(
+        "UPDATE inbox_messages SET state='unknown',turn_id=NULL,metadata='{}' WHERE message_id=?",
+    )
+    .bind(message)
+    .execute(&fixture.app.db())
+    .await
+    .unwrap();
+    let service = super::CodexService::new(fixture.app.event_ingest_service());
+    let native = json!({"id":"native-turn","status":"completed","items":[{
+        "id":"user-item","clientId":message,"type":"userMessage","content":[{"type":"text","text":"hi"}]
+    }]});
+    service
+        .turn_fact(&fixture.session, &native, "snapshot")
+        .await
+        .unwrap();
+    let snapshot = fixture
+        .app
+        .queries()
+        .session_snapshot(&fixture.session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!snapshot.has_unsettled_input);
+    assert_eq!(
+        snapshot.inbox[0].turn_id.as_deref(),
+        Some(snapshot.turns[0].turn_id.as_str())
+    );
+    assert_eq!(snapshot.turns[0].state, "completed");
+    assert_eq!(fixture.inputs.lock().await.len(), 1);
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn rejected_thread_start_allows_the_unbound_session_to_exit() {
+    let fixture = Fixture::new().await;
+    fixture.rpc_errors.lock().await.insert(
+        "thread/start".into(),
+        json!({"code":-32600,"message":"startup rejected"}),
+    );
+    let outcome = fixture
+        .app
+        .inbox_commands()
+        .submit_message(
+            &fixture.session,
+            serde_json::from_value(json!({"input":"hi"})).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(outcome.data["inbox_message"]["state"], "failed");
+    fixture
+        .app
+        .session_commands()
+        .terminate_session(&fixture.session)
+        .await
+        .unwrap();
+    assert_eq!(
+        fixture
+            .app
+            .queries()
+            .get_session(&fixture.session)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "exited"
+    );
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
 async fn failed_first_input_can_be_retried_on_the_same_unmaterialized_thread_after_resume() {
     let fixture = Fixture::new().await;
     fixture.rpc_errors.lock().await.insert(

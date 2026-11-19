@@ -12,7 +12,16 @@ impl BotService {
         let root = self.home.join("bot");
         let directory = root.join(&bot.bot_id);
         tokio::task::spawn_blocking(move || -> Result<()> {
-            std::fs::create_dir_all(directory)?;
+            let pi = directory.join(".pi");
+            std::fs::create_dir_all(&pi)?;
+            // Temporary until Pi exposes steeringMode as a CLI launch option.
+            let settings = tempfile::NamedTempFile::new_in(&pi)?;
+            serde_json::to_writer(settings.as_file(), &json!({"steeringMode": "all"}))?;
+            match settings.persist_noclobber(pi.join("settings.json")) {
+                Ok(_) => (),
+                Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => (),
+                Err(error) => return Err(error.error.into()),
+            }
             match std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)

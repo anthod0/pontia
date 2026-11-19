@@ -152,7 +152,6 @@ export function createPontiaPiExtension(
   dependencies: PontiaPiExtensionDependencies = {},
 ): void {
   const sourceEnv = dependencies.env ?? process.env;
-  const managedSession = sourceEnv.PONTIA_PI_MANAGED_SESSION === "1";
   delete sourceEnv.PONTIA_SESSION_ID;
   delete sourceEnv.PONTIA_RUNTIME_INSTANCE_ID;
   if (!pontiaHomeFromEnv(sourceEnv)) return;
@@ -200,11 +199,8 @@ export function createPontiaPiExtension(
     submission: ControlInput;
     sessionContext: SessionContext;
     consumed: boolean;
-    started?: () => void;
   }>();
-  let queuedControlInput:
-    | { id: string; submission: ControlInput; started?: () => void }
-    | undefined;
+  let queuedControlInput: { id: string; submission: ControlInput } | undefined;
 
   const modelId = (model: { provider: string; id: string }) => `${model.provider}/${model.id}`;
 
@@ -220,12 +216,11 @@ export function createPontiaPiExtension(
     if (!reportAccepted(result)) throw new Error("Pi model observation was not accepted");
   }
 
-  function sendControlInput(submission: ControlInput, started?: () => void): void {
+  function sendControlInput(submission: ControlInput): void {
     if (!boundSessionContext) throw new Error("Pi session is not bound");
     try {
-      directInput.run(
-        { submission, started, sessionContext: boundSessionContext, consumed: false },
-        () => pi.sendUserMessage(submission.input),
+      directInput.run({ submission, sessionContext: boundSessionContext, consumed: false }, () =>
+        pi.sendUserMessage(submission.input),
       );
     } catch (error) {
       throw new RpcError(
@@ -296,14 +291,7 @@ export function createPontiaPiExtension(
             );
           }
           try {
-            if (managedSession) {
-              pi.sendMessage(
-                { customType: "pontia-input", content: submission.input, display: true },
-                { deliverAs: "steer", triggerTurn: true },
-              );
-            } else {
-              pi.sendUserMessage(submission.input, { deliverAs: "steer" });
-            }
+            pi.sendUserMessage(submission.input, { deliverAs: "steer" });
           } catch (error) {
             throw new RpcError(
               -32007,
@@ -318,29 +306,6 @@ export function createPontiaPiExtension(
         if (!idle && !activeTurn?.ended)
           throw new RpcError(-32010, "Pi is busy; input was not submitted");
         const id = randomUUID();
-        if (managedSession) {
-          return new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              if (queuedControlInput?.id === id) queuedControlInput = undefined;
-              reject(new RpcError(-32007, "Pi did not confirm starting the submitted input"));
-            }, 4000);
-            queuedControlInput = {
-              id,
-              submission,
-              started: () => {
-                clearTimeout(timeout);
-                resolve();
-              },
-            };
-            try {
-              if (idle) dispatchQueuedInput();
-            } catch (error) {
-              clearTimeout(timeout);
-              queuedControlInput = undefined;
-              reject(new RpcError(-32007, String(error)));
-            }
-          });
-        }
         queuedControlInput = { id, submission };
         if (idle) dispatchQueuedInput();
       },
@@ -415,9 +380,9 @@ export function createPontiaPiExtension(
     description: "Deliver a pending Pontia input",
     handler: async (args) => {
       if (!queuedControlInput || args.trim() !== queuedControlInput.id) return;
-      const { submission, started } = queuedControlInput;
+      const { submission } = queuedControlInput;
       queuedControlInput = undefined;
-      sendControlInput(submission, started);
+      sendControlInput(submission);
     },
   });
 
@@ -554,12 +519,10 @@ export function createPontiaPiExtension(
           ? hookSessionDetails
           : deferredManualSessionDetails;
         if (!sessionDetails) return;
-        const workspaceActive =
-          managedSession ||
-          (await isActiveRegisteredWorkspace(
-            await registrationConnection(),
-            sessionDetails.clientCwd,
-          ));
+        const workspaceActive = await isActiveRegisteredWorkspace(
+          await registrationConnection(),
+          sessionDetails.clientCwd,
+        );
         if (!workspaceActive) {
           await closeControlSocket();
           reportingDisabled = true;
@@ -661,7 +624,6 @@ export function createPontiaPiExtension(
           ? undefined
           : await loadExistingSessionContext(await registrationConnection(), sessionDetails);
       const workspaceActive =
-        managedSession ||
         existingSession !== undefined ||
         (await isActiveRegisteredWorkspace(
           await registrationConnection(),
@@ -880,7 +842,6 @@ export function createPontiaPiExtension(
         ended: false,
         awaitingPromptMessage: prompted,
       };
-      if (submission) dispatch?.started?.();
     } catch (error) {
       if (!boundSessionContext) await closeControlSocket();
       pendingPrompt = undefined;

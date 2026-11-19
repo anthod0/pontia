@@ -85,21 +85,6 @@ impl ClientConfiguration for Client {
 }
 
 impl ClientLauncher for Client {
-    fn supports_application_launch(&self) -> bool {
-        true
-    }
-
-    fn application_command(
-        &self,
-        _: &Value,
-        settings: &pontia_agent_control::client_contract::ApplicationLaunchSettings,
-    ) -> Result<String> {
-        if settings.model != MODEL {
-            return Err(Error::CapabilityUnavailable("model unavailable".into()));
-        }
-        Ok("in-process".into())
-    }
-
     fn validate_resume(&self, _: &str, _: Option<&Path>) -> Result<()> {
         Ok(())
     }
@@ -114,9 +99,7 @@ impl ClientLauncher for Client {
             entered.send(()).unwrap();
             release.recv().unwrap();
         }
-        if request.runtime.start_command.is_none()
-            && request.runtime.model.as_deref() != Some(MODEL)
-        {
+        if request.runtime.model.as_deref() != Some(MODEL) {
             return Err(Error::CapabilityUnavailable("model unavailable".into()));
         }
         self.tokens.lock().unwrap().insert(
@@ -402,13 +385,67 @@ async fn instructions(control: &AgentControl, session: &str) -> String {
         .to_owned()
 }
 
-async fn fixture() -> (
+struct ExitReporter(tokio::task::JoinHandle<()>);
+impl Drop for ExitReporter {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+fn report_exits(control: &AgentControl) -> ExitReporter {
+    let control = control.clone();
+    ExitReporter(tokio::spawn(async move {
+        loop {
+            for session in control.queries().list_owned_sessions("bot").await.unwrap() {
+                let snapshot = control
+                    .queries()
+                    .session_snapshot(&session)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                if snapshot.state != "exited" {
+                    for runtime in &snapshot.runtimes {
+                        if !GenericRuntimeManager.is_alive(&runtime.runtime_id) {
+                            control
+                                .event_ingest_service()
+                                .report_client_fact(
+                                    &session,
+                                    Some(&runtime.runtime_id),
+                                    EventType::SessionExited,
+                                    json!({"reason":"test runtime exited"}),
+                                )
+                                .await
+                                .unwrap();
+                        }
+                    }
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }))
+}
+
+const BOT_CLIENT: pontia_agent_control::client_contract::AgentClientSpec =
+    pontia_agent_control::client_contract::AgentClientSpec {
+        capabilities: CAPABILITIES,
+        ..pontia_agent_control::client_contract::TEST_SPEC
+    };
+
+type Fixture = (
     tempfile::TempDir,
     sqlx::SqlitePool,
     Arc<Client>,
     AgentControl,
     ConversationService,
-) {
+);
+
+async fn fixture() -> Fixture {
+    fixture_with_client(&BOT_CLIENT).await
+}
+
+async fn fixture_with_client(
+    spec: &'static pontia_agent_control::client_contract::AgentClientSpec,
+) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite(&format!(
         "sqlite://{}",
@@ -421,12 +458,7 @@ async fn fixture() -> (
         .execute(&pool).await.unwrap();
     let client = Arc::new(Client::default());
     let mut registration = test_registration();
-    const BOT_CLIENT: pontia_agent_control::client_contract::AgentClientSpec =
-        pontia_agent_control::client_contract::AgentClientSpec {
-            capabilities: CAPABILITIES,
-            ..pontia_agent_control::client_contract::TEST_SPEC
-        };
-    registration.spec = &BOT_CLIENT;
+    registration.spec = spec;
     registration.configuration = Some(client.clone());
     registration.launcher = Some(client.clone());
     registration.in_process = Some(client.clone());
@@ -717,6 +749,44 @@ async fn helpers_are_isolated_reusable_and_reply_to_the_current_bot() {
 }
 
 #[tokio::test]
+async fn helper_remains_addressable_when_first_delivery_fails_or_is_unknown() {
+    let (_root, _pool, client, control, conversation) = fixture().await;
+    let (bot_id, session) = bot(&conversation).await;
+    let helpers = HelperService::new(control, conversation);
+    for (task, status) in [("reject once", "failed"), ("uncertain once", "unknown")] {
+        let response = helpers
+            .execute(HelperRequest {
+                session_id: session.clone(),
+                command: HelperCommand::Create(CreateHelper {
+                    profile_id: None,
+                    profile_version: None,
+                    description: task.into(),
+                    message: task.into(),
+                }),
+            })
+            .await
+            .unwrap();
+        assert_eq!(response["delivery"]["status"], status);
+        let id = response["session_id"].as_str().unwrap();
+        assert!(
+            helpers
+                .list(&bot_id)
+                .await
+                .unwrap()
+                .iter()
+                .any(|helper| helper.session_id == id)
+        );
+        let inputs = client.inputs.lock().unwrap();
+        let mut delivered = inputs.iter().filter(|input| input.session_id == id);
+        assert_eq!(
+            delivered.next().unwrap().input,
+            format!("Source: Bot\nSession: {session}\n\n{task}")
+        );
+        assert!(delivered.next().is_none());
+    }
+}
+
+#[tokio::test]
 async fn helper_delivery_results_are_not_retried_and_failed_reports_survive_restart() {
     let (root, pool, client, control, conversation) = fixture().await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
@@ -933,6 +1003,14 @@ async fn helper_launch_pins_the_selected_profile_and_keeps_the_initialized_model
         .await
         .unwrap();
     let target = response["session_id"].as_str().unwrap();
+    let binding = instructions(&control, target).await;
+    assert_eq!(binding.matches("Review only").count(), 1);
+    assert_eq!(
+        binding
+            .matches(include_str!("../src/helpers/instructions.md"))
+            .count(),
+        1
+    );
     request.version = "3".into();
     request.default_model = Some("missing/model".into());
     profiles

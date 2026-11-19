@@ -2,8 +2,8 @@ mod notifications;
 pub(crate) use notifications::seed_workspaces;
 
 use pontia_agent_control::{
-    AgentControl, AgentProfileService, CreateSessionRequest, SessionMessagesQuery,
-    SessionOwnership, SessionView, TurnTimelineService, client_contract::ApplicationLaunchSettings,
+    AgentControl, AgentProfileService, SessionMessagesQuery, SessionOwnership, SessionView,
+    TurnTimelineService,
 };
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -13,9 +13,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::{
-    conversation::ConversationService,
-    handoff::HelperContext,
-    identity::{BotRole, TOOL_TOKEN_ENV},
+    conversation::ConversationService, handoff::HelperContext, identity::BotRole,
     records::BotService,
 };
 
@@ -213,14 +211,16 @@ impl HelperService {
             .with_clients(self.control.clients())
             .launch_defaults(&profile_id, input.profile_version.as_deref())
             .await?;
-        if !self.conversation.supports_client(&profile.client_type) {
+        if !self
+            .control
+            .clients()
+            .spec(&profile.client_type)
+            .is_some_and(|spec| spec.capabilities.steer)
+        {
             return Err(Error::CapabilityUnavailable(
                 "Client cannot run a helper Session".into(),
             ));
         }
-        let execution_policy = self
-            .conversation
-            .restricted_execution_policy(&profile.client_type)?;
         let reference = format!("helper:{bot_id}:{}", uuid::Uuid::now_v7());
         let directory = self
             .conversation
@@ -230,51 +230,30 @@ impl HelperService {
             .join("helpers")
             .join(reference.rsplit(':').next().unwrap());
         tokio::fs::create_dir_all(&directory).await?;
-        let instructions_file = directory.join("instructions.md");
-        tokio::fs::write(&instructions_file, include_str!("helpers/instructions.md")).await?;
+        let ownership = SessionOwnership {
+            application_id: "bot".into(),
+            reference: reference.clone(),
+        };
+        let mut request = self
+            .conversation
+            .profile_session_request(
+                profile,
+                &directory,
+                ownership.clone(),
+                include_str!("helpers/instructions.md"),
+            )
+            .await?;
+        request.description = Some(input.description);
         // Save the unique creation reference first so recovery can find a Session even if launch fails.
         sqlx::query("INSERT INTO bot_helpers(reference, bot_id) VALUES (?, ?)")
             .bind(&reference)
             .bind(bot_id)
             .execute(&self.control.db())
             .await?;
-        let ownership = SessionOwnership {
-            application_id: "bot".into(),
-            reference: reference.clone(),
-        };
         let outcome = self
             .control
             .session_commands()
-            .create_application_session(
-                CreateSessionRequest {
-                    execution_policy,
-                    model: None,
-                    client_type: profile.client_type,
-                    title: None,
-                    description: Some(input.description),
-                    workspace: None,
-                    workspace_id: None,
-                    handle: None,
-                    role: None,
-                    execution_profile_id: Some(profile.profile_id),
-                    execution_profile_version: Some(profile.version),
-                    additional_instructions: None,
-                    metadata: json!({}),
-                    initial_task: None,
-                    runtime_environment: [(
-                        TOOL_TOKEN_ENV.into(),
-                        uuid::Uuid::new_v4().to_string(),
-                    )]
-                    .into(),
-                    ownership: Some(ownership.clone()),
-                },
-                ApplicationLaunchSettings {
-                    client_key: profile.client_key,
-                    directory,
-                    model: profile.model,
-                    instructions_file,
-                },
-            )
+            .create_session(request)
             .await;
         if let Some(session) = self
             .control

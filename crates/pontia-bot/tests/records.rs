@@ -167,7 +167,10 @@ async fn bots_have_independent_configuration_directories_and_current_sessions() 
     assert_eq!((&b.client_key, &b.model), (&"b".into(), &"model-b".into()));
     assert!(a.current_session_id.is_none());
     let directory = f.bots.directory(&a.bot_id).await.unwrap();
-    assert!(directory.is_dir());
+    let settings: Value =
+        serde_json::from_slice(&std::fs::read(directory.join(".pi/settings.json")).unwrap())
+            .unwrap();
+    assert_eq!(settings["steeringMode"], "all");
     assert!(f.bots.directory(&b.bot_id).await.unwrap().is_dir());
     assert_ne!(directory, f.bots.directory(&b.bot_id).await.unwrap());
     std::fs::write(directory.join("notes.txt"), "keep me").unwrap();

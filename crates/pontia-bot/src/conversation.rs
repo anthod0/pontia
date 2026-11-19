@@ -139,19 +139,6 @@ impl ConversationService {
         &self.records
     }
 
-    pub fn supports_client(&self, client_type: &str) -> bool {
-        self.control
-            .clients()
-            .get(client_type)
-            .is_some_and(|entry| {
-                entry.spec.capabilities.steer
-                    && entry
-                        .launcher
-                        .as_ref()
-                        .is_some_and(|launcher| launcher.supports_application_launch())
-            })
-    }
-
     pub(crate) fn restricted_execution_policy(
         &self,
         client_type: &str,
@@ -178,6 +165,48 @@ impl ConversationService {
                             && config.restricted_execution_policy().is_some()
                     })
             })
+    }
+
+    pub(crate) async fn profile_session_request(
+        &self,
+        profile: pontia_agent_control::ProfileLaunchDefaults,
+        directory: &std::path::Path,
+        ownership: SessionOwnership,
+        instructions: &str,
+    ) -> Result<CreateSessionRequest> {
+        let clients = self.control.clients();
+        if !clients.get(&profile.client_type).is_some_and(|entry| {
+            entry.spec.capabilities.accept_task
+                && entry
+                    .profile
+                    .as_ref()
+                    .is_some_and(|policy| policy.supports_explicit())
+        }) {
+            return Err(Error::CapabilityUnavailable(
+                "Client cannot run tasks with an explicit Profile".into(),
+            ));
+        }
+        let metadata = self
+            .session_metadata(&profile.client_type, &profile.client_key)
+            .await?;
+        Ok(CreateSessionRequest {
+            execution_policy: self.restricted_execution_policy(&profile.client_type)?,
+            model: Some(profile.model),
+            client_type: profile.client_type,
+            title: None,
+            description: None,
+            workspace: Some(directory.to_string_lossy().into_owned()),
+            workspace_id: None,
+            handle: None,
+            role: None,
+            execution_profile_id: Some(profile.profile_id),
+            execution_profile_version: Some(profile.version),
+            additional_instructions: Some(instructions.into()),
+            metadata,
+            initial_task: None,
+            runtime_environment: [(TOOL_TOKEN_ENV.into(), uuid::Uuid::new_v4().to_string())].into(),
+            ownership: Some(ownership),
+        })
     }
 
     async fn session_metadata(

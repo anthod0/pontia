@@ -171,9 +171,6 @@ impl CodexService {
                 (snapshot["thread"].clone(), turns)
             }
             None => {
-                runtime
-                    .set_subscription(session_id, SubscriptionState::Reconciling)
-                    .await;
                 let (cwd, model): (Option<String>, Option<String>) = sqlx::query_as("SELECT COALESCE(workspace_ref,json_extract(metadata,'$.codex_launch_cwd')),json_extract(metadata,'$.codex_launch_model') FROM sessions WHERE session_id=?")
                     .bind(session_id).fetch_one(&self.pool).await?;
                 let cwd =
@@ -183,7 +180,18 @@ impl CodexService {
                 if let Some(model) = model {
                     params["model"] = model.into();
                 }
-                let response = connection.call("thread/start", params).await?;
+                runtime
+                    .set_subscription(session_id, SubscriptionState::Reconciling)
+                    .await;
+                let response = match connection.call("thread/start", params).await {
+                    Ok(response) => response,
+                    Err(error) => {
+                        if !matches!(error, Error::ControlUnknown(_)) {
+                            runtime.clear_subscription(session_id).await;
+                        }
+                        return Err(error);
+                    }
+                };
                 runtime.current_guard().await?;
                 let thread = response["thread"].clone();
                 self.bind(session_id, &runtime, &thread).await?;

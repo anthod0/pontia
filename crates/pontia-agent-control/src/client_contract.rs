@@ -17,8 +17,7 @@ mod session;
 mod setup;
 pub use channel::{ClientControlChannel, ClientControlOperation};
 pub use data::{
-    ApplicationLaunchSettings, BranchTargetRequest, ClientData, ClientLaunchRequest,
-    ClientLauncher, NativeEventEvidence,
+    BranchTargetRequest, ClientData, ClientLaunchRequest, ClientLauncher, NativeEventEvidence,
 };
 pub use service::{ClientService, ClientServicePhase};
 pub use session::{

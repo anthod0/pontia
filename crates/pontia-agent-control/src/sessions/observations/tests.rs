@@ -170,6 +170,7 @@ async fn input_receipts_link_facts_in_either_order_without_creating_turns() {
                 &fixture.session,
                 Some("runtime"),
                 NativeTurnObservation {
+                    inbox_message_id: None,
                     native_turn_id: id.into(),
                     input_summary: Some("input".into()),
                     output_summary: None,
@@ -430,6 +431,7 @@ async fn obsolete_ready_cannot_resume_an_exited_session() {
 async fn obsolete_turn_observation_and_receipt_cannot_link_inbox() {
     let fixture = Fixture::new().await;
     let turn = || NativeTurnObservation {
+        inbox_message_id: None,
         native_turn_id: "native".into(),
         input_summary: None,
         output_summary: None,

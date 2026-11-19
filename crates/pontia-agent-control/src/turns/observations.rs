@@ -11,6 +11,7 @@ pub struct NativeTurnService {
 
 pub struct NativeTurnObservation {
     pub native_turn_id: String,
+    pub inbox_message_id: Option<String>,
     pub input_summary: Option<String>,
     pub output_summary: Option<String>,
     pub terminal: Result<Option<EventType>>,
@@ -40,6 +41,13 @@ impl NativeTurnService {
         .await?;
         let native = &turn.native_turn_id;
         let existing: Option<(String,String)> = sqlx::query_as("SELECT t.turn_id,t.state FROM native_turn_bindings b JOIN turns t ON t.turn_id=b.turn_id WHERE b.session_id=? AND b.client_turn_id=?").bind(session).bind(native).fetch_optional(&self.pool).await?;
+        if let (Some((turn_id, _)), Some(message)) = (&existing, &turn.inbox_message_id) {
+            pontia_storage_sqlite::repositories::inbox::SqliteInboxRepository::new(
+                self.pool.clone(),
+            )
+            .link_started_turn(session, message, turn_id)
+            .await?;
+        }
         if existing.as_ref().is_some_and(|(_, state)| {
             matches!(state.as_str(), "completed" | "failed" | "interrupted")
         }) {
@@ -54,7 +62,7 @@ impl NativeTurnService {
                 .input_summary
                 .as_deref()
                 .or_else(|| dispatch.as_ref().map(|(_, input)| input.as_str()));
-            self.events.report_client_fact(session, runtime_id, EventType::TurnStarted, json!({"native_turn_id":native,"input":{"summary":summary.map(|s| s.chars().take(200).collect::<String>())},"metadata":{"native_turn_id":native,"native_started_at":turn.started_at,"observation":turn.origin,"inbox_message_id":dispatch.map(|(id,_)|id)}})).await?;
+            self.events.report_client_fact(session, runtime_id, EventType::TurnStarted, json!({"native_turn_id":native,"input":{"summary":summary.map(|s| s.chars().take(200).collect::<String>())},"metadata":{"native_turn_id":native,"native_started_at":turn.started_at,"observation":turn.origin,"inbox_message_id":turn.inbox_message_id.or_else(|| dispatch.map(|(id,_)|id))}})).await?;
         }
         crate::inbox::InboxAssociations::new(self.pool.clone(), self.events.clients())
             .link_native_turn(session, native, runtime_id)

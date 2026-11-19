@@ -156,9 +156,8 @@ impl CodexService {
                 return Ok(());
             }
         }
-        let input = items
-            .iter()
-            .find(|item| item["type"] == "userMessage")
+        let user_message = items.iter().find(|item| item["type"] == "userMessage");
+        let input = user_message
             .and_then(|item| item["content"].as_array())
             .map(|parts| {
                 parts
@@ -190,6 +189,9 @@ impl CodexService {
                 None,
                 NativeTurnObservation {
                     native_turn_id: native_id.into(),
+                    inbox_message_id: user_message
+                        .and_then(|item| item["clientId"].as_str())
+                        .map(str::to_owned),
                     input_summary: bounded(input.as_deref()),
                     output_summary: bounded(final_message.and_then(|item| item["text"].as_str())),
                     terminal,

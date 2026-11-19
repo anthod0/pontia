@@ -12,7 +12,6 @@ use super::{
 };
 use crate::{
     PontiaEvent, PontiaEventSource, PontiaEventType,
-    client_contract::ApplicationLaunchSettings,
     workspaces::{require_active_workspace_id, resolve_session_directory},
 };
 
@@ -29,38 +28,7 @@ impl SessionCommandService {
     }
     pub async fn create_session(
         &self,
-        request: CreateSessionRequest,
-    ) -> Result<CreateSessionOutcome> {
-        self.create(request, None).await
-    }
-
-    pub async fn create_application_session(
-        &self,
-        request: CreateSessionRequest,
-        mut settings: ApplicationLaunchSettings,
-    ) -> Result<CreateSessionOutcome> {
-        if request.ownership.is_none()
-            || request.workspace.is_some()
-            || request.workspace_id.is_some()
-            || request.initial_task.is_some()
-        {
-            return Err(Error::Domain(
-                "An application launch requires Session ownership and a dedicated directory".into(),
-            ));
-        }
-        settings.directory = std::fs::canonicalize(settings.directory)?;
-        if !settings.directory.is_dir() {
-            return Err(Error::Domain(
-                "Application Session launch path must be a directory".into(),
-            ));
-        }
-        self.create(request, Some(settings)).await
-    }
-
-    async fn create(
-        &self,
         mut request: CreateSessionRequest,
-        application: Option<ApplicationLaunchSettings>,
     ) -> Result<CreateSessionOutcome> {
         let _creation_guard = if request.ownership.is_some() {
             Some(self.creation_gate.lock().await)
@@ -120,30 +88,9 @@ impl SessionCommandService {
             self.pool.clone(),
             self.clients.registry().clone(),
         );
-        let (configuration, start_command) = if let Some(settings) = &application {
-            let resolved = client_settings
-                .for_creation_key(&request.client_type, &settings.client_key)
-                .await?;
-            let command = self
-                .clients
-                .registry()
-                .get(&request.client_type)
-                .and_then(|entry| entry.launcher.as_ref())
-                .ok_or_else(|| {
-                    Error::CapabilityUnavailable(
-                        "Client cannot launch an application Session".into(),
-                    )
-                })?
-                .application_command(&resolved.unwrap_or(Value::Null), settings)?;
-            (None, Some(command))
-        } else {
-            (
-                client_settings
-                    .for_creation(&request.client_type, &request.metadata)
-                    .await?,
-                None,
-            )
-        };
+        let configuration = client_settings
+            .for_creation(&request.client_type, &request.metadata)
+            .await?;
 
         let profile = crate::AgentProfileService::new(self.pool.clone())
             .with_clients(self.clients.registry().clone())
@@ -179,19 +126,17 @@ impl SessionCommandService {
             )));
         }
 
-        let application_directory = application.as_ref().map(|settings| &settings.directory);
-        let (runtime_directory, workspace_record) = if let Some(directory) = application_directory {
-            (directory.to_string_lossy().into_owned(), None)
-        } else if let Some(workspace_id) = request.workspace_id.as_deref() {
-            let workspace = require_active_workspace_id(&self.pool, workspace_id).await?;
-            (workspace.canonical_path.clone(), Some(workspace))
-        } else if let Some(directory) = request.workspace.as_deref() {
-            resolve_session_directory(&self.pool, &self.pontia_home, directory).await?
-        } else {
-            return Err(Error::Domain(
-                "A Session launch directory is required".into(),
-            ));
-        };
+        let (runtime_directory, workspace_record) =
+            if let Some(workspace_id) = request.workspace_id.as_deref() {
+                let workspace = require_active_workspace_id(&self.pool, workspace_id).await?;
+                (workspace.canonical_path.clone(), Some(workspace))
+            } else if let Some(directory) = request.workspace.as_deref() {
+                resolve_session_directory(&self.pool, &self.pontia_home, directory).await?
+            } else {
+                return Err(Error::Domain(
+                    "A Session launch directory is required".into(),
+                ));
+            };
         if let Some(handle) = handle {
             let workspace = workspace_record.as_ref().ok_or_else(|| {
                 Error::Domain("Session handles require a registered Workspace".into())
@@ -222,7 +167,6 @@ impl SessionCommandService {
                 PontiaEventType::SessionCreated,
                 json!({
                     "workspace": runtime_workspace,
-                    "application_launch_directory": application_directory,
                     "title": request.title,
                     "handle": request.handle,
                     "role": request.role,
@@ -265,7 +209,7 @@ impl SessionCommandService {
                     workspace_name: runtime_workspace_name,
                     handle: request.handle.clone(),
                     role: request.role.clone(),
-                    start_command,
+                    start_command: None,
                     environment: request.runtime_environment.clone(),
                 },
                 configuration,

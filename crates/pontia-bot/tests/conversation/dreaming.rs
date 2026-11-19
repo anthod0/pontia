@@ -104,26 +104,7 @@ async fn one_device_round_survives_failure_and_restart_without_becoming_a_helper
     );
     finish(&control, &first, EventType::TurnFailed).await;
     let restarted = DreamingService::new(control.clone(), conversation.clone());
-    assert!(restarted.start().await.unwrap().is_none());
-    let runtime = control
-        .queries()
-        .session_snapshot(&first)
-        .await
-        .unwrap()
-        .unwrap()
-        .runtimes[0]
-        .runtime_id
-        .clone();
-    control
-        .event_ingest_service()
-        .report_client_fact(
-            &first,
-            Some(&runtime),
-            EventType::SessionExited,
-            json!({"reason":"test client exit"}),
-        )
-        .await
-        .unwrap();
+    let _exits = report_exits(&control);
     let second = restarted.start().await.unwrap().unwrap();
     assert_ne!(first, second);
     assert!(conversation.resolve(&first).await.is_err());
@@ -292,4 +273,81 @@ async fn hourly_runner_waits_skips_overlap_and_does_not_retry_failed_rounds() {
     shutdown.send(true).unwrap();
     task.await.unwrap();
     manual_clock.abort();
+}
+
+#[tokio::test]
+async fn accepted_first_input_keeps_an_idle_round_alive_until_its_native_turn_arrives() {
+    use pontia_agent_control::client_contract::{
+        AgentClientAdapter, AgentClientSpec, TurnLifecycleBehavior,
+    };
+    const NATIVE_TURNS: AgentClientSpec = AgentClientSpec {
+        adapter: AgentClientAdapter {
+            turn_lifecycle: TurnLifecycleBehavior::ClientManagedInteractive,
+            ..BOT_CLIENT.adapter
+        },
+        ..BOT_CLIENT
+    };
+    let (_root, pool, client, control, conversation) = fixture_with_client(&NATIVE_TURNS).await;
+    let (_, bot_session) = bot(&conversation).await;
+    let memories = MemoryCommands::new(MemoryService::new(pool), Arc::new(conversation.clone()));
+    memories.execute(serde_json::from_value(json!({"session_id":bot_session,"command":{"action":"create","input":{"kind":"fact","content":"pending","keywords":["pending"]}}})).unwrap()).await.unwrap();
+    let service = DreamingService::new(control.clone(), conversation.clone());
+    let round = service.start().await.unwrap().unwrap();
+    let snapshot = control
+        .queries()
+        .session_snapshot(&round)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snapshot.state, "idle");
+    assert!(snapshot.turns.is_empty());
+    assert_eq!(snapshot.inbox[0].state, "dispatched");
+    let restarted = DreamingService::new(control.clone(), conversation);
+    let (shutdown, receiver) = tokio::sync::watch::channel(false);
+    let cleanup = tokio::spawn(restarted.clone().run(receiver));
+    assert!(restarted.start().await.unwrap().is_none());
+    assert!(GenericRuntimeManager.is_alive(&snapshot.runtimes[0].runtime_id));
+    assert_eq!(
+        client
+            .inputs
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|input| input.session_id == round)
+            .count(),
+        1
+    );
+    let runtime = &snapshot.runtimes[0].runtime_id;
+    let ingest = control.event_ingest_service();
+    let started = ingest.report_fact(ReportedFact {
+        session_id: round.clone(),
+        turn_id: None,
+        report_key: Some("delayed-start".into()),
+        fact_type: EventType::TurnStarted,
+        data: json!({"runtime_id":runtime,"metadata":{"inbox_message_id":snapshot.inbox[0].message_id}}),
+    }).await.unwrap();
+    let turn = started.turn_id.unwrap();
+    report(&ingest, &round, runtime, &turn, EventType::TurnCompleted).await;
+    let _exits = report_exits(&control);
+    tokio::time::timeout(std::time::Duration::from_secs(8), async {
+        loop {
+            if control
+                .queries()
+                .get_session(&round)
+                .await
+                .unwrap()
+                .unwrap()
+                .state
+                == "exited"
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_ne!(restarted.start().await.unwrap().unwrap(), round);
+    shutdown.send(true).unwrap();
+    cleanup.await.unwrap();
 }

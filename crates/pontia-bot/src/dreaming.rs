@@ -1,8 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use pontia_agent_control::{
-    AgentControl, AgentProfileService, CreateSessionRequest, SessionOwnership,
-    client_contract::ApplicationLaunchSettings,
+    AgentControl, AgentProfileService, SessionOwnership, SubmitInboxMessageRequest,
 };
 use pontia_core::{Error, Result};
 use serde::Deserialize;
@@ -11,7 +10,7 @@ use tokio::sync::{Mutex, watch};
 
 use crate::{
     conversation::ConversationService,
-    identity::{BotIdentity, BotRole, TOOL_TOKEN_ENV},
+    identity::{BotIdentity, BotRole},
     records::DREAMING_PROFILE_ID,
 };
 
@@ -68,14 +67,18 @@ impl DreamingService {
             .with_clients(self.control.clients())
             .launch_defaults(DREAMING_PROFILE_ID, None)
             .await?;
-        if !self.conversation.supports_client(&profile.client_type) {
+        if !self
+            .control
+            .clients()
+            .spec(&profile.client_type)
+            .is_some_and(|spec| {
+                spec.capabilities.report_turn_started && spec.capabilities.report_turn_finished
+            })
+        {
             return Err(Error::CapabilityUnavailable(
                 "Client cannot run a Dreaming Session".into(),
             ));
         }
-        let execution_policy = self
-            .conversation
-            .restricted_execution_policy(&profile.client_type)?;
         let round = uuid::Uuid::now_v7().to_string();
         let directory = self
             .control
@@ -84,52 +87,61 @@ impl DreamingService {
             .join("dreaming")
             .join(&round);
         tokio::fs::create_dir_all(&directory).await?;
-        let instructions_file = directory.join("instructions.md");
-        tokio::fs::write(&instructions_file, include_str!("dreaming/instructions.md")).await?;
+        let mut request = self
+            .conversation
+            .profile_session_request(
+                profile,
+                &directory,
+                SessionOwnership {
+                    application_id: "bot".into(),
+                    reference: format!("dreaming:{round}"),
+                },
+                include_str!("dreaming/instructions.md"),
+            )
+            .await?;
+        request.title = Some("Dreaming".into());
+        request.description = Some("Organize pending device memories".into());
         let outcome = self
             .control
             .session_commands()
-            .create_application_session(
-                CreateSessionRequest {
-                    execution_policy,
-                    model: None,
-                    client_type: profile.client_type,
-                    title: Some("Dreaming".into()),
-                    description: Some("Organize pending device memories".into()),
-                    workspace: None,
-                    workspace_id: None,
-                    handle: None,
-                    role: None,
-                    execution_profile_id: Some(profile.profile_id),
-                    execution_profile_version: Some(profile.version),
-                    additional_instructions: None,
-                    metadata: json!({}),
-                    initial_task: None,
-                    runtime_environment: [(
-                        TOOL_TOKEN_ENV.into(),
-                        uuid::Uuid::new_v4().to_string(),
-                    )]
-                    .into(),
-                    ownership: Some(SessionOwnership {
-                        application_id: "bot".into(),
-                        reference: format!("dreaming:{round}"),
-                    }),
-                },
-                ApplicationLaunchSettings {
-                    client_key: profile.client_key,
-                    directory,
-                    model: profile.model,
-                    instructions_file,
-                },
-            )
+            .create_session(request)
             .await?;
         let session_id = outcome
             .session_id()
             .ok_or_else(|| Error::Domain("Dreaming creation returned no Session ID".into()))?;
-        let recipients: Vec<_> = bots.iter().map(|bot| json!({"bot_id": bot.bot_id, "name": bot.name, "description": bot.description})).collect();
-        self.control.turn_commands().submit_live_input(session_id, format!(
-            "Organize all unfinished memories. Start with `pontia bot memory pending`, following every page. {pending} memories are currently pending. Available Bots for an essential clarification (choose one by context): {}", serde_json::to_string(&recipients)?
-        )).await?;
+        let recipients: Vec<_> = bots
+            .iter()
+            .map(|bot| {
+                json!({
+                    "bot_id": bot.bot_id, "name": bot.name, "description": bot.description
+                })
+            })
+            .collect();
+        let input = format!(
+            "Organize all unfinished memories. Start with `pontia bot memory pending`, following every page. {pending} memories are currently pending. Available Bots for an essential clarification (choose one by context): {}",
+            serde_json::to_string(&recipients)?
+        );
+        // The Inbox receipt keeps this round in flight until the native Turn is observed.
+        let delivery = self
+            .control
+            .inbox_commands()
+            .submit_message(
+                session_id,
+                SubmitInboxMessageRequest {
+                    input,
+                    delivery_policy: "after_idle".into(),
+                    metadata: json!({}),
+                    branch_target_turn_id: None,
+                },
+            )
+            .await?;
+        let message = &delivery.data["inbox_message"];
+        if let Some(reason) = message["failure_message"].as_str() {
+            if message["state"] == "unknown" {
+                return Err(Error::ControlUnknown(reason.into()));
+            }
+            return Err(Error::Domain(reason.into()));
+        }
         tracing::info!(%session_id, pending, "Dreaming started");
         Ok(Some(session_id.into()))
     }
@@ -158,13 +170,24 @@ impl DreamingService {
             .session_snapshot(&id)
             .await?
             .ok_or_else(|| Error::NotFound(format!("Session {id} not found")))?;
-        if !matches!(
-            session.state.as_str(),
-            "idle" | "error" | "interrupted" | "exited"
-        ) {
-            return Ok(false);
-        }
-        if session.state == "idle" && session.has_unsettled_input {
+        let exited = match session.state.as_str() {
+            "idle" => self.control.session_commands().exit_if_idle(&id).await?,
+            "exited" => true,
+            "created" | "starting" if session.has_unsettled_input => false,
+            "created" | "starting" | "interrupted" | "error" => {
+                self.control
+                    .session_commands()
+                    .terminate_session(&id)
+                    .await?;
+                self.control
+                    .queries()
+                    .session_snapshot(&id)
+                    .await?
+                    .is_some_and(|session| session.state == "exited")
+            }
+            _ => false,
+        };
+        if !exited {
             return Ok(false);
         }
         if reported.as_deref() != Some(&id) {
@@ -183,19 +206,7 @@ impl DreamingService {
             tracing::info!(session_id = %id, state = %session.state, turns = ?session.turns, details = %json!(failures), pending, "Dreaming ended; unfinished memories remain for the next round");
             *reported = Some(id.clone());
         }
-        if session.state == "exited" {
-            return Ok(true);
-        }
-        self.control
-            .session_commands()
-            .terminate_session(&id)
-            .await?;
-        Ok(self
-            .control
-            .queries()
-            .session_snapshot(&id)
-            .await?
-            .is_some_and(|s| s.state == "exited"))
+        Ok(true)
     }
 
     pub async fn run(self, mut shutdown: watch::Receiver<bool>) {
