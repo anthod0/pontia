@@ -192,43 +192,23 @@ impl ConversationService {
         }
         let lower = used.is_some_and(|used| used > 75_000)
             && idle_since.is_some_and(|since| now - since >= time::Duration::minutes(5));
-        if upper {
-            let next = self.start_session(&bot, activity).await?;
-            // A native queued input may have started while the replacement was launching.
-            let current = self
-                .control
-                .queries()
-                .session_snapshot(session)
-                .await?
-                .ok_or_else(|| Error::NotFound(format!("Session {session} not found")))?;
-            if current.state != "idle"
-                || current.has_unsettled_input
-                || current
-                    .turns
-                    .iter()
-                    .any(|turn| matches!(turn.state.as_str(), "queued" | "running"))
-            {
-                return Err(Error::StateConflict(
-                    "Bot resumed execution before handoff".into(),
-                ));
-            }
-            self.records
-                .set_current_session(bot_id, Some(&next))
-                .await?;
-            activity.generation_notice.lock().unwrap().take();
-            activity.notify(ConversationUpdate::Changed);
-            // The pointer is committed. Cleanup failure must not roll it back or fail new input.
-            if let Err(error) = self.control.session_commands().exit_if_idle(session).await {
-                self.generation_error(bot_id, activity, &error);
-            }
-        } else if lower
-            && self
-                .control
-                .session_commands()
-                .exit_if_idle(session)
-                .await?
+        if !upper && !lower {
+            return Ok(());
+        }
+        let next = if upper {
+            Some(self.start_session(&bot, activity).await?)
+        } else {
+            None
+        };
+        if self
+            .control
+            .session_commands()
+            .exit_if_idle(session)
+            .await?
         {
-            self.records.set_current_session(bot_id, None).await?;
+            self.records
+                .set_current_session(bot_id, next.as_deref())
+                .await?;
             activity.generation_notice.lock().unwrap().take();
             activity.notify(ConversationUpdate::Changed);
         }

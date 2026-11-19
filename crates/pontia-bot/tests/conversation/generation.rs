@@ -413,13 +413,13 @@ async fn resumed_execution_rejects_the_switch_and_recovery_cleans_the_unused_rep
         .submit_live_input(&old, "already in native queue".into())
         .await
         .unwrap();
-    assert!(!control.session_commands().exit_if_idle(&old).await.unwrap());
     release.send(()).unwrap();
     rotating.await.unwrap();
     assert_eq!(
         current(&conversation, &id).await.as_deref(),
         Some(old.as_str())
     );
+    assert!(conversation.chat(&id).await.unwrap().notices.is_empty());
     let owned = control.queries().list_owned_sessions("bot").await.unwrap();
     assert_eq!(owned.len(), 2);
     let unused = owned.iter().find(|session| **session != old).unwrap();
@@ -546,46 +546,50 @@ async fn failed_handoff_preserves_helper_failure_notice_and_never_replays_origin
 }
 
 #[tokio::test]
-async fn a_committed_new_pointer_is_kept_when_old_exit_confirmation_is_lost() {
+async fn unknown_exit_keeps_the_old_pointer_and_does_not_deliver_the_waiting_input() {
     let (_root, _pool, client, control, conversation) = fixture().await;
     let (id, old) = bot(&conversation).await;
     usage(&control, &old, 300_000, 1_000_000).await;
     finish(&control, &old, EventType::TurnCompleted).await;
     // No exit reporter: the runtime stops but its terminal fact is delayed.
+    let result = conversation.deliver_input(&id, "trigger handoff").await;
+    assert!(matches!(result, Err(Error::ControlUnknown(_))));
     assert_eq!(
-        conversation
-            .send(&id, "trigger handoff")
-            .await
-            .unwrap()
-            .status,
-        MessageStatus::Normal
+        current(&conversation, &id).await.as_deref(),
+        Some(old.as_str())
     );
-    let new = current(&conversation, &id).await.unwrap();
-    assert_ne!(new, old);
     assert!(!conversation.chat(&id).await.unwrap().notices.is_empty());
-    conversation.send(&id, "after unknown exit").await.unwrap();
-    assert_eq!(
-        client.inputs.lock().unwrap().last().unwrap().session_id,
-        new
-    );
+    assert_eq!(client.inputs.lock().unwrap().len(), 1);
+
+    let runtime = control
+        .queries()
+        .session_snapshot(&old)
+        .await
+        .unwrap()
+        .unwrap()
+        .runtimes[0]
+        .runtime_id
+        .clone();
+    control
+        .event_ingest_service()
+        .report_client_fact(
+            &old,
+            Some(&runtime),
+            EventType::SessionExited,
+            json!({"reason": "delayed exit confirmation"}),
+        )
+        .await
+        .unwrap();
     let _exits = report_exits(&control);
     let recovered = ConversationService::new(control.clone());
     reconcile(&recovered).await;
-    assert_eq!(
-        current(&recovered, &id).await.as_deref(),
-        Some(new.as_str())
-    );
-    assert_eq!(
-        control
-            .queries()
-            .get_session(&old)
-            .await
-            .unwrap()
-            .unwrap()
-            .state,
-        "exited"
-    );
-    assert_eq!(client.inputs.lock().unwrap().len(), 3);
+    assert_eq!(current(&recovered, &id).await, None);
+    recovered.send(&id, "after confirmed exit").await.unwrap();
+    let new = current(&recovered, &id).await.unwrap();
+    assert_ne!(new, old);
+    let inputs = client.inputs.lock().unwrap();
+    assert_eq!(inputs.len(), 2);
+    assert_eq!(inputs.last().unwrap().session_id, new);
 }
 
 #[tokio::test]
