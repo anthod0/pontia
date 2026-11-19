@@ -835,3 +835,70 @@ async fn runtime_registration_cannot_register_or_reactivate_a_workspace() {
         pi.close();
     }
 }
+
+#[tokio::test]
+async fn precreated_session_binds_only_in_its_dedicated_directory_without_a_workspace() {
+    use pontia_agent_control::{PontiaEvent, PontiaEventSource, PontiaEventType};
+    let (state, root) = state().await;
+    let directory = root.path().join("bot/current");
+    let other = root.path().join("bot/other");
+    std::fs::create_dir_all(&directory).unwrap();
+    let directory = directory.canonicalize().unwrap();
+    std::fs::create_dir(&other).unwrap();
+    for (kind, payload) in [
+        (
+            PontiaEventType::SessionCreated,
+            json!({"workspace":directory}),
+        ),
+        (
+            PontiaEventType::SessionStarting,
+            json!({"runtime_id":"dedicated-runtime"}),
+        ),
+    ] {
+        state
+            .event_ingest_service()
+            .ingest_pontia_event(PontiaEvent::new(
+                "dedicated-session",
+                None,
+                PontiaEventSource::ExternalApi,
+                "pi",
+                kind,
+                payload,
+            ))
+            .await
+            .unwrap();
+    }
+    let (pi, _requests) = client(&state);
+    let request = |cwd: &std::path::Path| {
+        json!({"version":PROTOCOL_VERSION,"binding":{
+            "client_type":"pi", "client_session_key":"dedicated-session", "client_cwd":cwd,
+            "runtime_id":"dedicated-runtime"
+        }})
+    };
+    assert!(pi.call("runtime.register", request(&other)).await.is_err());
+    let workspace = state.queries().list_workspaces().await.unwrap().remove(0);
+    assert!(
+        pi.call(
+            "runtime.register",
+            request(std::path::Path::new(&workspace.canonical_path))
+        )
+        .await
+        .is_err()
+    );
+    let result = pi
+        .call("runtime.register", request(&directory))
+        .await
+        .unwrap();
+    assert_eq!(result["session"]["session_id"], "dedicated-session");
+    assert_eq!(result["runtime"]["runtime_id"], "dedicated-runtime");
+    let session = state
+        .queries()
+        .get_session("dedicated-session")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(session.workspace_id.is_none());
+    assert_eq!(state.queries().list_workspaces().await.unwrap().len(), 1);
+    pi.close();
+    state.client_control().close().await;
+}

@@ -3,13 +3,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use pontia_agent_control::{
-    AgentControl, CreateSessionRequest, SessionOwnership,
-    client_contract::ApplicationLaunchSettings,
-};
+use pontia_agent_control::{AgentControl, CreateSessionRequest, SessionOwnership};
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tokio::sync::{Mutex as AsyncMutex, broadcast};
 
 use crate::{
@@ -154,6 +150,44 @@ impl ConversationService {
                         .as_ref()
                         .is_some_and(|launcher| launcher.supports_application_launch())
             })
+    }
+
+    pub fn supports_bot_client(&self, client_type: &str) -> bool {
+        self.control
+            .clients()
+            .get(client_type)
+            .is_some_and(|entry| {
+                entry.spec.capabilities.steer
+                    && entry.profile.is_some()
+                    && entry
+                        .configuration
+                        .as_ref()
+                        .is_some_and(|config| config.supports_startup_model())
+            })
+    }
+
+    async fn session_metadata(
+        &self,
+        client_type: &str,
+        client_key: &str,
+    ) -> Result<serde_json::Value> {
+        let clients = self.control.clients();
+        let configuration = clients
+            .get(client_type)
+            .and_then(|entry| entry.configuration.as_ref())
+            .ok_or_else(|| {
+                Error::CapabilityUnavailable("Client cannot create a Bot Session".into())
+            })?;
+        for option in clients.creation_options(&self.control.db()).await? {
+            if option.client_type == client_type
+                && configuration.key(&option.metadata)? == client_key
+            {
+                return Ok(option.metadata);
+            }
+        }
+        Err(Error::CapabilityUnavailable(format!(
+            "Client {client_type}/{client_key} is unavailable for Session creation"
+        )))
     }
 
     fn activity(&self, bot_id: &str) -> Arc<Activity> {
@@ -327,7 +361,7 @@ impl ConversationService {
 
     async fn start_session(&self, bot: &Bot, activity: &Activity) -> Result<String> {
         let ownership_prefix = format!("{}:", bot.bot_id);
-        if !self.supports_client(&bot.client_type) {
+        if !self.supports_bot_client(&bot.client_type) {
             return Err(Error::CapabilityUnavailable(
                 "Client cannot run a Bot Session".into(),
             ));
@@ -354,43 +388,32 @@ impl ConversationService {
                 .map_err(|error| Error::Domain(format!("Cannot prepare Bot handoff: {error}")))?
         };
         let launch = uuid::Uuid::now_v7();
-        let instructions_file = directory.join(format!("handoff-{launch}.md"));
-        tokio::fs::write(&instructions_file, handoff).await?;
         let outcome = self
             .control
             .session_commands()
-            .create_application_session(
-                CreateSessionRequest {
-                    model: None,
-                    client_type: bot.client_type.clone(),
-                    title: Some(bot.name.clone()),
-                    description: bot.description.clone(),
-                    workspace: None,
-                    workspace_id: None,
-                    handle: None,
-                    role: None,
-                    execution_profile_id: None,
-                    execution_profile_version: None,
-                    additional_instructions: None,
-                    metadata: json!({}),
-                    initial_task: None,
-                    runtime_environment: [(
-                        TOOL_TOKEN_ENV.into(),
-                        uuid::Uuid::new_v4().to_string(),
-                    )]
+            .create_session(CreateSessionRequest {
+                model: Some(bot.model.clone()),
+                client_type: bot.client_type.clone(),
+                title: Some(bot.name.clone()),
+                description: bot.description.clone(),
+                workspace: Some(directory.to_string_lossy().into_owned()),
+                workspace_id: None,
+                handle: None,
+                role: None,
+                execution_profile_id: None,
+                execution_profile_version: None,
+                additional_instructions: Some(handoff),
+                metadata: self
+                    .session_metadata(&bot.client_type, &bot.client_key)
+                    .await?,
+                initial_task: None,
+                runtime_environment: [(TOOL_TOKEN_ENV.into(), uuid::Uuid::new_v4().to_string())]
                     .into(),
-                    ownership: Some(SessionOwnership {
-                        application_id: APPLICATION_ID.into(),
-                        reference: format!("{ownership_prefix}{launch}"),
-                    }),
-                },
-                ApplicationLaunchSettings {
-                    client_key: bot.client_key.clone(),
-                    directory,
-                    model: bot.model.clone(),
-                    instructions_file,
-                },
-            )
+                ownership: Some(SessionOwnership {
+                    application_id: APPLICATION_ID.into(),
+                    reference: format!("{ownership_prefix}{launch}"),
+                }),
+            })
             .await?;
         let session_id = outcome
             .session_id()

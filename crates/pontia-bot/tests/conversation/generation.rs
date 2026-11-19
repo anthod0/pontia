@@ -260,12 +260,8 @@ async fn launch_failure_keeps_old_pointer_and_failed_input_requires_explicit_ret
     );
     assert_eq!(client.inputs.lock().unwrap().len(), 1);
     assert!(
-        client
-            .handoffs
-            .lock()
-            .unwrap()
-            .last()
-            .unwrap()
+        instructions(&control, &new)
+            .await
             .contains("not automatically replayed")
     );
     assert_eq!(

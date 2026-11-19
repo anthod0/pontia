@@ -656,8 +656,13 @@ export function createPontiaPiExtension(
       const logFile = currentHookLogFile();
       let context: SessionContext | undefined;
 
+      const existingSession =
+        reason === "fork"
+          ? undefined
+          : await loadExistingSessionContext(await registrationConnection(), sessionDetails);
       const workspaceActive =
         managedSession ||
+        existingSession !== undefined ||
         (await isActiveRegisteredWorkspace(
           await registrationConnection(),
           sessionDetails.clientCwd,
@@ -691,10 +696,6 @@ export function createPontiaPiExtension(
         });
         readyReported = false;
       } else {
-        const existingSession = await loadExistingSessionContext(
-          await registrationConnection(),
-          sessionDetails,
-        );
         if (reason === "reload" && !existingSession) {
           reportingDisabled = true;
           deferredManualSessionDetails = undefined;

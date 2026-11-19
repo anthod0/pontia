@@ -30,7 +30,7 @@ pub async fn clients(State(state): State<HttpState>) -> Result<Json<ApiResponse<
     let vars = std::env::vars().collect();
     let clients: Vec<_> = service.list(&DetectionContext { vars: &vars, pontia_home: app.pontia_home() })
         .await?.into_iter()
-        .filter(|client| client.enabled && state.bots().supports_client(&client.client_type))
+        .filter(|client| client.enabled && state.bots().supports_bot_client(&client.client_type))
         .map(|client| json!({"id": client.id, "client_type": client.client_type, "client_key": client.client_key, "name": client.name}))
         .collect();
     Ok(ok(json!({"clients": clients})))
@@ -71,7 +71,7 @@ pub async fn update(
 }
 
 fn validate_client(state: &HttpState, request: &BotConfiguration) -> Result<(), ApiError> {
-    if !state.bots().supports_client(&request.client_type) {
+    if !state.bots().supports_bot_client(&request.client_type) {
         return Err(ApiError::invalid_request(
             "This client cannot run a Bot Session",
         ));

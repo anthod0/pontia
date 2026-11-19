@@ -7,8 +7,8 @@ use pontia_agent_control::{
     AgentControl, EventIngestService, ReportedFact,
     agent_clients::AgentClientService,
     client_contract::{
-        AgentInput, ApplicationLaunchSettings, ClientConfiguration, ClientLaunchRequest,
-        ClientLauncher, GenericTestClient, InProcessClient, test_registration,
+        AgentInput, ClientConfiguration, ClientLaunchRequest, ClientLauncher, GenericTestClient,
+        InProcessClient, test_registration,
     },
     clients::ClientRegistry,
 };
@@ -36,7 +36,6 @@ const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
 #[derive(Default)]
 struct Client {
     inputs: Mutex<Vec<AgentInput>>,
-    handoffs: Mutex<Vec<String>>,
     blocked: Mutex<Option<String>>,
     launch_gate: Mutex<
         Option<(
@@ -48,6 +47,9 @@ struct Client {
 }
 
 impl ClientConfiguration for Client {
+    fn supports_startup_model(&self) -> bool {
+        true
+    }
     fn keys(&self) -> Vec<String> {
         vec!["default".into()]
     }
@@ -73,20 +75,11 @@ impl ClientLauncher for Client {
     fn application_command(
         &self,
         _: &Value,
-        settings: &ApplicationLaunchSettings,
+        settings: &pontia_agent_control::client_contract::ApplicationLaunchSettings,
     ) -> Result<String> {
-        let gate = self.launch_gate.lock().unwrap().take();
-        if let Some((entered, release)) = gate {
-            entered.send(()).unwrap();
-            release.recv().unwrap();
-        }
         if settings.model != MODEL {
             return Err(Error::CapabilityUnavailable("model unavailable".into()));
         }
-        self.handoffs
-            .lock()
-            .unwrap()
-            .push(std::fs::read_to_string(&settings.instructions_file)?);
         Ok("in-process".into())
     }
 
@@ -95,6 +88,16 @@ impl ClientLauncher for Client {
     }
 
     fn launch(&self, request: ClientLaunchRequest<'_>) -> Result<RuntimeStartResult> {
+        let gate = self.launch_gate.lock().unwrap().take();
+        if let Some((entered, release)) = gate {
+            entered.send(()).unwrap();
+            release.recv().unwrap();
+        }
+        if request.runtime.start_command.is_none()
+            && request.runtime.model.as_deref() != Some(MODEL)
+        {
+            return Err(Error::CapabilityUnavailable("model unavailable".into()));
+        }
         self.tokens.lock().unwrap().insert(
             request.runtime.session_id.clone(),
             request.runtime.environment[TOOL_TOKEN_ENV].clone(),
@@ -104,6 +107,9 @@ impl ClientLauncher for Client {
 }
 
 impl pontia_agent_control::client_contract::ClientProfile for Client {
+    fn inject_builtin(&self) -> bool {
+        true
+    }
     fn validate_templates(&self, _: Option<&str>, _: Option<&str>) -> Result<()> {
         Ok(())
     }
@@ -343,13 +349,11 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
     assert!(service.chat(a).await.unwrap().bot.working_on.is_none());
     assert_eq!(service.chat(b).await.unwrap().messages.len(), 1);
 
-    {
-        let handoffs = client.handoffs.lock().unwrap();
-        assert_eq!(handoffs.len(), 2);
-        assert!(handoffs[0].contains("historical failure"));
-        assert!(!handoffs[0].contains("wake A"));
-        assert!(!handoffs[1].contains("historical failure"));
-    }
+    let a_handoff = instructions(&control, &a_session).await;
+    let b_handoff = instructions(&control, &b_session).await;
+    assert!(a_handoff.contains("historical failure"));
+    assert!(!a_handoff.contains("wake A"));
+    assert!(!b_handoff.contains("historical failure"));
     let delivered = client.inputs.lock().unwrap().len();
     let recovered = ConversationService::new(control);
     let chat = recovered.chat(a).await.unwrap();
@@ -364,6 +368,17 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
             .iter()
             .all(|input| !input.input.contains("historical failure"))
     );
+}
+
+async fn instructions(control: &AgentControl, session: &str) -> String {
+    pontia_agent_control::AgentProfileService::new(control.db())
+        .session_binding(session)
+        .await
+        .unwrap()
+        .unwrap()["system"]
+        .as_str()
+        .unwrap()
+        .to_owned()
 }
 
 async fn fixture() -> (
@@ -381,6 +396,8 @@ async fn fixture() -> (
     .await
     .unwrap();
     run_migrations(&pool).await.unwrap();
+    sqlx::query("UPDATE execution_profiles SET supported_client_types='[\"generic\"]' WHERE profile_id='default' AND version='2'")
+        .execute(&pool).await.unwrap();
     let client = Arc::new(Client::default());
     let mut registration = test_registration();
     const BOT_CLIENT: pontia_agent_control::client_contract::AgentClientSpec =
@@ -617,7 +634,7 @@ async fn helpers_are_isolated_reusable_and_reply_to_the_current_bot() {
                 .any(|input| input.session_id == first && input.input.contains(&a_session))
         );
     }
-    let handoff = client.handoffs.lock().unwrap().last().unwrap().clone();
+    let handoff = instructions(&control, &current).await;
     assert!(handoff.contains(&first));
     assert!(handoff.contains(&second));
     helpers

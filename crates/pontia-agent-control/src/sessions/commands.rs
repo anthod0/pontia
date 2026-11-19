@@ -13,7 +13,7 @@ use super::{
 use crate::{
     PontiaEvent, PontiaEventSource, PontiaEventType,
     client_contract::ApplicationLaunchSettings,
-    workspaces::{require_active_workspace, require_active_workspace_id},
+    workspaces::{require_active_workspace_id, resolve_session_directory},
 };
 
 enum SessionManagementAction {
@@ -163,30 +163,27 @@ impl SessionCommandService {
             )));
         }
 
-        let workspace_record = if application.is_some() {
-            None
+        let application_directory = application.as_ref().map(|settings| &settings.directory);
+        let (runtime_directory, workspace_record) = if let Some(directory) = application_directory {
+            (directory.to_string_lossy().into_owned(), None)
         } else if let Some(workspace_id) = request.workspace_id.as_deref() {
-            Some(require_active_workspace_id(&self.pool, workspace_id).await?)
-        } else if let Some(workspace) = request.workspace.as_deref() {
-            Some(require_active_workspace(&self.pool, workspace).await?)
+            let workspace = require_active_workspace_id(&self.pool, workspace_id).await?;
+            (workspace.canonical_path.clone(), Some(workspace))
+        } else if let Some(directory) = request.workspace.as_deref() {
+            resolve_session_directory(&self.pool, &self.pontia_home, directory).await?
         } else {
             return Err(Error::Domain(
-                "An active registered Workspace is required".into(),
+                "A Session launch directory is required".into(),
             ));
         };
-        if let (Some(handle), Some(workspace_record)) = (handle, &workspace_record) {
-            self.ensure_handle_available(&workspace_record.workspace_id, handle)
+        if let Some(handle) = handle {
+            let workspace = workspace_record.as_ref().ok_or_else(|| {
+                Error::Domain("Session handles require a registered Workspace".into())
+            })?;
+            self.ensure_handle_available(&workspace.workspace_id, handle)
                 .await?;
         }
-        let application_directory = application.as_ref().map(|settings| &settings.directory);
-        let runtime_workspace = application_directory
-            .as_ref()
-            .map(|path| path.to_string_lossy().into_owned())
-            .or_else(|| {
-                workspace_record
-                    .as_ref()
-                    .map(|record| record.canonical_path.clone())
-            });
+        let runtime_workspace = Some(runtime_directory);
         let runtime_workspace_name = workspace_record
             .as_ref()
             .and_then(|record| record.name.clone());

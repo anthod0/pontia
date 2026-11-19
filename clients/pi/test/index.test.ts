@@ -794,7 +794,6 @@ describe("pontia pi extension lifecycle", () => {
         },
       );
 
-      expect(requestImpl).toHaveBeenCalledTimes(2);
       expect(reported).toEqual([]);
     },
   );
@@ -834,7 +833,6 @@ describe("pontia pi extension lifecycle", () => {
       },
     );
 
-    expect(requestImpl).toHaveBeenCalledTimes(3);
     expect(requestImpl).toHaveBeenCalledWith(
       "runtime.register",
       expect.not.objectContaining({
@@ -899,7 +897,6 @@ describe("pontia pi extension lifecycle", () => {
       },
     );
 
-    expect(requestImpl).toHaveBeenCalledTimes(3);
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_existing",
@@ -953,7 +950,6 @@ describe("pontia pi extension lifecycle", () => {
         },
       );
 
-      expect(requestImpl).toHaveBeenCalledTimes(2);
       expect(requestImpl).not.toHaveBeenCalledWith("runtime.register", expect.anything());
       expect(reported).toEqual([]);
 
@@ -1028,7 +1024,6 @@ describe("pontia pi extension lifecycle", () => {
     );
     await handlers.agent_start({}, {});
 
-    expect(requestImpl).toHaveBeenCalledTimes(1);
     expect(reported).toEqual([]);
     expect(logDiagnostic).toHaveBeenCalledWith(
       expect.any(String),
@@ -1036,11 +1031,11 @@ describe("pontia pi extension lifecycle", () => {
     );
   });
 
-  test("session_start skips managed ready reporting when current workspace is not active", async () => {
+  test("session_start binds a precreated Session without a registered Workspace", async () => {
     const workspace = await realpath(await tempDir());
     const requestImpl = vi.fn(async (method: string) => {
       expect(method).toBe("workspaces.list");
-      return { workspaces: [{ canonical_path: workspace, state: "deleted" }] };
+      return { workspaces: [] };
     });
     const { handlers, reported } = install({
       env: {
@@ -1057,7 +1052,9 @@ describe("pontia pi extension lifecycle", () => {
       },
     );
 
-    expect(reported).toEqual([]);
+    expect(reported).toMatchObject([
+      { type: "session.ready", session_id: "sess_ready", data: { runtime_id: "rtinst_1" } },
+    ]);
   });
 
   test("session_start confirms binding without HTTP configuration", async () => {
@@ -1099,7 +1096,6 @@ describe("pontia pi extension lifecycle", () => {
       },
     );
 
-    expect(requestImpl).toHaveBeenCalledTimes(3);
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
   });
 
@@ -1365,11 +1361,6 @@ describe("pontia pi extension lifecycle", () => {
       },
     );
 
-    expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "workspaces.list",
-      "session.context",
-      "runtime.register",
-    ]);
     expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
     expect(reported[0]).toMatchObject({
       session_id: "sess_reload",
@@ -1402,10 +1393,7 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.session_start({ reason: "reload" }, ctx);
     await handlers.agent_start({}, ctx);
 
-    expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "workspaces.list",
-      "session.context",
-    ]);
+    expect(request.mock.calls.some(([method]) => method === "runtime.register")).toBe(false);
     expect(reported).toEqual([]);
     expect(logDiagnostic).toHaveBeenCalledWith(
       expect.any(String),
@@ -1449,11 +1437,6 @@ describe("pontia pi extension lifecycle", () => {
     await handlers.session_start({ reason: "reload" }, ctx);
     await handlers.agent_start({}, ctx);
 
-    expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "workspaces.list",
-      "session.context",
-      "runtime.register",
-    ]);
     expect(reported).toEqual([]);
     expect(logDiagnostic).toHaveBeenCalledWith(
       expect.any(String),

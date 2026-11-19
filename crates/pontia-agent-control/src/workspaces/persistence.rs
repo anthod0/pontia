@@ -10,6 +10,25 @@ use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 
 use super::WorkspaceRecord;
 
+pub(crate) async fn resolve_session_directory(
+    pool: &SqlitePool,
+    pontia_home: &Path,
+    directory: &str,
+) -> Result<(String, Option<WorkspaceRecord>)> {
+    let canonical = std::fs::canonicalize(directory)?;
+    if !canonical.is_dir() {
+        return Err(Error::Domain(
+            "Session launch path must be a directory".into(),
+        ));
+    }
+    let bot_root = pontia_home.join("bot");
+    if bot_root.is_dir() && canonical.starts_with(std::fs::canonicalize(bot_root)?) {
+        return Ok((canonical.to_string_lossy().into_owned(), None));
+    }
+    let workspace = require_active_workspace(pool, &canonical.to_string_lossy()).await?;
+    Ok((workspace.canonical_path.clone(), Some(workspace)))
+}
+
 pub async fn require_active_workspace(
     pool: &SqlitePool,
     workspace: &str,
