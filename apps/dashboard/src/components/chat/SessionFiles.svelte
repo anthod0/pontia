@@ -6,6 +6,7 @@
   import SharedFileCard from './SharedFileCard.svelte'
   import SharedImageViewer from './SharedImageViewer.svelte'
   import { canPreviewImage } from '$lib/downloads/preview'
+  import { provideFilePreviewNavigator, useFilePreview } from './filePreviewContext'
 
   let { sessionId, files: store, open = $bindable(false) }: { sessionId: string; files: SessionFilesStore; open?: boolean } = $props()
   const files = $derived($store.files)
@@ -14,6 +15,9 @@
   const images = $derived(files.filter(canPreviewImage))
   let imageViewerOpen = $state(false)
   let imageViewerIndex = $state(0)
+  const preview = useFilePreview()
+  // The preview panel sits beside the conversation, so the modal file list closes before it opens.
+  provideFilePreviewNavigator({ open(target) { open = false; preview.open(target) } })
 </script>
 
 <Dialog.Root bind:open>

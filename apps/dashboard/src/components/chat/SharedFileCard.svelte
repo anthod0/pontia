@@ -8,10 +8,12 @@
   import FileIcon from 'phosphor-svelte/lib/FileIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import { canPreviewImage } from "$lib/downloads/preview";
+  import { useFilePreview } from './filePreviewContext'
   import { downloads, downloadKey } from '$lib/downloads/manager'
   import { ApiError } from '../../api/errors'
   import type { SharedFile } from '../../api/types'
   const device = useDeviceRuntime();
+  const preview = useFilePreview();
 
   let { file, sessionId, variant = 'card', onenlarge }: {
     file: SharedFile
@@ -63,18 +65,30 @@
 </script>
 
 {#snippet body(thumb: string)}
+  {#snippet icon()}
+    <div class="flex {thumb} shrink-0 items-center justify-center rounded bg-muted"><FileIcon class={variant === 'row' ? 'size-4 text-muted-foreground' : 'size-5 text-muted-foreground'} aria-hidden="true" /></div>
+  {/snippet}
+  {#snippet details()}
+    <div class="min-w-0 flex-1">
+      <p class="truncate text-sm font-medium" title={file.name}>{file.name}</p>
+      <p class="truncate text-xs text-muted-foreground" title={new Date(file.created_at).toLocaleString($currentLocale)}>{sizeLabel(file.size)}</p>
+    </div>
+  {/snippet}
   <div class="flex items-center gap-2">
     {#if previewUrl && onenlarge}
       <button type="button" class="shrink-0" onclick={onenlarge} aria-label={$t('files.enlargeNamed', { name: file.name })}>
         <img src={previewUrl} alt={file.name} class="{thumb} rounded object-cover" />
       </button>
+      {@render details()}
+    {:else if canPreviewImage(file)}
+      {@render icon()}
+      {@render details()}
     {:else}
-      <div class="flex {thumb} shrink-0 items-center justify-center rounded bg-muted"><FileIcon class={variant === 'row' ? 'size-4 text-muted-foreground' : 'size-5 text-muted-foreground'} aria-hidden="true" /></div>
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => preview.open({ device, sessionId, path: file.path })} aria-label={$t('files.previewNamed', { name: file.name })}>
+        {@render icon()}
+        {@render details()}
+      </button>
     {/if}
-    <div class="min-w-0 flex-1">
-      <p class="truncate text-sm font-medium" title={file.name}>{file.name}</p>
-      <p class="truncate text-xs text-muted-foreground" title={new Date(file.created_at).toLocaleString($currentLocale)}>{sizeLabel(file.size)}</p>
-    </div>
     <Button size="icon-sm" variant="ghost" onclick={download} disabled={downloading} aria-label={downloading ? $t('files.receivingNamed', { name: file.name }) : $t('files.downloadNamed', { name: file.name })} title={downloading ? $t('files.receiving') : $t('files.download')}>
       <DownloadSimpleIcon class="size-4" />
     </Button>
