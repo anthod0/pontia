@@ -13,7 +13,7 @@ Pontia 包含以下 Agent Client：
 | --- | --- | --- |
 | [Pi](/docs/agent-clients/pi) | `pi` 和 `tmux` | Pontia 的 Pi 插件 |
 | [Codex](/docs/codex) | 支持 app-server 守护进程的 Codex CLI | 按用户启动的 Codex 守护进程、启动器和 shell PATH |
-| [Claude Code](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) | Node.js LTS、npm 以及 Claude Code 认证 | 来自 npm 的 `@pontia/claude-client` 包 |
+| [Claude Code](/docs/agent-clients/claude) | Node.js LTS、npm 以及 Claude Code 认证 | 来自 npm 的 `@pontia/claude-client` 包 |
 | ACP Agent | 通过 stdio 使用 Agent Client Protocol 通信的 Agent | 无；安装 Agent 后启用对应条目即可 |
 
 ## 在初始化时选择 Client

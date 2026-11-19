@@ -1,0 +1,70 @@
+<svelte:head>
+	<title>Claude Code Agent Client — Pontia</title>
+	<meta name="description" content="Claude Code Agent Client の連携をインストール、設定、更新して Pontia で使います。" />
+</svelte:head>
+
+# Claude Code Agent Client
+
+Claude Code の連携は、Claude Agent SDK を通じて Claude のコーディングタスクを実行します。Dashboard から Session を開始し、ツールのリクエストに応答し、後で同じ会話を再開できます。
+
+## 要件
+
+Node.js LTS をインストールし、`node` と `npm` を `PATH` から使えるようにします。Pontia を実行するユーザーで動作することを確認してください。
+
+```sh
+node --version
+npm --version
+```
+
+Pontia を実行するのと同じ OS ユーザーで、Claude Code にサインインするか、そのモデルプロバイダーを設定します。
+
+## 連携をインストールする
+
+次のコマンドの実行時に **Claude Code** を選択します。
+
+```sh
+pontia init
+```
+
+後からインストールまたは修復するには、`pontia setup claude` を実行します。これにより Claude Code Client も有効になります。
+
+初回のセットアップでは、`@pontia/claude-client` パッケージとその Claude Agent SDK の依存関係を npm から `$PONTIA_HOME/clients/claude-client` にインストールします。インターネット接続と数百 MB のディスク容量が必要です。以降のセットアップでは、動作するインストールを再利用します。
+
+セットアップは、Node.js と Claude Code の設定パスを Pontia サービス用に保存します。
+
+## カスタムの Claude Code 設定ディレクトリを使う
+
+Claude Code はデフォルトで `~/.claude` から設定を読み込みます。別のディレクトリを使うには、セットアップ時にその絶対パスを指定します。
+
+```sh
+CLAUDE_CONFIG_DIR=/absolute/path/to/claude-config pontia setup claude
+```
+
+## 独自のクライアントインストールを使う
+
+デフォルトの代わりに既存の `@pontia/claude-client` インストールを使うには、そのエントリスクリプトの絶対パスを指定します。
+
+```sh
+PONTIA_CLAUDE_HOST_PATH=/absolute/path/to/node_modules/@pontia/claude-client/dist/src/main.js pontia setup claude
+```
+
+セットアップはパッケージをインストールせず、そのインストールを確認します。
+
+## クライアントを更新する
+
+`pontia update` は Claude Code クライアントを更新しません。更新するには、アクティブな Claude Code Session を終了してから、次を実行します。
+
+```sh
+npm install --prefix "${PONTIA_HOME:-$HOME/.pontia}/clients/claude-client" --omit=dev @pontia/claude-client@latest
+pontia setup claude
+```
+
+セットアップは更新されたインストールを確認し、Client を有効にします。
+
+## Claude Code Session の動作
+
+実行中の処理は、Pontia サービスの再起動や更新の後に継続しない場合があります。Session の終了後も履歴を閲覧でき、新しいメッセージを送ると同じ会話を再開できます。
+
+リクエストが失敗すると、Claude Agent SDK が再試行することがあります。SDK の再試行中、Dashboard には認証エラーなどの失敗が表示されます。再試行の通知は、タスクが完了または失敗したことを意味しません。再試行中でも Session を終了できます。
+
+セットアップや認証に失敗する場合は、[トラブルシューティング](/docs/troubleshooting)を参照してください。

@@ -49,7 +49,7 @@ Install the clients you plan to use before initialization:
 
 - **pi:** the `pi` CLI and `tmux`;
 - **Codex:** the `codex` CLI;
-- **Claude Code:** Node.js LTS with npm, and a signed-in Claude Code. See the [Claude Code guide](docs/claude-agent.md);
+- **Claude Code:** Node.js LTS with npm, and a signed-in Claude Code;
 - **ACP agents:** the agent itself, enabled after initialization as described in [Agent Clients](https://pontia.dev/docs/agent-clients#enable-an-acp-agent).
 
 ### Initialize

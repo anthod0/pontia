@@ -1,0 +1,70 @@
+<svelte:head>
+	<title>Claude Code Agent Client — Pontia</title>
+	<meta name="description" content="安装、配置和更新 Pontia 的 Claude Code Agent Client 集成。" />
+</svelte:head>
+
+# Claude Code Agent Client
+
+Claude Code 集成通过 Claude Agent SDK 运行 Claude 编码任务。你可以从 Dashboard 启动 Session、回应工具请求，并在之后恢复同一个对话。
+
+## 要求
+
+安装 Node.js LTS，并确保 `node` 和 `npm` 在 `PATH` 中可用。确认运行 Pontia 的用户可以使用它们：
+
+```sh
+node --version
+npm --version
+```
+
+以运行 Pontia 的同一操作系统用户登录 Claude Code，或配置其模型提供商。
+
+## 安装集成
+
+运行以下命令时选择 **Claude Code**：
+
+```sh
+pontia init
+```
+
+之后如需安装或修复，运行 `pontia setup claude`。该命令也会启用 Claude Code Client。
+
+首次设置时，Pontia 会从 npm 将 `@pontia/claude-client` 包及其 Claude Agent SDK 依赖安装到 `$PONTIA_HOME/clients/claude-client`。这需要联网，并占用数百 MB 磁盘空间。之后再次设置会复用可用的安装。
+
+设置会为 Pontia 服务保存 Node.js 和 Claude Code 配置路径。
+
+## 使用自定义 Claude Code 配置目录
+
+Claude Code 默认从 `~/.claude` 读取配置。要使用其他目录，请在设置时传入其绝对路径：
+
+```sh
+CLAUDE_CONFIG_DIR=/absolute/path/to/claude-config pontia setup claude
+```
+
+## 使用自己的客户端安装
+
+要使用已有的 `@pontia/claude-client` 安装代替默认安装，请传入其入口脚本的绝对路径：
+
+```sh
+PONTIA_CLAUDE_HOST_PATH=/absolute/path/to/node_modules/@pontia/claude-client/dist/src/main.js pontia setup claude
+```
+
+设置会检查该安装，而不会安装软件包。
+
+## 更新客户端
+
+`pontia update` 不会更新 Claude Code 客户端。要更新它，请先退出活动的 Claude Code Session，然后运行：
+
+```sh
+npm install --prefix "${PONTIA_HOME:-$HOME/.pontia}/clients/claude-client" --omit=dev @pontia/claude-client@latest
+pontia setup claude
+```
+
+设置会检查更新后的安装并启用该 Client。
+
+## Claude Code Session 的运行方式
+
+Pontia 服务重启或更新后，正在进行的执行可能不会继续。Session 退出后，你仍可浏览其历史，并发送新消息来恢复同一个对话。
+
+请求失败时，Claude Agent SDK 可能会重试。SDK 重试期间，Dashboard 会显示失败信息，例如认证错误。重试通知并不表示任务已完成或已失败。重试期间也可以退出 Session。
+
+如果设置或认证失败，请参阅[故障排除](/docs/troubleshooting)。

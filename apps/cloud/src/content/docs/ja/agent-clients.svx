@@ -13,7 +13,7 @@ Pontia には次の Agent Client が含まれています。
 | --- | --- | --- |
 | [Pi](/docs/agent-clients/pi) | `pi` と `tmux` | Pontia の Pi プラグイン |
 | [Codex](/docs/codex) | app-server デーモンに対応した Codex CLI | ユーザーごとの Codex デーモンの起動、ランチャー、シェルの PATH |
-| [Claude Code](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) | Node.js LTS、npm、Claude Code の認証 | npm の `@pontia/claude-client` パッケージ |
+| [Claude Code](/docs/agent-clients/claude) | Node.js LTS、npm、Claude Code の認証 | npm の `@pontia/claude-client` パッケージ |
 | ACP エージェント | stdio 経由で Agent Client Protocol を話すエージェント | なし。エージェントをインストールした後にエントリを有効にします |
 
 ## 初期化時に Client を選択する

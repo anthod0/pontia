@@ -70,7 +70,7 @@ Aprovações de comandos, alterações de arquivos e permissões aparecem no Das
 
 ## O Claude Code não inicia
 
-Confira se `node --version` e `npm --version` funcionam para o usuário que executa o Pontia e depois execute `pontia setup claude` para refazer a verificação de dependências. Se o Dashboard relatar uma falha de autenticação enquanto o SDK tenta novamente, corrija o login ou as configurações de provedor do próprio Claude Code para esse usuário. Veja o [guia do Claude Code](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md) para atualizar o pacote do cliente.
+Confira se `node --version` e `npm --version` funcionam para o usuário que executa o Pontia e depois execute `pontia setup claude` para refazer a verificação de dependências. Se o Dashboard relatar uma falha de autenticação enquanto o SDK tenta novamente, corrija o login ou as configurações de provedor do próprio Claude Code para esse usuário. Veja [Claude Code](/docs/agent-clients/claude) para atualizar o pacote do cliente.
 
 ## Um agente ACP não inicia
 

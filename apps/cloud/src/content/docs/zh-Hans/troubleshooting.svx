@@ -70,7 +70,7 @@ $PONTIA_HOME/state/pi-hook.log
 
 ## Claude Code 无法启动
 
-确认对运行 Pontia 的用户而言，`node --version` 和 `npm --version` 可以正常运行，然后运行 `pontia setup claude` 重新进行依赖检查。如果 SDK 重试时 Dashboard 报告认证失败，请为该用户修复 Claude Code 自身的登录或提供商设置。更新客户端软件包的方法见 [Claude Code 指南](https://github.com/anthod0/pontia/blob/main/docs/claude-agent.md)。
+确认对运行 Pontia 的用户而言，`node --version` 和 `npm --version` 可以正常运行，然后运行 `pontia setup claude` 重新进行依赖检查。如果 SDK 重试时 Dashboard 报告认证失败，请为该用户修复 Claude Code 自身的登录或提供商设置。更新客户端软件包的方法见 [Claude Code](/docs/agent-clients/claude)。
 
 ## ACP Agent 无法启动
 

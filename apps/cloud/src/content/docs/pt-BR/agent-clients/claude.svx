@@ -1,0 +1,70 @@
+<svelte:head>
+	<title>Agent Client Claude Code — Pontia</title>
+	<meta name="description" content="Instale, configure e atualize a integração do Agent Client Claude Code com o Pontia." />
+</svelte:head>
+
+# Agent Client Claude Code
+
+A integração com o Claude Code executa tarefas de programação do Claude pelo Claude Agent SDK. Você pode iniciar Sessions pelo Dashboard, responder a solicitações de ferramentas e retomar a mesma conversa depois.
+
+## Requisitos
+
+Instale o Node.js LTS e deixe `node` e `npm` disponíveis no seu `PATH`. Confira se eles funcionam para o usuário que executa o Pontia:
+
+```sh
+node --version
+npm --version
+```
+
+Entre no Claude Code ou configure o provedor de modelos dele com o mesmo usuário do sistema operacional que executa o Pontia.
+
+## Instalar a integração
+
+Selecione **Claude Code** ao executar:
+
+```sh
+pontia init
+```
+
+Para instalar ou reparar depois, execute `pontia setup claude`. Isso também ativa o Client Claude Code.
+
+Na primeira configuração, o Pontia instala o pacote `@pontia/claude-client` e as dependências do Claude Agent SDK pelo npm em `$PONTIA_HOME/clients/claude-client`. Isso exige acesso à internet e algumas centenas de megabytes de espaço em disco. As configurações seguintes reutilizam uma instalação que esteja funcionando.
+
+A configuração salva os caminhos do Node.js e da configuração do Claude Code para o serviço do Pontia.
+
+## Usar um diretório de configuração personalizado do Claude Code
+
+Por padrão, o Claude Code lê a configuração em `~/.claude`. Para usar outro diretório, informe o caminho absoluto dele durante a configuração:
+
+```sh
+CLAUDE_CONFIG_DIR=/absolute/path/to/claude-config pontia setup claude
+```
+
+## Usar a sua própria instalação do cliente
+
+Para usar uma instalação existente de `@pontia/claude-client` em vez da padrão, informe o caminho absoluto do script de entrada dela:
+
+```sh
+PONTIA_CLAUDE_HOST_PATH=/absolute/path/to/node_modules/@pontia/claude-client/dist/src/main.js pontia setup claude
+```
+
+A configuração verifica essa instalação em vez de instalar o pacote.
+
+## Atualizar o cliente
+
+O `pontia update` não atualiza o cliente do Claude Code. Para atualizá-lo, saia das Sessions ativas do Claude Code e execute:
+
+```sh
+npm install --prefix "${PONTIA_HOME:-$HOME/.pontia}/clients/claude-client" --omit=dev @pontia/claude-client@latest
+pontia setup claude
+```
+
+A configuração verifica a instalação atualizada e ativa o Client.
+
+## Como as Sessions do Claude Code funcionam
+
+Uma execução em andamento pode não continuar após uma reinicialização ou atualização do serviço do Pontia. Depois que uma Session sai, você ainda pode navegar pelo histórico dela e enviar outra mensagem para retomar a mesma conversa.
+
+Quando uma solicitação falha, o Claude Agent SDK pode tentar novamente. Enquanto o SDK tenta novamente, o Dashboard mostra a falha, como um erro de autenticação. Um aviso de nova tentativa não significa que a tarefa foi concluída ou falhou. Você pode sair da Session enquanto ela tenta novamente.
+
+Se a configuração ou a autenticação falhar, veja [Solução de problemas](/docs/troubleshooting).

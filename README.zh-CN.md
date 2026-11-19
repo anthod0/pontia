@@ -49,7 +49,7 @@
 
 - **pi**：`pi` CLI 和 `tmux`
 - **Codex**：`codex` CLI
-- **Claude Code**：Node.js LTS 和 npm，且 Claude Code 已登录。详见 [Claude Code 指南](docs/claude-agent.md)
+- **Claude Code**：Node.js LTS 和 npm，且 Claude Code 已登录
 - **ACP agent**：先装好 agent 本身，初始化后按 [Agent Clients](https://pontia.dev/zh/docs/agent-clients#enable-an-acp-agent) 启用
 
 ### 初始化
