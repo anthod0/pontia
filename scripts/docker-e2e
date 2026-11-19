@@ -3,12 +3,15 @@
 
 import argparse
 import base64
-from contextlib import closing
+from contextlib import closing, contextmanager
+import fcntl
 import hashlib
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import shlex
 import signal
@@ -21,7 +24,6 @@ import tarfile
 ROOT = Path(__file__).resolve().parent.parent
 LAB = ROOT / "docker/e2e"
 STATE = LAB / ".local"
-PROJECT = "pontia-e2e-docker"
 EDGE_ID = "01900000-0000-7000-8000-000000000001"
 EDGE_OWNER_ID = "01900000-0000-7000-8000-000000000002"
 EDGE_NAME = "docker-e2e"
@@ -144,34 +146,136 @@ def check(state):
                for provider in ("GOOGLE", "GITHUB")):
         raise ValueError("Configure at least one OAuth provider in cloud.dev.vars")
     hosts = ["pontia.dev", "app.pontia.dev", EDGE_HOST]
-    config = state / "edge/config.json"
     check_certificates(state, hosts)
-    if config.exists():
-        # edge expects the full chain and private key in one PEM file.
-        write_private(state / "edge/tls.pem",
-                      (state / "tls/fullchain.pem").read_bytes().rstrip() + b"\n"
-                      + (state / "tls/privkey.pem").read_bytes())
 
 
-def compose(args, **kwargs):
-    # Ignore unrelated host Compose settings.
-    env = {key: value for key, value in os.environ.items()
-           if not key.startswith("COMPOSE_")}
-    return run([
-        "docker", "compose", "--ansi", "never", "--project-name", PROJECT,
-        "--file", str(LAB / "compose.yaml"),
-        *args,
-    ], env=env, **kwargs)
+class Lab:
+    def __init__(self, root, config, name="default"):
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}", name):
+            raise ValueError("Instance name must be 1–48 lowercase letters, digits, underscores or hyphens")
+        self.root = root.resolve()
+        self.config = config.resolve()
+        self.name = name
+        checkout = hashlib.sha256(os.fsencode(self.root)).hexdigest()[:12]
+        self.images = f"pontia-e2e-{checkout}"
+        self.project = f"{self.images}-{name}"
+        self.network = f"{self.project}_lab"
+        self.state = self.config / "instances" / name
+
+    @contextmanager
+    def locked(self):
+        self.state.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with (self.state / ".lock").open("a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise ValueError(f"Instance {self.name} is busy") from None
+            yield
+
+    def compose(self, args, **kwargs):
+        env = {key: value for key, value in os.environ.items()
+               if not key.startswith(("COMPOSE_", "E2E_"))}
+        # The documentation subnet only renders build/check config. Startup
+        # creates the external network and records Docker's allocation first.
+        allocation = self.state / "network.json"
+        subnet = ipaddress.ip_network(json.loads(allocation.read_text())["subnet"]
+                                      if allocation.exists() else "192.0.2.0/24")
+        env.update(E2E_CONFIG=str(self.config), E2E_STATE=str(self.state),
+                   E2E_IMAGES=self.images, E2E_NETWORK=self.network)
+        for offset, service in enumerate(("cloud", "dashboard", "edge", "device", "browser"), 2):
+            env[f"E2E_{service.upper()}_IP"] = str(subnet[offset])
+        return run([
+            "docker", "compose", "--ansi", "never", "--project-name", self.project,
+            "--file", str(self.root / "docker/e2e/compose.yaml"), *args,
+        ], env=env, **kwargs)
+
+    def resources(self, resource):
+        return run(["docker", resource, "ls", "-q", "--filter",
+                    f"label=com.docker.compose.project={self.project}"], capture_output=True).stdout.strip()
+
+    def prepare_auth(self):
+        for service, files in AUTH_FILES.items():
+            for name in files:
+                source = self.config / "auth" / service / name
+                target = self.state / "auth" / service / name
+                target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                if source.exists() and not target.exists():
+                    write_private(target, source.read_bytes())
+        settings = Path("auth/device/claude-settings.json")
+        if (self.config / settings).exists():
+            write_private(self.state / settings, (self.config / settings).read_bytes())
+        else:
+            (self.state / settings).unlink(missing_ok=True)
+        prepare_claude(self.state, self.config)
+
+    def browser_url(self):
+        address = self.compose(["port", "browser", "6080"], capture_output=True).stdout.decode().strip()
+        return f"http://{address}/vnc.html?autoconnect=1&resize=scale"
+
+    def up(self):
+        with self.locked():
+            if any(self.resources(resource) for resource in ("container", "volume", "network")):
+                raise ValueError(f"Instance {self.name} already exists. Finish its task before running --name {self.name} down.")
+            check(self.config)
+            self.prepare_auth()
+            try:
+                prepare_edge(self.state, self.config)
+                run(["docker", "network", "create", "--internal", "--label",
+                     f"com.docker.compose.project={self.project}", self.network], capture_output=True)
+                network = json.loads(run(["docker", "network", "inspect", self.network], capture_output=True).stdout)[0]
+                subnet = network["IPAM"]["Config"][0]["Subnet"]
+                write_private(self.state / "network.json", json.dumps({"subnet": subnet}))
+                self.compose(["up", "-d", "--wait", "--wait-timeout", "180"])
+                for client in ("pi", "codex", "claude-agent"):
+                    self.compose(["exec", "-T", "device", "pontia", "client", "enable", client])
+                print(f"Instance: {self.name} ({self.project})")
+                print(f"Test browser: {self.browser_url()}")
+            except BaseException:
+                self.stop()
+                raise
+
+    def down(self):
+        with self.locked():
+            self.stop()
+
+    def stop(self):
+        containers = {}
+        for service in AUTH_FILES:
+            result = self.compose(["ps", "--all", "--quiet", service], capture_output=True)
+            if result.stdout.strip():
+                containers[service] = result.stdout.decode().strip()
+        self.compose(["stop"])
+        if "device" in containers:
+            for name, path in AUTH_FILES["device"].items():
+                contents = container_file(containers["device"], path)
+                if contents is not None:
+                    write_private(self.state / "auth/device" / name, contents)
+        if "browser" in containers:
+            save_browser_credentials(containers["browser"], self.state)
+        self.compose(["down", "--volumes", "--remove-orphans"])
+        if self.resources("network"):
+            run(["docker", "network", "rm", self.network], capture_output=True)
+        for name in ("edge/config.json", "edge/credential", "edge/tls.pem", "cloud-bootstrap.sql", "network.json"):
+            (self.state / name).unlink(missing_ok=True)
+        print(f"Instance {self.name} removed. Its login credentials are retained in {self.state / 'auth'}.")
+
+    def login_device(self):
+        self.compose(["exec", "-T", "device", "pontia", "login"])
+        self.compose(["exec", "-T", "device", "pontia", "remote", "edges"])
+        self.compose(["exec", "-T", "device", "pontia", "remote", "enable",
+                      "--edge", EDGE_ID, "--name", f"Docker E2E {self.name}"])
+        self.compose(["restart", "device"])
+        self.compose(["up", "-d", "--wait", "--wait-timeout", "180", "device"])
+        # Doctor reports registration and the URL, but exits 1 without systemd.
+        try:
+            self.compose(["exec", "-T", "device", "pontia", "doctor"])
+        except subprocess.CalledProcessError as error:
+            if error.returncode != 1:
+                raise
 
 
-def start_services():
-    check(STATE)
-    compose(["up", "-d", "--wait", "--wait-timeout", "180"])
-    print("Test browser: http://127.0.0.1:18179/vnc.html?autoconnect=1&resize=scale")
-
-
-def prepare_claude(state):
-    key = variables(state / "cloud.dev.vars").get("OPENROUTER_API_KEY")
+def prepare_claude(state, config):
+    key = variables(config / "cloud.dev.vars").get("OPENROUTER_API_KEY")
     if key is None:
         return
     if not key.strip() or key.strip() == "xxx":
@@ -184,40 +288,6 @@ def prepare_claude(state):
         "ANTHROPIC_API_KEY": "",
     })
     write_private(path, json.dumps(settings) + "\n")
-
-
-def up():
-    for resource in ("container", "volume", "network"):
-        existing = run(["docker", resource, "ls", "-q", "--filter",
-                        f"label=com.docker.compose.project={PROJECT}"], capture_output=True)
-        if existing.stdout.strip():
-            raise ValueError("An E2E run already exists. Finish it with docker-e2e down before starting a fresh run.")
-    initialize(STATE)
-    prepare_claude(STATE)
-    try:
-        prepare_edge(STATE)
-        start_services()
-        for client in ("pi", "codex", "claude-agent"):
-            compose(["exec", "-T", "device", "pontia", "client", "enable", client])
-    except BaseException:
-        down()
-        raise
-
-
-def login_device():
-    compose(["exec", "-T", "device", "pontia", "login"])
-    compose(["exec", "-T", "device", "pontia", "remote", "edges"])
-    compose(["exec", "-T", "device", "pontia", "remote", "enable",
-             "--edge", EDGE_ID, "--name", "Docker E2E Device"])
-    compose(["restart", "device"])
-    compose(["up", "-d", "--wait", "--wait-timeout", "180", "device"])
-    # Docker supervises pontiad without a systemd user service. Doctor still
-    # reports the account, registration, and Dashboard URL before exiting 1.
-    try:
-        compose(["exec", "-T", "device", "pontia", "doctor"])
-    except subprocess.CalledProcessError as error:
-        if error.returncode != 1:
-            raise
 
 
 def container_file(container, path):
@@ -260,35 +330,16 @@ def save_browser_credentials(container, state):
         write_private(state / "auth/browser/Local State", json.dumps({"os_crypt": encryption}))
 
 
-def down():
-    containers = {}
-    for service in AUTH_FILES:
-        result = compose(["ps", "--all", "--quiet", service], capture_output=True)
-        if result.stdout.strip():
-            containers[service] = result.stdout.decode().strip()
-    compose(["stop"])
-    if "device" in containers:
-        for name, path in AUTH_FILES["device"].items():
-            contents = container_file(containers["device"], path)
-            if contents is not None:
-                write_private(STATE / "auth/device" / name, contents)
-    if "browser" in containers:
-        save_browser_credentials(containers["browser"], STATE)
-    compose(["down", "--volumes", "--remove-orphans"])
-    for name in ("edge/config.json", "edge/credential", "edge/tls.pem", "cloud-bootstrap.sql"):
-        (STATE / name).unlink(missing_ok=True)
-    print("E2E containers, networks and run data removed. Certificates and login credentials retained.")
-
-
-def run_task(args):
+def run_task(lab, args):
     def interrupted(signum, frame):
         raise KeyboardInterrupt
 
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
-        up()
+        lab.up()
         try:
-            with subprocess.Popen(args or ["bash"], cwd=ROOT) as task:
+            with subprocess.Popen(args or ["bash"], cwd=lab.root,
+                                  env=dict(os.environ, PONTIA_E2E_NAME=lab.name)) as task:
                 try:
                     status = task.wait()
                 except BaseException:
@@ -298,12 +349,12 @@ def run_task(args):
                 if status:
                     raise subprocess.CalledProcessError(status, args or ["bash"])
         finally:
-            down()
+            lab.down()
     finally:
         signal.signal(signal.SIGTERM, previous)
 
 
-def prepare_edge(state):
+def prepare_edge(state, config):
     # Only called for a fresh run. Keep Cloud's hash and the edge credential paired.
     secret = secrets.token_urlsafe(32)
     seed = (LAB / "cloud-edge.sql").read_text().format(
@@ -319,12 +370,19 @@ def prepare_edge(state):
         "browser_dashboard_origin": "https://app.pontia.dev",
     }) + "\n")
 
+    write_private(state / "edge/tls.pem",
+                  (config / "tls/fullchain.pem").read_bytes().rstrip() + b"\n"
+                  + (config / "tls/privkey.pem").read_bytes())
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--name", default=os.environ.get("PONTIA_E2E_NAME", "default"),
+                        help="Instance within this checkout (default: PONTIA_E2E_NAME or default)")
     parser.add_argument("command", choices=("init", "check", "build", "up", "run", "login-device", "down", "compose"))
     parser.add_argument("args", nargs=argparse.REMAINDER)
     options = parser.parse_args()
+    lab = Lab(ROOT, STATE, options.name)
     if options.command not in ("compose", "run") and options.args:
         parser.error("Extra arguments are only supported by compose and run")
     if options.command == "init":
@@ -335,22 +393,22 @@ def main():
         raise ValueError("Run scripts/docker-e2e init first")
     if options.command == "check":
         check(STATE)
-        compose(["config", "--quiet"])
+        lab.compose(["config", "--quiet"])
         print("Configuration and certificates checked; this is not an E2E test result.")
     elif options.command == "build":
-        definition = compose(["build", "--print"], capture_output=True)
+        definition = lab.compose(["build", "--print"], capture_output=True)
         run(["docker", "buildx", "bake", "--file", "-", "--allow=network.host", "--pull", "--load"],
             input=definition.stdout, cwd=ROOT)
     elif options.command == "up":
-        up()
+        lab.up()
     elif options.command == "run":
-        run_task(options.args)
+        run_task(lab, options.args)
     elif options.command == "login-device":
-        login_device()
+        lab.login_device()
     elif options.command == "down":
-        down()
+        lab.down()
     elif options.command == "compose":
-        compose(options.args)
+        lab.compose(options.args)
 
 
 if __name__ == "__main__":

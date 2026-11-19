@@ -1,5 +1,7 @@
 """Opt-in image smoke tests; no public certificates or external credentials used."""
 
+from concurrent.futures import ThreadPoolExecutor
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -10,6 +12,34 @@ import unittest
 import uuid
 
 import test_setup
+
+
+class SmokeLab(test_setup.setup.Lab):
+    def compose(self, args, **kwargs):
+        rendered = super().compose(["config", "--format", "json"], capture_output=True)
+        config = json.loads(rendered.stdout)
+        config["networks"]["outbound"]["internal"] = True
+        for name, service in config["services"].items():
+            service.pop("build")
+            if name == "device":
+                service["security_opt"] = [f"seccomp={self.root / 'docker/e2e/device-seccomp.json'}"]
+        # Only health probes trust the temporary CA; application TLS is unchanged.
+        for name in ("cloud", "dashboard", "edge"):
+            config["services"][name]["volumes"].append({
+                "type": "bind", "source": str(self.config / "tls/test-ca.pem"),
+                "target": "/e2e-test-ca.pem", "read_only": True,
+            })
+        for name in ("cloud", "dashboard"):
+            config["services"][name]["healthcheck"]["test"][2:2] = ["--cacert", "/e2e-test-ca.pem"]
+        config["services"]["edge"]["healthcheck"]["test"] = ["CMD-SHELL",
+            "curl --fail --silent --cacert /e2e-test-ca.pem "
+            "--resolve docker-e2e.edge.pontia.dev:443:127.0.0.1 https://docker-e2e.edge.pontia.dev/healthz"]
+        self.state.mkdir(parents=True, exist_ok=True)
+        compose_file = self.state / "smoke-compose.json"
+        compose_file.write_text(json.dumps(config))
+        env = {key: value for key, value in os.environ.items() if not key.startswith("COMPOSE_")}
+        return subprocess.run(["docker", "compose", "--project-name", self.project,
+                               "-f", str(compose_file), *args], env=env, check=True, **kwargs)
 
 
 @unittest.skipUnless(os.environ.get("PONTIA_DOCKER_SMOKE") == "1", "Set PONTIA_DOCKER_SMOKE=1 after building images")
@@ -63,17 +93,11 @@ class ContainerSmokeTests(unittest.TestCase):
         ''')
         result = subprocess.run([
             "docker", "run", "--rm", "--init", "--network", "none",
-            "--entrypoint", "python3", "pontia-e2e-docker-cloud:latest", "-c", probe,
+            "--entrypoint", "python3", f"{test_setup.setup.Lab(test_setup.ROOT, test_setup.ROOT).images}-cloud:latest", "-c", probe,
         ], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_local_stack_bootstraps_public_edge_and_discards_run_data(self):
-        existing = subprocess.run([
-            "docker", "network", "ls", "--filter", "label=com.docker.compose.project=pontia-e2e-docker",
-            "--format", "{{.Name}}",
-        ], check=True, capture_output=True)
-        self.assertFalse(existing.stdout.strip(),
-                         "Run scripts/docker-e2e down first: the normal lab and smoke test share a fixed subnet")
         fixture = test_setup.SetupTests()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
@@ -89,52 +113,21 @@ class ContainerSmokeTests(unittest.TestCase):
         test_setup.setup.write_private(state / "auth/device/claude-settings.json", json.dumps(claude_settings))
         tls = state / "tls"
         shutil.copyfile(fixture.root / "ca.pem", tls / "test-ca.pem")
-        edge = state / "edge"
-        test_setup.setup.prepare_edge(state)
-        with test_setup.patch.dict(os.environ, {"SSL_CERT_FILE": str(fixture.root / "ca.pem")}):
-            test_setup.setup.check(state)
-        shutil.copyfile(fixture.root / "ca.pem", edge / "test-ca.pem")
-        env = {key: value for key, value in os.environ.items() if not key.startswith("COMPOSE_")}
-        rendered = subprocess.run([
-            "docker", "compose", "-f", str(test_setup.ROOT / "docker/e2e/compose.yaml"),
-            "config", "--format", "json",
-        ], env=env, check=True, capture_output=True)
-        config = json.loads(rendered.stdout)
-        config.pop("name", None)
-        # Each run owns a unique project, networks and volumes. Disable ALL egress.
-        for volume in config["volumes"].values():
-            volume.pop("name", None)
-        for network in config["networks"].values():
-            network.pop("name", None)
-            network["internal"] = True
-        for name, service in config["services"].items():
-            service.pop("build")
-            service["image"] = f"pontia-e2e-docker-{name}:latest"
-            service.pop("ports", None)
-            if name == "device":
-                service["security_opt"] = [f"seccomp={test_setup.ROOT / 'docker/e2e/device-seccomp.json'}"]
-            for mount in service.get("volumes", []):
-                if mount["type"] == "bind":
-                    mount["source"] = str(state / Path(mount["source"]).relative_to(test_setup.ROOT / "docker/e2e/.local"))
-        # Trust the ephemeral CA ONLY for smoke-test HTTP probes. The browser and
-        # Rust clients are unchanged; this does not establish remote-access E2E.
-        for name in ("cloud", "dashboard"):
-            probe = config["services"][name]["healthcheck"]["test"]
-            probe[2:2] = ["--cacert", "/tls/test-ca.pem"]
-        config["services"]["edge"]["healthcheck"]["test"][1] = (
-            "curl --fail --silent --cacert /etc/pontia/edge/test-ca.pem "
-            "--resolve docker-e2e.edge.pontia.dev:443:127.0.0.1 https://docker-e2e.edge.pontia.dev/healthz"
-        )
-        compose_file = fixture.root / "compose.json"
-        compose_file.write_text(json.dumps(config))
-        project = "pontia-smoke-" + uuid.uuid4().hex[:12]
-        prefix = ["docker", "compose", "--project-name", project, "-f", str(compose_file)]
+        first = SmokeLab(test_setup.ROOT, state, "smoke-" + uuid.uuid4().hex[:12])
+        second = SmokeLab(test_setup.ROOT, state, "smoke-" + uuid.uuid4().hex[:12])
+        trust = test_setup.patch.dict(os.environ, {"SSL_CERT_FILE": str(fixture.root / "ca.pem")})
+        trust.start()
+        self.addCleanup(trust.stop)
 
         def compose(*args):
-            return subprocess.run([*prefix, *args], env=env, check=True, capture_output=True)
+            return first.compose(list(args), capture_output=True)
 
         try:
-            compose("up", "-d", "--wait", "--wait-timeout", "180")
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                list(executor.map(lambda lab: lab.up(), (first, second)))
+            self.assertNotEqual(json.loads((first.state / "network.json").read_text()),
+                                json.loads((second.state / "network.json").read_text()))
+            second.compose(["exec", "-T", "device", "touch", "/home/e2e/workspace/keep-me"])
             public_edge = compose("exec", "-T", "cloud", "./node_modules/.bin/wrangler", "d1", "execute", "DB",
                                   "--local", "--persist-to", "/state", "--json", "--command",
                                   "SELECT access_scope, tunnel_url FROM edges;")
@@ -161,10 +154,9 @@ class ContainerSmokeTests(unittest.TestCase):
             sandbox = compose("exec", "-T", "device", "codex", "sandbox", "-c", 'sandbox_mode="workspace-write"',
                               "--", "sh", "-c", "printf sandbox-ok > /home/e2e/workspace/sandbox.txt && cat /home/e2e/workspace/sandbox.txt")
             self.assertEqual(sandbox.stdout, b"sandbox-ok")
-            denied = subprocess.run([*prefix, "exec", "-T", "device", "codex", "sandbox", "-c", 'sandbox_mode="workspace-write"',
-                                     "--", "sh", "-c", "printf forbidden > /home/e2e/outside-workspace.txt"],
-                                    env=env, capture_output=True)
-            self.assertNotEqual(denied.returncode, 0)
+            with self.assertRaises(subprocess.CalledProcessError):
+                compose("exec", "-T", "device", "codex", "sandbox", "-c", 'sandbox_mode="workspace-write"',
+                        "--", "sh", "-c", "printf forbidden > /home/e2e/outside-workspace.txt")
             oauth = compose(
                 "exec", "-T", "cloud", "curl", "--silent", "--show-error", "--cacert", "/tls/test-ca.pem",
                 "--dump-header", "-", "--output", "/dev/null", "--request", "POST",
@@ -190,30 +182,31 @@ class ContainerSmokeTests(unittest.TestCase):
             # Stopping Cloud must leave its domain pinned, not resolve production.
             compose("stop", "cloud")
             hosts = compose("exec", "-T", "device", "getent", "hosts", "pontia.dev").stdout
-            self.assertEqual(hosts.split()[0], b"172.30.83.2")
-            unavailable = subprocess.run([
-                *prefix, "exec", "-T", "device", "curl", "--noproxy", "*", "--max-time", "3",
-                "--fail", "https://pontia.dev/",
-            ], env=env, capture_output=True)
-            self.assertNotEqual(unavailable.returncode, 0)
+            subnet = json.loads((first.state / "network.json").read_text())["subnet"]
+            self.assertEqual(hosts.split()[0].decode(), str(ipaddress.ip_network(subnet)[2]))
+            with self.assertRaises(subprocess.CalledProcessError):
+                compose("exec", "-T", "device", "curl", "--noproxy", "*", "--max-time", "3",
+                        "--fail", "https://pontia.dev/")
             compose("exec", "-T", "device", "python3", "-c",
                     "from pathlib import Path; "
                     "Path('/home/e2e/.claude/.credentials.json').write_text('{\"test_credential\":\"refreshed\"}'); "
                     "Path('/home/e2e/.claude/settings.json').write_text('{\"permissions\":{\"allow\":[\"Bash\"]}}'); "
                     "Path('/home/e2e/.claude/projects').mkdir(exist_ok=True); "
                     "Path('/home/e2e/.claude/projects/discard-me').touch()")
-            with test_setup.patch.object(test_setup.setup, "STATE", state), \
-                    test_setup.patch.object(test_setup.setup, "compose", side_effect=lambda args, **kwargs:
-                        subprocess.run([*prefix, *args], env=env, check=True, **kwargs)):
-                test_setup.setup.down()
-            saved = state / "auth/device/claude.json"
+            first.down()
+            for resource in ("container", "volume", "network"):
+                self.assertFalse(first.resources(resource))
+            second.compose(["exec", "-T", "device", "test", "-f", "/home/e2e/workspace/keep-me"])
+            second.compose(["exec", "-T", "device", "test", "!", "-e", "/home/e2e/workspace/discard-me"])
+            second.compose(["exec", "-T", "cloud", "curl", "--fail", "--silent", "--cacert",
+                            "/e2e-test-ca.pem", "https://pontia.dev/"], capture_output=True)
+            saved = first.state / "auth/device/claude.json"
             self.assertEqual(json.loads(saved.read_text()), {"test_credential": "refreshed"})
             self.assertEqual(saved.stat().st_mode & 0o777, 0o600)
-            self.assertEqual(json.loads((state / "auth/device/claude-settings.json").read_text()), claude_settings)
-            test_setup.setup.prepare_edge(state)
-            with test_setup.patch.dict(os.environ, {"SSL_CERT_FILE": str(fixture.root / "ca.pem")}):
-                test_setup.setup.check(state)
-            compose("up", "-d", "--wait", "--wait-timeout", "180")
+            self.assertEqual(json.loads((state / "auth/device/claude.json").read_text()),
+                             {"test_credential": "original"})
+            self.assertEqual(json.loads((first.state / "auth/device/claude-settings.json").read_text()), claude_settings)
+            first.up()
             credentials = compose("exec", "-T", "device", "sh", "-c",
                                   "test ! -e /home/e2e/workspace/discard-me && cat /home/e2e/.codex/auth.json")
             self.assertEqual(json.loads(credentials.stdout), {"test_credential": "retained"})
@@ -227,9 +220,8 @@ class ContainerSmokeTests(unittest.TestCase):
                             "--local", "--persist-to", "/state", "--json", "--command",
                             "SELECT count(*) AS count FROM hero_name_modifiers WHERE word='discard-me';")
             self.assertEqual(json.loads(fresh.stdout)[0]["results"][0]["count"], 0)
-        except Exception:
-            logs = subprocess.run([*prefix, "logs", "--tail=50"], env=env, capture_output=True)
-            print(logs.stdout.decode(errors="replace"))
-            raise
         finally:
-            compose("down", "--volumes")
+            for lab in (first, second):
+                lab.down()
+                for resource in ("container", "volume", "network"):
+                    self.assertFalse(lab.resources(resource))

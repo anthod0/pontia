@@ -54,6 +54,7 @@ class SetupTests(unittest.TestCase):
         self.root = Path(self.sandbox.name)
         self.state = self.root / "state"
         setup.initialize(self.state)
+        self.lab = setup.Lab(ROOT, self.state)
 
     def oauth(self):
         path = self.state / "cloud.dev.vars"
@@ -91,13 +92,13 @@ class SetupTests(unittest.TestCase):
             "model": "test-model", "env": {"ANTHROPIC_API_KEY": "old-key"},
         }))
         original = path.read_bytes()
-        setup.prepare_claude(self.state)
+        setup.prepare_claude(self.state, self.state)
         self.assertEqual(path.read_bytes(), original)
         config = self.state / "cloud.dev.vars"
         base = config.read_text()
         for key in ("test-openrouter-first", "test-openrouter-rotated"):
             config.write_text(base + f'OPENROUTER_API_KEY="{key}"\n')
-            setup.prepare_claude(self.state)
+            setup.prepare_claude(self.state, self.state)
             self.assertEqual(json.loads(path.read_text()), {
                 "model": "test-model",
                 "env": {
@@ -113,11 +114,10 @@ class SetupTests(unittest.TestCase):
         base = config.read_text()
         for value in ('xxx', '""', '"  "'):
             config.write_text(base + f"OPENROUTER_API_KEY={value}\n")
-            with patch.object(setup, "STATE", self.state), \
-                    patch.object(setup, "run", return_value=subprocess.CompletedProcess([], 0, b"")), \
-                    patch.object(setup, "compose") as compose:
+            with patch.object(self.lab, "resources", return_value=b""), \
+                    patch.object(setup, "check"), patch.object(self.lab, "compose") as compose:
                 with self.assertRaises(ValueError):
-                    setup.up()
+                    self.lab.up()
                 compose.assert_not_called()
             self.assertFalse((self.state / "auth/device/claude-settings.json").exists())
 
@@ -158,14 +158,14 @@ class SetupTests(unittest.TestCase):
             ("import os,signal,time; os.kill(os.getppid(),signal.SIGTERM); time.sleep(30)", KeyboardInterrupt),
         ]
         for code, error in cases:
-            with self.subTest(code=code), patch.object(setup, "ROOT", self.root), \
-                    patch.object(setup, "up", side_effect=lambda: active.touch()), \
-                    patch.object(setup, "down", side_effect=lambda: active.unlink()):
+            with self.subTest(code=code), patch.object(self.lab, "root", self.root), \
+                    patch.object(self.lab, "up", side_effect=lambda: active.touch()), \
+                    patch.object(self.lab, "down", side_effect=lambda: active.unlink()):
                 if error:
                     with self.assertRaises(error):
-                        setup.run_task([sys.executable, "-c", code])
+                        setup.run_task(self.lab, [sys.executable, "-c", code])
                 else:
-                    setup.run_task([sys.executable, "-c", code])
+                    setup.run_task(self.lab, [sys.executable, "-c", code])
                 self.assertFalse(active.exists())
 
     def test_new_environments_have_independent_valid_signing_keys(self):
@@ -217,7 +217,7 @@ class SetupTests(unittest.TestCase):
     def test_public_edge_bootstrap_is_repeatable_and_new_runs_rotate_credentials(self):
         self.oauth()
         with self.certificates():
-            setup.prepare_edge(self.state)
+            setup.prepare_edge(self.state, self.state)
             setup.check(self.state)
         db = sqlite3.connect(":memory:")
         self.addCleanup(db.close)
@@ -237,26 +237,62 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(row[3], base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest()).decode().rstrip("="))
         for table in ("accounts", "auth_sessions", "devices", "edge_tickets"):
             self.assertEqual(db.execute(f"SELECT count(*) FROM {table}").fetchone()[0], 0)
-        setup.prepare_edge(self.state)
+        setup.prepare_edge(self.state, self.state)
         self.assertNotEqual((self.state / "edge/credential").read_text().strip(), credential)
         self.assertNotEqual((self.state / "cloud-bootstrap.sql").read_text(), seed)
 
+    def test_instance_names_and_checkouts_have_distinct_resources(self):
+        other_name = setup.Lab(ROOT, self.state, "other")
+        other_checkout = setup.Lab(self.root / "checkout", self.state, "default")
+        self.assertNotEqual(self.lab.project, other_name.project)
+        self.assertNotEqual(self.lab.state, other_name.state)
+        self.assertNotEqual(self.lab.project, other_checkout.project)
+        self.assertNotEqual(self.lab.images, other_checkout.images)
+        self.assertEqual(self.lab.images, other_name.images)
+        for name in ("../escape", "", "Uppercase", "a/b"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                setup.Lab(ROOT, self.state, name)
+
+    def test_instance_credentials_are_seeded_once_and_never_overwrite_another_instance(self):
+        seed = self.state / "auth/device/codex.json"
+        setup.write_private(seed, '{"token":"seed"}')
+        self.lab.prepare_auth()
+        refreshed = self.lab.state / "auth/device/codex.json"
+        setup.write_private(refreshed, '{"token":"refreshed"}')
+        other = setup.Lab(ROOT, self.state, "other")
+        other.prepare_auth()
+        self.lab.prepare_auth()
+        self.assertEqual(json.loads(refreshed.read_text()), {"token": "refreshed"})
+        self.assertEqual(json.loads((other.state / "auth/device/codex.json").read_text()), {"token": "seed"})
+        self.assertEqual(json.loads(seed.read_text()), {"token": "seed"})
+
+    def test_concurrent_operations_on_same_instance_are_rejected(self):
+        other = setup.Lab(ROOT, self.state, "other")
+        same = setup.Lab(ROOT, self.state)
+        with self.lab.locked(), other.locked():
+            with self.assertRaises(ValueError):
+                with same.locked():
+                    self.fail("A second operation acquired the same instance")
+        with same.locked():
+            pass
+
+    def test_run_passes_instance_selection_to_child_commands(self):
+        lab = setup.Lab(self.root, self.state, "selected")
+        with patch.object(lab, "up"), patch.object(lab, "down"):
+            setup.run_task(lab, [sys.executable, "-c",
+                                "import os; assert os.environ['PONTIA_E2E_NAME'] == 'selected'"])
+
     @unittest.skipUnless(shutil.which("docker"), "Docker CLI required for Compose validation")
     def test_compose_pins_all_application_domains_and_only_publishes_loopback_browser(self):
-        env = {key: value for key, value in os.environ.items()
-               if not key.startswith("COMPOSE_")}
-        result = subprocess.run([
-            "docker", "compose",
-            "-f", str(ROOT / "docker/e2e/compose.yaml"), "config", "--format", "json",
-        ], env=env, check=True, capture_output=True)
+        result = self.lab.compose(["config", "--format", "json"], capture_output=True)
         config = json.loads(result.stdout)
         for service in config["services"].values():
             hosts = service["extra_hosts"]
             if isinstance(hosts, list):
                 hosts = dict(entry.split("=", 1) for entry in hosts)
             self.assertEqual(hosts, {
-                "pontia.dev": "172.30.83.2", "app.pontia.dev": "172.30.83.3",
-                "docker-e2e.edge.pontia.dev": "172.30.83.4",
+                "pontia.dev": "192.0.2.2", "app.pontia.dev": "192.0.2.3",
+                "docker-e2e.edge.pontia.dev": "192.0.2.4",
             })
             for port in service.get("ports", []):
                 self.assertEqual(port["host_ip"], "127.0.0.1")
@@ -265,8 +301,8 @@ class SetupTests(unittest.TestCase):
                 if mount["type"] == "bind":
                     self.assertTrue(mount["read_only"])
                     self.assertFalse(mount["bind"]["create_host_path"])
-        self.assertTrue(config["networks"]["lab"]["internal"])
-        self.assertEqual(config["networks"]["lab"]["ipam"]["config"][0]["ip_range"], "172.30.83.128/25")
+        self.assertTrue(config["networks"]["lab"]["external"])
+        self.assertNotIn("published", config["services"]["browser"]["ports"][0])
         self.assertEqual(set(config["services"]["edge"]["networks"]), {"lab"})
 
 

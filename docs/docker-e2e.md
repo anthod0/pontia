@@ -6,9 +6,10 @@ Each run starts with fresh containers and databases and automatically provisions
 
 ## 1. Start the environment
 
-Run these commands from the root of the checkout you want to validate:
+Run these commands from the root of the checkout you want to validate. Choose an instance name for this terminal:
 
 ```bash
+export PONTIA_E2E_NAME=my-task
 ./scripts/docker-e2e build
 ./scripts/docker-e2e check
 ./scripts/docker-e2e up
@@ -16,17 +17,30 @@ Run these commands from the root of the checkout you want to validate:
 
 The build includes uncommitted source changes and new files in the current checkout. If certificate or credential checks fail, report the specific blocker. Do not reinitialize the environment or copy authentication files from your everyday account.
 
-Only one run may use a host at a time, including runs from different worktrees. If startup reports an existing run, identify the task that owns it first. Only after that task has finished may you clean up with `./scripts/docker-e2e down` and retry.
+Multiple instances can run on the same host. Different checkouts are isolated automatically. In the same checkout, choose a different name for each concurrent task. You can also select an instance explicitly:
+
+```bash
+./scripts/docker-e2e --name task-a up
+./scripts/docker-e2e --name task-b up
+./scripts/docker-e2e --name task-a login-device
+./scripts/docker-e2e --name task-a down
+```
+
+Use the same name for all commands belonging to a task. `--name` takes precedence over `PONTIA_E2E_NAME`; when neither is set, the name is `default`. Build once per checkout after source changes; all instances in that checkout use those images.
+
+If startup reports that the selected instance already exists, identify its owner before cleaning it up. Other names and other checkouts can continue running. Each instance retains its own refreshed login credentials across runs. New instances start with the prepared test credentials in `docker/e2e/.local/auth/`.
 
 ## 2. Open the container browser and sign in
 
-Open this URL in the host browser:
+Open the `Test browser` URL printed by `up` in the host browser. Each instance receives an available loopback port. To find it again:
 
-```text
-http://127.0.0.1:18179/vnc.html?autoconnect=1&resize=scale
+```bash
+./scripts/docker-e2e compose port browser 6080
 ```
 
-This page provides access to the browser inside the container. Agents should use `computer-use` to operate it. For browser automation, you can also connect to CDP at `127.0.0.1:9222` inside the container through a temporary `docker exec` forwarder. Close the forwarder when finished.
+Use `http://<printed-address>/vnc.html?autoconnect=1&resize=scale`.
+
+The page provides access to the browser inside the container. Agents should use `computer-use` to operate it. For browser automation, you can also connect to CDP at `127.0.0.1:9222` inside the container through a temporary `docker exec` forwarder. Close the forwarder when finished.
 
 Access the following URLs only in the **container browser**:
 
@@ -36,7 +50,7 @@ Access the following URLs only in the **container browser**:
 | `https://app.pontia.dev` | Public Dashboard for this run |
 | `http://localhost:8080/dashboard/` | Local Dashboard for this run |
 
-Opening `pontia.dev` or `app.pontia.dev` directly on the host still reaches production.
+Opening `pontia.dev` or `app.pontia.dev` directly on the host still reaches production. All instances use the same container URLs and OAuth callback URLs; additional instances require no GitHub OAuth configuration changes.
 
 Open `https://pontia.dev` in the container browser and sign in with GitHub or Google. Existing external provider login credentials are reused, but each run still requires an OAuth flow to create the local user and login session. Complete any required reauthentication or MFA in the container browser.
 
@@ -82,7 +96,7 @@ An API key or compatible gateway can be used without a Claude subscription. Befo
 
 For a gateway, add `ANTHROPIC_BASE_URL` and use the credential variable required by that gateway: `ANTHROPIC_AUTH_TOKEN` for a bearer token or `ANTHROPIC_API_KEY` for an `x-api-key` header. Set `model` in the same settings file if the gateway requires a particular model ID. See [Claude's gateway configuration guide](https://code.claude.com/docs/en/llm-gateway-connect).
 
-The private settings file applies to Claude Code both in the terminal and through Pontia. It is excluded from Git and image builds. Edit this host file for changes that should apply to future runs; settings and approvals changed inside a run are discarded. Do not copy your everyday Claude configuration or put real credentials in this guide, shell arguments, or validation evidence.
+The private settings file applies to Claude Code both in the terminal and through Pontia. It is excluded from Git and image builds. Edit this host file for changes that should apply to future runs of any instance; settings and approvals changed inside a run are discarded. Do not copy your everyday Claude configuration or put real credentials in this guide, shell arguments, or validation evidence.
 
 Check authentication with `./scripts/docker-e2e compose exec device claude auth status`. This checks the configured authentication source; only a completed model task proves the credential and provider work. Select **Claude Code** when creating the Dashboard Session, then verify file creation, tool approval, exit, history, and resume. Real model tasks use the configured provider's quota or billing.
 
@@ -116,19 +130,20 @@ Whether validation passes, fails, or is blocked, run this command before finishi
 ./scripts/docker-e2e down
 ```
 
-This preserves refreshed login credentials for reuse and removes the run's containers, networks, databases, Sessions, client conversations, Workspaces, and browser runtime data. Use the same command to clean up after a forced termination or host interruption.
+This preserves refreshed login credentials in `docker/e2e/.local/instances/<name>/auth/` and removes the selected instance's containers, networks, databases, Sessions, client conversations, Workspaces, and browser runtime data. Other instances remain running. Use the same command to clean up after a forced termination or host interruption.
 
-Confirm that all three commands below return no output before ending the task:
+Get the selected instance’s project name, then confirm that all three resource checks return no output before ending the task:
 
 ```bash
-docker ps -aq --filter label=com.docker.compose.project=pontia-e2e-docker
-docker volume ls -q --filter label=com.docker.compose.project=pontia-e2e-docker
-docker network ls -q --filter label=com.docker.compose.project=pontia-e2e-docker
+project=$(./scripts/docker-e2e compose config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')
+docker ps -aq --filter "label=com.docker.compose.project=$project"
+docker volume ls -q --filter "label=com.docker.compose.project=$project"
+docker network ls -q --filter "label=com.docker.compose.project=$project"
 ```
 
 If credential export fails, services remain stopped and data volumes are retained. Resolve the failure and retry `down`; do not report cleanup as complete until it succeeds.
 
-If you have a complete validation script, use this command to manage startup and cleanup automatically:
+If you have a complete validation script, use this command to manage startup and cleanup automatically. Commands inside the script inherit the selected instance name:
 
 ```bash
 ./scripts/docker-e2e run bash /absolute/path/to/validation.sh

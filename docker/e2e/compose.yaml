@@ -1,11 +1,9 @@
-name: pontia-e2e-docker
-
 # Pin the application domains even when a service is stopped. Docker DNS aliases
 # alone could fall back to public DNS after the last matching container exits.
 x-local-hosts: &local-hosts
-  - "pontia.dev=172.30.83.2"
-  - "app.pontia.dev=172.30.83.3"
-  - "docker-e2e.edge.pontia.dev=172.30.83.4"
+  - "pontia.dev=${E2E_CLOUD_IP:?Use scripts/docker-e2e}"
+  - "app.pontia.dev=${E2E_DASHBOARD_IP:?Use scripts/docker-e2e}"
+  - "docker-e2e.edge.pontia.dev=${E2E_EDGE_IP:?Use scripts/docker-e2e}"
 
 x-build: &build
   context: ../..
@@ -16,6 +14,7 @@ x-build: &build
 
 services:
   cloud:
+    image: ${E2E_IMAGES}-cloud:latest
     build:
       <<: *build
       target: cloud
@@ -23,19 +22,19 @@ services:
     extra_hosts: *local-hosts
     volumes:
       - type: bind
-        source: ./.local/cloud.dev.vars
+        source: ${E2E_CONFIG}/cloud.dev.vars
         target: /app/.dev.vars
         read_only: true
         bind:
           create_host_path: false
       - type: bind
-        source: ./.local/tls
+        source: ${E2E_CONFIG}/tls
         target: /tls
         read_only: true
         bind:
           create_host_path: false
       - type: bind
-        source: ./.local/cloud-bootstrap.sql
+        source: ${E2E_STATE}/cloud-bootstrap.sql
         target: /app/e2e-bootstrap.sql
         read_only: true
         bind:
@@ -43,7 +42,7 @@ services:
       - cloud-state:/state
     networks:
       lab:
-        ipv4_address: 172.30.83.2
+        ipv4_address: ${E2E_CLOUD_IP:?Use scripts/docker-e2e}
       outbound: {}
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--resolve", "pontia.dev:443:127.0.0.1", "https://pontia.dev/"]
@@ -53,6 +52,7 @@ services:
       start_period: 20s
 
   dashboard:
+    image: ${E2E_IMAGES}-dashboard:latest
     build:
       <<: *build
       target: dashboard
@@ -60,14 +60,14 @@ services:
     extra_hosts: *local-hosts
     volumes:
       - type: bind
-        source: ./.local/tls
+        source: ${E2E_CONFIG}/tls
         target: /tls
         read_only: true
         bind:
           create_host_path: false
     networks:
       lab:
-        ipv4_address: 172.30.83.3
+        ipv4_address: ${E2E_DASHBOARD_IP:?Use scripts/docker-e2e}
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--resolve", "app.pontia.dev:443:127.0.0.1", "https://app.pontia.dev/"]
       interval: 5s
@@ -75,6 +75,7 @@ services:
       retries: 10
 
   edge:
+    image: ${E2E_IMAGES}-edge:latest
     build:
       <<: *build
       target: edge
@@ -84,14 +85,14 @@ services:
     extra_hosts: *local-hosts
     volumes:
       - type: bind
-        source: ./.local/edge
+        source: ${E2E_STATE}/edge
         target: /etc/pontia/edge
         read_only: true
         bind:
           create_host_path: false
     networks:
       lab:
-        ipv4_address: 172.30.83.4
+        ipv4_address: ${E2E_EDGE_IP:?Use scripts/docker-e2e}
     depends_on:
       cloud:
         condition: service_healthy
@@ -102,6 +103,7 @@ services:
       retries: 10
 
   device:
+    image: ${E2E_IMAGES}-device:latest
     build:
       <<: *build
       target: device
@@ -118,13 +120,14 @@ services:
     volumes:
       - device-home:/home/e2e
       - type: bind
-        source: ./.local/auth/device
+        source: ${E2E_STATE}/auth/device
         target: /e2e-auth
         read_only: true
         bind:
           create_host_path: false
     networks:
-      lab: {}
+      lab:
+        ipv4_address: ${E2E_DEVICE_IP:?Use scripts/docker-e2e}
       outbound: {}
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/healthz"]
@@ -134,6 +137,7 @@ services:
       start_period: 10s
 
   browser:
+    image: ${E2E_IMAGES}-browser:latest
     build:
       <<: *build
       target: browser
@@ -142,17 +146,18 @@ services:
     shm_size: 1gb
     extra_hosts: *local-hosts
     ports:
-      - "127.0.0.1:18179:6080"
+      - "127.0.0.1::6080"
     volumes:
       - browser-home:/home/e2e
       - type: bind
-        source: ./.local/auth/browser
+        source: ${E2E_STATE}/auth/browser
         target: /e2e-auth
         read_only: true
         bind:
           create_host_path: false
     networks:
-      lab: {}
+      lab:
+        ipv4_address: ${E2E_BROWSER_IP:?Use scripts/docker-e2e}
       outbound: {}
     depends_on:
       cloud:
@@ -169,11 +174,8 @@ services:
 
 networks:
   lab:
-    internal: true
-    ipam:
-      config:
-        - subnet: 172.30.83.0/24
-          ip_range: 172.30.83.128/25
+    external: true
+    name: ${E2E_NETWORK}
   outbound: {}
 
 volumes:
