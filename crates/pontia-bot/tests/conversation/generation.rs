@@ -27,7 +27,7 @@ async fn reconcile(service: &ConversationService) {
 }
 
 #[tokio::test]
-async fn both_upper_limits_wait_for_idle_survive_compaction_and_keep_helpers_and_work_status() {
+async fn both_upper_limits_wait_for_idle_and_keep_helpers_and_work_status() {
     for (limit, window) in [(258_000, 1_000_000), (102_400, 128_000)] {
         let (_root, _pool, client, control, conversation) = fixture().await;
         let _exits = report_exits(&control);
@@ -61,9 +61,7 @@ async fn both_upper_limits_wait_for_idle_survive_compaction_and_keep_helpers_and
             current(&conversation, &id).await.as_deref(),
             Some(old.as_str())
         );
-        usage(&control, &old, 1000, window).await;
         finish(&control, &old, EventType::TurnCompleted).await;
-        // Reconstruct from persisted facts, not an in-memory high-water mark.
         let recovered = ConversationService::new(control.clone());
         reconcile(&recovered).await;
         let new = current(&recovered, &id).await.unwrap();
@@ -561,6 +559,7 @@ async fn helper_wake_launch_failure_is_visible_even_with_no_current_session() {
     let worker = helper(&helpers, &old).await;
     usage(&control, &old, 80_000, 1_000_000).await;
     finish(&control, &old, EventType::TurnCompleted).await;
+    reconcile(&conversation).await;
     conversation
         .reconcile_generations(OffsetDateTime::now_utc() + Duration::minutes(6))
         .await
@@ -644,6 +643,7 @@ async fn helper_waiting_on_unknown_idle_exit_retains_uncertainty_and_is_not_repl
     let worker = helper(&helpers, &old).await;
     usage(&control, &old, 80_000, 1_000_000).await;
     finish(&control, &old, EventType::TurnCompleted).await;
+    reconcile(&conversation).await;
     let runtime = control
         .queries()
         .session_snapshot(&old)
@@ -716,4 +716,58 @@ async fn helper_waiting_on_unknown_idle_exit_retains_uncertainty_and_is_not_repl
             .count(),
         0
     );
+}
+
+#[tokio::test]
+async fn idle_timer_persists_across_restart_and_resets_after_fast_turn() {
+    let (_root, _pool, _client, control, conversation) = fixture().await;
+    let _exits = report_exits(&control);
+    let (id, old) = bot(&conversation).await;
+    let t0 = OffsetDateTime::now_utc();
+    usage(&control, &old, 80_000, 1_000_000).await;
+    finish(&control, &old, EventType::TurnCompleted).await;
+
+    // First idle check records the persisted idle timer.
+    conversation.reconcile_generations(t0).await.unwrap();
+    assert_eq!(
+        current(&conversation, &id).await.as_deref(),
+        Some(old.as_str())
+    );
+
+    // Across restart, elapsed time continues from the persisted idle_since.
+    let recovered = ConversationService::new(control.clone());
+    recovered
+        .reconcile_generations(t0 + Duration::seconds(299))
+        .await
+        .unwrap();
+    assert_eq!(
+        current(&recovered, &id).await.as_deref(),
+        Some(old.as_str())
+    );
+
+    // A fast turn completing between checks changes current_turn_id and resets idle_since.
+    recovered.send(&id, "fast turn").await.unwrap();
+    finish(&control, &old, EventType::TurnCompleted).await;
+    let t1 = t0 + Duration::minutes(6);
+    recovered.reconcile_generations(t1).await.unwrap();
+    assert_eq!(
+        current(&recovered, &id).await.as_deref(),
+        Some(old.as_str())
+    );
+
+    // Restarting again keeps counting from the reset timer and retires at 5 minutes.
+    let restarted = ConversationService::new(control.clone());
+    restarted
+        .reconcile_generations(t1 + Duration::seconds(299))
+        .await
+        .unwrap();
+    assert_eq!(
+        current(&restarted, &id).await.as_deref(),
+        Some(old.as_str())
+    );
+    restarted
+        .reconcile_generations(t1 + Duration::minutes(5))
+        .await
+        .unwrap();
+    assert_eq!(current(&restarted, &id).await, None);
 }

@@ -1,7 +1,29 @@
 use super::{Activity, ConversationService, ConversationUpdate, Notice};
-use pontia_core::{Error, Result};
+use pontia_core::{
+    Error, Result,
+    domain::{DomainEvent, EventType},
+};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::sync::watch;
+
+const RECONCILE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15);
+const IDLE_TOKEN_LIMIT: u64 = 75_000;
+const IDLE_DURATION: time::Duration = time::Duration::minutes(5);
+
+fn should_reconcile(event: &DomainEvent) -> bool {
+    matches!(
+        event.event_type,
+        EventType::SessionReady
+            | EventType::SessionExited
+            | EventType::SessionError
+            | EventType::SessionContextUsageUpdated
+            | EventType::TurnStarted
+            | EventType::TurnCompleted
+            | EventType::TurnFailed
+            | EventType::TurnAbandoned
+            | EventType::TurnInterrupted
+    )
+}
 
 pub(super) enum SwitchFailure {
     Failed(String),
@@ -64,7 +86,7 @@ impl ConversationService {
 
     pub async fn run_generations(self, mut shutdown: watch::Receiver<bool>) {
         let mut events = self.control.agent_events().subscribe();
-        let mut tick = tokio::time::interval(std::time::Duration::from_secs(2));
+        let mut tick = tokio::time::interval(RECONCILE_INTERVAL);
         loop {
             if *shutdown.borrow() {
                 break;
@@ -72,8 +94,10 @@ impl ConversationService {
             tokio::select! {
                 _ = shutdown.changed() => break,
                 _ = tick.tick() => (),
-                event = events.recv() => {
-                    if matches!(event, Err(tokio::sync::broadcast::error::RecvError::Closed)) { break; }
+                event = events.recv() => match event {
+                    Ok(event) if !should_reconcile(&event) => continue,
+                    Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => (),
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
             }
             if let Err(error) = self.reconcile_generations(OffsetDateTime::now_utc()).await {
@@ -158,40 +182,49 @@ impl ConversationService {
                 .iter()
                 .any(|turn| matches!(turn.state.as_str(), "queued" | "running"))
         {
+            self.records.clear_idle_timer(bot_id).await?;
             return Ok(());
         }
 
-        // Read existing facts instead of persisting a second lifecycle projection.
-        // Earlier high usage still requests handoff after native compaction reduces it.
-        let events = self.control.queries().list_session_events(session).await?;
-        let mut used = None;
-        let mut window = None;
-        let mut upper = false;
-        let mut idle_since = None;
-        for event in events {
-            if event.event_type == "session.context_usage_updated" {
-                let usage = &event.payload["context_usage"];
-                if let Some(value) = usage.get("used_tokens") {
-                    used = value.as_u64();
+        let session_view = self
+            .control
+            .queries()
+            .get_session(session)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Session {session} not found")))?;
+        let used = session_view
+            .context_usage
+            .as_ref()
+            .and_then(|usage| usage.used_tokens);
+        let window = session_view
+            .context_usage
+            .as_ref()
+            .and_then(|usage| usage.max_tokens);
+        let upper = used.is_some_and(|used| self.generation_limits.exceeded(used, window));
+        let lower = if upper {
+            false
+        } else if used.is_some_and(|used| used > IDLE_TOKEN_LIMIT) {
+            let timer = self.records.idle_timer(bot_id).await?;
+            let current_turn = snapshot.current_turn_id.as_deref();
+            match timer {
+                Some(timer) if timer.turn_id.as_deref() == current_turn => {
+                    let since = OffsetDateTime::parse(&timer.since, &Rfc3339).map_err(|error| {
+                        Error::Domain(format!("Invalid Bot idle_since timestamp: {error}"))
+                    })?;
+                    now - since >= IDLE_DURATION
                 }
-                if let Some(value) = usage.get("max_tokens") {
-                    window = value.as_u64();
+                _ => {
+                    let timestamp = now.format(&Rfc3339).expect("UTC timestamp");
+                    self.records
+                        .set_idle_timer(bot_id, &timestamp, current_turn)
+                        .await?;
+                    false
                 }
-                upper |= used.is_some_and(|used| self.generation_limits.exceeded(used, window));
             }
-            let idle_boundary = match event.event_type.as_str() {
-                "turn.completed" | "turn.failed" => event.turn_id == snapshot.current_turn_id,
-                "session.ready" => snapshot.current_turn_id.is_none() && idle_since.is_none(),
-                _ => false,
-            };
-            if idle_boundary && idle_since.is_none() {
-                idle_since = Some(OffsetDateTime::parse(&event.time, &Rfc3339).map_err(
-                    |error| Error::Domain(format!("Invalid Session event time: {error}")),
-                )?);
-            }
-        }
-        let lower = used.is_some_and(|used| used > 75_000)
-            && idle_since.is_some_and(|since| now - since >= time::Duration::minutes(5));
+        } else {
+            self.records.clear_idle_timer(bot_id).await?;
+            false
+        };
         if !upper && !lower {
             return Ok(());
         }
@@ -211,6 +244,8 @@ impl ConversationService {
                 .await?;
             activity.generation_notice.lock().unwrap().take();
             activity.notify(ConversationUpdate::Changed);
+        } else {
+            self.records.clear_idle_timer(bot_id).await?;
         }
         Ok(())
     }

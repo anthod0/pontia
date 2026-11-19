@@ -62,6 +62,12 @@ pub struct Bot {
     pub working_on: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct BotIdleTimer {
+    pub since: String,
+    pub turn_id: Option<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BotConfiguration {
@@ -182,10 +188,53 @@ impl BotService {
     /// The conversation service owns Session lifecycle and routing around this pointer.
     pub async fn set_current_session(&self, bot_id: &str, session_id: Option<&str>) -> Result<Bot> {
         sqlx::query_as(
-            "UPDATE bots SET current_session_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            "UPDATE bots SET current_session_id = ?, idle_since = NULL, idle_turn_id = NULL,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
              WHERE bot_id = ? RETURNING *",
-        ).bind(session_id).bind(bot_id).fetch_optional(&self.pool).await?
-            .ok_or_else(|| Error::NotFound(format!("Bot {bot_id} not found")))
+        )
+        .bind(session_id)
+        .bind(bot_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| Error::NotFound(format!("Bot {bot_id} not found")))
+    }
+
+    pub(crate) async fn idle_timer(&self, bot_id: &str) -> Result<Option<BotIdleTimer>> {
+        let row: Option<(Option<String>, Option<String>)> =
+            sqlx::query_as("SELECT idle_since, idle_turn_id FROM bots WHERE bot_id = ?")
+                .bind(bot_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        let Some((since, turn_id)) = row else {
+            return Err(Error::NotFound(format!("Bot {bot_id} not found")));
+        };
+        Ok(since.map(|since| BotIdleTimer { since, turn_id }))
+    }
+
+    pub(crate) async fn set_idle_timer(
+        &self,
+        bot_id: &str,
+        since: &str,
+        turn_id: Option<&str>,
+    ) -> Result<()> {
+        sqlx::query("UPDATE bots SET idle_since = ?, idle_turn_id = ? WHERE bot_id = ?")
+            .bind(since)
+            .bind(turn_id)
+            .bind(bot_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub(crate) async fn clear_idle_timer(&self, bot_id: &str) -> Result<()> {
+        sqlx::query(
+            "UPDATE bots SET idle_since = NULL, idle_turn_id = NULL
+             WHERE bot_id = ? AND (idle_since IS NOT NULL OR idle_turn_id IS NOT NULL)",
+        )
+        .bind(bot_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     pub fn helper_profile_id(bot_id: &str) -> String {
