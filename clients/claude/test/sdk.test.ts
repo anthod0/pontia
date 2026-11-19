@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { spawn } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { listModels } from "../src/models.js";
-import { Host, type QueryFactory } from "../src/host.js";
+import { Host, type QueryFactory, type ExecutionPolicy } from "../src/host.js";
 import type { HostEvent } from "../src/facts.js";
 
 // Opt-in runs the real SDK against a loopback-only model substitute, never a live model.
@@ -34,7 +34,7 @@ test(
       );
     }
     await writeFile(join(cwd, "input.txt"), "isolated tool result marker\n");
-    const requests: Array<{ messages: unknown; model: string }> = [];
+    const requests: Array<{ messages: unknown; model: string; tools: Array<{ name: string }> }> = [];
     const server = createServer(async (request, response) => {
       try {
         const chunks: Buffer[] = [];
@@ -49,7 +49,7 @@ test(
           response.writeHead(404).end();
           return;
         }
-        requests.push({ messages: body.messages, model: body.model });
+        requests.push({ messages: body.messages, model: body.model, tools: body.tools ?? [] });
         const message = {
           id: `message_${requests.length}`,
           type: "message",
@@ -66,7 +66,7 @@ test(
                     input: { file_path: join(cwd, "input.txt") },
                   },
                 ]
-              : [3, 5].includes(requests.length)
+              : [3, 5, 11, 13].includes(requests.length)
                 ? [
                     {
                       type: "tool_use",
@@ -88,7 +88,7 @@ test(
                       },
                     ]
                   : [{ type: "text", text: "fixture answer" }],
-          stop_reason: [1, 3, 5, 7, 9].includes(requests.length) ? "tool_use" : "end_turn",
+          stop_reason: [1, 3, 5, 7, 9, 11, 13].includes(requests.length) ? "tool_use" : "end_turn",
           stop_sequence: null,
           usage: { input_tokens: 12, output_tokens: 3 },
         };
@@ -177,9 +177,9 @@ test(
       assert.equal(code, 0);
       return JSON.parse(output) as Array<{ uuid: string; session_id: string; message: unknown }>;
     }
-    const create = (resume?: string) => {
+    const create = (resume?: string, execution_policy?: ExecutionPolicy) => {
       const host = new Host(
-        { session_id: "pontia-session", cwd, resume, model: "haiku" },
+        { session_id: "pontia-session", cwd, resume, model: "haiku", execution_policy },
         (event) => events.push(event),
         factory,
       );
@@ -318,6 +318,23 @@ test(
         await assert.rejects(history(native));
       } finally {
         await writeFile(path, saved);
+      }
+      const policy: ExecutionPolicy = {
+        tools: ["Read", "Bash", "Glob", "Write"],
+        disabled_tools: ["Write", "Agent"], disable_mcp: true, yolo: true,
+      };
+      const restricted = create(undefined, policy);
+      await finish(restricted, randomUUID(), "Denied tool under YOLO");
+      const restrictedNative = restricted.status().native_session_id!;
+      await restricted.close();
+      const resumedRestricted = create(restrictedNative, policy);
+      await finish(resumedRestricted, randomUUID(), "Denied tool after resume under YOLO");
+      for (const index of [10, 12]) {
+        const names = requests[index]!.tools.map((tool) => tool.name);
+        assert.ok(names.includes("Glob"));
+        assert.ok(!names.includes("Write"));
+        assert.ok(!names.includes("Agent"));
+        await assert.rejects(access(join(cwd, `write-${index + 1}.txt`)));
       }
     } finally {
       try {

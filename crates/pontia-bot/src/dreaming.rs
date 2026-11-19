@@ -88,7 +88,7 @@ impl DreamingService {
             .session_commands()
             .create_application_session(
                 CreateSessionRequest {
-                    execution_policy: crate::execution_policy(),
+                    execution_policy: crate::execution_policy(&profile.client_type),
                     model: None,
                     client_type: profile.client_type,
                     title: Some("Dreaming".into()),

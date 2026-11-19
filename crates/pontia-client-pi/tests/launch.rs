@@ -14,8 +14,22 @@ fn path_env_lock() -> &'static Mutex<()> {
 }
 
 #[test]
+fn execution_policy_accepts_native_patterns_but_rejects_ambiguous_cli_entries() {
+    use pontia_agent_control::client_contract::ClientConfiguration;
+    use serde_json::json;
+    let config = pontia_client_pi::config::PiConfiguration::new(json!({}), json!({}));
+    config.validate_execution_policy(&serde_json::from_value(json!({"tools":["grep","custom_tool"],"disabled_tools":["mcp__remote__*"],"disable_mcp":true})).unwrap()).unwrap();
+    for tool in ["", "  ", "read,bash", "+read", "-write"] {
+        for field in ["tools", "disabled_tools"] {
+            let policy = serde_json::from_value(json!({field:[tool]})).unwrap();
+            assert!(config.validate_execution_policy(&policy).is_err());
+        }
+    }
+}
+
+#[test]
 fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating_flags() {
-    use pontia_core::execution_policy::{ExecutionPolicy, ExecutionTool};
+    use pontia_core::execution_policy::ExecutionPolicy;
     let _guard = path_env_lock().lock().unwrap();
     let root = tempfile::tempdir().unwrap();
     let log = root.path().join("tmux.log");
@@ -33,15 +47,30 @@ fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating
     )
     .unwrap();
     std::fs::write(&native, "{\"type\":\"session\",\"id\":\"native-policy\"}\n").unwrap();
-    for tools in [vec![ExecutionTool::Read, ExecutionTool::Bash], vec![]] {
+    for (policy, expected) in [
+        (
+            serde_json::json!({"tools":["read","grep","custom_tool"],"disabled_tools":["custom_tool","mcp__remote__*"],"disable_mcp":true,"yolo":true}),
+            vec![
+                "--tools",
+                "read,grep,custom_tool",
+                "--exclude-tools",
+                "custom_tool,mcp__remote__*",
+                "--no-mcp",
+            ],
+        ),
+        (serde_json::json!({"tools":[]}), vec!["--no-tools"]),
+        (
+            serde_json::json!({"disabled_tools":["edit","write"]}),
+            vec!["--exclude-tools", "edit,write"],
+        ),
+        (serde_json::json!({"disable_mcp":true}), vec!["--no-mcp"]),
+        (serde_json::json!({}), vec![]),
+    ] {
         let mut runtime = launch_request(
             root.path(),
             Some(format!("sh '{}' --approve", capture.display())),
         );
-        runtime.execution_policy = ExecutionPolicy {
-            tools: Some(tools.clone()),
-            yolo: true,
-        };
+        runtime.execution_policy = serde_json::from_value::<ExecutionPolicy>(policy).unwrap();
         for resume in [false, true] {
             let result = launcher
                 .launch(pontia_agent_control::clients::ClientLaunchRequest {
@@ -63,12 +92,7 @@ fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating
             );
             let args = std::fs::read_to_string(&args_file).unwrap();
             let args: Vec<_> = args.lines().collect();
-            assert_eq!(args.iter().filter(|arg| **arg == "--no-mcp").count(), 1);
-            if tools.is_empty() {
-                assert!(args.contains(&"--no-tools"));
-            } else {
-                assert!(args.windows(2).any(|args| args == ["--tools", "read,bash"]));
-            }
+            assert_eq!(&args[1..args.len() - 2], expected.as_slice());
             runtime.start_command = result.metadata["start_command"].as_str().map(str::to_owned);
             std::fs::write(&log, "").unwrap();
         }

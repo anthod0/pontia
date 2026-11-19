@@ -46,10 +46,18 @@ export function bootstrap(value: unknown): Bootstrap {
     const policy = object(data.execution_policy);
     if (
       typeof policy.yolo !== "boolean" ||
+      typeof policy.disable_mcp !== "boolean" ||
+      !Array.isArray(policy.disabled_tools) ||
+      policy.disabled_tools.some((tool) => typeof tool !== "string" || !tool.trim()) ||
       (policy.tools !== null &&
-        (!Array.isArray(policy.tools) || policy.tools.some((tool) => tool !== "read" && tool !== "bash")))
+        (!Array.isArray(policy.tools) || policy.tools.some((tool) => typeof tool !== "string" || !tool.trim())))
     ) throw new ControlError("rejected", "invalid_execution_policy");
-    result.execution_policy = { tools: policy.tools as ExecutionPolicy["tools"], yolo: policy.yolo };
+    result.execution_policy = {
+      tools: policy.tools as ExecutionPolicy["tools"],
+      disabled_tools: policy.disabled_tools as string[],
+      disable_mcp: policy.disable_mcp,
+      yolo: policy.yolo,
+    };
   }
   if (!/^[0-9a-f]{64}$/.test(result.token)) throw new ControlError("rejected", "invalid_token");
   return result;

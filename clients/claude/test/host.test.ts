@@ -28,13 +28,13 @@ function setup(resume?: string) {
 const rejects = (reason: string) => (error: unknown) =>
   error instanceof ControlError && error.reason === reason;
 
-for (const tools of [null, [], ["read", "bash"]] as const) {
+for (const tools of [null, [], ["Read", "Bash", "Glob"]] as const) {
   test(`YOLO applies the requested tool set and does not request approval (${tools})`, async (t) => {
     const fixture = sdk();
     const events: HostEvent[] = [];
     const host = new Host(
       { session_id: "policy-session", cwd: "/unused-fixture-workspace",
-        execution_policy: { tools: tools === null ? null : [...tools], yolo: true } },
+        execution_policy: { tools: tools === null ? null : [...tools], disabled_tools: [], disable_mcp: false, yolo: true } },
       (event) => events.push(event), fixture.factory,
     );
     t.after(() => host.close());
@@ -43,18 +43,35 @@ for (const tools of [null, [], ["read", "bash"]] as const) {
     assert.equal(options.permissionMode, "bypassPermissions");
     assert.equal(options.allowDangerouslySkipPermissions, true);
     assert.equal(options.sandbox?.enabled, false);
-    assert.deepEqual(options.tools, tools === null ? undefined : tools.length ? ["Read", "Bash"] : []);
-    if (tools !== null) {
-      assert.equal(options.strictMcpConfig, true);
-      assert.deepEqual(options.mcpServers, {});
-      assert.deepEqual(options.skills, []);
-    }
+    assert.deepEqual(options.tools, tools === null ? undefined : [...tools]);
+    assert.equal(options.strictMcpConfig, undefined);
+    assert.equal(options.mcpServers, undefined);
     const context = { signal: new AbortController().signal, toolUseID: "call", requestId: "permission" };
     const bash = await options.canUseTool!("Bash", { command: "pwd" }, context);
-    assert.equal(bash?.behavior, tools?.length === 0 ? "deny" : "allow");
-    const write = await options.canUseTool!("Write", {}, context);
-    assert.equal(write?.behavior, tools === null ? "allow" : "deny");
+    assert.equal(bash?.behavior, "allow");
     assert.equal(events.some((event) => event.kind === "permission_requested"), false);
+  });
+}
+
+for (const disableMcp of [false, true]) {
+  test(`native deny rules and MCP policy reach the SDK on resume (${disableMcp})`, async (t) => {
+    const fixture = sdk();
+    const host = new Host({
+      session_id: "policy-session", cwd: "/unused-fixture-workspace", resume: native,
+      execution_policy: {
+        tools: ["Read", "Write", "Bash"],
+        disabled_tools: ["Write", "Agent", "Bash(git push *)", "mcp__remote__*"],
+        disable_mcp: disableMcp, yolo: true,
+      },
+    }, () => {}, fixture.factory);
+    t.after(() => host.close());
+    host.submit(first, "task");
+    const options = fixture.options!;
+    assert.equal(options.resume, native);
+    assert.deepEqual(options.tools, ["Read", "Write", "Bash"]);
+    assert.deepEqual(options.disallowedTools, ["AskUserQuestion", "Write", "Agent", "Bash(git push *)", "mcp__remote__*", ...(disableMcp ? ["mcp__*"] : [])]);
+    assert.equal(options.strictMcpConfig, disableMcp ? true : undefined);
+    assert.deepEqual(options.mcpServers, disableMcp ? {} : undefined);
   });
 }
 

@@ -87,22 +87,20 @@ impl ClientLauncher for PiLauncher {
             None => command,
         };
         // Pi runs tools without approval or sandboxing. --approve trusts project resources.
-        let policy_args = match &runtime.execution_policy.tools {
+        let mut policy_args = match &runtime.execution_policy.tools {
             None => String::new(),
-            Some(tools) if tools.is_empty() => " --no-tools --no-mcp".into(),
-            Some(tools) => {
-                use pontia_core::execution_policy::ExecutionTool;
-                let tools = tools
-                    .iter()
-                    .map(|tool| match tool {
-                        ExecutionTool::Read => "read",
-                        ExecutionTool::Bash => "bash",
-                    })
-                    .collect::<Vec<_>>()
-                    .join(",");
-                format!(" --tools {} --no-mcp", quote(&tools))
-            }
+            Some(tools) if tools.is_empty() => " --no-tools".into(),
+            Some(tools) => format!(" --tools {}", quote(&tools.join(","))),
         };
+        if !runtime.execution_policy.disabled_tools.is_empty() {
+            policy_args.push_str(&format!(
+                " --exclude-tools {}",
+                quote(&runtime.execution_policy.disabled_tools.join(","))
+            ));
+        }
+        if runtime.execution_policy.disable_mcp {
+            policy_args.push_str(" --no-mcp");
+        }
         let session_args = match request.native_session_key {
             Some(key) => {
                 self.validate_resume(key, request.native_session_file)?;

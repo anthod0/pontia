@@ -63,8 +63,19 @@ struct Configuration {
 impl ClientConfiguration for Configuration {
     fn validate_execution_policy(
         &self,
-        _: &pontia_core::execution_policy::ExecutionPolicy,
+        policy: &pontia_core::execution_policy::ExecutionPolicy,
     ) -> Result<()> {
+        if policy
+            .tools
+            .iter()
+            .flatten()
+            .chain(&policy.disabled_tools)
+            .any(|tool| tool.trim().is_empty())
+        {
+            return Err(pontia_core::Error::Domain(
+                "Claude tool entries must be nonempty native names or rules".into(),
+            ));
+        }
         Ok(())
     }
 

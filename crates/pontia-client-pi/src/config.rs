@@ -22,8 +22,15 @@ impl PiConfiguration {
 impl ClientConfiguration for PiConfiguration {
     fn validate_execution_policy(
         &self,
-        _: &pontia_core::execution_policy::ExecutionPolicy,
+        policy: &pontia_core::execution_policy::ExecutionPolicy,
     ) -> Result<()> {
+        for tool in policy.tools.iter().flatten().chain(&policy.disabled_tools) {
+            if tool.trim().is_empty() || tool.contains(',') || tool.starts_with(['+', '-']) {
+                return Err(Error::Domain(
+                    "Pi tool entries must be nonempty native names or patterns without commas or +/- prefixes".into(),
+                ));
+            }
+        }
         Ok(())
     }
 

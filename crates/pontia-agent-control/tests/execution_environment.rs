@@ -93,7 +93,7 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
     let mut notices = control.agent_events().subscribe();
     let mut request: CreateSessionRequest = serde_json::from_value(json!({
         "client_type": "generic", "workspace": root.path(),
-        "execution_policy": {"tools":["read","bash"],"yolo":true}
+        "execution_policy": {"tools":["Read","Bash","custom_tool"],"disabled_tools":["Write","mcp__remote__*"],"disable_mcp":true,"yolo":true}
     }))
     .unwrap();
     request.runtime_environment = environment.clone();
@@ -181,6 +181,8 @@ async fn unsupported_execution_policy_is_rejected_before_creating_a_session() {
         json!({"tools":["read","bash"]}),
         json!({"yolo":true}),
         json!({"tools":[]}),
+        json!({"disabled_tools":["Write"]}),
+        json!({"disable_mcp":true}),
     ] {
         let request = serde_json::from_value(
             json!({"client_type":"generic", "workspace":root.path(), "execution_policy":policy}),
@@ -204,7 +206,7 @@ async fn native_forks_inherit_the_source_policy_after_control_recovery() {
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
     let app = AgentControl::builder(pool.clone(), root.path().into()).build();
-    let policy = json!({"tools":["read","bash"],"yolo":true});
+    let policy = json!({"tools":["Read","Bash","custom_tool"],"disabled_tools":["Write","mcp__remote__*"],"disable_mcp":true,"yolo":true});
     for (session, payload) in [
         ("parent", json!({"execution_policy":policy})),
         ("child", json!({})),

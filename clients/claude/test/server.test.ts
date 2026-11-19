@@ -8,8 +8,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, type TestContext } from "node:test";
-import { serve, type Bootstrap } from "../src/server.js";
+import { bootstrap, serve, type Bootstrap } from "../src/server.js";
 import { assistant, first, init, result, sdk, second } from "./fixture.js";
+
+test("bootstrap preserves native tool rules and rejects malformed execution policies", () => {
+  const config = { session_id: "session", runtime_id: "runtime", socket_path: "/unused/socket", cwd: "/unused", token: "a".repeat(64) };
+  const policy = { tools: ["Read", "Glob"], disabled_tools: ["Agent", "Bash(git push *)"], disable_mcp: true, yolo: false };
+  assert.deepEqual(bootstrap({ ...config, execution_policy: policy }).execution_policy, policy);
+  for (const invalid of [{ tools: [1] }, { tools: [""] }, { disabled_tools: "Write" }, { disabled_tools: [false] }, { disable_mcp: "true" }]) {
+    assert.throws(() => bootstrap({ ...config, execution_policy: { ...policy, ...invalid } }));
+  }
+});
 
 async function setup(t: TestContext) {
   const sandbox = await mkdtempDisposable(join(tmpdir(), "pontia-host-test-"));

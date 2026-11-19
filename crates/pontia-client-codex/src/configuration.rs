@@ -25,6 +25,16 @@ impl ClientConfiguration for CodexConfiguration {
                 "Codex cannot restrict its tools to the requested allowlist".into(),
             ));
         }
+        if !policy.disabled_tools.is_empty() {
+            return Err(Error::CapabilityUnavailable(
+                "Codex cannot enforce a native tool denylist".into(),
+            ));
+        }
+        if policy.disable_mcp {
+            return Err(Error::CapabilityUnavailable(
+                "Codex cannot disable MCP through execution policy".into(),
+            ));
+        }
         Ok(())
     }
 

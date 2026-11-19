@@ -7,6 +7,51 @@ use serde_json::json;
 use std::sync::Arc;
 
 #[tokio::test]
+async fn tool_selection_denials_and_mcp_disabling_are_rejected_before_creation() {
+    let root = tempfile::tempdir().unwrap();
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    run_migrations(&pool).await.unwrap();
+    let mut clients = ClientRegistry::default();
+    clients.register(pontia_client_codex::registration());
+    AgentClientService::new(pool.clone(), clients.clone())
+        .save("codex", "default", Some(true), None)
+        .await
+        .unwrap();
+    let app = AgentControl::builder(pool.clone(), root.path().into())
+        .clients(clients)
+        .build();
+    for policy in [
+        json!({"tools":["exec_command"]}),
+        json!({"tools":[]}),
+        json!({"disabled_tools":["apply_patch"]}),
+        json!({"disable_mcp":true}),
+    ] {
+        let request = serde_json::from_value(
+            json!({"client_type":"codex", "workspace":root.path(), "execution_policy":policy}),
+        )
+        .unwrap();
+        assert!(matches!(
+            app.session_commands().create_session(request).await,
+            Err(pontia_core::Error::CapabilityUnavailable(_))
+        ));
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sessions")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    use pontia_agent_control::client_contract::ClientConfiguration;
+    CodexConfiguration::new(json!({}))
+        .validate_execution_policy(
+            &serde_json::from_value(json!({"yolo":true,"disabled_tools":[],"disable_mcp":false}))
+                .unwrap(),
+        )
+        .unwrap();
+}
+
+#[tokio::test]
 async fn codex_configuration_preserves_admission_without_consuming_legacy_tui_settings() {
     let root = tempfile::tempdir().unwrap();
     let pool = connect_sqlite(&format!("sqlite://{}", root.path().join("db").display()))

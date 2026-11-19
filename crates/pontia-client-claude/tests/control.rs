@@ -1244,7 +1244,7 @@ async fn default_instructions_are_fixed_before_input_and_survive_resume() {
     sqlx::query("UPDATE execution_profiles SET system_prompt_template='creation-marker' WHERE profile_id='default' AND version='2'")
         .execute(&h.app.db()).await.unwrap();
     let request =
-        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"additional_instructions":"caller-marker","execution_policy":{"tools":["read","bash"],"yolo":true}}))
+        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"additional_instructions":"caller-marker","execution_policy":{"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"yolo":true}}))
             .unwrap();
     let created = h
         .app
@@ -1291,7 +1291,10 @@ async fn default_instructions_are_fixed_before_input_and_survive_resume() {
         .collect();
     assert_eq!(
         policies,
-        vec![json!({"tools":["read","bash"],"yolo":true}); 2]
+        vec![
+            json!({"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"yolo":true});
+            2
+        ]
     );
     h.stop().await;
 }

@@ -96,7 +96,7 @@ impl ClientLauncher for Client {
     fn launch(&self, request: ClientLaunchRequest<'_>) -> Result<RuntimeStartResult> {
         assert_eq!(
             serde_json::to_value(&request.runtime.execution_policy).unwrap(),
-            json!({"tools":["read","bash"],"yolo":true})
+            json!({"tools":["read","bash"],"disabled_tools":[],"disable_mcp":true,"yolo":true})
         );
         let gate = self.launch_gate.lock().unwrap().take();
         if let Some((entered, release)) = gate {

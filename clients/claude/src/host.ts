@@ -4,7 +4,9 @@ import { Permissions } from "./permissions.js";
 import { FactError, InputFacts, type Emit, type ResultDiagnostic } from "./facts.js";
 
 export interface ExecutionPolicy {
-  tools: ("read" | "bash")[] | null;
+  tools: string[] | null;
+  disabled_tools: string[];
+  disable_mcp: boolean;
   yolo: boolean;
 }
 
@@ -81,7 +83,7 @@ export class Host {
     });
     if (!this.execution) {
       const policy = this.options.execution_policy;
-      const tools = policy?.tools?.map((tool) => ({ read: "Read", bash: "Bash" })[tool]);
+      const tools = policy?.tools;
       const options: Options = {
         cwd: this.options.cwd,
         ...(this.options.model ? { model: this.options.model } : {}),
@@ -98,15 +100,15 @@ export class Host {
         includePartialMessages: true,
         permissionMode: policy?.yolo ? "bypassPermissions" : "default",
         ...(policy?.yolo ? { allowDangerouslySkipPermissions: true, sandbox: { enabled: false } } : {}),
-        ...(tools ? { tools, strictMcpConfig: true, mcpServers: {}, skills: [] } : {}),
+        ...(tools ? { tools } : {}),
+        ...(policy?.disable_mcp ? { strictMcpConfig: true, mcpServers: {} } : {}),
         settingSources: ["user", "project", "local"],
         settings: { env: { PONTIA_SESSION_ID: this.options.session_id } },
-        disallowedTools: tools ? ["AskUserQuestion", "mcp__*"] : ["AskUserQuestion"],
+        disallowedTools: ["AskUserQuestion", ...(policy?.disabled_tools ?? []),
+          ...(policy?.disable_mcp ? ["mcp__*"] : [])],
         canUseTool: (tool, input, context) => {
           if (!this.acceptsControl())
             return Promise.resolve({ behavior: "deny", message: "Tool approval is unavailable." });
-          if (tools && !tools.includes(tool))
-            return Promise.resolve({ behavior: "deny", message: "Tool is outside the Session allowlist." });
           if (policy?.yolo) return Promise.resolve({ behavior: "allow", updatedInput: input });
           return this.permissions.request(tool, input, context);
         },
