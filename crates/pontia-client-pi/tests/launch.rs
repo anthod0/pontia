@@ -48,15 +48,26 @@ fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating
     .unwrap();
     std::fs::write(&native, "{\"type\":\"session\",\"id\":\"native-policy\"}\n").unwrap();
     use pontia_agent_control::client_contract::ClientConfiguration;
-    let bot_policy = pontia_client_pi::config::PiConfiguration::new(
+    let config = pontia_client_pi::config::PiConfiguration::new(
         serde_json::json!({}),
         serde_json::json!({}),
-    )
-    .restricted_execution_policy()
-    .unwrap();
+    );
+    let restricted = config.restricted_execution_policy().unwrap();
+    assert_eq!(restricted.tools, None);
+    assert_eq!(restricted.disabled_tools, vec!["edit", "write"]);
+    assert!(restricted.disable_mcp);
+    assert!(!restricted.yolo);
+    config.validate_execution_policy(&restricted).unwrap();
+    let mut approval_free = restricted.clone();
+    approval_free.yolo = true;
+    config.validate_execution_policy(&approval_free).unwrap();
     for (policy, expected) in [
         (
-            serde_json::json!(bot_policy),
+            serde_json::json!(restricted),
+            vec!["--exclude-tools", "edit,write", "--no-mcp"],
+        ),
+        (
+            serde_json::json!(approval_free),
             vec!["--exclude-tools", "edit,write", "--no-mcp"],
         ),
         (
@@ -103,6 +114,7 @@ fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating
             );
             let args = std::fs::read_to_string(&args_file).unwrap();
             let args: Vec<_> = args.lines().collect();
+            assert_eq!(args[0], "--approve");
             assert_eq!(&args[1..args.len() - 2], expected.as_slice());
             runtime.start_command = result.metadata["start_command"].as_str().map(str::to_owned);
             std::fs::write(&log, "").unwrap();

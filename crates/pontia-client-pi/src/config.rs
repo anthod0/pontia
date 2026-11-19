@@ -26,7 +26,7 @@ impl ClientConfiguration for PiConfiguration {
         Some(pontia_core::execution_policy::ExecutionPolicy {
             disabled_tools: ["edit", "write"].into_iter().map(str::to_owned).collect(),
             disable_mcp: true,
-            yolo: true,
+            yolo: false,
             ..Default::default()
         })
     }

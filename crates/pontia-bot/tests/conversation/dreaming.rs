@@ -351,3 +351,328 @@ async fn accepted_first_input_keeps_an_idle_round_alive_until_its_native_turn_ar
     shutdown.send(true).unwrap();
     cleanup.await.unwrap();
 }
+
+async fn seed_pending_memory(
+    pool: sqlx::SqlitePool,
+    conversation: &ConversationService,
+    bot_session: &str,
+) {
+    let memories = MemoryCommands::new(MemoryService::new(pool), Arc::new(conversation.clone()));
+    memories
+        .execute(
+            serde_json::from_value(json!({
+                "session_id": bot_session,
+                "command": {
+                    "action": "create",
+                    "input": {
+                        "kind": "fact",
+                        "content": "pending memory",
+                        "keywords": ["pending"]
+                    }
+                }
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn bot_helper_and_dreaming_enforce_yolo_on_restricted_client_policy() {
+    let (_root, pool, client, control, conversation) = fixture().await;
+    assert_eq!(
+        client.restricted_execution_policy(),
+        Some(pontia_core::execution_policy::ExecutionPolicy {
+            tools: None,
+            disabled_tools: vec!["edit".into(), "write".into()],
+            disable_mcp: true,
+            yolo: false,
+        })
+    );
+    let (_, bot_session) = bot(&conversation).await;
+    let helpers = HelperService::new(control.clone(), conversation.clone());
+    let helper_session = helper(&helpers, &bot_session).await;
+    seed_pending_memory(pool, &conversation, &bot_session).await;
+    let dreaming = DreamingService::new(control.clone(), conversation.clone());
+    let dreaming_session = dreaming.start().await.unwrap().unwrap();
+
+    let expected = pontia_core::execution_policy::ExecutionPolicy {
+        tools: None,
+        disabled_tools: vec!["edit".into(), "write".into()],
+        disable_mcp: true,
+        yolo: true,
+    };
+    for session in [&bot_session, &helper_session, &dreaming_session] {
+        assert_eq!(
+            client.launched_policies.lock().unwrap().get(session),
+            Some(&expected)
+        );
+        assert_eq!(
+            control
+                .queries()
+                .session_execution_policy(session)
+                .await
+                .unwrap(),
+            expected
+        );
+    }
+}
+
+#[tokio::test]
+async fn dreaming_rejects_clients_without_approval_free_restricted_policy_before_creating_state() {
+    let (root, pool, client, control, conversation) = fixture().await;
+    let (_, bot_session) = bot(&conversation).await;
+    seed_pending_memory(pool, &conversation, &bot_session).await;
+    let dreaming = DreamingService::new(control.clone(), conversation.clone());
+    assert!(conversation.supports_bot_client("generic"));
+
+    for support in [PolicySupport::NoRestriction, PolicySupport::RejectYolo] {
+        *client.policy_support.lock().unwrap() = support;
+        assert!(!conversation.supports_bot_client("generic"));
+        assert!(matches!(
+            dreaming.start().await,
+            Err(Error::CapabilityUnavailable(_))
+        ));
+        assert!(
+            control
+                .queries()
+                .latest_owned_session("bot", "dreaming:")
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(!root.path().join("bot").join("dreaming").exists());
+    }
+}
+
+#[tokio::test]
+async fn dreaming_profile_default_execution_policy_cannot_weaken_enforced_policy() {
+    use pontia_agent_control::{AgentProfileService, UpsertExecutionProfileRequest};
+    use pontia_bot::records::DREAMING_PROFILE_ID;
+
+    let (_root, pool, client, control, conversation) = fixture().await;
+    let (_, bot_session) = bot(&conversation).await;
+    seed_pending_memory(pool, &conversation, &bot_session).await;
+
+    let profiles = AgentProfileService::new(control.db()).with_clients(control.clients());
+    let existing = profiles
+        .get_latest(DREAMING_PROFILE_ID)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut updated: UpsertExecutionProfileRequest =
+        serde_json::from_value(json!(existing)).unwrap();
+    updated.default_execution_policy = json!({
+        "yolo": false,
+        "disable_mcp": false,
+        "disabled_tools": []
+    });
+    profiles
+        .update_version(DREAMING_PROFILE_ID, &existing.version, updated)
+        .await
+        .unwrap();
+
+    let dreaming = DreamingService::new(control.clone(), conversation);
+    let round = dreaming.start().await.unwrap().unwrap();
+    let expected = pontia_core::execution_policy::ExecutionPolicy {
+        tools: None,
+        disabled_tools: vec!["edit".into(), "write".into()],
+        disable_mcp: true,
+        yolo: true,
+    };
+    assert_eq!(
+        client.launched_policies.lock().unwrap().get(&round),
+        Some(&expected)
+    );
+    assert_eq!(
+        control
+            .queries()
+            .session_execution_policy(&round)
+            .await
+            .unwrap(),
+        expected
+    );
+}
+
+#[tokio::test]
+async fn blocked_dreaming_interaction_is_rejected_and_terminated_without_wedging_next_round() {
+    use pontia_agent_control::interactions::{
+        ChoiceInteractionRequest, InteractionIntent, InteractionOption, InteractionState,
+    };
+
+    let (_root, pool, client, control, conversation) = fixture().await;
+    let (_, bot_session) = bot(&conversation).await;
+    seed_pending_memory(pool, &conversation, &bot_session).await;
+    let dreaming = DreamingService::new(control.clone(), conversation);
+
+    let first = dreaming.start().await.unwrap().unwrap();
+    let snapshot = control
+        .queries()
+        .session_snapshot(&first)
+        .await
+        .unwrap()
+        .unwrap();
+    let runtime = snapshot.runtimes[0].runtime_id.clone();
+    let turn = control.queries().list_turns(&first).await.unwrap()[0]
+        .turn_id
+        .clone();
+    report(
+        &control.event_ingest_service(),
+        &first,
+        &runtime,
+        &turn,
+        EventType::TurnStarted,
+    )
+    .await;
+
+    let rejectable = control
+        .interactions()
+        .register(ChoiceInteractionRequest {
+            session_id: first.clone(),
+            turn_id: Some(turn.clone()),
+            title: "Approve command".into(),
+            description: None,
+            options: vec![
+                InteractionOption {
+                    key: "allow".into(),
+                    label: "Allow".into(),
+                    intent: InteractionIntent::Positive,
+                },
+                InteractionOption {
+                    key: "deny".into(),
+                    label: "Deny".into(),
+                    intent: InteractionIntent::Negative,
+                },
+            ],
+        })
+        .await
+        .unwrap();
+    let positive_only = control
+        .interactions()
+        .register(ChoiceInteractionRequest {
+            session_id: first.clone(),
+            turn_id: Some(turn.clone()),
+            title: "Confirm action".into(),
+            description: None,
+            options: vec![InteractionOption {
+                key: "allow-only".into(),
+                label: "Allow".into(),
+                intent: InteractionIntent::Positive,
+            }],
+        })
+        .await
+        .unwrap();
+    control
+        .event_ingest_service()
+        .report_fact(ReportedFact {
+            session_id: first.clone(),
+            turn_id: Some(turn.clone()),
+            report_key: None,
+            fact_type: EventType::InteractionBlocked,
+            data: json!({"runtime_id": runtime, "interaction_id": rejectable.interaction_id}),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        control
+            .queries()
+            .session_snapshot(&first)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "waiting_for_interaction"
+    );
+
+    assert!(dreaming.start().await.unwrap().is_none());
+    assert_eq!(
+        *client.interaction_responses.lock().unwrap(),
+        vec![(first.clone(), rejectable.interaction_id.clone(), "deny".into())]
+    );
+    assert_eq!(
+        control
+            .interactions()
+            .get(&first, &positive_only.interaction_id)
+            .await
+            .unwrap()
+            .state,
+        InteractionState::Pending
+    );
+    assert!(!GenericRuntimeManager.is_alive(&runtime));
+
+    control
+        .event_ingest_service()
+        .report_client_fact(
+            &first,
+            Some(&runtime),
+            EventType::SessionExited,
+            json!({"reason": "terminated blocked dreaming round"}),
+        )
+        .await
+        .unwrap();
+
+    let second = dreaming.start().await.unwrap().unwrap();
+    assert_ne!(second, first);
+
+    // Even if rejecting an interaction fails, Dreaming must still terminate the blocked round.
+    *client.fail_interaction_response.lock().unwrap() = true;
+    let snapshot = control
+        .queries()
+        .session_snapshot(&second)
+        .await
+        .unwrap()
+        .unwrap();
+    let second_runtime = snapshot.runtimes[0].runtime_id.clone();
+    let second_turn = control.queries().list_turns(&second).await.unwrap()[0]
+        .turn_id
+        .clone();
+    report(
+        &control.event_ingest_service(),
+        &second,
+        &second_runtime,
+        &second_turn,
+        EventType::TurnStarted,
+    )
+    .await;
+    let failing = control
+        .interactions()
+        .register(ChoiceInteractionRequest {
+            session_id: second.clone(),
+            turn_id: Some(second_turn.clone()),
+            title: "Approve command".into(),
+            description: None,
+            options: vec![InteractionOption {
+                key: "deny".into(),
+                label: "Deny".into(),
+                intent: InteractionIntent::Negative,
+            }],
+        })
+        .await
+        .unwrap();
+    control
+        .event_ingest_service()
+        .report_fact(ReportedFact {
+            session_id: second.clone(),
+            turn_id: Some(second_turn),
+            report_key: None,
+            fact_type: EventType::InteractionBlocked,
+            data: json!({"runtime_id": second_runtime, "interaction_id": failing.interaction_id}),
+        })
+        .await
+        .unwrap();
+
+    assert!(dreaming.start().await.unwrap().is_none());
+    assert!(!GenericRuntimeManager.is_alive(&second_runtime));
+    control
+        .event_ingest_service()
+        .report_client_fact(
+            &second,
+            Some(&second_runtime),
+            EventType::SessionExited,
+            json!({"reason": "terminated blocked dreaming round after reject failure"}),
+        )
+        .await
+        .unwrap();
+    let third = dreaming.start().await.unwrap().unwrap();
+    assert_ne!(third, second);
+}

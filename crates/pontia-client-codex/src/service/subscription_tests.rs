@@ -221,28 +221,46 @@ impl Fixture {
 #[tokio::test]
 async fn restricted_session_starts_with_native_agents_disabled() {
     use pontia_agent_control::client_contract::ClientConfiguration;
-    let policy = crate::configuration::CodexConfiguration::new(json!({}))
-        .restricted_execution_policy()
-        .unwrap();
-    let fixture = Fixture::with_policy(None, json!(policy)).await;
-    fixture.dispatch_first_input().await;
-    {
-        let requests = fixture.thread_requests.lock().await;
-        let config = &requests[0]["params"]["config"];
-        assert_eq!(config["agents.enabled"], false);
-        assert_eq!(config["features.multi_agent"], false);
-        assert_eq!(config["features.multi_agent_v2"], false);
-        assert_eq!(config["sandbox_mode"], "danger-full-access");
-        assert_eq!(config["approval_policy"], "never");
-        assert!(
-            config
-                .as_object()
-                .unwrap()
-                .keys()
-                .all(|key| !key.starts_with("hooks") && !key.starts_with("mcp_servers"))
-        );
+    let config = crate::configuration::CodexConfiguration::new(json!({}));
+    let base = config.restricted_execution_policy().unwrap();
+    assert_eq!(base.tools, None);
+    assert_eq!(base.disabled_tools, vec!["spawn_agent"]);
+    assert!(!base.disable_mcp);
+    assert!(!base.yolo);
+    for yolo in [false, true] {
+        let mut policy = base.clone();
+        policy.yolo = yolo;
+        config.validate_execution_policy(&policy).unwrap();
+        let fixture = Fixture::with_policy(None, json!(policy)).await;
+        fixture.dispatch_first_input().await;
+        {
+            let requests = fixture.thread_requests.lock().await;
+            let config = &requests[0]["params"]["config"];
+            assert_eq!(config["agents.enabled"], false);
+            assert_eq!(config["features.multi_agent"], false);
+            assert_eq!(config["features.multi_agent_v2"], false);
+            assert_eq!(
+                config["sandbox_mode"],
+                if yolo {
+                    json!("danger-full-access")
+                } else {
+                    Value::Null
+                }
+            );
+            assert_eq!(
+                config["approval_policy"],
+                if yolo { json!("never") } else { Value::Null }
+            );
+            assert!(
+                config
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .all(|key| !key.starts_with("hooks") && !key.starts_with("mcp_servers"))
+            );
+        }
+        fixture.shutdown().await;
     }
-    fixture.shutdown().await;
 }
 
 #[tokio::test]

@@ -87,7 +87,7 @@ impl ClientConfiguration for Configuration {
             .map(str::to_owned)
             .collect(),
             disable_mcp: true,
-            yolo: true,
+            yolo: false,
             ..Default::default()
         })
     }

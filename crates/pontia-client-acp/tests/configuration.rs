@@ -130,3 +130,20 @@ fn database_only_peer_requires_one_valid_source_after_merging() {
         "company"
     );
 }
+
+#[test]
+fn acp_omits_restricted_execution_policy_and_rejects_yolo() {
+    let configuration = AcpConfiguration::new(Default::default());
+    assert_eq!(configuration.restricted_execution_policy(), None);
+    configuration
+        .validate_execution_policy(&Default::default())
+        .unwrap();
+    let yolo = pontia_agent_control::ExecutionPolicy {
+        yolo: true,
+        ..Default::default()
+    };
+    assert!(matches!(
+        configuration.validate_execution_policy(&yolo),
+        Err(pontia_core::Error::CapabilityUnavailable(_))
+    ));
+}

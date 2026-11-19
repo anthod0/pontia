@@ -43,13 +43,18 @@ async fn tool_selection_denials_and_mcp_disabling_are_rejected_before_creation()
         0
     );
     use pontia_agent_control::client_contract::ClientConfiguration;
-    CodexConfiguration::new(json!({}))
-        .validate_execution_policy(
-            &serde_json::from_value(
-                json!({"yolo":true,"disabled_tools":["spawn_agent"],"disable_mcp":false}),
-            )
-            .unwrap(),
-        )
+    let configuration = CodexConfiguration::new(json!({}));
+    let mut restricted = configuration.restricted_execution_policy().unwrap();
+    assert_eq!(restricted.tools, None);
+    assert_eq!(restricted.disabled_tools, vec!["spawn_agent"]);
+    assert!(!restricted.disable_mcp);
+    assert!(!restricted.yolo);
+    configuration
+        .validate_execution_policy(&restricted)
+        .unwrap();
+    restricted.yolo = true;
+    configuration
+        .validate_execution_policy(&restricted)
         .unwrap();
 }
 

@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use pontia_agent_control::{
     AgentControl, AgentProfileService, SessionOwnership, SubmitInboxMessageRequest,
+    interactions::{InteractionIntent, InteractionState},
 };
 use pontia_core::{Error, Result};
 use serde::Deserialize;
@@ -48,6 +49,25 @@ impl DreamingService {
         }
     }
 
+    fn dreaming_execution_policy(
+        &self,
+        client_type: &str,
+    ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
+        let clients = self.control.clients();
+        let configuration = clients
+            .get(client_type)
+            .and_then(|entry| entry.configuration.as_ref())
+            .ok_or_else(|| {
+                Error::CapabilityUnavailable("Client cannot run a Dreaming Session".into())
+            })?;
+        let mut policy = configuration.restricted_execution_policy().ok_or_else(|| {
+            Error::CapabilityUnavailable("Client cannot restrict Dreaming Session tools".into())
+        })?;
+        policy.yolo = true;
+        configuration.validate_execution_policy(&policy)?;
+        Ok(policy)
+    }
+
     /// Start one round; an existing active round always wins.
     pub async fn start(&self) -> Result<Option<String>> {
         let mut reported = self.gate.lock().await;
@@ -79,6 +99,7 @@ impl DreamingService {
                 "Client cannot run a Dreaming Session".into(),
             ));
         }
+        let execution_policy = self.dreaming_execution_policy(&profile.client_type)?;
         let round = uuid::Uuid::now_v7().to_string();
         let directory = self
             .control
@@ -97,6 +118,7 @@ impl DreamingService {
                     reference: format!("dreaming:{round}"),
                 },
                 include_str!("dreaming/instructions.md"),
+                execution_policy,
             )
             .await?;
         request.title = Some("Dreaming".into());
@@ -174,6 +196,18 @@ impl DreamingService {
             "idle" => self.control.session_commands().exit_if_idle(&id).await?,
             "exited" => true,
             "created" | "starting" if session.has_unsettled_input => false,
+            "waiting_for_interaction" => {
+                self.reject_blocked_interactions(&id).await;
+                self.control
+                    .session_commands()
+                    .terminate_session(&id)
+                    .await?;
+                self.control
+                    .queries()
+                    .session_snapshot(&id)
+                    .await?
+                    .is_some_and(|session| session.state == "exited")
+            }
             "created" | "starting" | "interrupted" | "error" => {
                 self.control
                     .session_commands()
@@ -198,7 +232,11 @@ impl DreamingService {
                 .filter(|event| {
                     matches!(
                         event.event_type.as_str(),
-                        "turn.failed" | "turn.interrupted" | "session.error" | "session.exited"
+                        "turn.failed"
+                            | "turn.interrupted"
+                            | "session.error"
+                            | "session.exited"
+                            | "interaction.blocked"
                     )
                 })
                 .map(|event| json!({"type": event.event_type, "details": event.payload}))
@@ -207,6 +245,87 @@ impl DreamingService {
             *reported = Some(id.clone());
         }
         Ok(true)
+    }
+
+    async fn reject_blocked_interactions(&self, session_id: &str) {
+        let interactions = self.control.interactions();
+        let mut cursor = None;
+        let mut seen = Vec::new();
+        loop {
+            let page = match interactions
+                .list(
+                    session_id,
+                    Some(InteractionState::Pending),
+                    200,
+                    cursor.as_deref(),
+                )
+                .await
+            {
+                Ok(page) => page,
+                Err(error) => {
+                    tracing::warn!(
+                        %session_id,
+                        %error,
+                        "Dreaming Session blocked on interaction; failed to list pending interactions before terminating"
+                    );
+                    return;
+                }
+            };
+            for interaction in page.interactions {
+                seen.push(interaction.interaction_id.clone());
+                let Some(option) = interaction
+                    .options
+                    .iter()
+                    .find(|option| option.intent == InteractionIntent::Negative)
+                else {
+                    tracing::warn!(
+                        %session_id,
+                        interaction_id = %interaction.interaction_id,
+                        title = %interaction.title,
+                        "Dreaming Session blocked on interaction without a negative option; terminating without responding"
+                    );
+                    continue;
+                };
+                match interactions
+                    .respond(
+                        &self.control,
+                        session_id,
+                        &interaction.interaction_id,
+                        &option.key,
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        tracing::warn!(
+                            %session_id,
+                            interaction_id = %interaction.interaction_id,
+                            option_key = %option.key,
+                            title = %interaction.title,
+                            "Dreaming Session blocked on interaction; rejected pending interaction before terminating"
+                        );
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            %session_id,
+                            interaction_id = %interaction.interaction_id,
+                            option_key = %option.key,
+                            %error,
+                            "Dreaming Session blocked on interaction; failed to reject pending interaction before terminating"
+                        );
+                    }
+                }
+            }
+            let Some(next) = page.next_cursor else {
+                break;
+            };
+            cursor = Some(next);
+        }
+        if seen.is_empty() {
+            tracing::warn!(
+                %session_id,
+                "Dreaming Session blocked on interaction; terminating Session"
+            );
+        }
     }
 
     pub async fn run(self, mut shutdown: watch::Receiver<bool>) {

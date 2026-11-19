@@ -7,8 +7,8 @@ use pontia_agent_control::{
     AgentControl, EventIngestService, ReportedFact,
     agent_clients::AgentClientService,
     client_contract::{
-        AgentInput, ClientConfiguration, ClientLaunchRequest, ClientLauncher, GenericTestClient,
-        InProcessClient, test_registration,
+        AgentInput, ClientConfiguration, ClientInteractions, ClientLaunchRequest, ClientLauncher,
+        ClientOperation, GenericTestClient, InProcessClient, test_registration,
     },
     clients::ClientRegistry,
 };
@@ -33,6 +33,14 @@ const CAPABILITIES: AgentClientCapabilities = AgentClientCapabilities {
     ..pontia_agent_control::client_contract::TEST_SPEC.capabilities
 };
 
+#[derive(Clone, Copy, Default)]
+enum PolicySupport {
+    #[default]
+    Restricted,
+    NoRestriction,
+    RejectYolo,
+}
+
 #[derive(Default)]
 struct Client {
     inputs: Mutex<Vec<AgentInput>>,
@@ -44,24 +52,39 @@ struct Client {
         )>,
     >,
     tokens: Mutex<std::collections::HashMap<String, String>>,
+    policy_support: Mutex<PolicySupport>,
+    launched_policies:
+        Mutex<std::collections::HashMap<String, pontia_core::execution_policy::ExecutionPolicy>>,
+    interaction_responses: Mutex<Vec<(String, String, String)>>,
+    fail_interaction_response: Mutex<bool>,
 }
 
 impl ClientConfiguration for Client {
     fn restricted_execution_policy(
         &self,
     ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
-        Some(pontia_core::execution_policy::ExecutionPolicy {
-            disabled_tools: ["edit", "write"].into_iter().map(str::to_owned).collect(),
-            disable_mcp: true,
-            yolo: true,
-            ..Default::default()
-        })
+        match *self.policy_support.lock().unwrap() {
+            PolicySupport::NoRestriction => None,
+            PolicySupport::Restricted | PolicySupport::RejectYolo => {
+                Some(pontia_core::execution_policy::ExecutionPolicy {
+                    disabled_tools: ["edit", "write"].into_iter().map(str::to_owned).collect(),
+                    disable_mcp: true,
+                    yolo: false,
+                    ..Default::default()
+                })
+            }
+        }
     }
 
     fn validate_execution_policy(
         &self,
-        _: &pontia_core::execution_policy::ExecutionPolicy,
+        policy: &pontia_core::execution_policy::ExecutionPolicy,
     ) -> Result<()> {
+        if matches!(*self.policy_support.lock().unwrap(), PolicySupport::RejectYolo) && policy.yolo {
+            return Err(Error::CapabilityUnavailable(
+                "Client cannot run approval-free".into(),
+            ));
+        }
         Ok(())
     }
     fn supports_startup_model(&self) -> bool {
@@ -94,6 +117,10 @@ impl ClientLauncher for Client {
             serde_json::to_value(&request.runtime.execution_policy).unwrap(),
             json!({"tools":null,"disabled_tools":["edit","write"],"disable_mcp":true,"yolo":true})
         );
+        self.launched_policies.lock().unwrap().insert(
+            request.runtime.session_id.clone(),
+            request.runtime.execution_policy.clone(),
+        );
         let gate = self.launch_gate.lock().unwrap().take();
         if let Some((entered, release)) = gate {
             entered.send(()).unwrap();
@@ -123,6 +150,37 @@ impl pontia_agent_control::client_contract::ClientProfile for Client {
         _instructions_required: bool,
     ) -> Result<Value> {
         Ok(json!({"system": profile.system_prompt_template}))
+    }
+}
+
+impl ClientInteractions for Client {
+    fn resolve<'a>(
+        &'a self,
+        events: EventIngestService,
+        session: &'a str,
+        interaction: &'a str,
+        option: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        self.interaction_responses.lock().unwrap().push((
+            session.to_owned(),
+            interaction.to_owned(),
+            option.to_owned(),
+        ));
+        let fail = *self.fail_interaction_response.lock().unwrap();
+        Box::pin(async move {
+            if fail {
+                return Err(Error::ControlUnknown("interaction channel unavailable".into()));
+            }
+            events
+                .report_client_fact(
+                    session,
+                    None,
+                    EventType::InteractionUnblocked,
+                    json!({"interaction_id": interaction}),
+                )
+                .await?;
+            Ok(())
+        })
     }
 }
 
@@ -460,6 +518,7 @@ async fn fixture_with_client(
     let mut registration = test_registration();
     registration.spec = spec;
     registration.configuration = Some(client.clone());
+    registration.interactions = Some(client.clone());
     registration.launcher = Some(client.clone());
     registration.in_process = Some(client.clone());
     registration.profile = Some(client.clone());

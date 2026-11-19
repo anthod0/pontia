@@ -23,7 +23,7 @@ impl ClientConfiguration for CodexConfiguration {
     ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
         Some(pontia_core::execution_policy::ExecutionPolicy {
             disabled_tools: vec![SPAWN_AGENT.into()],
-            yolo: true,
+            yolo: false,
             ..Default::default()
         })
     }

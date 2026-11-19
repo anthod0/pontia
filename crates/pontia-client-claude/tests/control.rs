@@ -1548,3 +1548,56 @@ async fn steering_uses_the_active_turn_while_after_idle_waits() {
     h.wait_states(&session, &["completed", "completed"]).await;
     h.stop().await;
 }
+
+#[tokio::test]
+async fn restricted_execution_policy_defaults_yolo_false_and_accepts_explicit_yolo_opt_in() {
+    let configuration = pontia_client_claude::registration()
+        .configuration
+        .expect("Claude configuration");
+    let restricted = configuration
+        .restricted_execution_policy()
+        .expect("Claude restricted execution policy");
+    assert_eq!(restricted.tools, None);
+    assert!(restricted.disable_mcp);
+    assert!(!restricted.yolo);
+    for tool in ["Edit", "Write", "NotebookEdit", "Agent", "Task"] {
+        assert!(
+            restricted.disabled_tools.iter().any(|entry| entry == tool),
+            "missing restricted tool {tool}"
+        );
+    }
+    configuration
+        .validate_execution_policy(&restricted)
+        .unwrap();
+    let mut approval_free = restricted.clone();
+    approval_free.yolo = true;
+    configuration
+        .validate_execution_policy(&approval_free)
+        .unwrap();
+
+    let h = Harness::new().await;
+    let request = serde_json::from_value(json!({
+        "client_type": "claude-agent",
+        "workspace": h.root.path(),
+        "execution_policy": approval_free,
+    }))
+    .unwrap();
+    let created = h
+        .app
+        .session_commands()
+        .create_session(request)
+        .await
+        .unwrap();
+    let session = created.session_id().unwrap();
+    h.submit(session, "restricted yolo task").await;
+    h.gate(session, 1, "start");
+    h.gate(session, 1, "finish");
+    h.wait_states(session, &["completed"]).await;
+    let spawn = h
+        .wire(session)
+        .into_iter()
+        .find(|frame| frame["method"] == "spawn")
+        .expect("spawn frame");
+    assert_eq!(spawn["execution_policy"], json!(approval_free));
+    h.stop().await;
+}

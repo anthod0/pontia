@@ -201,6 +201,25 @@ impl HelperService {
         }
     }
 
+    fn helper_execution_policy(
+        &self,
+        client_type: &str,
+    ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
+        let clients = self.control.clients();
+        let configuration = clients
+            .get(client_type)
+            .and_then(|entry| entry.configuration.as_ref())
+            .ok_or_else(|| {
+                Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
+            })?;
+        let mut policy = configuration.restricted_execution_policy().ok_or_else(|| {
+            Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
+        })?;
+        policy.yolo = true;
+        configuration.validate_execution_policy(&policy)?;
+        Ok(policy)
+    }
+
     async fn create(&self, bot_id: &str, source: &str, input: CreateHelper) -> Result<Value> {
         nonempty(&input.message)?;
         nonempty(&input.description)?;
@@ -221,6 +240,7 @@ impl HelperService {
                 "Client cannot run a helper Session".into(),
             ));
         }
+        let execution_policy = self.helper_execution_policy(&profile.client_type)?;
         let reference = format!("helper:{bot_id}:{}", uuid::Uuid::now_v7());
         let directory = self
             .conversation
@@ -241,6 +261,7 @@ impl HelperService {
                 &directory,
                 ownership.clone(),
                 include_str!("helpers/instructions.md"),
+                execution_policy,
             )
             .await?;
         request.description = Some(input.description);

@@ -139,18 +139,23 @@ impl ConversationService {
         &self.records
     }
 
-    pub(crate) fn restricted_execution_policy(
+    fn bot_execution_policy(
         &self,
         client_type: &str,
     ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
-        self.control
-            .clients()
+        let clients = self.control.clients();
+        let configuration = clients
             .get(client_type)
             .and_then(|entry| entry.configuration.as_ref())
-            .and_then(|config| config.restricted_execution_policy())
             .ok_or_else(|| {
                 Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
-            })
+            })?;
+        let mut policy = configuration.restricted_execution_policy().ok_or_else(|| {
+            Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
+        })?;
+        policy.yolo = true;
+        configuration.validate_execution_policy(&policy)?;
+        Ok(policy)
     }
 
     pub fn supports_bot_client(&self, client_type: &str) -> bool {
@@ -160,10 +165,11 @@ impl ConversationService {
             .is_some_and(|entry| {
                 entry.spec.capabilities.steer
                     && entry.profile.is_some()
-                    && entry.configuration.as_ref().is_some_and(|config| {
-                        config.supports_startup_model()
-                            && config.restricted_execution_policy().is_some()
-                    })
+                    && entry
+                        .configuration
+                        .as_ref()
+                        .is_some_and(|config| config.supports_startup_model())
+                    && self.bot_execution_policy(client_type).is_ok()
             })
     }
 
@@ -173,6 +179,7 @@ impl ConversationService {
         directory: &std::path::Path,
         ownership: SessionOwnership,
         instructions: &str,
+        execution_policy: pontia_core::execution_policy::ExecutionPolicy,
     ) -> Result<CreateSessionRequest> {
         let clients = self.control.clients();
         if !clients
@@ -187,7 +194,7 @@ impl ConversationService {
             .session_metadata(&profile.client_type, &profile.client_key)
             .await?;
         Ok(CreateSessionRequest {
-            execution_policy: self.restricted_execution_policy(&profile.client_type)?,
+            execution_policy,
             model: Some(profile.model),
             client_type: profile.client_type,
             title: None,
@@ -432,7 +439,7 @@ impl ConversationService {
             .control
             .session_commands()
             .create_session(CreateSessionRequest {
-                execution_policy: self.restricted_execution_policy(&bot.client_type)?,
+                execution_policy: self.bot_execution_policy(&bot.client_type)?,
                 model: Some(bot.model.clone()),
                 client_type: bot.client_type.clone(),
                 title: Some(bot.name.clone()),
