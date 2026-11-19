@@ -1045,6 +1045,56 @@ async fn interruption_receipt_waits_for_result_and_normal_completion_can_win() {
 }
 
 #[tokio::test]
+async fn conditional_exit_waits_for_host_and_process_closure() {
+    let h = Harness::new().await;
+    let session = h.create("held").await;
+    h.wait_inputs(&session, 1).await;
+    let commands = h.app.session_commands();
+    assert!(!commands.exit_if_idle(&session).await.unwrap());
+    h.gate(&session, 1, "start");
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    // Submit directly so the SDK accepts input before its started fact creates a Turn.
+    h.app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "follow up".into(), json!({}))
+        .await
+        .unwrap();
+    assert_eq!(
+        h.app
+            .queries()
+            .session_snapshot(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "idle"
+    );
+    assert!(!commands.exit_if_idle(&session).await.unwrap());
+    assert!(
+        h.wire(&session)
+            .iter()
+            .any(|request| request["method"] == "is_idle")
+    );
+    h.gate(&session, 2, "start");
+    h.gate(&session, 2, "finish");
+    h.wait_states(&session, &["completed", "completed"]).await;
+    assert!(commands.exit_if_idle(&session).await.unwrap());
+    assert_eq!(
+        h.app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "exited"
+    );
+    assert!(commands.exit_if_idle(&session).await.unwrap());
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn explicit_sdk_close_abandons_active_turn_without_fabricating_result() {
     let h = Harness::new().await;
     let session = h.create("held").await;

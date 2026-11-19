@@ -128,6 +128,31 @@ async fn missing_pi_connection_rejects_delivery_without_creating_a_turn() {
 }
 
 #[tokio::test]
+async fn conditional_exit_refuses_unsettled_control_state_before_contacting_the_client() {
+    let (pool, _root, app) = setup().await;
+    let commands = app.session_commands();
+    // No peer is attached, so reaching the client would return an error.
+    assert!(!commands.exit_if_idle("sess_pi").await.unwrap());
+    ready(&pool).await;
+    sqlx::query("INSERT INTO turns(turn_id,session_id,state) VALUES ('turn','sess_pi','queued')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(!commands.exit_if_idle("sess_pi").await.unwrap());
+    sqlx::query("UPDATE turns SET state='running' WHERE turn_id='turn'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(!commands.exit_if_idle("sess_pi").await.unwrap());
+    sqlx::query("UPDATE turns SET state='completed' WHERE turn_id='turn'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO inbox_messages(message_id,session_id,state,delivery_policy,input_summary) VALUES ('next','sess_pi','pending','after_idle','next')").execute(&pool).await.unwrap();
+    assert!(!commands.exit_if_idle("sess_pi").await.unwrap());
+}
+
+#[tokio::test]
 async fn conditional_exit_uses_the_native_idle_decision_and_waits_for_exit_confirmation() {
     let (pool, _root, state) = setup().await;
     ready(&pool).await;

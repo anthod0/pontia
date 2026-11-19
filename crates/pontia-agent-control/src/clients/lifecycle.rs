@@ -1,5 +1,5 @@
 use super::ClientAdapter;
-use crate::client_contract::{ClientExitOutcome, TerminateBehavior};
+use crate::client_contract::{ClientExitMode, ClientExitOutcome, TerminateBehavior};
 use crate::{control::ControlResult, runtime::ControlTarget};
 use pontia_core::{Error, Result};
 use pontia_runtime::{GenericRuntimeManager, RuntimeStartRequest, RuntimeStartResult};
@@ -58,50 +58,49 @@ impl ClientAdapter {
         self.start_in_process(root, request, 0).map(Some)
     }
 
-    pub async fn exit_if_idle(&self, target: &ControlTarget) -> Result<bool> {
-        target.validate(&self.pool).await?;
-        match self.spec.adapter.terminate {
-            TerminateBehavior::Connected => {
-                self.control
-                    .shutdown_if_idle(&target.session_id, target.instance()?)
-                    .await
-            }
-            TerminateBehavior::RuntimeManager
-                if matches!(
-                    self.spec.adapter.runtime,
-                    crate::client_contract::RuntimeBehavior::InProcess
-                ) =>
-            {
-                // Backend-managed Turns are serialized by the caller's input reservation.
-                self.exit(target).await.into_result()?;
-                Ok(true)
-            }
-            _ => Err(Error::CapabilityUnavailable(
-                "Client cannot exit conditionally while idle".into(),
-            )),
-        }
-    }
-
-    pub async fn exit(&self, target: &ControlTarget) -> ControlResult<ClientExitOutcome> {
+    pub async fn exit(
+        &self,
+        target: &ControlTarget,
+        mode: ClientExitMode,
+    ) -> ControlResult<ClientExitOutcome> {
         let result = async {
-            target.validate(&self.pool.clone()).await?;
+            target.validate(&self.pool).await?;
             if let Some(client) = self.session_client() {
-                return client.exit(self.events.clone(), target).await;
+                return client.exit(self.events.clone(), target, mode).await;
             }
             match self.spec.adapter.terminate {
                 TerminateBehavior::Connected => {
-                    self.control
-                        .shutdown(&target.session_id, target.instance()?)
-                        .await?;
-                    Ok(ClientExitOutcome::Requested)
+                    let instance = target.instance()?;
+                    if mode == ClientExitMode::IfIdle {
+                        if !self
+                            .control
+                            .shutdown_if_idle(&target.session_id, instance)
+                            .await?
+                        {
+                            return Ok(ClientExitOutcome::Busy);
+                        }
+                    } else {
+                        self.control.shutdown(&target.session_id, instance).await?;
+                    }
                 }
                 TerminateBehavior::RuntimeManager => {
+                    // The input reservation serializes backend-managed, in-process Turns.
+                    if mode == ClientExitMode::IfIdle
+                        && !matches!(
+                            self.spec.adapter.runtime,
+                            crate::client_contract::RuntimeBehavior::InProcess
+                        )
+                    {
+                        return Err(Error::CapabilityUnavailable(
+                            "Client cannot exit conditionally while idle".into(),
+                        ));
+                    }
                     if let Some(handle) = &target.runtime_id {
                         GenericRuntimeManager.terminate_session(handle)?;
                     }
-                    Ok(ClientExitOutcome::Requested)
                 }
             }
+            Ok(ClientExitOutcome::Requested)
         }
         .await;
         ControlResult::from_result(result)
@@ -200,7 +199,7 @@ impl ClientAdapter {
                 }
             }
             TerminateBehavior::RuntimeManager => {
-                self.exit(target).await.into_result()?;
+                self.exit(target, ClientExitMode::Unconditional).await.into_result()?;
             }
         }
         if let Some(launcher) = self

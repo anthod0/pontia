@@ -1,6 +1,8 @@
 use crate::{
     AgentControl, EventIngestService,
-    client_contract::{ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails},
+    client_contract::{
+        ClientExitMode, ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails,
+    },
     control::InputReceipt,
     runtime::ControlTarget,
     turns::InputIntent,
@@ -71,6 +73,7 @@ impl ClientSession for Client {
         &'a self,
         _: EventIngestService,
         _: &'a ControlTarget,
+        _: ClientExitMode,
     ) -> ClientOperation<'a, ClientExitOutcome> {
         panic!("unexpected exit")
     }

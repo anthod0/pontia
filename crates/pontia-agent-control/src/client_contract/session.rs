@@ -9,8 +9,15 @@ use std::{future::Future, path::Path, pin::Pin};
 
 pub type ClientOperation<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientExitMode {
+    Unconditional,
+    IfIdle,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClientExitOutcome {
+    Busy,
     Requested,
     Confirmed { reason: String },
 }
@@ -69,6 +76,7 @@ pub trait ClientSession: Send + Sync {
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
+        mode: ClientExitMode,
     ) -> ClientOperation<'a, ClientExitOutcome>;
     fn resume<'a>(
         &'a self,

@@ -122,6 +122,8 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
         case "permission":
           host.resolvePermission(string(request.permission_id), string(request.option));
           break;
+        case "is_idle":
+          return { status: "accepted", idle: host.isIdle() };
         case "close":
           await host.close();
           break;

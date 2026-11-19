@@ -239,6 +239,10 @@ for line in sys.stdin:
                 "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": " after cancel"}}
             }})
     elif method == "session/close":
+        if os.environ.get("ACP_HOLD_CLOSE") == "1":
+            wait_for("release-close")
+        if os.environ.get("ACP_DROP_CLOSE") == "1":
+            os._exit(0)
         if os.environ.get("ACP_CLOSE_FAIL") == "1":
             send({"id": request["id"], "error": {"code": -32603, "message": "Close failed"}})
         else:

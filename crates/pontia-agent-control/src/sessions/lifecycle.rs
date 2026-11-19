@@ -8,7 +8,8 @@ use serde_json::json;
 use super::SessionCommandService;
 use crate::ControlCommandOutcome;
 use crate::{
-    PontiaEvent, PontiaEventSource, PontiaEventType, client_contract::ClientExitOutcome,
+    PontiaEvent, PontiaEventSource, PontiaEventType,
+    client_contract::{ClientExitMode, ClientExitOutcome},
     get_workspace_record,
 };
 use pontia_core::domain::EventType;
@@ -61,9 +62,7 @@ impl SessionCommandService {
         )
         .await?;
         if !self
-            .clients
-            .for_client(&snapshot.client_type)?
-            .exit_if_idle(&target)
+            .exit_target(&snapshot.client_type, &target, ClientExitMode::IfIdle)
             .await?
         {
             return Ok(false);
@@ -181,16 +180,34 @@ impl SessionCommandService {
         )
         .await?;
         if session.state != "exited" {
-            let outcome = self
-                .clients
-                .for_client(&session.client_type)?
-                .exit(&target)
-                .await
-                .into_result()?;
-            if let ClientExitOutcome::Confirmed { reason } = outcome {
+            self.exit_target(&session.client_type, &target, ClientExitMode::Unconditional)
+                .await?;
+        }
+        Ok(ControlCommandOutcome {
+            data: json!({"session":query.get_session(session_id).await?}),
+            duplicate: false,
+        })
+    }
+
+    async fn exit_target(
+        &self,
+        client_type: &str,
+        target: &crate::runtime::ControlTarget,
+        mode: ClientExitMode,
+    ) -> Result<bool> {
+        match self
+            .clients
+            .for_client(client_type)?
+            .exit(target, mode)
+            .await
+            .into_result()?
+        {
+            ClientExitOutcome::Busy => return Ok(false),
+            ClientExitOutcome::Requested => {}
+            ClientExitOutcome::Confirmed { reason } => {
                 self.event_ingest
                     .report_client_fact(
-                        session_id,
+                        &target.session_id,
                         target.runtime_id.as_deref(),
                         EventType::SessionExited,
                         json!({"reason":reason}),
@@ -198,10 +215,7 @@ impl SessionCommandService {
                     .await?;
             }
         }
-        Ok(ControlCommandOutcome {
-            data: json!({"session":query.get_session(session_id).await?}),
-            duplicate: false,
-        })
+        Ok(true)
     }
 
     pub(crate) async fn resume_for_input(&self, session_id: &str) -> Result<()> {

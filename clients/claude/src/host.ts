@@ -68,6 +68,11 @@ export class Host {
     };
   }
 
+  isIdle(): boolean {
+    if (!this.acceptsControl()) throw new ControlError("rejected", "execution_unavailable");
+    return !this.current || this.current.finished;
+  }
+
   submit(id: string, text: string): void {
     if (!this.acceptsControl()) throw new ControlError("rejected", "execution_unavailable");
     this.validateInput(id, text);

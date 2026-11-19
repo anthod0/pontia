@@ -1009,6 +1009,99 @@ async fn unknown_stop_reason_does_not_guess_a_terminal_state() {
 }
 
 #[tokio::test]
+async fn conditional_exit_preserves_an_active_prompt_and_pending_permissions() {
+    use pontia_agent_control::{
+        client_contract::{ClientExitMode, ClientExitOutcome},
+        runtime::ControlTarget,
+    };
+    let h = Harness::new(&[("ACP_PERMISSION", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    let clients = h.app.clients();
+    let adapter = clients.get("acp").unwrap().session.as_ref().unwrap();
+    let target = ControlTarget::resolve(&h.app.db(), &clients, &session, None)
+        .await
+        .unwrap();
+    for permissions_pending in [false, true] {
+        if permissions_pending {
+            h.release("update-1");
+            h.wait_interactions(&session, 3).await;
+        }
+        assert_eq!(
+            adapter
+                .exit(
+                    h.app.event_ingest_service(),
+                    &target,
+                    ClientExitMode::IfIdle
+                )
+                .await
+                .unwrap(),
+            ClientExitOutcome::Busy
+        );
+    }
+    assert_eq!(h.requests("session/close"), 0);
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    let commands = h.app.session_commands();
+    assert!(commands.exit_if_idle(&session).await.unwrap());
+    assert_eq!(h.events(&session, "session.exited").await, 1);
+    assert!(commands.exit_if_idle(&session).await.unwrap());
+    assert_eq!(h.requests("session/close"), 1);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn conditional_exit_reports_unknown_when_the_close_receipt_is_lost() {
+    let h = Harness::new(&[("ACP_DROP_CLOSE", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    assert!(matches!(
+        h.app.session_commands().exit_if_idle(&session).await,
+        Err(Error::ControlUnknown(_))
+    ));
+    assert_eq!(h.events(&session, "session.exited").await, 0);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn conditional_exit_reports_unknown_when_a_connected_agent_withholds_the_receipt() {
+    let h = Harness::new(&[("ACP_HOLD_CLOSE", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    let commands = h.app.session_commands();
+    let target = session.clone();
+    let exit = tokio::spawn(async move { commands.exit_if_idle(&target).await });
+    h.wait_requests("session/close", 1).await;
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(31)).await;
+    let result = exit.await.unwrap();
+    tokio::time::resume();
+    assert!(matches!(result, Err(Error::ControlUnknown(_))));
+    assert_eq!(h.events(&session, "session.exited").await, 0);
+    h.release("release-close");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while h.events(&session, "session.exited").await == 0 {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        h.app
+            .session_commands()
+            .exit_if_idle(&session)
+            .await
+            .unwrap()
+    );
+    assert_eq!(h.requests("session/close"), 1);
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn failed_close_does_not_exit_session_or_terminate_peer() {
     let h = Harness::new(&[("ACP_CLOSE_FAIL", "1")]).await;
     let session = h.create("first").await.unwrap();
@@ -1861,6 +1954,14 @@ async fn cancelling_a_history_reader_does_not_strand_replay_or_misclassify_late_
             .await
     });
     h.wait_requests("session/load", 2).await;
+    assert!(
+        !h.app
+            .session_commands()
+            .exit_if_idle(&session)
+            .await
+            .unwrap()
+    );
+    assert_eq!(h.requests("session/close"), 0);
     read.abort();
     assert!(read.await.unwrap_err().is_cancelled());
     h.release("release-load");
@@ -1894,6 +1995,8 @@ async fn a_stalled_peer_does_not_block_other_session_recovery_or_shutdown() {
     h.release("first-load");
     h.restart().await;
     h.wait_ready(&second, 2).await;
+    h.wait_requests("session/load", 4).await;
+    assert!(!h.app.session_commands().exit_if_idle(&first).await.unwrap());
     let stalled = h.app.queries().get_session(&first).await.unwrap().unwrap();
     assert!(!stalled.capabilities.accept_task);
     assert!(!stalled.capabilities.timeline);

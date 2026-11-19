@@ -22,8 +22,8 @@ pub use data::{
 };
 pub use service::{ClientService, ClientServicePhase};
 pub use session::{
-    ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails, InProcessClient,
-    NativeSessionFork, SessionCreationOption,
+    ClientExitMode, ClientExitOutcome, ClientOperation, ClientSession, ClientSessionDetails,
+    InProcessClient, NativeSessionFork, SessionCreationOption,
 };
 pub use setup::{ClientIntegration, PreparedClientIntegration, PreparedClientUninstall};
 #[cfg(any(test, feature = "generic-test-client"))]

@@ -15,9 +15,9 @@ use pontia_agent_control::{
     AgentBindingService, AgentControl, EventIngestService, PontiaEventType,
     UpsertAgentBindingRequest,
     client_contract::{
-        AgentClientCapabilities, ClientConfiguration, ClientExitOutcome, ClientInteractions,
-        ClientOperation, ClientService, ClientServicePhase, ClientSession, ClientSessionDetails,
-        SessionCreationOption,
+        AgentClientCapabilities, ClientConfiguration, ClientExitMode, ClientExitOutcome,
+        ClientInteractions, ClientOperation, ClientService, ClientServicePhase, ClientSession,
+        ClientSessionDetails, SessionCreationOption,
     },
     clients::ClientRegistration,
     control::InputReceipt,
@@ -489,27 +489,54 @@ impl ClientSession for AcpAdapter {
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
+        mode: ClientExitMode,
     ) -> ClientOperation<'a, ClientExitOutcome> {
         Box::pin(async move {
             let peer = self.peer(&target.session_id).await?;
             let native = {
                 let mut state = peer.state.lock().await;
                 target.validate(&events.db()).await?;
-                if !state.current || !state.ready || state.closing || state.replay.is_some() {
+                if !state.current || state.closing {
+                    return Err(unavailable());
+                }
+                if mode == ClientExitMode::IfIdle
+                    && (state.active.is_some()
+                        || !state.permissions.is_empty()
+                        || state.replay.is_some())
+                {
+                    return Ok(ClientExitOutcome::Busy);
+                }
+                if !state.ready || state.replay.is_some() {
                     return Err(unavailable());
                 }
                 state.closing = true;
                 state.refresh_capabilities();
                 state.native.clone().ok_or_else(unavailable)?
             };
-            // The ordered close callback fences late updates before waking us.
-            // A subsequent EOF cannot undo its confirmed close result.
-            peer.close_session(native).await?;
-            peer.stop().await;
-            self.peers.lock().await.remove(&target.session_id);
-            Ok(ClientExitOutcome::Confirmed {
-                reason: "acp_session_closed".into(),
-            })
+            let session = target.session_id.clone();
+            let close = async move {
+                peer.close_session(native).await?;
+                peer.stop().await;
+                events
+                    .report_client_fact(
+                        &session,
+                        Some(&peer.runtime),
+                        pontia_core::domain::EventType::SessionExited,
+                        json!({"reason":"acp_session_closed"}),
+                    )
+                    .await?;
+                Ok(ClientExitOutcome::Requested)
+            };
+            if mode == ClientExitMode::Unconditional {
+                return close.await;
+            }
+            // The peer owns the in-flight close even after the caller's deadline.
+            tokio::time::timeout(std::time::Duration::from_secs(30), tokio::spawn(close))
+                .await
+                .map_err(|_| Error::ControlUnknown("ACP Session close receipt timed out".into()))?
+                .map_err(|error| {
+                    Error::ControlUnknown(format!("ACP Session close unconfirmed: {error}"))
+                })?
         })
     }
 

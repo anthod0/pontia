@@ -3,7 +3,10 @@ use crate::runtime::{
     CodexRuntime, SubscriptionState,
     protocol::{CONTROL_TIMEOUT, Connection, Notification},
 };
-use pontia_agent_control::{AgentBindingService, client_contract::ClientExitOutcome};
+use pontia_agent_control::{
+    AgentBindingService,
+    client_contract::{ClientExitMode, ClientExitOutcome},
+};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
 use tokio::sync::broadcast;
@@ -12,6 +15,7 @@ impl CodexService {
     pub(crate) async fn exit(
         &self,
         target: &pontia_agent_control::runtime::ControlTarget,
+        mode: ClientExitMode,
     ) -> Result<ClientExitOutcome> {
         let session = &target.session_id;
         let runtime = self.runtime(session).await?;
@@ -21,8 +25,12 @@ impl CodexService {
             .binding_for_session(session)
             .await?;
         if let Some(binding) = binding {
-            self.close_thread(session, &runtime, &binding.client_session_key)
-                .await?;
+            if !self
+                .close_thread(session, &runtime, &binding.client_session_key, mode)
+                .await?
+            {
+                return Ok(ClientExitOutcome::Busy);
+            }
         } else if runtime.subscription(session).await.is_some() {
             return Err(Error::ControlUnknown(
                 "unbound Codex Session still has subscription state".into(),
@@ -49,7 +57,8 @@ impl CodexService {
         session: &str,
         runtime: &CodexRuntime,
         thread: &str,
-    ) -> Result<()> {
+        mode: ClientExitMode,
+    ) -> Result<bool> {
         let connection = runtime.connection().await?;
         let mut events = connection.events.subscribe();
         // Consume native facts here as well: the observer shares the Session operation lock.
@@ -57,6 +66,9 @@ impl CodexService {
             let (turns, revision) = self.exit_turns(session, runtime, &connection, thread).await?;
             let active = active_turn(&turns)?;
             if let Some(native) = active {
+                if mode == ClientExitMode::IfIdle {
+                    return Ok(None);
+                }
                 connection
                     .call("turn/interrupt", json!({"threadId":thread,"turnId":native}))
                     .await?;
@@ -68,7 +80,7 @@ impl CodexService {
                         ));
                     }
                     match turns.iter().find(|turn| turn["id"] == native) {
-                        Some(turn) if terminal(turn) => return Ok(revision),
+                        Some(turn) if terminal(turn) => return Ok(Some(revision)),
                         Some(_) => {},
                         None => return Err(Error::ControlUnknown(
                             "Codex stopping turn disappeared without a terminal result; thread was not archived".into(),
@@ -77,12 +89,15 @@ impl CodexService {
                     wait_for_change(&mut events, thread).await?;
                 }
             }
-            Ok(revision)
+            Ok(Some(revision))
         })
         .await
         .map_err(|_| Error::ControlUnknown(
             "Codex stop was not confirmed before the control deadline; thread was not archived".into(),
         ))??;
+        let Some(stopped_revision) = stopped_revision else {
+            return Ok(false);
+        };
         runtime.current_guard().await?;
 
         // Archive can unload even if its receipt is lost. Persist the existing reload
@@ -103,7 +118,7 @@ impl CodexService {
         let _current = runtime.current_guard().await?;
         let _activity = connection.confirm_activity(thread, revision).await?;
         self.confirm_exit(session, runtime).await;
-        Ok(())
+        Ok(true)
     }
 
     async fn archive_and_restore(

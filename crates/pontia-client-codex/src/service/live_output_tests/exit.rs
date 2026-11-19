@@ -61,6 +61,49 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn conditional_exit_reads_native_work_before_archiving() {
+    let f = Fixture::new(turn(json!([])), vec![]).await;
+    f.complete_native("completed").await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while f.session_state().await != "idle" {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+
+    // A new native Turn is visible to app-server before its start notification.
+    f.server_state
+        .turns
+        .lock()
+        .await
+        .push(json!({"id":"external","status":"inProgress","items":[]}));
+    let commands = f.app.session_commands();
+    assert!(!commands.exit_if_idle(&f.session).await.unwrap());
+    assert!(
+        !f.server_state
+            .methods
+            .lock()
+            .await
+            .iter()
+            .any(|m| matches!(m.as_str(), "turn/interrupt" | "thread/archive"))
+    );
+    f.server_state.turns.lock().await[1]["status"] = json!("completed");
+
+    f.reject_rpc("thread/turns/list").await;
+    assert!(matches!(
+        commands.exit_if_idle(&f.session).await,
+        Err(Error::StateConflict(_))
+    ));
+    assert!(!f.server_state.unloaded.load(Ordering::SeqCst));
+    f.server_state.rpc_errors.lock().await.clear();
+    assert!(commands.exit_if_idle(&f.session).await.unwrap());
+    assert_eq!(f.session_state().await, "exited");
+    assert!(commands.exit_if_idle(&f.session).await.unwrap());
+    f.shutdown().await;
+}
+
+#[tokio::test]
 async fn exit_waits_for_native_terminal_and_preserves_natural_completion() {
     let f = Fixture::new(turn(json!([])), vec![]).await;
     f.server_state.hold_interrupt.store(true, Ordering::SeqCst);

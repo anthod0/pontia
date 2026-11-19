@@ -144,6 +144,8 @@ if (process.argv[2] === "history") {
         active.interrupt = true;
         expire();
         send({ type: "response", id: request.id, status: "accepted" });
+      } else if (request.method === "is_idle") {
+        send({ type: "response", id: request.id, status: "accepted", idle: !active });
       } else if (request.method === "close") {
         clearInterval(timer);
         expire();

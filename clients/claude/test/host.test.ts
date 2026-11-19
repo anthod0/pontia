@@ -470,6 +470,7 @@ for (const combined of [false, true]) {
       );
       await settle();
       assert.equal(events.filter((e) => e.kind === "finished").length, 0);
+      assert.equal(host.isIdle(), false);
       assert.throws(() => host.submit(native, "queued"), rejects("input_busy"));
     }
     fixture.messages.push(assistant(second, [{ type: "text", text: "redirected" }], "steered"));
@@ -496,6 +497,7 @@ for (const combined of [false, true]) {
     });
     assert.equal(events.filter((e) => e.kind === "input").length, 1);
     assert.ok(consumed < events.findIndex((e) => e.kind === "text" && e.delta === "redirected"));
+    assert.equal(host.isIdle(), true);
     host.submit(native, "next task");
     assert.equal((await fixture.next()).value.uuid, native);
   });

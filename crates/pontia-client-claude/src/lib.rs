@@ -364,14 +364,24 @@ impl ClientSession for Adapter {
         &'a self,
         events: EventIngestService,
         target: &'a ControlTarget,
+        mode: ClientExitMode,
     ) -> ClientOperation<'a, ClientExitOutcome> {
         Box::pin(async move {
             let peer = self.target(&events, target).await?;
+            let connection = peer.connection()?;
+            if mode == ClientExitMode::IfIdle {
+                let response = connection.request(json!({"method":"is_idle"})).await?;
+                match response["idle"].as_bool() {
+                    Some(false) => return Ok(ClientExitOutcome::Busy),
+                    Some(true) => {}
+                    None => {
+                        return Err(Error::Domain("Claude Code host omitted idle status".into()));
+                    }
+                }
+            }
             peer.state.lock().await.closing = true;
-            peer.connection()?
-                .request(json!({"method":"close"}))
-                .await?;
-            peer.connection()?.wait_exit().await?;
+            connection.request(json!({"method":"close"})).await?;
+            connection.wait_exit().await?;
             if !peer.state.lock().await.closed {
                 return Err(Error::ControlUnknown(
                     "Claude Code execution closure not confirmed".into(),
