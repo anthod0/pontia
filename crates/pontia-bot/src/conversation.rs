@@ -175,13 +175,10 @@ impl ConversationService {
         instructions: &str,
     ) -> Result<CreateSessionRequest> {
         let clients = self.control.clients();
-        if !clients.get(&profile.client_type).is_some_and(|entry| {
-            entry.spec.capabilities.accept_task
-                && entry
-                    .profile
-                    .as_ref()
-                    .is_some_and(|policy| policy.supports_explicit())
-        }) {
+        if !clients
+            .get(&profile.client_type)
+            .is_some_and(|entry| entry.spec.capabilities.accept_task && entry.profile.is_some())
+        {
             return Err(Error::CapabilityUnavailable(
                 "Client cannot run tasks with an explicit Profile".into(),
             ));

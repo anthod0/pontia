@@ -1350,6 +1350,138 @@ async fn default_instructions_are_fixed_before_input_and_survive_resume() {
 }
 
 #[tokio::test]
+async fn explicit_profile_instructions_are_validated_fixed_and_preserved_across_resume() {
+    use pontia_agent_control::{AgentProfileService, UpsertExecutionProfileRequest};
+
+    let h = Harness::new().await;
+    sqlx::query("UPDATE execution_profiles SET system_prompt_template='builtin-marker' WHERE profile_id='default' AND version='2'")
+        .execute(&h.app.db()).await.unwrap();
+    let profiles = AgentProfileService::new(h.app.db()).with_clients(h.app.clients());
+    let profile_request =
+        |id: &str, system: Option<&str>, turn: Option<&str>, clients: Vec<&str>| {
+            UpsertExecutionProfileRequest {
+                profile_id: id.into(),
+                version: "1".into(),
+                name: id.into(),
+                description: None,
+                default_client_type: None,
+                default_client_key: None,
+                default_model: None,
+                supported_client_types: clients.into_iter().map(str::to_owned).collect(),
+                agent_kind: "executor".into(),
+                system_prompt_template: system.map(str::to_owned),
+                turn_prompt_template: turn.map(str::to_owned),
+                default_session_role: None,
+                default_session_description: None,
+                handle_prefix: None,
+                expected_output_schema: None,
+                artifact_contract: json!({}),
+                default_execution_policy: json!({}),
+                default_review_policy: json!({}),
+                metadata: json!({}),
+            }
+        };
+    for invalid in [
+        profile_request("bad-turn", None, Some("turn prompt"), vec!["claude-agent"]),
+        profile_request("bad-blank", Some("   "), None, vec!["claude-agent"]),
+        profile_request(
+            "bad-placeholder",
+            Some("hello {{name}}"),
+            None,
+            vec!["claude-agent"],
+        ),
+    ] {
+        assert!(profiles.create_profile(invalid).await.is_err());
+    }
+    profiles
+        .create_profile(profile_request(
+            "empty-system",
+            None,
+            None,
+            vec!["claude-agent"],
+        ))
+        .await
+        .unwrap();
+    profiles
+        .create_profile(profile_request("other-client", Some("other"), None, vec![]))
+        .await
+        .unwrap();
+    let rejected: CreateSessionRequest = serde_json::from_value(json!({
+        "client_type": "claude-agent",
+        "workspace": h.root.path(),
+        "execution_profile_id": "other-client",
+    }))
+    .unwrap();
+    assert!(
+        h.app
+            .session_commands()
+            .create_session(rejected)
+            .await
+            .is_err()
+    );
+
+    profiles
+        .create_profile(profile_request(
+            "claude-reviewer",
+            Some("explicit-marker"),
+            None,
+            vec!["claude-agent"],
+        ))
+        .await
+        .unwrap();
+    let request = serde_json::from_value(json!({
+        "client_type": "claude-agent",
+        "workspace": h.root.path(),
+        "execution_profile_id": "claude-reviewer",
+        "additional_instructions": "caller-marker",
+    }))
+    .unwrap();
+    let created = h
+        .app
+        .session_commands()
+        .create_session(request)
+        .await
+        .unwrap();
+    let session = created.session_id().unwrap();
+    assert_eq!(
+        created.data["session"]["execution_profile_id"],
+        "claude-reviewer"
+    );
+    assert_eq!(created.data["session"]["execution_profile_version"], "1");
+    sqlx::query("DROP TABLE execution_profiles")
+        .execute(&h.app.db())
+        .await
+        .unwrap();
+    h.submit(session, "first input").await;
+    h.gate(session, 1, "start");
+    h.gate(session, 1, "finish");
+    h.wait_states(session, &["completed"]).await;
+    h.app
+        .session_commands()
+        .terminate_session(session)
+        .await
+        .unwrap();
+    h.resume_input(session, "resumed input").await;
+    h.gate(session, 2, "start");
+    h.gate(session, 2, "finish");
+    h.wait_states(session, &["completed", "completed"]).await;
+    let prompts: Vec<_> = h
+        .wire(session)
+        .into_iter()
+        .filter(|frame| frame["method"] == "spawn")
+        .map(|frame| frame["system_prompt"].clone())
+        .collect();
+    assert_eq!(
+        prompts,
+        vec![
+            json!("builtin-marker\n\nexplicit-marker\n\ncaller-marker"),
+            json!("builtin-marker\n\nexplicit-marker\n\ncaller-marker"),
+        ]
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn steering_uses_the_active_turn_while_after_idle_waits() {
     let h = Harness::new().await;
     let session = h.create("original").await;

@@ -7,9 +7,6 @@ pub trait ClientProfile: Send + Sync {
     fn inject_builtin(&self) -> bool {
         false
     }
-    fn supports_explicit(&self) -> bool {
-        true
-    }
     fn validate_templates(&self, system: Option<&str>, turn: Option<&str>) -> Result<()>;
     /// `instructions_required` distinguishes caller-requested instructions from builtin defaults.
     fn bind(&self, profile: &ExecutionProfileView, instructions_required: bool) -> Result<Value>;

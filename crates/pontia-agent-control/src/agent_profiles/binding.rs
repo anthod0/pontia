@@ -65,52 +65,48 @@ impl AgentProfileService {
             }
             return Ok(None);
         };
-        let explicit = if policy.supports_explicit() {
-            match id {
-                Some(id) => {
-                    let profile = match version {
-                        Some(version) => self.get_version(id, version).await?,
-                        None => self.get_latest(id).await?,
-                    }
-                    .ok_or_else(|| {
-                        Error::NotFound(format!(
-                            "agent profile {id}@{} not found",
-                            version.unwrap_or("latest")
-                        ))
-                    })?;
-                    if !profile.active {
-                        return Err(Error::Domain(format!(
-                            "agent profile {id}@{} is archived",
-                            profile.version
-                        )));
-                    }
-                    if !profile
-                        .supported_client_types
-                        .iter()
-                        .any(|client| client == client_type)
-                    {
-                        return Err(Error::Domain(format!(
-                            "agent profile {id}@{} does not declare {client_type} support",
-                            profile.version
-                        )));
-                    }
-                    policy.validate_templates(
-                        profile.system_prompt_template.as_deref(),
-                        profile.turn_prompt_template.as_deref(),
-                    )?;
-                    Some(profile)
+        let explicit = match id {
+            Some(id) => {
+                let profile = match version {
+                    Some(version) => self.get_version(id, version).await?,
+                    None => self.get_latest(id).await?,
                 }
-                None => {
-                    if version.is_some() {
-                        return Err(Error::Domain(
-                            "execution_profile_version requires execution_profile_id".into(),
-                        ));
-                    }
-                    None
+                .ok_or_else(|| {
+                    Error::NotFound(format!(
+                        "agent profile {id}@{} not found",
+                        version.unwrap_or("latest")
+                    ))
+                })?;
+                if !profile.active {
+                    return Err(Error::Domain(format!(
+                        "agent profile {id}@{} is archived",
+                        profile.version
+                    )));
                 }
+                if !profile
+                    .supported_client_types
+                    .iter()
+                    .any(|client| client == client_type)
+                {
+                    return Err(Error::Domain(format!(
+                        "agent profile {id}@{} does not declare {client_type} support",
+                        profile.version
+                    )));
+                }
+                policy.validate_templates(
+                    profile.system_prompt_template.as_deref(),
+                    profile.turn_prompt_template.as_deref(),
+                )?;
+                Some(profile)
             }
-        } else {
-            None
+            None => {
+                if version.is_some() {
+                    return Err(Error::Domain(
+                        "execution_profile_version requires execution_profile_id".into(),
+                    ));
+                }
+                None
+            }
         };
         let builtin = if policy.inject_builtin() {
             self.list_latest().await?.into_iter().find(|profile| {
