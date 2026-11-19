@@ -34,13 +34,20 @@
 
 <Sidebar.Group class="shrink-0">
   <Sidebar.GroupLabel>{$t('bots.title')}</Sidebar.GroupLabel>
+  {#if bots.data?.length}
+    <Sidebar.GroupAction aria-label={$t('bots.create')} title={$t('bots.create')} onclick={() => { creating = true }}>
+      <PlusIcon />
+    </Sidebar.GroupAction>
+  {/if}
   <Sidebar.GroupContent>
     <Sidebar.Menu>
-      <Sidebar.MenuItem>
-        <Sidebar.MenuButton tooltipContent={$t('bots.create')} onclick={() => { creating = true }}>
-          <PlusIcon /><span>{$t('bots.create')}</span>
-        </Sidebar.MenuButton>
-      </Sidebar.MenuItem>
+      {#if bots.data?.length === 0}
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton tooltipContent={$t('bots.create')} onclick={() => { creating = true }}>
+            <PlusIcon /><span>{$t('bots.create')}</span>
+          </Sidebar.MenuButton>
+        </Sidebar.MenuItem>
+      {/if}
       {#each bots.data ?? [] as bot, index (bot.bot_id)}
         {@const chat = chats[index]?.data}
         {@const working = chat ? !!chat.bot.working_on || chat.processing : !!bot.working_on}
