@@ -124,7 +124,7 @@
   }
 
   function handleDeviceShortcut(event: KeyboardEvent): void {
-    if (dashboardRelativePath() !== '/' || $devices.length < 2) return;
+    if ($devices.length < 2) return;
     const shortcut = matchChatShortcut(event);
     if (shortcut?.action !== 'switchDevice') return;
     const target = adjacentValue($devices.map(device => device.handle), activeHandle ?? null, shortcut.direction);

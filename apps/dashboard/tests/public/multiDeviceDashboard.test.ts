@@ -364,6 +364,14 @@ test("root honors the workspace query parameter for the active device", async ()
   expect(JSON.parse(call[2].body as string).workspace_id).toBe("other");
 });
 
+test("Alt+M switches devices from settings and keeps the section", async () => {
+  window.history.replaceState({}, "", "/office-mac/settings/clients");
+  render(MultiDeviceDashboardHarness);
+  await screen.findByText("Device page");
+  await fireEvent.keyDown(window, { key: "m", code: "KeyM", altKey: true });
+  await waitFor(() => expect(location.pathname).toBe("/travel-laptop/settings/clients"));
+});
+
 test("sidebar device selection keeps the settings section and permits an offline target", async () => {
   window.history.replaceState({}, "", "/office-mac/settings/clients");
   render(MultiDeviceDashboardHarness);

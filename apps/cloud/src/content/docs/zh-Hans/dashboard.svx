@@ -73,7 +73,8 @@ Agent 可以运行 `pontia send-file PATH` 从其 Session 中共享文件。文�
 | `Alt+1` … `Alt+9` | 按侧边栏位置打开活跃聊天 |
 | `Alt+N` | 打开 New chat |
 | `Alt+L` | 聚焦输入框 |
-| `Alt+M` / `Alt+C` / `Alt+W` | 在 New chat 中切换到下一个设备、Agent Client 或 Workspace。加 `Shift` 切换到上一个。 |
+| `Alt+M` | 切换到下一个设备。加 `Shift` 切换到上一个。 |
+| `Alt+C` / `Alt+W` | 在 New chat 中切换到下一个 Agent Client 或 Workspace。加 `Shift` 切换到上一个。 |
 | `Alt+?` | 显示快捷键参考 |
 | `Ctrl+B`（macOS 上为 `Cmd+B`） | 显示或隐藏侧边栏 |
 
