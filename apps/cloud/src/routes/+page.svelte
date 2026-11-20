@@ -3,10 +3,10 @@
 	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import HeroSection from '$lib/components/HeroSection.svelte';
 	import FeatureSection from '$lib/components/FeatureSection.svelte';
+	import RemoteSection from '$lib/components/RemoteSection.svelte';
 	import BotSection from '$lib/components/BotSection.svelte';
 	import HomeFaq from '$lib/components/HomeFaq.svelte';
 	import OpenSourceSection from '$lib/components/OpenSourceSection.svelte';
-	import IntegrationProgress from '$lib/components/IntegrationProgress.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import LocaleLinks from '$lib/components/LocaleLinks.svelte';
@@ -66,8 +66,8 @@
 
 	<BotSection />
 	<FeatureSection />
+	<RemoteSection />
 	<OpenSourceSection />
-	<IntegrationProgress />
 	<HomeFaq />
 
 	<section class="closing page-width" aria-labelledby="closing-title" {@attach reveal()}>

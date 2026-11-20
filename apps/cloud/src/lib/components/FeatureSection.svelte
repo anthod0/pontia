@@ -1,207 +1,127 @@
 <script lang="ts">
-	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
-	import LockSimpleIcon from 'phosphor-svelte/lib/LockSimpleIcon';
+	import { onMount } from 'svelte';
 	import { reveal } from '$lib/reveal';
 	import { m } from '$lib/paraglide/messages';
-	import { localizeHref } from '$lib/paraglide/runtime';
 
-	const clients = [
-		{ name: 'Pi', logo: '/client-logos/pi.svg' },
-		{ name: 'Codex', logo: '/client-logos/codex.svg', darkLogo: '/client-logos/codex-dark.svg' },
-		{ name: 'Claude Code', logo: '/client-logos/claude-code.svg' },
-		{ name: 'Grok Build', logo: '/client-logos/grok-build.svg' },
-		{ name: 'OpenCode', logo: '/client-logos/opencode.svg', darkLogo: '/client-logos/opencode-dark.svg' }
+	type Unit = {
+		client: string;
+		logo: string;
+		darkLogo?: string;
+		title: string;
+		workspace: string;
+		branch: string;
+		model: string;
+		state: 'busy' | 'waiting' | 'idle';
+		/** Current step for busy units, pending request for waiting units. */
+		activity?: string;
+		/** Seconds the current Turn has been running. */
+		elapsed?: number;
+	};
+
+	// SVG logo sources: https://pi.dev/press-kit; Claude symbol extracted from
+	// the inline wordmark at https://claude.com/product/claude-code;
+	// https://grok.com/images/favicon.svg; OpenCode brand assets at
+	// https://opencode.ai/brand. The OpenAI symbol used for Codex comes from
+	// anomalyco/opencode: packages/ui/src/assets/icons/provider/openai.svg.
+	// Local vector assets live in static/client-logos/.
+	// Sample Sessions; each one is an isolated unit with its own Workspace, branch, model, and state.
+	const units: Unit[] = [
+		{ client: 'Codex', logo: '/client-logos/codex.svg', darkLogo: '/client-logos/codex-dark.svg', title: 'Add keyboard shortcuts', workspace: '~/code/atlas', branch: 'feat/keyboard-shortcuts', model: 'gpt-5.4', state: 'busy', activity: 'Running bun test', elapsed: 83 },
+		{ client: 'Claude Code', logo: '/client-logos/claude-code.svg', title: 'Review API changes', workspace: '~/code/atlas', branch: 'main', model: 'claude-sonnet-4.5', state: 'waiting', activity: 'git diff v1.8..HEAD' },
+		{ client: 'Pi', logo: '/client-logos/pi.svg', title: 'Add integration tests', workspace: '~/code/atlas', branch: 'test/checkout-flow', model: 'gpt-5.4', state: 'busy', activity: 'Editing tests/checkout.spec.ts', elapsed: 214 },
+		{ client: 'Grok Build', logo: '/client-logos/grok-build.svg', title: 'Investigate flaky CI job', workspace: '~/code/infra', branch: 'main', model: 'grok-code-fast-1', state: 'busy', activity: 'Reading 6 files', elapsed: 41 },
+		{ client: 'OpenCode', logo: '/client-logos/opencode.svg', darkLogo: '/client-logos/opencode-dark.svg', title: 'Build the settings page', workspace: '~/code/atlas', branch: 'feat/settings', model: 'kimi-k2', state: 'idle' },
+		{ client: 'Codex', logo: '/client-logos/codex.svg', darkLogo: '/client-logos/codex-dark.svg', title: 'Rotate staging certificates', workspace: '~/code/infra', branch: 'ops/certs', model: 'gpt-5.4-mini', state: 'idle' }
 	];
-	const terminalLines = ['Reading 4 files', 'Editing src/shortcuts.ts', 'Running bun test'];
+	const stateLabel = { busy: m.features_state_busy, waiting: m.features_state_waiting, idle: m.features_state_idle };
+
+	// Busy units count up while the section is on screen.
+	let tick = $state(0);
+	onMount(() => {
+		if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		const timer = setInterval(() => tick++, 1000);
+		return () => clearInterval(timer);
+	});
+	const clock = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 </script>
 
-<section id="features" class="highlights page-width section-block" aria-labelledby="features-title" {@attach reveal()}>
-	<div class="section-intro reveal">
-		<div class="section-heading">
-			<h2 id="features-title">{m.features_title()}</h2>
-			<p>{m.features_intro()}</p>
-		</div>
-		<a class="section-link" href={localizeHref('/docs/how-it-works')}>{m.how_pontia_works()}<ArrowRightIcon size={12} /></a>
+<section id="features" class="units-section page-width section-block" aria-labelledby="features-title" {@attach reveal()}>
+	<div class="section-heading reveal">
+		<h2 id="features-title">{m.features_title()}</h2>
+		<p>{m.features_intro()}</p>
 	</div>
 
-	<div class="bento">
-		<article class="card wide reveal" style="--i: 1">
-			<div class="visual clients-visual" aria-hidden="true">
-				<div class="marquee">
-					{#each [0, 1] as copy}
-						<ul class:duplicate={copy === 1}>
-							{#each clients as client}<li><img class:light-logo={client.darkLogo} src={client.logo} alt="" width="24" height="24" loading="lazy" />{#if client.darkLogo}<img class="dark-logo" src={client.darkLogo} alt="" width="24" height="24" loading="lazy" />{/if}{client.name}</li>{/each}
-						</ul>
-					{/each}
+	<ul class="units" aria-hidden="true">
+		{#each units as unit, index}
+			<li class={['unit', 'reveal', unit.state]} style={`--i: ${index % 3}`}>
+				<div class="unit-head">
+					<span class="client">
+						<img class:light-logo={unit.darkLogo} src={unit.logo} alt="" width="16" height="16" loading="lazy" />
+						{#if unit.darkLogo}<img class="dark-logo" src={unit.darkLogo} alt="" width="16" height="16" loading="lazy" />{/if}
+						{unit.client}
+					</span>
+					<span class="state"><span class="dot"></span>{stateLabel[unit.state]()}</span>
 				</div>
-			</div>
-			<div class="card-copy">
-				<h3>{m.features_subscriptions_title()}</h3>
-				<p>{m.features_subscriptions_text()}</p>
-				<a class="card-link" href={localizeHref('/docs/agent-clients')}>{m.agent_clients()}<ArrowRightIcon size={12} /></a>
-			</div>
-		</article>
+				<p class="unit-title">{unit.title}</p>
+				<dl class="unit-meta">
+					<dt>cwd</dt><dd>{unit.workspace}</dd>
+					<dt>branch</dt><dd>{unit.branch}</dd>
+					<dt>model</dt><dd>{unit.model}</dd>
+				</dl>
+				<div class="unit-foot">
+					{#if unit.state === 'busy'}
+						<span class="activity">› {unit.activity}</span><span class="elapsed">{clock(unit.elapsed! + tick)}</span>
+					{:else if unit.state === 'waiting'}
+						<span class="activity">$ {unit.activity}</span><span class="approve">{m.features_approve()}</span>
+					{:else}
+						<span class="activity muted">—</span>
+					{/if}
+				</div>
+			</li>
+		{/each}
+	</ul>
 
-		<article class="card narrow reveal" style="--i: 2">
-			<div class="visual phone-visual" aria-hidden="true">
-				<div class="phone">
-					<span class="phone-notch"></span>
-					<span class="phone-title">Sessions</span>
-					<span class="phone-row"><span class="dot busy"></span>Fix search pagination</span>
-					<span class="phone-row approval"><span class="dot waiting"></span>Review API changes<span class="approve">Approve</span></span>
-					<span class="phone-row"><span class="dot idle"></span>Add integration tests</span>
-				</div>
-			</div>
-			<div class="card-copy">
-				<h3>{m.features_pocket_title()}</h3>
-				<p>{m.features_pocket_text()}</p>
-				<a class="card-link" href={localizeHref('/docs/dashboard')}>{m.dashboard_guide()}<ArrowRightIcon size={12} /></a>
-			</div>
-		</article>
-
-		<article class="card narrow reveal" style="--i: 1">
-			<div class="visual terminal-visual" aria-hidden="true">
-				<div class="terminal">
-					<span class="terminal-path">~/code/atlas <span>feat/keyboard-shortcuts</span></span>
-					<span class="terminal-line prompt">codex</span>
-					{#each terminalLines as line, index}<span class="terminal-line step" style={`--step: ${index}`}>{line}</span>{/each}
-					<span class="terminal-line done" style="--step: 3">128 tests passed<span class="cursor"></span></span>
-				</div>
-			</div>
-			<div class="card-copy">
-				<h3>{m.features_local_title()}</h3>
-				<p>{m.features_local_text()}</p>
-			</div>
-		</article>
-
-		<article class="card wide reveal" style="--i: 2">
-			<div class="visual relay-visual" aria-hidden="true">
-				<div class="relay">
-					<div class="node"><span class="node-name">{m.features_browser()}</span></div>
-					<div class="wire to-edge"><span class="packet"></span><span class="packet back"></span></div>
-					<div class="node edge">
-						<span class="node-name"><LockSimpleIcon size={12} weight="bold" />Edge</span>
-						<span class="cipher"><span>9f2a c41e 77b0 e3d9 1a6c 58f2 0bd4 9f2a c41e 77b0 e3d9 1a6c 58f2 0bd4</span></span>
-					</div>
-					<div class="wire from-edge"><span class="packet"></span><span class="packet back"></span></div>
-					<div class="node"><span class="node-name">{m.features_device()}</span></div>
-				</div>
-			</div>
-			<div class="card-copy">
-				<h3>{m.features_encrypted_title()}</h3>
-				<p>{m.features_encrypted_text()}</p>
-				<a class="card-link" href={localizeHref('/docs/security')}>{m.security_model()}<ArrowRightIcon size={12} /></a>
-			</div>
-		</article>
-	</div>
 </section>
 
 <style>
-	.section-link { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; padding-bottom: 6px; color: var(--primary); font-size: 13px; font-weight: 500; }
-	.section-link:hover, .card-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+	.section-heading { margin-bottom: 35px; }
 
-	.bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
-	.card { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); transition: border-color 0.25s, translate 0.25s; }
-	/* Keep the reveal transition alongside the hover transitions. */
-	.bento :global(.card.reveal) { transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out), border-color 0.25s, translate 0.25s; transition-delay: calc(var(--i, 0) * 90ms), calc(var(--i, 0) * 90ms), 0s, 0s; }
-	.card:hover { border-color: var(--border-strong); translate: 0 -2px; }
-	.wide { grid-column: span 4; }
-	.narrow { grid-column: span 2; }
-	.visual { position: relative; display: grid; place-items: center; height: 200px; overflow: hidden; border-bottom: 1px solid var(--border); background: radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 16px 16px, var(--background); }
-	.card-copy { display: flex; flex: 1; flex-direction: column; padding: 22px 24px 24px; }
-	.card h3 { margin-bottom: 8px; font-size: 19px; font-weight: 500; letter-spacing: -0.025em; }
-	.card p { flex: 1; font-size: 14px; line-height: 1.7; color: var(--muted-foreground); text-wrap: pretty; }
-	.card-link { display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; margin-top: 16px; color: var(--primary); font-size: 12px; font-weight: 500; }
-
-	/* Relay: packets travel both ways; the Edge only ever shows scrolling ciphertext. */
-	.relay { display: flex; align-items: center; width: min(560px, 100% - 48px); }
-	.node { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); box-shadow: 0 6px 16px -10px rgb(60 56 54 / 30%); }
-	.node-name { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; color: var(--heading); }
-	.edge { border-color: var(--primary); border-style: dashed; }
-	.edge .node-name { color: var(--primary); }
-	.cipher { width: 96px; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent); }
-	.cipher span { display: block; width: max-content; font: 9px var(--font-mono); color: var(--olive); animation: scroll-x 6s linear infinite; }
-	.wire { position: relative; flex: 1; height: 1px; margin-inline: 4px; background: repeating-linear-gradient(90deg, var(--primary) 0 4px, transparent 4px 8px); }
-	.packet { position: absolute; top: -3px; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px rgb(69 133 136 / 18%); opacity: 0; animation: send 2.4s cubic-bezier(0.6, 0, 0.4, 1) infinite; }
-	.packet.back { background: var(--olive); box-shadow: 0 0 0 3px color-mix(in srgb, var(--olive) 18%, transparent); animation-name: reply; }
-	/* The device-side wire runs slightly ahead so the two wires do not move in lockstep. */
-	.from-edge .packet { animation-delay: -0.7s; }
-
-	/* Terminal: lines appear in sequence once the card is revealed. */
-	.terminal-visual { place-items: center; padding: 20px; }
-	.terminal { display: flex; flex-direction: column; gap: 5px; width: 100%; max-width: 280px; padding: 14px 16px; border: 1px solid #45433e; border-radius: 8px; background: #282828; box-shadow: 0 12px 28px -16px rgb(40 40 40 / 60%); font: 11px/1.5 var(--font-mono); color: #ebdbb2; }
-	.terminal-path { margin-bottom: 2px; color: #83a598; }
-	.terminal-path span { color: #928374; }
-	.terminal-line::before { margin-right: 8px; color: #928374; }
-	.prompt::before { content: '$'; }
-	.step::before { content: '›'; color: #d79921; }
-	.done { color: #b8bb26; }
-	.done::before { content: '✓'; color: #b8bb26; }
-	.cursor { display: inline-block; width: 6px; height: 12px; margin-left: 6px; vertical-align: -2px; background: #ebdbb2; animation: blink 1s steps(1) infinite; }
-
-	/* Phone: the busy dot pulses and the approval row asks for attention. */
-	.phone-visual { place-items: end center; }
-	.phone { display: flex; flex-direction: column; gap: 7px; width: 196px; height: 172px; padding: 22px 12px 0; border: 1px solid var(--border-strong); border-bottom: 0; border-radius: 24px 24px 0 0; background: var(--surface); box-shadow: 0 -8px 30px -18px rgb(60 56 54 / 30%); }
-	.phone-notch { align-self: center; width: 44px; height: 5px; margin: -10px 0 6px; border-radius: 3px; background: var(--border-strong); }
-	.phone-title { font-size: 12px; font-weight: 600; color: var(--heading); }
-	.phone-row { display: flex; align-items: center; gap: 7px; padding: 7px 8px; overflow: hidden; border: 1px solid transparent; border-radius: 6px; background: var(--background); font-size: 10px; color: var(--foreground); white-space: nowrap; }
-	.approval { border-color: rgb(177 98 134 / 35%); animation: attention 2.8s ease-in-out infinite; }
-	.approve { margin-left: auto; padding: 2px 6px; border-radius: 4px; background: var(--button); color: white; font-size: 9px; font-weight: 500; }
-	.dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; }
-	.dot.busy { background: var(--color-busy); animation: pulse 1.6s ease-out infinite; }
-	.dot.waiting { background: var(--color-interrupted); }
-	.dot.idle { background: var(--color-idle); }
-
-	/* Client logos scroll continuously; the second copy fills the loop. */
-	.marquee { display: flex; width: 100%; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 15%, #000 85%, transparent); }
-	.marquee ul { display: flex; flex-shrink: 0; gap: 12px; margin: 0; padding: 0 6px; list-style: none; animation: scroll-list 24s linear infinite; }
-	.card:hover .marquee ul { animation-play-state: paused; }
-	.marquee li { display: flex; align-items: center; gap: 10px; padding: 12px 18px 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 14px; font-weight: 500; color: var(--heading); white-space: nowrap; box-shadow: 0 6px 16px -12px rgb(60 56 54 / 30%); }
-	.marquee img { width: 24px; height: 24px; object-fit: contain; }
-	.marquee img.dark-logo { display: none; }
-	:global(.dark) .marquee img.light-logo { display: none; }
-	:global(.dark) .marquee img.dark-logo { display: block; }
+	/* One hairline grid: units sit side by side as equal, separate cells. */
+	.units { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--border); list-style: none; }
+	.unit { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 20px 22px; background: var(--surface); }
+	.unit-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+	.client { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--heading); }
+	.client img { width: 16px; height: 16px; object-fit: contain; }
+	.client img.dark-logo { display: none; }
+	:global(.dark) .client img.light-logo { display: none; }
+	:global(.dark) .client img.dark-logo { display: block; }
+	.state { display: inline-flex; align-items: center; gap: 6px; font: 11px var(--font-mono); color: var(--muted-foreground); }
+	.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-idle); }
+	.busy .dot { background: var(--color-busy); animation: pulse 1.6s ease-out infinite; }
+	.waiting .dot { background: var(--color-interrupted); }
+	.waiting .state { color: var(--color-interrupted); }
+	.unit-title { font-size: 16px; font-weight: 500; letter-spacing: -0.015em; color: var(--heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.unit-meta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; margin: 0; font: 11px/1.5 var(--font-mono); }
+	.unit-meta dt { color: var(--inactive); }
+	.unit-meta dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground); }
+	.unit-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 26px; padding-top: 12px; border-top: 1px dashed var(--border); font: 11px var(--font-mono); box-sizing: content-box; }
+	.activity { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground); }
+	.busy .activity { color: var(--color-busy); }
+	.activity.muted { color: var(--inactive); }
+	.elapsed { flex-shrink: 0; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+	.approve { flex-shrink: 0; padding: 3px 8px; border-radius: 4px; background: var(--button); color: white; font: 500 11px var(--font-sans); }
 
 
-	/* On every wire, one dot leaves each end at once and they cross midway. */
-	@keyframes send {
-		0% { left: 0; opacity: 0; }
-		8%, 80% { opacity: 1; }
-		88%, 100% { left: calc(100% - 7px); opacity: 0; }
-	}
-	@keyframes reply {
-		0% { left: calc(100% - 7px); opacity: 0; }
-		8%, 80% { opacity: 1; }
-		88%, 100% { left: 0; opacity: 0; }
-	}
-	@keyframes scroll-x { to { transform: translateX(-50%); } }
-	@keyframes scroll-list { to { transform: translateX(-100%); } }
-	@keyframes blink { 50% { opacity: 0; } }
-	@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgb(215 153 33 / 50%); } 100% { box-shadow: 0 0 0 7px rgb(215 153 33 / 0%); } }
-	@keyframes attention { 0%, 100% { box-shadow: 0 0 0 0 rgb(177 98 134 / 0%); } 50% { box-shadow: 0 0 0 3px rgb(177 98 134 / 14%); } }
-
-	/* Terminal steps type in after their card is revealed. */
-	:global([data-reveal]) .step, :global([data-reveal]) .done { opacity: 0; }
-	:global([data-reveal='visible']) .step, :global([data-reveal='visible']) .done { animation: type-in 0.4s ease-out both; animation-delay: calc(700ms + var(--step) * 450ms); }
-	@keyframes type-in { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
-
+	@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgb(215 153 33 / 50%); } 100% { box-shadow: 0 0 0 6px rgb(215 153 33 / 0%); } }
 	@media (prefers-reduced-motion: reduce) {
-		.packet, .cipher span, .marquee ul, .cursor, .dot.busy, .approval { animation: none; }
-		.packet { opacity: 1; }
-		.packet.back { display: none; }
-		.marquee .duplicate { display: none; }
-		.marquee { justify-content: center; }
-		.marquee ul { flex-wrap: wrap; justify-content: center; }
+		.busy .dot { animation: none; }
 	}
 	@media (max-width: 900px) {
-		.wide, .narrow { grid-column: span 6; }
+		.units { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	}
 	@media (max-width: 600px) {
-		.visual { height: 176px; }
-		.card-copy { padding: 18px 18px 20px; }
-		.card h3 { font-size: 18px; }
-		.relay { width: calc(100% - 32px); }
-		.node { padding: 8px 10px; }
-		.cipher { width: 48px; }
+		.units { grid-template-columns: 1fr; }
+		.unit:nth-child(n + 4) { display: none; }
+		.unit { padding: 18px; }
 	}
 </style>
