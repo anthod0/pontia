@@ -68,8 +68,10 @@ async fn explicit_instructions_are_appended_and_pinned_across_history_and_restar
     .await
     .unwrap();
     assert!(injected(&h, &session).await);
-    sqlx::query("UPDATE execution_profiles SET system_prompt_template='changed-profile' WHERE profile_id='reviewer'")
-        .execute(&h.app.db()).await.unwrap();
+    sqlx::query("DROP TABLE agent_profiles")
+        .execute(&h.app.db())
+        .await
+        .unwrap();
     h.history(&session).await.unwrap();
     h.restart().await;
     h.wait_ready(&session, 2).await;

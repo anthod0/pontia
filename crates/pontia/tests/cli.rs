@@ -179,7 +179,6 @@ instructions = "Research the implementation."
 inputs = ["requirements.md"]
 output = "research.md"
 execution_profile_id = "researcher"
-execution_profile_version = "1"
 
 [[nodes]]
 type = "agent"

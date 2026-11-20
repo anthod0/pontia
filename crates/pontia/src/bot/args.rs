@@ -257,8 +257,6 @@ pub(super) enum HelperCommand {
         temporary: Option<String>,
         #[arg(long)]
         profile_id: Option<String>,
-        #[arg(long)]
-        profile_version: Option<String>,
         #[arg(long, allow_hyphen_values = true)]
         description: String,
         #[arg(long, allow_hyphen_values = true)]

@@ -47,7 +47,6 @@ async fn seed_running_workflow(
             inputs: "[]".to_string(),
             output: "result.md".to_string(),
             execution_profile_id: None,
-            execution_profile_version: None,
         })
         .await
         .expect("create node");

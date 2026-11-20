@@ -43,7 +43,6 @@ struct WorkflowRunNode {
     inputs: Vec<String>,
     output: String,
     execution_profile_id: Option<String>,
-    execution_profile_version: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,7 +109,6 @@ pub async fn run_workflow(
                     inputs: node.inputs,
                     output: node.output,
                     execution_profile_id: node.execution_profile_id,
-                    execution_profile_version: node.execution_profile_version,
                 })
                 .collect(),
         })

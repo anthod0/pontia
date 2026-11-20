@@ -51,18 +51,6 @@ pub(crate) fn validate_run_request(request: &RunWorkflowRequest) -> Result<()> {
                 "Agent Node phase must be at most 80 characters".to_string(),
             ));
         }
-        match (
-            node.execution_profile_id.as_ref(),
-            node.execution_profile_version.as_ref(),
-        ) {
-            (Some(_), Some(_)) | (None, None) => {}
-            _ => {
-                return Err(Error::InvalidDefinition(format!(
-                    "Agent Node {} must specify both execution_profile_id and execution_profile_version",
-                    node.title
-                )));
-            }
-        }
         for input in &node.inputs {
             validate_handoff_file_name(input)?;
             if !available_handoffs.contains_key(input) {

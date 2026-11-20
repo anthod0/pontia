@@ -1,4 +1,4 @@
-use pontia_agent_control::UpsertExecutionProfileRequest;
+use pontia_agent_control::UpsertAgentProfileRequest;
 use pontia_core::{Error, Result};
 use serde_json::json;
 
@@ -45,26 +45,14 @@ impl BotService {
     }
 }
 
-fn helper_profile(bot: &Bot) -> UpsertExecutionProfileRequest {
-    UpsertExecutionProfileRequest {
+fn helper_profile(bot: &Bot) -> UpsertAgentProfileRequest {
+    UpsertAgentProfileRequest {
         profile_id: BotService::helper_profile_id(&bot.bot_id),
-        version: "1".into(),
         name: format!("{} helper", bot.name),
         description: None,
-        default_client_type: Some(bot.client_type.clone()),
-        default_client_key: Some(bot.client_key.clone()),
-        default_model: Some(bot.model.clone()),
-        supported_client_types: vec![bot.client_type.clone()],
-        agent_kind: "executor".into(),
-        system_prompt_template: None,
-        turn_prompt_template: None,
-        default_session_role: None,
-        default_session_description: None,
-        handle_prefix: None,
-        expected_output_schema: None,
-        artifact_contract: json!({}),
-        default_execution_policy: json!({}),
-        default_review_policy: json!({}),
-        metadata: json!({}),
+        client_type: Some(bot.client_type.clone()),
+        client_key: Some(bot.client_key.clone()),
+        model: Some(bot.model.clone()),
+        system_prompt: None,
     }
 }

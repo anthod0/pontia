@@ -1301,7 +1301,7 @@ async fn standalone_session_instructions_are_fixed_before_input_and_survive_resu
         .await
         .unwrap();
     let session = created.session_id().unwrap();
-    sqlx::query("DROP TABLE execution_profiles")
+    sqlx::query("DROP TABLE agent_profiles")
         .execute(&h.app.db())
         .await
         .unwrap();
@@ -1369,7 +1369,7 @@ async fn session_instructions_are_validated_fixed_and_preserved_across_resume() 
         .await
         .unwrap();
     let session = created.session_id().unwrap();
-    sqlx::query("DROP TABLE execution_profiles")
+    sqlx::query("DROP TABLE agent_profiles")
         .execute(&h.app.db())
         .await
         .unwrap();

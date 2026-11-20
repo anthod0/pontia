@@ -296,7 +296,7 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
             args.extend(["--message", "new\nrequirements"]);
         }
         if action == "create" {
-            args.extend(["--workspace-id", "project", "--profile-version", "2"]);
+            args.extend(["--workspace-id", "project"]);
             args.extend(["--description", "Task", "--profile-id", "selected-profile"]);
         }
         let output = f.cli(&args).await;
@@ -316,7 +316,10 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
         }
         if action == "create" {
             assert_eq!(request["command"]["input"]["workspace_id"], "project");
-            assert_eq!(request["command"]["input"]["profile_version"], "2");
+            assert_eq!(
+                request["command"]["input"]["profile_id"],
+                "selected-profile"
+            );
         }
     }
 }
@@ -377,7 +380,7 @@ async fn temporary_helper_sends_the_task_directory_name_as_the_location() {
         f.requests.try_recv().unwrap()["command"]["input"],
         json!({
             "temporary":name, "description":name, "message":"Find the exchange rate",
-            "profile_id":null, "profile_version":null
+            "profile_id":null
         })
     );
 }
@@ -397,4 +400,27 @@ async fn helper_check_continuation_preserves_the_native_history_query() {
     let request = f.requests.recv().await.unwrap();
     assert_eq!(request["command"]["action"], "check");
     assert_eq!(request["command"]["input"], next);
+}
+
+#[tokio::test]
+async fn helper_create_rejects_removed_profile_version_argument() {
+    let mut f = Fixture::new("helper", json!({})).await;
+    let output = f
+        .cli(&[
+            "helper",
+            "create",
+            "--workspace-id",
+            "project",
+            "--profile-id",
+            "reviewer",
+            "--profile-version",
+            "1",
+            "--description",
+            "Review",
+            "--message",
+            "Review changes",
+        ])
+        .await;
+    assert!(!output.status.success());
+    assert!(f.requests.try_recv().is_err());
 }

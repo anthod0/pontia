@@ -32,9 +32,8 @@ mod workflows;
 mod workspaces;
 
 pub use agent_profiles::{
-    create_agent_profile, create_agent_profile_version, delete_agent_profile,
-    delete_agent_profile_version, get_agent_profile, get_agent_profile_version,
-    list_agent_profile_versions, list_agent_profiles, update_agent_profile_version,
+    create_agent_profile, delete_agent_profile, get_agent_profile, list_agent_profiles,
+    update_agent_profile,
 };
 pub use auth::validate_auth;
 pub(crate) use authentication::authenticate;

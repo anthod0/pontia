@@ -1,55 +1,37 @@
-use pontia_core::error::{Error, Result};
-
-use super::UpsertExecutionProfileRequest;
+use super::UpsertAgentProfileRequest;
+use pontia_core::{Error, Result};
 
 pub(super) fn validate_request(
     clients: &crate::clients::ClientRegistry,
-    request: &UpsertExecutionProfileRequest,
+    request: &UpsertAgentProfileRequest,
 ) -> Result<()> {
     validate_non_empty("profile_id", &request.profile_id)?;
-    validate_non_empty("version", &request.version)?;
     validate_non_empty("name", &request.name)?;
-    match (
-        &request.default_client_type,
-        &request.default_client_key,
-        &request.default_model,
-    ) {
+    match (&request.client_type, &request.client_key, &request.model) {
         (None, None, None) => {}
-        (Some(client_type), Some(client_key), Some(model)) => {
-            validate_non_empty("default_client_type", client_type)?;
-            validate_non_empty("default_client_key", client_key)?;
-            validate_non_empty("default_model", model)?;
-            if !request.supported_client_types.contains(client_type) {
-                return Err(Error::Domain(
-                    "default client must be included in supported_client_types".into(),
-                ));
-            }
+        (Some(client), Some(key), Some(model)) => {
+            validate_non_empty("client_type", client)?;
+            validate_non_empty("client_key", key)?;
+            validate_non_empty("model", model)?;
         }
         _ => {
             return Err(Error::Domain(
-                "default_client_type, default_client_key and default_model must be set together"
-                    .into(),
+                "client_type, client_key and model must be set together".into(),
             ));
         }
     }
-    for client_type in &request.supported_client_types {
-        if clients.spec(client_type).is_none() {
-            return Err(Error::Domain(format!(
-                "unsupported client_type in supported_client_types: {client_type}"
-            )));
-        }
+    crate::sessions::instructions::validate_static_instructions(request.system_prompt.as_deref())?;
+    if let Some(client) = &request.client_type {
         if let Some(policy) = clients
-            .get(client_type)
+            .get(client)
             .and_then(|client| client.instructions.as_ref())
         {
-            policy.validate_instructions(request.system_prompt_template.as_deref())?;
+            policy.validate_instructions(request.system_prompt.as_deref())?;
+        } else if request.system_prompt.is_some() {
+            return Err(Error::CapabilityUnavailable(
+                "Client cannot inject system instructions".into(),
+            ));
         }
-    }
-    if request.agent_kind != "executor" {
-        return Err(Error::Domain(format!(
-            "unsupported agent_kind: {}",
-            request.agent_kind
-        )));
     }
     Ok(())
 }

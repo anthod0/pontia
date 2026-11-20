@@ -18,7 +18,6 @@ pub trait SessionCreator {
     fn resolve_profile(
         &self,
         id: &str,
-        version: Option<&str>,
     ) -> impl Future<Output = Result<ProfileSessionConfig>> + Send;
 
     fn default_client_type(&self) -> Result<String>;
@@ -36,34 +35,27 @@ pub trait SessionCreator {
 }
 
 impl SessionCreator for AgentControl {
-    async fn resolve_profile(
-        &self,
-        id: &str,
-        version: Option<&str>,
-    ) -> Result<ProfileSessionConfig> {
+    async fn resolve_profile(&self, id: &str) -> Result<ProfileSessionConfig> {
         let profiles =
             pontia_agent_control::AgentProfileService::new(self.db()).with_clients(self.clients());
-        let profile = profiles.resolve_launch(id, version).await?;
-        if profile.default_client_type.is_some() {
-            let defaults = profiles.launch_defaults(id, Some(&profile.version)).await?;
-            let metadata = self
-                .clients()
-                .creation_metadata(&self.db(), &defaults.client_type, &defaults.client_key)
-                .await?;
-            Ok(ProfileSessionConfig {
-                client_type: defaults.client_type,
-                model: Some(defaults.model),
-                metadata,
-                system_instructions: defaults.system_prompt,
-            })
-        } else {
-            Ok(ProfileSessionConfig {
-                client_type: self.default_client_type()?,
-                model: None,
-                metadata: serde_json::json!({}),
-                system_instructions: profile.system_prompt_template,
-            })
-        }
+        let profile = profiles.resolve_launch(id).await?;
+        let (client_type, metadata) =
+            if let (Some(client), Some(key)) = (&profile.client_type, &profile.client_key) {
+                (
+                    client.clone(),
+                    self.clients()
+                        .creation_metadata(&self.db(), client, key)
+                        .await?,
+                )
+            } else {
+                (self.default_client_type()?, serde_json::json!({}))
+            };
+        Ok(ProfileSessionConfig {
+            client_type,
+            model: profile.model,
+            metadata,
+            system_instructions: profile.system_prompt,
+        })
     }
 
     fn default_client_type(&self) -> Result<String> {

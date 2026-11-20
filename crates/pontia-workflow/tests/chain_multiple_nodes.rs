@@ -38,11 +38,10 @@ impl SessionCreator for SequencedSessionCreator {
     async fn resolve_profile(
         &self,
         id: &str,
-        version: Option<&str>,
     ) -> pontia_workflow::Result<pontia_workflow::ProfileSessionConfig> {
         Ok(pontia_workflow::ProfileSessionConfig {
             client_type: "pi".into(),
-            model: version.map(str::to_owned),
+            model: Some(format!("{id}-model")),
             metadata: json!({}),
             system_instructions: Some(id.into()),
         })
@@ -294,7 +293,6 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
             inputs: json!(["brief.md"]).to_string(),
             output: "research.md".to_string(),
             execution_profile_id: Some("research".to_string()),
-            execution_profile_version: Some("1".to_string()),
         },
         CreateWorkflowNodeRecord {
             node_id: "node_draft".to_string(),
@@ -306,7 +304,6 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
             inputs: json!(["research.md", "style.md"]).to_string(),
             output: "draft.md".to_string(),
             execution_profile_id: Some("writer".to_string()),
-            execution_profile_version: Some("2".to_string()),
         },
         CreateWorkflowNodeRecord {
             node_id: "node_review".to_string(),
@@ -318,7 +315,6 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
             inputs: json!(["checklist.md"]).to_string(),
             output: "review.md".to_string(),
             execution_profile_id: Some("review".to_string()),
-            execution_profile_version: Some("3".to_string()),
         },
     ] {
         repository.create_node(node).await.expect("create node");
@@ -459,7 +455,11 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
             .iter()
             .map(|request| request.model.as_deref())
             .collect::<Vec<_>>(),
-        vec![Some("1"), Some("2"), Some("3")]
+        vec![
+            Some("research-model"),
+            Some("writer-model"),
+            Some("review-model")
+        ]
     );
 
     write_output(&pontia_home, "wf_chain", "review.md", "Review complete.");
@@ -582,7 +582,6 @@ async fn paused_coordinator_ignores_expected_interrupt_and_defers_downstream_dis
                 },
                 output: output.to_string(),
                 execution_profile_id: None,
-                execution_profile_version: None,
             })
             .await
             .expect("create node");
@@ -690,7 +689,6 @@ async fn lagged_notifications_reconcile_a_persisted_confirmed_session_exit() {
             inputs: "[]".to_string(),
             output: "result.md".to_string(),
             execution_profile_id: None,
-            execution_profile_version: None,
         })
         .await
         .expect("create node");

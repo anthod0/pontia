@@ -180,17 +180,9 @@ fn external_api_router(state: HttpState) -> Router {
         )
         .route(
             "/api/v1/agent-profiles/{profile_id}",
-            get(api::get_agent_profile).delete(api::delete_agent_profile),
-        )
-        .route(
-            "/api/v1/agent-profiles/{profile_id}/versions",
-            get(api::list_agent_profile_versions).post(api::create_agent_profile_version),
-        )
-        .route(
-            "/api/v1/agent-profiles/{profile_id}/versions/{version}",
-            get(api::get_agent_profile_version)
-                .put(api::update_agent_profile_version)
-                .delete(api::delete_agent_profile_version),
+            get(api::get_agent_profile)
+                .put(api::update_agent_profile)
+                .delete(api::delete_agent_profile),
         )
         .route(
             "/api/v1/workflows",

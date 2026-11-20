@@ -20,9 +20,8 @@ impl SessionCreator for RecordingSessionCreator {
     async fn resolve_profile(
         &self,
         id: &str,
-        version: Option<&str>,
     ) -> pontia_workflow::Result<pontia_workflow::ProfileSessionConfig> {
-        assert_eq!((id, version), ("writer", Some("3")));
+        assert_eq!(id, "writer");
         Ok(pontia_workflow::ProfileSessionConfig {
             client_type: "generic".into(),
             model: Some("writer-model".into()),
@@ -78,7 +77,6 @@ async fn start_launches_first_node_with_required_task_completion_instructions() 
             inputs: json!(["brief.md"]).to_string(),
             output: "release.md".to_string(),
             execution_profile_id: Some("writer".to_string()),
-            execution_profile_version: Some("3".to_string()),
         })
         .await
         .expect("create node");
@@ -218,7 +216,6 @@ async fn start_creates_the_workflow_handoff_directory() {
             inputs: "[]".to_string(),
             output: "result.md".to_string(),
             execution_profile_id: None,
-            execution_profile_version: None,
         })
         .await
         .expect("create node");
@@ -278,7 +275,6 @@ async fn start_rejects_handoff_input_names_that_escape_the_handoff_directory() {
                 inputs: json!([input]).to_string(),
                 output: "result.md".to_string(),
                 execution_profile_id: None,
-                execution_profile_version: None,
             })
             .await
             .expect("create node");

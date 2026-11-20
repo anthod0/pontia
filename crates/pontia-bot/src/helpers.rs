@@ -68,7 +68,6 @@ pub struct CreateHelper {
     #[serde(flatten)]
     pub location: HelperLocation,
     pub profile_id: Option<String>,
-    pub profile_version: Option<String>,
     pub description: String,
     pub message: String,
 }
@@ -151,7 +150,6 @@ impl HelperService {
                     CreateHelper {
                         location: HelperLocation::ReadOnly,
                         profile_id: None,
-                        profile_version: None,
                         description: input.message.clone(),
                         message: format!("{scope}\n\n{}", input.message),
                     },
@@ -247,8 +245,15 @@ impl HelperService {
                 .unwrap_or_else(|| BotService::helper_profile_id(bot_id));
             let profile = AgentProfileService::new(self.control.db())
                 .with_clients(self.control.clients())
-                .launch_defaults(&profile_id, input.profile_version.as_deref())
+                .resolve_launch(&profile_id)
                 .await?;
+            let (Some(client_type), Some(client_key), Some(model)) =
+                (&profile.client_type, &profile.client_key, &profile.model)
+            else {
+                return Err(Error::Domain(format!(
+                    "agent profile {profile_id} has no launch defaults"
+                )));
+            };
             let instructions = [
                 profile.system_prompt.as_deref(),
                 Some(include_str!("helpers/instructions.md")),
@@ -259,9 +264,9 @@ impl HelperService {
             .join("\n\n");
             self.conversation
                 .task_session_request(
-                    &profile.client_type,
-                    &profile.client_key,
-                    &profile.model,
+                    client_type,
+                    client_key,
+                    model,
                     ownership.clone(),
                     &instructions,
                 )

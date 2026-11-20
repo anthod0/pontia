@@ -46,7 +46,6 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
             inputs: json!(["brief.md", "changes.md"]).to_string(),
             output: "release.md".to_string(),
             execution_profile_id: Some("writer".to_string()),
-            execution_profile_version: Some("3".to_string()),
         })
         .await
         .expect("create root node");
@@ -61,7 +60,6 @@ async fn repository_persists_workflow_nodes_bindings_submissions_and_ordered_eve
             inputs: json!(["release.md"]).to_string(),
             output: "approved.md".to_string(),
             execution_profile_id: None,
-            execution_profile_version: None,
         })
         .await
         .expect("create child node");
@@ -316,7 +314,6 @@ async fn node_activation_claim_blocks_pause_until_the_session_is_bound() {
             inputs: "[]".to_string(),
             output: "result.md".to_string(),
             execution_profile_id: None,
-            execution_profile_version: None,
         })
         .await
         .expect("create node");

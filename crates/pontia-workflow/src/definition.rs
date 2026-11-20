@@ -326,7 +326,6 @@ pub(crate) fn accepted_definition_from_snapshot(
                 inputs: serde_json::from_str(&node.inputs)?,
                 output: node.output,
                 execution_profile_id: node.execution_profile_id,
-                execution_profile_version: node.execution_profile_version,
             },
             activated: node.session_id.is_some(),
         });

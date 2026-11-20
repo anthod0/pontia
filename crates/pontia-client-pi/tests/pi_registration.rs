@@ -64,7 +64,7 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
         .unwrap();
     let session = registered["session"]["session_id"].as_str().unwrap();
     let runtime = registered["runtime"]["runtime_id"].as_str().unwrap();
-    sqlx::query("DROP TABLE execution_profiles")
+    sqlx::query("DROP TABLE agent_profiles")
         .execute(&state.db())
         .await
         .unwrap();

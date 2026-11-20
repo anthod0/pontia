@@ -24,7 +24,6 @@ fn node(id: &str, parent: Option<&str>, phase: &str, title: &str) -> CreateWorkf
         inputs: "[]".to_string(),
         output: format!("{id}.md"),
         execution_profile_id: None,
-        execution_profile_version: None,
     }
 }
 

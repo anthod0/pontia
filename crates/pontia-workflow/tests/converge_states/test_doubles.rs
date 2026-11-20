@@ -40,7 +40,6 @@ impl SessionCreator for SequencedSessionCreator {
     async fn resolve_profile(
         &self,
         _id: &str,
-        _version: Option<&str>,
     ) -> pontia_workflow::Result<pontia_workflow::ProfileSessionConfig> {
         panic!("this fixture does not configure Agent Profiles")
     }

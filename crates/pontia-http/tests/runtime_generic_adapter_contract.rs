@@ -338,7 +338,6 @@ async fn workflow_resume_sends_continue_through_the_interrupted_session_inbox() 
                 inputs: "[]".to_string(),
                 output: "result.md".to_string(),
                 execution_profile_id: None,
-                execution_profile_version: None,
             }],
         )
         .await

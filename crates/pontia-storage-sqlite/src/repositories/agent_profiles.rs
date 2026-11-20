@@ -1,39 +1,19 @@
+use crate::models::agent_profiles::AgentProfileRow;
 use pontia_core::Result;
 use sqlx::SqlitePool;
 
-use crate::models::agent_profiles::ExecutionProfileRow;
-
-const EXECUTION_PROFILE_COLUMNS: &str = r#"profile_id, version, name, description, default_client_type, default_client_key, default_model, supported_client_types, agent_kind,
-          system_prompt_template, turn_prompt_template, default_session_role,
-          default_session_description, handle_prefix,
-          expected_output_schema, artifact_contract, default_execution_policy,
-          default_review_policy, metadata, active, archived_at, archived_reason,
-          created_at, updated_at"#;
-
 #[derive(Debug, Clone)]
-pub struct ExecutionProfileWriteRecord {
+pub struct AgentProfileWriteRecord {
     pub profile_id: String,
-    pub version: String,
     pub name: String,
     pub description: Option<String>,
-    pub default_client_type: Option<String>,
-    pub default_client_key: Option<String>,
-    pub default_model: Option<String>,
-    pub supported_client_types: String,
-    pub agent_kind: String,
-    pub system_prompt_template: Option<String>,
-    pub turn_prompt_template: Option<String>,
-    pub default_session_role: Option<String>,
-    pub default_session_description: Option<String>,
-    pub handle_prefix: Option<String>,
-    pub expected_output_schema: Option<String>,
-    pub artifact_contract: String,
-    pub default_execution_policy: String,
-    pub default_review_policy: String,
-    pub metadata: String,
+    pub client_type: Option<String>,
+    pub client_key: Option<String>,
+    pub model: Option<String>,
+    pub system_prompt: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SqliteAgentProfileRepository {
     pool: SqlitePool,
 }
@@ -43,225 +23,57 @@ impl SqliteAgentProfileRepository {
         Self { pool }
     }
 
-    pub async fn insert_version(&self, record: ExecutionProfileWriteRecord) -> Result<()> {
-        let mut connection = self.pool.acquire().await?;
-        Self::insert_version_in(&mut connection, record).await
+    pub async fn create(&self, record: AgentProfileWriteRecord) -> Result<()> {
+        self.insert(record, false).await
     }
 
-    pub async fn initialize_profile(&self, record: ExecutionProfileWriteRecord) -> Result<()> {
-        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM execution_profiles WHERE profile_id = ?)",
-        )
-        .bind(&record.profile_id)
-        .fetch_one(&mut *tx)
-        .await?;
-        if !exists {
-            Self::insert_version_in(&mut tx, record).await?;
-        }
-        tx.commit().await?;
-        Ok(())
+    pub async fn initialize_profile(&self, record: AgentProfileWriteRecord) -> Result<()> {
+        self.insert(record, true).await
     }
 
-    async fn insert_version_in(
-        connection: &mut sqlx::SqliteConnection,
-        record: ExecutionProfileWriteRecord,
-    ) -> Result<()> {
-        sqlx::query(
-            r#"INSERT INTO execution_profiles (
-                    profile_id, version, name, description, default_client_type, default_client_key, default_model, supported_client_types, agent_kind,
-                    system_prompt_template, turn_prompt_template, default_session_role,
-                    default_session_description, handle_prefix,
-                    expected_output_schema, artifact_contract, default_execution_policy,
-                    default_review_policy, metadata
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(record.profile_id)
-        .bind(record.version)
-        .bind(record.name)
-        .bind(record.description)
-        .bind(record.default_client_type)
-        .bind(record.default_client_key)
-        .bind(record.default_model)
-        .bind(record.supported_client_types)
-        .bind(record.agent_kind)
-        .bind(record.system_prompt_template)
-        .bind(record.turn_prompt_template)
-        .bind(record.default_session_role)
-        .bind(record.default_session_description)
-        .bind(record.handle_prefix)
-        .bind(record.expected_output_schema)
-        .bind(record.artifact_contract)
-        .bind(record.default_execution_policy)
-        .bind(record.default_review_policy)
-        .bind(record.metadata)
-        .execute(connection)
-        .await?;
-        Ok(())
-    }
-
-    pub async fn update_version(&self, record: ExecutionProfileWriteRecord) -> Result<()> {
-        sqlx::query(
-            r#"UPDATE execution_profiles
-               SET name = ?, description = ?, default_client_type = ?, default_client_key = ?, default_model = ?,
-                   supported_client_types = ?, agent_kind = ?,
-                   system_prompt_template = ?, turn_prompt_template = ?, default_session_role = ?,
-                   default_session_description = ?, handle_prefix = ?, expected_output_schema = ?,
-                   artifact_contract = ?, default_execution_policy = ?, default_review_policy = ?,
-                   metadata = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE profile_id = ? AND version = ?"#,
-        )
-        .bind(record.name)
-        .bind(record.description)
-        .bind(record.default_client_type)
-        .bind(record.default_client_key)
-        .bind(record.default_model)
-        .bind(record.supported_client_types)
-        .bind(record.agent_kind)
-        .bind(record.system_prompt_template)
-        .bind(record.turn_prompt_template)
-        .bind(record.default_session_role)
-        .bind(record.default_session_description)
-        .bind(record.handle_prefix)
-        .bind(record.expected_output_schema)
-        .bind(record.artifact_contract)
-        .bind(record.default_execution_policy)
-        .bind(record.default_review_policy)
-        .bind(record.metadata)
-        .bind(record.profile_id)
-        .bind(record.version)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
-    pub async fn archive_version(&self, profile_id: &str, version: &str) -> Result<()> {
-        sqlx::query(
-            r#"UPDATE execution_profiles
-               SET active = 0,
-                   archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                   archived_reason = COALESCE(archived_reason, 'deleted via External API'),
-                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE profile_id = ? AND version = ?"#,
-        )
-        .bind(profile_id)
-        .bind(version)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
-    pub async fn archive_active_versions(&self, profile_id: &str) -> Result<u64> {
-        let result = sqlx::query(
-            r#"UPDATE execution_profiles
-               SET active = 0,
-                   archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                   archived_reason = COALESCE(archived_reason, 'deleted via External API'),
-                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-               WHERE profile_id = ? AND active = 1"#,
-        )
-        .bind(profile_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(result.rows_affected())
-    }
-
-    pub async fn list_latest(&self) -> Result<Vec<ExecutionProfileRow>> {
-        let query = format!(
-            r#"SELECT {EXECUTION_PROFILE_COLUMNS}
-               FROM execution_profiles ep
-               WHERE active = 1 AND archived_at IS NULL AND rowid = (
-                   SELECT max(rowid) FROM execution_profiles latest
-                   WHERE latest.profile_id = ep.profile_id
-                     AND latest.active = 1
-                     AND latest.archived_at IS NULL
-               )
-               ORDER BY profile_id"#
-        );
-        Ok(sqlx::query_as::<_, ExecutionProfileRow>(&query)
-            .fetch_all(&self.pool)
-            .await?)
-    }
-
-    pub async fn list_latest_including_archived(&self) -> Result<Vec<ExecutionProfileRow>> {
-        let query = format!(
-            r#"SELECT {EXECUTION_PROFILE_COLUMNS}
-               FROM execution_profiles ep
-               WHERE rowid = (
-                   SELECT max(rowid) FROM execution_profiles latest
-                   WHERE latest.profile_id = ep.profile_id
-               )
-               ORDER BY profile_id"#
-        );
-        Ok(sqlx::query_as::<_, ExecutionProfileRow>(&query)
-            .fetch_all(&self.pool)
-            .await?)
-    }
-
-    pub async fn get_latest(&self, profile_id: &str) -> Result<Option<ExecutionProfileRow>> {
-        let query = format!(
-            r#"SELECT {EXECUTION_PROFILE_COLUMNS}
-               FROM execution_profiles
-               WHERE profile_id = ? AND active = 1 AND archived_at IS NULL
-               ORDER BY rowid DESC
-               LIMIT 1"#
-        );
-        Ok(sqlx::query_as::<_, ExecutionProfileRow>(&query)
-            .bind(profile_id)
-            .fetch_optional(&self.pool)
-            .await?)
-    }
-
-    pub async fn list_versions(
-        &self,
-        profile_id: &str,
-        include_archived: bool,
-    ) -> Result<Vec<ExecutionProfileRow>> {
-        let query = if include_archived {
-            format!(
-                r#"SELECT {EXECUTION_PROFILE_COLUMNS}
-                   FROM execution_profiles
-                   WHERE profile_id = ?
-                   ORDER BY rowid"#
-            )
+    async fn insert(&self, record: AgentProfileWriteRecord, initialize: bool) -> Result<()> {
+        let conflict = if initialize {
+            " ON CONFLICT(profile_id) DO NOTHING"
         } else {
-            format!(
-                r#"SELECT {EXECUTION_PROFILE_COLUMNS}
-                   FROM execution_profiles
-                   WHERE profile_id = ? AND active = 1 AND archived_at IS NULL
-                   ORDER BY rowid"#
-            )
+            ""
         };
-        Ok(sqlx::query_as::<_, ExecutionProfileRow>(&query)
-            .bind(profile_id)
-            .fetch_all(&self.pool)
-            .await?)
+        sqlx::query(&format!("INSERT INTO agent_profiles (profile_id, name, description, client_type, client_key, model, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?){conflict}"))
+            .bind(record.profile_id).bind(record.name).bind(record.description)
+            .bind(record.client_type).bind(record.client_key).bind(record.model).bind(record.system_prompt)
+            .execute(&self.pool).await?;
+        Ok(())
     }
 
-    pub async fn get_version(
-        &self,
-        profile_id: &str,
-        version: &str,
-    ) -> Result<Option<ExecutionProfileRow>> {
-        let query = format!(
-            r#"SELECT {EXECUTION_PROFILE_COLUMNS}
-               FROM execution_profiles
-               WHERE profile_id = ? AND version = ?"#
-        );
-        Ok(sqlx::query_as::<_, ExecutionProfileRow>(&query)
-            .bind(profile_id)
-            .bind(version)
-            .fetch_optional(&self.pool)
-            .await?)
+    pub async fn update(&self, record: AgentProfileWriteRecord) -> Result<bool> {
+        Ok(sqlx::query("UPDATE agent_profiles SET name=?, description=?, client_type=?, client_key=?, model=?, system_prompt=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE profile_id=?")
+            .bind(record.name).bind(record.description).bind(record.client_type).bind(record.client_key)
+            .bind(record.model).bind(record.system_prompt).bind(record.profile_id)
+            .execute(&self.pool).await?.rows_affected() != 0)
     }
 
-    pub async fn profile_exists(&self, profile_id: &str) -> Result<bool> {
-        let exists: i64 = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM execution_profiles WHERE profile_id = ?)",
+    pub async fn delete(&self, profile_id: &str) -> Result<bool> {
+        Ok(sqlx::query("DELETE FROM agent_profiles WHERE profile_id=?")
+            .bind(profile_id)
+            .execute(&self.pool)
+            .await?
+            .rows_affected()
+            != 0)
+    }
+
+    pub async fn list(&self) -> Result<Vec<AgentProfileRow>> {
+        Ok(
+            sqlx::query_as("SELECT * FROM agent_profiles ORDER BY profile_id")
+                .fetch_all(&self.pool)
+                .await?,
         )
-        .bind(profile_id)
-        .fetch_one(&self.pool)
-        .await?;
-        Ok(exists != 0)
+    }
+
+    pub async fn get(&self, profile_id: &str) -> Result<Option<AgentProfileRow>> {
+        Ok(
+            sqlx::query_as("SELECT * FROM agent_profiles WHERE profile_id=?")
+                .bind(profile_id)
+                .fetch_optional(&self.pool)
+                .await?,
+        )
     }
 }

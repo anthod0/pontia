@@ -34,7 +34,6 @@ pub struct CreateWorkflowNodeRecord {
     pub inputs: String,
     pub output: String,
     pub execution_profile_id: Option<String>,
-    pub execution_profile_version: Option<String>,
 }
 
 #[derive(Clone)]
@@ -64,7 +63,6 @@ pub struct ApplyWorkflowNodeRecord {
     pub inputs: String,
     pub output: String,
     pub execution_profile_id: Option<String>,
-    pub execution_profile_version: Option<String>,
 }
 
 #[derive(Debug, Clone)]

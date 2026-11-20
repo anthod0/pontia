@@ -1,0 +1,234 @@
+use pontia_agent_control::{
+    AgentProfileService, UpsertAgentProfileRequest,
+    client_contract::{
+        ClientConfiguration, ClientInstructions, InstructionsBindingInput, test_registration,
+    },
+    clients::ClientRegistry,
+};
+use pontia_core::{Error, Result};
+use pontia_storage_sqlite::{
+    connect_sqlite, repositories::agent_clients::SqliteAgentClientRepository, run_migrations,
+};
+use serde_json::{Value, json};
+use std::sync::Arc;
+
+struct Configuration;
+impl ClientConfiguration for Configuration {
+    fn keys(&self) -> Vec<String> {
+        vec!["default".into()]
+    }
+    fn presentation(&self, key: &str, _: &Value) -> (String, String) {
+        (key.into(), key.into())
+    }
+    fn key(&self, _: &Value) -> Result<String> {
+        Ok("default".into())
+    }
+    fn merged(&self, _: &str, overrides: &Value) -> Value {
+        overrides.clone()
+    }
+    fn resolve(&self, key: &str, overrides: &Value) -> Result<Value> {
+        if key != "default" {
+            return Err(Error::Domain("Unknown client key".into()));
+        }
+        Ok(overrides.clone())
+    }
+}
+struct Instructions;
+impl ClientInstructions for Instructions {
+    fn inject_standalone_session_instructions(&self) -> bool {
+        false
+    }
+    fn validate_instructions(&self, text: Option<&str>) -> Result<()> {
+        if text == Some("client-rejected") {
+            return Err(Error::Domain("Unsupported instructions".into()));
+        }
+        Ok(())
+    }
+    fn bind(&self, input: &InstructionsBindingInput<'_>) -> Result<Value> {
+        Ok(json!({"system_prompt":input.system_prompt}))
+    }
+}
+async fn fixture() -> (AgentProfileService, SqliteAgentClientRepository) {
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    run_migrations(&pool).await.unwrap();
+    let settings = SqliteAgentClientRepository::new(pool.clone());
+    settings
+        .save("generic", "default", Some(true), None)
+        .await
+        .unwrap();
+    let mut client = test_registration();
+    client.configuration = Some(Arc::new(Configuration));
+    client.instructions = Some(Arc::new(Instructions));
+    let mut clients = ClientRegistry::default();
+    clients.register(client);
+    (
+        AgentProfileService::new(pool).with_clients(clients),
+        settings,
+    )
+}
+fn request() -> UpsertAgentProfileRequest {
+    UpsertAgentProfileRequest {
+        profile_id: "reviewer".into(),
+        name: "Reviewer".into(),
+        description: None,
+        client_type: None,
+        client_key: None,
+        model: None,
+        system_prompt: Some("Review carefully".into()),
+    }
+}
+fn configured() -> UpsertAgentProfileRequest {
+    UpsertAgentProfileRequest {
+        client_type: Some("generic".into()),
+        client_key: Some("default".into()),
+        model: Some("model".into()),
+        ..request()
+    }
+}
+
+#[tokio::test]
+async fn crud_initialization_and_launch_use_current_profile() {
+    let (service, _) = fixture().await;
+    let initial = service.create(request()).await.unwrap();
+    assert!(matches!(
+        service.create(request()).await,
+        Err(Error::StateConflict(_))
+    ));
+    service.initialize_profile(configured()).await.unwrap();
+    assert_eq!(service.get("reviewer").await.unwrap().unwrap(), initial);
+    let mut edited = configured();
+    edited.system_prompt = Some("Edited".into());
+    let updated = service.update("reviewer", edited).await.unwrap();
+    assert_eq!(updated.created_at, initial.created_at);
+    assert_eq!(service.list().await.unwrap(), vec![updated]);
+    let launch = service.resolve_launch("reviewer").await.unwrap();
+    assert_eq!(launch.client_type.as_deref(), Some("generic"));
+    assert_eq!(launch.client_key.as_deref(), Some("default"));
+    assert_eq!(launch.model.as_deref(), Some("model"));
+    assert_eq!(launch.system_prompt.as_deref(), Some("Edited"));
+    service.delete("reviewer").await.unwrap();
+    assert!(matches!(
+        service.resolve_launch("reviewer").await,
+        Err(Error::NotFound(_))
+    ));
+    assert!(matches!(
+        service.update("reviewer", request()).await,
+        Err(Error::NotFound(_))
+    ));
+    assert!(matches!(
+        service.delete("reviewer").await,
+        Err(Error::NotFound(_))
+    ));
+    service.initialize_profile(request()).await.unwrap();
+    assert_eq!(
+        service
+            .resolve_launch("reviewer")
+            .await
+            .unwrap()
+            .client_type,
+        None
+    );
+    assert_eq!(service.list().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn rejects_empty_identifiers_partial_defaults_and_invalid_instructions() {
+    let (service, _) = fixture().await;
+    let mut invalid = Vec::new();
+    let mut input = request();
+    input.profile_id = " ".into();
+    invalid.push(input);
+    let mut input = request();
+    input.name = " ".into();
+    invalid.push(input);
+    for mask in 1..7 {
+        let mut input = request();
+        if mask & 1 != 0 {
+            input.client_type = Some("generic".into());
+        }
+        if mask & 2 != 0 {
+            input.client_key = Some("default".into());
+        }
+        if mask & 4 != 0 {
+            input.model = Some("model".into());
+        }
+        invalid.push(input);
+    }
+    for text in [" ", "{{input}}", "closing}}"] {
+        let mut input = request();
+        input.system_prompt = Some(text.into());
+        invalid.push(input);
+    }
+    for field in ["client", "key", "model"] {
+        let mut input = configured();
+        match field {
+            "client" => input.client_type = Some(" ".into()),
+            "key" => input.client_key = Some(" ".into()),
+            _ => input.model = Some(" ".into()),
+        }
+        invalid.push(input);
+    }
+    let mut input = configured();
+    input.system_prompt = Some("client-rejected".into());
+    invalid.push(input);
+    for input in invalid {
+        assert!(matches!(service.create(input).await, Err(Error::Domain(_))));
+    }
+    assert!(service.list().await.unwrap().is_empty());
+    assert!(matches!(
+        service.update("other", request()).await,
+        Err(Error::Domain(_))
+    ));
+}
+
+#[tokio::test]
+async fn rejects_unknown_and_disabled_clients_at_save_and_launch() {
+    let (service, settings) = fixture().await;
+    let mut input = configured();
+    input.client_type = Some("missing".into());
+    assert!(service.create(input).await.is_err());
+    settings
+        .save("generic", "unknown", Some(true), None)
+        .await
+        .unwrap();
+    let mut input = configured();
+    input.client_key = Some("unknown".into());
+    assert!(service.create(input).await.is_err());
+    service.create(configured()).await.unwrap();
+    settings
+        .save("generic", "default", Some(false), None)
+        .await
+        .unwrap();
+    assert!(matches!(
+        service.resolve_launch("reviewer").await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+    assert!(matches!(
+        service.update("reviewer", configured()).await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+    service.delete("reviewer").await.unwrap();
+    assert!(matches!(
+        service.create(configured()).await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+}
+
+#[tokio::test]
+async fn rejects_launch_defaults_for_clients_without_configuration() {
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    run_migrations(&pool).await.unwrap();
+    SqliteAgentClientRepository::new(pool.clone())
+        .save("generic", "default", Some(true), None)
+        .await
+        .unwrap();
+    let mut clients = ClientRegistry::default();
+    clients.register(test_registration());
+    let service = AgentProfileService::new(pool).with_clients(clients);
+    let mut input = configured();
+    input.system_prompt = None;
+    assert!(matches!(
+        service.create(input).await,
+        Err(Error::CapabilityUnavailable(_))
+    ));
+}

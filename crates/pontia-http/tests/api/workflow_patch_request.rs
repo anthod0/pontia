@@ -44,7 +44,6 @@ async fn seed_requester(app: &TestApp) {
             inputs: "[]".into(),
             output: "result.md".into(),
             execution_profile_id: None,
-            execution_profile_version: None,
         })
         .await
         .expect("create node");

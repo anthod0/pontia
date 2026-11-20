@@ -202,7 +202,6 @@ impl WorkflowPatchService {
                             inputs: serde_json::to_string(&node.definition.inputs)?,
                             output: node.definition.output,
                             execution_profile_id: node.definition.execution_profile_id,
-                            execution_profile_version: node.definition.execution_profile_version,
                         })
                     })
                     .collect::<Result<Vec<_>>>()?;
@@ -459,7 +458,6 @@ pub(crate) fn accepted_from_graph(
                 inputs: serde_json::from_str(&row.inputs)?,
                 output: row.output,
                 execution_profile_id: row.execution_profile_id,
-                execution_profile_version: row.execution_profile_version,
             },
             activated: row.session_id.is_some(),
         });

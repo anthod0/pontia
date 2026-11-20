@@ -26,7 +26,6 @@ fn node(
             },
             output: output.to_string(),
             execution_profile_id: None,
-            execution_profile_version: None,
         },
     }
 }

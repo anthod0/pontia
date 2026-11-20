@@ -23,8 +23,8 @@ impl SqliteWorkflowRepository {
             sqlx::query(
                 r#"INSERT INTO workflow_nodes
                    (node_id, workflow_id, parent_node_id, node_type, phase, title, instructions,
-                    inputs, output, execution_profile_id, execution_profile_version)
-                   VALUES (?, ?, ?, 'agent', ?, ?, ?, ?, ?, ?, ?)"#,
+                    inputs, output, execution_profile_id)
+                   VALUES (?, ?, ?, 'agent', ?, ?, ?, ?, ?, ?)"#,
             )
             .bind(node.node_id)
             .bind(node.workflow_id)
@@ -35,7 +35,6 @@ impl SqliteWorkflowRepository {
             .bind(node.inputs)
             .bind(node.output)
             .bind(node.execution_profile_id)
-            .bind(node.execution_profile_version)
             .execute(&mut *tx)
             .await?;
         }
@@ -61,8 +60,8 @@ impl SqliteWorkflowRepository {
         sqlx::query(
             r#"INSERT INTO workflow_nodes
                (node_id, workflow_id, parent_node_id, node_type, phase, title, instructions, inputs,
-                output, execution_profile_id, execution_profile_version)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                output, execution_profile_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(node.node_id)
         .bind(node.workflow_id)
@@ -74,7 +73,6 @@ impl SqliteWorkflowRepository {
         .bind(node.inputs)
         .bind(node.output)
         .bind(node.execution_profile_id)
-        .bind(node.execution_profile_version)
         .execute(&self.pool)
         .await?;
         Ok(())

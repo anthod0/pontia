@@ -93,11 +93,7 @@ async fn activate_claimed_node<S: SessionCreator>(
         render_initial_task(node, handoff_dir, &output_file, &problem_report_file).await?;
     let launch = async {
         match node.execution_profile_id.as_deref() {
-            Some(id) => {
-                sessions
-                    .resolve_profile(id, node.execution_profile_version.as_deref())
-                    .await
-            }
+            Some(id) => sessions.resolve_profile(id).await,
             None => Ok(crate::ProfileSessionConfig {
                 client_type: sessions.default_client_type()?,
                 model: None,

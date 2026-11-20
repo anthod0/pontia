@@ -40,7 +40,6 @@ pub struct WorkflowNodeRow {
     pub inputs: String,
     pub output: String,
     pub execution_profile_id: Option<String>,
-    pub execution_profile_version: Option<String>,
     pub introduced_revision: i64,
     pub retired_revision: Option<i64>,
     pub session_id: Option<String>,

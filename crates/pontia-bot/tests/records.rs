@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use pontia_agent_control::{
-    AgentProfileService, UpsertExecutionProfileRequest,
+    AgentProfileService, UpsertAgentProfileRequest,
     client_contract::{ClientConfiguration, ClientInstructions, test_registration},
     clients::ClientRegistry,
 };
@@ -70,6 +70,17 @@ impl Fixture {
         .await
         .unwrap();
         run_migrations(&pool).await.unwrap();
+        let settings =
+            pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
+                pool.clone(),
+            );
+        for key in ["a", "b"] {
+            settings
+                .save("generic", key, Some(true), None)
+                .await
+                .unwrap();
+        }
+
         let mut registry = ClientRegistry::default();
         let mut client = test_registration();
         client.configuration = Some(Arc::new(Configuration));
@@ -85,9 +96,14 @@ impl Fixture {
         }
     }
 
-    async fn profile_request(&self, id: &str) -> UpsertExecutionProfileRequest {
-        let profile = self.profiles.get_latest(id).await.unwrap().unwrap();
-        serde_json::from_value(serde_json::to_value(profile).unwrap()).unwrap()
+    async fn profile_request(&self, id: &str) -> UpsertAgentProfileRequest {
+        let profile = self.profiles.get(id).await.unwrap().unwrap();
+        {
+            let mut value = serde_json::to_value(profile).unwrap();
+            value.as_object_mut().unwrap().remove("created_at");
+            value.as_object_mut().unwrap().remove("updated_at");
+            serde_json::from_value(value).unwrap()
+        }
     }
 }
 
@@ -219,23 +235,20 @@ async fn defaults_capture_creation_config_and_preserve_user_edits_and_shared_res
         .await
         .unwrap();
     let helper = BotService::helper_profile_id(&a.bot_id);
-    let initial = f.profiles.launch_defaults(&helper, None).await.unwrap();
+    let initial = f.profiles.resolve_launch(&helper).await.unwrap();
     assert_eq!(
         (
-            initial.client_type.as_str(),
-            initial.client_key.as_str(),
-            initial.model.as_str()
+            initial.client_type.as_deref(),
+            initial.client_key.as_deref(),
+            initial.model.as_deref()
         ),
-        ("generic", "a", "model-a")
+        (Some("generic"), Some("a"), Some("model-a"))
     );
     let mut request = f.profile_request(&helper).await;
-    request.default_client_key = Some("b".into());
-    request.default_model = Some("custom-model".into());
-    request.system_prompt_template = Some("custom instructions".into());
-    f.profiles
-        .update_version(&helper, "1", request)
-        .await
-        .unwrap();
+    request.client_key = Some("b".into());
+    request.model = Some("custom-model".into());
+    request.system_prompt = Some("custom instructions".into());
+    f.profiles.update(&helper, request).await.unwrap();
     let b = f
         .bots
         .create(configuration("B", "b", "model-b"))
@@ -248,25 +261,23 @@ async fn defaults_capture_creation_config_and_preserve_user_edits_and_shared_res
     f.bots.initialize(&a.bot_id).await.unwrap();
     assert_eq!(
         f.profiles
-            .launch_defaults(&BotService::helper_profile_id(&b.bot_id), None)
+            .resolve_launch(&BotService::helper_profile_id(&b.bot_id))
             .await
             .unwrap()
-            .model,
-        "model-b"
+            .model
+            .as_deref(),
+        Some("model-b")
     );
     assert_eq!(
         f.profiles
-            .launch_defaults(&helper, None)
+            .resolve_launch(&helper)
             .await
             .unwrap()
-            .model,
-        "custom-model"
+            .model
+            .as_deref(),
+        Some("custom-model")
     );
-    let launch = f
-        .profiles
-        .launch_defaults(&helper, Some("1"))
-        .await
-        .unwrap();
+    let launch = f.profiles.resolve_launch(&helper).await.unwrap();
     assert_eq!(launch.system_prompt.as_deref(), Some("custom instructions"));
     assert_eq!(
         std::fs::read_to_string(user).unwrap(),
@@ -300,20 +311,13 @@ async fn filesystem_initialization_failure_can_be_retried_with_the_saved_bot_id(
     reopened.initialize(&bot_id).await.unwrap();
     assert_eq!(std::fs::read_to_string(user).unwrap(), "user edited this");
     assert_eq!(reopened.list().await.unwrap().len(), 1);
-    assert_eq!(
-        f.profiles
-            .list_versions(&BotService::helper_profile_id(&bot_id), true)
-            .await
-            .unwrap()
-            .len(),
-        1
-    );
+    assert_eq!(f.profiles.list().await.unwrap().len(), 1);
 }
 
 #[tokio::test]
 async fn retry_after_helper_profile_failure_uses_the_saved_bot() {
     let f = Fixture::new().await;
-    sqlx::query("CREATE TRIGGER reject_helper BEFORE INSERT ON execution_profiles BEGIN SELECT RAISE(FAIL, 'test failure'); END").execute(&f.pool).await.unwrap();
+    sqlx::query("CREATE TRIGGER reject_helper BEFORE INSERT ON agent_profiles BEGIN SELECT RAISE(FAIL, 'test failure'); END").execute(&f.pool).await.unwrap();
     let error = f
         .bots
         .create(configuration("A", "a", "model-a"))
@@ -333,11 +337,12 @@ async fn retry_after_helper_profile_failure_uses_the_saved_bot() {
     f.bots.initialize(&bot_id).await.unwrap();
     assert_eq!(
         f.profiles
-            .launch_defaults(&BotService::helper_profile_id(&bot_id), None)
+            .resolve_launch(&BotService::helper_profile_id(&bot_id))
             .await
             .unwrap()
-            .model,
-        "model-a"
+            .model
+            .as_deref(),
+        Some("model-a")
     );
 }
 
@@ -434,7 +439,7 @@ async fn messages_with_equal_timestamps_have_a_stable_id_order() {
 }
 
 #[tokio::test]
-async fn profile_launch_defaults_are_validated_versioned_and_editable() {
+async fn deleted_helper_profile_is_reinitialized_with_bot_defaults() {
     let f = Fixture::new().await;
     let bot = f
         .bots
@@ -442,46 +447,16 @@ async fn profile_launch_defaults_are_validated_versioned_and_editable() {
         .await
         .unwrap();
     let id = BotService::helper_profile_id(&bot.bot_id);
-    let mut request = f.profile_request(&id).await;
-    request.default_model = None;
-    assert!(matches!(
-        f.profiles.update_version(&id, "1", request).await,
-        Err(Error::Domain(_))
-    ));
-    assert!(
-        sqlx::query("UPDATE execution_profiles SET default_model = NULL WHERE profile_id = ?")
-            .bind(&id)
-            .execute(&f.pool)
-            .await
-            .is_err()
-    );
-    let mut request = f.profile_request(&id).await;
-    request.version = "2".into();
-    request.default_client_key = Some("b".into());
-    request.default_model = Some("model-b".into());
-    f.profiles
-        .create_profile_version(&id, request)
-        .await
-        .unwrap();
-    let latest = f.profiles.launch_defaults(&id, None).await.unwrap();
-    assert_eq!(
-        (
-            latest.version.as_str(),
-            latest.client_key.as_str(),
-            latest.model.as_str()
-        ),
-        ("2", "b", "model-b")
-    );
+    f.profiles.delete(&id).await.unwrap();
+    assert!(f.profiles.resolve_launch(&id).await.is_err());
+    f.bots.initialize(&bot.bot_id).await.unwrap();
     assert_eq!(
         f.profiles
-            .launch_defaults(&id, Some("1"))
+            .resolve_launch(&id)
             .await
             .unwrap()
-            .model,
-        "model-a"
+            .model
+            .as_deref(),
+        Some("model-a")
     );
-    f.profiles.archive_version(&id, "2").await.unwrap();
-    assert!(f.profiles.launch_defaults(&id, Some("2")).await.is_err());
-    f.bots.initialize(&bot.bot_id).await.unwrap();
-    assert_eq!(f.profiles.list_versions(&id, true).await.unwrap().len(), 2);
 }

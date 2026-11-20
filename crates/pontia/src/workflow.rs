@@ -122,7 +122,6 @@ struct NodeDefinition {
     inputs: Vec<String>,
     output: String,
     execution_profile_id: Option<String>,
-    execution_profile_version: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

@@ -1,197 +1,95 @@
-use pontia_core::error::{Error, Result};
-use pontia_storage_sqlite::repositories::agent_profiles::{
-    ExecutionProfileWriteRecord, SqliteAgentProfileRepository,
-};
-use serde_json::json;
-
 use super::{
-    AgentProfileCommandOutcome, AgentProfileService, UpsertExecutionProfileRequest,
+    AgentProfileService, AgentProfileView, UpsertAgentProfileRequest,
     validation::{is_unique_constraint, validate_request},
+};
+use pontia_core::{Error, Result};
+use pontia_storage_sqlite::repositories::agent_profiles::{
+    AgentProfileWriteRecord, SqliteAgentProfileRepository,
 };
 
 impl AgentProfileService {
-    /// Initialize an application-provided default without replacing any existing version.
-    pub async fn initialize_profile(&self, request: UpsertExecutionProfileRequest) -> Result<()> {
-        if self.profile_exists(&request.profile_id).await? {
+    pub async fn initialize_profile(&self, request: UpsertAgentProfileRequest) -> Result<()> {
+        if self.get(&request.profile_id).await?.is_some() {
             return Ok(());
         }
         self.validate_configuration(&request).await?;
         SqliteAgentProfileRepository::new(self.pool.clone())
-            .initialize_profile(execution_profile_write_record(&request)?)
+            .initialize_profile(request.into())
             .await
     }
 
-    async fn validate_configuration(&self, request: &UpsertExecutionProfileRequest) -> Result<()> {
+    async fn validate_configuration(&self, request: &UpsertAgentProfileRequest) -> Result<()> {
         validate_request(&self.clients, request)?;
-        if let (Some(client), Some(key)) =
-            (&request.default_client_type, &request.default_client_key)
-        {
-            crate::agent_clients::AgentClientService::new(self.pool.clone(), self.clients.clone())
-                .resolve(client, key)
-                .await?;
+        if let (Some(client), Some(key)) = (&request.client_type, &request.client_key) {
+            self.validate_launch_client(client, key).await?;
         }
         Ok(())
     }
 
-    pub async fn create_profile(
-        &self,
-        request: UpsertExecutionProfileRequest,
-    ) -> Result<AgentProfileCommandOutcome> {
-        if self.profile_exists(&request.profile_id).await? {
-            return Err(Error::StateConflict(format!(
-                "execution profile {} already exists; create a new version instead",
-                request.profile_id
-            )));
-        }
-        self.create_version(request).await
-    }
-
-    pub async fn create_profile_version(
-        &self,
-        profile_id: &str,
-        request: UpsertExecutionProfileRequest,
-    ) -> Result<AgentProfileCommandOutcome> {
-        if profile_id != request.profile_id {
-            return Err(Error::Domain(format!(
-                "profile_id in path ({profile_id}) must match request profile_id ({})",
-                request.profile_id
-            )));
-        }
-        self.create_version(request).await
-    }
-
-    pub(super) async fn create_version(
-        &self,
-        request: UpsertExecutionProfileRequest,
-    ) -> Result<AgentProfileCommandOutcome> {
+    pub async fn create(&self, request: UpsertAgentProfileRequest) -> Result<AgentProfileView> {
         self.validate_configuration(&request).await?;
-
-        let result = SqliteAgentProfileRepository::new(self.pool.clone())
-            .insert_version(execution_profile_write_record(&request)?)
-            .await;
-
-        if let Err(error) = result {
+        let id = request.profile_id.clone();
+        if let Err(error) = SqliteAgentProfileRepository::new(self.pool.clone())
+            .create(request.into())
+            .await
+        {
             if is_unique_constraint(&error) {
                 return Err(Error::StateConflict(format!(
-                    "execution profile {} version {} already exists",
-                    request.profile_id, request.version
+                    "agent profile {id} already exists"
                 )));
             }
             return Err(error);
         }
-
-        let profile = self
-            .get_version(&request.profile_id, &request.version)
-            .await?
-            .ok_or_else(|| Error::Domain("created execution profile missing".to_string()))?;
-        let data = json!({ "agent_profile": profile });
-        Ok(AgentProfileCommandOutcome {
-            data,
-            duplicate: false,
-        })
+        self.require_profile(&id).await
     }
 
-    pub async fn update_version(
+    pub async fn update(
         &self,
-        profile_id: &str,
-        version: &str,
-        request: UpsertExecutionProfileRequest,
-    ) -> Result<AgentProfileCommandOutcome> {
-        if profile_id != request.profile_id || version != request.version {
+        id: &str,
+        request: UpsertAgentProfileRequest,
+    ) -> Result<AgentProfileView> {
+        if id != request.profile_id {
             return Err(Error::Domain(
-                "profile_id and version in path must match request body".to_string(),
+                "profile_id in path must match request body".into(),
             ));
         }
         self.validate_configuration(&request).await?;
-        let _current = self
-            .get_version(profile_id, version)
+        if !SqliteAgentProfileRepository::new(self.pool.clone())
+            .update(request.into())
             .await?
-            .ok_or_else(|| {
-                Error::NotFound(format!("agent profile {profile_id}@{version} not found"))
-            })?;
-
-        SqliteAgentProfileRepository::new(self.pool.clone())
-            .update_version(execution_profile_write_record(&request)?)
-            .await?;
-
-        let profile = self
-            .get_version(profile_id, version)
-            .await?
-            .ok_or_else(|| Error::Domain("updated execution profile missing".to_string()))?;
-        let data = json!({ "agent_profile": profile });
-        Ok(AgentProfileCommandOutcome {
-            data,
-            duplicate: false,
-        })
+        {
+            return Err(Error::NotFound(format!("agent profile {id} not found")));
+        }
+        self.require_profile(id).await
     }
 
-    pub async fn archive_version(
-        &self,
-        profile_id: &str,
-        version: &str,
-    ) -> Result<AgentProfileCommandOutcome> {
-        let current = self
-            .get_version(profile_id, version)
+    pub async fn delete(&self, id: &str) -> Result<()> {
+        if !SqliteAgentProfileRepository::new(self.pool.clone())
+            .delete(id)
             .await?
-            .ok_or_else(|| {
-                Error::NotFound(format!("agent profile {profile_id}@{version} not found"))
-            })?;
-        if current.active {
-            SqliteAgentProfileRepository::new(self.pool.clone())
-                .archive_version(profile_id, version)
-                .await?;
+        {
+            return Err(Error::NotFound(format!("agent profile {id} not found")));
         }
-        let profile = self
-            .get_version(profile_id, version)
-            .await?
-            .ok_or_else(|| Error::Domain("archived execution profile missing".to_string()))?;
-        let data = json!({ "agent_profile": profile });
-        Ok(AgentProfileCommandOutcome {
-            data,
-            duplicate: false,
-        })
+        Ok(())
     }
 
-    pub async fn archive_profile(&self, profile_id: &str) -> Result<AgentProfileCommandOutcome> {
-        let versions = self.list_versions(profile_id, true).await?;
-        if versions.is_empty() {
-            return Err(Error::NotFound(format!(
-                "agent profile {profile_id} not found"
-            )));
-        }
-        let archived_versions = SqliteAgentProfileRepository::new(self.pool.clone())
-            .archive_active_versions(profile_id)
-            .await?;
-        let data = json!({ "profile_id": profile_id, "archived_versions": archived_versions });
-        Ok(AgentProfileCommandOutcome {
-            data,
-            duplicate: false,
-        })
+    pub(super) async fn require_profile(&self, id: &str) -> Result<AgentProfileView> {
+        self.get(id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("agent profile {id} not found")))
     }
 }
 
-fn execution_profile_write_record(
-    request: &UpsertExecutionProfileRequest,
-) -> Result<ExecutionProfileWriteRecord> {
-    Ok(ExecutionProfileWriteRecord {
-        profile_id: request.profile_id.clone(),
-        version: request.version.clone(),
-        name: request.name.clone(),
-        description: request.description.clone(),
-        default_client_type: request.default_client_type.clone(),
-        default_client_key: request.default_client_key.clone(),
-        default_model: request.default_model.clone(),
-        supported_client_types: serde_json::to_string(&request.supported_client_types)?,
-        agent_kind: request.agent_kind.clone(),
-        system_prompt_template: request.system_prompt_template.clone(),
-        turn_prompt_template: request.turn_prompt_template.clone(),
-        default_session_role: request.default_session_role.clone(),
-        default_session_description: request.default_session_description.clone(),
-        handle_prefix: request.handle_prefix.clone(),
-        expected_output_schema: request.expected_output_schema.clone(),
-        artifact_contract: serde_json::to_string(&request.artifact_contract)?,
-        default_execution_policy: serde_json::to_string(&request.default_execution_policy)?,
-        default_review_policy: serde_json::to_string(&request.default_review_policy)?,
-        metadata: serde_json::to_string(&request.metadata)?,
-    })
+impl From<UpsertAgentProfileRequest> for AgentProfileWriteRecord {
+    fn from(request: UpsertAgentProfileRequest) -> Self {
+        Self {
+            profile_id: request.profile_id,
+            name: request.name,
+            description: request.description,
+            client_type: request.client_type,
+            client_key: request.client_key,
+            model: request.model,
+            system_prompt: request.system_prompt,
+        }
+    }
 }

@@ -925,7 +925,7 @@ async fn creating_a_session_wakes_an_observer_with_no_active_sessions() {
 async fn profile_survives_first_input_and_resume_without_mutable_profiles() {
     let fixture = Fixture::with_instructions(Some("caller-marker")).await;
     *fixture.configuration.lock().await = json!({"developer_instructions":"native-marker"});
-    sqlx::query("DROP TABLE execution_profiles")
+    sqlx::query("DROP TABLE agent_profiles")
         .execute(&fixture.app.db())
         .await
         .unwrap();

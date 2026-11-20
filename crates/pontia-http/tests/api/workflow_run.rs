@@ -142,7 +142,6 @@ async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
                     "inputs": ["requirements.md"],
                     "output": "research.md",
                     "execution_profile_id": null,
-                    "execution_profile_version": null
                 },
                 {
                     "type": "agent",
@@ -152,7 +151,6 @@ async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
                     "inputs": ["research.md"],
                     "output": "result.md",
                     "execution_profile_id": null,
-                    "execution_profile_version": null
                 },
                 {
                     "type": "agent",
@@ -162,7 +160,6 @@ async fn workflow_run_creates_and_starts_a_linear_agent_workflow() {
                     "inputs": ["result.md"],
                     "output": "review.md",
                     "execution_profile_id": null,
-                    "execution_profile_version": null
                 }
             ]
         }),
@@ -262,7 +259,6 @@ async fn workflow_run_requires_a_valid_phase() {
                     "inputs": [],
                     "output": "result.md",
                     "execution_profile_id": null,
-                    "execution_profile_version": null
                 }]
             }),
         )
@@ -293,7 +289,6 @@ async fn workflow_run_rejects_a_missing_phase_during_json_decoding() {
                 "inputs": [],
                 "output": "result.md",
                 "execution_profile_id": null,
-                "execution_profile_version": null
             }]
         }),
     )
@@ -314,15 +309,21 @@ async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
     let app = TestApp::new().await;
     let profiles =
         AgentProfileService::new(app.db.clone()).with_clients(app.state.control().clients());
-    profiles.create_profile(serde_json::from_value(json!({
-        "profile_id":"reviewer", "version":"1", "name":"Reviewer", "agent_kind":"executor",
-        "supported_client_types":["codex"], "default_client_type":"codex", "default_client_key":"default",
-        "default_model":"review-model", "system_prompt_template":"Review carefully"
-    })).unwrap()).await.unwrap();
+    profiles
+        .create(
+            serde_json::from_value(json!({
+                "profile_id":"reviewer", "name":"Reviewer",
+                "client_type":"codex", "client_key":"default",
+                "model":"review-model", "system_prompt":"Review carefully"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
     let launch = app
         .state
         .control()
-        .resolve_profile("reviewer", None)
+        .resolve_profile("reviewer")
         .await
         .unwrap();
     assert_eq!(launch.client_type, "codex");
@@ -331,7 +332,7 @@ async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
     let (status, body) = post_run(&app, json!({
         "workflow_id":"wf_profile", "title":"Review", "cwd":app.workspace().path(),
         "nodes":[{"type":"agent", "phase":"Review", "title":"Reviewer", "instructions":"Review the files",
-            "inputs":[], "output":"review.md", "execution_profile_id":"reviewer", "execution_profile_version":"1"}]
+            "inputs":[], "output":"review.md", "execution_profile_id":"reviewer"}]
     })).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let repository = SqliteWorkflowRepository::new(app.db.clone(), app.state.control().queries());
@@ -354,7 +355,7 @@ async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
             .client_type,
         "codex"
     );
-    profiles.archive_profile("reviewer").await.unwrap();
+    profiles.delete("reviewer").await.unwrap();
     assert_eq!(
         SessionInstructionsService::new(app.db.clone())
             .session_instructions(session)
@@ -366,14 +367,14 @@ async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
     assert!(
         app.state
             .control()
-            .resolve_profile("reviewer", None)
+            .resolve_profile("reviewer")
             .await
             .is_err()
     );
     assert!(
         app.state
             .control()
-            .resolve_profile("missing", None)
+            .resolve_profile("missing")
             .await
             .is_err()
     );
@@ -384,15 +385,21 @@ async fn workflow_profiles_without_launch_defaults_use_the_default_client() {
     use pontia_agent_control::AgentProfileService;
     use pontia_workflow::SessionCreator;
     let app = TestApp::new().await;
-    AgentProfileService::new(app.db.clone()).with_clients(app.state.control().clients())
-        .create_profile(serde_json::from_value(json!({
-            "profile_id":"default-client", "version":"1", "name":"Default client", "agent_kind":"executor",
-            "supported_client_types":[], "system_prompt_template":"Keep context"
-        })).unwrap()).await.unwrap();
+    AgentProfileService::new(app.db.clone())
+        .with_clients(app.state.control().clients())
+        .create(
+            serde_json::from_value(json!({
+                "profile_id":"default-client", "name":"Default client",
+                "system_prompt":"Keep context"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
     let launch = app
         .state
         .control()
-        .resolve_profile("default-client", None)
+        .resolve_profile("default-client")
         .await
         .unwrap();
     assert_eq!(launch.client_type, "generic");
@@ -407,7 +414,7 @@ async fn workflow_missing_profile_fails_node_activation_with_configuration_error
     let (status, body) = post_run(&app, json!({
         "workflow_id":"wf_missing_profile", "title":"Missing Profile", "cwd":app.workspace().path(),
         "nodes":[{"type":"agent", "phase":"Review", "title":"Reviewer", "instructions":"Review the files",
-            "inputs":[], "output":"review.md", "execution_profile_id":"missing", "execution_profile_version":"1"}]
+            "inputs":[], "output":"review.md", "execution_profile_id":"missing"}]
     })).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
     assert!(
@@ -440,4 +447,15 @@ async fn workflow_missing_profile_fails_node_activation_with_configuration_error
         message.contains("agent profile missing not found"),
         "{message}"
     );
+}
+
+#[tokio::test]
+async fn workflow_rejects_removed_profile_version_field() {
+    let app = TestApp::new().await;
+    let (status, _) = post_run(&app, json!({
+        "workflow_id":"wf_old_profile", "title":"Review", "cwd":app.workspace().path(),
+        "nodes":[{"type":"agent", "phase":"Review", "title":"Reviewer", "instructions":"Review",
+            "inputs":[], "output":"review.md", "execution_profile_id":"reviewer", "execution_profile_version":"1"}]
+    })).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }

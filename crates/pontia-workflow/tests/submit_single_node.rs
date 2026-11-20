@@ -32,7 +32,6 @@ impl SessionCreator for BoundSessionCreator {
     async fn resolve_profile(
         &self,
         _id: &str,
-        _version: Option<&str>,
     ) -> pontia_workflow::Result<pontia_workflow::ProfileSessionConfig> {
         panic!("this fixture does not configure Agent Profiles")
     }
@@ -264,7 +263,6 @@ async fn seed_running_single_node(
             inputs: "[]".to_string(),
             output: "result.md".to_string(),
             execution_profile_id: None,
-            execution_profile_version: None,
         })
         .await
         .expect("create node");
@@ -630,7 +628,6 @@ async fn submission_rejects_wrong_identity_missing_output_and_duplicate_ownershi
             inputs: r#"["result.md"]"#.to_string(),
             output: "result.md".to_string(),
             execution_profile_id: None,
-            execution_profile_version: None,
         })
         .await
         .expect("create conflicting Node");

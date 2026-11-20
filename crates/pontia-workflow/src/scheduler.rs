@@ -82,7 +82,6 @@ where
                 inputs: serde_json::to_string(&definition.inputs)?,
                 output: definition.output.clone(),
                 execution_profile_id: definition.execution_profile_id.clone(),
-                execution_profile_version: definition.execution_profile_version.clone(),
             });
             parent_node_id = Some(node_id);
         }

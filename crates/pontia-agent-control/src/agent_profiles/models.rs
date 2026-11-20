@@ -1,78 +1,34 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct ProfileLaunchDefaults {
-    pub profile_id: String,
-    pub version: String,
-    pub client_type: String,
-    pub client_key: String,
-    pub model: String,
-    pub system_prompt: Option<String>,
-}
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct ExecutionProfileView {
+pub struct AgentProfileView {
     pub profile_id: String,
-    pub version: String,
     pub name: String,
     pub description: Option<String>,
-    pub default_client_type: Option<String>,
-    pub default_client_key: Option<String>,
-    pub default_model: Option<String>,
-    pub supported_client_types: Vec<String>,
-    pub agent_kind: String,
-    pub system_prompt_template: Option<String>,
-    pub turn_prompt_template: Option<String>,
-    pub default_session_role: Option<String>,
-    pub default_session_description: Option<String>,
-    pub handle_prefix: Option<String>,
-    pub expected_output_schema: Option<String>,
-    pub artifact_contract: Value,
-    pub default_execution_policy: Value,
-    pub default_review_policy: Value,
-    pub metadata: Value,
-    pub active: bool,
-    pub archived_at: Option<String>,
-    pub archived_reason: Option<String>,
+    pub client_type: Option<String>,
+    pub client_key: Option<String>,
+    pub model: Option<String>,
+    pub system_prompt: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct UpsertExecutionProfileRequest {
+#[serde(deny_unknown_fields)]
+pub struct UpsertAgentProfileRequest {
     pub profile_id: String,
-    pub version: String,
     pub name: String,
     pub description: Option<String>,
-    pub default_client_type: Option<String>,
-    pub default_client_key: Option<String>,
-    pub default_model: Option<String>,
-    #[serde(default)]
-    pub supported_client_types: Vec<String>,
-    pub agent_kind: String,
-    pub system_prompt_template: Option<String>,
-    pub turn_prompt_template: Option<String>,
-    pub default_session_role: Option<String>,
-    pub default_session_description: Option<String>,
-    pub handle_prefix: Option<String>,
-    pub expected_output_schema: Option<String>,
-    #[serde(default = "empty_object")]
-    pub artifact_contract: Value,
-    #[serde(default = "empty_object")]
-    pub default_execution_policy: Value,
-    #[serde(default = "empty_object")]
-    pub default_review_policy: Value,
-    #[serde(default = "empty_object")]
-    pub metadata: Value,
+    pub client_type: Option<String>,
+    pub client_key: Option<String>,
+    pub model: Option<String>,
+    pub system_prompt: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct AgentProfileCommandOutcome {
-    pub data: Value,
-    pub duplicate: bool,
-}
-
-fn empty_object() -> Value {
-    json!({})
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProfileLaunchConfig {
+    pub client_type: Option<String>,
+    pub client_key: Option<String>,
+    pub model: Option<String>,
+    pub system_prompt: Option<String>,
 }

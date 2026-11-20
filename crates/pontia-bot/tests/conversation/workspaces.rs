@@ -11,7 +11,6 @@ fn project_helper(session: &str, workspace_id: &str) -> HelperRequest {
         command: HelperCommand::Create(CreateHelper {
             location: HelperLocation::WorkspaceId(workspace_id.into()),
             profile_id: None,
-            profile_version: None,
             description: "Project task".into(),
             message: "Start the project task".into(),
         }),

@@ -7,10 +7,7 @@ mod queries;
 mod rows;
 mod validation;
 
-pub use models::{
-    AgentProfileCommandOutcome, ExecutionProfileView, ProfileLaunchDefaults,
-    UpsertExecutionProfileRequest,
-};
+pub use models::{AgentProfileView, ProfileLaunchConfig, UpsertAgentProfileRequest};
 
 #[derive(Clone)]
 pub struct AgentProfileService {

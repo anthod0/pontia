@@ -29,7 +29,6 @@ fn node(session_id: Option<&str>, submitted: bool) -> WorkflowNodeRow {
         inputs: "[]".to_string(),
         output: "out.md".to_string(),
         execution_profile_id: None,
-        execution_profile_version: None,
         introduced_revision: 1,
         retired_revision: None,
         session_id: session_id.map(str::to_string),

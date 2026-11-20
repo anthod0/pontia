@@ -27,7 +27,6 @@ pub struct WorkflowGraphNodeView {
     pub inputs: Vec<String>,
     pub output: String,
     pub execution_profile_id: Option<String>,
-    pub execution_profile_version: Option<String>,
     pub introduced_revision: i64,
     pub retired_revision: Option<i64>,
 }
@@ -71,7 +70,6 @@ impl WorkflowQueryService {
                 inputs: serde_json::from_str(&node.inputs)?,
                 output: node.output,
                 execution_profile_id: node.execution_profile_id,
-                execution_profile_version: node.execution_profile_version,
                 introduced_revision: node.introduced_revision,
                 retired_revision: node.retired_revision,
             });

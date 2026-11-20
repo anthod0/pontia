@@ -872,7 +872,7 @@ async fn native_start_pins_profile_and_resume_preserves_it_without_profile_queri
     );
     f.complete(native).await;
     f.session(native, "idle").await;
-    sqlx::query("DROP TABLE execution_profiles")
+    sqlx::query("DROP TABLE agent_profiles")
         .execute(&f.app.db())
         .await
         .unwrap();

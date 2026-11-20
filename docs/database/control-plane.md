@@ -253,35 +253,19 @@ CREATE TABLE inbox_messages (
   FOREIGN KEY (turn_id) REFERENCES turns (turn_id)
 );
 
-CREATE TABLE execution_profiles (
-  profile_id TEXT NOT NULL,
-  version TEXT NOT NULL,
+CREATE TABLE agent_profiles (
+  profile_id TEXT NOT NULL PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
-  supported_client_types TEXT NOT NULL DEFAULT '[]',
-  system_prompt_template TEXT,
-  turn_prompt_template TEXT,
-  default_session_role TEXT,
-  default_session_description TEXT,
-  handle_prefix TEXT,
-  expected_output_schema TEXT,
-  artifact_contract TEXT NOT NULL DEFAULT '{}',
-  default_execution_policy TEXT NOT NULL DEFAULT '{}',
-  default_review_policy TEXT NOT NULL DEFAULT '{}',
-  metadata TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
-  archived_at TEXT,
-  archived_reason TEXT,
-  agent_kind TEXT NOT NULL DEFAULT 'executor',
-  default_client_type TEXT,
-  default_client_key TEXT,
-  default_model TEXT CHECK (
-    (default_client_type IS NULL AND default_client_key IS NULL AND default_model IS NULL)
-    OR (default_client_type IS NOT NULL AND default_client_key IS NOT NULL AND default_model IS NOT NULL)
+  client_type TEXT,
+  client_key TEXT,
+  model TEXT CHECK (
+      (client_type IS NULL AND client_key IS NULL AND model IS NULL)
+      OR (client_type IS NOT NULL AND client_key IS NOT NULL AND model IS NOT NULL)
   ),
-  PRIMARY KEY (profile_id, version)
+  system_prompt TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE TABLE agent_bindings (
@@ -354,7 +338,6 @@ CREATE TABLE workflow_nodes (
   inputs TEXT NOT NULL DEFAULT '[]',
   output TEXT NOT NULL,
   execution_profile_id TEXT,
-  execution_profile_version TEXT,
   session_id TEXT,
   submitted_at TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -509,20 +492,10 @@ CREATE INDEX idx_inbox_messages_turn ON inbox_messages (turn_id)
 WHERE
   turn_id IS NOT NULL;
 
-CREATE INDEX idx_execution_profiles_profile_created ON execution_profiles (profile_id, created_at, version);
-
 CREATE UNIQUE INDEX idx_sessions_workspace_handle ON sessions (workspace_id, handle)
 WHERE
   handle IS NOT NULL
   AND state NOT IN ('exited', 'error');
-
-CREATE INDEX idx_execution_profiles_active_latest ON execution_profiles (
-  profile_id,
-  active,
-  archived_at,
-  created_at,
-  version
-);
 
 CREATE INDEX idx_agent_bindings_session ON agent_bindings (session_id, id);
 
@@ -562,7 +535,6 @@ WHERE
 
 CREATE INDEX idx_workflow_patches_workflow_requested ON workflow_patches (workflow_id, requested_at, patch_id);
 
-
 CREATE UNIQUE INDEX idx_inbox_messages_retry_of ON inbox_messages (retry_of_message_id)
 WHERE
   retry_of_message_id IS NOT NULL;
@@ -595,6 +567,22 @@ CREATE TABLE domain_event_positions (
     position INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id TEXT NOT NULL UNIQUE
 );
+
+CREATE TRIGGER workflow_nodes_immutable_definition
+BEFORE UPDATE ON workflow_nodes
+WHEN OLD.workflow_id IS NOT NEW.workflow_id
+  OR OLD.parent_node_id IS NOT NEW.parent_node_id
+  OR OLD.node_type IS NOT NEW.node_type
+  OR OLD.phase IS NOT NEW.phase
+  OR OLD.title IS NOT NEW.title
+  OR OLD.instructions IS NOT NEW.instructions
+  OR OLD.inputs IS NOT NEW.inputs
+  OR OLD.output IS NOT NEW.output
+  OR OLD.execution_profile_id IS NOT NEW.execution_profile_id
+  OR OLD.introduced_revision IS NOT NEW.introduced_revision
+BEGIN
+    SELECT RAISE(ABORT, 'accepted workflow node definitions are immutable');
+END;
 
 CREATE TRIGGER events_assign_position AFTER INSERT ON events BEGIN
     INSERT INTO domain_event_positions(event_id) VALUES (NEW.event_id);
