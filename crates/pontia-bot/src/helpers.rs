@@ -290,7 +290,7 @@ impl HelperService {
                         .is_ok_and(|canonical| canonical == path)
                 {
                     return Err(Error::Domain(
-                        "Use --temporary NAME for the default Workspace".into(),
+                        "Use --temporary NAME for the temporary Workspace".into(),
                     ));
                 }
                 request.workspace_id = Some(id);

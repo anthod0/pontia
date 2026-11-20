@@ -60,7 +60,7 @@ pub(super) fn document(
             "Workspace ID: {}{}\nPath: {}\nName: {}\nState: {}\nDescription: {}",
             workspace.workspace_id,
             if workspace.workspace_id == default_workspace_id {
-                "\nDefault Workspace"
+                "\nTemporary Workspace"
             } else {
                 ""
             },

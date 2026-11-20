@@ -51,7 +51,7 @@ async fn temporary_helpers_share_the_task_folder_and_appear_in_the_default_works
     ));
     let handoff = instructions(&control, &main).await;
     assert!(handoff.contains(&format!(
-        "Workspace ID: {}\nDefault Workspace",
+        "Workspace ID: {}\nTemporary Workspace",
         workspace.workspace_id
     )));
     assert!(handoff.contains(&format!(
