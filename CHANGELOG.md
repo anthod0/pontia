@@ -7,10 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-11-20
+
+### Added
+
+- The chat composer offers `/pin` and `/archive` to pin, unpin, archive, or unarchive the current Session.
+- Files pasted into the chat composer are attached to the message.
+- The file preview panel previews shared text files.
+- Bot avatars animate while the Bot is working, and the Bot work status text shimmers.
+
 ### Changed
 
 - `pontia bot helper create` now requires either `--workspace-id ID` for project work or `--temporary NAME` for a one-off task. Bots prepare the default Workspace at `~/Pontia` and keep each temporary task’s files in `~/Pontia/NAME`.
 - `pontia update` and `pontia uninstall` now list blocking Sessions by title, Agent Client, and Workspace with a plain reason, instead of Session IDs.
+- `Alt+M` switches devices from any Dashboard page, not only New chat.
+- The mobile top bar menu shows Downloads only when there are downloads, with a badge counting them.
+- When Bots exist, the create Bot button moves to the Bots sidebar group header.
+- Creating a Bot no longer asks for a description; edit it later in Bot settings.
+
+### Fixed
+
+- `pontia update` updates an npm-installed Pi extension with `pi update` instead of reinstalling it.
+- Swiping left closes the mobile sidebar; previously it closed on a right swipe.
+- Mobile top bar buttons leave a gap below the top edge of the screen.
 
 ## [0.8.1] - 2026-11-20
 
