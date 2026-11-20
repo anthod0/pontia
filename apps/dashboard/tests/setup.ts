@@ -25,6 +25,26 @@ class TestResizeObserver {
 
 Object.defineProperty(window, "ResizeObserver", { writable: true, value: TestResizeObserver });
 Object.defineProperty(globalThis, "ResizeObserver", { writable: true, value: TestResizeObserver });
+
+class TestIntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
+}
+
+Object.defineProperty(window, "IntersectionObserver", {
+  configurable: true,
+  writable: true,
+  value: TestIntersectionObserver,
+});
+Object.defineProperty(globalThis, "IntersectionObserver", {
+  configurable: true,
+  writable: true,
+  value: TestIntersectionObserver,
+});
 Object.defineProperty(window, "scrollTo", { writable: true, value: () => {} });
 Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => null });
 Object.defineProperty(Range.prototype, "getClientRects", { configurable: true, value: () => [] });

@@ -5,6 +5,7 @@ import AppShellHost from "./components/layout/AppShellHost.svelte";
 import TopBarHost from "./components/layout/TopBarHost.svelte";
 import SettingsShellHost from "./components/settings/SettingsShellHost.svelte";
 import { downloads } from "../src/lib/downloads/manager";
+import { testDevice } from "./deviceFixture";
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -52,7 +53,10 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("$lib/navigation", () => ({ navigate: mocks.navigate }));
+vi.mock("$lib/navigation", async (importOriginal) => ({
+  ...(await importOriginal()),
+  navigate: mocks.navigate,
+}));
 vi.mock("../src/services/eventStream", async (importOriginal) => {
   const original = await importOriginal();
   const mocked = {
@@ -286,20 +290,73 @@ test("sidebar collapses the pinned sessions group", async () => {
   expect(screen.queryByText("session-pinned")).not.toBeInTheDocument();
 });
 
-test("sidebar loads the next page when its session list reaches the bottom", async () => {
+class TestIntersectionObserver {
+  static instances: TestIntersectionObserver[] = [];
+  readonly target: Element[] = [];
+
+  constructor(
+    private readonly callback: IntersectionObserverCallback,
+    readonly options: IntersectionObserverInit = {},
+  ) {
+    TestIntersectionObserver.instances.push(this);
+  }
+
+  observe(element: Element) {
+    this.target.push(element);
+  }
+
+  unobserve() {}
+  disconnect() {}
+
+  trigger(isIntersecting: boolean) {
+    this.callback(
+      this.target.map((target) => ({ isIntersecting, target }) as IntersectionObserverEntry),
+      this as unknown as IntersectionObserver,
+    );
+  }
+}
+
+test("sidebar loads the next page when the end of its session list scrolls into view", async () => {
+  TestIntersectionObserver.instances = [];
+  vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
   mocks.sessions.set([chatSession("session-active", "idle", "2026-05-14T04:00:00Z")]);
   mocks.sidebarSessionsNextCursor.set("next-page");
   render(AppSidebarHost);
 
-  const scroller = screen.getByText("Recent Sessions").closest(".overflow-y-auto") as HTMLElement;
-  Object.defineProperties(scroller, {
-    scrollHeight: { configurable: true, value: 500 },
-    scrollTop: { configurable: true, value: 420 },
-    clientHeight: { configurable: true, value: 80 },
-  });
-  await fireEvent.scroll(scroller);
+  const [observer] = TestIntersectionObserver.instances;
+  expect(observer.options.root).toBe(document.querySelector('[data-sidebar="content"]'));
+  expect(mocks.loadMoreSidebarSessions).not.toHaveBeenCalled();
 
-  expect(mocks.loadMoreSidebarSessions).toHaveBeenCalledTimes(1);
+  observer.trigger(true);
+  await waitFor(() => expect(mocks.loadMoreSidebarSessions).toHaveBeenCalledTimes(1));
+  vi.unstubAllGlobals();
+});
+
+test("sidebar collapses the Bots group and keeps the create action", async () => {
+  vi.spyOn(testDevice.api, "listBots").mockResolvedValue([
+    {
+      bot_id: "bot-1",
+      name: "Release Captain",
+      description: null,
+      avatar_shape: "classic",
+      avatar_color: "blue",
+      client_type: "pi",
+      client_key: "default",
+      model: "provider/model",
+      working_on: null,
+    },
+  ]);
+  render(AppSidebarHost);
+
+  expect(await screen.findByText("Release Captain")).toBeInTheDocument();
+  const toggle = screen.getByRole("button", { name: /^bots$/i });
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await fireEvent.click(toggle);
+
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByText("Release Captain")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Create Bot" })).toBeInTheDocument();
+  vi.restoreAllMocks();
 });
 
 test("sidebar shows semantic status dots except for terminal sessions, and opens chat for the selected session", async () => {

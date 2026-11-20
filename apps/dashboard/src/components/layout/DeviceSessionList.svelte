@@ -147,15 +147,24 @@
     renamingSession = null
   }
 
-  function handleSessionListScroll(event: Event): void {
-    const target = event.currentTarget as HTMLElement
-    if (
-      target.scrollHeight - target.scrollTop - target.clientHeight <= 80 &&
-      overview.nextCursor &&
-      !overviewQuery.isFetchingNextPage
-    ) {
-      void overviewQuery.fetchNextPage()
-    }
+  function loadNextPage(): void {
+    if (overview.nextCursor && !overviewQuery.isFetchingNextPage) void overviewQuery.fetchNextPage()
+  }
+
+  // Re-observing after each page reports whether the end is still in view, so loading continues until the list
+  // fills the sidebar. A failed page is retried only when the end scrolls back into view.
+  function observeNextPageSentinel(node: HTMLElement): { destroy: () => void } {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) loadNextPage()
+    }, { root: node.closest('[data-sidebar="content"]'), rootMargin: '0px 0px 80px 0px' })
+    $effect(() => {
+      if (overview.nextCursor && !overviewQuery.isFetchingNextPage && !overviewQuery.isFetchNextPageError) {
+        observer.unobserve(node)
+        observer.observe(node)
+      }
+    })
+    observer.observe(node)
+    return { destroy: () => observer.disconnect() }
   }
 </script>
 
@@ -216,13 +225,13 @@
   </Sidebar.MenuItem>
 {/snippet}
 
-<div class="no-scrollbar min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:hidden" onscroll={handleSessionListScroll}>
+<div class="group-data-[collapsible=icon]:hidden">
   {#if overviewQuery.error}
     <p role="alert" class="px-4 py-2 text-xs text-destructive">{$t('sessions.sidebarFailed')} {overviewQuery.error.message}</p>
   {/if}
   {#if overview.pinned.length}
     <Sidebar.Group>
-      <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
+      <Sidebar.GroupLabel class="sticky top-0 z-10 flex h-8 items-center gap-1 bg-sidebar p-0 px-2">
         <button
           type="button"
           class="flex min-w-0 items-center gap-1 rounded-sm text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
@@ -245,7 +254,7 @@
     </Sidebar.Group>
   {/if}
   <Sidebar.Group>
-    <Sidebar.GroupLabel class="flex h-8 items-center gap-1 p-0 px-2">
+    <Sidebar.GroupLabel class="sticky top-0 z-10 flex h-8 items-center gap-1 bg-sidebar p-0 px-2">
       <button
         type="button"
         class="flex min-w-0 items-center gap-1 rounded-sm text-left text-xs font-medium hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
@@ -321,6 +330,7 @@
           <Sidebar.MenuSkeleton />
         {/if}
       </Sidebar.Menu>
+      <div aria-hidden="true" class="h-px" use:observeNextPageSentinel></div>
     </Sidebar.GroupContent>
   {/if}
   </Sidebar.Group>

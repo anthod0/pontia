@@ -49,7 +49,8 @@
     <Sidebar.Trigger class="size-12 shrink-0 [&_svg:not([class*=size-])]:size-6 md:size-7 md:[&_svg:not([class*=size-])]:size-4 group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:inset-0 group-data-[collapsible=icon]:m-auto group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:group-hover/brand:opacity-100 group-data-[collapsible=icon]:focus-visible:opacity-100" />
   </Sidebar.Header>
   <Sidebar.Separator class="mx-4 data-[orientation=horizontal]:w-auto group-data-[collapsible=icon]:mx-2" />
-  <Sidebar.Content class="overflow-hidden">
+  <!-- Primary actions stay in place; everything below them scrolls as one list. -->
+  <div class="flex shrink-0 flex-col">
     {#if settingsPath}
       <Sidebar.Group>
         <Sidebar.GroupContent>
@@ -64,6 +65,30 @@
         </Sidebar.GroupContent>
       </Sidebar.Group>
       {@render deviceSwitcher?.()}
+    {:else}
+      <Sidebar.Group>
+        <Sidebar.GroupContent>
+          <Sidebar.Menu>
+            <Sidebar.MenuItem>
+              <Sidebar.MenuButton
+                isActive={currentPath === '/'}
+                class="mb-2 h-10 justify-center bg-primary-solid text-[13px] font-semibold text-primary-foreground hover:bg-primary-solid-hover hover:text-primary-foreground active:bg-primary-solid-active active:text-primary-foreground data-[active=true]:bg-primary-solid data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary-solid-hover group-data-[collapsible=icon]:mb-0 group-data-[collapsible=icon]:bg-transparent! group-data-[collapsible=icon]:text-sidebar-foreground! group-data-[collapsible=icon]:hover:bg-sidebar-accent! group-data-[collapsible=icon]:hover:text-sidebar-accent-foreground!"
+                tooltipContent={$t('nav.newChat')}
+                onclick={onNewChat}
+              >
+                <NotePencilIcon />
+                <span class="group-data-[collapsible=icon]:hidden">{$t('nav.newChat')}</span>
+                <ShortcutKeys keys={chatShortcuts.newChat.keys} class="ml-auto shrink-0 border border-primary-foreground/40 bg-transparent px-1 py-0 text-[10px] text-primary-foreground/80 group-data-[collapsible=icon]:hidden" aria-hidden="true" />
+              </Sidebar.MenuButton>
+            </Sidebar.MenuItem>
+          </Sidebar.Menu>
+        </Sidebar.GroupContent>
+      </Sidebar.Group>
+      {@render deviceSwitcher?.()}
+    {/if}
+  </div>
+  <Sidebar.Content class="overflow-x-hidden overflow-y-auto group-data-[collapsible=icon]:overflow-y-auto">
+    {#if settingsPath}
       <Sidebar.Group>
         <Sidebar.GroupLabel class="h-8 px-2">{$t('settings.title')}</Sidebar.GroupLabel>
         <Sidebar.GroupContent>
@@ -84,28 +109,11 @@
           </Sidebar.Menu>
         </Sidebar.GroupContent>
       </Sidebar.Group>
+    {:else if groups}
+      {@render groups()}
     {:else}
-      <Sidebar.Group>
-        <Sidebar.GroupContent>
-          <Sidebar.Menu>
-            <Sidebar.MenuItem>
-              <Sidebar.MenuButton
-                isActive={currentPath === '/'}
-                class="mb-2 h-10 justify-center bg-primary-solid text-[13px] font-semibold text-primary-foreground hover:bg-primary-solid-hover hover:text-primary-foreground active:bg-primary-solid-active active:text-primary-foreground data-[active=true]:bg-primary-solid data-[active=true]:text-primary-foreground data-[active=true]:hover:bg-primary-solid-hover group-data-[collapsible=icon]:mb-0 group-data-[collapsible=icon]:bg-transparent! group-data-[collapsible=icon]:text-sidebar-foreground! group-data-[collapsible=icon]:hover:bg-sidebar-accent! group-data-[collapsible=icon]:hover:text-sidebar-accent-foreground!"
-                tooltipContent={$t('nav.newChat')}
-                onclick={onNewChat}
-              >
-                <NotePencilIcon />
-                <span class="group-data-[collapsible=icon]:hidden">{$t('nav.newChat')}</span>
-                <ShortcutKeys keys={chatShortcuts.newChat.keys} class="ml-auto shrink-0 border border-primary-foreground/40 bg-transparent px-1 py-0 text-[10px] text-primary-foreground/80 group-data-[collapsible=icon]:hidden" aria-hidden="true" />
-              </Sidebar.MenuButton>
-            </Sidebar.MenuItem>
-          </Sidebar.Menu>
-        </Sidebar.GroupContent>
-      </Sidebar.Group>
-
-      {@render deviceSwitcher?.()}
-      {#if groups}{@render groups()}{:else}<DeviceBotList /><DeviceSessionList />{/if}
+      <DeviceBotList />
+      <DeviceSessionList />
     {/if}
   </Sidebar.Content>
   <Sidebar.Footer>

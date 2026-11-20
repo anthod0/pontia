@@ -123,7 +123,7 @@ beforeEach(async () => {
   });
 });
 
-const sidebar = () => within(document.querySelector<HTMLElement>('[data-sidebar="content"]')!);
+const sidebar = () => within(document.querySelector<HTMLElement>('[data-slot="sidebar-inner"]')!);
 
 async function chooseSidebarDevice(name: string) {
   await userEvent.click(screen.getByRole("button", { name: "Sidebar device" }));
