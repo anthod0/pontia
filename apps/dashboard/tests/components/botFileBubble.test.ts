@@ -78,3 +78,25 @@ test("marks a deleted file as unavailable without a download action", async () =
   expect(await screen.findByRole("alert")).toHaveTextContent("File no longer exists");
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
+
+test("falls back to the file bubble when a shared image is gone", async () => {
+  class VisibleObserver {
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+    observe(target: Element) {
+      this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as never);
+    }
+    disconnect() {}
+  }
+  vi.stubGlobal("IntersectionObserver", VisibleObserver);
+  vi.spyOn(testDevice.fileApi, "sharedFileContent").mockRejectedValue(
+    new ApiError("File not found", "not_found", 404),
+  );
+  render(BotFileBubble, {
+    file: { ...file, file_id: "gone", name: "gone.png", media_type: "image/png" },
+    sessionId: "main",
+  });
+  expect(await screen.findByRole("alert")).toHaveTextContent("File no longer exists");
+  expect(screen.queryByRole("img", { name: "gone.png" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  vi.unstubAllGlobals();
+});

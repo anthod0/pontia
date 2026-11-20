@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
-import type { Bot, BotMessagePage } from "../../src/api/types";
+import type { Bot, BotMessagePage, SharedFile } from "../../src/api/types";
 import BotChatPage from "../../src/pages/BotChatPage.svelte";
 import BotChatPreviewHarness from "./BotChatPreviewHarness.svelte";
 import type { BotUpdate } from "../../src/services/botChatStream";
@@ -253,4 +253,74 @@ test("downloads a live file share directly from the open Bot chat", async () => 
   expect(download).toHaveBeenCalledWith("main", "file-1", expect.any(AbortSignal));
   await waitFor(() => expect(save).toHaveBeenCalled());
   expect(save.mock.instances[0]).toHaveProperty("download", file.name);
+});
+
+function sharedFiles(...files: SharedFile[]) {
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
+    bot,
+    entries: files.map((file) => ({
+      kind: "shared_file",
+      id: file.file_id,
+      session_id: "main",
+      created_at: file.created_at,
+      file,
+    })),
+    file_link_session: null,
+    notice_session_id: "main",
+    generation_notice: null,
+    next_before: null,
+    processing: false,
+  });
+}
+
+const sharedFile = (name: string, media_type = "application/octet-stream"): SharedFile => ({
+  file_id: `file-${name}`,
+  turn_id: null,
+  name,
+  path: `/work/${name}`,
+  size: 12,
+  media_type,
+  created_at: "2026-11-20T00:00:00Z",
+});
+
+test("shows a shared image inline and enlarges it in the image viewer", async () => {
+  class VisibleObserver {
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+    observe(target: Element) {
+      this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as never);
+    }
+    disconnect() {}
+  }
+  vi.stubGlobal("IntersectionObserver", VisibleObserver);
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:bot-image");
+  const read = vi
+    .spyOn(testDevice.fileApi, "sharedFileContent")
+    .mockResolvedValue(new Response("png", { headers: { "Content-Type": "image/png" } }));
+  sharedFiles(sharedFile("chart.png", "image/png"));
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+
+  const enlarge = await screen.findByRole("button", { name: "Enlarge chart.png" });
+  expect(within(enlarge).getByRole("img", { name: "chart.png" })).toHaveAttribute(
+    "src",
+    "blob:bot-image",
+  );
+  expect(read).toHaveBeenCalledWith("main", "file-chart.png");
+  await fireEvent.click(enlarge);
+  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Download chart.png" })).toBeInTheDocument();
+  vi.unstubAllGlobals();
+});
+
+test("opens a shared text file in the file preview panel and leaves binary files download-only", async () => {
+  const read = vi
+    .spyOn(testDevice.fileApi, "pathFileContent")
+    .mockResolvedValue(new Response("# Notes\n"));
+  sharedFiles(sharedFile("notes.md"), sharedFile("bundle.zip"));
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+
+  expect(await screen.findByRole("button", { name: "Download bundle.zip" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Preview bundle.zip" })).not.toBeInTheDocument();
+  await fireEvent.click(screen.getByRole("button", { name: "Preview notes.md" }));
+  await within(screen.getByRole("complementary")).findByRole("heading", { name: "Notes" });
+  expect(read).toHaveBeenCalledWith("main", "/work/notes.md", expect.any(AbortSignal));
 });
