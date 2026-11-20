@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-11-20
+
 ### Added
 
 - `pontia bot helper create` accepts `--title TEXT` to name the helper's Session in the Dashboard.
