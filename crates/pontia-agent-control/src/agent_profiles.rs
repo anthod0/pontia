@@ -1,7 +1,7 @@
 use sqlx::SqlitePool;
 
-mod binding;
 mod commands;
+mod launch;
 mod models;
 mod queries;
 mod rows;

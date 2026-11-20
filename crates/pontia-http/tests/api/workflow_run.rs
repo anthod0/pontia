@@ -387,7 +387,7 @@ async fn workflow_profiles_without_launch_defaults_use_the_default_client() {
     AgentProfileService::new(app.db.clone()).with_clients(app.state.control().clients())
         .create_profile(serde_json::from_value(json!({
             "profile_id":"default-client", "version":"1", "name":"Default client", "agent_kind":"executor",
-            "supported_client_types":["generic"], "system_prompt_template":"Keep context"
+            "supported_client_types":[], "system_prompt_template":"Keep context"
         })).unwrap()).await.unwrap();
     let launch = app
         .state
@@ -399,4 +399,45 @@ async fn workflow_profiles_without_launch_defaults_use_the_default_client() {
     assert_eq!(launch.system_instructions.as_deref(), Some("Keep context"));
     assert_eq!(launch.model, None);
     assert_eq!(launch.metadata, json!({}));
+}
+
+#[tokio::test]
+async fn workflow_missing_profile_fails_node_activation_with_configuration_error() {
+    let app = TestApp::new().await;
+    let (status, body) = post_run(&app, json!({
+        "workflow_id":"wf_missing_profile", "title":"Missing Profile", "cwd":app.workspace().path(),
+        "nodes":[{"type":"agent", "phase":"Review", "title":"Reviewer", "instructions":"Review the files",
+            "inputs":[], "output":"review.md", "execution_profile_id":"missing", "execution_profile_version":"1"}]
+    })).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("agent profile missing not found"),
+        "{body}"
+    );
+    let workflow =
+        pontia_workflow::WorkflowQueryService::new(app.db.clone(), app.state.control().queries())
+            .get_workflow("wf_missing_profile")
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(workflow.state, "failed");
+    assert_eq!(workflow.nodes.len(), 1);
+    let node = &workflow.nodes[0];
+    assert_eq!(node.status, pontia_workflow::WorkflowAgentStatus::Failed);
+    assert_eq!(node.session_id, None);
+    let message = workflow.failure_message.unwrap();
+    assert!(
+        message.contains(&format!(
+            "Session configuration failed for Workflow Agent Node {}:",
+            node.node_id
+        )),
+        "{message}"
+    );
+    assert!(
+        message.contains("agent profile missing not found"),
+        "{message}"
+    );
 }

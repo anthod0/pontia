@@ -186,6 +186,30 @@ impl ClientRegistry {
         Ok(options)
     }
 
+    pub async fn creation_metadata(
+        &self,
+        pool: &sqlx::SqlitePool,
+        client: &str,
+        key: &str,
+    ) -> pontia_core::Result<serde_json::Value> {
+        let configuration = self
+            .get(client)
+            .and_then(|entry| entry.configuration.as_ref())
+            .ok_or_else(|| {
+                pontia_core::Error::CapabilityUnavailable(format!(
+                    "Client configuration unavailable: {client}"
+                ))
+            })?;
+        for option in self.creation_options(pool).await? {
+            if option.client_type == client && configuration.key(&option.metadata)? == key {
+                return Ok(option.metadata);
+            }
+        }
+        Err(pontia_core::Error::CapabilityUnavailable(format!(
+            "Client {client}/{key} is unavailable for Session creation"
+        )))
+    }
+
     pub fn default_client_type(&self) -> pontia_core::Result<&'static str> {
         self.registrations()
             .find(|client| client.spec.default_for_creation)

@@ -37,6 +37,9 @@ impl ClientConfiguration for Configuration {
 
 struct Profile;
 impl ClientInstructions for Profile {
+    fn inject_standalone_session_instructions(&self) -> bool {
+        false
+    }
     fn validate_instructions(&self, _: Option<&str>) -> Result<()> {
         Ok(())
     }

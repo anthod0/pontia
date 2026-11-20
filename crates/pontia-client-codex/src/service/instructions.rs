@@ -49,7 +49,7 @@ pub(crate) async fn prepare_proxy_request(
     config: &Value,
 ) -> Result<Option<Value>> {
     use crate::proxy::ThreadOperation;
-    if params["ephemeral"] == true || operation == ThreadOperation::Fork {
+    if params["ephemeral"] == true {
         return Ok(None);
     }
     if operation == ThreadOperation::Resume
@@ -87,7 +87,7 @@ pub(crate) async fn prepare_proxy_request(
             }
             None => None,
         },
-        ThreadOperation::Fork => unreachable!(),
+        ThreadOperation::Fork => return Ok(None),
     };
     let Some(instructions) = &mut instructions else {
         return Ok(None);

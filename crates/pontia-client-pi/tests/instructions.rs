@@ -34,3 +34,16 @@ async fn instructions_compose_only_the_requested_sources() {
         ));
     }
 }
+
+#[tokio::test]
+async fn caller_instructions_require_client_injection_capability() {
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    let mut clients = ClientRegistry::default();
+    clients.register(pontia_agent_control::client_contract::test_registration());
+    let service = SessionInstructionsService::new(pool).with_clients(clients);
+    assert!(matches!(
+        service.resolve("generic", Some("Keep context"), false),
+        Err(pontia_core::Error::CapabilityUnavailable(_))
+    ));
+    assert_eq!(service.resolve("generic", None, true).unwrap(), None);
+}

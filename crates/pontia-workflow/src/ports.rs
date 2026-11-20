@@ -19,10 +19,7 @@ pub trait SessionCreator {
         &self,
         id: &str,
         version: Option<&str>,
-    ) -> impl Future<Output = Result<ProfileSessionConfig>> + Send {
-        let _ = version;
-        async move { Err(pontia_core::Error::NotFound(format!("agent profile {id} not found")).into()) }
-    }
+    ) -> impl Future<Output = Result<ProfileSessionConfig>> + Send;
 
     fn default_client_type(&self) -> Result<String>;
     fn find_session_by_ownership(
@@ -44,55 +41,29 @@ impl SessionCreator for AgentControl {
         id: &str,
         version: Option<&str>,
     ) -> Result<ProfileSessionConfig> {
-        let clients = self.clients();
-        let profile = pontia_agent_control::AgentProfileService::new(self.db())
-            .with_clients(clients.clone())
-            .resolve_launch(id, version)
-            .await?;
-        let (client_type, model, metadata) =
-            if let (Some(client_type), Some(client_key), Some(model)) = (
-                profile.default_client_type,
-                profile.default_client_key,
-                profile.default_model,
-            ) {
-                let configuration = clients
-                    .get(&client_type)
-                    .and_then(|entry| entry.configuration.as_ref())
-                    .ok_or_else(|| {
-                        pontia_core::Error::CapabilityUnavailable(format!(
-                            "Client configuration unavailable: {client_type}"
-                        ))
-                    })?;
-                let mut metadata = None;
-                for option in clients.creation_options(&self.db()).await? {
-                    if option.client_type == client_type
-                        && configuration.key(&option.metadata)? == client_key
-                    {
-                        metadata = Some(option.metadata);
-                        break;
-                    }
-                }
-                let metadata = metadata.ok_or_else(|| {
-                    pontia_core::Error::CapabilityUnavailable(format!(
-                        "Client {client_type}/{client_key} is unavailable for Session creation"
-                    ))
-                })?;
-                (client_type, Some(model), metadata)
-            } else {
-                (self.default_client_type()?, None, serde_json::json!({}))
-            };
-        if !profile.supported_client_types.contains(&client_type) {
-            return Err(pontia_core::Error::Domain(format!(
-                "agent profile {id} does not declare {client_type} support"
-            ))
-            .into());
+        let profiles =
+            pontia_agent_control::AgentProfileService::new(self.db()).with_clients(self.clients());
+        let profile = profiles.resolve_launch(id, version).await?;
+        if profile.default_client_type.is_some() {
+            let defaults = profiles.launch_defaults(id, Some(&profile.version)).await?;
+            let metadata = self
+                .clients()
+                .creation_metadata(&self.db(), &defaults.client_type, &defaults.client_key)
+                .await?;
+            Ok(ProfileSessionConfig {
+                client_type: defaults.client_type,
+                model: Some(defaults.model),
+                metadata,
+                system_instructions: defaults.system_prompt,
+            })
+        } else {
+            Ok(ProfileSessionConfig {
+                client_type: self.default_client_type()?,
+                model: None,
+                metadata: serde_json::json!({}),
+                system_instructions: profile.system_prompt_template,
+            })
         }
-        Ok(ProfileSessionConfig {
-            client_type,
-            model,
-            metadata,
-            system_instructions: profile.system_prompt_template,
-        })
     }
 
     fn default_client_type(&self) -> Result<String> {

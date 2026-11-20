@@ -241,23 +241,10 @@ impl ConversationService {
         client_type: &str,
         client_key: &str,
     ) -> Result<serde_json::Value> {
-        let clients = self.control.clients();
-        let configuration = clients
-            .get(client_type)
-            .and_then(|entry| entry.configuration.as_ref())
-            .ok_or_else(|| {
-                Error::CapabilityUnavailable("Client cannot create a Bot Session".into())
-            })?;
-        for option in clients.creation_options(&self.control.db()).await? {
-            if option.client_type == client_type
-                && configuration.key(&option.metadata)? == client_key
-            {
-                return Ok(option.metadata);
-            }
-        }
-        Err(Error::CapabilityUnavailable(format!(
-            "Client {client_type}/{client_key} is unavailable for Session creation"
-        )))
+        self.control
+            .clients()
+            .creation_metadata(&self.control.db(), client_type, client_key)
+            .await
     }
 
     fn activity(&self, bot_id: &str) -> Arc<Activity> {

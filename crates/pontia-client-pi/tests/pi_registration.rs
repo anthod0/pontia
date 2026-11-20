@@ -607,11 +607,6 @@ async fn rpc_queries_read_workspace_and_session_instructions() {
     );
     for (method, params) in [
         ("session.get", json!({"session_id":"missing"})),
-        (
-            "profile.get",
-            json!({"profile_id":"reviewer", "version":"missing"}),
-        ),
-        ("profile.get", json!({"profile_id":"missing"})),
         ("session.get", json!({})),
         ("workspaces.list", json!({"unexpected": true})),
     ] {

@@ -9,9 +9,9 @@ pub struct InstructionsBindingInput<'a> {
 
 /// Interprets client-specific instruction constraints and creation-time content.
 pub trait ClientInstructions: Send + Sync {
-    fn inject_standalone_session_instructions(&self) -> bool {
-        false
+    fn inject_standalone_session_instructions(&self) -> bool;
+    fn validate_instructions(&self, system: Option<&str>) -> Result<()> {
+        crate::sessions::instructions::validate_static_instructions(system)
     }
-    fn validate_instructions(&self, system: Option<&str>) -> Result<()>;
     fn bind(&self, input: &InstructionsBindingInput<'_>) -> Result<Value>;
 }
