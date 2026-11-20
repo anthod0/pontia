@@ -439,19 +439,29 @@ async fn lag_recovers_completion_before_unload_without_reloading() {
 }
 
 #[tokio::test]
-async fn exit_and_resume_while_notifications_wait_observes_new_execution() {
+async fn exit_and_resume_with_pending_approval_observes_new_execution() {
     let fixture = Fixture::new(
         turn(json!([{"type":"agentMessage","id":"item","text":"existing"}])),
         Vec::new(),
     )
     .await;
-    let runtime = CodexRuntime::existing(fixture.root.path()).await.unwrap();
-    let connection = runtime.connection().await.unwrap();
-    let associations = connection.interactions.lock().await;
     fixture.notify(json!({"id":"pending","method":"item/commandExecution/requestApproval","params":{"threadId":"thread","command":"echo hello"}})).await;
     tokio::time::timeout(Duration::from_secs(3), async {
-        while connection.pending_server_requests().await.is_empty() {
-            tokio::task::yield_now().await;
+        while fixture
+            .app
+            .interactions()
+            .list(
+                &fixture.session,
+                Some(pontia_agent_control::interactions::InteractionState::Pending),
+                1,
+                None,
+            )
+            .await
+            .unwrap()
+            .interactions
+            .is_empty()
+        {
+            tokio::time::sleep(Duration::from_millis(5)).await;
         }
     })
     .await
@@ -468,7 +478,6 @@ async fn exit_and_resume_while_notifications_wait_observes_new_execution() {
         .resume_session(&fixture.session, fixture.root.path())
         .await
         .unwrap();
-    drop(associations);
     let mut resumed_turn =
         turn(json!([{"type":"agentMessage","id":"new-item","text":"new output"}]));
     resumed_turn["id"] = json!("resumed-turn");
