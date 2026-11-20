@@ -29,6 +29,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+test("the download button appears after a download starts and counts every listed download", async () => {
+  render(DownloadCenter);
+  expect(screen.queryByRole("button", { name: "Downloads", exact: true })).not.toBeInTheDocument();
+  downloads.start("missing-device", "session", { kind: "shared", fileId: "file-1" }, "report.txt");
+  expect(await screen.findByRole("button", { name: "Downloads", exact: true })).toBeInTheDocument();
+  expect(screen.getByTestId("downloads-count")).toHaveTextContent("1");
+  downloads.start("missing-device", "session", { kind: "shared", fileId: "file-2" }, "notes.txt");
+  await waitFor(() => expect(screen.getByTestId("downloads-count")).toHaveTextContent("2"));
+  downloads.clearFinished();
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: "Downloads", exact: true }),
+    ).not.toBeInTheDocument(),
+  );
+});
+
 test("a shared file keeps receiving after its card and download dialog close, and can be cancelled centrally", async () => {
   let stream!: ReadableStreamDefaultController<Uint8Array>;
   const cancelled = vi.fn();

@@ -145,8 +145,10 @@
     {/if}
   </div>
   {/if}
+  {#if settingsPath}
+    <TopBarMoreMenu />
+  {:else}
   <TopBarMoreMenu>
-    {#if !settingsPath}
       <DropdownMenu.Item class="min-h-11 gap-3 px-3" onclick={onNewChat}>
         <NotePencilIcon /> {$t('nav.newChat')}
       </DropdownMenu.Item>
@@ -160,8 +162,8 @@
           <GearIcon /> {$t('bots.edit')}
         </DropdownMenu.Item>
       {/if}
-    {/if}
   </TopBarMoreMenu>
+  {/if}
 </header>
 
 {#if botSettingsOpen && botId && botChat.data}

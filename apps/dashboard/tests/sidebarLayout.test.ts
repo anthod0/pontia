@@ -4,6 +4,7 @@ import AppSidebarHost from "./components/layout/AppSidebarHost.svelte";
 import AppShellHost from "./components/layout/AppShellHost.svelte";
 import TopBarHost from "./components/layout/TopBarHost.svelte";
 import SettingsShellHost from "./components/settings/SettingsShellHost.svelte";
+import { downloads } from "../src/lib/downloads/manager";
 
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
@@ -926,9 +927,17 @@ test.each([
   expect(screen.getByRole("dialog", { name: "Sidebar" })).toHaveAttribute("data-state", "open");
 });
 
-test("mobile more menu opens the download center", async () => {
+test("mobile more menu hides downloads until a download starts, then opens the download center", async () => {
   render(AppShellHost);
   await fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: "More" }));
-  await fireEvent.click(screen.getByRole("menuitem", { name: "Downloads" }));
+  expect(screen.queryByRole("menuitem", { name: "Downloads" })).not.toBeInTheDocument();
+  await fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+
+  downloads.start("missing-device", "session", { kind: "shared", fileId: "file-1" }, "report.txt");
+  await fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: "More" }));
+  const item = await screen.findByRole("menuitem", { name: /Downloads/ });
+  expect(within(item).getByTestId("downloads-count")).toHaveTextContent("1");
+  await fireEvent.click(item);
   expect(screen.getByRole("dialog", { name: "Downloads" })).toBeInTheDocument();
+  downloads.clearFinished();
 });
