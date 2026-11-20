@@ -67,6 +67,7 @@ export interface BotMessagePage {
   processing: boolean;
   generation_notice: BotNotice | null;
   notice_session_id: string | null;
+  file_link_session: { session_id: string; workspace: string | null } | null;
   entries: BotEntry[];
   next_before: string | null;
 }

@@ -19,6 +19,7 @@ function equalEntry(a: BotEntry, b: BotEntry): boolean {
 export class BotTimeline {
   entries = $state.raw<BotEntry[]>([]);
   bot = $state.raw<Bot | null>(null);
+  fileLinkSession = $state.raw<BotMessagePage["file_link_session"]>(null);
   processing = $state(false);
   generationNotice = $state.raw<BotNotice | null>(null);
   before = $state<string | null>(null);
@@ -141,6 +142,7 @@ export class BotTimeline {
     }
     if (reset || rotated) this.stale = new Set(this.known.keys());
     this.bot = latest.bot;
+    this.fileLinkSession = latest.file_link_session;
     this.processing = latest.processing;
     this.generationNotice = latest.generation_notice;
     this.device.queryClient.setQueryData(["bot-processing", this.id], latest.processing);

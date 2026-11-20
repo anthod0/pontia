@@ -186,6 +186,29 @@ async fn pages_and_anchors_use_the_same_millisecond_and_binary_id_order() {
 }
 
 #[tokio::test]
+async fn replies_keep_the_bots_file_context_after_its_session_exits() {
+    let app = fixture().await;
+    for (session, owner) in [
+        ("s", "a:launch"),
+        ("helper", "helper:a:launch"),
+        ("t", "b:launch"),
+    ] {
+        sqlx::query("INSERT INTO sessions(session_id,client_type,state,application_id,application_ref,workspace_ref) VALUES (?,'generic','exited','bot',?,?)")
+            .bind(session).bind(owner).bind(format!("/work/{session}")).execute(&app.db).await.unwrap();
+    }
+    sqlx::query("UPDATE bots SET current_session_id = NULL WHERE bot_id = 'a'")
+        .execute(&app.db)
+        .await
+        .unwrap();
+
+    let history = page(&app, &[]).await;
+    assert_eq!(
+        history["file_link_session"],
+        json!({"session_id": "s", "workspace": "/work/s"})
+    );
+}
+
+#[tokio::test]
 async fn main_session_shares_are_downloadable_from_bot_history_after_rotation() {
     let app = fixture().await;
     let path = app.workspace().path().join("Pontia项目描述.xlsx");

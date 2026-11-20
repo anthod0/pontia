@@ -2,7 +2,9 @@ mod domain_events;
 mod execution_policy;
 mod snapshots;
 pub use domain_events::{DomainEventPage, DomainEventReader, DomainEventRecord};
-pub use snapshots::{RuntimeSnapshot, SessionOwnership, SessionSnapshot, TurnSnapshot};
+pub use snapshots::{
+    OwnedSession, RuntimeSnapshot, SessionOwnership, SessionSnapshot, TurnSnapshot,
+};
 mod control;
 pub(crate) use control::SessionControlState;
 mod event_history;

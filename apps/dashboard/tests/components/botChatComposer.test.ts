@@ -26,6 +26,7 @@ async function openChat() {
     },
     entries: [],
     next_before: null,
+    file_link_session: null,
     notice_session_id: null,
     generation_notice: null,
     processing: false,

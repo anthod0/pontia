@@ -1,8 +1,9 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
 import type { Bot, BotMessagePage } from "../../src/api/types";
 import BotChatPage from "../../src/pages/BotChatPage.svelte";
+import BotChatPreviewHarness from "./BotChatPreviewHarness.svelte";
 
 const bot: Bot = {
   bot_id: "a",
@@ -54,6 +55,7 @@ test("renders Bot replies as markdown while keeping user messages as plain text"
       },
     ],
     next_before: null,
+    file_link_session: null,
     notice_session_id: null,
     generation_notice: null,
     processing: false,
@@ -78,6 +80,37 @@ test("renders Bot replies as markdown while keeping user messages as plain text"
   expect(screen.getByText("Keep [literal](https://example.com/user) raw")).toBeInTheDocument();
 });
 
+test.each([
+  ["/tmp/report.md", "/tmp/report.md"],
+  ["reports/report.md", "/bot/a/reports/report.md"],
+])("opens %s from a historical Bot reply in the file preview panel", async (href, path) => {
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
+    bot,
+    entries: [
+      {
+        id: "reply",
+        kind: "bot_reply",
+        content: `[查看报告](${href})`,
+        status: "normal",
+        created_at: "2026-11-20T00:00:00Z",
+      },
+    ],
+    file_link_session: { session_id: "previous", workspace: "/bot/a" },
+    notice_session_id: null,
+    generation_notice: null,
+    next_before: null,
+    processing: false,
+  });
+  const read = vi
+    .spyOn(testDevice.fileApi, "pathFileContent")
+    .mockResolvedValue(new Response("# Report"));
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+
+  await fireEvent.click(await screen.findByRole("button", { name: "Preview report.md" }));
+  await within(screen.getByRole("complementary")).findByRole("heading", { name: "Report" });
+  expect(read).toHaveBeenCalledWith("previous", path, expect.any(AbortSignal));
+});
+
 function chatWith(processing: boolean, count = 1) {
   vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
     bot,
@@ -89,6 +122,7 @@ function chatWith(processing: boolean, count = 1) {
       created_at: new Date(index).toISOString(),
     })),
     next_before: null,
+    file_link_session: null,
     notice_session_id: null,
     generation_notice: null,
     processing,
@@ -130,6 +164,7 @@ test("downloads a live file share directly from the open Bot chat", async () => 
     bot,
     entries: [],
     next_before: null,
+    file_link_session: null,
     notice_session_id: null,
     generation_notice: null,
     processing: false,

@@ -172,7 +172,7 @@ impl DreamingService {
 
     // Session ownership survives daemon restarts; no separate run or scheduler state is needed.
     async fn finish_previous(&self, reported: &mut Option<String>) -> Result<bool> {
-        let Some(id) = self
+        let Some(previous) = self
             .control
             .queries()
             .latest_owned_session("bot", "dreaming:")
@@ -180,6 +180,7 @@ impl DreamingService {
         else {
             return Ok(true);
         };
+        let id = previous.session_id;
         let session = self
             .control
             .queries()

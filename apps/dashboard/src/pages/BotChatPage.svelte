@@ -99,6 +99,8 @@
                   <MessageResponse
                     content={parts.text}
                     markdown
+                    sessionId={timeline.fileLinkSession?.session_id}
+                    linkBase={timeline.fileLinkSession?.workspace ? `${timeline.fileLinkSession.workspace.replace(/\/+$/, '')}/` : null}
                     class="size-auto rounded-2xl bg-muted px-4 py-3 break-words [&_code]:bg-background [&_th]:bg-background [&_[data-code-block]]:bg-background"
                   />
                 {:else}

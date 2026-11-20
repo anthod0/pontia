@@ -1,4 +1,6 @@
-use pontia_agent_control::queries::{OwnedSessionFile, SessionEventSummary, SharedFile, TimePage};
+use pontia_agent_control::queries::{
+    OwnedSession, OwnedSessionFile, SessionEventSummary, SharedFile, TimePage,
+};
 use pontia_core::{Error, Result, domain::EventType};
 use serde::{Deserialize, Serialize};
 
@@ -97,6 +99,7 @@ pub struct TimelinePage {
     processing: bool,
     generation_notice: Option<Notice>,
     notice_session_id: Option<String>,
+    file_link_session: Option<OwnedSession>,
     entries: Vec<TimelineEntry>,
     next_before: Option<String>,
 }
@@ -162,6 +165,11 @@ impl ConversationService {
         let generation_notice = activity.generation_notice.lock().unwrap().clone();
         Ok(TimelinePage {
             notice_session_id: bot.current_session_id.clone(),
+            file_link_session: self
+                .control
+                .queries()
+                .latest_owned_session(APPLICATION_ID, &format!("{bot_id}:"))
+                .await?,
             bot,
             processing,
             generation_notice,

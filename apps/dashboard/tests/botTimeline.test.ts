@@ -29,6 +29,7 @@ function page(entries: BotEntry[], before: string | null, session = "s"): BotMes
       working_on: null,
     },
     processing: false,
+    file_link_session: null,
     notice_session_id: session,
     generation_notice: null,
     next_before: before,

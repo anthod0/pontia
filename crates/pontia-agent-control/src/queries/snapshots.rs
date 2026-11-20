@@ -10,6 +10,12 @@ pub struct SessionOwnership {
     pub reference: String,
 }
 
+#[derive(Debug, FromRow, Serialize)]
+pub struct OwnedSession {
+    pub session_id: String,
+    pub workspace: Option<String>,
+}
+
 #[derive(Debug, Clone, FromRow)]
 pub struct TurnSnapshot {
     pub turn_id: String,
@@ -176,9 +182,9 @@ impl ControlQueryService {
         &self,
         application_id: &str,
         reference_prefix: &str,
-    ) -> Result<Option<String>> {
-        Ok(sqlx::query_scalar(
-            "SELECT session_id FROM sessions
+    ) -> Result<Option<OwnedSession>> {
+        Ok(sqlx::query_as(
+            "SELECT session_id, workspace_ref AS workspace FROM sessions
              WHERE application_id = ? AND substr(application_ref, 1, length(?)) = ?
              ORDER BY application_ref DESC LIMIT 1",
         )

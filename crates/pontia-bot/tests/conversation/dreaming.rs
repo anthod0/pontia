@@ -5,6 +5,15 @@ use pontia_bot::{
     memory::{MemoryCommands, MemoryService},
 };
 
+async fn latest_dreaming_session_id(control: &AgentControl) -> Option<String> {
+    control
+        .queries()
+        .latest_owned_session("bot", "dreaming:")
+        .await
+        .unwrap()
+        .map(|session| session.session_id)
+}
+
 #[tokio::test]
 async fn one_device_round_survives_failure_and_restart_without_becoming_a_helper() {
     let (_root, pool, client, control, conversation) = fixture().await;
@@ -146,24 +155,13 @@ async fn hourly_runner_waits_skips_overlap_and_does_not_retry_failed_rounds() {
     let task = tokio::spawn(DreamingService::new(control.clone(), conversation).run(receiver));
     tokio::task::yield_now().await;
     tokio::time::advance(std::time::Duration::from_secs(3599)).await;
-    assert!(
-        control
-            .queries()
-            .latest_owned_session("bot", "dreaming:")
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(latest_dreaming_session_id(&control).await.is_none());
     tokio::time::advance(std::time::Duration::from_secs(1)).await;
     // Database and launch work run on real worker threads, independent of the paused clock.
     tokio::time::resume();
     let first = tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            if let Some(id) = control
-                .queries()
-                .latest_owned_session("bot", "dreaming:")
-                .await
-                .unwrap()
+            if let Some(id) = latest_dreaming_session_id(&control).await
                 && !control.queries().list_turns(&id).await.unwrap().is_empty()
             {
                 break id;
@@ -176,12 +174,7 @@ async fn hourly_runner_waits_skips_overlap_and_does_not_retry_failed_rounds() {
     tokio::time::pause();
     tokio::time::advance(std::time::Duration::from_secs(3600)).await;
     assert_eq!(
-        control
-            .queries()
-            .latest_owned_session("bot", "dreaming:")
-            .await
-            .unwrap()
-            .as_deref(),
+        latest_dreaming_session_id(&control).await.as_deref(),
         Some(first.as_str())
     );
     tokio::time::resume();
@@ -208,23 +201,14 @@ async fn hourly_runner_waits_skips_overlap_and_does_not_retry_failed_rounds() {
     tokio::time::pause();
     tokio::time::advance(std::time::Duration::from_secs(3590)).await;
     assert_eq!(
-        control
-            .queries()
-            .latest_owned_session("bot", "dreaming:")
-            .await
-            .unwrap()
-            .as_deref(),
+        latest_dreaming_session_id(&control).await.as_deref(),
         Some(first.as_str())
     );
     tokio::time::advance(std::time::Duration::from_secs(10)).await;
     tokio::time::resume();
     let next = tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            if let Some(id) = control
-                .queries()
-                .latest_owned_session("bot", "dreaming:")
-                .await
-                .unwrap()
+            if let Some(id) = latest_dreaming_session_id(&control).await
                 && id != first
                 && !control.queries().list_turns(&id).await.unwrap().is_empty()
             {
@@ -439,14 +423,7 @@ async fn dreaming_rejects_clients_without_approval_free_restricted_policy_before
             dreaming.start().await,
             Err(Error::CapabilityUnavailable(_))
         ));
-        assert!(
-            control
-                .queries()
-                .latest_owned_session("bot", "dreaming:")
-                .await
-                .unwrap()
-                .is_none()
-        );
+        assert!(latest_dreaming_session_id(&control).await.is_none());
         assert!(!root.path().join("bot").join("readonly").exists());
     }
 }
