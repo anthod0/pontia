@@ -229,6 +229,11 @@ export function createSessionQueries(device: DeviceRuntime) {
     onSuccess: applySessionResult,
   });
 
+  const unarchiveSessionMutationOptions = () => ({
+    mutationFn: device.api.unarchiveSession,
+    onSuccess: applySessionResult,
+  });
+
   const interruptSessionMutationOptions = () => ({
     mutationFn: device.api.interruptSession,
     onSuccess: async (_result: unknown, sessionId: string) => invalidateAfterControl(sessionId),
@@ -308,6 +313,10 @@ export function createSessionQueries(device: DeviceRuntime) {
     return executeMutation(archiveSessionMutationOptions(), sessionId);
   }
 
+  function mutateUnarchiveSession(sessionId: string): Promise<SessionView> {
+    return executeMutation(unarchiveSessionMutationOptions(), sessionId);
+  }
+
   async function mutateInterruptSession(sessionId: string): Promise<void> {
     await executeMutation(interruptSessionMutationOptions(), sessionId);
   }
@@ -347,6 +356,7 @@ export function createSessionQueries(device: DeviceRuntime) {
     mutatePinSession,
     mutateUnpinSession,
     mutateArchiveSession,
+    mutateUnarchiveSession,
     mutateInterruptSession,
     mutateResumeSession,
     mutateTerminateSession,

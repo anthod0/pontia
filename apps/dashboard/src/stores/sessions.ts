@@ -180,6 +180,10 @@ export function createSessions(device: DeviceRuntime) {
     return device.sessionQueries.mutateArchiveSession(sessionId);
   }
 
+  function unarchiveSession(sessionId: string): Promise<SessionView> {
+    return device.sessionQueries.mutateUnarchiveSession(sessionId);
+  }
+
   function submitInboxMessage(
     sessionId: string,
     input: SubmitInboxMessageInput,
@@ -241,6 +245,7 @@ export function createSessions(device: DeviceRuntime) {
     pinSession,
     unpinSession,
     archiveSession,
+    unarchiveSession,
     submitInboxMessage,
     recoverInboxSubmission,
     retryInboxMessage,

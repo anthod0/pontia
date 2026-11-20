@@ -700,6 +700,18 @@ export function createApi(device: DeviceRuntime) {
     ).session;
   }
 
+  async function unarchiveSession(sessionId: string): Promise<SessionView> {
+    return (
+      await request<{ session: SessionView }>(
+        `/sessions/${encodeURIComponent(sessionId)}/unarchive`,
+        {
+          method: "POST",
+          mutating: true,
+        },
+      )
+    ).session;
+  }
+
   async function getSession(
     sessionId: string,
     options: ReadRequestOptions = {},
@@ -943,6 +955,7 @@ export function createApi(device: DeviceRuntime) {
     pinSession,
     unpinSession,
     archiveSession,
+    unarchiveSession,
     getSession,
     listTurns,
     listInboxMessages,

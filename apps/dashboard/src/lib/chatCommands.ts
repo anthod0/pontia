@@ -1,11 +1,13 @@
 interface ChatCommandInfo {
   description: string;
   disabledReason?: string;
+  /** Whether a toggle command's state is currently on, such as /pin on a pinned session. */
+  active?: boolean;
 }
 
 export type ChatCommand = ChatCommandInfo &
   (
-    | { name: "/new" | "/exit" | "/compact"; run: () => void }
+    | { name: "/new" | "/exit" | "/compact" | "/pin" | "/archive"; run: () => void }
     | { name: "/rename"; run: (title: string) => void }
   );
 

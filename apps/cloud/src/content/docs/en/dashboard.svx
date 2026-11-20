@@ -60,6 +60,8 @@ Type `/` in the composer to see commands available in the current context:
 | `/rename` | Rename the current Session |
 | `/compact` | Summarize older context while the Session is idle, when supported |
 | `/exit` | End Pontia's active control of the current Session |
+| `/pin` | Pin or unpin the current Session |
+| `/archive` | Archive or unarchive the current Session |
 
 `/exit` ends Pontia's control of the Session. The Agent Client manages the lifecycle and storage of its native conversation.
 

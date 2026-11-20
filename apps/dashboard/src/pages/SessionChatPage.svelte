@@ -65,6 +65,10 @@
     loadSessionDetail,
     interruptSession,
     terminateSession,
+    pinSession,
+    unpinSession,
+    archiveSession,
+    unarchiveSession,
     resumeSession,
     sessionDetail,
     sessionDetailLoading,
@@ -874,6 +878,27 @@
     }
   }
 
+  async function toggleSelectedSessionManagement(command: '/pin' | '/archive'): Promise<void> {
+    if (!selectedSession || actionBusy) return
+    const session = selectedSession
+    const sessionId = session.session_id
+    actionBusy = true
+    actionError = null
+    try {
+      if (command === '/pin') {
+        if (session.archived_at) return
+        await (session.pinned_at ? unpinSession : pinSession)(sessionId)
+      } else {
+        await (session.archived_at ? unarchiveSession : archiveSession)(sessionId)
+      }
+      if (selectedSessionId === sessionId && $chatDraft.trim() === command) clearChatDraft()
+    } catch (error) {
+      if (selectedSessionId === sessionId) actionError = error instanceof Error ? error.message : String(error)
+    } finally {
+      actionBusy = false
+    }
+  }
+
   async function interruptSelectedSession(): Promise<void> {
     if (!selectedSessionId) return
     actionBusy = true
@@ -1190,6 +1215,8 @@
           onRename={(title) => void renameSelectedSession(title)}
           onExit={() => void exitSelectedSession()}
           onCompact={() => void compactSelectedSession()}
+          onTogglePin={() => void toggleSelectedSessionManagement('/pin')}
+          onToggleArchive={() => void toggleSelectedSessionManagement('/archive')}
           onInterrupt={() => void interruptSelectedSession()}
           onFocus={() => void refreshCurrentSessionGitStatus()}
           onRefreshGitStatus={() => void refreshCurrentSessionGitStatus()}

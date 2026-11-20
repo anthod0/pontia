@@ -65,6 +65,8 @@
     { name: '/rename', description: $t('chat.renameCurrent'), disabledReason: $t('chat.noCurrent'), run: () => {} },
     { name: '/compact', description: $t('compaction.description'), disabledReason: $t('chat.noCurrent'), run: () => {} },
     { name: '/exit', description: $t('chat.endCurrent'), disabledReason: $t('chat.noCurrent'), run: () => {} },
+    { name: '/pin', description: $t('chat.pinCurrent'), disabledReason: $t('chat.noCurrent'), run: () => {} },
+    { name: '/archive', description: $t('chat.archiveCurrent'), disabledReason: $t('chat.noCurrent'), run: () => {} },
   ])
 </script>
 

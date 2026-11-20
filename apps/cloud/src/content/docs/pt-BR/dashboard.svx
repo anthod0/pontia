@@ -60,6 +60,8 @@ Digite `/` no compositor para ver os comandos disponíveis no contexto atual:
 | `/rename` | Renomeia a Session atual |
 | `/compact` | Resume o contexto mais antigo enquanto a Session está ociosa, quando suportado |
 | `/exit` | Encerra o controle ativo do Pontia sobre a Session atual |
+| `/pin` | Fixa ou desafixa a Session atual |
+| `/archive` | Arquiva ou desarquiva a Session atual |
 
 `/exit` encerra o controle do Pontia sobre a Session. O Agent Client gerencia o ciclo de vida e o armazenamento da conversa nativa dele.
 

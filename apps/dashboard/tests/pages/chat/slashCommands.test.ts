@@ -139,8 +139,78 @@ test.each(["exited", "error"])(
 );
 
 test.each([
+  { command: "/pin", label: "Pin", overrides: {}, called: "pinSession" },
+  {
+    command: "/pin",
+    label: "Unpin",
+    overrides: { pinned_at: "2026-05-14T00:00:00Z" },
+    called: "unpinSession",
+  },
+  { command: "/archive", label: "Archive", overrides: {}, called: "archiveSession" },
+  {
+    command: "/archive",
+    label: "Unarchive",
+    overrides: { archived_at: "2026-05-14T00:00:00Z" },
+    called: "unarchiveSession",
+  },
+] as const)(
+  "$command toggles to $label, keeps the page, and clears the command",
+  async ({ command, label, overrides, called }) => {
+    const selected = renderChat(command, overrides);
+    await fireEvent.click(await screen.findByRole("button", { name: label }));
+    await waitFor(() => expect(get(chatDraft)).toBe(""));
+    expect(mocks[called]).toHaveBeenCalledExactlyOnceWith(selected.session_id);
+    for (const other of [
+      "pinSession",
+      "unpinSession",
+      "archiveSession",
+      "unarchiveSession",
+    ] as const) {
+      if (other !== called) expect(mocks[other]).not.toHaveBeenCalled();
+    }
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  },
+);
+
+test("/pin is unavailable for an archived session", async () => {
+  renderChat("/pin", { archived_at: "2026-05-14T00:00:00Z" });
+  expect(await screen.findByRole("button", { name: "Pin" })).toBeDisabled();
+  await fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+  expect(mocks.pinSession).not.toHaveBeenCalled();
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+});
+
+test("failed /archive preserves the command for retry and shows the error", async () => {
+  mocks.archiveSession.mockRejectedValueOnce(new Error("Archive failed"));
+  renderChat("/archive");
+  await fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Archive failed");
+  expect(get(chatDraft)).toBe("/archive");
+});
+
+test("chat actions pin and archive the current session without submitting a message", async () => {
+  const selected = renderChat("");
+  await openChatActions();
+  await fireEvent.click(within(await screen.findByRole("menu", { hidden: true })).getByText("Pin"));
+  await waitFor(() =>
+    expect(mocks.pinSession).toHaveBeenCalledExactlyOnceWith(selected.session_id),
+  );
+  await openChatActions();
+  await fireEvent.click(
+    within(await screen.findByRole("menu", { hidden: true })).getByText("Archive"),
+  );
+  await waitFor(() =>
+    expect(mocks.archiveSession).toHaveBeenCalledExactlyOnceWith(selected.session_id),
+  );
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+});
+
+test.each([
   ["/exit", "Exit"],
   ["/rename New title", "Rename"],
+  ["/pin", "Pin"],
+  ["/archive", "Archive"],
 ])(
   "new chat disables %s and /new clears the prompt while preserving workspace selection",
   async (value, label) => {
@@ -227,19 +297,19 @@ test("chat actions prepares rename and focuses the input without executing it", 
   expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
 });
 
-test.each([
-  { state: "exited" },
-  { state: "error" },
-])("chat actions hides unavailable operations: %j", async (overrides) => {
-  renderChat("", overrides);
-  await openChatActions();
-  const menu = within(await screen.findByRole("menu", { hidden: true }));
-  if (overrides.state) expect(menu.queryByText("Exit")).not.toBeInTheDocument();
-  await fireEvent.click(menu.getByText("New chat"));
-  expect(mocks.navigate).toHaveBeenCalledWith("/", { workspace: "workspace-1" });
-  expect(mocks.terminateSession).not.toHaveBeenCalled();
-  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
-});
+test.each([{ state: "exited" }, { state: "error" }])(
+  "chat actions hides unavailable operations: %j",
+  async (overrides) => {
+    renderChat("", overrides);
+    await openChatActions();
+    const menu = within(await screen.findByRole("menu", { hidden: true }));
+    if (overrides.state) expect(menu.queryByText("Exit")).not.toBeInTheDocument();
+    await fireEvent.click(menu.getByText("New chat"));
+    expect(mocks.navigate).toHaveBeenCalledWith("/", { workspace: "workspace-1" });
+    expect(mocks.terminateSession).not.toHaveBeenCalled();
+    expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+  },
+);
 
 test("a model fact refreshes session metadata even when native history is available", async () => {
   const selected = renderChat("", { model: "model-a" });

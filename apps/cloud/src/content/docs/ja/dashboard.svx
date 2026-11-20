@@ -60,6 +60,8 @@ Inbox は、配信待ちのメッセージや Agent Client がキューに入れ
 | `/rename` | 現在の Session の名前を変更します |
 | `/compact` | Session がアイドル状態のときに古いコンテキストを要約します（対応している場合） |
 | `/exit` | 現在の Session に対する Pontia のアクティブな制御を終了します |
+| `/pin` | 現在の Session をピン留め、またはピン留めを解除します |
+| `/archive` | 現在の Session をアーカイブ、またはアーカイブを解除します |
 
 `/exit` は、Session に対する Pontia の制御を終了します。ネイティブの会話のライフサイクルと保存は Agent Client が管理します。
 

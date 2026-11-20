@@ -60,6 +60,8 @@ Agent 可以运行 `pontia send-file PATH` 从其 Session 中共享文件。文�
 | `/rename` | 重命名当前 Session |
 | `/compact` | 在 Session 空闲时总结较早的上下文（如果支持） |
 | `/exit` | 结束 Pontia 对当前 Session 的主动控制 |
+| `/pin` | 置顶或取消置顶当前 Session |
+| `/archive` | 归档或取消归档当前 Session |
 
 `/exit` 会结束 Pontia 对该 Session 的控制。原生对话的生命周期和存储由 Agent Client 管理。
 

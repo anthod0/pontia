@@ -9,6 +9,10 @@
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import SignOutIcon from 'phosphor-svelte/lib/SignOutIcon'
+  import PushPinIcon from 'phosphor-svelte/lib/PushPinIcon'
+  import PushPinSlashIcon from 'phosphor-svelte/lib/PushPinSlashIcon'
+  import ArchiveIcon from 'phosphor-svelte/lib/ArchiveIcon'
+  import BoxArrowUpIcon from 'phosphor-svelte/lib/BoxArrowUpIcon'
   import DotsThreeVerticalIcon from 'phosphor-svelte/lib/DotsThreeVerticalIcon'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
@@ -97,19 +101,23 @@
   const compact = $derived(fullscreen && !multiline)
   let uploadPicker = $state<{ choose: () => void } | null>(null)
   let fullscreenUploadPicker = $state<{ choose: () => void } | null>(null)
-  const commandActions: Record<ChatCommand['name'], { label: string; icon: typeof NotePencilIcon }> = $derived({
-    '/new': { label: $t('chat.new'), icon: NotePencilIcon },
-    '/rename': { label: $t('common.rename'), icon: PencilSimpleIcon },
-    '/exit': { label: $t('common.exit'), icon: SignOutIcon },
-    '/compact': { label: $t('compaction.action'), icon: StackSimpleIcon },
-  })
+  function commandActionFor(item: ChatCommand): { label: string; icon: typeof NotePencilIcon } {
+    switch (item.name) {
+      case '/new': return { label: $t('chat.new'), icon: NotePencilIcon }
+      case '/rename': return { label: $t('common.rename'), icon: PencilSimpleIcon }
+      case '/exit': return { label: $t('common.exit'), icon: SignOutIcon }
+      case '/compact': return { label: $t('compaction.action'), icon: StackSimpleIcon }
+      case '/pin': return item.active ? { label: $t('sessions.unpin'), icon: PushPinSlashIcon } : { label: $t('sessions.pin'), icon: PushPinIcon }
+      case '/archive': return item.active ? { label: $t('common.unarchive'), icon: BoxArrowUpIcon } : { label: $t('common.archive'), icon: ArchiveIcon }
+    }
+  }
   const mentionIdentities = new Map<string, FilePickerFileView>()
   let fullscreenEditor = $state<{ focusEnd: () => void } | null>(null)
   let editor = $state<{ focusEnd: () => void } | null>(null)
   let focusCommandInput = false
   const availableCommands = $derived(startSession ? [] : commands.filter((item) => !item.disabledReason))
   const command = $derived(findChatCommand(value, commands))
-  const commandAction = $derived(command ? commandActions[command.name] : undefined)
+  const commandAction = $derived(command ? commandActionFor(command) : undefined)
   const commandArgument = $derived(command ? value.trim().slice(command.name.length).trim() : '')
   const cannotSubmit = $derived(disabled || busy || sending || (command ? Boolean(command.disabledReason) || (command.name === '/rename' && !commandArgument) : submitDisabled || uploadBlocked || (!value.trim() && completedFiles.length === 0)))
 
@@ -261,7 +269,7 @@
             {#if availableCommands.length > 0}<DropdownMenu.Separator />{/if}
           {/if}
           {#each availableCommands as item (item.name)}
-            {@const action = commandActions[item.name]}
+            {@const action = commandActionFor(item)}
             <DropdownMenu.Item variant={item.name === '/exit' ? 'destructive' : 'default'} onSelect={() => chooseMenuCommand(item)}>
               <action.icon class="size-4" />
               <span class="min-w-0 flex-1">

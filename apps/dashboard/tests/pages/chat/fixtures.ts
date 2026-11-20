@@ -106,6 +106,10 @@ const mocks = vi.hoisted(() => {
     resumeSession: vi.fn(),
     interruptSession: vi.fn(),
     terminateSession: vi.fn(),
+    pinSession: vi.fn(),
+    unpinSession: vi.fn(),
+    archiveSession: vi.fn(),
+    unarchiveSession: vi.fn(),
     updateSessionTitle: vi.fn(),
     createSession: vi.fn(),
     loadSessionTimeline: vi.fn(async (_sessionId: string) => null),
@@ -238,6 +242,10 @@ vi.mock("../../../src/stores/sessions", async (importOriginal) => {
     resumeSession: mocks.resumeSession,
     interruptSession: mocks.interruptSession,
     terminateSession: mocks.terminateSession,
+    pinSession: mocks.pinSession,
+    unpinSession: mocks.unpinSession,
+    archiveSession: mocks.archiveSession,
+    unarchiveSession: mocks.unarchiveSession,
     updateSessionTitle: mocks.updateSessionTitle,
     createSession: async (input: import("../../../src/api/types").CreateSessionInput) => {
       const result = await mocks.createSession(input);

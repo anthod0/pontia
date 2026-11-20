@@ -41,6 +41,8 @@
     onRename: (title: string) => void
     onExit: () => void
     onCompact: () => void
+    onTogglePin: () => void
+    onToggleArchive: () => void
   }
 
   let {
@@ -69,6 +71,8 @@
     onRename,
     onExit,
     onCompact,
+    onTogglePin,
+    onToggleArchive,
   }: Props = $props()
 
   let sharedFilesOpen = $state(false)
@@ -84,6 +88,19 @@
       description: $t('chat.endCurrent'),
       disabledReason: isTerminalSession(session) ? $t('chat.alreadyEnded') : undefined,
       run: onExit,
+    },
+    {
+      name: '/pin',
+      description: session.pinned_at ? $t('chat.unpinCurrent') : $t('chat.pinCurrent'),
+      disabledReason: session.archived_at ? $t('chat.archivedCannotPin') : undefined,
+      active: Boolean(session.pinned_at),
+      run: onTogglePin,
+    },
+    {
+      name: '/archive',
+      description: session.archived_at ? $t('chat.unarchiveCurrent') : $t('chat.archiveCurrent'),
+      active: Boolean(session.archived_at),
+      run: onToggleArchive,
     },
   ])
 </script>
