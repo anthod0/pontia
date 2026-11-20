@@ -32,7 +32,11 @@ pub struct HttpState {
 
 impl HttpState {
     pub fn new(app: AppState, dashboard: ResolvedDashboard) -> Self {
-        let bots = ConversationService::new(app.control().clone());
+        let bots = ConversationService::new(
+            app.control().clone(),
+            std::env::home_dir(),
+            app.workspace_browser().roots,
+        );
         let helpers = pontia_bot::helpers::HelperService::new(app.control().clone(), bots.clone());
         let dreaming =
             pontia_bot::dreaming::DreamingService::new(app.control().clone(), bots.clone());

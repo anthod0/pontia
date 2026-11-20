@@ -34,21 +34,34 @@ pub struct HandoffService {
     pool: SqlitePool,
     user: UserService,
     queries: ControlQueryService,
+    roots: Vec<pontia_config::WorkspaceRootConfig>,
 }
 
 impl HandoffService {
-    pub fn new(pool: SqlitePool, user: UserService, queries: ControlQueryService) -> Self {
+    pub fn new(
+        pool: SqlitePool,
+        user: UserService,
+        queries: ControlQueryService,
+        roots: Vec<pontia_config::WorkspaceRootConfig>,
+    ) -> Self {
         Self {
             pool,
             user,
             queries,
+            roots,
         }
     }
 
     /// Reads historical context only. Deliver the current input separately, including retries.
     /// The caller supplies helper associations; native conversations are never queried.
-    pub async fn generate(&self, bot_id: &str, helpers: &[HelperContext]) -> Result<String, Error> {
-        self.generate_for_input(bot_id, helpers, &[]).await
+    pub async fn generate(
+        &self,
+        bot_id: &str,
+        helpers: &[HelperContext],
+        default_workspace_id: &str,
+    ) -> Result<String, Error> {
+        self.generate_for_input(bot_id, helpers, &[], default_workspace_id)
+            .await
     }
 
     pub(crate) async fn generate_for_input(
@@ -56,6 +69,7 @@ impl HandoffService {
         bot_id: &str,
         helpers: &[HelperContext],
         pending_message_ids: &[String],
+        default_workspace_id: &str,
     ) -> Result<String, Error> {
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bots WHERE bot_id = ?)")
             .bind(bot_id)
@@ -98,6 +112,8 @@ impl HandoffService {
         Ok(render::document(
             &user,
             &workspaces,
+            default_workspace_id,
+            &self.roots,
             &memories,
             &helpers,
             &messages,

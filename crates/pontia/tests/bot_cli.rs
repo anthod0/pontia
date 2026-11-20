@@ -219,6 +219,26 @@ async fn neighbor_continuation_preserves_origin_workspace_and_page_size() {
 async fn named_arguments_reject_incomplete_or_invalid_operations_before_sending_requests() {
     let mut f = Fixture::new(json!({})).await;
     for args in [
+        vec![
+            "helper",
+            "create",
+            "--description",
+            "task",
+            "--message",
+            "start",
+        ],
+        vec![
+            "helper",
+            "create",
+            "--description",
+            "task",
+            "--message",
+            "start",
+            "--workspace-id",
+            "project",
+            "--temporary",
+            "task",
+        ],
         vec!["update-user", "--old-text", ""],
         vec!["workspace", "describe", "--workspace-id", "project"],
         vec![
@@ -296,6 +316,32 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
             assert_eq!(request["command"]["input"]["profile_version"], "2");
         }
     }
+}
+
+#[tokio::test]
+async fn temporary_helper_sends_the_task_directory_name_as_the_location() {
+    let mut f = Fixture::new(json!({"delivery":{"status":"accepted"}})).await;
+    let name = "2026-11-20_汇率查询";
+    let output = f
+        .cli(&[
+            "helper",
+            "create",
+            "--temporary",
+            name,
+            "--description",
+            name,
+            "--message",
+            "Find the exchange rate",
+        ])
+        .await;
+    assert!(output.status.success());
+    assert_eq!(
+        f.requests.try_recv().unwrap()["command"]["input"],
+        json!({
+            "temporary":name, "description":name, "message":"Find the exchange rate",
+            "profile_id":null, "profile_version":null
+        })
+    );
 }
 
 #[tokio::test]

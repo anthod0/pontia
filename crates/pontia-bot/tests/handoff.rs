@@ -33,6 +33,7 @@ impl Fixture {
             pool.clone(),
             UserService::new(root.path()),
             ControlQueryService::new(pool.clone()),
+            vec![],
         );
         Self {
             root,
@@ -61,7 +62,7 @@ impl Fixture {
     }
 
     async fn generate(&self) -> String {
-        self.service.generate("a", &[]).await.unwrap()
+        self.service.generate("a", &[], "default-id").await.unwrap()
     }
 }
 
@@ -81,7 +82,7 @@ fn ids<'a>(text: &'a str, prefix: &str) -> Vec<&'a str> {
 }
 
 #[tokio::test]
-async fn first_start_has_all_six_sections_and_does_not_create_user_file() {
+async fn first_start_has_all_sections_and_does_not_create_user_file() {
     let f = Fixture::new().await;
     let doc = f.generate().await;
     assert_eq!(
@@ -92,6 +93,7 @@ async fn first_start_has_all_six_sections_and_does_not_create_user_file() {
             "## Instructions",
             "## User",
             "## Workspace",
+            "## Workspace roots",
             "## Memory",
             "## Helpers",
             "## Recent chat"
@@ -99,7 +101,7 @@ async fn first_start_has_all_six_sections_and_does_not_create_user_file() {
     );
     assert!(!f.root.path().join("bot/USER.md").exists());
     assert!(matches!(
-        f.service.generate("missing", &[]).await,
+        f.service.generate("missing", &[], "default-id").await,
         Err(pontia_bot::handoff::Error::Control(
             pontia_core::Error::NotFound(_)
         ))
@@ -271,7 +273,7 @@ async fn recent_chat_selects_sixty_visible_messages_for_this_bot_in_chronologica
             .bind(internal).bind(internal).execute(&f.pool).await.is_err());
     }
     assert!(!f.generate().await.contains("internal-secret"));
-    let other = f.service.generate("b", &[]).await.unwrap();
+    let other = f.service.generate("b", &[], "default-id").await.unwrap();
     assert_eq!(
         ids(section(&other, "Recent chat"), "Historical message ID: "),
         ["msg-b-99"]
@@ -295,12 +297,16 @@ async fn helpers_include_idle_and_error_but_exclude_exited_dreaming_and_other_bo
             bot_id: bot.into(),
             session_id: session.into(),
             role,
-            workspace_id: (session == "running").then(|| "project".into()),
+            workspace_id: Some("project".into()),
             state,
             description: Some(format!("work-{session}")),
         });
     }
-    let doc = f.service.generate("a", &helpers).await.unwrap();
+    let doc = f
+        .service
+        .generate("a", &helpers, "default-id")
+        .await
+        .unwrap();
     assert_eq!(
         ids(section(&doc, "Helpers"), "Session ID: "),
         ["error", "idle", "retrieval", "running"]
@@ -311,12 +317,23 @@ async fn helpers_include_idle_and_error_but_exclude_exited_dreaming_and_other_bo
     );
     assert_eq!(
         ids(section(&doc, "Helpers"), "Workspace ID: "),
-        ["unbound", "unbound", "unbound", "project"]
+        ["project", "project", "project"]
     );
+    assert!(
+        section(&doc, "Helpers")
+            .contains("Session ID: retrieval\nRead-only deep retrieval\nState: idle")
+    );
+    assert!(!doc.contains("unbound"));
     assert!(section(&doc, "Helpers").contains("work-idle"));
     assert!(!section(&doc, "Recent chat").contains("work-"));
     helpers.reverse();
-    assert_eq!(f.service.generate("a", &helpers).await.unwrap(), doc);
+    assert_eq!(
+        f.service
+            .generate("a", &helpers, "default-id")
+            .await
+            .unwrap(),
+        doc
+    );
 }
 
 #[test]

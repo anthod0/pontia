@@ -300,13 +300,11 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
         .current_session_id
         .unwrap();
     assert_ne!(a_session, b_session);
-    assert!(
-        control
-            .queries()
-            .list_workspaces()
-            .await
-            .unwrap()
-            .is_empty()
+    let workspaces = control.queries().list_workspaces().await.unwrap();
+    assert_eq!(workspaces.len(), 1);
+    assert_eq!(
+        Path::new(&workspaces[0].canonical_path),
+        _root.path().join("Pontia").canonicalize().unwrap()
     );
 
     let turns = control.queries().list_turns(&a_session).await.unwrap();
@@ -416,7 +414,7 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
     let chat = service.chat(a).await.unwrap();
     assert_eq!(chat.messages.last().unwrap().content, "Complete\nreply");
     assert_eq!(chat.bot.working_on.as_deref(), Some("Checking"));
-    let restarted = ConversationService::new(control.clone());
+    let restarted = test_conversation(control.clone());
     assert_eq!(
         restarted.chat(a).await.unwrap().bot.working_on.as_deref(),
         Some("Checking")
@@ -434,7 +432,7 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
     assert!(!a_handoff.contains("wake A"));
     assert!(!b_handoff.contains("historical failure"));
     let delivered = client.inputs.lock().unwrap().len();
-    let recovered = ConversationService::new(control);
+    let recovered = test_conversation(control);
     let chat = recovered.chat(a).await.unwrap();
     assert_eq!(chat.messages[0].status, MessageStatus::Failed);
     assert_eq!(client.inputs.lock().unwrap().len(), delivered);
@@ -591,6 +589,16 @@ type Fixture = (
     ConversationService,
 );
 
+fn test_conversation(control: AgentControl) -> ConversationService {
+    let home = control.pontia_home().to_owned();
+    let roots = vec![pontia_config::WorkspaceRootConfig {
+        root_id: "projects".into(),
+        label: "My projects".into(),
+        path: home.join("projects").display().to_string(),
+    }];
+    ConversationService::new(control, Some(home), roots)
+}
+
 async fn fixture() -> Fixture {
     fixture_with_client(&BOT_CLIENT).await
 }
@@ -625,12 +633,14 @@ async fn fixture_with_client(
     let control = AgentControl::builder(pool.clone(), root.path().to_owned())
         .clients(registry)
         .build();
-    let service = ConversationService::new(control.clone());
+    let service = test_conversation(control.clone());
 
     (root, pool, client, control, service)
 }
 
-use pontia_bot::helpers::{CreateHelper, HelperCommand, HelperRequest, HelperService};
+use pontia_bot::helpers::{
+    CreateHelper, HelperCommand, HelperLocation, HelperRequest, HelperService,
+};
 
 async fn bot(service: &ConversationService) -> (String, String) {
     let bot = service
@@ -654,7 +664,7 @@ async fn helper(service: &HelperService, session: &str) -> String {
         .execute(HelperRequest {
             session_id: session.into(),
             command: HelperCommand::Create(CreateHelper {
-                workspace_id: None,
+                location: HelperLocation::Temporary("2026-11-20_task".into()),
                 profile_id: None,
                 profile_version: None,
                 description: "assigned work".into(),
@@ -912,7 +922,7 @@ async fn helper_remains_addressable_when_first_delivery_fails_or_is_unknown() {
             .execute(HelperRequest {
                 session_id: session.clone(),
                 command: HelperCommand::Create(CreateHelper {
-                    workspace_id: None,
+                    location: HelperLocation::Temporary("2026-11-20_task".into()),
                     profile_id: None,
                     profile_version: None,
                     description: task.into(),
@@ -933,10 +943,9 @@ async fn helper_remains_addressable_when_first_delivery_fails_or_is_unknown() {
         );
         let inputs = client.inputs.lock().unwrap();
         let mut delivered = inputs.iter().filter(|input| input.session_id == id);
-        assert_eq!(
-            delivered.next().unwrap().input,
-            format!("Source: Bot\nSession: {session}\n\n{task}")
-        );
+        let input = &delivered.next().unwrap().input;
+        assert!(input.starts_with(&format!("Source: Bot\nSession: {session}\n\n")));
+        assert!(input.ends_with(&format!("\n\n{task}")));
         assert!(delivered.next().is_none());
     }
 }
@@ -1005,7 +1014,7 @@ async fn helper_delivery_results_are_not_retried_and_failed_reports_survive_rest
         .build();
     let recovered = HelperService::new(
         recovered_control.clone(),
-        ConversationService::new(recovered_control),
+        test_conversation(recovered_control),
     );
     *client.blocked.lock().unwrap() = None;
     recovered.reconcile().await.unwrap();
@@ -1063,7 +1072,7 @@ async fn reliable_helper_failures_are_durable_and_event_replay_does_not_duplicat
         .execute(&pool)
         .await
         .unwrap();
-    let recovered = HelperService::new(control.clone(), ConversationService::new(control.clone()));
+    let recovered = HelperService::new(control.clone(), test_conversation(control.clone()));
     *client.blocked.lock().unwrap() = None;
     recovered.reconcile().await.unwrap();
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bot_notifications")
@@ -1119,7 +1128,7 @@ async fn running_bots_receive_new_workspaces_once_and_initial_context_does_not_w
         );
     }
     workspace_service.register(register("new")).await.unwrap();
-    let recovered = HelperService::new(control.clone(), ConversationService::new(control));
+    let recovered = HelperService::new(control.clone(), test_conversation(control));
     recovered.reconcile().await.unwrap();
     assert_eq!(client.inputs.lock().unwrap().len(), before + 1);
 }
@@ -1149,7 +1158,7 @@ async fn helper_launch_pins_the_selected_profile_and_keeps_the_initialized_model
         .execute(HelperRequest {
             session_id: session.clone(),
             command: HelperCommand::Create(CreateHelper {
-                workspace_id: None,
+                location: HelperLocation::Temporary("2026-11-20_task".into()),
                 profile_id: Some("specialist".into()),
                 profile_version: Some("2".into()),
                 description: "specialized task".into(),

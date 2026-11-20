@@ -246,9 +246,18 @@ pub(super) enum HelperCommand {
     },
     /// Start a helper using an Agent Profile (defaults to this Bot's helper Profile)
     Create {
-        /// Start in this active Workspace; omit to use a private helper directory
-        #[arg(long)]
+        /// Start in this active project Workspace
+        #[arg(
+            long,
+            required_unless_present = "temporary",
+            conflicts_with = "temporary"
+        )]
+        #[serde(skip_serializing_if = "Option::is_none")]
         workspace_id: Option<String>,
+        /// Keep this task's files in ~/Pontia/NAME
+        #[arg(long, value_name = "NAME")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        temporary: Option<String>,
         #[arg(long)]
         profile_id: Option<String>,
         #[arg(long)]

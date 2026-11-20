@@ -1,9 +1,14 @@
 use crate::identity::{BotIdentity, BotRole, IdentityError};
+use pontia_agent_control::workspaces::{
+    WorkspaceRecord, require_active_workspace, upsert_canonical_workspace,
+};
 use pontia_agent_control::{
     WorkspaceView,
     workspaces::{RegisterWorkspaceRequest, WorkspaceService},
 };
+use pontia_core::Error as ControlError;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -64,5 +69,20 @@ impl WorkspaceCommands {
                     .await?
             }
         })
+    }
+}
+
+pub(crate) async fn initialize_default(
+    pool: &sqlx::SqlitePool,
+    path: &Path,
+) -> pontia_core::Result<WorkspaceRecord> {
+    tokio::fs::create_dir_all(path).await?;
+    let canonical = tokio::fs::canonicalize(path).await?;
+    let path = canonical.to_string_lossy();
+    match require_active_workspace(pool, &path).await {
+        Err(ControlError::NotFound(_) | ControlError::StateConflict(_)) => {
+            upsert_canonical_workspace(pool, &path, None).await
+        }
+        result => result,
     }
 }

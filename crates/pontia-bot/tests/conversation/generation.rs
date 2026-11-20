@@ -62,7 +62,7 @@ async fn both_upper_limits_wait_for_idle_and_keep_helpers_and_work_status() {
             Some(old.as_str())
         );
         finish(&control, &old, EventType::TurnCompleted).await;
-        let recovered = ConversationService::new(control.clone());
+        let recovered = test_conversation(control.clone());
         reconcile(&recovered).await;
         let new = current(&recovered, &id).await.unwrap();
         assert_ne!(new, old);
@@ -151,7 +151,7 @@ async fn idle_timer_resets_on_execution_and_helper_wakes_a_new_generation() {
         .unwrap();
     assert_eq!(current(&conversation, &id).await, None);
     let before = client.inputs.lock().unwrap().len();
-    let recovered = ConversationService::new(control.clone());
+    let recovered = test_conversation(control.clone());
     reconcile(&recovered).await;
     assert_eq!(client.inputs.lock().unwrap().len(), before);
     let helpers = HelperService::new(control.clone(), recovered.clone());
@@ -201,7 +201,7 @@ async fn launch_failure_keeps_old_pointer_and_failed_input_requires_explicit_ret
         .update(&id, bot_configuration("new configuration", MODEL))
         .await
         .unwrap();
-    let recovered = ConversationService::new(control.clone());
+    let recovered = test_conversation(control.clone());
     reconcile(&recovered).await;
     let new = current(&recovered, &id).await.unwrap();
     assert_ne!(new, old);
@@ -313,7 +313,7 @@ async fn recovery_retires_uncommitted_sessions_and_never_revives_them_from_an_em
         .set_current_session(&id, None)
         .await
         .unwrap();
-    let recovered = ConversationService::new(control.clone());
+    let recovered = test_conversation(control.clone());
     reconcile(&recovered).await;
     assert_eq!(current(&recovered, &id).await, None);
     assert_eq!(
@@ -399,7 +399,7 @@ async fn resumed_execution_rejects_the_switch_and_recovery_cleans_the_unused_rep
         .unwrap();
     assert!(GenericRuntimeManager.is_alive(&snapshot.runtimes[0].runtime_id));
     finish(&control, &old, EventType::TurnCompleted).await;
-    reconcile(&ConversationService::new(control.clone())).await;
+    reconcile(&test_conversation(control.clone())).await;
     assert_ne!(
         current(&conversation, &id).await.as_deref(),
         Some(old.as_str())
@@ -468,7 +468,7 @@ async fn failed_handoff_preserves_helper_failure_notice_and_never_replays_origin
         .update(&id, bot_configuration("Bot", MODEL))
         .await
         .unwrap();
-    let recovered = ConversationService::new(control.clone());
+    let recovered = test_conversation(control.clone());
     reconcile(&recovered).await;
     let new = current(&recovered, &id).await.unwrap();
     let helpers = HelperService::new(control, recovered.clone());
@@ -539,7 +539,7 @@ async fn unknown_exit_keeps_the_old_pointer_and_does_not_deliver_the_waiting_inp
         .await
         .unwrap();
     let _exits = report_exits(&control);
-    let recovered = ConversationService::new(control.clone());
+    let recovered = test_conversation(control.clone());
     reconcile(&recovered).await;
     assert_eq!(current(&recovered, &id).await, None);
     recovered.send(&id, "after confirmed exit").await.unwrap();
@@ -623,7 +623,7 @@ async fn recovery_releases_interrupted_and_error_orphan_runtimes() {
             .set_current_session(&id, None)
             .await
             .unwrap();
-        reconcile(&ConversationService::new(control.clone())).await;
+        reconcile(&test_conversation(control.clone())).await;
         let snapshot = control
             .queries()
             .session_snapshot(&orphan)
@@ -700,7 +700,7 @@ async fn helper_waiting_on_unknown_idle_exit_retains_uncertainty_and_is_not_repl
         0
     );
     let _exits = report_exits(&control);
-    let recovered = ConversationService::new(control.clone());
+    let recovered = test_conversation(control.clone());
     reconcile(&recovered).await;
     HelperService::new(control, recovered)
         .reconcile()
@@ -735,7 +735,7 @@ async fn idle_timer_persists_across_restart_and_resets_after_fast_turn() {
     );
 
     // Across restart, elapsed time continues from the persisted idle_since.
-    let recovered = ConversationService::new(control.clone());
+    let recovered = test_conversation(control.clone());
     recovered
         .reconcile_generations(t0 + Duration::seconds(299))
         .await
@@ -756,7 +756,7 @@ async fn idle_timer_persists_across_restart_and_resets_after_fast_turn() {
     );
 
     // Restarting again keeps counting from the reset timer and retires at 5 minutes.
-    let restarted = ConversationService::new(control.clone());
+    let restarted = test_conversation(control.clone());
     restarted
         .reconcile_generations(t1 + Duration::seconds(299))
         .await

@@ -106,7 +106,7 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
             .iter()
             .any(|s| s.session_id == reader)
     );
-    let reopened = ConversationService::new(control.clone());
+    let reopened = test_conversation(control.clone());
     assert_eq!(
         reopened.resolve(&reader).await.unwrap().role,
         BotRole::Retrieval

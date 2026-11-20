@@ -36,6 +36,8 @@ fn data(text: &str) -> String {
 pub(super) fn document(
     user: &str,
     workspaces: &[WorkspaceView],
+    default_workspace_id: &str,
+    roots: &[pontia_config::WorkspaceRootConfig],
     memories: &[Memory],
     helpers: &[&HelperContext],
     messages: &[BotMessage],
@@ -55,12 +57,27 @@ pub(super) fn document(
     }
     for workspace in workspaces {
         output.push_str(&data(&format!(
-            "Workspace ID: {}\nPath: {}\nName: {}\nState: {}\nDescription: {}",
+            "Workspace ID: {}{}\nPath: {}\nName: {}\nState: {}\nDescription: {}",
             workspace.workspace_id,
+            if workspace.workspace_id == default_workspace_id {
+                "\nDefault Workspace"
+            } else {
+                ""
+            },
             workspace.canonical_path,
             workspace.name.as_deref().unwrap_or("None yet."),
             workspace.state,
             workspace.description.as_deref().unwrap_or("None yet."),
+        )));
+    }
+    output.push_str("## Workspace roots\n\n");
+    if roots.is_empty() {
+        output.push_str(NONE);
+    }
+    for root in roots {
+        output.push_str(&data(&format!(
+            "Root ID: {}\nPath: {}",
+            root.root_id, root.path
         )));
     }
     output.push_str(&bounded_section(
@@ -80,10 +97,18 @@ pub(super) fn document(
         output.push_str(NONE);
     }
     for helper in helpers {
+        let location = if helper.role == crate::identity::BotRole::Retrieval {
+            "Read-only deep retrieval\n".into()
+        } else {
+            helper
+                .workspace_id
+                .as_ref()
+                .map(|id| format!("Workspace ID: {id}\n"))
+                .unwrap_or_default()
+        };
         output.push_str(&data(&format!(
-            "Session ID: {}\nWorkspace ID: {}\nState: {}\nDescription: {}",
+            "Session ID: {}\n{location}State: {}\nDescription: {}",
             helper.session_id,
-            helper.workspace_id.as_deref().unwrap_or("unbound"),
             helper.state,
             helper.description.as_deref().unwrap_or("None yet."),
         )));

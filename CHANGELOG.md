@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `pontia bot helper create` now requires either `--workspace-id ID` for project work or `--temporary NAME` for a one-off task. Bots prepare the default Workspace at `~/Pontia` and keep each temporary task’s files in `~/Pontia/NAME`.
 - `pontia update` and `pontia uninstall` now list blocking Sessions by title, Agent Client, and Workspace with a plain reason, instead of Session IDs.
 
 ## [0.8.1] - 2026-11-20

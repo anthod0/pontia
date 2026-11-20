@@ -9,13 +9,115 @@ fn project_helper(session: &str, workspace_id: &str) -> HelperRequest {
     HelperRequest {
         session_id: session.into(),
         command: HelperCommand::Create(CreateHelper {
-            workspace_id: Some(workspace_id.into()),
+            location: HelperLocation::WorkspaceId(workspace_id.into()),
             profile_id: None,
             profile_version: None,
             description: "Project task".into(),
             message: "Start the project task".into(),
         }),
     }
+}
+
+fn temporary_helper(session: &str, name: &str) -> HelperRequest {
+    serde_json::from_value(json!({
+        "session_id": session, "command": {"action": "create", "input": {
+            "temporary": name, "description": format!("Report for {name}"), "message": "Write a report"
+        }}
+    }))
+    .unwrap()
+}
+
+#[tokio::test]
+async fn temporary_helpers_share_the_task_folder_and_appear_in_the_default_workspace() {
+    let (root, pool, client, control, conversation) = fixture().await;
+    let (_, main) = bot(&conversation).await;
+    let helpers = HelperService::new(control.clone(), conversation);
+    let default = root.path().join("Pontia");
+    let task = "2026-11-20_汇率查询";
+    let folder = default.join(task);
+    let workspace = pontia_agent_control::workspaces::require_active_workspace(
+        &pool,
+        default.to_str().unwrap(),
+    )
+    .await
+    .unwrap();
+    let error = helpers
+        .execute(project_helper(&main, &workspace.workspace_id))
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        pontia_bot::helpers::HelperError::Control(Error::Domain(_))
+    ));
+    let handoff = instructions(&control, &main).await;
+    assert!(handoff.contains(&format!(
+        "Workspace ID: {}\nDefault Workspace",
+        workspace.workspace_id
+    )));
+    assert!(handoff.contains(&format!(
+        "Root ID: projects\nPath: {}",
+        root.path().join("projects").display()
+    )));
+    let report = folder.join("previous-report.txt");
+    for assignment in 0..2 {
+        let response = helpers
+            .execute(temporary_helper(&main, task))
+            .await
+            .unwrap();
+        let id = response["session_id"].as_str().unwrap();
+        assert_eq!(
+            client.launch_directories.lock().unwrap()[id],
+            default.canonicalize().unwrap().to_str().unwrap()
+        );
+        assert!(
+            recent_project_ids(&pool, &workspace.workspace_id)
+                .await
+                .iter()
+                .any(|session| session == id)
+        );
+        if assignment == 0 {
+            std::fs::write(&report, "initial findings").unwrap();
+        } else {
+            assert_eq!(
+                std::fs::read_to_string(&report).unwrap(),
+                "initial findings"
+            );
+        }
+        let inputs = client.inputs.lock().unwrap();
+        let input = &inputs
+            .iter()
+            .find(|input| input.session_id == id)
+            .unwrap()
+            .input;
+        assert!(input.contains(folder.to_str().unwrap()));
+        assert!(input.ends_with("Write a report"));
+    }
+}
+
+#[tokio::test]
+async fn ordinary_creation_rejects_invalid_task_names_and_the_retrieval_profile() {
+    let (_root, _, _, control, conversation) = fixture().await;
+    let (id, main) = bot(&conversation).await;
+    let helpers = HelperService::new(control.clone(), conversation);
+    for name in ["", "one/two", ".", "..", "trailing/"] {
+        assert!(
+            helpers
+                .execute(temporary_helper(&main, name))
+                .await
+                .is_err(),
+            "{name:?}"
+        );
+    }
+    let mut request = temporary_helper(&main, "task");
+    let HelperCommand::Create(input) = &mut request.command else {
+        unreachable!()
+    };
+    input.profile_id = Some(pontia_bot::records::BotService::retrieval_profile_id(&id));
+    assert!(helpers.execute(request).await.is_err());
+    assert_eq!(
+        control.queries().list_owned_sessions("bot").await.unwrap(),
+        [main]
+    );
 }
 
 #[tokio::test]
@@ -39,18 +141,7 @@ async fn project_helpers_follow_workspace_filters_and_accept_steering_on_their_r
     }
     let private_root = root.path().join("bot").join(&bot_id).join("helpers");
     assert!(!private_root.exists());
-    let unbound = helper(&helpers, &main).await;
     let sessions = helpers.list(&bot_id).await.unwrap();
-    let private = sessions.iter().find(|s| s.session_id == unbound).unwrap();
-    assert_eq!(private.workspace_id, None);
-    assert!(
-        Path::new(private.workspace.as_ref().unwrap())
-            .starts_with(private_root.canonicalize().unwrap())
-    );
-    assert_eq!(
-        client.launch_directories.lock().unwrap().get(&unbound),
-        private.workspace.as_ref()
-    );
 
     for (project, id) in &projects {
         assert_eq!(
@@ -234,7 +325,7 @@ async fn failed_launcher_keeps_project_and_bot_ownership_in_list_and_next_handof
     assert_eq!(failed.workspace_id.as_ref(), Some(&project.workspace_id));
     assert_eq!(
         recent_project_ids(&pool, &project.workspace_id).await,
-        [failed.session_id.clone()]
+        std::slice::from_ref(&failed.session_id)
     );
     let runtime = control
         .queries()
@@ -276,4 +367,72 @@ async fn failed_launcher_keeps_project_and_bot_ownership_in_list_and_next_handof
         "Session ID: {}\nWorkspace ID: {}\nState: error",
         failed.session_id, project.workspace_id
     )));
+}
+
+#[tokio::test]
+async fn only_main_session_start_restores_the_default_directory_and_workspace() {
+    let (root, pool, _, control, conversation) = fixture().await;
+    let default = root.path().join("Pontia");
+    assert!(!default.exists());
+    let (_, main) = bot(&conversation).await;
+    let helpers = HelperService::new(control, conversation.clone());
+    let path = default.to_str().unwrap();
+    let canonical = default.canonicalize().unwrap();
+    let workspace =
+        upsert_canonical_workspace(&pool, canonical.to_str().unwrap(), Some("My tasks"))
+            .await
+            .unwrap();
+    std::fs::remove_dir(&default).unwrap();
+    assert!(
+        helpers
+            .execute(temporary_helper(&main, "task"))
+            .await
+            .is_err()
+    );
+    assert!(!default.exists());
+    bot(&conversation).await;
+    let restored = pontia_agent_control::workspaces::require_active_workspace(&pool, path)
+        .await
+        .unwrap();
+    assert_eq!(restored.workspace_id, workspace.workspace_id);
+    assert_eq!(restored.name.as_deref(), Some("My tasks"));
+    SqliteWorkspaceRepository::new(pool.clone())
+        .mark_deleted(&workspace.workspace_id)
+        .await
+        .unwrap();
+    assert!(
+        helpers
+            .execute(temporary_helper(&main, "task"))
+            .await
+            .is_err()
+    );
+    assert!(!default.join("task").exists());
+    bot(&conversation).await;
+    let restored = pontia_agent_control::workspaces::require_active_workspace(&pool, path)
+        .await
+        .unwrap();
+    assert_eq!(restored.workspace_id, workspace.workspace_id);
+    helpers
+        .execute(temporary_helper(&main, "task"))
+        .await
+        .unwrap();
+}
+
+#[test]
+fn external_helper_creation_requires_one_writable_location() {
+    for invalid in [
+        json!({}),
+        json!({"workspace_id":"one", "temporary":"two"}),
+        json!({"read_only":null}),
+    ] {
+        let mut input = json!({"message":"task","description":"test"});
+        input
+            .as_object_mut()
+            .unwrap()
+            .extend(invalid.as_object().unwrap().clone());
+        assert!(
+            serde_json::from_value::<HelperCommand>(json!({"action":"create", "input":input}))
+                .is_err()
+        );
+    }
 }

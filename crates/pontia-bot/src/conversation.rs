@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
@@ -118,23 +119,35 @@ pub struct ConversationService {
     records: BotService,
     messages: MessageService,
     handoff: HandoffService,
+    default_workspace: Option<PathBuf>,
     activity: Arc<Mutex<HashMap<String, Arc<Activity>>>>,
     generation_limits: GenerationLimits,
 }
 
 impl ConversationService {
-    pub fn new(control: AgentControl) -> Self {
+    pub fn new(
+        control: AgentControl,
+        user_home: Option<PathBuf>,
+        roots: Vec<pontia_config::WorkspaceRootConfig>,
+    ) -> Self {
         let pool = control.db();
         let records = BotService::new(pool.clone(), control.pontia_home(), control.clients());
         let user = UserService::new(control.pontia_home());
         Self {
             records,
             messages: MessageService::new(pool.clone()),
-            handoff: HandoffService::new(pool, user, control.queries()),
+            handoff: HandoffService::new(pool, user, control.queries(), roots),
+            default_workspace: user_home.map(|path| path.join("Pontia")),
             control,
             activity: Arc::default(),
             generation_limits: GenerationLimits::default(),
         }
+    }
+
+    pub(crate) fn default_workspace(&self) -> Result<&Path> {
+        self.default_workspace
+            .as_deref()
+            .ok_or_else(|| Error::Domain("Cannot locate the user's home directory".into()))
     }
 
     pub fn records(&self) -> &BotService {
@@ -437,6 +450,9 @@ impl ConversationService {
         }
         self.records.initialize(&bot.bot_id).await?;
         let directory = self.records.directory(&bot.bot_id).await?;
+        let default_workspace =
+            crate::workspaces::initialize_default(&self.control.db(), self.default_workspace()?)
+                .await?;
         crate::helpers::seed_workspaces(&self.control, &bot.bot_id).await?;
         let handoff = {
             let _recording = activity.recording.lock().await;
@@ -452,6 +468,7 @@ impl ConversationService {
                     &bot.bot_id,
                     &crate::helpers::contexts(&self.control, &bot.bot_id).await?,
                     &pending,
+                    &default_workspace.workspace_id,
                 )
                 .await
                 .map_err(|error| Error::Domain(format!("Cannot prepare Bot handoff: {error}")))?

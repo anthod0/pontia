@@ -4,12 +4,13 @@ pub(crate) use notifications::seed_workspaces;
 use pontia_agent_control::{
     AgentControl, AgentProfileService, SessionMessagesQuery, SessionOwnership, SessionView,
     TurnTimelineService,
+    workspaces::{require_active_workspace, require_active_workspace_id},
 };
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::SqlitePool;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -63,11 +64,21 @@ pub struct RetrieveMemories {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateHelper {
-    pub workspace_id: Option<String>,
+    #[serde(flatten)]
+    pub location: HelperLocation,
     pub profile_id: Option<String>,
     pub profile_version: Option<String>,
     pub description: String,
     pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HelperLocation {
+    WorkspaceId(String),
+    Temporary(String),
+    #[serde(skip)]
+    ReadOnly,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -138,7 +149,7 @@ impl HelperService {
                     &bot.bot_id,
                     &request.session_id,
                     CreateHelper {
-                        workspace_id: None,
+                        location: HelperLocation::ReadOnly,
                         profile_id: Some(BotService::retrieval_profile_id(&bot.bot_id)),
                         profile_version: input.profile_version,
                         description: input.message.clone(),
@@ -148,10 +159,19 @@ impl HelperService {
                 .await
                 .map_err(Into::into)
             }
-            HelperCommand::Create(input) => self
-                .create(&bot.bot_id, &request.session_id, input)
-                .await
-                .map_err(Into::into),
+            HelperCommand::Create(input) => {
+                if input.profile_id.as_deref()
+                    == Some(&BotService::retrieval_profile_id(&bot.bot_id))
+                {
+                    return Err(Error::Domain(
+                        "Use helper retrieve for the deep retrieval Profile".into(),
+                    )
+                    .into());
+                }
+                self.create(&bot.bot_id, &request.session_id, input)
+                    .await
+                    .map_err(Into::into)
+            }
             HelperCommand::List => Ok(json!({"helpers": self.list(&bot.bot_id).await?})),
             HelperCommand::Send {
                 session_id,
@@ -258,21 +278,50 @@ impl HelperService {
                 execution_policy,
             )
             .await?;
-        if let Some(id) = input.workspace_id {
-            request.workspace_id = Some(id);
-        } else if profile_id == BotService::retrieval_profile_id(bot_id) {
-            let directory = self.conversation.records().read_only_directory().await?;
-            request.workspace = Some(directory.to_string_lossy().into_owned());
-        } else {
-            let directory = self
-                .conversation
-                .records()
-                .directory(bot_id)
-                .await?
-                .join("helpers")
-                .join(launch.to_string());
-            tokio::fs::create_dir_all(&directory).await?;
-            request.workspace = Some(directory.to_string_lossy().into_owned());
+        let mut message = input.message;
+        match input.location {
+            HelperLocation::WorkspaceId(id) => {
+                let project = require_active_workspace_id(&self.control.db(), &id).await?;
+                let path = Path::new(&project.canonical_path);
+                let default = self.conversation.default_workspace()?;
+                if path == default
+                    || default
+                        .canonicalize()
+                        .is_ok_and(|canonical| canonical == path)
+                {
+                    return Err(Error::Domain(
+                        "Use --temporary NAME for the default Workspace".into(),
+                    ));
+                }
+                request.workspace_id = Some(id);
+            }
+            HelperLocation::Temporary(name) => {
+                if name.is_empty() || name.contains('/') || name == "." || name == ".." {
+                    return Err(Error::Domain(
+                        "Temporary task name must be a single directory name".into(),
+                    ));
+                }
+                let path = self.conversation.default_workspace()?;
+                let workspace =
+                    require_active_workspace(&self.control.db(), &path.to_string_lossy()).await?;
+                let directory = path.join(name);
+                match tokio::fs::create_dir(&directory).await {
+                    Ok(()) => {}
+                    Err(error)
+                        if error.kind() == std::io::ErrorKind::AlreadyExists
+                            && directory.is_dir() => {}
+                    Err(error) => return Err(error.into()),
+                }
+                message = format!(
+                    "Work in {} and keep all files for this task in that directory.\n\n{message}",
+                    directory.display()
+                );
+                request.workspace_id = Some(workspace.workspace_id);
+            }
+            HelperLocation::ReadOnly => {
+                let directory = self.conversation.records().read_only_directory().await?;
+                request.workspace = Some(directory.to_string_lossy().into_owned());
+            }
         }
         request.description = Some(input.description);
         // Save the unique creation reference first so recovery can find a Session even if launch fails.
@@ -309,7 +358,7 @@ impl HelperService {
             .turn_commands()
             .submit_live_input(
                 session_id,
-                format!("Source: Bot\nSession: {source}\n\n{}", input.message),
+                format!("Source: Bot\nSession: {source}\n\n{message}"),
             )
             .await;
         Ok(json!({"session_id": session_id, "delivery": Delivery::from_result(delivery)}))

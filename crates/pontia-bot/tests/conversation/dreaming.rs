@@ -247,7 +247,7 @@ async fn hourly_runner_waits_skips_overlap_and_does_not_retry_failed_rounds() {
         1
     );
     finish(&control, &next, EventType::TurnInterrupted).await;
-    let restart = DreamingService::new(control.clone(), ConversationService::new(control.clone()));
+    let restart = DreamingService::new(control.clone(), test_conversation(control.clone()));
     assert!(restart.start().await.unwrap().is_none());
     let runtime = control
         .queries()
