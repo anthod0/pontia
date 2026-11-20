@@ -37,6 +37,21 @@ impl CodexService {
         let existing = pontia_agent_control::AgentBindingService::new(self.pool.clone())
             .binding_for_client_session("codex", native)
             .await?;
+        let parent = self.fork_parent_session(thread, params).await?;
+        for session in existing
+            .as_ref()
+            .map(|binding| &binding.session_id)
+            .into_iter()
+            .chain(parent.as_ref())
+        {
+            if crate::runtime::CodexServerTarget::for_session(&self.pool, session).await?
+                != runtime.target
+            {
+                return Err(Error::StateConflict(
+                    "Codex thread belongs to another app-server target".into(),
+                ));
+            }
+        }
         let expected_session = reservation
             .as_ref()
             .map(|reservation| reservation.session.clone())
@@ -57,8 +72,11 @@ impl CodexService {
                     launch_cwd: cwd.into(),
                     client_session_file: thread["path"].as_str().map(str::to_owned),
                 },
-                json!({"codex_control_root":runtime.root,"codex_launch_cwd":cwd}),
-                profile_binding,
+                pontia_agent_control::sessions::NativeSubscription {
+                    metadata: json!({"codex_control_root":runtime.root,"codex_launch_cwd":cwd}),
+                    profile_binding,
+                    launch_mode: runtime.target.launch_mode(),
+                },
                 Some(&expected_session),
             )
             .await?;
@@ -77,11 +95,16 @@ impl CodexService {
             Some(guard) => guard,
             None => runtime.lock_session(&session).await,
         };
-        self.record_fork_lineage(&session, thread, params).await?;
-        if self.root(&session).await? != runtime.root {
+        if self.root(&session).await? != runtime.root
+            || crate::runtime::CodexServerTarget::for_session(&self.pool, &session).await?
+                != runtime.target
+        {
             return Err(Error::StateConflict(
-                "Codex Session belongs to another control root".into(),
+                "Codex Session belongs to another control root or app-server target".into(),
             ));
+        }
+        if let Some(parent) = parent {
+            self.record_fork_lineage(&session, &parent, params).await?;
         }
         if operation == ThreadOperation::Start {
             if connection
@@ -106,7 +129,8 @@ impl CodexService {
             runtime
                 .set_subscription(&session, SubscriptionState::AwaitingFirstInput)
                 .await;
-            let _ = observation_changes().send((runtime.root.clone(), session.clone()));
+            let _ =
+                observation_changes().send((runtime.root.clone(), runtime.target, session.clone()));
             return Ok((session, operation_guard));
         }
         let boundary = self.confirm_loaded_thread(runtime, native).await?;
@@ -192,7 +216,7 @@ impl CodexService {
                 json!({"threadId":native,"excludeTurns":true}),
             )
             .await;
-        let _ = observation_changes().send((runtime.root.clone(), session.into()));
+        let _ = observation_changes().send((runtime.root.clone(), runtime.target, session.into()));
         result
     }
 }

@@ -597,49 +597,73 @@ describe("pontia pi extension lifecycle", () => {
     );
   });
 
-  test("session_start startup reports one-time agent client ready from server runtime context", async () => {
-    const workspace = await realpath(await tempDir());
-    const requestImpl = vi.fn(async (method: string) => {
-      expect(method).toBe("workspaces.list");
-      return { workspaces: [{ canonical_path: workspace, state: "active" }] };
-    });
-    const { handlers, reported } = install({
-      env: {
-        PONTIA_SESSION_ID: "sess_ready",
-        PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
-      },
-      request: requestImpl as any,
-    });
-
-    await handlers.session_start(
-      { reason: "startup" },
-      {
-        sessionManager: {
-          getSessionId: () => "pi_session_1",
-          getSessionFile: () => "/tmp/pi/session.jsonl",
-          getSessionDir: () => "/tmp/pi",
-          getCwd: () => workspace,
+  test.each(["tui", "rpc"])(
+    "session_start in %s reports ready from server runtime context",
+    async (mode) => {
+      const workspace = await realpath(await tempDir());
+      const requestImpl = vi.fn(async (method: string) => {
+        expect(method).toBe("workspaces.list");
+        return { workspaces: [{ canonical_path: workspace, state: "active" }] };
+      });
+      const { handlers, reported } = install({
+        env: {
+          PONTIA_SESSION_ID: "sess_ready",
+          PONTIA_RUNTIME_INSTANCE_ID: "rtinst_1",
         },
-      },
-    );
+        request: requestImpl as any,
+      });
 
-    expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
-    expect(reported[0]).toMatchObject({
-      session_id: "sess_ready",
-      data: {
-        runtime_id: "rtinst_1",
-        client_session_key: "pi_session_1",
-        client_session_file: "/tmp/pi/session.jsonl",
-        client_session_dir: "/tmp/pi",
-        client_cwd: workspace,
-      },
+      await handlers.session_start(
+        { reason: "startup" },
+        {
+          mode,
+          sessionManager: {
+            getSessionId: () => "pi_session_1",
+            getSessionFile: () => "/tmp/pi/session.jsonl",
+            getSessionDir: () => "/tmp/pi",
+            getCwd: () => workspace,
+          },
+        },
+      );
+
+      expect(reported.map((event) => event.type)).toEqual(["session.ready"]);
+      expect(reported[0]).toMatchObject({
+        session_id: "sess_ready",
+        data: {
+          runtime_id: "rtinst_1",
+          client_session_key: "pi_session_1",
+          client_session_file: "/tmp/pi/session.jsonl",
+          client_session_dir: "/tmp/pi",
+          client_cwd: workspace,
+        },
+      });
+    },
+  );
+
+  test("external RPC in an active Workspace stays unbound on first input", async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === "session.context") return { session_context: null };
+      return { workspaces: [{ canonical_path: defaultPontiaHome, state: "active" }] };
     });
+    const { handlers, reported } = install({ request });
+    const ctx = {
+      mode: "rpc",
+      sessionManager: {
+        getSessionId: () => "external",
+        getSessionFile: () => join(defaultPontiaHome, "pi.jsonl"),
+        getCwd: () => defaultPontiaHome,
+      },
+    };
+    await handlers.session_start({ reason: "startup" }, ctx);
+    await handlers.before_agent_start({ messageType: "user", prompt: "hello" }, ctx);
+    expect(request.mock.calls.map(([method]) => method)).toEqual(["session.context"]);
+    expect(reported).toEqual([]);
   });
 
   test.each([
     ["print mode", "print", "/tmp/pi/session.jsonl"],
     ["json mode", "json", "/tmp/pi/session.jsonl"],
-    ["rpc mode", "rpc", "/tmp/pi/session.jsonl"],
+    ["rpc --no-session", "rpc", undefined],
     ["--no-session", "tui", undefined],
   ])("session_start ignores %s", async (_case, mode, sessionFile) => {
     const requestImpl = vi.fn(async () => ({

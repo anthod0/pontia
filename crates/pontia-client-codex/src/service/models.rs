@@ -10,7 +10,7 @@ use pontia_agent_control::sessions::SessionModel;
 
 impl CodexService {
     pub(crate) async fn available_models(root: &std::path::Path) -> Result<AgentClientModels> {
-        let runtime = CodexRuntime::ensure(root).await?;
+        let runtime = CodexRuntime::ensure(root, crate::runtime::CodexServerTarget::User).await?;
         let connection = runtime.connection().await?;
         let mut models = list_models(&connection).await?;
         let configuration = connection

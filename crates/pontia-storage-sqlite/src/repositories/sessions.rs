@@ -30,6 +30,7 @@ pub struct StartingSessionRow {
     pub runtime_id: Option<String>,
     pub tmux_socket_path: Option<String>,
     pub tmux_pane_id: Option<String>,
+    pub process_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -363,7 +364,7 @@ impl SqliteSessionRepository {
     pub async fn starting_sessions_before(&self, cutoff: &str) -> Result<Vec<StartingSessionRow>> {
         Ok(sqlx::query_as::<_, StartingSessionRow>(
             r#"SELECT s.session_id, s.client_type,
-                      r.runtime_id, r.tmux_socket_path, r.tmux_pane_id,
+                      r.runtime_id, r.tmux_socket_path, r.tmux_pane_id, r.process_fingerprint,
                       (SELECT e.event_id FROM events e WHERE e.session_id=s.session_id
                        AND e.event_type IN ('session.starting','session.resuming')
                        ORDER BY e.rowid DESC LIMIT 1) AS startup_event_id

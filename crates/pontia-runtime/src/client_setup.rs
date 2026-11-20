@@ -135,38 +135,11 @@ pub fn start(home: &Path, cli: &Path, client: &str, id: &str) -> Result<SetupOpe
 }
 
 fn launcher(cli: &Path) -> Result<Command, String> {
-    #[cfg(target_os = "linux")]
-    if Path::new("/run/systemd/system").is_dir() {
-        let mut command = Command::new("systemd-run");
-        let help = Command::new("systemd-run")
-            .arg("--help")
-            .output()
-            .map_err(|error| error.to_string())?;
-        if !help.status.success() {
-            return Err(String::from_utf8_lossy(&help.stderr).into_owned());
-        }
-        if String::from_utf8_lossy(&help.stdout).contains("--expand-environment=") {
-            command.arg("--expand-environment=no");
-        }
-        command.args([
-            "--user",
-            "--scope",
-            "--quiet",
-            "--collect",
-            "--no-ask-password",
-            "--description=Pontia client setup",
-            "--",
-        ]);
-        command.arg(cli);
-        return Ok(command);
-    }
-    {
-        use std::os::unix::process::CommandExt;
-        let mut command = Command::new(cli);
-        // Separate from launchd's service process group, or a container's foreground group.
-        command.process_group(0);
-        Ok(command)
-    }
+    use std::os::unix::process::CommandExt;
+    let mut command = crate::detached::independent_command(cli, "Pontia client setup")
+        .map_err(|error| error.to_string())?;
+    command.process_group(0);
+    Ok(command)
 }
 
 /// Called only by the hidden CLI worker. All installation behavior remains in `pontia setup`.

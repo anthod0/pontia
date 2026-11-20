@@ -92,10 +92,12 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
     let control = build();
     let mut notices = control.agent_events().subscribe();
     let mut request: CreateSessionRequest = serde_json::from_value(json!({
-        "client_type": "generic", "workspace": root.path(),
+        "client_type": "generic", "workspace": root.path(), "launch_mode": "background",
         "execution_policy": {"tools":["Read","Bash","custom_tool"],"disabled_tools":["Write","mcp__remote__*"],"disable_mcp":true,"yolo":true}
     }))
     .unwrap();
+    assert_eq!(request.launch_mode, pontia_core::LaunchMode::Foreground);
+    request.launch_mode = pontia_core::LaunchMode::Background;
     request.runtime_environment = environment.clone();
     let policy = request.execution_policy.clone();
     let outcome = control
@@ -106,6 +108,7 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
     let session = outcome.session_id().unwrap();
     let created = notices.try_recv().unwrap();
     assert_eq!(created.event_type, PontiaEventType::SessionCreated.into());
+    assert_eq!(created.payload["launch_mode"], "background");
     assert!(created.payload.get("runtime_environment").is_none());
     assert!(
         !created
@@ -141,6 +144,7 @@ async fn creation_restart_and_recovered_resume_keep_launch_context_out_of_events
         assert_eq!(launches.len(), 3);
         for launch in launches.iter() {
             assert_eq!(launch.session_id, session);
+            assert_eq!(launch.launch_mode, pontia_core::LaunchMode::Background);
             assert_eq!(launch.environment, environment);
             assert_eq!(launch.execution_policy, policy);
             assert_eq!(launch.workspace.as_deref(), root.path().to_str());
@@ -208,7 +212,11 @@ async fn native_forks_inherit_the_source_policy_after_control_recovery() {
     let app = AgentControl::builder(pool.clone(), root.path().into()).build();
     let policy = json!({"tools":["Read","Bash","custom_tool"],"disabled_tools":["Write","mcp__remote__*"],"disable_mcp":true,"yolo":true});
     for (session, payload) in [
-        ("parent", json!({"execution_policy":policy})),
+        (
+            "parent",
+            json!({"execution_policy":policy,"launch_mode":"background"}),
+        ),
+        ("legacy", json!({})),
         ("child", json!({})),
         ("grandchild", json!({})),
     ] {
@@ -229,6 +237,22 @@ async fn native_forks_inherit_the_source_policy_after_control_recovery() {
             .bind(child).bind(parent).execute(&pool).await.unwrap();
     }
     let recovered = AgentControl::builder(pool, root.path().into()).build();
+    assert_eq!(
+        recovered
+            .queries()
+            .session_launch_mode("legacy")
+            .await
+            .unwrap(),
+        pontia_core::LaunchMode::Foreground
+    );
+    assert_eq!(
+        recovered
+            .queries()
+            .session_launch_mode("grandchild")
+            .await
+            .unwrap(),
+        pontia_core::LaunchMode::Background
+    );
     assert_eq!(
         serde_json::to_value(
             recovered

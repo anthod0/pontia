@@ -134,6 +134,7 @@ fn session_request(
         workflow.workflow_id.clone(),
     )]);
     CreateSessionRequest {
+        launch_mode: Default::default(),
         execution_policy: Default::default(),
         model: None,
         ownership: Some(pontia_agent_control::SessionOwnership {

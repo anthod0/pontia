@@ -13,13 +13,52 @@ use std::{
 };
 use tokio::sync::Mutex;
 
-fn registry() -> &'static Mutex<HashMap<PathBuf, Arc<CodexRuntime>>> {
-    static RUNTIMES: OnceLock<Mutex<HashMap<PathBuf, Arc<CodexRuntime>>>> = OnceLock::new();
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum CodexServerTarget {
+    User,
+    Background,
+}
+
+impl CodexServerTarget {
+    pub(crate) async fn for_session(pool: &sqlx::SqlitePool, session: &str) -> Result<Self> {
+        use pontia_core::LaunchMode;
+        Ok(
+            match pontia_agent_control::ControlQueryService::new(pool.clone())
+                .session_launch_mode(session)
+                .await?
+            {
+                LaunchMode::Foreground => Self::User,
+                LaunchMode::Background => Self::Background,
+            },
+        )
+    }
+
+    pub(super) fn launch_mode(self) -> pontia_core::LaunchMode {
+        match self {
+            Self::Background => pontia_core::LaunchMode::Background,
+            Self::User => pontia_core::LaunchMode::Foreground,
+        }
+    }
+
+    fn connection_gate(self) -> &'static Mutex<()> {
+        static USER: Mutex<()> = Mutex::const_new(());
+        static BACKGROUND: Mutex<()> = Mutex::const_new(());
+        match self {
+            Self::User => &USER,
+            Self::Background => &BACKGROUND,
+        }
+    }
+}
+
+type Registry = HashMap<(PathBuf, CodexServerTarget), Arc<CodexRuntime>>;
+
+fn registry() -> &'static Mutex<Registry> {
+    static RUNTIMES: OnceLock<Mutex<Registry>> = OnceLock::new();
     RUNTIMES.get_or_init(Default::default)
 }
 
 pub(crate) struct CurrentConnectionGuard {
-    _registry: tokio::sync::MutexGuard<'static, HashMap<PathBuf, Arc<CodexRuntime>>>,
+    _registry: tokio::sync::MutexGuard<'static, Registry>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,6 +72,7 @@ pub(crate) enum SubscriptionState {
 pub struct CodexRuntime {
     pub root: PathBuf,
     pub socket_path: PathBuf,
+    pub target: CodexServerTarget,
     connection: Arc<Connection>,
     operations: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
     subscriptions: Mutex<HashMap<String, (SubscriptionState, u64)>>,
@@ -60,63 +100,116 @@ pub async fn probe_daemon(codex_home: &Path) -> Result<()> {
     Ok(())
 }
 
+async fn connect_daemon(
+    endpoint: &daemon::Endpoint,
+    target: CodexServerTarget,
+    unloaded: Arc<Mutex<HashMap<String, u64>>>,
+) -> Result<Arc<Connection>> {
+    let (socket, starting) = match target {
+        CodexServerTarget::User => (protocol::open(&endpoint.socket).await?, None),
+        CodexServerTarget::Background => {
+            let (stream, starting) = daemon::connect_background(endpoint).await?;
+            (protocol::websocket(stream).await?, starting)
+        }
+    };
+    let connection = Connection::initialize(socket, unloaded, target).await?;
+    if connection.codex_home.canonicalize().ok().as_ref() != Some(&endpoint.home) {
+        connection.close().await;
+        return Err(protocol::protocol_error(
+            "daemon Codex home does not match the selected environment",
+        ));
+    }
+    if let Some(starting) = starting {
+        starting.ready();
+    }
+    Ok(connection)
+}
+
 impl CodexRuntime {
+    pub(crate) async fn for_session(
+        pool: &sqlx::SqlitePool,
+        session: &str,
+    ) -> Result<Option<Arc<Self>>> {
+        let root: Option<String> = sqlx::query_scalar(
+            "SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?",
+        )
+        .bind(session)
+        .fetch_optional(pool)
+        .await?
+        .flatten();
+        let Some(root) = root else { return Ok(None) };
+        Ok(Self::existing_target(
+            Path::new(&root),
+            CodexServerTarget::for_session(pool, session).await?,
+        )
+        .await)
+    }
+
+    #[cfg(test)]
     pub async fn existing(root: &Path) -> Option<Arc<Self>> {
-        let root = root.canonicalize().ok()?;
-        registry().lock().await.get(&root).cloned()
+        Self::existing_target(root, CodexServerTarget::User).await
+    }
+
+    async fn existing_target(root: &Path, target: CodexServerTarget) -> Option<Arc<Self>> {
+        registry()
+            .lock()
+            .await
+            .get(&(root.to_owned(), target))
+            .cloned()
     }
 
     #[cfg(test)]
     pub(crate) async fn install_for_test(root: &Path, socket: PathBuf) -> Result<Arc<Self>> {
         let root = root.canonicalize()?;
-        let mut runtimes = registry().lock().await;
+        let target = CodexServerTarget::User;
+        let _guard = target.connection_gate().lock().await;
         Self::connect(
-            &mut runtimes,
             root.clone(),
+            target,
             daemon::Endpoint { socket, home: root },
         )
         .await
     }
 
-    pub async fn ensure(root: &Path) -> Result<Arc<Self>> {
+    pub async fn ensure(root: &Path, target: CodexServerTarget) -> Result<Arc<Self>> {
         let root = root.canonicalize()?;
-        let mut registry = registry().lock().await;
-        if let Some(runtime) = registry.get(&root)
-            && runtime.connection.is_connected()
-        {
-            return Ok(runtime.clone());
-        }
-        let endpoint = match registry.get(&root) {
-            Some(runtime) => daemon::Endpoint {
+        let _guard = target.connection_gate().lock().await;
+        let endpoint = if let Some(runtime) = Self::existing_target(&root, target).await {
+            if runtime.connection.is_connected() {
+                return Ok(runtime);
+            }
+            daemon::Endpoint {
                 socket: runtime.socket_path.clone(),
                 home: runtime.connection.codex_home.clone(),
-            },
-            None => daemon::Endpoint::resolve()?,
+            }
+        } else {
+            let mut endpoint = daemon::Endpoint::resolve()?;
+            if target == CodexServerTarget::Background {
+                endpoint.socket = root.join("state/codex/background-app-server.sock");
+            }
+            endpoint
         };
-        Self::connect(&mut registry, root, endpoint).await
+        Self::connect(root, target, endpoint).await
     }
 
     async fn connect(
-        registry: &mut HashMap<PathBuf, Arc<Self>>,
         root: PathBuf,
+        target: CodexServerTarget,
         endpoint: daemon::Endpoint,
     ) -> Result<Arc<Self>> {
-        let previous = registry.get(&root);
+        let previous = Self::existing_target(&root, target).await;
         let unloaded = previous
+            .as_ref()
             .map(|runtime| runtime.connection.unloaded_threads.clone())
             .unwrap_or_default();
         let operations = previous
+            .as_ref()
             .map(|runtime| runtime.operations.clone())
             .unwrap_or_default();
-        let connection = Connection::connect_observing(&endpoint.socket, unloaded).await?;
-        if connection.codex_home.canonicalize().ok().as_ref() != Some(&endpoint.home) {
-            connection.close().await;
-            return Err(protocol::protocol_error(
-                "daemon Codex home does not match the selected environment",
-            ));
-        }
+        let connection = connect_daemon(&endpoint, target, unloaded).await?;
         let runtime = Arc::new(Self {
             root: root.clone(),
+            target,
             socket_path: endpoint.socket,
             connection,
             operations,
@@ -124,7 +217,11 @@ impl CodexRuntime {
             subscription_sequence: AtomicU64::new(1),
             profile_service: OnceLock::new(),
         });
-        if let Some(old) = registry.insert(root, runtime.clone()) {
+        if let Some(old) = registry()
+            .lock()
+            .await
+            .insert((root, target), runtime.clone())
+        {
             old.connection.close().await;
         }
         Ok(runtime)
@@ -133,7 +230,7 @@ impl CodexRuntime {
     pub(crate) async fn current_guard(&self) -> Result<CurrentConnectionGuard> {
         let registry = registry().lock().await;
         if !registry
-            .get(&self.root)
+            .get(&(self.root.clone(), self.target))
             .is_some_and(|runtime| std::ptr::eq(runtime.as_ref(), self))
             || !self.connection.is_connected()
         {
@@ -206,8 +303,11 @@ impl CodexRuntime {
 
     pub async fn shutdown(root: &Path) {
         let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-        if let Some(runtime) = registry().lock().await.remove(&root) {
-            runtime.connection.close().await;
+        for target in [CodexServerTarget::User, CodexServerTarget::Background] {
+            let _guard = target.connection_gate().lock().await;
+            if let Some(runtime) = registry().lock().await.remove(&(root.clone(), target)) {
+                runtime.connection.close().await;
+            }
         }
     }
 }

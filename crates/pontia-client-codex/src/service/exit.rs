@@ -49,7 +49,7 @@ impl CodexService {
             .set_subscription(session, SubscriptionState::ExitPending)
             .await;
         confirmed_exits().lock().await.insert(session.into());
-        let _ = observation_changes().send((runtime.root.clone(), session.into()));
+        let _ = observation_changes().send((runtime.root.clone(), runtime.target, session.into()));
     }
 
     async fn close_thread(
@@ -113,7 +113,7 @@ impl CodexService {
                 stopped_revision,
             )
             .await;
-        let _ = observation_changes().send((runtime.root.clone(), session.into()));
+        let _ = observation_changes().send((runtime.root.clone(), runtime.target, session.into()));
         let revision = result?;
         let _current = runtime.current_guard().await?;
         let _activity = connection.confirm_activity(thread, revision).await?;

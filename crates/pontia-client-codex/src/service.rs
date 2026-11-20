@@ -23,7 +23,7 @@ mod proxy_observer;
 mod proxy_runtimes;
 #[cfg(test)]
 mod subscription_tests;
-use crate::runtime::{CodexRuntime, SubscriptionState};
+use crate::runtime::{CodexRuntime, CodexServerTarget, SubscriptionState};
 use pontia_agent_control::{AgentBindingService, UpsertAgentBindingRequest};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
@@ -40,8 +40,9 @@ fn confirmed_exits() -> &'static Mutex<HashSet<String>> {
     SESSIONS.get_or_init(Default::default)
 }
 
-fn observation_changes() -> &'static broadcast::Sender<(PathBuf, String)> {
-    static CHANGES: OnceLock<broadcast::Sender<(PathBuf, String)>> = OnceLock::new();
+fn observation_changes() -> &'static broadcast::Sender<(PathBuf, CodexServerTarget, String)> {
+    static CHANGES: OnceLock<broadcast::Sender<(PathBuf, CodexServerTarget, String)>> =
+        OnceLock::new();
     CHANGES.get_or_init(|| broadcast::channel(1024).0)
 }
 
@@ -77,7 +78,11 @@ impl CodexService {
             .bind(model)
             .bind(session_id)
             .execute(&self.pool).await?;
-        let _ = observation_changes().send((root, session_id.into()));
+        let _ = observation_changes().send((
+            root,
+            CodexServerTarget::for_session(&self.pool, session_id).await?,
+            session_id.into(),
+        ));
         Ok(())
     }
 
@@ -94,7 +99,11 @@ impl CodexService {
     }
 
     pub(super) async fn runtime(&self, session_id: &str) -> Result<Arc<CodexRuntime>> {
-        let runtime = CodexRuntime::ensure(&self.root(session_id).await?).await?;
+        let runtime = CodexRuntime::ensure(
+            &self.root(session_id).await?,
+            CodexServerTarget::for_session(&self.pool, session_id).await?,
+        )
+        .await?;
         runtime.profile_service.get_or_init(|| self.profiles());
         Ok(runtime)
     }
@@ -118,7 +127,8 @@ impl CodexService {
                 metadata: json!({}),
             })
             .await?;
-        let _ = observation_changes().send((runtime.root.clone(), session_id.into()));
+        let _ =
+            observation_changes().send((runtime.root.clone(), runtime.target, session_id.into()));
         Ok(())
     }
 
@@ -248,7 +258,8 @@ impl CodexService {
                 .set_subscription(session_id, SubscriptionState::Available)
                 .await;
         }
-        let _ = observation_changes().send((runtime.root.clone(), session_id.into()));
+        let _ =
+            observation_changes().send((runtime.root.clone(), runtime.target, session_id.into()));
         Ok(pontia_agent_control::control::InputReceipt {
             native_turn_id: accepted
                 .get("turnId")
@@ -451,7 +462,7 @@ impl CodexService {
         runtime.set_subscription(session, subscription).await;
         drop(unloaded);
         self.event_ingest.control_available(session);
-        let _ = observation_changes().send((runtime.root.clone(), session.into()));
+        let _ = observation_changes().send((runtime.root.clone(), runtime.target, session.into()));
         Ok(())
     }
 

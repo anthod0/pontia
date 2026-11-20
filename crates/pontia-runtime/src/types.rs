@@ -8,6 +8,8 @@ pub use pontia_core::client_capabilities::{AgentClientCapabilities, AgentInput};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeStartRequest {
     #[serde(default)]
+    pub launch_mode: pontia_core::LaunchMode,
+    #[serde(default)]
     pub execution_policy: pontia_core::execution_policy::ExecutionPolicy,
     pub model: Option<String>,
     pub session_id: String,

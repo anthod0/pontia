@@ -23,7 +23,8 @@ pub(super) async fn prepare(
     if params["ephemeral"] == true {
         return Ok(None);
     }
-    let runtime = CodexRuntime::ensure(state.pontia_home()).await?;
+    let runtime =
+        CodexRuntime::ensure(state.pontia_home(), crate::runtime::CodexServerTarget::User).await?;
     let identity = if operation == ThreadOperation::Resume {
         let native = params["threadId"]
             .as_str()
@@ -32,13 +33,20 @@ pub(super) async fn prepare(
     } else {
         None
     };
-    let binding = if operation == ThreadOperation::Resume {
+    let source = if operation != ThreadOperation::Start {
         AgentBindingService::new(state.db())
-            .binding_for_client_session("codex", params["threadId"].as_str().unwrap())
+            .binding_for_client_session("codex", params["threadId"].as_str().unwrap_or_default())
             .await?
     } else {
         None
     };
+    if let Some(binding) = &source
+        && crate::runtime::CodexServerTarget::for_session(&state.db(), &binding.session_id).await?
+            != runtime.target
+    {
+        return Ok(None);
+    }
+    let binding = source.filter(|_| operation == ThreadOperation::Resume);
     let session = binding
         .as_ref()
         .map(|binding| binding.session_id.clone())

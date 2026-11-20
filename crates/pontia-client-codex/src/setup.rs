@@ -130,7 +130,9 @@ impl CodexDaemonProbe for DaemonProbe {
     fn probe(&self, home: &Path) -> Result<(), String> {
         let home = home.to_path_buf();
         std::thread::spawn(move || {
-            tokio::runtime::Runtime::new()
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
                 .map_err(|error| format!("failed to create Codex probe runtime: {error}"))?
                 .block_on(crate::runtime::probe_daemon(&home))
                 .map_err(|error| error.to_string())
@@ -255,7 +257,7 @@ pub fn inspect<R: CommandRunner + ?Sized>(
         return Err("Codex automatic startup is supported only on Linux and macOS".to_string());
     }
 
-    let executable = resolve_executable(vars)?;
+    let executable = resolve_executable(vars.get("PATH").map(String::as_str))?;
     let home = resolve_codex_home(vars, user_home)?;
     let service_user = current_service_user(runner)?;
     let environment = codex_environment(&home)?;
@@ -549,21 +551,20 @@ pub(crate) fn detect(
     context: &pontia_agent_control::client_contract::DetectionContext<'_>,
 ) -> pontia_agent_control::client_contract::ClientDetection {
     use pontia_agent_control::client_contract::ClientDetection;
-    match find_executable(context.vars) {
+    match find_executable(context.vars.get("PATH").map(String::as_str)) {
         Ok(Some(path)) => ClientDetection::detected(path.display().to_string()),
         Ok(None) => ClientDetection::not_detected(),
         Err(error) => ClientDetection::unknown(error),
     }
 }
 
-fn resolve_executable(vars: &HashMap<String, String>) -> Result<PathBuf, String> {
-    find_executable(vars)?
+pub(crate) fn resolve_executable(search_path: Option<&str>) -> Result<PathBuf, String> {
+    find_executable(search_path)?
         .ok_or_else(|| "Codex must be installed and executable on PATH".to_string())
 }
 
-fn find_executable(vars: &HashMap<String, String>) -> Result<Option<PathBuf>, String> {
-    let path = vars
-        .get("PATH")
+fn find_executable(search_path: Option<&str>) -> Result<Option<PathBuf>, String> {
+    let path = search_path
         .filter(|path| !path.trim().is_empty())
         .ok_or_else(|| "PATH must be set to locate the Codex executable".to_string())?;
     let current_dir = env::current_dir()

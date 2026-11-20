@@ -89,24 +89,29 @@ impl CodexService {
         .map(|(session, _operation)| session)
     }
 
-    pub(super) async fn record_fork_lineage(
+    pub(super) async fn fork_parent_session(
         &self,
-        child: &str,
         thread: &Value,
         params: &Value,
-    ) -> Result<()> {
+    ) -> Result<Option<String>> {
         let Some(parent) = thread["forkedFromId"].as_str().or_else(|| {
             // Only a fork receipt carries source parameters here.
             params["threadId"].as_str().filter(|id| thread["id"] != *id)
         }) else {
-            return Ok(());
+            return Ok(None);
         };
-        let Some(parent_binding) = AgentBindingService::new(self.pool.clone())
+        Ok(AgentBindingService::new(self.pool.clone())
             .binding_for_client_session("codex", parent)
             .await?
-        else {
-            return Ok(());
-        };
+            .map(|binding| binding.session_id))
+    }
+
+    pub(super) async fn record_fork_lineage(
+        &self,
+        child: &str,
+        parent: &str,
+        params: &Value,
+    ) -> Result<()> {
         let before = params["beforeTurnId"].as_str();
         let last = params["lastTurnId"].as_str();
         let boundary = before.or(last);
@@ -114,7 +119,7 @@ impl CodexService {
             sqlx::query_scalar(
                 "SELECT turn_id FROM native_turn_bindings WHERE session_id=? AND client_turn_id=?",
             )
-            .bind(&parent_binding.session_id)
+            .bind(parent)
             .bind(boundary)
             .fetch_optional(&self.pool)
             .await?
@@ -122,7 +127,7 @@ impl CodexService {
             None
         };
         NativeSessionService::new(self.pool.clone(), self.event_ingest.clone()).record_fork(
-            child, &parent_binding.session_id, turn.as_deref(), boundary,
+            child, parent, turn.as_deref(), boundary,
             json!({"boundary": if before.is_some() { Some("before") } else if last.is_some() { Some("after") } else { None }}),
         ).await
     }

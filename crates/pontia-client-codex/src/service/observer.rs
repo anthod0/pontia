@@ -1,5 +1,5 @@
 use super::{CodexService, live_output::CodexLiveOutput};
-use crate::runtime::{CodexRuntime, SubscriptionState};
+use crate::runtime::{CodexRuntime, CodexServerTarget, SubscriptionState};
 use pontia_agent_control::AgentBindingService;
 use pontia_core::{
     Error, Result,
@@ -18,7 +18,8 @@ struct Observation {
 
 pub struct CodexObserver {
     service: CodexService,
-    changes: broadcast::Receiver<(PathBuf, String)>,
+    target: CodexServerTarget,
+    changes: broadcast::Receiver<(PathBuf, CodexServerTarget, String)>,
     session_events: broadcast::Receiver<DomainEvent>,
     root: PathBuf,
     live_output: pontia_agent_control::LiveOutputService,
@@ -26,9 +27,19 @@ pub struct CodexObserver {
 }
 
 impl CodexObserver {
+    #[cfg(test)]
     pub fn new(state: &pontia_agent_control::AgentControl, root: PathBuf) -> Self {
+        Self::for_target(state, root, CodexServerTarget::User)
+    }
+
+    pub fn for_target(
+        state: &pontia_agent_control::AgentControl,
+        root: PathBuf,
+        target: CodexServerTarget,
+    ) -> Self {
         Self {
             service: CodexService::new(state.event_ingest_service()),
+            target,
             changes: super::observation_changes().subscribe(),
             session_events: state.agent_events().subscribe(),
             live_output: state.live_output(),
@@ -61,24 +72,19 @@ impl CodexObserver {
             if *shutdown.borrow() {
                 break;
             }
-            let active = match sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM sessions WHERE client_type='codex' AND state<>'exited'",
-            )
-            .fetch_one(&self.service.pool)
-            .await
-            {
+            let active = match self.has_active_sessions().await {
                 Ok(active) => active,
                 Err(error) => {
                     tracing::error!(%error, "Codex observation could not read Sessions");
                     return;
                 }
             };
-            if active == 0 {
+            if !active {
                 tokio::select! {
                     _ = shutdown.changed() => break,
                     change = self.changes.recv() => {
                         match change {
-                            Ok((root, _)) if root == self.root => {},
+                            Ok((root, target, _)) if root == self.root && target == self.target => {},
                             Err(broadcast::error::RecvError::Lagged(_)) => {},
                             _ => continue,
                         }
@@ -86,7 +92,7 @@ impl CodexObserver {
                 }
                 continue;
             }
-            match CodexRuntime::ensure(&self.root).await {
+            match CodexRuntime::ensure(&self.root, self.target).await {
                 Ok(runtime) => {
                     if let Err(error) = self.observe(runtime.clone(), &mut shutdown).await {
                         tracing::warn!(%error, "Codex observation interrupted");
@@ -103,6 +109,21 @@ impl CodexObserver {
                 _ = tokio::time::sleep(Duration::from_secs(1)) => {}
             }
         }
+    }
+
+    pub(super) async fn has_active_sessions(&self) -> Result<bool> {
+        let sessions: Vec<String> = sqlx::query_scalar("SELECT session_id FROM sessions WHERE client_type='codex' AND state<>'exited' AND (state<>'error' OR ?) AND json_extract(metadata,'$.codex_control_root')=?")
+            .bind(self.target == CodexServerTarget::User).bind(self.root.to_string_lossy().as_ref()).fetch_all(&self.service.pool).await?;
+        for session in sessions {
+            if self.owns_session(&session).await? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    async fn owns_session(&self, session: &str) -> Result<bool> {
+        Ok(CodexServerTarget::for_session(&self.service.pool, session).await? == self.target)
     }
 
     async fn observes(&self, runtime: &CodexRuntime, session: &str) -> Result<bool> {
@@ -152,6 +173,9 @@ impl CodexObserver {
         let Some((state, thread)) = row else {
             return Ok(());
         };
+        if !self.owns_session(session).await? {
+            return Ok(());
+        }
         if let Some(thread) = &thread {
             observation.threads.insert(thread.clone(), session.into());
         }
@@ -296,7 +320,7 @@ impl CodexObserver {
                 _ = shutdown.changed() => return Ok(()),
                 change = self.changes.recv() => {
                     match change {
-                        Ok((root, session)) if root == runtime.root => {
+                        Ok((root, target, session)) if root == runtime.root && target == self.target => {
                             self.reconcile_session(&runtime, connection, &session, false, &mut observation).await?;
                         }
                         Err(broadcast::error::RecvError::Lagged(_)) => {
@@ -336,8 +360,8 @@ impl CodexObserver {
                     let session = match observation.threads.get(thread) {
                         Some(session) => session.clone(),
                         None => match AgentBindingService::new(self.service.pool.clone()).binding_for_client_session("codex", thread).await? {
-                            Some(binding) => binding.session_id,
-                            None => return Ok(()),
+                            Some(binding) if self.owns_session(&binding.session_id).await? => binding.session_id,
+                            _ => return Ok(()),
                         },
                     };
                     observation.threads.insert(thread.to_string(), session.clone());

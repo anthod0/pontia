@@ -6,101 +6,107 @@ import type { LifecycleControl } from "../src/control-socket.js";
 import type { InternalEvent } from "../src/events.js";
 import { tempDir } from "./temp-dir.js";
 
-test("session switches register a fresh connection and failed registration never reports ready", async () => {
-  const root = await tempDir("pc-");
-  const workspace = await realpath(root);
-  const handlers: Record<string, (event: any, context?: any) => Promise<void>> = {};
-  const events: InternalEvent[] = [];
-  const registered: string[] = [];
-  const controls: LifecycleControl[] = [];
-  const calls: string[] = [];
-  const closes: Array<ReturnType<typeof vi.fn>> = [];
-  createPontiaPiExtension(
-    {
-      on(name: string, handler: any) {
-        handlers[name] = handler;
-      },
-      registerCommand() {},
-    } as any,
-    {
-      env: { PONTIA_HOME: root },
-      connectPi: async (_home, _error, _submit, _models, _replay, lifecycle) => {
-        controls.push(lifecycle!);
-        expect(() => lifecycle!.interrupt()).toThrow();
-        expect(() => lifecycle!.shutdown()).toThrow();
-        const close = vi.fn(async () => {});
-        closes.push(close);
-        return {
-          close,
-          registered(identity) {
-            registered.push(identity.sessionId);
-          },
-          async request(method, params) {
-            if (method === "event.report") {
-              expect(close).not.toHaveBeenCalled();
-              events.push((params as any).event);
-              return { accepted: true };
-            }
-            if (method === "workspaces.list")
-              return { workspaces: [{ canonical_path: workspace, state: "active" }] };
-            if (method === "session.context") {
-              const id = (params as any).client_session_key;
+test.each(["tui", "rpc"])(
+  "session switches in %s register a fresh connection and failed registration never reports ready",
+  async (mode) => {
+    const root = await tempDir("pc-");
+    const workspace = await realpath(root);
+    const handlers: Record<string, (event: any, context?: any) => Promise<void>> = {};
+    const events: InternalEvent[] = [];
+    const registered: string[] = [];
+    const controls: LifecycleControl[] = [];
+    const calls: string[] = [];
+    const closes: Array<ReturnType<typeof vi.fn>> = [];
+    createPontiaPiExtension(
+      {
+        on(name: string, handler: any) {
+          handlers[name] = handler;
+        },
+        registerCommand() {},
+      } as any,
+      {
+        env: { PONTIA_HOME: root },
+        connectPi: async (_home, _error, _submit, _models, _replay, lifecycle) => {
+          controls.push(lifecycle!);
+          expect(() => lifecycle!.interrupt()).toThrow();
+          expect(() => lifecycle!.shutdown()).toThrow();
+          const close = vi.fn(async () => {});
+          closes.push(close);
+          return {
+            close,
+            registered(identity) {
+              registered.push(identity.sessionId);
+            },
+            async request(method, params) {
+              if (method === "event.report") {
+                expect(close).not.toHaveBeenCalled();
+                events.push((params as any).event);
+                return { accepted: true };
+              }
+              if (method === "workspaces.list")
+                return { workspaces: [{ canonical_path: workspace, state: "active" }] };
+              if (method === "session.context") {
+                const id = (params as any).client_session_key;
+                return {
+                  session_context: {
+                    session_id: `sess_${id}`,
+                    runtime_id: `rt_${id}`,
+                    client_type: "pi",
+                    session_state: "starting",
+                  },
+                };
+              }
+              const id = (params as any).binding.client_session_key;
+              if (id === "failed") throw new Error("Registration rejected");
               return {
-                session_context: {
-                  session_id: `sess_${id}`,
-                  runtime_id: `rt_${id}`,
-                  client_type: "pi",
-                  session_state: "starting",
-                },
+                session: { session_id: `sess_${id}` },
+                runtime: { runtime_id: `rt_${id}` },
               };
-            }
-            const id = (params as any).binding.client_session_key;
-            if (id === "failed") throw new Error("Registration rejected");
-            return {
-              session: { session_id: `sess_${id}` },
-              runtime: { runtime_id: `rt_${id}` },
-            };
-          },
-        };
-      },
+            },
+          };
+        },
 
-      logDiagnostic: vi.fn(async () => {}),
-    },
-  );
-  const context = (id: string) => ({
-    abort: () => calls.push(`${id}:abort`),
-    shutdown: () => calls.push(`${id}:shutdown`),
-    mode: "tui",
-    sessionManager: {
-      getSessionId: () => id,
-      getSessionFile: () => join(root, `${id}.jsonl`),
-      getCwd: () => workspace,
-    },
-  });
-  await handlers.session_start({ reason: "startup" }, context("one"));
-  controls[0].interrupt();
-  controls[0].shutdown();
-  expect(calls).toEqual(["one:abort", "one:abort", "one:shutdown"]);
-  expect(events.map((event) => event.type)).toEqual(["session.ready"]);
-  await handlers.session_shutdown({ reason: "new" });
-  expect(closes[0]).toHaveBeenCalledOnce();
-  await handlers.session_start({ reason: "new" }, context("two"));
-  expect(() => controls[0].interrupt()).toThrow();
-  expect(() => controls[0].shutdown()).toThrow();
-  controls[1].shutdown();
-  expect(calls.slice(3)).toEqual(["two:abort", "two:shutdown"]);
-  await handlers.session_shutdown({ reason: "new" });
-  await handlers.session_start({ reason: "new" }, context("failed"));
-  expect(() => controls[2].shutdown()).toThrow();
-  expect(registered).toEqual(["sess_one", "sess_two"]);
-  expect(events.map((event) => event.type)).toEqual([
-    "session.ready",
-    "session.exited",
-    "session.ready",
-    "session.exited",
-  ]);
-  await handlers.session_shutdown({ reason: "quit" });
-});
+        logDiagnostic: vi.fn(async () => {}),
+      },
+    );
+    const context = (id: string) => ({
+      abort: () => calls.push(`${id}:abort`),
+      shutdown: () => calls.push(`${id}:shutdown`),
+      mode,
+      isIdle: () => false,
+      hasPendingMessages: () => false,
+      sessionManager: {
+        getSessionId: () => id,
+        getSessionFile: () => join(root, `${id}.jsonl`),
+        getCwd: () => workspace,
+      },
+    });
+    await handlers.session_start({ reason: "startup" }, context("one"));
+    expect(controls[0].shutdownIfIdle()).toBe(false);
+    controls[0].interrupt();
+    controls[0].shutdown();
+    expect(calls).toEqual(["one:abort", "one:abort", "one:shutdown"]);
+    expect(events.map((event) => event.type)).toEqual(["session.ready"]);
+    await handlers.session_shutdown({ reason: "new" });
+    expect(closes[0]).toHaveBeenCalledOnce();
+    await handlers.session_start({ reason: "new" }, context("two"));
+    expect(() => controls[0].interrupt()).toThrow();
+    expect(() => controls[0].shutdown()).toThrow();
+    controls[1].shutdown();
+    expect(calls.slice(3)).toEqual(["two:abort", "two:shutdown"]);
+    await handlers.session_shutdown({ reason: "new" });
+    await handlers.session_start({ reason: "new" }, context("failed"));
+    expect(() => controls[2].shutdown()).toThrow();
+    expect(registered).toEqual(["sess_one", "sess_two"]);
+    expect(events.map((event) => event.type)).toEqual([
+      "session.ready",
+      "session.exited",
+      "session.ready",
+      "session.exited",
+    ]);
+    await handlers.session_shutdown({ reason: "quit" });
+  },
+);
 
 test("a disconnected deferred registration can initialize on the next manual turn", async () => {
   const { mkdir } = await import("node:fs/promises");

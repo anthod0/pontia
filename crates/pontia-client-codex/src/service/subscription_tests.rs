@@ -1203,3 +1203,86 @@ async fn client_catalog_reports_native_default_and_configuration_override() {
     assert_eq!(catalog.models[0].id, "model-one");
     fixture.shutdown().await;
 }
+
+#[tokio::test]
+async fn observers_and_proxy_only_manage_sessions_on_their_own_server() {
+    use crate::runtime::CodexServerTarget;
+    let fixture = Fixture::new().await;
+    let background = super::CodexObserver::for_target(
+        &fixture.app,
+        fixture.root.path().into(),
+        CodexServerTarget::Background,
+    );
+    let user = CodexRuntime::existing(fixture.root.path()).await.unwrap();
+    let mut request: CreateSessionRequest =
+        serde_json::from_value(json!({"client_type":"codex","workspace":fixture.root.path()}))
+            .unwrap();
+    request.launch_mode = pontia_core::LaunchMode::Background;
+    assert!(!background.has_active_sessions().await.unwrap());
+
+    let outcome = fixture
+        .app
+        .session_commands()
+        .create_session(request)
+        .await
+        .unwrap();
+    let session = outcome.session_id().unwrap();
+    let service = super::CodexService::new(fixture.app.event_ingest_service());
+    let thread = json!({"thread":{"id":"background-thread","cwd":fixture.root.path(),"canAcceptDirectInput":true,"status":{"type":"idle"}}});
+    pontia_agent_control::AgentBindingService::new(fixture.app.db())
+        .upsert_binding(pontia_agent_control::UpsertAgentBindingRequest {
+            session_id: session.into(),
+            client_type: "codex".into(),
+            launch_cwd: fixture.root.path().display().to_string(),
+            client_session_key: "background-thread".into(),
+            client_session_file: None,
+            metadata: json!({}),
+        })
+        .await
+        .unwrap();
+    assert!(
+        CodexRuntime::for_session(&fixture.app.db(), session)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(matches!(
+        service
+            .adopt_opened_thread(
+                &user,
+                crate::proxy::ThreadOperation::Resume,
+                &thread,
+                &json!({}),
+                None,
+                None
+            )
+            .await,
+        Err(pontia_core::Error::StateConflict(_))
+    ));
+    let mut child = thread.clone();
+    child["thread"]["id"] = json!("unbound-child");
+    child["thread"]["forkedFromId"] = json!("background-thread");
+    assert!(matches!(
+        service
+            .adopt_opened_thread(
+                &user,
+                crate::proxy::ThreadOperation::Fork,
+                &child,
+                &json!({}),
+                None,
+                None
+            )
+            .await,
+        Err(pontia_core::Error::StateConflict(_))
+    ));
+    assert!(
+        pontia_agent_control::AgentBindingService::new(fixture.app.db())
+            .binding_for_client_session("codex", "unbound-child")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(background.has_active_sessions().await.unwrap());
+    assert!(user.subscription(session).await.is_none());
+    fixture.shutdown().await;
+}

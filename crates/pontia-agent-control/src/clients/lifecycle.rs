@@ -193,9 +193,8 @@ impl ClientAdapter {
             TerminateBehavior::Connected => {
                 if let Some(runtime_id) = &target.runtime_id
                     && let Some(record) = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).get(runtime_id).await?
-                    && let Some((socket, pane)) = record.tmux_socket_path.zip(record.tmux_pane_id)
                 {
-                    GenericRuntimeManager.kill_tmux_pane(&socket, &pane)?;
+                    crate::runtime::terminate_runtime(record.tmux_socket_path.as_deref(), record.tmux_pane_id.as_deref(), record.process_fingerprint.as_deref())?;
                 }
             }
             TerminateBehavior::RuntimeManager => {
@@ -241,5 +240,11 @@ impl ClientAdapter {
 }
 
 pub(crate) fn discard_unbound_runtime(runtime: &RuntimeStartResult) {
-    let _ = GenericRuntimeManager.terminate_session(&runtime.runtime_handle);
+    if let Some(value) = runtime.metadata.get("process_fingerprint") {
+        if let Ok(fingerprint) = serde_json::from_value(value.clone()) {
+            let _ = GenericRuntimeManager.terminate_process(&fingerprint);
+        }
+    } else {
+        let _ = GenericRuntimeManager.terminate_session(&runtime.runtime_handle);
+    }
 }

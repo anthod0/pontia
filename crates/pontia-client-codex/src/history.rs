@@ -49,17 +49,7 @@ impl CodexHistory {
         let Some(pool) = &self.pool else {
             return Ok(None);
         };
-        let root: Option<String> = sqlx::query_scalar(
-            "SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?",
-        )
-        .bind(&self.binding.session_id)
-        .fetch_optional(pool)
-        .await?
-        .flatten();
-        match root {
-            Some(root) => Ok(CodexRuntime::existing(Path::new(&root)).await),
-            None => Ok(None),
-        }
+        CodexRuntime::for_session(pool, &self.binding.session_id).await
     }
 
     async fn snapshot(&self, source: Option<HistorySource>) -> Result<&Snapshot> {

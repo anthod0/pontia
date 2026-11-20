@@ -74,14 +74,22 @@ impl ClientLauncher for PiLauncher {
             }
             None => format!("--session-id {}", quote(&runtime.session_id)),
         };
-        runtime.start_command = Some(format!("{command}{policy_args} {session_args}"));
-        let mut result = pontia_runtime::GenericRuntimeManager.start_tmux(
-            request.root,
-            runtime,
-            request.restart_count,
-            request.reuse_pane,
-            &crate::SPEC.launch_options(),
-        )?;
+        let background = runtime.launch_mode == pontia_core::LaunchMode::Background;
+        let mode = if background { " --mode rpc" } else { "" };
+        runtime.start_command = Some(format!("{command}{mode}{policy_args} {session_args}"));
+        let options = crate::SPEC.launch_options();
+        let manager = pontia_runtime::GenericRuntimeManager;
+        let mut result = if background {
+            manager.start_detached_process(request.root, runtime, options.capabilities)?
+        } else {
+            manager.start_tmux(
+                request.root,
+                runtime,
+                request.restart_count,
+                request.reuse_pane,
+                &options,
+            )?
+        };
         // Persist the reusable command, not the selector for this launch's native session.
         result.metadata["start_command"] = command.into();
         Ok(result)

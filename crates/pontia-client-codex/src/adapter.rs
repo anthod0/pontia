@@ -138,9 +138,8 @@ impl pontia_agent_control::client_contract::ClientInteractions for CodexClient {
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
             let service = CodexService::new(events);
-            let root = service.root(session).await?;
-            let runtime = CodexRuntime::existing(&root)
-                .await
+            let runtime = CodexRuntime::for_session(&service.pool, session)
+                .await?
                 .ok_or_else(|| Error::CapabilityUnavailable("Codex connection expired".into()))?;
             let _operation = runtime.lock_session(session).await;
             let live: bool = sqlx::query_scalar(
@@ -266,10 +265,7 @@ impl ClientSession for CodexClient {
     }
     fn available<'a>(&'a self, pool: SqlitePool, session: &'a str) -> ClientOperation<'a, bool> {
         Box::pin(async move {
-            let root: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?")
-                .bind(session).fetch_optional(&pool).await?.flatten();
-            let Some(root) = root else { return Ok(false) };
-            let Some(runtime) = CodexRuntime::existing(Path::new(&root)).await else {
+            let Some(runtime) = CodexRuntime::for_session(&pool, session).await? else {
                 return Ok(false);
             };
             let bound = pontia_agent_control::AgentBindingService::new(pool)
@@ -292,10 +288,7 @@ impl ClientSession for CodexClient {
         session: &'a str,
     ) -> ClientOperation<'a, bool> {
         Box::pin(async move {
-            let root: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?")
-                .bind(session).fetch_optional(&pool).await?.flatten();
-            let Some(root) = root else { return Ok(false) };
-            let Some(runtime) = CodexRuntime::existing(Path::new(&root)).await else {
+            let Some(runtime) = CodexRuntime::for_session(&pool, session).await? else {
                 return Ok(false);
             };
             Ok(runtime.connection().await.is_ok()
@@ -315,24 +308,18 @@ impl ClientSession for CodexClient {
             let binding = pontia_agent_control::AgentBindingService::new(pool.clone())
                 .binding_for_session(session)
                 .await?;
-            let root: Option<String> = sqlx::query_scalar("SELECT json_extract(metadata,'$.codex_control_root') FROM sessions WHERE session_id=?")
-                .bind(session).fetch_optional(&pool).await?.flatten();
-            let connection = if let Some(root) = root {
-                match CodexRuntime::existing(Path::new(&root)).await {
-                    Some(runtime) => match runtime.subscription(session).await {
-                        Some(SubscriptionState::Available) => "available",
-                        Some(SubscriptionState::AwaitingFirstInput) => "awaiting_input",
-                        Some(SubscriptionState::Reconciling) => "reconciling",
-                        Some(SubscriptionState::ExitPending) => "unavailable",
-                        None if binding.is_none() && runtime.connection().await.is_ok() => {
-                            "awaiting_input"
-                        }
-                        None => "unavailable",
-                    },
+            let connection = match CodexRuntime::for_session(&pool, session).await? {
+                Some(runtime) => match runtime.subscription(session).await {
+                    Some(SubscriptionState::Available) => "available",
+                    Some(SubscriptionState::AwaitingFirstInput) => "awaiting_input",
+                    Some(SubscriptionState::Reconciling) => "reconciling",
+                    Some(SubscriptionState::ExitPending) => "unavailable",
+                    None if binding.is_none() && runtime.connection().await.is_ok() => {
+                        "awaiting_input"
+                    }
                     None => "unavailable",
-                }
-            } else {
-                "unavailable"
+                },
+                None => "unavailable",
             };
             let profiles = crate::profiles::CodexProfiles::new(pool.clone());
             let profile = match profiles.codex_binding(session).await {

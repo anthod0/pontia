@@ -9,6 +9,8 @@ use pontia_core::error::{Error, Result};
 
 use super::RuntimeStartRequest;
 
+pub(super) const SESSION_ENVIRONMENT: &str = "PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_PATCH_ID";
+
 pub(super) struct RuntimePaths<'a> {
     pub(super) log_path: &'a Path,
 }
@@ -52,7 +54,7 @@ pub(super) fn write_launch_script(
     let runtime_body = format!("exec sh -c {}\n", shell_quote(command));
     let content = format!(
         r#"#!/usr/bin/env sh
-unset PONTIA_SESSION_ID PONTIA_CLIENT_TYPE PONTIA_RUNTIME_INSTANCE_ID PONTIA_WORKSPACE PONTIA_RUNTIME_LOG PONTIA_WORKFLOW_ID PONTIA_WORKFLOW_PATCH_ID
+unset {SESSION_ENVIRONMENT}
 export PONTIA_HOME={}
 {}PONTIA_LAUNCH_SCRIPT=${{0:-}}
 cleanup_pontia_launch_script() {{
@@ -81,19 +83,26 @@ cleanup_pontia_launch_script
 }
 
 fn render_runtime_environment(request: &RuntimeStartRequest) -> Result<String> {
+    validate_runtime_environment(request)?;
     let mut rendered = String::new();
     for (name, value) in &request.environment {
+        rendered.push_str(&format!("export {name}={}\n", shell_quote(value)));
+    }
+    Ok(rendered)
+}
+
+pub(super) fn validate_runtime_environment(request: &RuntimeStartRequest) -> Result<()> {
+    for name in request.environment.keys() {
         let valid_name = name.bytes().enumerate().all(|(index, byte)| {
             byte == b'_' || byte.is_ascii_alphabetic() || (index > 0 && byte.is_ascii_digit())
         });
-        if !valid_name || name == "PONTIA_HOME" {
+        if name.is_empty() || !valid_name || name == "PONTIA_HOME" {
             return Err(Error::Domain(format!(
                 "invalid runtime environment variable name: {name}"
             )));
         }
-        rendered.push_str(&format!("export {name}={}\n", shell_quote(value)));
     }
-    Ok(rendered)
+    Ok(())
 }
 
 fn shell_quote(value: &str) -> String {
@@ -117,6 +126,7 @@ mod tests {
             log_path: &log_path,
         };
         let request = RuntimeStartRequest {
+            launch_mode: Default::default(),
             execution_policy: Default::default(),
             model: None,
             runtime_id: None,
@@ -178,6 +188,7 @@ mod tests {
             log_path: &tempdir.path().join("runtime.log"),
         };
         let request = RuntimeStartRequest {
+            launch_mode: Default::default(),
             execution_policy: Default::default(),
             model: None,
             runtime_id: None,

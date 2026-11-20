@@ -186,6 +186,7 @@ impl SessionCommandService {
                     "ownership": request.ownership,
                     "runtime_environment": request.runtime_environment,
                     "execution_policy": request.execution_policy,
+                    "launch_mode": request.launch_mode,
                 }),
             ))
             .await?;
@@ -208,6 +209,7 @@ impl SessionCommandService {
             .start(
                 &self.pontia_home,
                 RuntimeStartRequest {
+                    launch_mode: request.launch_mode,
                     execution_policy: request.execution_policy,
                     model: request.model,
                     runtime_id: Some(runtime_id.clone()),

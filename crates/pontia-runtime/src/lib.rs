@@ -4,6 +4,7 @@
 //! module stays independent from HTTP transport details.
 
 pub mod client_setup;
+mod detached;
 pub mod executable;
 mod in_process;
 pub mod local_service;
@@ -15,6 +16,7 @@ mod session_identifier;
 mod tmux;
 mod types;
 
+pub use detached::{detached_command, reap_detached_child};
 pub use manager::GenericRuntimeManager;
 pub use process::{ProcessFingerprint, ProcessObservation};
 use std::path::PathBuf;
@@ -69,6 +71,7 @@ mod tests {
             .start_in_process(
                 Path::new("/pontia-test-home"),
                 RuntimeStartRequest {
+                    launch_mode: Default::default(),
                     execution_policy: Default::default(),
                     model: None,
                     runtime_id: None,
@@ -108,6 +111,7 @@ mod tests {
             .start_in_process(
                 Path::new("/pontia-test-home"),
                 RuntimeStartRequest {
+                    launch_mode: Default::default(),
                     execution_policy: Default::default(),
                     model: None,
                     runtime_id: Some("runtime_named".into()),
@@ -132,6 +136,7 @@ mod tests {
     fn generic_runtime_registry_tracks_lifecycle_and_restart_identity() {
         let manager = GenericRuntimeManager;
         let request = RuntimeStartRequest {
+            launch_mode: Default::default(),
             execution_policy: Default::default(),
             model: None,
             runtime_id: Some("runtime_lifecycle".into()),
@@ -203,6 +208,7 @@ mod tests {
             .start_tmux(
                 dir.path(),
                 RuntimeStartRequest {
+                    launch_mode: Default::default(),
                     execution_policy: Default::default(),
                     model: None,
                     runtime_id: None,

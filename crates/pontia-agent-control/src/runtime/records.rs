@@ -30,3 +30,17 @@ pub(crate) fn runtime_binding_record(
             .map_err(|err| Error::Domain(err.to_string()))?,
     })
 }
+
+pub(crate) fn terminate_runtime(
+    socket: Option<&str>,
+    pane: Option<&str>,
+    fingerprint: Option<&str>,
+) -> Result<()> {
+    let manager = pontia_runtime::GenericRuntimeManager;
+    if let Some((socket, pane)) = socket.zip(pane) {
+        manager.kill_tmux_pane(socket, pane)?;
+    } else if let Some(fingerprint) = fingerprint {
+        manager.terminate_process(&serde_json::from_str(fingerprint)?)?;
+    }
+    Ok(())
+}

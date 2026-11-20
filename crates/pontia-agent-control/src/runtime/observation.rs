@@ -117,8 +117,11 @@ impl RuntimeObservationService {
                 ))
                 .await?;
             if transitioned
-                && let Some((socket, pane)) = session.tmux_socket_path.zip(session.tmux_pane_id)
-                && let Err(error) = self.runtime.kill_tmux_pane(&socket, &pane)
+                && let Err(error) = super::terminate_runtime(
+                    session.tmux_socket_path.as_deref(),
+                    session.tmux_pane_id.as_deref(),
+                    session.process_fingerprint.as_deref(),
+                )
             {
                 tracing::warn!(
                     session_id = %session.session_id,

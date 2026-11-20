@@ -621,6 +621,7 @@ impl ClientSession for AcpAdapter {
                 events,
                 self.root.get().ok_or_else(unavailable)?,
                 RuntimeStartRequest {
+                    launch_mode: Default::default(),
                     execution_policy: Default::default(),
                     model: None,
                     session_id: target.session_id.clone(),

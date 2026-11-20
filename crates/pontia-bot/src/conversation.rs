@@ -218,6 +218,7 @@ impl ConversationService {
             .session_metadata(&profile.client_type, &profile.client_key)
             .await?;
         Ok(CreateSessionRequest {
+            launch_mode: Default::default(),
             execution_policy,
             model: Some(profile.model),
             client_type: profile.client_type,
@@ -494,6 +495,7 @@ impl ConversationService {
             .control
             .session_commands()
             .create_session(CreateSessionRequest {
+                launch_mode: Default::default(),
                 execution_policy: self.bot_execution_policy(&bot.client_type)?,
                 model: Some(bot.model.clone()),
                 client_type: bot.client_type.clone(),

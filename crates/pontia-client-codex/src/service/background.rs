@@ -17,9 +17,15 @@ impl ClientService for CodexBackgroundService {
         state: AgentControl,
     ) -> ClientOperation<'a, Option<JoinHandle<pontia_core::Result<()>>>> {
         Box::pin(async move {
-            let observer = CodexObserver::new(&state, state.pontia_home().to_path_buf());
+            use crate::runtime::CodexServerTarget;
+            let observer = |target| {
+                CodexObserver::for_target(&state, state.pontia_home().to_path_buf(), target)
+            };
+            let background = observer(CodexServerTarget::Background);
+            let observer = observer(CodexServerTarget::User);
             observer.prepare().await?;
             let proxy = crate::proxy::Proxy::bind(state.pontia_home()).await?;
+            tokio::spawn(background.run(state.shutdown().subscribe()));
             tokio::spawn(observer.run(state.shutdown().subscribe()));
             let (observations, incoming) = tokio::sync::mpsc::channel(128);
             Ok(Some(tokio::spawn(async move {

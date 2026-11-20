@@ -14,8 +14,10 @@ async fn concurrent_subscription_adoption_creates_one_session_without_a_runtime(
                 launch_cwd: fixture._root.path().display().to_string(),
                 client_session_file: None,
             },
-            json!({"control_root":"shared-backend"}),
-            None,
+            super::NativeSubscription {
+                metadata: json!({"control_root":"shared-backend"}),
+                ..Default::default()
+            },
             None,
         )
     };
@@ -585,8 +587,10 @@ async fn native_admission_requires_explicit_workspace_activation_without_side_ef
                         launch_cwd: cwd.display().to_string(),
                         client_session_file: None
                     },
-                    json!({}),
-                    None,
+                    super::NativeSubscription {
+                        metadata: json!({}),
+                        ..Default::default()
+                    },
                     None,
                 )
                 .await
@@ -648,8 +652,10 @@ async fn native_admission_requires_explicit_workspace_activation_without_side_ef
                 launch_cwd: cwd.display().to_string(),
                 client_session_file: None,
             },
-            json!({}),
-            None,
+            super::NativeSubscription {
+                metadata: json!({}),
+                ..Default::default()
+            },
             None,
         )
     };

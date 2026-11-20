@@ -64,10 +64,15 @@ function reportAccepted(result: EventReportResult | boolean): boolean {
   return typeof result === "boolean" ? result : result.accepted;
 }
 
-function isPersistentTuiContext(ctx: unknown): boolean {
+function isPersistentSessionContext(ctx: unknown): boolean {
   if (!ctx || typeof ctx !== "object") return false;
-  if ((ctx as Record<string, unknown>).mode !== "tui") return false;
+  const mode = (ctx as Record<string, unknown>).mode;
+  if (mode !== "tui" && mode !== "rpc") return false;
   return piSessionDetailsFromHookContext(ctx).clientSessionFile !== undefined;
+}
+
+function terminateRpcProcess(): void {
+  process.kill(process.pid, "SIGTERM");
 }
 
 export interface PontiaPiExtensionDependencies {
@@ -329,11 +334,13 @@ export function createPontiaPiExtension(
         shutdownIfIdle() {
           const ctx = lifecycleContext();
           if (!ctx.isIdle() || ctx.hasPendingMessages()) return false;
+          if (ctx.mode === "rpc") return terminateRpcProcess;
           ctx.shutdown();
           return true;
         },
         shutdown() {
           const ctx = lifecycleContext();
+          if (ctx.mode === "rpc" && ctx.isIdle()) return terminateRpcProcess;
           // Ordinary extension context: abort first, then exit after Pi settles.
           // Unlike double Ctrl+C, this allows turn cleanup before session_shutdown.
           ctx.abort();
@@ -389,7 +396,7 @@ export function createPontiaPiExtension(
   pi.registerCommand("pontia-edit", {
     description: "Replay a Pontia Inbox message from a historical Pi entry",
     handler: async (args, ctx) => {
-      if (!isPersistentTuiContext(ctx)) return;
+      if (!isPersistentSessionContext(ctx)) return;
       const inboxMessageId = args.trim();
       const logFile = currentHookLogFile();
       if (!/^msg_[^\s]+$/.test(inboxMessageId)) {
@@ -514,6 +521,7 @@ export function createPontiaPiExtension(
     const logFile = currentHookLogFile();
     try {
       if (!boundSessionContext) {
+        if (ctx.mode === "rpc") return;
         const hookSessionDetails = piSessionDetailsFromHookContext(ctx);
         const sessionDetails = hookSessionDetails.clientSessionKey
           ? hookSessionDetails
@@ -608,7 +616,7 @@ export function createPontiaPiExtension(
     delete extensionState.forkParentSessionId;
     boundSessionContext = undefined;
     readyReported = false;
-    if (!isPersistentTuiContext(ctx)) {
+    if (!isPersistentSessionContext(ctx)) {
       reportingDisabled = true;
       return;
     }
@@ -623,6 +631,11 @@ export function createPontiaPiExtension(
         reason === "fork"
           ? undefined
           : await loadExistingSessionContext(await registrationConnection(), sessionDetails);
+      if (ctx.mode === "rpc" && !existingSession && !(reason === "fork" && parentSessionId)) {
+        await closeControlSocket();
+        reportingDisabled = true;
+        return;
+      }
       const workspaceActive =
         existingSession !== undefined ||
         (await isActiveRegisteredWorkspace(

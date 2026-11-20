@@ -60,20 +60,24 @@ pub(crate) fn invalidates_request(
 }
 
 pub async fn open(path: &Path) -> Result<Socket> {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        let stream = UnixStream::connect(path).await.map_err(|error| {
-            protocol_error(format!(
-                "daemon at {} is unavailable: {error}; start Codex daemon externally",
-                path.display()
-            ))
-        })?;
-        let (socket, _) = tokio_tungstenite::client_async("ws://localhost/", stream)
-            .await
-            .map_err(protocol_error)?;
-        Ok(socket)
-    })
+    let stream = super::daemon::connect_socket(path).await.map_err(|error| {
+        protocol_error(format!(
+            "daemon at {} is unavailable: {error}",
+            path.display()
+        ))
+    })?;
+    websocket(stream).await
+}
+
+pub(super) async fn websocket(stream: UnixStream) -> Result<Socket> {
+    let (socket, _) = tokio::time::timeout(
+        Duration::from_secs(5),
+        tokio_tungstenite::client_async("ws://localhost/", stream),
+    )
     .await
     .map_err(|_| protocol_error("daemon connection timed out"))?
+    .map_err(protocol_error)?;
+    Ok(socket)
 }
 
 pub fn protocol_error(error: impl std::fmt::Display) -> Error {
@@ -96,6 +100,7 @@ enum Outgoing {
 }
 
 pub struct Connection {
+    pub(crate) target: super::CodexServerTarget,
     pub(crate) unloaded_threads: Arc<Mutex<HashMap<String, u64>>>,
     thread_activity: Arc<Mutex<HashMap<String, u64>>>,
     pub(crate) pending_archives: Arc<Mutex<HashMap<String, u64>>>,
@@ -116,14 +121,19 @@ pub struct Connection {
 
 impl Connection {
     pub async fn connect(path: &Path) -> Result<Arc<Self>> {
-        Self::connect_observing(path, Arc::default()).await
+        Self::initialize(
+            open(path).await?,
+            Arc::default(),
+            super::CodexServerTarget::User,
+        )
+        .await
     }
 
-    pub(crate) async fn connect_observing(
-        path: &Path,
+    pub(super) async fn initialize(
+        mut socket: Socket,
         unloaded_threads: Arc<Mutex<HashMap<String, u64>>>,
+        target: super::CodexServerTarget,
     ) -> Result<Arc<Self>> {
-        let mut socket = open(path).await?;
         let identity = DaemonIdentity::capture(socket.get_ref())?;
         // Validate the peer's response before exposing a usable control connection.
         socket
@@ -194,6 +204,7 @@ impl Connection {
         let thread_activity = Arc::new(Mutex::new(HashMap::<String, u64>::new()));
         let pending_archives = Arc::new(Mutex::new(HashMap::<String, u64>::new()));
         let connection = Arc::new(Self {
+            target,
             unloaded_threads: unloaded_threads.clone(),
             thread_activity: thread_activity.clone(),
             pending_archives: pending_archives.clone(),

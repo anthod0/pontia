@@ -148,13 +148,11 @@ impl SessionCommandService {
                     .iter()
                     .filter(|runtime| Some(&runtime.runtime_id) == target.runtime_id.as_ref())
                 {
-                    if let Some((socket, pane)) = runtime
-                        .tmux_socket_path
-                        .as_deref()
-                        .zip(runtime.tmux_pane_id.as_deref())
-                    {
-                        pontia_runtime::GenericRuntimeManager.kill_tmux_pane(socket, pane)?;
-                    }
+                    crate::runtime::terminate_runtime(
+                        runtime.tmux_socket_path.as_deref(),
+                        runtime.tmux_pane_id.as_deref(),
+                        runtime.process_fingerprint.as_deref(),
+                    )?;
                 }
                 self.event_ingest
                     .ingest_pontia_event(PontiaEvent::new(
@@ -303,6 +301,7 @@ impl SessionCommandService {
                 &target,
                 pontia_home,
                 RuntimeStartRequest {
+                    launch_mode: self.queries.session_launch_mode(session_id).await?,
                     execution_policy: self.queries.session_execution_policy(session_id).await?,
                     model: None,
                     runtime_id: target.runtime_id.clone(),
@@ -443,6 +442,7 @@ impl SessionCommandService {
         let prior_restart_count = 0;
         let environment = self.runtime_environment(session_id).await?;
         let execution_policy = self.queries.session_execution_policy(session_id).await?;
+        let launch_mode = self.queries.session_launch_mode(session_id).await?;
         let mut runtime_replacement_tx = self.pool.begin().await?;
         SqliteTurnRepository::serialize_session_turn_writes_in_tx(
             &mut runtime_replacement_tx,
@@ -469,6 +469,7 @@ impl SessionCommandService {
                 &target,
                 pontia_home,
                 RuntimeStartRequest {
+                    launch_mode,
                     execution_policy,
                     model: None,
                     runtime_id: target.runtime_id.clone(),

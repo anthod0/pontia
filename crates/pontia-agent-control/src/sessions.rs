@@ -6,7 +6,9 @@ pub use agent_bindings::{
 pub(crate) use agent_bindings::{
     register_agent_binding_for_ready_event_in_tx, upsert_agent_binding_in_tx,
 };
-pub use observations::{NativeSessionIdentity, NativeSessionObservation, NativeSessionService};
+pub use observations::{
+    NativeSessionIdentity, NativeSessionObservation, NativeSessionService, NativeSubscription,
+};
 use std::{collections::BTreeMap, path::PathBuf};
 
 use serde::Deserialize;
@@ -28,6 +30,8 @@ mod validation;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct CreateSessionRequest {
+    #[serde(skip)]
+    pub launch_mode: pontia_core::LaunchMode,
     #[serde(default)]
     pub execution_policy: pontia_core::execution_policy::ExecutionPolicy,
     pub model: Option<String>,

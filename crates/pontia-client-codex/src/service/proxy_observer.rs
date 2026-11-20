@@ -22,7 +22,7 @@ async fn observe(
     root: &std::path::Path,
     observation: Observation,
 ) -> Result<()> {
-    let runtime = CodexRuntime::ensure(root).await?;
+    let runtime = CodexRuntime::ensure(root, crate::runtime::CodexServerTarget::User).await?;
     let connection = runtime.connection().await?;
     if connection.identity != observation.daemon {
         return Err(Error::ControlUnknown(
@@ -79,6 +79,11 @@ async fn observe(
                 return Ok(());
             };
             let session = &binding.session_id;
+            if crate::runtime::CodexServerTarget::for_session(&service.pool, session).await?
+                != runtime.target
+            {
+                return Ok(());
+            }
             let _operation = runtime.lock_session(session).await;
             let subscription = runtime.subscription(session).await;
             let accepts_turn: bool = sqlx::query_scalar("SELECT state IN ('idle','busy','waiting_for_interaction','interrupted') FROM sessions WHERE session_id=?")

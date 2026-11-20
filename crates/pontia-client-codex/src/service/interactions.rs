@@ -106,7 +106,8 @@ async fn register(
     let Some(session) = session else {
         return Ok(());
     };
-    if super::CodexService::has_confirmed_exit(&session).await
+    if crate::runtime::CodexServerTarget::for_session(&pool, &session).await? != connection.target
+        || super::CodexService::has_confirmed_exit(&session).await
         || connection
             .unloaded_threads
             .lock()

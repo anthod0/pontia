@@ -392,3 +392,48 @@ async fn restart_rejects_active_turn_and_terminal_session_without_changing_runti
     ));
     assert_eq!(states(&app).await, ("error".into(), "exited".into()));
 }
+
+#[tokio::test]
+async fn timeout_and_error_exit_terminate_the_recorded_headless_process() {
+    use std::time::Duration;
+    for timeout in [true, false] {
+        let (app, _root) = fixture().await;
+        let mut process = tokio::process::Command::new("sleep")
+            .arg("30")
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let fingerprint =
+            pontia_runtime::ProcessFingerprint::capture(process.id().unwrap()).unwrap();
+        sqlx::query("UPDATE session_runtimes SET process_fingerprint=? WHERE runtime_id='runtime'")
+            .bind(serde_json::to_string(&fingerprint).unwrap())
+            .execute(&app.db())
+            .await
+            .unwrap();
+        if timeout {
+            sqlx::query("UPDATE events SET created_at='2000-01-01T00:00:00Z' WHERE event_type='session.starting'")
+                .execute(&app.db()).await.unwrap();
+            app.runtime_observer()
+                .sweep_startup_timeouts()
+                .await
+                .unwrap();
+            assert_eq!(states(&app).await, ("error".into(), "exited".into()));
+        } else {
+            app.event_ingest_service().ingest_pontia_event(PontiaEvent::new("session",None,PontiaEventSource::RuntimeManager,"pi",PontiaEventType::SessionError,json!({"runtime_id":"runtime","reason":"startup_failed","failure":{"message":"test failure"}}))).await.unwrap();
+            app.session_commands()
+                .request_exit("session", Some("runtime"))
+                .await
+                .unwrap();
+            assert_eq!(states(&app).await, ("exited".into(), "exited".into()));
+        }
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(2), process.wait())
+                .await
+                .unwrap()
+                .unwrap()
+                .signal(),
+            Some(15)
+        );
+    }
+}

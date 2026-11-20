@@ -14,6 +14,44 @@ fn path_env_lock() -> &'static Mutex<()> {
 }
 
 #[test]
+fn background_launch_starts_rpc_with_the_requested_session_and_no_tmux() {
+    let root = tempfile::tempdir().unwrap();
+    let script = root.path().join("pi.py");
+    std::fs::write(
+        &script,
+        r#"import json, os, sys, time
+with open("args.json.tmp", "w") as f:
+    json.dump(sys.argv[1:], f)
+os.rename("args.json.tmp", "args.json")
+time.sleep(8)
+"#,
+    )
+    .unwrap();
+    let mut runtime = launch_request(root.path(), Some("python3 pi.py --approve".into()));
+    runtime.launch_mode = pontia_core::LaunchMode::Background;
+    let started = start_session(&RuntimeConfig::default(), root.path(), runtime).unwrap();
+    let fingerprint =
+        serde_json::from_value(started.metadata["process_fingerprint"].clone()).unwrap();
+    let args = root.path().join("args.json");
+    for _ in 0..200 {
+        if args.exists() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    GenericRuntimeManager
+        .terminate_process(&fingerprint)
+        .unwrap();
+    assert_eq!(started.runtime_kind, "process");
+    assert!(started.metadata.get("tmux_pane_id").is_none());
+    assert_eq!(started.metadata["start_command"], "python3 pi.py --approve");
+    assert_eq!(
+        serde_json::from_slice::<Vec<String>>(&std::fs::read(args).unwrap()).unwrap(),
+        ["--approve", "--mode", "rpc", "--session-id", "sess_launch"]
+    );
+}
+
+#[test]
 fn execution_policy_accepts_native_patterns_but_rejects_ambiguous_cli_entries() {
     use pontia_agent_control::client_contract::ClientConfiguration;
     use serde_json::json;
@@ -147,12 +185,13 @@ fn start_session_uses_configured_tui_command_when_env_is_absent() {
         &config,
         tempdir.path().join("pontia-home").as_path(),
         RuntimeStartRequest {
+            launch_mode: Default::default(),
             execution_policy: Default::default(),
             model: Some("provider/model".into()),
             runtime_id: None,
             session_id: "sess_configured".to_string(),
             client_type: "pi".to_string(),
-            workspace: Some(tempdir.path().join("workspace").display().to_string()),
+            workspace: Some(tempdir.path().display().to_string()),
             workspace_name: None,
             handle: None,
             role: None,
@@ -217,12 +256,13 @@ fn start_session_prefers_env_tui_command_over_configured_command() {
         &config,
         tempdir.path().join("pontia-home").as_path(),
         RuntimeStartRequest {
+            launch_mode: Default::default(),
             execution_policy: Default::default(),
             model: None,
             runtime_id: None,
             session_id: "sess_env_override".to_string(),
             client_type: "pi".to_string(),
-            workspace: Some(tempdir.path().join("workspace-env").display().to_string()),
+            workspace: Some(tempdir.path().display().to_string()),
             workspace_name: None,
             handle: None,
             role: None,
@@ -514,12 +554,13 @@ fn creation_reads_current_database_settings_with_environment_file_and_default_pr
 
 fn launch_request(root: &Path, start_command: Option<String>) -> RuntimeStartRequest {
     RuntimeStartRequest {
+        launch_mode: Default::default(),
         execution_policy: Default::default(),
         model: None,
         runtime_id: None,
         session_id: "sess_launch".into(),
         client_type: "pi".into(),
-        workspace: Some(root.join("workspace").display().to_string()),
+        workspace: Some(root.display().to_string()),
         workspace_name: None,
         handle: None,
         role: None,

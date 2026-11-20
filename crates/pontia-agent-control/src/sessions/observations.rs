@@ -18,6 +18,13 @@ pub struct NativeSessionIdentity {
     pub client_session_file: Option<String>,
 }
 
+#[derive(Default)]
+pub struct NativeSubscription {
+    pub metadata: Value,
+    pub profile_binding: Option<Value>,
+    pub launch_mode: pontia_core::LaunchMode,
+}
+
 pub struct NativeSessionObservation {
     pub identity: NativeSessionIdentity,
     pub provisioned_runtime: RuntimeStartResult,
@@ -61,10 +68,14 @@ impl NativeSessionService {
         client: &str,
         native_key: &str,
         identity: NativeSessionIdentity,
-        metadata: Value,
-        profile_binding: Option<Value>,
+        subscription: NativeSubscription,
         reserved_session: Option<&str>,
     ) -> Result<String> {
+        let NativeSubscription {
+            metadata,
+            profile_binding,
+            launch_mode,
+        } = subscription;
         let workspace =
             crate::workspaces::require_active_workspace(&self.pool, &identity.launch_cwd).await?;
         let control = self.events.history_control();
@@ -92,7 +103,7 @@ impl NativeSessionService {
                     PontiaEventSource::RuntimeManager,
                     client,
                     PontiaEventType::SessionCreated,
-                    json!({"workspace":workspace.canonical_path,"metadata":metadata,"execution_profile_binding":profile_binding}),
+                    json!({"workspace":workspace.canonical_path,"metadata":metadata,"execution_profile_binding":profile_binding,"launch_mode":launch_mode}),
                 ),
                 UpsertAgentBindingRequest {
                     session_id: session.clone(),

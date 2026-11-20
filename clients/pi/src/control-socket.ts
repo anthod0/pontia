@@ -22,8 +22,8 @@ export interface ControlInput {
 }
 export interface LifecycleControl {
   interrupt(): void;
-  shutdown(): void;
-  shutdownIfIdle(): boolean;
+  shutdown(): void | (() => void);
+  shutdownIfIdle(): boolean | (() => void);
 }
 export interface CompactionControl {
   compact(operationId: string): void;
@@ -97,6 +97,8 @@ class RpcSocket {
         REQUEST_TIMEOUT_MS,
       );
       timer.unref();
+      // RPC mode installs its stdin listener only after extension registration.
+      this.socket.ref();
       this.pending.set(id, { resolve, reject, timer });
       this.write(encoded);
     });
@@ -109,12 +111,12 @@ class RpcSocket {
     return `${encoded}\n`;
   }
 
-  private write(encoded: string): void {
+  private write(encoded: string, afterWrite?: () => void): void {
     if (this.socket.writableLength + Buffer.byteLength(encoded) > 2 * MAX_RPC_FRAME_BYTES) {
       this.fail(new Error("Pi RPC backpressure limit reached"));
       return;
     }
-    this.socket.write(encoded);
+    this.socket.write(encoded, afterWrite);
   }
 
   private fail(error: Error): void {
@@ -165,9 +167,10 @@ class RpcSocket {
       ) {
         throw new Error("Invalid Pi RPC request");
       }
-      const respond = (body: object) => {
+      const respond = (body: object, afterWrite?: () => void) => {
         if (message.id !== undefined)
-          this.write(this.encode({ jsonrpc: "2.0", id: message.id, ...body }));
+          this.write(this.encode({ jsonrpc: "2.0", id: message.id, ...body }), afterWrite);
+        else afterWrite?.();
       };
       const error = (code: number, message: string) => respond({ error: { code, message } });
       const params = message.params === undefined ? {} : message.params;
@@ -212,7 +215,11 @@ class RpcSocket {
       }
       if (this.lifecycle && message.method === "shutdown_if_idle") {
         try {
-          respond({ result: { accepted: this.lifecycle.shutdownIfIdle() } });
+          const action = this.lifecycle.shutdownIfIdle();
+          respond(
+            { result: { accepted: action !== false } },
+            typeof action === "function" ? action : undefined,
+          );
         } catch (failure) {
           error(
             failure instanceof RpcError ? failure.code : -32006,
@@ -223,8 +230,8 @@ class RpcSocket {
       }
       if (this.lifecycle && (message.method === "interrupt" || message.method === "shutdown")) {
         try {
-          this.lifecycle[message.method as "interrupt" | "shutdown"]();
-          respond({ result: { accepted: true } });
+          const action = this.lifecycle[message.method as "interrupt" | "shutdown"]();
+          respond({ result: { accepted: true } }, action || undefined);
         } catch (failure) {
           error(
             failure instanceof RpcError ? failure.code : -32006,
@@ -300,6 +307,7 @@ class RpcSocket {
     const pending = this.pending.get(message.id);
     if (!pending) throw new Error("Unexpected Pi RPC response ID");
     this.pending.delete(message.id);
+    if (!this.pending.size) this.socket.unref();
     clearTimeout(pending.timer);
     if (message.error) pending.reject(new RpcError(message.error.code, message.error.message));
     else pending.resolve(message.result);
