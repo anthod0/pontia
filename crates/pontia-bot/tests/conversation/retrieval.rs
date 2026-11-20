@@ -60,6 +60,9 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
     let shared = root.path().join("bot/readonly").canonicalize().unwrap();
     assert_eq!(created.workspace.as_deref(), shared.to_str());
     let second = retrieve(&helpers, &session, None).await;
+    for session in [&reader, &second] {
+        assert_launch_mode(&control, &client, session, LaunchMode::Background).await;
+    }
     assert_eq!(
         client
             .launch_directories

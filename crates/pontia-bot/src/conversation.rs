@@ -495,7 +495,7 @@ impl ConversationService {
             .control
             .session_commands()
             .create_session(CreateSessionRequest {
-                launch_mode: Default::default(),
+                launch_mode: pontia_core::LaunchMode::Background,
                 execution_policy: self.bot_execution_policy(&bot.client_type)?,
                 model: Some(bot.model.clone()),
                 client_type: bot.client_type.clone(),

@@ -19,7 +19,7 @@ use pontia_bot::{
     records::BotConfiguration,
 };
 use pontia_core::{
-    Error, Result,
+    Error, LaunchMode, Result,
     client_capabilities::AgentClientCapabilities,
     domain::{EventType, ReportedEvent},
 };
@@ -55,6 +55,7 @@ struct Client {
     policy_support: Mutex<PolicySupport>,
     launch_directories: Mutex<std::collections::HashMap<String, String>>,
     fail_next_launch: Mutex<bool>,
+    launch_modes: Mutex<std::collections::HashMap<String, LaunchMode>>,
     launched_policies:
         Mutex<std::collections::HashMap<String, pontia_core::execution_policy::ExecutionPolicy>>,
     interaction_responses: Mutex<Vec<(String, String, String)>>,
@@ -122,6 +123,10 @@ impl ClientLauncher for Client {
         assert_eq!(
             serde_json::to_value(&request.runtime.execution_policy).unwrap(),
             json!({"tools":null,"disabled_tools":["edit","write"],"disable_mcp":true,"yolo":true})
+        );
+        self.launch_modes.lock().unwrap().insert(
+            request.runtime.session_id.clone(),
+            request.runtime.launch_mode,
         );
         self.launched_policies.lock().unwrap().insert(
             request.runtime.session_id.clone(),
@@ -299,6 +304,8 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
         .current_session_id
         .unwrap();
     assert_ne!(a_session, b_session);
+    assert_launch_mode(&control, &client, &a_session, LaunchMode::Background).await;
+    assert_launch_mode(&control, &client, &b_session, LaunchMode::Background).await;
     let workspaces = control.queries().list_workspaces().await.unwrap();
     assert_eq!(workspaces.len(), 1);
     assert_eq!(
@@ -639,6 +646,26 @@ use pontia_bot::helpers::{
     CreateHelper, HelperCommand, HelperLocation, HelperRequest, HelperService,
 };
 
+async fn assert_launch_mode(
+    control: &AgentControl,
+    client: &Client,
+    session: &str,
+    expected: LaunchMode,
+) {
+    assert_eq!(
+        client.launch_modes.lock().unwrap().get(session),
+        Some(&expected)
+    );
+    assert_eq!(
+        control
+            .queries()
+            .session_launch_mode(session)
+            .await
+            .unwrap(),
+        expected
+    );
+}
+
 async fn bot(service: &ConversationService) -> (String, String) {
     let bot = service
         .records()
@@ -837,6 +864,7 @@ async fn helpers_are_isolated_reusable_and_reply_to_the_current_bot() {
         .current_session_id
         .unwrap();
     assert_ne!(current, a_session);
+    assert_launch_mode(&control, &client, &current, LaunchMode::Background).await;
     {
         let inputs = client.inputs.lock().unwrap();
         let latest = inputs.last().unwrap();

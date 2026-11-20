@@ -238,6 +238,7 @@ impl HelperService {
                     ),
                 )
                 .await?;
+            request.launch_mode = pontia_core::LaunchMode::Background;
             request.role = Some(RETRIEVAL_ROLE.into());
             request
         } else {

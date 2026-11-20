@@ -66,6 +66,7 @@ async fn both_upper_limits_wait_for_idle_and_keep_helpers_and_work_status() {
         reconcile(&recovered).await;
         let new = current(&recovered, &id).await.unwrap();
         assert_ne!(new, old);
+        assert_launch_mode(&control, &client, &new, LaunchMode::Background).await;
         assert_eq!(
             control
                 .queries()

@@ -64,6 +64,7 @@ async fn one_device_round_survives_failure_and_restart_without_becoming_a_helper
         .clone();
     let service = DreamingService::new(control.clone(), conversation.clone());
     let first = service.start().await.unwrap().unwrap();
+    assert_launch_mode(&control, &client, &first, LaunchMode::Background).await;
     assert!(
         !instructions(&control, &first)
             .await
@@ -121,6 +122,7 @@ async fn one_device_round_survives_failure_and_restart_without_becoming_a_helper
     let restarted = DreamingService::new(control.clone(), conversation.clone());
     let _exits = report_exits(&control);
     let second = restarted.start().await.unwrap().unwrap();
+    assert_launch_mode(&control, &client, &second, LaunchMode::Background).await;
     assert_ne!(first, second);
     assert!(conversation.resolve(&first).await.is_err());
     let remaining = call(&memories, &second, "pending", json!({})).await;
@@ -604,6 +606,7 @@ async fn blocked_dreaming_interaction_is_rejected_and_terminated_without_wedging
         .unwrap();
 
     let second = dreaming.start().await.unwrap().unwrap();
+    assert_launch_mode(&control, &client, &second, LaunchMode::Background).await;
     assert_ne!(second, first);
     let shared = root.path().join("bot/readonly").canonicalize().unwrap();
     let directories = client.launch_directories.lock().unwrap().clone();
@@ -673,5 +676,6 @@ async fn blocked_dreaming_interaction_is_rejected_and_terminated_without_wedging
         .await
         .unwrap();
     let third = dreaming.start().await.unwrap().unwrap();
+    assert_launch_mode(&control, &client, &third, LaunchMode::Background).await;
     assert_ne!(third, second);
 }

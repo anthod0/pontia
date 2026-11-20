@@ -65,6 +65,7 @@ async fn temporary_helpers_share_the_task_folder_and_appear_in_the_default_works
             .await
             .unwrap();
         let id = response["session_id"].as_str().unwrap();
+        assert_launch_mode(&control, &client, id, LaunchMode::Foreground).await;
         assert_eq!(
             client.launch_directories.lock().unwrap()[id],
             default.canonicalize().unwrap().to_str().unwrap()
@@ -138,6 +139,7 @@ async fn project_helpers_follow_workspace_filters_and_accept_steering_on_their_r
     let sessions = helpers.list(&bot_id).await.unwrap();
 
     for (project, id) in &projects {
+        assert_launch_mode(&control, &client, id, LaunchMode::Foreground).await;
         assert_eq!(
             client.launch_directories.lock().unwrap().get(id),
             Some(&project.canonical_path)
