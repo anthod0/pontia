@@ -441,7 +441,7 @@ async fn dreaming_rejects_clients_without_approval_free_restricted_policy_before
                 .unwrap()
                 .is_none()
         );
-        assert!(!root.path().join("bot").join("dreaming").exists());
+        assert!(!root.path().join("bot").join("readonly").exists());
     }
 }
 
@@ -500,7 +500,7 @@ async fn blocked_dreaming_interaction_is_rejected_and_terminated_without_wedging
         ChoiceInteractionRequest, InteractionIntent, InteractionOption, InteractionState,
     };
 
-    let (_root, pool, client, control, conversation) = fixture().await;
+    let (root, pool, client, control, conversation) = fixture().await;
     let (_, bot_session) = bot(&conversation).await;
     seed_pending_memory(pool, &conversation, &bot_session).await;
     let dreaming = DreamingService::new(control.clone(), conversation);
@@ -587,7 +587,11 @@ async fn blocked_dreaming_interaction_is_rejected_and_terminated_without_wedging
     assert!(dreaming.start().await.unwrap().is_none());
     assert_eq!(
         *client.interaction_responses.lock().unwrap(),
-        vec![(first.clone(), rejectable.interaction_id.clone(), "deny".into())]
+        vec![(
+            first.clone(),
+            rejectable.interaction_id.clone(),
+            "deny".into()
+        )]
     );
     assert_eq!(
         control
@@ -613,6 +617,13 @@ async fn blocked_dreaming_interaction_is_rejected_and_terminated_without_wedging
 
     let second = dreaming.start().await.unwrap().unwrap();
     assert_ne!(second, first);
+    let shared = root.path().join("bot/readonly").canonicalize().unwrap();
+    let directories = client.launch_directories.lock().unwrap().clone();
+    assert_eq!(directories.get(&first).map(String::as_str), shared.to_str());
+    assert_eq!(
+        directories.get(&second).map(String::as_str),
+        shared.to_str()
+    );
 
     // Even if rejecting an interaction fails, Dreaming must still terminate the blocked round.
     *client.fail_interaction_response.lock().unwrap() = true;

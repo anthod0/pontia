@@ -32,7 +32,7 @@ async fn memory(commands: &MemoryCommands, session: &str, action: &str, input: V
 #[tokio::test]
 async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_failure_notifications()
 {
-    let (_root, pool, client, control, conversation) = fixture().await;
+    let (root, pool, client, control, conversation) = fixture().await;
     let (id, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
     let reader = retrieve(&helpers, &session, Some("workspace-a")).await;
@@ -52,6 +52,18 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
     );
     assert_eq!(created.execution_profile_version.as_deref(), Some("1"));
     assert!(created.workspace_id.is_none());
+    let shared = root.path().join("bot/readonly").canonicalize().unwrap();
+    assert_eq!(created.workspace.as_deref(), shared.to_str());
+    let second = retrieve(&helpers, &session, None).await;
+    assert_eq!(
+        client
+            .launch_directories
+            .lock()
+            .unwrap()
+            .get(&second)
+            .map(String::as_str),
+        shared.to_str()
+    );
     let turn = control
         .queries()
         .list_turns(&reader)

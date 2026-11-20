@@ -101,13 +101,7 @@ impl DreamingService {
         }
         let execution_policy = self.dreaming_execution_policy(&profile.client_type)?;
         let round = uuid::Uuid::now_v7().to_string();
-        let directory = self
-            .control
-            .pontia_home()
-            .join("bot")
-            .join("dreaming")
-            .join(&round);
-        tokio::fs::create_dir_all(&directory).await?;
+        let directory = self.conversation.records().read_only_directory().await?;
         let mut request = self
             .conversation
             .profile_session_request(

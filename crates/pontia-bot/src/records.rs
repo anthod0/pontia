@@ -185,6 +185,13 @@ impl BotService {
         Ok(self.home.join("bot").join(bot.bot_id))
     }
 
+    /// Shared launch directory for Sessions that only read Bot data, such as retrieval and Dreaming.
+    pub async fn read_only_directory(&self) -> Result<PathBuf> {
+        let directory = self.home.join("bot").join("readonly");
+        tokio::fs::create_dir_all(&directory).await?;
+        Ok(directory)
+    }
+
     /// The conversation service owns Session lifecycle and routing around this pointer.
     pub async fn set_current_session(&self, bot_id: &str, session_id: Option<&str>) -> Result<Bot> {
         sqlx::query_as(

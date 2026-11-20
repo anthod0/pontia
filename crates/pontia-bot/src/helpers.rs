@@ -260,6 +260,9 @@ impl HelperService {
             .await?;
         if let Some(id) = input.workspace_id {
             request.workspace_id = Some(id);
+        } else if profile_id == BotService::retrieval_profile_id(bot_id) {
+            let directory = self.conversation.records().read_only_directory().await?;
+            request.workspace = Some(directory.to_string_lossy().into_owned());
         } else {
             let directory = self
                 .conversation
