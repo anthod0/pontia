@@ -33,8 +33,12 @@ export interface BotConfiguration {
 
 export interface Bot extends BotConfiguration {
   bot_id: string;
-  working_on: string | null;
 }
+
+export type BotWorkStatus =
+  | { kind: "processing" }
+  | { kind: "working"; title: string }
+  | { kind: "idle" };
 
 export type BotClient = Pick<AgentClientView, "id" | "name" | "client_type" | "client_key">;
 
@@ -64,7 +68,7 @@ export type BotEntry = BotMessage | BotNotice | BotSharedFile;
 
 export interface BotMessagePage {
   bot: Bot;
-  processing: boolean;
+  status: BotWorkStatus;
   generation_notice: BotNotice | null;
   notice_session_id: string | null;
   file_link_session: { session_id: string; workspace: string | null } | null;

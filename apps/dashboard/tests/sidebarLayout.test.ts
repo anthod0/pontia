@@ -7,6 +7,17 @@ import SettingsShellHost from "./components/settings/SettingsShellHost.svelte";
 import { downloads } from "../src/lib/downloads/manager";
 import { testDevice } from "./deviceFixture";
 
+import type { BotMessagePage, BotWorkStatus } from "../src/api/types";
+import type { BotUpdate } from "../src/services/botChatStream";
+
+const botStreams = vi.hoisted(() => new Map<string, (update: BotUpdate) => void>());
+vi.mock("../src/services/botChatStream", () => ({
+  openBotChatStream: (_device: unknown, id: string, onUpdate: (update: BotUpdate) => void) => {
+    botStreams.set(id, onUpdate);
+    return () => botStreams.delete(id);
+  },
+}));
+
 const mocks = vi.hoisted(() => {
   function writableStore<T>(initial: T) {
     let value = initial;
@@ -341,7 +352,6 @@ test("sidebar collapses the Bots group and keeps the create action", async () =>
       client_type: "pi",
       client_key: "default",
       model: "provider/model",
-      working_on: null,
     },
   ]);
   render(AppSidebarHost);
@@ -973,4 +983,47 @@ test("mobile more menu hides downloads until a download starts, then opens the d
   await fireEvent.click(item);
   expect(screen.getByRole("dialog", { name: "Downloads" })).toBeInTheDocument();
   downloads.clearFinished();
+});
+
+test("sidebar refreshes every Bot status from live updates without opening its chat", async () => {
+  const bots = ["first", "second"].map((id) => ({
+    bot_id: id,
+    name: id,
+    description: null,
+    avatar_shape: "classic" as const,
+    avatar_color: "blue" as const,
+    client_type: "pi",
+    client_key: "default",
+    model: "test",
+  }));
+  vi.spyOn(testDevice.api, "listBots").mockResolvedValue(bots);
+  let status: BotWorkStatus = { kind: "idle" };
+  vi.spyOn(testDevice.api, "getBotMessages").mockImplementation(
+    async (id) =>
+      ({
+        bot: bots.find((bot) => bot.bot_id === id)!,
+        status,
+        entries: [],
+        next_before: null,
+        generation_notice: null,
+        notice_session_id: null,
+        file_link_session: null,
+      }) satisfies BotMessagePage,
+  );
+  const view = render(AppSidebarHost);
+  await waitFor(() => expect(botStreams.has("second")).toBe(true));
+  for (const next of [
+    { kind: "processing" },
+    { kind: "working", title: "Review" },
+    { kind: "idle" },
+  ] satisfies BotWorkStatus[]) {
+    status = next;
+    botStreams.get("second")!({ type: "changed" });
+    await waitFor(() =>
+      expect(testDevice.queryClient.getQueryData(["bot-status", "second"])).toEqual(next),
+    );
+  }
+  view.unmount();
+  expect(botStreams.has("second")).toBe(false);
+  vi.restoreAllMocks();
 });

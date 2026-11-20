@@ -225,6 +225,8 @@ async fn named_arguments_reject_incomplete_or_invalid_operations_before_sending_
         vec![
             "helper",
             "create",
+            "--title",
+            "Task",
             "--description",
             "task",
             "--message",
@@ -233,6 +235,8 @@ async fn named_arguments_reject_incomplete_or_invalid_operations_before_sending_
         vec![
             "helper",
             "create",
+            "--title",
+            "Task",
             "--description",
             "task",
             "--message",
@@ -369,6 +373,8 @@ async fn temporary_helper_sends_the_task_directory_name_as_the_location() {
         .cli(&[
             "helper",
             "create",
+            "--title",
+            "Checking exchange rates",
             "--temporary",
             name,
             "--description",
@@ -382,7 +388,7 @@ async fn temporary_helper_sends_the_task_directory_name_as_the_location() {
         f.requests.try_recv().unwrap()["command"]["input"],
         json!({
             "temporary":name, "description":name, "message":"Find the exchange rate",
-            "profile_id":null, "title":null
+            "profile_id":null, "title":"Checking exchange rates"
         })
     );
 }
@@ -415,6 +421,8 @@ async fn helper_create_rejects_removed_profile_version_argument() {
             "project",
             "--profile-id",
             "reviewer",
+            "--title",
+            "Review",
             "--profile-version",
             "1",
             "--description",
@@ -422,6 +430,35 @@ async fn helper_create_rejects_removed_profile_version_argument() {
             "--message",
             "Review changes",
         ])
+        .await;
+    assert!(!output.status.success());
+    assert!(f.requests.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn helper_requires_a_title_before_contacting_the_service() {
+    let mut f = Fixture::new("helper", json!({})).await;
+    let output = f
+        .cli(&[
+            "helper",
+            "create",
+            "--temporary",
+            "task",
+            "--description",
+            "Task",
+            "--message",
+            "Start",
+        ])
+        .await;
+    assert!(!output.status.success());
+    assert!(f.requests.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn send_to_user_rejects_the_removed_working_on_argument() {
+    let mut f = Fixture::new("send-to-user", json!({})).await;
+    let output = f
+        .cli(&["send-to-user", "--message", "Hello", "--working-on", "Task"])
         .await;
     assert!(!output.status.success());
     assert!(f.requests.try_recv().is_err());

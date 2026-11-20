@@ -15,7 +15,6 @@ const bot: Bot = {
   client_type: "pi",
   client_key: "default",
   model: "provider/model",
-  working_on: null,
 };
 
 test("edits an avatar, retains the selection after a failed save, and saves it on retry", async () => {

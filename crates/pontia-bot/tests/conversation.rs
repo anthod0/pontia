@@ -13,7 +13,7 @@ use pontia_agent_control::{
     clients::ClientRegistry,
 };
 use pontia_bot::{
-    conversation::{ConversationService, ConversationUpdate, Reply, ReplyRequest},
+    conversation::{ConversationService, ConversationUpdate, Reply, ReplyRequest, WorkStatus},
     identity::{BotIdentity, TOOL_TOKEN_ENV},
     messages::MessageStatus,
     records::BotConfiguration,
@@ -381,11 +381,10 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
         2
     );
 
-    let reply = |session: &str, text: &str, work: Option<&str>| ReplyRequest {
+    let reply = |session: &str, text: &str| ReplyRequest {
         session_id: session.into(),
         input: Reply {
             message: text.into(),
-            working_on: work.map(str::to_owned),
         },
     };
     assert!(service.resolve(&a_session).await.is_ok());
@@ -405,13 +404,13 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
     );
     assert!(
         service
-            .send_to_user(reply("foreign", "must not show", None))
+            .send_to_user(reply("foreign", "must not show"))
             .await
             .is_err()
     );
     let mut updates = service.subscribe(a);
     service
-        .send_to_user(reply(&a_session, "Complete\nreply", Some("Checking")))
+        .send_to_user(reply(&a_session, "Complete\nreply"))
         .await
         .unwrap();
     assert!(matches!(
@@ -424,17 +423,14 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
     ));
     let chat = service.chat(a).await.unwrap();
     assert_eq!(chat.messages.last().unwrap().content, "Complete\nreply");
-    assert_eq!(chat.bot.working_on.as_deref(), Some("Checking"));
+
     let restarted = test_conversation(control.clone());
-    assert_eq!(
-        restarted.chat(a).await.unwrap().bot.working_on.as_deref(),
-        Some("Checking")
-    );
+    assert_eq!(restarted.chat(a).await.unwrap().status, WorkStatus::Idle);
     service
-        .send_to_user(reply(&a_session, "Done", None))
+        .send_to_user(reply(&a_session, "Done"))
         .await
         .unwrap();
-    assert!(service.chat(a).await.unwrap().bot.working_on.is_none());
+    assert_eq!(service.chat(a).await.unwrap().status, WorkStatus::Idle);
     assert_eq!(service.chat(b).await.unwrap().messages.len(), 1);
 
     let a_handoff = instructions(&control, &a_session).await;
@@ -468,7 +464,7 @@ async fn failed_messages_show_processing_only_after_a_successful_retry() {
         .unwrap();
     let failed = service.send(&bot.bot_id, "hello").await.unwrap();
     assert_eq!(failed.status, MessageStatus::Failed);
-    assert!(!service.chat(&bot.bot_id).await.unwrap().processing);
+    assert!(service.chat(&bot.bot_id).await.unwrap().status != WorkStatus::Processing);
 
     service
         .records()
@@ -476,7 +472,7 @@ async fn failed_messages_show_processing_only_after_a_successful_retry() {
         .await
         .unwrap();
     service.retry(&bot.bot_id, &failed.id).await.unwrap();
-    assert!(service.chat(&bot.bot_id).await.unwrap().processing);
+    assert!(service.chat(&bot.bot_id).await.unwrap().status == WorkStatus::Processing);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -495,10 +491,10 @@ async fn processing_shows_until_the_bot_answers_or_its_turn_ends() {
     let target = id.clone();
     let sending = tokio::spawn(async move { sender.send(&target, "first").await.unwrap() });
     waiting.await.unwrap();
-    assert!(service.chat(&id).await.unwrap().processing);
+    assert!(service.chat(&id).await.unwrap().status == WorkStatus::Processing);
     release.send(()).unwrap();
     sending.await.unwrap();
-    assert!(service.chat(&id).await.unwrap().processing);
+    assert!(service.chat(&id).await.unwrap().status == WorkStatus::Processing);
 
     let session = service
         .records()
@@ -507,38 +503,31 @@ async fn processing_shows_until_the_bot_answers_or_its_turn_ends() {
         .unwrap()
         .current_session_id
         .unwrap();
-    let reply = |text: &str, work: Option<&str>| ReplyRequest {
+    let reply = |text: &str| ReplyRequest {
         session_id: session.clone(),
         input: Reply {
             message: text.into(),
-            working_on: work.map(str::to_owned),
         },
     };
-    service.send_to_user(reply("Hi", None)).await.unwrap();
-    assert!(!service.chat(&id).await.unwrap().processing);
+    service.send_to_user(reply("Hi")).await.unwrap();
+    assert!(service.chat(&id).await.unwrap().status != WorkStatus::Processing);
 
     service.send(&id, "second").await.unwrap();
-    assert!(service.chat(&id).await.unwrap().processing);
-    service
-        .send_to_user(reply("On it", Some("Checking")))
-        .await
-        .unwrap();
-    assert!(!service.chat(&id).await.unwrap().processing);
+    assert!(service.chat(&id).await.unwrap().status == WorkStatus::Processing);
+    service.send_to_user(reply("On it")).await.unwrap();
+    assert!(service.chat(&id).await.unwrap().status != WorkStatus::Processing);
     service.send(&id, "third").await.unwrap();
     let chat = service.chat(&id).await.unwrap();
-    assert!(chat.processing);
-    assert_eq!(chat.bot.working_on.as_deref(), Some("Checking"));
-    service
-        .send_to_user(reply("Still checking", Some("Checking")))
-        .await
-        .unwrap();
-    assert!(!service.chat(&id).await.unwrap().processing);
+    assert!(chat.status == WorkStatus::Processing);
 
-    service.send_to_user(reply("Done", None)).await.unwrap();
+    service.send_to_user(reply("Still checking")).await.unwrap();
+    assert!(service.chat(&id).await.unwrap().status != WorkStatus::Processing);
+
+    service.send_to_user(reply("Done")).await.unwrap();
     service.send(&id, "fourth").await.unwrap();
-    assert!(service.chat(&id).await.unwrap().processing);
+    assert!(service.chat(&id).await.unwrap().status == WorkStatus::Processing);
     finish(&control, &session, EventType::TurnCompleted).await;
-    assert!(!service.chat(&id).await.unwrap().processing);
+    assert!(service.chat(&id).await.unwrap().status != WorkStatus::Processing);
 }
 
 async fn instructions(control: &AgentControl, session: &str) -> String {
@@ -711,7 +700,7 @@ async fn helper(service: &HelperService, session: &str) -> String {
             command: HelperCommand::Create(CreateHelper {
                 location: HelperLocation::Temporary("2026-11-20_task".into()),
                 profile_id: None,
-                title: None,
+                title: "Assigned work".into(),
                 description: "assigned work".into(),
                 message: "first assignment".into(),
             }),
@@ -970,7 +959,7 @@ async fn helper_remains_addressable_when_first_delivery_fails_or_is_unknown() {
                 command: HelperCommand::Create(CreateHelper {
                     location: HelperLocation::Temporary("2026-11-20_task".into()),
                     profile_id: None,
-                    title: None,
+                    title: "Assigned work".into(),
                     description: task.into(),
                     message: task.into(),
                 }),
@@ -1206,7 +1195,7 @@ async fn create_helper(
             command: HelperCommand::Create(CreateHelper {
                 location: HelperLocation::Temporary("2026-11-20_task".into()),
                 profile_id: profile_id.map(Into::into),
-                title: None,
+                title: "Assigned work".into(),
                 description: "assigned work".into(),
                 message: "task".into(),
             }),
@@ -1583,3 +1572,6 @@ async fn helper_rejects_missing_and_deleted_profiles_before_creating_a_session()
         .unwrap();
     assert_eq!(after, before);
 }
+
+#[path = "conversation/status.rs"]
+mod status;

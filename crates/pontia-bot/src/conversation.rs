@@ -20,6 +20,9 @@ use crate::{
     user::UserService,
 };
 
+mod status;
+pub use status::WorkStatus;
+
 mod generation;
 pub use generation::GenerationLimits;
 mod timeline;
@@ -101,8 +104,7 @@ pub struct Conversation {
     pub bot: Bot,
     pub messages: Vec<BotMessage>,
     pub notices: Vec<Notice>,
-    /// The user awaits a reply the Bot is receiving or working on.
-    pub processing: bool,
+    pub status: WorkStatus,
 }
 
 #[derive(Clone, Serialize)]
@@ -123,7 +125,6 @@ pub struct ReplyRequest {
 #[serde(deny_unknown_fields)]
 pub struct Reply {
     pub message: String,
-    pub working_on: Option<String>,
 }
 
 #[derive(Clone)]
@@ -302,7 +303,7 @@ impl ConversationService {
 
     pub async fn chat(&self, bot_id: &str) -> Result<Conversation> {
         let activity = self.activity(bot_id);
-        // Serialize the snapshot with sendToUser so a reply and its work status arrive together.
+        // Keep the reply and its status in the same snapshot.
         let _guard = activity.reply.lock().await;
         let bot = self.records.get(bot_id).await?;
         let messages = self.messages.list(bot_id).await?;
@@ -332,31 +333,13 @@ impl ConversationService {
                 }
             }
         }
-        let processing = self.processing(&bot, &activity).await?;
+        let status = self.work_status(&bot, &activity).await?;
         Ok(Conversation {
             bot,
             messages,
             notices,
-            processing,
+            status,
         })
-    }
-
-    async fn processing(&self, bot: &Bot, activity: &Activity) -> Result<bool> {
-        if !self.messages.unanswered(&bot.bot_id).await? {
-            return Ok(false);
-        }
-        if !activity.pending_inputs.lock().unwrap().is_empty() {
-            return Ok(true);
-        }
-        match &bot.current_session_id {
-            Some(session) => {
-                self.control
-                    .queries()
-                    .session_has_active_turn(session)
-                    .await
-            }
-            None => Ok(false),
-        }
     }
 
     pub async fn send(&self, bot_id: &str, content: &str) -> Result<BotMessage> {
@@ -390,6 +373,7 @@ impl ConversationService {
             Input::Retry(id) => self.messages.retry(bot_id, &id).await?,
         };
         let pending = activity.track_input(&message.id);
+        self.await_reply(bot_id).await?;
         activity.notify(ConversationUpdate::Message {
             message: message.clone(),
         });
@@ -420,7 +404,14 @@ impl ConversationService {
         let activity = self.activity(bot_id);
         let revision = activity.switch_failure.lock().unwrap().0;
         let _guard = activity.delivery.lock().await;
-        self.deliver(bot_id, input, &activity, revision).await
+        let id = uuid::Uuid::now_v7().to_string();
+        let pending = activity.track_input(&id);
+        self.await_reply(bot_id).await?;
+        activity.notify(ConversationUpdate::Changed);
+        let result = self.deliver(bot_id, input, &activity, revision).await;
+        drop(pending);
+        activity.notify(ConversationUpdate::Changed);
+        result
     }
 
     async fn deliver(
@@ -440,6 +431,7 @@ impl ConversationService {
                     .error());
             }
         }
+        self.await_reply(bot_id).await?;
         self.rotate(bot_id, activity, time::OffsetDateTime::now_utc())
             .await?;
         let bot = self.records.get(bot_id).await?;
@@ -450,10 +442,32 @@ impl ConversationService {
                 return Err(error);
             }
         };
-        self.control
+        let position = self
+            .control
+            .queries()
+            .session_snapshot(&session_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Session {session_id} not found")))?
+            .event_position;
+        sqlx::query(
+            "UPDATE bots SET awaiting_reply = 1, awaiting_reply_after = ? WHERE bot_id = ?",
+        )
+        .bind(position)
+        .bind(bot_id)
+        .execute(&self.control.db())
+        .await?;
+        let result = self
+            .control
             .turn_commands()
             .submit_live_input(&session_id, input.into())
-            .await
+            .await;
+        if result.is_err() && !matches!(&result, Err(Error::ControlUnknown(_))) {
+            sqlx::query("UPDATE bots SET awaiting_reply = 0 WHERE bot_id = ?")
+                .bind(bot_id)
+                .execute(&self.control.db())
+                .await?;
+        }
+        result
     }
 
     async fn current_session(&self, bot: Bot, activity: &Activity) -> Result<String> {
@@ -588,10 +602,6 @@ impl ConversationService {
                 code: "bot_session_required",
                 message: IdentityError.to_string(),
             })?;
-        let working_on = request
-            .input
-            .working_on
-            .filter(|value| !value.trim().is_empty());
         if request.input.message.trim().is_empty() {
             return Err(Error::Domain("message cannot be empty".into()));
         }
@@ -601,7 +611,7 @@ impl ConversationService {
         let mut progress = ReplyInProgress(&activity, None);
         let message = self
             .messages
-            .reply(&bot.bot_id, &request.input.message, working_on.as_deref())
+            .reply(&bot.bot_id, &request.input.message)
             .await?;
         progress.1 = Some(message.clone());
         Ok(message)

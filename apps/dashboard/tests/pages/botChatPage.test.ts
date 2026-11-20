@@ -23,7 +23,6 @@ const bot: Bot = {
   client_type: "pi",
   client_key: "default",
   model: "test",
-  working_on: null,
 };
 
 beforeEach(() => {
@@ -67,7 +66,7 @@ test("renders Bot replies as markdown while keeping user messages as plain text"
     file_link_session: null,
     notice_session_id: null,
     generation_notice: null,
-    processing: false,
+    status: { kind: "idle" },
   });
 
   const { container } = render(BotChatPage, { botId: bot.bot_id });
@@ -108,7 +107,7 @@ test.each([
     notice_session_id: null,
     generation_notice: null,
     next_before: null,
-    processing: false,
+    status: { kind: "idle" },
   });
   const read = vi
     .spyOn(testDevice.fileApi, "pathFileContent")
@@ -122,7 +121,7 @@ test.each([
 
 function chatWith(processing: boolean, count = 1, workingOn: string | null = null) {
   vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
-    bot: { ...bot, working_on: workingOn },
+    bot,
     entries: Array.from({ length: count }, (_, index) => ({
       id: `msg-${index}`,
       kind: "user_input",
@@ -134,57 +133,15 @@ function chatWith(processing: boolean, count = 1, workingOn: string | null = nul
     file_link_session: null,
     notice_session_id: null,
     generation_notice: null,
-    processing,
+    status: processing
+      ? { kind: "processing" }
+      : workingOn
+        ? { kind: "working", title: workingOn }
+        : { kind: "idle" },
   });
   render(BotChatPage, { botId: bot.bot_id });
   return screen.findByRole("log");
 }
-
-test("shows a status while the Bot processes an unanswered message", async () => {
-  await chatWith(true);
-  expect(screen.getByRole("status").querySelector("svg.bot")).toHaveClass("classic");
-});
-
-test("shows processing over the work status until the Bot replies", async () => {
-  await chatWith(true, 1, "Checking logs");
-  expect(screen.getByRole("status")).toHaveTextContent("Working on your message");
-  expect(screen.queryByText("Checking logs")).not.toBeInTheDocument();
-});
-
-test("shows the work status when no message awaits a reply", async () => {
-  await chatWith(false, 1, "Checking logs");
-  expect(screen.getByRole("status")).toHaveTextContent("Checking logs");
-});
-
-test("shows only the typing bubble while a reply arrives over the work status", async () => {
-  const log = await chatWith(true, 1, "Checking logs");
-  stream.push({ type: "typing" });
-  await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
-  expect(within(log).getByText("•••")).toBeInTheDocument();
-});
-
-test("restores the work status as soon as the reply arrives", async () => {
-  const log = await chatWith(true, 1, "Checking logs");
-  vi.mocked(testDevice.api.getBotMessages).mockReturnValue(new Promise(() => {}));
-  stream.push({ type: "typing" });
-  stream.push({
-    type: "message",
-    message: {
-      id: "msg-reply",
-      kind: "bot_reply",
-      content: "On it",
-      status: "normal",
-      created_at: new Date(1).toISOString(),
-    },
-  });
-  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Checking logs"));
-  expect(within(log).queryByText("•••")).not.toBeInTheDocument();
-});
-
-test("shows no status when the Bot is idle", async () => {
-  await chatWith(false);
-  expect(screen.queryByRole("status")).not.toBeInTheDocument();
-});
 
 test("mounts only the visible window of a full Bot history page", async () => {
   const log = await chatWith(false, 50);
@@ -212,7 +169,7 @@ test("downloads a live file share directly from the open Bot chat", async () => 
     file_link_session: null,
     notice_session_id: null,
     generation_notice: null,
-    processing: false,
+    status: { kind: "idle" },
   };
   vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue(latest);
   const events = vi.spyOn(testDevice.events, "subscribeDashboardEvents");

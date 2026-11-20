@@ -1,4 +1,11 @@
-import type { Bot, BotEntry, BotMessage, BotMessagePage, BotNotice } from "../api/types";
+import type {
+  Bot,
+  BotEntry,
+  BotMessage,
+  BotMessagePage,
+  BotNotice,
+  BotWorkStatus,
+} from "../api/types";
 import { ApiError } from "../api/errors";
 import type { DeviceRuntime } from "../device/runtime";
 
@@ -20,7 +27,7 @@ export class BotTimeline {
   entries = $state.raw<BotEntry[]>([]);
   bot = $state.raw<Bot | null>(null);
   fileLinkSession = $state.raw<BotMessagePage["file_link_session"]>(null);
-  processing = $state(false);
+  status = $state.raw<BotWorkStatus>({ kind: "idle" });
   generationNotice = $state.raw<BotNotice | null>(null);
   before = $state<string | null>(null);
   loadingOlder = $state(false);
@@ -68,16 +75,9 @@ export class BotTimeline {
   }
 
   message(message: BotMessage) {
-    // A reply answers the pending input, so processing ends before the refresh confirms it.
-    if (message.kind === "bot_reply") this.setProcessing(false);
     if (this.running) this.live.set(message.id, message);
     if (this.known.has(message.id)) this.merge([message]);
     this.refresh();
-  }
-
-  private setProcessing(processing: boolean) {
-    this.processing = processing;
-    this.device.queryClient.setQueryData(["bot-processing", this.id], processing);
   }
 
   private async page(locator: { before?: string; around?: string } = {}) {
@@ -150,7 +150,8 @@ export class BotTimeline {
     if (reset || rotated) this.stale = new Set(this.known.keys());
     this.bot = latest.bot;
     this.fileLinkSession = latest.file_link_session;
-    this.setProcessing(latest.processing);
+    this.status = latest.status;
+    this.device.queryClient.setQueryData(["bot-status", this.id], latest.status);
     this.generationNotice = latest.generation_notice;
     this.device.queryClient.setQueryData<Bot[]>(["bots"], (bots) =>
       bots?.map((bot) => (bot.bot_id === this.id ? latest.bot : bot)),

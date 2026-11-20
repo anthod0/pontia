@@ -67,7 +67,7 @@ pub struct CreateHelper {
     #[serde(flatten)]
     pub location: HelperLocation,
     pub profile_id: Option<String>,
-    pub title: Option<String>,
+    pub title: String,
     pub description: String,
     pub message: String,
 }
@@ -150,7 +150,7 @@ impl HelperService {
                     CreateHelper {
                         location: HelperLocation::ReadOnly,
                         profile_id: None,
-                        title: None,
+                        title: "Retrieving memories".into(),
                         description: input.message.clone(),
                         message: format!("{scope}\n\n{}", input.message),
                     },
@@ -216,6 +216,7 @@ impl HelperService {
     async fn create(&self, bot: &Bot, source: &str, input: CreateHelper) -> Result<Value> {
         nonempty(&input.message)?;
         nonempty(&input.description)?;
+        nonempty(&input.title)?;
         let bot_id = &bot.bot_id;
         let reference = format!("helper:{bot_id}:{}", uuid::Uuid::now_v7());
         let ownership = SessionOwnership {
@@ -324,7 +325,7 @@ impl HelperService {
                 request.workspace = Some(directory.to_string_lossy().into_owned());
             }
         }
-        request.title = input.title;
+        request.title = Some(input.title);
         request.description = Some(input.description);
         // Save the unique creation reference first so recovery can find a Session even if launch fails.
         sqlx::query("INSERT INTO bot_helpers(reference, bot_id) VALUES (?, ?)")
@@ -478,7 +479,7 @@ fn forbidden() -> Error {
 fn nonempty(message: &str) -> Result<()> {
     if message.trim().is_empty() {
         return Err(Error::Domain(
-            "message and description must not be empty".into(),
+            "message, description, and title must not be empty".into(),
         ));
     }
     Ok(())

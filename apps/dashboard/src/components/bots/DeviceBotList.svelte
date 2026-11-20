@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { createQueries, createQuery, skipToken } from '@tanstack/svelte-query'
+  import { createQueries, createQuery } from '@tanstack/svelte-query'
+  import { openBotChatStream } from '../../services/botChatStream'
   import { page } from '$app/state'
   import { t } from '$lib/i18n'
   import { dashboardPath, navigate } from '$lib/navigation'
@@ -21,12 +22,22 @@
   const statuses = createQueries(
     () => ({
       queries: (bots.data ?? []).map((bot) => ({
-        queryKey: ['bot-processing', bot.bot_id],
-        queryFn: skipToken,
+        queryKey: ['bot-status', bot.bot_id],
+        queryFn: async ({ signal }: { signal: AbortSignal }) => (await device.api.getBotMessages(bot.bot_id, { limit: 1 }, signal)).status,
       })),
     }),
     () => device.queryClient,
   )
+  const botIds = $derived((bots.data ?? []).map(bot => bot.bot_id).join(","))
+  $effect(() => {
+    const close = botIds.split(',').filter(Boolean).map(id => openBotChatStream(device, id, update => {
+      if (update.type === 'typing') return
+      const query = { queryKey: ['bot-status', id] }
+      // Invalidation alone can reuse an initial request that predates this update.
+      void device.queryClient.cancelQueries(query).then(() => device.queryClient.invalidateQueries(query))
+    }, () => {}))
+    return () => close.forEach(stop => stop())
+  })
   const scope = $derived(handle ? `/${handle}` : undefined)
   let creating = $state(false)
   let botsOpen = $state(true)
@@ -68,7 +79,7 @@
           </Sidebar.MenuItem>
         {/if}
         {#each bots.data ?? [] as bot, index (bot.bot_id)}
-          {@const working = !!bot.working_on || statuses[index]?.data === true}
+          {@const working = statuses[index]?.data?.kind === 'processing' || statuses[index]?.data?.kind === 'working'}
           {@const path = `/bots/${encodeURIComponent(bot.bot_id)}`}
           {@const active = page.params.botId === bot.bot_id && (handle === undefined || handle === page.params.handle)}
           <Sidebar.MenuItem>

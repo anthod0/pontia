@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Bot work status now shows message processing first, then the title of the newest busy helper, and disappears when idle. Memory retrieval and dreaming do not count as background work. Bot chats and sidebar activity update as helper Sessions change.
+- **Breaking:** `pontia bot send-to-user` no longer accepts `--working-on`, and its API no longer accepts `working_on`. Bot records no longer expose that field; chat and message-page responses replace `processing` with `status` (`processing`, `working` with a title, or `idle`).
+- **Breaking:** `pontia bot helper create` requires a nonempty `--title`, and the helper creation API requires `title`. Memory retrieval is unchanged.
 - Bot chat messages scroll beneath the transparent top bar, and the work status above the composer is larger and easier to read.
 - `pontia bot helper create` without `--profile-id` starts a general helper that uses the Bot's current client and model. Bots no longer create a `<bot_id>-helper` Agent Profile, so changing a Bot's model in its settings also applies to new helpers. Existing `<bot_id>-helper` Profiles remain ordinary Profiles and can be deleted.
 

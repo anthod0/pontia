@@ -26,9 +26,8 @@ function page(entries: BotEntry[], before: string | null, session = "s"): BotMes
       client_type: "pi",
       client_key: "default",
       model: "test",
-      working_on: null,
     },
-    processing: false,
+    status: { kind: "idle" },
     file_link_session: null,
     notice_session_id: session,
     generation_notice: null,
@@ -131,4 +130,21 @@ test("orders mixed timestamps by UTC millisecond and binary ID", () => {
   const a = { ...message(1), id: "Z", created_at: "2026-11-20T10:00:00.123999+08:00" };
   const b = { ...message(2), id: "a", created_at: "2026-11-20T02:00:00.123Z" };
   expect([b, a].sort(compareBotEntries).map((row) => row.id)).toEqual(["Z", "a"]);
+});
+
+test("refreshes the chat and shared sidebar status through processing, working, and idle", async () => {
+  const fetch = vi.spyOn(testDevice.api, "getBotMessages");
+  const timeline = new BotTimeline(testDevice, "bot");
+  const statuses: BotMessagePage["status"][] = [
+    { kind: "processing" },
+    { kind: "working", title: "Review changes" },
+    { kind: "idle" },
+  ];
+  for (const status of statuses) {
+    fetch.mockResolvedValue({ ...page([], null), status });
+    timeline.refresh();
+    await waitFor(() => expect(timeline.status).toEqual(status));
+    expect(testDevice.queryClient.getQueryData(["bot-status", "bot"])).toEqual(status);
+  }
+  timeline.destroy();
 });

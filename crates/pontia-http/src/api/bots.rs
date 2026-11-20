@@ -11,10 +11,9 @@ use axum::{
 };
 use pontia_agent_control::{agent_clients::AgentClientService, client_contract::DetectionContext};
 use pontia_bot::{
-    conversation::{ConversationUpdate, NOTICE_EVENTS, ReplyRequest},
+    conversation::{ConversationUpdate, ReplyRequest},
     records::{BotConfiguration, CreateError},
 };
-use pontia_core::domain::EventType;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::broadcast::error::RecvError;
@@ -190,37 +189,14 @@ pub async fn stream(
                     Err(RecvError::Closed) => break,
                 },
                 event = events.recv() => match event {
-                    Ok(event) if matches!(
-                        event.event_type,
-                        EventType::TurnCreated
-                            | EventType::TurnQueued
-                            | EventType::TurnStarted
-                            | EventType::TurnCompleted
-                            | EventType::TurnFailed
-                            | EventType::TurnDispatchFailed
-                            | EventType::TurnAbandoned
-                            | EventType::TurnInterrupted
-                            | EventType::SessionError
-                            | EventType::SessionExited
-                    ) => {
-                        match state.bots().records().get(&bot_id).await {
-                            Ok(bot) if bot.current_session_id.as_deref() == Some(&event.session_id) =>
-                            {
-                                let update = if NOTICE_EVENTS.contains(&event.event_type) {
-                                    ConversationUpdate::Reset
-                                } else {
-                                    ConversationUpdate::Changed
-                                };
-                                yield Ok(update_event(update, options.timeline));
-                            }
-                            Ok(_) => (),
-                            Err(error) => {
-                                tracing::warn!(%bot_id, %error, "Bot event stream lookup failed");
-                                break;
-                            }
+                    Ok(event) => match state.bots().event_update(&bot_id, &event).await {
+                        Ok(Some(update)) => yield Ok(update_event(update, options.timeline)),
+                        Ok(None) => (),
+                        Err(error) => {
+                            tracing::warn!(%bot_id, %error, "Bot event stream lookup failed");
+                            break;
                         }
-                    }
-                    Ok(_) => (),
+                    },
                     Err(RecvError::Lagged(_)) => {
                         updates = updates.resubscribe();
                         events = events.resubscribe();

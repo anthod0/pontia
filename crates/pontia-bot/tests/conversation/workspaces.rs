@@ -13,7 +13,7 @@ fn project_helper(session: &str, workspace_id: &str, title: Option<&str>) -> Hel
         command: HelperCommand::Create(CreateHelper {
             location: HelperLocation::WorkspaceId(workspace_id.into()),
             profile_id: None,
-            title: title.map(Into::into),
+            title: title.unwrap_or("Project task").into(),
             description: "Project task".into(),
             message: "Start the project task".into(),
         }),
@@ -23,7 +23,7 @@ fn project_helper(session: &str, workspace_id: &str, title: Option<&str>) -> Hel
 fn temporary_helper(session: &str, name: &str) -> HelperRequest {
     serde_json::from_value(json!({
         "session_id": session, "command": {"action": "create", "input": {
-            "temporary": name, "description": format!("Report for {name}"), "message": "Write a report"
+            "temporary": name, "title": "Writing a report", "description": format!("Report for {name}"), "message": "Write a report"
         }}
     }))
     .unwrap()
@@ -475,7 +475,7 @@ fn external_helper_creation_requires_one_writable_location() {
         json!({"workspace_id":"one", "temporary":"two"}),
         json!({"read_only":null}),
     ] {
-        let mut input = json!({"message":"task","description":"test"});
+        let mut input = json!({"message":"task","description":"test","title":"Test task"});
         input
             .as_object_mut()
             .unwrap()

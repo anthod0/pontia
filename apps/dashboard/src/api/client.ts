@@ -111,10 +111,10 @@ export function createApi(device: DeviceRuntime) {
 
   function getBotMessages(
     id: string,
-    page: { before?: string; around?: string },
+    page: { before?: string; around?: string; limit?: number },
     signal?: AbortSignal,
   ): Promise<BotMessagePage> {
-    const query = new URLSearchParams({ limit: "50", ...page });
+    const query = new URLSearchParams({ ...page, limit: String(page.limit ?? 50) });
     return request(`${botPath(id)}/messages?${query}`, { signal });
   }
 

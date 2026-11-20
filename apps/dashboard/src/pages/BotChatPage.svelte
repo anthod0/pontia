@@ -129,18 +129,17 @@
       {/snippet}
     </BotMessageFeed>
     <div class="shrink-0 px-1 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <!-- An unanswered message outranks the background work status; the typing bubble replaces it while the reply arrives. -->
-      {#if timeline.processing}
+      {#if timeline.status.kind === 'processing'}
         {#if !typing}
           <p class="mb-2 flex items-start gap-2 px-2 text-sm leading-5 text-muted-foreground" role="status">
             <BotAvatar shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working class="size-5 shrink-0" />
             <span class="shimmer min-w-0">{$t('bots.processing')}</span>
           </p>
         {/if}
-      {:else if timeline.bot.working_on}
+      {:else if timeline.status.kind === 'working'}
         <p class="mb-2 flex items-start gap-2 px-2 text-sm leading-5 text-muted-foreground" role="status">
           <BotAvatar shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working class="size-5 shrink-0" />
-          <span class="shimmer line-clamp-2 min-w-0 [overflow-wrap:anywhere]" title={timeline.bot.working_on}>{timeline.bot.working_on}</span>
+          <span class="shimmer line-clamp-2 min-w-0 [overflow-wrap:anywhere]" title={timeline.status.title}>{timeline.status.title}</span>
         </p>
       {/if}
       {#if timeline.refreshError}{@render refreshFailure()}{/if}

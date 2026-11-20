@@ -11,7 +11,6 @@ const bot: Bot = {
   client_type: "pi",
   client_key: "default",
   model: "provider/first",
-  working_on: null,
   avatar_shape: "classic",
   avatar_color: "blue",
 };

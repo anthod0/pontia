@@ -56,16 +56,10 @@ impl MessageService {
         append_message(&self.pool, bot_id, kind, content).await
     }
 
-    pub(crate) async fn reply(
-        &self,
-        bot_id: &str,
-        content: &str,
-        working_on: Option<&str>,
-    ) -> Result<BotMessage> {
+    pub(crate) async fn reply(&self, bot_id: &str, content: &str) -> Result<BotMessage> {
         let mut tx = self.pool.begin().await?;
         let message = append_message(&mut *tx, bot_id, MessageKind::BotReply, content).await?;
-        sqlx::query("UPDATE bots SET working_on = ? WHERE bot_id = ?")
-            .bind(working_on)
+        sqlx::query("UPDATE bots SET awaiting_reply = 0 WHERE bot_id = ?")
             .bind(bot_id)
             .execute(&mut *tx)
             .await?;
@@ -116,17 +110,6 @@ impl MessageService {
                 .fetch_optional(&self.pool)
                 .await?,
         )
-    }
-
-    pub(crate) async fn unanswered(&self, bot_id: &str) -> Result<bool> {
-        let latest: Option<MessageKind> = sqlx::query_scalar(
-            "SELECT kind FROM bot_messages WHERE bot_id = ? AND status = 'normal'
-             ORDER BY timeline_ms DESC, id DESC LIMIT 1",
-        )
-        .bind(bot_id)
-        .fetch_optional(&self.pool)
-        .await?;
-        Ok(latest == Some(MessageKind::UserInput))
     }
 
     pub(crate) async fn retry(&self, bot_id: &str, id: &str) -> Result<BotMessage> {
