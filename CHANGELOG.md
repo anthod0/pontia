@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The homepage now presents example agent Sessions and remote control features, including terminal synchronization and end-to-end encryption.
+- Bot file messages show file-type icons and download progress, with inline image previews and a preview panel for text files.
+- Quick start guides now use three steps: install Pontia, initialize the device, and open the Dashboard. Platform guides include service startup instructions.
+- Bots delegate worktree creation to their helpers.
 - Bot work status now shows message processing first, then the title of the newest busy helper, and disappears when idle. Memory retrieval and dreaming do not count as background work. Bot chats and sidebar activity update as helper Sessions change.
 - **Breaking:** `pontia bot send-to-user` no longer accepts `--working-on`, and its API no longer accepts `working_on`. Bot records no longer expose that field; chat and message-page responses replace `processing` with `status` (`processing`, `working` with a title, or `idle`).
 - **Breaking:** `pontia bot helper create` requires a nonempty `--title`, and the helper creation API requires `title`. Memory retrieval is unchanged.
