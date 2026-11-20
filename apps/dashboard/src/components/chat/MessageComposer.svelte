@@ -89,6 +89,7 @@
   let submissionError = $state<string | null>(null)
   const uploadBlocked = $derived(Boolean(draftId) && (!attachments.ready || attachments.items.some(item => item.status !== 'complete')))
   const completedFiles = $derived(attachments.items.flatMap(item => item.status === 'complete' && item.upload?.path ? [{ name: item.name, path: item.upload.path }] : []))
+  const uploadUnavailable = $derived(disabled || busy || sending || !attachments.ready)
   let fullscreenOpen = $state(false)
   let inlineInput = $state<HTMLDivElement | null>(null)
   // Sticky until the draft is cleared, so a line that only wraps in the narrow compact row cannot flip layouts back and forth.
@@ -201,6 +202,15 @@
     onInterrupt()
   }
 
+  // Office apps put a rendered image next to copied rich text; keep pasting that as text.
+  function pasteFiles(event: ClipboardEvent): void {
+    const data = event.clipboardData
+    if (!uploads || uploadUnavailable || !data?.files.length || data.types.includes('text/rtf')) return
+    event.preventDefault()
+    event.stopPropagation()
+    void uploads.add(Array.from(data.files))
+  }
+
   function handleKeydown(event: KeyboardEvent): void {
     if (event.isComposing || event.keyCode === 229) return
     const queueInput = !event.shiftKey && !event.ctrlKey && !event.metaKey
@@ -228,7 +238,7 @@
 
 {#snippet uploadButton(picker: { choose: () => void } | null)}
   {#if uploads}
-    <Button type="button" variant="ghost" size="icon-sm" aria-label={$t('files.upload')} title={$t('files.upload')} disabled={disabled || busy || sending || !attachments.ready} onclick={() => picker?.choose()}>
+    <Button type="button" variant="ghost" size="icon-sm" aria-label={$t('files.upload')} title={$t('files.upload')} disabled={uploadUnavailable} onclick={() => picker?.choose()}>
       <PlusIcon class="size-4" />
     </Button>
   {/if}
@@ -279,7 +289,7 @@
       <UploadAttachments bind:this={uploadPicker} draft={uploads} disabled={disabled || busy || sending} />
     </div>
   {/if}
-  <PromptInput.Body class={compact ? 'col-start-2 row-start-2' : undefined}>
+  <PromptInput.Body class={compact ? 'col-start-2 row-start-2' : undefined} onpastecapture={pasteFiles}>
     <div bind:this={inlineInput} class="relative">
       <ChatCommandInput bind:this={editor} id={inputId} bind:value {commands} onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget {autofocus} onkeydown={handleKeydown} onfocus={onFocus} class={fullscreen ? `min-h-0 py-2 text-base sm:text-[13.5px] ${compact ? 'px-0' : 'pl-3 pr-10 sm:pr-3'}` : 'min-h-[52px] px-4 py-3 text-base sm:text-[13.5px]'} />
       {#if fullscreen && !compact}
@@ -327,7 +337,7 @@
 
       <PromptInput.Root class="mt-2 flex min-h-0 w-full flex-1 flex-col shadow-none" onSubmit={submitAndCloseFullscreen}>
         {#if uploads}<UploadAttachments bind:this={fullscreenUploadPicker} draft={uploads} disabled={disabled || busy || sending} />{/if}
-        <PromptInput.Body class="min-h-0 flex-1">
+        <PromptInput.Body class="min-h-0 flex-1" onpastecapture={pasteFiles}>
           <ChatCommandInput bind:this={fullscreenEditor} bind:value {commands} commandSide="bottom" onCommand={executeCommand} {workspaceId} {placeholder} {disabled} {mentionIdentities} shortcutFocusTarget autofocus onkeydown={handleKeydown} onfocus={onFocus} class="h-full min-h-[52px] pr-2" />
         </PromptInput.Body>
         {#if command?.disabledReason}<p role="status" class="pb-2 text-xs text-muted-foreground">{command.disabledReason}</p>{/if}

@@ -94,3 +94,39 @@ test("reports upload failures in a toast instead of beside the file", async () =
     expect.objectContaining({ description: expect.stringContaining("device unreachable") }),
   );
 });
+
+function clipboard(files: File[], types: string[]) {
+  return { files, types: [...types, ...(files.length ? ["Files"] : [])], getData: () => "" };
+}
+
+test("uploads files pasted into the input", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => new Promise(() => {})),
+  );
+  const draftId = crypto.randomUUID();
+  render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
+  const send = screen.getByRole("button", { name: "Send" });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  const file = new File(["png"], "image.png", { type: "image/png" });
+  const pasted = await fireEvent.paste(screen.getByRole("textbox"), {
+    clipboardData: clipboard([file], []),
+  });
+  expect(pasted).toBe(false);
+  await screen.findByRole("button", { name: "Remove attachment image.png" });
+  expect(send).toBeDisabled();
+});
+
+test("keeps rich text pastes that carry a rendered image as text", async () => {
+  const draftId = crypto.randomUUID();
+  render(MessageComposer, { value: "", draftId, onSubmit: vi.fn() });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Upload files" })).toBeEnabled());
+  const file = new File(["png"], "image.png", { type: "image/png" });
+  const pasted = await fireEvent.paste(screen.getByRole("textbox"), {
+    clipboardData: clipboard([file], ["text/plain", "text/rtf"]),
+  });
+  expect(pasted).toBe(true);
+  expect(
+    screen.queryByRole("button", { name: "Remove attachment image.png" }),
+  ).not.toBeInTheDocument();
+});
