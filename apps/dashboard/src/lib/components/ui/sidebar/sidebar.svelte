@@ -40,10 +40,10 @@
 
 	function endSwipe(event: TouchEvent): void {
 		if (!swipeStart) return;
-		const dx = event.changedTouches[0].clientX - swipeStart.x;
+		const leftwardDistance = swipeStart.x - event.changedTouches[0].clientX;
 		const dy = Math.abs(event.changedTouches[0].clientY - swipeStart.y);
 		swipeStart = null;
-		if (dx >= 64 && dx > dy * 2) sidebar.setOpenMobile(false);
+		if (leftwardDistance >= 64 && leftwardDistance > dy * 2) sidebar.setOpenMobile(false);
 	}
 </script>
 

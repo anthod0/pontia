@@ -903,24 +903,24 @@ test("mobile sidebar closes with its close button", async () => {
   );
 });
 
-test("mobile sidebar closes on a right swipe", async () => {
+test("mobile sidebar closes on a left swipe", async () => {
   const sidebar = await openMobileSidebar();
-  await fireEvent.touchStart(sidebar, { touches: [{ clientX: 40, clientY: 200 }] });
-  await fireEvent.touchMove(sidebar, { touches: [{ clientX: 150, clientY: 210 }] });
-  await fireEvent.touchEnd(sidebar, { changedTouches: [{ clientX: 180, clientY: 215 }] });
+  await fireEvent.touchStart(sidebar, { touches: [{ clientX: 180, clientY: 200 }] });
+  await fireEvent.touchMove(sidebar, { touches: [{ clientX: 70, clientY: 210 }] });
+  await fireEvent.touchEnd(sidebar, { changedTouches: [{ clientX: 40, clientY: 215 }] });
   await waitFor(() =>
     expect(screen.queryByRole("dialog", { name: "Sidebar" })).not.toBeInTheDocument(),
   );
 });
 
 test.each([
-  { name: "a short drag", x: 65, y: 205, cancel: false },
-  { name: "a left swipe", x: -80, y: 205, cancel: false },
-  { name: "a vertical scroll", x: 150, y: 400, cancel: false },
-  { name: "a cancelled gesture", x: 180, y: 210, cancel: true },
+  { name: "a right swipe", x: 320, y: 205, cancel: false },
+  { name: "a short drag", x: 155, y: 205, cancel: false },
+  { name: "a vertical scroll", x: 70, y: 400, cancel: false },
+  { name: "a cancelled gesture", x: 40, y: 210, cancel: true },
 ])("mobile sidebar stays open after $name", async ({ x, y, cancel }) => {
   const sidebar = await openMobileSidebar();
-  await fireEvent.touchStart(sidebar, { touches: [{ clientX: 40, clientY: 200 }] });
+  await fireEvent.touchStart(sidebar, { touches: [{ clientX: 180, clientY: 200 }] });
   await fireEvent.touchMove(sidebar, { touches: [{ clientX: x, clientY: y }] });
   if (cancel) await fireEvent.touchCancel(sidebar);
   await fireEvent.touchEnd(sidebar, { changedTouches: [{ clientX: x, clientY: y }] });
