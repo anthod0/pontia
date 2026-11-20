@@ -19,7 +19,8 @@ pub mod workspaces;
 
 pub use agent_events::AgentEventBroker;
 pub use agent_profiles::{
-    AgentProfileService, AgentProfileView, ProfileLaunchConfig, UpsertAgentProfileRequest,
+    AgentProfileService, AgentProfileView, LaunchableAgentProfile, ProfileLaunchConfig,
+    UpsertAgentProfileRequest,
 };
 pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
 pub use client_contract::{ClientControlChannel, ClientControlOperation};

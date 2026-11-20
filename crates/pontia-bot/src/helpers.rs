@@ -277,16 +277,8 @@ impl HelperService {
                 )
                 .await?
         };
-        if !self
-            .control
-            .clients()
-            .spec(&request.client_type)
-            .is_some_and(|spec| spec.capabilities.steer)
-        {
-            return Err(Error::CapabilityUnavailable(
-                "Client cannot run a helper Session".into(),
-            ));
-        }
+        self.conversation
+            .require_helper_client(&request.client_type)?;
         let mut message = input.message;
         match input.location {
             HelperLocation::WorkspaceId(id) => {

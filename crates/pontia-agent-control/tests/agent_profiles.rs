@@ -48,7 +48,11 @@ impl ClientInstructions for Instructions {
         Ok(json!({"system_prompt":input.system_prompt}))
     }
 }
-async fn fixture() -> (AgentProfileService, SqliteAgentClientRepository) {
+async fn fixture() -> (
+    AgentProfileService,
+    SqliteAgentClientRepository,
+    sqlx::SqlitePool,
+) {
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
     let settings = SqliteAgentClientRepository::new(pool.clone());
@@ -62,8 +66,9 @@ async fn fixture() -> (AgentProfileService, SqliteAgentClientRepository) {
     let mut clients = ClientRegistry::default();
     clients.register(client);
     (
-        AgentProfileService::new(pool).with_clients(clients),
+        AgentProfileService::new(pool.clone()).with_clients(clients),
         settings,
+        pool,
     )
 }
 fn request() -> UpsertAgentProfileRequest {
@@ -88,7 +93,7 @@ fn configured() -> UpsertAgentProfileRequest {
 
 #[tokio::test]
 async fn crud_and_launch_use_current_profile() {
-    let (service, _) = fixture().await;
+    let (service, _, _) = fixture().await;
     let initial = service.create(request()).await.unwrap();
     assert!(matches!(
         service.create(request()).await,
@@ -123,7 +128,7 @@ async fn crud_and_launch_use_current_profile() {
 
 #[tokio::test]
 async fn rejects_empty_identifiers_partial_defaults_and_invalid_instructions() {
-    let (service, _) = fixture().await;
+    let (service, _, _) = fixture().await;
     let mut invalid = Vec::new();
     let mut input = request();
     input.profile_id = " ".into();
@@ -173,7 +178,7 @@ async fn rejects_empty_identifiers_partial_defaults_and_invalid_instructions() {
 
 #[tokio::test]
 async fn rejects_unknown_and_disabled_clients_at_save_and_launch() {
-    let (service, settings) = fixture().await;
+    let (service, settings, _) = fixture().await;
     let mut input = configured();
     input.client_type = Some("missing".into());
     assert!(service.create(input).await.is_err());
@@ -220,5 +225,85 @@ async fn rejects_launch_defaults_for_clients_without_configuration() {
     assert!(matches!(
         service.create(input).await,
         Err(Error::CapabilityUnavailable(_))
+    ));
+}
+
+fn configured_profile(id: &str, model: &str) -> UpsertAgentProfileRequest {
+    UpsertAgentProfileRequest {
+        profile_id: id.into(),
+        name: id.into(),
+        model: Some(model.into()),
+        ..configured()
+    }
+}
+
+#[tokio::test]
+async fn launchable_profiles_follow_current_launch_admission_in_id_order() {
+    let (service, settings, pool) = fixture().await;
+    service
+        .create(configured_profile("zeta", "model-z"))
+        .await
+        .unwrap();
+    let mut described = configured_profile("alpha", "model-a");
+    described.description = Some("Reviews code".into());
+    service.create(described).await.unwrap();
+    service.create(request()).await.unwrap();
+    service
+        .create(configured_profile("unparsable", "model-u"))
+        .await
+        .unwrap();
+    settings
+        .save("generic", "unknown", Some(true), None)
+        .await
+        .unwrap();
+    // The client configuration no longer accepts this saved key.
+    sqlx::query("UPDATE agent_profiles SET client_key = 'unknown' WHERE profile_id = 'unparsable'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let listed = service.list_launchable().await.unwrap();
+    assert_eq!(
+        listed
+            .iter()
+            .map(|profile| (profile.profile_id.as_str(), profile.model.as_str()))
+            .collect::<Vec<_>>(),
+        [("alpha", "model-a"), ("zeta", "model-z")]
+    );
+    assert_eq!(listed[0].description.as_deref(), Some("Reviews code"));
+    assert_eq!(
+        (
+            listed[0].client_type.as_str(),
+            listed[0].client_key.as_str()
+        ),
+        ("generic", "default")
+    );
+    let mut updated = configured_profile("zeta", "model-new");
+    updated.description = Some("Updated".into());
+    service.update("zeta", updated).await.unwrap();
+    service.delete("alpha").await.unwrap();
+    let listed = service.list_launchable().await.unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(
+        (listed[0].model.as_str(), listed[0].description.as_deref()),
+        ("model-new", Some("Updated"))
+    );
+    settings
+        .save("generic", "default", Some(false), None)
+        .await
+        .unwrap();
+    assert!(service.list_launchable().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn launchable_profiles_report_storage_failures() {
+    let (service, _, pool) = fixture().await;
+    service.create(configured()).await.unwrap();
+    sqlx::query("DROP TABLE agent_clients")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(matches!(
+        service.list_launchable().await,
+        Err(Error::Database(_))
     ));
 }

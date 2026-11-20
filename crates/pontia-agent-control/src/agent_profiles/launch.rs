@@ -1,4 +1,4 @@
-use super::{AgentProfileService, ProfileLaunchConfig};
+use super::{AgentProfileService, LaunchableAgentProfile, ProfileLaunchConfig};
 use pontia_core::{Error, Result};
 
 impl AgentProfileService {
@@ -23,5 +23,38 @@ impl AgentProfileService {
             model: profile.model,
             system_prompt: profile.system_prompt,
         })
+    }
+
+    /// Profiles, ordered by ID, whose launch defaults currently pass Session creation
+    /// admission. Profiles with an unavailable client are omitted; storage failures are returned.
+    pub async fn list_launchable(&self) -> Result<Vec<LaunchableAgentProfile>> {
+        let mut launchable = Vec::new();
+        for profile in self.list().await? {
+            let (Some(client_type), Some(client_key), Some(model)) =
+                (profile.client_type, profile.client_key, profile.model)
+            else {
+                continue;
+            };
+            match self.validate_launch_client(&client_type, &client_key).await {
+                Ok(()) => {}
+                // Disabled, unknown, or unparsable client configuration.
+                Err(
+                    Error::CapabilityUnavailable(_)
+                    | Error::Domain(_)
+                    | Error::InvalidConfig { .. }
+                    | Error::Serialization(_),
+                ) => continue,
+                Err(error) => return Err(error),
+            }
+            launchable.push(LaunchableAgentProfile {
+                profile_id: profile.profile_id,
+                name: profile.name,
+                description: profile.description,
+                client_type,
+                client_key,
+                model,
+            });
+        }
+        Ok(launchable)
     }
 }

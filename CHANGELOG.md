@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Bots see the Agent Profiles that can start a helper, with each Profile's name, description, client, and model, so they can pick one with `--profile-id` without querying the device.
+
 ### Changed
 
 - `pontia bot helper create` without `--profile-id` starts a general helper that uses the Bot's current client and model. Bots no longer create a `<bot_id>-helper` Agent Profile, so changing a Bot's model in its settings also applies to new helpers. Existing `<bot_id>-helper` Profiles remain ordinary Profiles and can be deleted.

@@ -32,3 +32,14 @@ pub struct ProfileLaunchConfig {
     pub model: Option<String>,
     pub system_prompt: Option<String>,
 }
+
+/// Launch selection data for a Profile; the Profile system prompt is deliberately excluded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchableAgentProfile {
+    pub profile_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub client_type: String,
+    pub client_key: String,
+    pub model: String,
+}

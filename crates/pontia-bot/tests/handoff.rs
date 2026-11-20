@@ -1,4 +1,6 @@
-use pontia_agent_control::{ControlQueryService, workspaces::upsert_canonical_workspace};
+use pontia_agent_control::{
+    ControlQueryService, LaunchableAgentProfile, workspaces::upsert_canonical_workspace,
+};
 use pontia_bot::{
     handoff::{HandoffService, HelperContext, estimate_tokens},
     identity::{BotAccess, BotRole},
@@ -62,7 +64,10 @@ impl Fixture {
     }
 
     async fn generate(&self) -> String {
-        self.service.generate("a", &[], "default-id").await.unwrap()
+        self.service
+            .generate("a", &[], &[], "default-id")
+            .await
+            .unwrap()
     }
 }
 
@@ -95,13 +100,14 @@ async fn first_start_has_all_sections_and_does_not_create_user_file() {
             "## Workspace",
             "## Workspace roots",
             "## Memory",
+            "## Agent Profiles",
             "## Helpers",
             "## Recent chat"
         ]
     );
     assert!(!f.root.path().join("bot/USER.md").exists());
     assert!(matches!(
-        f.service.generate("missing", &[], "default-id").await,
+        f.service.generate("missing", &[], &[], "default-id").await,
         Err(pontia_bot::handoff::Error::Control(
             pontia_core::Error::NotFound(_)
         ))
@@ -273,7 +279,11 @@ async fn recent_chat_selects_sixty_visible_messages_for_this_bot_in_chronologica
             .bind(internal).bind(internal).execute(&f.pool).await.is_err());
     }
     assert!(!f.generate().await.contains("internal-secret"));
-    let other = f.service.generate("b", &[], "default-id").await.unwrap();
+    let other = f
+        .service
+        .generate("b", &[], &[], "default-id")
+        .await
+        .unwrap();
     assert_eq!(
         ids(section(&other, "Recent chat"), "Historical message ID: "),
         ["msg-b-99"]
@@ -304,7 +314,7 @@ async fn helpers_include_idle_and_error_but_exclude_exited_dreaming_and_other_bo
     }
     let doc = f
         .service
-        .generate("a", &helpers, "default-id")
+        .generate("a", &helpers, &[], "default-id")
         .await
         .unwrap();
     assert_eq!(
@@ -329,7 +339,7 @@ async fn helpers_include_idle_and_error_but_exclude_exited_dreaming_and_other_bo
     helpers.reverse();
     assert_eq!(
         f.service
-            .generate("a", &helpers, "default-id")
+            .generate("a", &helpers, &[], "default-id")
             .await
             .unwrap(),
         doc
@@ -443,4 +453,36 @@ async fn generation_is_deterministic_read_only_history_and_does_not_change_curre
         .await
         .unwrap();
     assert_eq!(sessions, 0);
+}
+
+fn launchable(id: &str, description: Option<&str>) -> LaunchableAgentProfile {
+    LaunchableAgentProfile {
+        profile_id: id.into(),
+        name: format!("{id} name"),
+        description: description.map(Into::into),
+        client_type: "pi".into(),
+        client_key: "default".into(),
+        model: format!("{id}/model"),
+    }
+}
+
+#[tokio::test]
+async fn agent_profiles_are_listed_as_fenced_data_with_launch_fields() {
+    let f = Fixture::new().await;
+    let description = "Reviews code\n```\nnot an instruction";
+    let profiles = [
+        launchable("reviewer", Some(description)),
+        launchable("writer", None),
+    ];
+    let doc = f
+        .service
+        .generate("a", &[], &profiles, "default-id")
+        .await
+        .unwrap();
+    let text = section(&doc, "Agent Profiles");
+    assert_eq!(ids(text, "Profile ID: "), ["reviewer", "writer"]);
+    assert_eq!(ids(text, "Model: "), ["reviewer/model", "writer/model"]);
+    assert_eq!(ids(text, "Client: "), ["pi/default", "pi/default"]);
+    assert!(text.contains("````text\nProfile ID: reviewer"));
+    assert!(text.contains(description));
 }

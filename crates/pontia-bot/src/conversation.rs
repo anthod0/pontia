@@ -4,7 +4,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use pontia_agent_control::{AgentControl, CreateSessionRequest, SessionOwnership};
+use pontia_agent_control::{
+    AgentControl, AgentProfileService, CreateSessionRequest, LaunchableAgentProfile,
+    SessionOwnership,
+};
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex as AsyncMutex, broadcast};
@@ -198,6 +201,51 @@ impl ConversationService {
             })
     }
 
+    fn task_execution_policy(
+        &self,
+        client_type: &str,
+    ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
+        if !self
+            .control
+            .clients()
+            .get(client_type)
+            .is_some_and(|entry| {
+                entry.spec.capabilities.accept_task && entry.instructions.is_some()
+            })
+        {
+            return Err(Error::CapabilityUnavailable(
+                "Client cannot run tasks with injected instructions".into(),
+            ));
+        }
+        self.bot_execution_policy(client_type)
+    }
+
+    /// Profiles that can currently start a helper; unavailable ones are left out of the list.
+    async fn helper_profiles(&self) -> Result<Vec<LaunchableAgentProfile>> {
+        let mut profiles = AgentProfileService::new(self.control.db())
+            .with_clients(self.control.clients())
+            .list_launchable()
+            .await?;
+        profiles.retain(|profile| self.require_helper_client(&profile.client_type).is_ok());
+        Ok(profiles)
+    }
+
+    /// Checks the client capabilities a helper Session needs, without launching anything.
+    pub(crate) fn require_helper_client(&self, client_type: &str) -> Result<()> {
+        self.task_execution_policy(client_type)?;
+        if !self
+            .control
+            .clients()
+            .spec(client_type)
+            .is_some_and(|spec| spec.capabilities.steer)
+        {
+            return Err(Error::CapabilityUnavailable(
+                "Client cannot run a helper Session".into(),
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) async fn task_session_request(
         &self,
         client_type: &str,
@@ -206,15 +254,7 @@ impl ConversationService {
         ownership: SessionOwnership,
         instructions: &str,
     ) -> Result<CreateSessionRequest> {
-        let clients = self.control.clients();
-        if !clients.get(client_type).is_some_and(|entry| {
-            entry.spec.capabilities.accept_task && entry.instructions.is_some()
-        }) {
-            return Err(Error::CapabilityUnavailable(
-                "Client cannot run tasks with injected instructions".into(),
-            ));
-        }
-        let execution_policy = self.bot_execution_policy(client_type)?;
+        let execution_policy = self.task_execution_policy(client_type)?;
         let metadata = self.session_metadata(client_type, client_key).await?;
         Ok(CreateSessionRequest {
             launch_mode: Default::default(),
@@ -468,6 +508,7 @@ impl ConversationService {
                 .generate_for_input(
                     &bot.bot_id,
                     &crate::helpers::contexts(&self.control, &bot.bot_id).await?,
+                    &self.helper_profiles().await?,
                     &pending,
                     &default_workspace.workspace_id,
                 )

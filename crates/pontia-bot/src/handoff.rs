@@ -1,6 +1,6 @@
 mod render;
 
-use pontia_agent_control::ControlQueryService;
+use pontia_agent_control::{ControlQueryService, LaunchableAgentProfile};
 use pontia_core::domain::SessionState;
 use sqlx::SqlitePool;
 
@@ -53,14 +53,16 @@ impl HandoffService {
     }
 
     /// Reads historical context only. Deliver the current input separately, including retries.
-    /// The caller supplies helper associations; native conversations are never queried.
+    /// The caller supplies helper associations and launchable helper Profiles; native
+    /// conversations are never queried.
     pub async fn generate(
         &self,
         bot_id: &str,
         helpers: &[HelperContext],
+        profiles: &[LaunchableAgentProfile],
         default_workspace_id: &str,
     ) -> Result<String, Error> {
-        self.generate_for_input(bot_id, helpers, &[], default_workspace_id)
+        self.generate_for_input(bot_id, helpers, profiles, &[], default_workspace_id)
             .await
     }
 
@@ -68,6 +70,7 @@ impl HandoffService {
         &self,
         bot_id: &str,
         helpers: &[HelperContext],
+        profiles: &[LaunchableAgentProfile],
         pending_message_ids: &[String],
         default_workspace_id: &str,
     ) -> Result<String, Error> {
@@ -115,6 +118,7 @@ impl HandoffService {
             default_workspace_id,
             &self.roots,
             &memories,
+            profiles,
             &helpers,
             &messages,
         ))

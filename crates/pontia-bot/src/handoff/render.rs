@@ -1,4 +1,4 @@
-use pontia_agent_control::WorkspaceView;
+use pontia_agent_control::{LaunchableAgentProfile, WorkspaceView};
 
 use super::HelperContext;
 use crate::{
@@ -33,12 +33,14 @@ fn data(text: &str) -> String {
     format!("{fence}text\n{text}\n{fence}\n\n")
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn document(
     user: &str,
     workspaces: &[WorkspaceView],
     default_workspace_id: &str,
     roots: &[pontia_config::WorkspaceRootConfig],
     memories: &[Memory],
+    profiles: &[LaunchableAgentProfile],
     helpers: &[&HelperContext],
     messages: &[BotMessage],
 ) -> String {
@@ -92,6 +94,23 @@ pub(super) fn document(
         }),
         false,
     ));
+    output.push_str("## Agent Profiles\n\n");
+    if profiles.is_empty() {
+        output.push_str(
+            "No Agent Profiles are available. Omit `--profile-id` to start the general helper.\n\n",
+        );
+    }
+    for profile in profiles {
+        output.push_str(&data(&format!(
+            "Profile ID: {}\nName: {}\nDescription: {}\nClient: {}/{}\nModel: {}",
+            profile.profile_id,
+            profile.name,
+            profile.description.as_deref().unwrap_or("None yet."),
+            profile.client_type,
+            profile.client_key,
+            profile.model,
+        )));
+    }
     output.push_str("## Helpers\n\n");
     if helpers.is_empty() {
         output.push_str(NONE);
