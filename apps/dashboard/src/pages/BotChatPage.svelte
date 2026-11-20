@@ -132,15 +132,15 @@
       <!-- An unanswered message outranks the background work status; the typing bubble replaces it while the reply arrives. -->
       {#if timeline.processing}
         {#if !typing}
-          <p class="mb-2 flex items-start gap-2 px-2 text-xs text-muted-foreground" role="status">
-            <BotAvatar shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working class="size-4" />
+          <p class="mb-2 flex items-start gap-2 px-2 text-sm leading-5 text-muted-foreground" role="status">
+            <BotAvatar shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working class="size-5 shrink-0" />
             <span class="shimmer min-w-0">{$t('bots.processing')}</span>
           </p>
         {/if}
       {:else if timeline.bot.working_on}
-        <p class="mb-2 flex items-start gap-2 px-2 text-xs text-muted-foreground" role="status">
-          <BotAvatar shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working class="size-4" />
-          <span class="shimmer min-w-0 [overflow-wrap:anywhere]">{timeline.bot.working_on}</span>
+        <p class="mb-2 flex items-start gap-2 px-2 text-sm leading-5 text-muted-foreground" role="status">
+          <BotAvatar shape={timeline.bot.avatar_shape} color={timeline.bot.avatar_color} working class="size-5 shrink-0" />
+          <span class="shimmer line-clamp-2 min-w-0 [overflow-wrap:anywhere]" title={timeline.bot.working_on}>{timeline.bot.working_on}</span>
         </p>
       {/if}
       {#if timeline.refreshError}{@render refreshFailure()}{/if}
