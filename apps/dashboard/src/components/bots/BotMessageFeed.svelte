@@ -18,6 +18,7 @@
     return rows
   })
   let headerHeight = $state(0)
+  let topInset = $state(0)
   const count = $derived(entries.length + Number(typing))
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: 0,
@@ -61,6 +62,7 @@
     untrack(() => get(virtualizer).setOptions({
       count: length,
       paddingStart,
+      scrollMargin: topInset,
       getItemKey: index => rows[index]?.id ?? 'typing',
     }))
     if (length && initial) {
@@ -141,6 +143,8 @@
   onwheelcapture={() => intent++} ontouchstartcapture={() => intent++}
   onpointerdowncapture={() => intent++} onkeydowncapture={() => intent++} onscrollcapture={scroll}
   class="no-scrollbar min-h-0 flex-1 overflow-y-auto px-1 [overflow-anchor:none]">
+  <!-- Keeps the oldest row clear of the transparent top bar the feed scrolls beneath. -->
+  <div aria-hidden="true" class="h-14 md:h-12" bind:clientHeight={topInset}></div>
   <div class="relative w-full" style:height={`${totalSize}px`}>
     {#if timeline.before}
       <div bind:clientHeight={headerHeight} class="absolute top-1 left-0 flex w-full items-center justify-center gap-2 text-sm">
@@ -151,7 +155,7 @@
       </div>
     {/if}
     {#each items as item (item.key)}
-      <div class="absolute top-0 left-0 w-full" style:transform={`translateY(${item.start}px)`}
+      <div class="absolute top-0 left-0 w-full" style:transform={`translateY(${item.start - topInset}px)`}
         data-index={item.index} data-bot-entry-id={entries[item.index]?.id} use:measure>
         {#if entries[item.index]}
           {@render row(entries[item.index])}

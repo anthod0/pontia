@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Bot chat messages scroll beneath the transparent top bar, and the work status above the composer is larger and easier to read.
 - `pontia bot helper create` without `--profile-id` starts a general helper that uses the Bot's current client and model. Bots no longer create a `<bot_id>-helper` Agent Profile, so changing a Bot's model in its settings also applies to new helpers. Existing `<bot_id>-helper` Profiles remain ordinary Profiles and can be deleted.
 
 ## [0.8.3] - 2026-11-20
