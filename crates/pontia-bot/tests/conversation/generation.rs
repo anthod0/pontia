@@ -34,12 +34,12 @@ async fn both_upper_limits_wait_for_idle_and_keep_helpers_and_work_status() {
         let (id, old) = bot(&conversation).await;
         let helpers = HelperService::new(control.clone(), conversation.clone());
         let worker = helper(&helpers, &old).await;
+        status::start(&control, &worker).await;
         conversation
             .send_to_user(ReplyRequest {
                 session_id: old.clone(),
                 input: Reply {
                     message: "working".into(),
-                    working_on: Some("background task".into()),
                 },
             })
             .await
@@ -78,8 +78,10 @@ async fn both_upper_limits_wait_for_idle_and_keep_helpers_and_work_status() {
             "exited"
         );
         assert_eq!(
-            recovered.chat(&id).await.unwrap().bot.working_on.as_deref(),
-            Some("background task")
+            recovered.chat(&id).await.unwrap().status,
+            WorkStatus::Working {
+                title: "Assigned work".into()
+            }
         );
         assert_eq!(helpers.list(&id).await.unwrap()[0].session_id, worker);
         assert_eq!(

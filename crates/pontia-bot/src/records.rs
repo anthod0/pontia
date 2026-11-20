@@ -55,7 +55,10 @@ pub struct Bot {
     pub current_session_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
-    pub working_on: Option<String>,
+    #[serde(skip)]
+    pub(crate) awaiting_reply: bool,
+    #[serde(skip)]
+    pub(crate) awaiting_reply_after: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -187,7 +190,7 @@ impl BotService {
     /// The conversation service owns Session lifecycle and routing around this pointer.
     pub async fn set_current_session(&self, bot_id: &str, session_id: Option<&str>) -> Result<Bot> {
         sqlx::query_as(
-            "UPDATE bots SET current_session_id = ?, idle_since = NULL, idle_turn_id = NULL,
+            "UPDATE bots SET current_session_id = ?, idle_since = NULL, idle_turn_id = NULL, awaiting_reply_after = NULL,
              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
              WHERE bot_id = ? RETURNING *",
         )

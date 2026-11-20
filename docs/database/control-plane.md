@@ -13,7 +13,8 @@ CREATE TABLE bots (
         DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL
         DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    working_on TEXT,
+    awaiting_reply INTEGER NOT NULL DEFAULT 0 CHECK (awaiting_reply IN (0, 1)),
+    awaiting_reply_after INTEGER,
     avatar_shape TEXT NOT NULL DEFAULT 'classic',
     avatar_color TEXT NOT NULL DEFAULT 'blue',
     idle_since TEXT,

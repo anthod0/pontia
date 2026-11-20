@@ -16,7 +16,6 @@ const first: Bot = {
   client_type: "pi",
   client_key: "default",
   model: "provider/model",
-  working_on: null,
 };
 
 beforeEach(() => {

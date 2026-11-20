@@ -270,13 +270,17 @@ async fn main_session_shares_are_downloadable_from_bot_history_after_rotation() 
 }
 
 #[tokio::test]
-async fn processing_considers_unanswered_input_outside_the_default_fifty_rows() {
+async fn work_status_is_independent_of_message_pagination() {
     let app = fixture().await;
-    sqlx::query("INSERT INTO sessions(session_id,client_type,state) VALUES ('s','generic','busy')")
+    sqlx::query("INSERT INTO sessions(session_id,client_type,state,application_id,application_ref) VALUES ('s','generic','busy','bot','a:test')")
         .execute(&app.db)
         .await
         .unwrap();
     sqlx::query("INSERT INTO turns(turn_id,session_id,state) VALUES ('turn','s','running')")
+        .execute(&app.db)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE bots SET awaiting_reply=1, awaiting_reply_after=0 WHERE bot_id='a'")
         .execute(&app.db)
         .await
         .unwrap();
@@ -300,15 +304,26 @@ async fn processing_considers_unanswered_input_outside_the_default_fifty_rows() 
             .iter()
             .all(|r| r["status"] == "failed")
     );
-    assert_eq!(tail["processing"], true);
+    assert_eq!(tail["status"], json!({"kind":"processing"}));
     let legacy = get_json(app.state.clone(), "/api/v1/bots/a").await.1;
     assert_eq!(legacy["data"]["messages"].as_array().unwrap().len(), 61);
-    assert_eq!(legacy["data"]["processing"], true);
-    sqlx::query("UPDATE turns SET state='completed' WHERE turn_id='turn'")
-        .execute(&app.db)
+    assert_eq!(legacy["data"]["status"], json!({"kind":"processing"}));
+    use pontia_core::domain::{EventSource, EventType, ReportedEvent};
+    app.state
+        .control()
+        .event_ingest_service()
+        .ingest_reported_event(ReportedEvent::new(
+            "completed".into(),
+            "s".into(),
+            Some("turn".into()),
+            EventSource::AgentAdapter,
+            "generic".into(),
+            EventType::TurnCompleted,
+            json!({}),
+        ))
         .await
         .unwrap();
-    assert_eq!(page(&app, &[]).await["processing"], false);
+    assert_eq!(page(&app, &[]).await["status"], json!({"kind":"idle"}));
 }
 
 async fn get_body(router: &Router, path: &str) -> Body {
@@ -461,4 +476,84 @@ async fn streaming_resets_for_current_session_notices_and_missed_updates() {
         state.bots().retry("a", "older").await.unwrap();
     }
     assert_eq!(next_update(&mut live).await, json!({"type":"reset"}));
+}
+
+#[tokio::test]
+async fn helper_busy_idle_and_exit_events_refresh_only_the_owning_bot() {
+    use pontia_core::domain::{EventSource, EventType, ReportedEvent};
+
+    let app = fixture().await;
+    let events = app.state.control().event_ingest_service();
+    events
+        .ingest_reported_event(ReportedEvent::new(
+            "helper-created".into(),
+            "worker".into(),
+            None,
+            EventSource::AgentAdapter,
+            "generic".into(),
+            EventType::SessionCreated,
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES ('helper:a:test','a','worker')")
+        .execute(&app.db).await.unwrap();
+    let router = pontia_http::router(app.state.clone());
+    let mut live = get_body(&router, "/api/v1/bots/a/stream?timeline=true").await;
+    let mut other = get_body(&router, "/api/v1/bots/b/stream?timeline=true").await;
+    next_update(&mut live).await;
+    next_update(&mut other).await;
+    for (id, kind, turn) in [
+        ("started", EventType::TurnStarted, Some("task".into())),
+        ("completed", EventType::TurnCompleted, Some("task".into())),
+        ("exited", EventType::SessionExited, None),
+    ] {
+        events
+            .ingest_reported_event(ReportedEvent::new(
+                id.into(),
+                "worker".into(),
+                turn,
+                EventSource::AgentAdapter,
+                "generic".into(),
+                kind,
+                json!({}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(next_update(&mut live).await, json!({"type":"changed"}));
+    }
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(30), other.frame())
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn helper_api_requires_title_and_send_to_user_rejects_working_on() {
+    let app = fixture().await;
+    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
+        .fetch_one(&app.db)
+        .await
+        .unwrap();
+    for (endpoint, input) in [
+        (
+            "helper",
+            json!({"session_id":"s","command":{"action":"create","input":{"temporary":"task","description":"Task","message":"Start"}}}),
+        ),
+        (
+            "send-to-user",
+            json!({"session_id":"s","input":{"message":"Hello","working_on":"Task"}}),
+        ),
+    ] {
+        let (status, body) =
+            post_json(app.state.clone(), &format!("/api/v1/bot/{endpoint}"), input).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"]["code"], "invalid_request");
+    }
+    let after: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
+        .fetch_one(&app.db)
+        .await
+        .unwrap();
+    assert_eq!(before, after);
 }

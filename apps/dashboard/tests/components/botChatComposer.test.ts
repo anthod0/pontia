@@ -22,14 +22,13 @@ async function openChat() {
       client_type: "pi",
       client_key: "default",
       model: "test",
-      working_on: null,
     },
     entries: [],
     next_before: null,
     file_link_session: null,
     notice_session_id: null,
     generation_notice: null,
-    processing: false,
+    status: { kind: "idle" },
   });
   await saveUploadRecord({
     scope,

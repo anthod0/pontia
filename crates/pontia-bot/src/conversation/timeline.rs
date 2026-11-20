@@ -96,7 +96,7 @@ struct Cursor {
 #[derive(Serialize)]
 pub struct TimelinePage {
     bot: Bot,
-    processing: bool,
+    status: super::WorkStatus,
     generation_notice: Option<Notice>,
     notice_session_id: Option<String>,
     file_link_session: Option<OwnedSession>,
@@ -161,7 +161,7 @@ impl ConversationService {
         } else {
             None
         };
-        let processing = self.processing(&bot, &activity).await?;
+        let status = self.work_status(&bot, &activity).await?;
         let generation_notice = activity.generation_notice.lock().unwrap().clone();
         Ok(TimelinePage {
             notice_session_id: bot.current_session_id.clone(),
@@ -171,7 +171,7 @@ impl ConversationService {
                 .latest_owned_session(APPLICATION_ID, &format!("{bot_id}:"))
                 .await?,
             bot,
-            processing,
+            status,
             generation_notice,
             entries: rows.into_iter().map(|row| row.entry).collect(),
             next_before,

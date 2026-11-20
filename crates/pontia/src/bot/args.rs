@@ -22,7 +22,7 @@ pub(super) enum BotTool {
     SessionMessages(SessionMessages),
     /// Update shared USER.md (at most 2,000 characters)
     UpdateUser(UpdateUser),
-    /// Send one complete reply and set the Bot's work status
+    /// Send one complete reply to the user
     SendToUser(SendToUser),
     /// Register an existing directory or change a Workspace description
     #[command(subcommand)]
@@ -32,16 +32,11 @@ pub(super) enum BotTool {
 }
 
 #[derive(Debug, Args, Serialize)]
-#[command(
-    after_help = "Example: pontia bot send-to-user --message 'I received your request.' --working-on 'Checking the logs'\nKeep --working-on to one short phrase; put steps and details in --message."
-)]
+#[command(after_help = "Example: pontia bot send-to-user --message 'I received your request.'")]
 pub(super) struct SendToUser {
     /// Complete user-visible reply
     #[arg(long, allow_hyphen_values = true)]
     message: String,
-    /// One short phrase naming the latest background work in progress; omit when no work remains
-    #[arg(long, allow_hyphen_values = true)]
-    working_on: Option<String>,
 }
 
 #[derive(Debug, Args, Serialize)]
@@ -257,9 +252,9 @@ pub(super) enum HelperCommand {
         temporary: Option<String>,
         #[arg(long)]
         profile_id: Option<String>,
-        /// Session title shown in the Dashboard
+        /// Describe what the helper is doing; shown as the Bot work status
         #[arg(long, allow_hyphen_values = true)]
-        title: Option<String>,
+        title: String,
         #[arg(long, allow_hyphen_values = true)]
         description: String,
         #[arg(long, allow_hyphen_values = true)]
