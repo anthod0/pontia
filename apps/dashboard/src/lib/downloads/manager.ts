@@ -16,6 +16,8 @@ export type DownloadTask = {
   status: "receiving" | "complete" | "failed" | "cancelled";
   progress: DownloadProgress;
   error: string | null;
+  /** API error code of the last failure, such as `not_found` when the file is gone. */
+  errorCode: string | null;
 };
 
 export function downloadKey(deviceId: string, sessionId: string, file: DownloadFile): string {
@@ -41,6 +43,7 @@ export function createDownloads() {
     task.status = "receiving";
     task.progress = { received: 0, total: null };
     task.error = null;
+    task.errorCode = null;
     emit();
     try {
       const device = devices.get(task.deviceId);
@@ -61,6 +64,7 @@ export function createDownloads() {
     } catch (error) {
       if (controller.signal.reason !== cancelled) {
         task.status = "failed";
+        task.errorCode = error instanceof ApiError ? error.code : null;
         task.error =
           error instanceof ApiError && error.status === 404
             ? translate("files.missing")
@@ -107,6 +111,7 @@ export function createDownloads() {
         status: "receiving",
         progress: { received: 0, total: null },
         error: null,
+        errorCode: null,
       };
       tasks.unshift(task);
       void receive(task);

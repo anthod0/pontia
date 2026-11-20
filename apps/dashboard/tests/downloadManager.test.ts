@@ -1,6 +1,7 @@
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createDownloads } from "../src/lib/downloads/manager";
+import { ApiError } from "../src/api/errors";
 
 let manager: ReturnType<typeof createDownloads>;
 let saved: Blob[];
@@ -127,4 +128,23 @@ test("clearing finished records preserves downloads still receiving on another d
   transfer.stream.close();
   await vi.waitFor(() => expect(get(manager)[0].status).toBe("complete"));
   expect(await saved[1].text()).toBe("other file");
+});
+
+test("a failed download keeps the API error code and clears it on retry", async () => {
+  const source = device("studio");
+  source.fileApi.sharedFileContent
+    .mockRejectedValueOnce(new ApiError("File not found", "not_found", 404))
+    .mockResolvedValueOnce(new Response("report", { headers: { "Content-Length": "6" } }));
+  manager.registerDevice(source);
+  const task = manager.start(
+    "studio",
+    "session",
+    { kind: "shared", fileId: "file-1" },
+    "report.txt",
+  );
+  await vi.waitFor(() => expect(get(manager)[0].status).toBe("failed"));
+  expect(get(manager)[0]).toMatchObject({ errorCode: "not_found", error: "File no longer exists" });
+  manager.retry(task.id);
+  await vi.waitFor(() => expect(get(manager)[0].status).toBe("complete"));
+  expect(get(manager)[0].errorCode).toBeNull();
 });

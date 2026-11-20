@@ -247,7 +247,9 @@ test("downloads a live file share directly from the open Bot chat", async () => 
       file,
     },
   });
-  await fireEvent.click(await screen.findByRole("button", { name: /Pontia项目描述.xlsx/ }));
+  await fireEvent.click(
+    await screen.findByRole("button", { name: "Download Pontia项目描述.xlsx" }),
+  );
   expect(download).toHaveBeenCalledWith("main", "file-1", expect.any(AbortSignal));
   await waitFor(() => expect(save).toHaveBeenCalled());
   expect(save.mock.instances[0]).toHaveProperty("download", file.name);

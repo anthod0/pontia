@@ -15,11 +15,10 @@
   const device = useDeviceRuntime();
   const preview = useFilePreview();
 
-  let { file, sessionId, variant = 'card', downloadOnly = false, onenlarge }: {
+  let { file, sessionId, variant = 'card', onenlarge }: {
     file: SharedFile
     sessionId: string
     variant?: 'card' | 'row'
-    downloadOnly?: boolean
     /** Opens the image viewer at this file. */
     onenlarge?: () => void
   } = $props()
@@ -42,7 +41,7 @@
   }
 
   function observePreview(node: HTMLElement) {
-    if (downloadOnly || !canPreviewImage(file)) return
+    if (!canPreviewImage(file)) return
     const observer = new IntersectionObserver(entries => {
       if (!entries.some(entry => entry.isIntersecting)) return
       observer.disconnect()
@@ -76,31 +75,23 @@
     </div>
   {/snippet}
   <div class="flex items-center gap-2">
-    {#if downloadOnly}
-      <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={download} disabled={downloading} aria-label={$t('files.downloadNamed', { name: file.name })}>
-        {@render icon()}
-        {@render details()}
-        <DownloadSimpleIcon class="size-4 shrink-0" />
+    {#if previewUrl && onenlarge}
+      <button type="button" class="shrink-0" onclick={onenlarge} aria-label={$t('files.enlargeNamed', { name: file.name })}>
+        <img src={previewUrl} alt={file.name} class="{thumb} rounded object-cover" />
       </button>
+      {@render details()}
+    {:else if canPreviewImage(file)}
+      {@render icon()}
+      {@render details()}
     {:else}
-      {#if previewUrl && onenlarge}
-        <button type="button" class="shrink-0" onclick={onenlarge} aria-label={$t('files.enlargeNamed', { name: file.name })}>
-          <img src={previewUrl} alt={file.name} class="{thumb} rounded object-cover" />
-        </button>
-        {@render details()}
-      {:else if canPreviewImage(file)}
+      <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => preview.open({ device, sessionId, path: file.path })} aria-label={$t('files.previewNamed', { name: file.name })}>
         {@render icon()}
         {@render details()}
-      {:else}
-        <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => preview.open({ device, sessionId, path: file.path })} aria-label={$t('files.previewNamed', { name: file.name })}>
-          {@render icon()}
-          {@render details()}
-        </button>
-      {/if}
-      <Button size="icon-sm" variant="ghost" onclick={download} disabled={downloading} aria-label={downloading ? $t('files.receivingNamed', { name: file.name }) : $t('files.downloadNamed', { name: file.name })} title={downloading ? $t('files.receiving') : $t('files.download')}>
-        <DownloadSimpleIcon class="size-4" />
-      </Button>
+      </button>
     {/if}
+    <Button size="icon-sm" variant="ghost" onclick={download} disabled={downloading} aria-label={downloading ? $t('files.receivingNamed', { name: file.name }) : $t('files.downloadNamed', { name: file.name })} title={downloading ? $t('files.receiving') : $t('files.download')}>
+      <DownloadSimpleIcon class="size-4" />
+    </Button>
   </div>
   {#if progress || error || task?.error}
     <div class="space-y-1">

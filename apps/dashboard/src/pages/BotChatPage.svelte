@@ -5,7 +5,7 @@
   import { t } from '$lib/i18n'
   import { Button } from '$lib/components/ui/button/index.js'
   import { MessageResponse } from '$lib/components/ai-elements/message/index.js'
-  import SharedFileCard from '../components/chat/SharedFileCard.svelte'
+  import BotFileBubble from '../components/bots/BotFileBubble.svelte'
   import MessageComposer from '../components/chat/MessageComposer.svelte'
   import { parseUploadMessage } from '$lib/uploads/message'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -116,8 +116,8 @@
             </div>
           </div>
         {:else if entry.kind === 'shared_file'}
-          <div class="w-fit max-w-[90%]">
-            <SharedFileCard file={entry.file} sessionId={entry.session_id} downloadOnly />
+          <div class="max-w-[90%]">
+            <BotFileBubble file={entry.file} sessionId={entry.session_id} />
           </div>
         {:else}
           <p class="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
