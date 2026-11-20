@@ -19,8 +19,6 @@ function session(session_id: string, title = session_id): SessionView {
     handle: null,
     role: null,
     description: null,
-    execution_profile_id: null,
-    execution_profile_version: null,
     state: "idle",
     current_turn_id: null,
     workspace_id: null,

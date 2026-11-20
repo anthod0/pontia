@@ -1,5 +1,6 @@
 import type { MessageKey } from "$lib/i18n";
 import type { Component } from "svelte";
+import IdentificationCardIcon from "phosphor-svelte/lib/IdentificationCardIcon";
 import FolderIcon from "phosphor-svelte/lib/FolderIcon";
 import SlidersHorizontalIcon from "phosphor-svelte/lib/SlidersHorizontalIcon";
 import TerminalWindowIcon from "phosphor-svelte/lib/TerminalWindowIcon";
@@ -23,6 +24,12 @@ export const settingsSections: SettingsSection[] = [
     path: "/settings/clients",
     icon: TerminalWindowIcon,
     match: ["/settings/clients"],
+  },
+  {
+    label: "profiles.title",
+    path: "/settings/agent-profiles",
+    icon: IdentificationCardIcon,
+    match: ["/settings/agent-profiles"],
   },
   {
     label: "settings.workspaces",

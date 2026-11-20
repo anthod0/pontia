@@ -77,7 +77,7 @@
                       <div><dt>{$t('workflow.instructions')}</dt><dd>{node.instructions || $t('common.notProvided')}</dd></div>
                       <div><dt>{$t('workflow.inputs')}</dt><dd>{node.inputs.length ? node.inputs.join('\n') : $t('common.none')}</dd></div>
                       <div><dt>{$t('workflow.output')}</dt><dd>{node.output || $t('common.notProvided')}</dd></div>
-                      <div><dt>{$t('profiles.profile')}</dt><dd>{node.execution_profile_id ?? $t('common.notProvided')}{node.execution_profile_version ? ` · ${node.execution_profile_version}` : ''}</dd></div>
+                      <div><dt>{$t('profiles.profile')}</dt><dd>{node.execution_profile_id ?? $t('common.notProvided')}</dd></div>
                       <div><dt>{$t('workflow.parentNode')}</dt><dd>{node.parent_node_id ?? $t('common.none')}</dd></div>
                       <div><dt>{$t('workflow.introduced')}</dt><dd>v{node.introduced_revision}</dd></div>
                     </dl>

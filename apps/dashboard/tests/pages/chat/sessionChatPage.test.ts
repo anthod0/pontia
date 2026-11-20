@@ -2002,8 +2002,6 @@ test("renders an existing session title in the top bar and metadata above the pr
     handle: "second",
     role: "reviewer",
     description: "Review dashboard changes",
-    execution_profile_id: "coder",
-    execution_profile_version: "1",
     state: "busy",
     workspace_id: "workspace-1",
     workspace: "~/repo/pontia",
@@ -2040,9 +2038,7 @@ test("renders an existing session title in the top bar and metadata above the pr
   });
   await userEvent.click(sessionDetailsButton);
   const clientBadge = screen.getAllByLabelText("Client: Pi")[0];
-  const profileBadge = screen.getAllByLabelText("Profile: coder@1")[0];
   expect(clientBadge).toBeInTheDocument();
-  expect(profileBadge).toBeInTheDocument();
   expect(screen.getAllByLabelText("Handle: second")[0]).toBeInTheDocument();
   const workspaceBadge = screen.getAllByLabelText("Workspace: /repo/pontia")[0];
   expect(workspaceBadge).toHaveTextContent("/repo/pontia");

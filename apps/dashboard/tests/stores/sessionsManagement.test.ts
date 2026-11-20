@@ -9,8 +9,6 @@ const baseSession: SessionView = {
   handle: null,
   role: null,
   description: null,
-  execution_profile_id: null,
-  execution_profile_version: null,
   workspace: null,
   workspace_id: null,
   workspace_ref: null,

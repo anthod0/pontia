@@ -2,7 +2,6 @@
   import { t } from '$lib/i18n';
   import { clientSessionLabel } from '../../clients'
   import AtIcon from 'phosphor-svelte/lib/AtIcon'
-  import RobotIcon from 'phosphor-svelte/lib/RobotIcon'
   import FolderIcon from 'phosphor-svelte/lib/FolderIcon'
   import GaugeIcon from 'phosphor-svelte/lib/GaugeIcon'
   import GitBranchIcon from 'phosphor-svelte/lib/GitBranchIcon'
@@ -10,7 +9,7 @@
   import { Badge } from '$lib/components/ui/badge/index.js'
   import type { SessionView, WorkspaceGitStatusView, WorkspaceView } from '../../api/types'
   import GitStatusInline from './GitStatusInline.svelte'
-  import { gitStatusAriaLabel, gitStatusTitle, sessionContextUsageLabel, sessionHandleTitle, sessionProfileTitle, sessionWorkspacePath, sessionWorkspaceTitle } from './sessionMetadata'
+  import { gitStatusAriaLabel, gitStatusTitle, sessionContextUsageLabel, sessionHandleTitle, sessionWorkspacePath, sessionWorkspaceTitle } from './sessionMetadata'
 
   interface Props {
     session: SessionView
@@ -45,11 +44,6 @@
 <Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={$t('chat.clientValue', { value: clientSessionLabel(session) })} aria-label={$t('chat.clientValue', { value: clientSessionLabel(session) })}>
   <TerminalWindowIcon class="size-4" aria-hidden="true" /> {clientSessionLabel(session)}
 </Badge>
-{#if sessionProfileTitle(session)}
-  <Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={$t('chat.profileValue', { value: sessionProfileTitle(session) })} aria-label={$t('chat.profileValue', { value: sessionProfileTitle(session) })}>
-    <RobotIcon class="size-4" aria-hidden="true" /> {sessionProfileTitle(session)}
-  </Badge>
-{/if}
 {#if sessionHandleTitle(session)}
   <Badge variant="outline" class="h-7 gap-1.5 px-3 text-sm font-normal text-muted-foreground" title={$t('chat.handleValue', { value: sessionHandleTitle(session) })} aria-label={$t('chat.handleValue', { value: sessionHandleTitle(session) })}>
     <AtIcon class="size-4" aria-hidden="true" /> {sessionHandleTitle(session)}

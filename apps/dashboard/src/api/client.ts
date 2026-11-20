@@ -387,17 +387,22 @@ export function createApi(device: DeviceRuntime) {
     return request<T>(path, { ...options, signal });
   }
 
-  async function listAgentProfiles(
-    includeArchived = false,
-    options: ReadRequestOptions = {},
-  ): Promise<AgentProfileView[]> {
-    const query = includeArchived ? "?include_archived=true" : "";
+  async function listAgentProfiles(options: ReadRequestOptions = {}): Promise<AgentProfileView[]> {
     return (
-      await boundedReadRequest<{ agent_profiles: AgentProfileView[] }>(
-        `/agent-profiles${query}`,
+      await boundedReadRequest<{ agent_profiles: AgentProfileView[] }>("/agent-profiles", options)
+    ).agent_profiles;
+  }
+
+  async function getAgentProfile(
+    profileId: string,
+    options: ReadRequestOptions = {},
+  ): Promise<AgentProfileView> {
+    return (
+      await boundedReadRequest<{ agent_profile: AgentProfileView }>(
+        `/agent-profiles/${encodeURIComponent(profileId)}`,
         options,
       )
-    ).agent_profiles;
+    ).agent_profile;
   }
 
   async function createAgentProfile(input: UpsertAgentProfileInput): Promise<AgentProfileView> {
@@ -410,64 +415,27 @@ export function createApi(device: DeviceRuntime) {
     ).agent_profile;
   }
 
-  async function deleteAgentProfile(
-    profileId: string,
-  ): Promise<{ profile_id: string; archived_versions: number }> {
-    return request<{ profile_id: string; archived_versions: number }>(
-      `/agent-profiles/${encodeURIComponent(profileId)}`,
-      { method: "DELETE", mutating: true },
-    );
-  }
-
-  async function listAgentProfileVersions(
-    profileId: string,
-    includeArchived = false,
-    options: ReadRequestOptions = {},
-  ): Promise<AgentProfileView[]> {
-    const query = includeArchived ? "?include_archived=true" : "";
-    return (
-      await request<{ agent_profile_versions: AgentProfileView[] }>(
-        `/agent-profiles/${encodeURIComponent(profileId)}/versions${query}`,
-        options,
-      )
-    ).agent_profile_versions;
-  }
-
-  async function createAgentProfileVersion(
+  async function updateAgentProfile(
     profileId: string,
     input: UpsertAgentProfileInput,
   ): Promise<AgentProfileView> {
     return (
       await request<{ agent_profile: AgentProfileView }>(
-        `/agent-profiles/${encodeURIComponent(profileId)}/versions`,
-        { method: "POST", body: input, mutating: true },
+        `/agent-profiles/${encodeURIComponent(profileId)}`,
+        {
+          method: "PUT",
+          body: input,
+          mutating: true,
+        },
       )
     ).agent_profile;
   }
 
-  async function updateAgentProfileVersion(
-    profileId: string,
-    version: string,
-    input: UpsertAgentProfileInput,
-  ): Promise<AgentProfileView> {
-    return (
-      await request<{ agent_profile: AgentProfileView }>(
-        `/agent-profiles/${encodeURIComponent(profileId)}/versions/${encodeURIComponent(version)}`,
-        { method: "PUT", body: input, mutating: true },
-      )
-    ).agent_profile;
-  }
-
-  async function deleteAgentProfileVersion(
-    profileId: string,
-    version: string,
-  ): Promise<AgentProfileView> {
-    return (
-      await request<{ agent_profile: AgentProfileView }>(
-        `/agent-profiles/${encodeURIComponent(profileId)}/versions/${encodeURIComponent(version)}`,
-        { method: "DELETE", mutating: true },
-      )
-    ).agent_profile;
+  async function deleteAgentProfile(profileId: string): Promise<{ profile_id: string }> {
+    return request<{ profile_id: string }>(`/agent-profiles/${encodeURIComponent(profileId)}`, {
+      method: "DELETE",
+      mutating: true,
+    });
   }
 
   async function listWorkflows(
@@ -942,10 +910,8 @@ export function createApi(device: DeviceRuntime) {
     listAgentProfiles,
     createAgentProfile,
     deleteAgentProfile,
-    listAgentProfileVersions,
-    createAgentProfileVersion,
-    updateAgentProfileVersion,
-    deleteAgentProfileVersion,
+    getAgentProfile,
+    updateAgentProfile,
     listWorkflows,
     getWorkflow,
     getWorkflowRevision,

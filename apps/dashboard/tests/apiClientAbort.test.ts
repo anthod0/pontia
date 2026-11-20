@@ -60,7 +60,7 @@ test("passes AbortSignal through settings-related read requests", async () => {
   await listWorkspaces({ signal: controller.signal });
   await listWorkspaceRoots({ signal: controller.signal });
   await listWorkspaceRootEntries("root-1", "", { signal: controller.signal });
-  await listAgentProfiles(false, { signal: controller.signal });
+  await listAgentProfiles({ signal: controller.signal });
 
   expect(fetchMock).toHaveBeenCalledTimes(4);
   const signals = fetchMock.mock.calls.map(([, init]) => (init as RequestInit).signal);

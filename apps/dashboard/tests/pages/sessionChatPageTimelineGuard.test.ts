@@ -190,8 +190,6 @@ const session = (overrides: Partial<SessionView> = {}): SessionView => ({
   handle: "generic-session",
   role: null,
   description: null,
-  execution_profile_id: null,
-  execution_profile_version: null,
   state: "idle",
   current_turn_id: null,
   workspace_id: "workspace-1",

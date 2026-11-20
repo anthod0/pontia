@@ -4,7 +4,6 @@ export const reservedDeviceHandles: ReadonlySet<string> = new Set([
   "about",
   "account",
   "accounts",
-  "agent-profiles",
   "admin",
   "api",
   "assets",

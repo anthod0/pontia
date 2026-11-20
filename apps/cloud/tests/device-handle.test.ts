@@ -9,6 +9,8 @@ describe("device handle", () => {
   test("accepts canonical handles", () => {
     expect(isValidDeviceHandle("office-mac")).toBe(true);
     expect(isValidDeviceHandle("a_b-")).toBe(true);
+    expect(isValidDeviceHandle("agent-profiles")).toBe(true);
+    expect(isValidDeviceHandle("settings")).toBe(false);
     expect(isValidDeviceHandle("a".repeat(48))).toBe(true);
   });
 

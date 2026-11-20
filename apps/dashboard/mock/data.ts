@@ -262,8 +262,6 @@ function buildSession(nextId: (prefix: string) => string, spec: SessionSpec): Mo
     handle: null,
     role: null,
     description: null,
-    execution_profile_id: null,
-    execution_profile_version: null,
     state: spec.state,
     current_turn_id: currentTurn?.turn_id ?? null,
     workspace_id: spec.workspace.workspace_id,
@@ -349,36 +347,15 @@ function agentClient(
   };
 }
 
-function agentProfile(
-  profileId: string,
-  version: string,
-  name: string,
-  description: string,
-  metadata: AgentProfileView["metadata"] = {},
-): AgentProfileView {
+function agentProfile(profileId: string, name: string, description: string): AgentProfileView {
   return {
     profile_id: profileId,
-    version,
     name,
     description,
-    supported_client_types: ["pi", "codex", "claude-agent"],
-    default_client_type: null,
-    default_client_key: null,
-    default_model: null,
-    agent_kind: "executor",
-    system_prompt_template: `You are ${name}. ${description}`,
-    turn_prompt_template: "{{input}}",
-    default_session_role: null,
-    default_session_description: null,
-    handle_prefix: null,
-    expected_output_schema: null,
-    artifact_contract: {},
-    default_execution_policy: {},
-    default_review_policy: {},
-    metadata,
-    active: true,
-    archived_at: null,
-    archived_reason: null,
+    client_type: null,
+    client_key: null,
+    model: null,
+    system_prompt: `You are ${name}. ${description}`,
     created_at: ago(60 * 24 * 10),
     updated_at: ago(60 * 24 * 2),
   };
@@ -423,7 +400,6 @@ function workflow(
         inputs: [],
         output: "report.md",
         execution_profile_id: "executor",
-        execution_profile_version: "1",
         introduced_revision: 1,
         retired_revision: null,
       });
@@ -746,9 +722,8 @@ export function createSampleData(): MockData {
     sessions,
     workflows,
     agentProfiles: [
-      agentProfile("executor", "1", "Executor", "Implements a single task.", {}),
-      agentProfile("reviewer", "1", "Reviewer", "Reviews a change for bugs and style."),
-      agentProfile("reviewer", "2", "Reviewer", "Reviews a change and checks it against the spec."),
+      agentProfile("executor", "Executor", "Implements a single task."),
+      agentProfile("reviewer", "Reviewer", "Reviews a change and checks it against the spec."),
     ],
     clientSetup: null,
     agentClients: [

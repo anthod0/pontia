@@ -1,183 +1,64 @@
 import { translate } from "$lib/i18n";
-import type {
-  AgentKind,
-  AgentProfileView,
-  JsonObject,
-  UpsertAgentProfileInput,
-} from "../../api/types";
-
-import { defaultClientType } from "../../clients";
+import type { AgentProfileView, UpsertAgentProfileInput } from "../../api/types";
 
 export interface AgentProfileDraft {
   profile_id: string;
-  version: string;
   name: string;
   description: string;
-  default_client_type: string | null;
-  default_client_key: string | null;
-  default_model: string | null;
-  supported_client_types_text: string;
-  agent_kind: AgentKind;
-  system_prompt_template: string;
-  turn_prompt_template: string;
-  default_session_role: string;
-  default_session_description: string;
-  handle_prefix: string;
-  expected_output_schema: string;
-  artifact_contract_text: string;
-  default_execution_policy_text: string;
-  default_review_policy_text: string;
-  metadata_text: string;
+  client_type: string;
+  client_key: string;
+  model: string;
+  system_prompt: string;
 }
 
 export type AgentProfileDraftErrors = Partial<Record<keyof AgentProfileDraft, string>>;
 
-export type BuildAgentProfileInputResult =
-  | { ok: true; input: UpsertAgentProfileInput }
-  | { ok: false; errors: AgentProfileDraftErrors };
-
-const EMPTY_JSON = "{}";
-
 export function createAgentProfileDraft(): AgentProfileDraft {
   return {
     profile_id: "",
-    version: "",
     name: "",
     description: "",
-    default_client_type: null,
-    default_client_key: null,
-    default_model: null,
-    supported_client_types_text: defaultClientType,
-    agent_kind: "executor",
-    system_prompt_template: "",
-    turn_prompt_template: "",
-    default_session_role: "",
-    default_session_description: "",
-    handle_prefix: "",
-    expected_output_schema: "",
-    artifact_contract_text: EMPTY_JSON,
-    default_execution_policy_text: EMPTY_JSON,
-    default_review_policy_text: EMPTY_JSON,
-    metadata_text: EMPTY_JSON,
+    client_type: "",
+    client_key: "",
+    model: "",
+    system_prompt: "",
   };
 }
 
-export function createAgentProfileDraftFromProfile(
-  profile: AgentProfileView,
-  options: { clearVersion?: boolean } = {},
-): AgentProfileDraft {
+export function createAgentProfileDraftFromProfile(profile: AgentProfileView): AgentProfileDraft {
   return {
     profile_id: profile.profile_id,
-    version: options.clearVersion ? "" : profile.version,
     name: profile.name,
     description: profile.description ?? "",
-    default_client_type: profile.default_client_type,
-    default_client_key: profile.default_client_key,
-    default_model: profile.default_model,
-    supported_client_types_text: profile.supported_client_types.join(", "),
-    agent_kind: profile.agent_kind,
-    system_prompt_template: profile.system_prompt_template ?? "",
-    turn_prompt_template: profile.turn_prompt_template ?? "",
-    default_session_role: profile.default_session_role ?? "",
-    default_session_description: profile.default_session_description ?? "",
-    handle_prefix: profile.handle_prefix ?? "",
-    expected_output_schema: profile.expected_output_schema ?? "",
-    artifact_contract_text: stringifyJson(profile.artifact_contract),
-    default_execution_policy_text: stringifyJson(profile.default_execution_policy),
-    default_review_policy_text: stringifyJson(profile.default_review_policy),
-    metadata_text: stringifyJson(profile.metadata),
+    client_type: profile.client_type ?? "",
+    client_key: profile.client_key ?? "",
+    model: profile.model ?? "",
+    system_prompt: profile.system_prompt ?? "",
   };
 }
 
-export function buildAgentProfileInput(draft: AgentProfileDraft): BuildAgentProfileInputResult {
+export function buildAgentProfileInput(
+  draft: AgentProfileDraft,
+): { ok: true; input: UpsertAgentProfileInput } | { ok: false; errors: AgentProfileDraftErrors } {
   const errors: AgentProfileDraftErrors = {};
-
   if (!draft.profile_id.trim()) errors.profile_id = translate("profiles.idRequired");
-  if (!draft.version.trim()) errors.version = translate("profiles.versionRequired");
   if (!draft.name.trim()) errors.name = translate("profiles.nameRequired");
-
-  const artifactContract = parseJsonObject(
-    "artifact_contract_text",
-    draft.artifact_contract_text,
-    errors,
-  );
-  const executionPolicy = parseJsonObject(
-    "default_execution_policy_text",
-    draft.default_execution_policy_text,
-    errors,
-  );
-  const reviewPolicy = parseJsonObject(
-    "default_review_policy_text",
-    draft.default_review_policy_text,
-    errors,
-  );
-  const metadata = parseJsonObject("metadata_text", draft.metadata_text, errors);
-
-  if (Object.keys(errors).length > 0) return { ok: false, errors };
-
+  const launch = [draft.client_type, draft.client_key, draft.model].map((value) => value.trim());
+  if (launch.some(Boolean) && !launch.every(Boolean))
+    errors.model = translate("profiles.clientModelRequired");
+  if (draft.system_prompt.includes("{{") || draft.system_prompt.includes("}}"))
+    errors.system_prompt = translate("profiles.staticPromptRequired");
+  if (Object.keys(errors).length) return { ok: false, errors };
   return {
     ok: true,
     input: {
       profile_id: draft.profile_id.trim(),
-      version: draft.version.trim(),
       name: draft.name.trim(),
-      description: nullableTrimmed(draft.description),
-      default_client_type: draft.default_client_type,
-      default_client_key: draft.default_client_key,
-      default_model: draft.default_model,
-      supported_client_types: splitClientTypes(draft.supported_client_types_text),
-      agent_kind: draft.agent_kind,
-      system_prompt_template: nullableTrimmed(draft.system_prompt_template),
-      turn_prompt_template: nullableTrimmed(draft.turn_prompt_template),
-      default_session_role: nullableTrimmed(draft.default_session_role),
-      default_session_description: nullableTrimmed(draft.default_session_description),
-      handle_prefix: nullableTrimmed(draft.handle_prefix),
-      expected_output_schema: nullableTrimmed(draft.expected_output_schema),
-      artifact_contract: artifactContract,
-      default_execution_policy: executionPolicy,
-      default_review_policy: reviewPolicy,
-      metadata,
+      description: draft.description.trim() || null,
+      client_type: launch[0] || null,
+      client_key: launch[1] || null,
+      model: launch[2] || null,
+      system_prompt: draft.system_prompt.trim() || null,
     },
   };
-}
-
-function nullableTrimmed(value: string): string | null {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function splitClientTypes(value: string): string[] {
-  return Array.from(
-    new Set(
-      value
-        .split(/[\s,]+/)
-        .map((client) => client.trim())
-        .filter(Boolean),
-    ),
-  );
-}
-
-function stringifyJson(value: unknown): string {
-  return JSON.stringify(value ?? {}, null, 2);
-}
-
-function parseJsonObject(
-  field: keyof AgentProfileDraft,
-  value: string,
-  errors: AgentProfileDraftErrors,
-): JsonObject {
-  const source = value.trim() || EMPTY_JSON;
-  try {
-    const parsed = JSON.parse(source) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      errors[field] = translate("profiles.jsonObjectRequired");
-      return {};
-    }
-    return parsed as JsonObject;
-  } catch (error) {
-    errors[field] = translate("profiles.invalidJson", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return {};
-  }
 }

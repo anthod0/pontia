@@ -1,6 +1,5 @@
 const deviceHandle = /^[a-z][a-z0-9_-]{3,47}$/;
 const reservedHandles = new Set([
-  "agent-profiles",
   "api",
   "assets",
   "auth",

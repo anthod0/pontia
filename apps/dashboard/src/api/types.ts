@@ -180,7 +180,6 @@ export interface WorkflowGraphNodeView {
   inputs: string[];
   output: string;
   execution_profile_id: string | null;
-  execution_profile_version: string | null;
   introduced_revision: number;
   retired_revision: number | null;
 }
@@ -298,55 +297,26 @@ export interface ContextUsageView {
   observed_at: string;
 }
 
-export type AgentKind = "executor";
-
 export interface AgentProfileView {
   profile_id: string;
-  version: string;
   name: string;
   description: string | null;
-  default_client_type: string | null;
-  default_client_key: string | null;
-  default_model: string | null;
-  supported_client_types: string[];
-  agent_kind: AgentKind;
-  system_prompt_template: string | null;
-  turn_prompt_template: string | null;
-  default_session_role: string | null;
-  default_session_description: string | null;
-  handle_prefix: string | null;
-  expected_output_schema: string | null;
-  artifact_contract: JsonObject;
-  default_execution_policy: JsonObject;
-  default_review_policy: JsonObject;
-  metadata: JsonObject;
-  active: boolean;
-  archived_at: string | null;
-  archived_reason: string | null;
+  client_type: string | null;
+  client_key: string | null;
+  model: string | null;
+  system_prompt: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface UpsertAgentProfileInput {
   profile_id: string;
-  version: string;
   name: string;
   description?: string | null;
-  default_client_type?: string | null;
-  default_client_key?: string | null;
-  default_model?: string | null;
-  supported_client_types?: string[];
-  agent_kind: AgentKind;
-  system_prompt_template?: string | null;
-  turn_prompt_template?: string | null;
-  default_session_role?: string | null;
-  default_session_description?: string | null;
-  handle_prefix?: string | null;
-  expected_output_schema?: string | null;
-  artifact_contract?: JsonObject;
-  default_execution_policy?: JsonObject;
-  default_review_policy?: JsonObject;
-  metadata?: JsonObject;
+  client_type?: string | null;
+  client_key?: string | null;
+  model?: string | null;
+  system_prompt?: string | null;
 }
 
 export interface SessionLineageView {
@@ -375,8 +345,6 @@ export interface SessionView {
   handle: string | null;
   role: string | null;
   description: string | null;
-  execution_profile_id: string | null;
-  execution_profile_version: string | null;
   state: SessionState | string;
   current_turn_id: string | null;
   workspace_id: string | null;
@@ -649,9 +617,7 @@ export interface CreateSessionInput {
   handle?: string | null;
   role?: string | null;
   description?: string | null;
-  execution_profile_id?: string | null;
-  execution_profile_version?: string | null;
-  additional_instructions?: string | null;
+  system_instructions?: string | null;
   include_standalone_session_instructions?: boolean;
   metadata?: JsonObject;
   initial_task?: { input: string; metadata?: JsonObject } | null;

@@ -63,7 +63,6 @@ test("history is read-only, preserves session navigation, and phase changes do n
         inputs: ["input.md"],
         output: "output.md",
         execution_profile_id: "writer",
-        execution_profile_version: "1",
         introduced_revision: 1,
         retired_revision: 3,
       },

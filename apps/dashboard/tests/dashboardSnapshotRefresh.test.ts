@@ -17,8 +17,6 @@ function detail(topology: boolean): SessionConsoleDetail {
       handle: null,
       role: null,
       description: null,
-      execution_profile_id: null,
-      execution_profile_version: null,
       state: "idle",
       current_turn_id: null,
       workspace_id: null,

@@ -15,8 +15,6 @@ const session = (overrides) => ({
   state: "idle",
   workspace_id: "workspace-1",
   workspace: null,
-  execution_profile_id: null,
-  execution_profile_version: null,
   title: null,
   handle: null,
   role: null,

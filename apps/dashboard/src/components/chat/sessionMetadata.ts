@@ -38,13 +38,6 @@ export function sessionContextUsageLabel(
   return summary;
 }
 
-export function sessionProfileTitle(session: SessionView): string | null {
-  if (!session.execution_profile_id) return null;
-  return session.execution_profile_version
-    ? `${session.execution_profile_id}@${session.execution_profile_version}`
-    : session.execution_profile_id;
-}
-
 export function sessionHandleTitle(session: SessionView): string | null {
   const handle = session.handle?.trim();
   return handle || null;
@@ -201,14 +194,6 @@ export function sessionMetadataItems(
       label: translate("context.label"),
       value: contextUsageLabel,
       title: translate("context.usage", { usage: contextUsageLabel }),
-    });
-  const profileTitle = sessionProfileTitle(session);
-  if (profileTitle)
-    items.push({
-      key: "profile",
-      label: translate("profiles.profile"),
-      value: profileTitle,
-      title: profileTitle,
     });
   const handleTitle = sessionHandleTitle(session);
   if (handleTitle)

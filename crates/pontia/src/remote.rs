@@ -722,7 +722,6 @@ fn reserved_device_handle(value: &str) -> bool {
         "about"
             | "account"
             | "accounts"
-            | "agent-profiles"
             | "admin"
             | "api"
             | "assets"
@@ -1165,6 +1164,8 @@ mod tests {
     fn validates_device_handles_used_in_remote_dashboard_urls() {
         assert!(valid_device_handle("office-mac"));
         assert!(valid_device_handle("home_2"));
+        assert!(validate_handle("agent-profiles").is_ok());
+        assert!(validate_handle("settings").is_err());
         assert!(!valid_device_handle("abc"));
         assert!(!valid_device_handle("Office-Mac"));
         assert!(!valid_device_handle("office/mac"));

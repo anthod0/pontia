@@ -338,52 +338,24 @@ function workflowListItem(detail: MockData["workflows"][number]["detail"]): Work
   };
 }
 
-function latestProfiles(profiles: AgentProfileView[], includeArchived: boolean) {
-  const latest = new Map<string, AgentProfileView>();
-  for (const profile of profiles) {
-    if (includeArchived || profile.active) latest.set(profile.profile_id, profile);
-  }
-  return [...latest.values()];
-}
-
 function profileFromInput(input: UpsertAgentProfileInput): AgentProfileView {
   const timestamp = now();
   return {
     description: null,
-    default_client_type: null,
-    default_client_key: null,
-    default_model: null,
-    supported_client_types: [],
-    system_prompt_template: null,
-    turn_prompt_template: null,
-    default_session_role: null,
-    default_session_description: null,
-    handle_prefix: null,
-    expected_output_schema: null,
-    artifact_contract: {},
-    default_execution_policy: {},
-    default_review_policy: {},
-    metadata: {},
+    client_type: null,
+    client_key: null,
+    model: null,
+    system_prompt: null,
     ...input,
-    active: true,
-    archived_at: null,
-    archived_reason: null,
     created_at: timestamp,
     updated_at: timestamp,
   };
 }
 
-function archiveProfile(profile: AgentProfileView): void {
-  profile.active = false;
-  profile.archived_at = now();
-  profile.archived_reason = "Deleted from the dashboard";
-}
-
-function findProfileVersion(device: MockDevice, profileId: string, version: string) {
+function findProfile(device: MockDevice, profileId: string) {
   return (
-    device.data.agentProfiles.find(
-      (profile) => profile.profile_id === profileId && profile.version === version,
-    ) ?? notFound("Agent profile version")
+    device.data.agentProfiles.find((profile) => profile.profile_id === profileId) ??
+    notFound("Agent profile")
   );
 }
 
@@ -591,22 +563,33 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
     }),
   ],
 
+  ["GET", "/agent-profiles", ({ device }) => ({ agent_profiles: device.data.agentProfiles })],
   [
     "GET",
-    "/agent-profiles",
-    ({ device, query }) => ({
-      agent_profiles: latestProfiles(
-        device.data.agentProfiles,
-        query.get("include_archived") === "true",
-      ),
-    }),
+    "/agent-profiles/:id",
+    ({ device, params: [profileId] }) => ({ agent_profile: findProfile(device, profileId) }),
   ],
   [
     "POST",
     "/agent-profiles",
     ({ device, body }) => {
-      const profile = profileFromInput(body as unknown as UpsertAgentProfileInput);
+      const input = body as unknown as UpsertAgentProfileInput;
+      if (device.data.agentProfiles.some((profile) => profile.profile_id === input.profile_id))
+        throw new HttpError(409, "conflict", "Profile already exists");
+      const profile = profileFromInput(input);
       device.data.agentProfiles.push(profile);
+      return { agent_profile: profile };
+    },
+  ],
+  [
+    "PUT",
+    "/agent-profiles/:id",
+    ({ device, params: [profileId], body }) => {
+      const profile = findProfile(device, profileId);
+      Object.assign(profile, profileFromInput(body as unknown as UpsertAgentProfileInput), {
+        profile_id: profileId,
+        created_at: profile.created_at,
+      });
       return { agent_profile: profile };
     },
   ],
@@ -614,49 +597,11 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
     "DELETE",
     "/agent-profiles/:id",
     ({ device, params: [profileId] }) => {
-      const versions = device.data.agentProfiles.filter(
-        (profile) => profile.profile_id === profileId && profile.active,
+      findProfile(device, profileId);
+      device.data.agentProfiles = device.data.agentProfiles.filter(
+        (profile) => profile.profile_id !== profileId,
       );
-      versions.forEach(archiveProfile);
-      return { profile_id: profileId, archived_versions: versions.length };
-    },
-  ],
-  [
-    "GET",
-    "/agent-profiles/:id/versions",
-    ({ device, params: [profileId], query }) => ({
-      agent_profile_versions: device.data.agentProfiles.filter(
-        (profile) =>
-          profile.profile_id === profileId &&
-          (profile.active || query.get("include_archived") === "true"),
-      ),
-    }),
-  ],
-  [
-    "POST",
-    "/agent-profiles/:id/versions",
-    ({ device, body }) => {
-      const profile = profileFromInput(body as unknown as UpsertAgentProfileInput);
-      device.data.agentProfiles.push(profile);
-      return { agent_profile: profile };
-    },
-  ],
-  [
-    "PUT",
-    "/agent-profiles/:id/versions/:version",
-    ({ device, params: [profileId, version], body }) => {
-      const profile = findProfileVersion(device, profileId, version);
-      Object.assign(profile, body, { updated_at: now() });
-      return { agent_profile: profile };
-    },
-  ],
-  [
-    "DELETE",
-    "/agent-profiles/:id/versions/:version",
-    ({ device, params: [profileId, version] }) => {
-      const profile = findProfileVersion(device, profileId, version);
-      archiveProfile(profile);
-      return { agent_profile: profile };
+      return { profile_id: profileId };
     },
   ],
 
@@ -848,8 +793,6 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
           handle: null,
           role: null,
           description: null,
-          execution_profile_id: null,
-          execution_profile_version: null,
           state: "idle",
           current_turn_id: null,
           workspace_id: workspace.workspace_id,
