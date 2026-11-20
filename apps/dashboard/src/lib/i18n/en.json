@@ -763,5 +763,5 @@
   "profiles.clientModelUnavailable": "The saved client or model is unavailable. Choose an enabled client and model, or clear both.",
   "profiles.staticPromptRequired": "Use static instructions without template variables.",
   "profiles.deleteConfirm": "Delete profile?",
-  "profiles.deleteDescription": "Delete {name}? Existing Sessions keep their instructions. A Bot’s default helper Profile is recreated with default values when the Bot initializes or retries."
+  "profiles.deleteDescription": "Delete {name}? Existing Sessions keep their instructions."
 }

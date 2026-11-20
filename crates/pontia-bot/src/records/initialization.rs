@@ -1,8 +1,7 @@
-use pontia_agent_control::UpsertAgentProfileRequest;
 use pontia_core::{Error, Result};
 use serde_json::json;
 
-use super::{Bot, BotService};
+use super::BotService;
 
 impl BotService {
     /// Retry a saved Bot's initialization without replacing user-managed resources.
@@ -37,22 +36,6 @@ impl BotService {
             }
         })
         .await
-        .map_err(|error| Error::Domain(error.to_string()))??;
-        self.profiles
-            .initialize_profile(helper_profile(&bot))
-            .await?;
-        Ok(())
-    }
-}
-
-fn helper_profile(bot: &Bot) -> UpsertAgentProfileRequest {
-    UpsertAgentProfileRequest {
-        profile_id: BotService::helper_profile_id(&bot.bot_id),
-        name: format!("{} helper", bot.name),
-        description: None,
-        client_type: Some(bot.client_type.clone()),
-        client_key: Some(bot.client_key.clone()),
-        model: Some(bot.model.clone()),
-        system_prompt: None,
+        .map_err(|error| Error::Domain(error.to_string()))?
     }
 }

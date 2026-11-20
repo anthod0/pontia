@@ -241,7 +241,7 @@ pub(super) enum MemoryCommand {
 #[derive(Debug, Subcommand, Serialize)]
 #[serde(tag = "action", content = "input", rename_all = "snake_case")]
 pub(super) enum HelperCommand {
-    /// Start a helper using an Agent Profile (defaults to this Bot's helper Profile)
+    /// Start a helper using an Agent Profile, or the general helper with this Bot's client and model
     Create {
         /// Start in this active project Workspace
         #[arg(

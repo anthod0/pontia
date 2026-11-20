@@ -14,11 +14,10 @@ use std::{path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
 use crate::{
-    conversation::ConversationService,
-    handoff::HelperContext,
-    identity::BotRole,
-    records::{Bot, BotService},
+    conversation::ConversationService, handoff::HelperContext, identity::BotRole, records::Bot,
 };
+
+const HELPER_INSTRUCTIONS: &str = include_str!("helpers/instructions.md");
 
 #[derive(Debug)]
 pub enum HelperError {
@@ -241,13 +240,10 @@ impl HelperService {
             request.launch_mode = pontia_core::LaunchMode::Background;
             request.role = Some(RETRIEVAL_ROLE.into());
             request
-        } else {
-            let profile_id = input
-                .profile_id
-                .unwrap_or_else(|| BotService::helper_profile_id(bot_id));
+        } else if let Some(profile_id) = &input.profile_id {
             let profile = AgentProfileService::new(self.control.db())
                 .with_clients(self.control.clients())
-                .resolve_launch(&profile_id)
+                .resolve_launch(profile_id)
                 .await?;
             let (Some(client_type), Some(client_key), Some(model)) =
                 (&profile.client_type, &profile.client_key, &profile.model)
@@ -256,14 +252,11 @@ impl HelperService {
                     "agent profile {profile_id} has no launch defaults"
                 )));
             };
-            let instructions = [
-                profile.system_prompt.as_deref(),
-                Some(include_str!("helpers/instructions.md")),
-            ]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join("\n\n");
+            let instructions = [profile.system_prompt.as_deref(), Some(HELPER_INSTRUCTIONS)]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join("\n\n");
             self.conversation
                 .task_session_request(
                     client_type,
@@ -271,6 +264,16 @@ impl HelperService {
                     model,
                     ownership.clone(),
                     &instructions,
+                )
+                .await?
+        } else {
+            self.conversation
+                .task_session_request(
+                    &bot.client_type,
+                    &bot.client_key,
+                    &bot.model,
+                    ownership.clone(),
+                    HELPER_INSTRUCTIONS,
                 )
                 .await?
         };

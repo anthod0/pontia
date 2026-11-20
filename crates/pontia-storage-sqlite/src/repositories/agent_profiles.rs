@@ -24,20 +24,7 @@ impl SqliteAgentProfileRepository {
     }
 
     pub async fn create(&self, record: AgentProfileWriteRecord) -> Result<()> {
-        self.insert(record, false).await
-    }
-
-    pub async fn initialize_profile(&self, record: AgentProfileWriteRecord) -> Result<()> {
-        self.insert(record, true).await
-    }
-
-    async fn insert(&self, record: AgentProfileWriteRecord, initialize: bool) -> Result<()> {
-        let conflict = if initialize {
-            " ON CONFLICT(profile_id) DO NOTHING"
-        } else {
-            ""
-        };
-        sqlx::query(&format!("INSERT INTO agent_profiles (profile_id, name, description, client_type, client_key, model, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?){conflict}"))
+        sqlx::query("INSERT INTO agent_profiles (profile_id, name, description, client_type, client_key, model, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?)")
             .bind(record.profile_id).bind(record.name).bind(record.description)
             .bind(record.client_type).bind(record.client_key).bind(record.model).bind(record.system_prompt)
             .execute(&self.pool).await?;

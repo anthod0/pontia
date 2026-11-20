@@ -8,16 +8,6 @@ use pontia_storage_sqlite::repositories::agent_profiles::{
 };
 
 impl AgentProfileService {
-    pub async fn initialize_profile(&self, request: UpsertAgentProfileRequest) -> Result<()> {
-        if self.get(&request.profile_id).await?.is_some() {
-            return Ok(());
-        }
-        self.validate_configuration(&request).await?;
-        SqliteAgentProfileRepository::new(self.pool.clone())
-            .initialize_profile(request.into())
-            .await
-    }
-
     async fn validate_configuration(&self, request: &UpsertAgentProfileRequest) -> Result<()> {
         validate_request(&self.clients, request)?;
         if let (Some(client), Some(key)) = (&request.client_type, &request.client_key) {

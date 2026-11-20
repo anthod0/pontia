@@ -3,9 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use pontia_agent_control::{
-    AgentProfileService, agent_clients::AgentClientService, clients::ClientRegistry,
-};
+use pontia_agent_control::{agent_clients::AgentClientService, clients::ClientRegistry};
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -97,15 +95,13 @@ pub struct BotService {
     pool: SqlitePool,
     home: PathBuf,
     clients: AgentClientService,
-    profiles: AgentProfileService,
     initialization_gate: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl BotService {
     pub fn new(pool: SqlitePool, pontia_home: &Path, clients: ClientRegistry) -> Self {
         Self {
-            clients: AgentClientService::new(pool.clone(), clients.clone()),
-            profiles: AgentProfileService::new(pool.clone()).with_clients(clients),
+            clients: AgentClientService::new(pool.clone(), clients),
             pool,
             home: pontia_home.to_owned(),
             initialization_gate: Arc::default(),
@@ -159,8 +155,6 @@ impl BotService {
 
     pub async fn update(&self, bot_id: &str, configuration: BotConfiguration) -> Result<Bot> {
         self.validate(&configuration).await?;
-        // Preserve creation-time defaults even when a prior initialization needs retrying.
-        self.initialize(bot_id).await?;
         Ok(sqlx::query_as(
             "UPDATE bots SET name = ?, description = ?, client_type = ?, client_key = ?, model = ?,
              avatar_shape = COALESCE(?, avatar_shape), avatar_color = COALESCE(?, avatar_color),
@@ -240,10 +234,6 @@ impl BotService {
         .execute(&self.pool)
         .await?;
         Ok(())
-    }
-
-    pub fn helper_profile_id(bot_id: &str) -> String {
-        format!("{bot_id}-helper")
     }
 
     async fn validate(&self, configuration: &BotConfiguration) -> Result<()> {

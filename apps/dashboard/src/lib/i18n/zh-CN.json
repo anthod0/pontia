@@ -763,5 +763,5 @@
   "profiles.clientModelUnavailable": "已保存的客户端或模型不可用。请选择已启用的客户端和模型，或同时清空。",
   "profiles.staticPromptRequired": "请使用不包含模板变量的静态指令。",
   "profiles.deleteConfirm": "删除 Profile？",
-  "profiles.deleteDescription": "确定删除 {name}？已有 Session 的指令不变。Bot 默认 helper Profile 会在 Bot 初始化或重试时按默认值重建。"
+  "profiles.deleteDescription": "确定删除 {name}？已有 Session 的指令不变。"
 }

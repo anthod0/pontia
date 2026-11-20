@@ -87,14 +87,13 @@ fn configured() -> UpsertAgentProfileRequest {
 }
 
 #[tokio::test]
-async fn crud_initialization_and_launch_use_current_profile() {
+async fn crud_and_launch_use_current_profile() {
     let (service, _) = fixture().await;
     let initial = service.create(request()).await.unwrap();
     assert!(matches!(
         service.create(request()).await,
         Err(Error::StateConflict(_))
     ));
-    service.initialize_profile(configured()).await.unwrap();
     assert_eq!(service.get("reviewer").await.unwrap().unwrap(), initial);
     let mut edited = configured();
     edited.system_prompt = Some("Edited".into());
@@ -119,16 +118,7 @@ async fn crud_initialization_and_launch_use_current_profile() {
         service.delete("reviewer").await,
         Err(Error::NotFound(_))
     ));
-    service.initialize_profile(request()).await.unwrap();
-    assert_eq!(
-        service
-            .resolve_launch("reviewer")
-            .await
-            .unwrap()
-            .client_type,
-        None
-    );
-    assert_eq!(service.list().await.unwrap().len(), 1);
+    assert!(service.list().await.unwrap().is_empty());
 }
 
 #[tokio::test]

@@ -17,16 +17,12 @@ fn record(name: &str) -> AgentProfileWriteRecord {
 }
 
 #[tokio::test]
-async fn creates_updates_initializes_and_deletes_profiles() {
+async fn creates_updates_and_deletes_profiles() {
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     run_migrations(&pool).await.unwrap();
     let repository = SqliteAgentProfileRepository::new(pool);
     repository.create(record("Original")).await.unwrap();
     assert!(repository.create(record("Duplicate")).await.is_err());
-    repository
-        .initialize_profile(record("Default"))
-        .await
-        .unwrap();
     let original = repository.get("reviewer").await.unwrap().unwrap();
     assert_eq!(original.name, "Original");
     assert!(repository.update(record("Edited")).await.unwrap());
@@ -37,14 +33,7 @@ async fn creates_updates_initializes_and_deletes_profiles() {
     assert!(repository.delete("reviewer").await.unwrap());
     assert!(!repository.delete("reviewer").await.unwrap());
     assert!(!repository.update(record("Missing")).await.unwrap());
-    repository
-        .initialize_profile(record("Recreated"))
-        .await
-        .unwrap();
-    assert_eq!(
-        repository.get("reviewer").await.unwrap().unwrap().name,
-        "Recreated"
-    );
+    assert!(repository.get("reviewer").await.unwrap().is_none());
 }
 
 #[tokio::test]

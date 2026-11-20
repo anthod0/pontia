@@ -4,7 +4,7 @@ use std::{
 };
 
 use pontia_agent_control::{
-    AgentControl, EventIngestService, ReportedFact,
+    AgentControl, AgentProfileService, EventIngestService, ReportedFact, UpsertAgentProfileRequest,
     agent_clients::AgentClientService,
     client_contract::{
         AgentInput, ClientConfiguration, ClientInteractions, ClientLaunchRequest, ClientLauncher,
@@ -56,6 +56,7 @@ struct Client {
     launch_directories: Mutex<std::collections::HashMap<String, String>>,
     fail_next_launch: Mutex<bool>,
     launch_modes: Mutex<std::collections::HashMap<String, LaunchMode>>,
+    launched_models: Mutex<std::collections::HashMap<String, Option<String>>>,
     launched_policies:
         Mutex<std::collections::HashMap<String, pontia_core::execution_policy::ExecutionPolicy>>,
     interaction_responses: Mutex<Vec<(String, String, String)>>,
@@ -127,6 +128,10 @@ impl ClientLauncher for Client {
         self.launch_modes.lock().unwrap().insert(
             request.runtime.session_id.clone(),
             request.runtime.launch_mode,
+        );
+        self.launched_models.lock().unwrap().insert(
+            request.runtime.session_id.clone(),
+            request.runtime.model.clone(),
         );
         self.launched_policies.lock().unwrap().insert(
             request.runtime.session_id.clone(),
@@ -1164,44 +1169,142 @@ async fn running_bots_receive_new_workspaces_once_and_initial_context_does_not_w
     assert_eq!(client.inputs.lock().unwrap().len(), before + 1);
 }
 
+fn profile(id: &str, model: &str, system_prompt: Option<&str>) -> UpsertAgentProfileRequest {
+    UpsertAgentProfileRequest {
+        profile_id: id.into(),
+        name: id.into(),
+        description: None,
+        client_type: Some("generic".into()),
+        client_key: Some("default".into()),
+        model: Some(model.into()),
+        system_prompt: system_prompt.map(Into::into),
+    }
+}
+
+fn profile_service(control: &AgentControl) -> AgentProfileService {
+    AgentProfileService::new(control.db()).with_clients(control.clients())
+}
+
+async fn create_helper(
+    service: &HelperService,
+    session: &str,
+    profile_id: Option<&str>,
+) -> std::result::Result<Value, pontia_bot::helpers::HelperError> {
+    service
+        .execute(HelperRequest {
+            session_id: session.into(),
+            command: HelperCommand::Create(CreateHelper {
+                location: HelperLocation::Temporary("2026-11-20_task".into()),
+                profile_id: profile_id.map(Into::into),
+                title: None,
+                description: "assigned work".into(),
+                message: "task".into(),
+            }),
+        })
+        .await
+}
+
+fn launched_model(client: &Client, session: &str) -> Option<String> {
+    client.launched_models.lock().unwrap()[session].clone()
+}
+
+const HELPER_INSTRUCTIONS: &str = include_str!("../src/helpers/instructions.md");
+
 #[tokio::test]
-async fn helper_launch_snapshots_the_selected_profile_and_keeps_the_initialized_model() {
-    use pontia_agent_control::{AgentProfileService, UpsertAgentProfileRequest};
-    let (_root, _pool, _client, control, conversation) = fixture().await;
+async fn general_helper_follows_a_corrected_bot_model_and_ignores_legacy_helper_profiles() {
+    let (_root, _pool, client, control, conversation) = fixture().await;
+    let bot = conversation
+        .records()
+        .create(bot_configuration("Bot", "missing/model"))
+        .await
+        .unwrap();
+    assert_eq!(
+        conversation
+            .send(&bot.bot_id, "start")
+            .await
+            .unwrap()
+            .status,
+        MessageStatus::Failed
+    );
+    profile_service(&control)
+        .create(profile(
+            &format!("{}-helper", bot.bot_id),
+            "missing/model",
+            Some("legacy prompt"),
+        ))
+        .await
+        .unwrap();
+    conversation
+        .records()
+        .update(&bot.bot_id, bot_configuration("Bot", MODEL))
+        .await
+        .unwrap();
+    conversation.send(&bot.bot_id, "retry").await.unwrap();
+    let session = conversation
+        .records()
+        .get(&bot.bot_id)
+        .await
+        .unwrap()
+        .current_session_id
+        .unwrap();
+    let helpers = HelperService::new(control.clone(), conversation.clone());
+    let response = create_helper(&helpers, &session, None).await.unwrap();
+    let helper = response["session_id"].as_str().unwrap();
+    assert_eq!(launched_model(&client, helper), Some(MODEL.into()));
+    assert_eq!(instructions(&control, helper).await, HELPER_INSTRUCTIONS);
+}
+
+#[tokio::test]
+async fn general_helper_launches_with_the_current_bot_client_key() {
+    let (_root, pool, _client, control, conversation) = fixture().await;
     let (id, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
+    let mut changed = bot_configuration("Bot", MODEL);
+    changed.client_key = "unconfigured".into();
+    conversation.records().update(&id, changed).await.unwrap();
+    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(matches!(
+        create_helper(&helpers, &session, None).await,
+        Err(pontia_bot::helpers::HelperError::Control(
+            Error::CapabilityUnavailable(_)
+        ))
+    ));
+    conversation
+        .records()
+        .update(&id, bot_configuration("Bot", MODEL))
+        .await
+        .unwrap();
+    create_helper(&helpers, &session, None).await.unwrap();
+    let after: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(after, before + 1);
+}
+
+#[tokio::test]
+async fn profile_helper_uses_the_profile_launch_config_and_keeps_its_instruction_snapshot() {
+    let (_root, _pool, client, control, conversation) = fixture().await;
+    let (id, session) = bot(&conversation).await;
+    let helpers = HelperService::new(control.clone(), conversation.clone());
+    let profiles = profile_service(&control);
+    profiles
+        .create(profile("specialist", MODEL, Some("Review only")))
+        .await
+        .unwrap();
     conversation
         .records()
         .update(&id, bot_configuration("changed", "missing/model"))
         .await
         .unwrap();
-    let original = helper(&helpers, &session).await;
-    let profiles = AgentProfileService::new(control.db()).with_clients(control.clients());
-    let default_id = pontia_bot::records::BotService::helper_profile_id(&id);
-    let default = profiles.get(&default_id).await.unwrap().unwrap();
-    let mut request: UpsertAgentProfileRequest = {
-        let mut value = json!(default);
-        value.as_object_mut().unwrap().remove("created_at");
-        value.as_object_mut().unwrap().remove("updated_at");
-        serde_json::from_value(value).unwrap()
-    };
-    request.profile_id = "specialist".into();
-    request.system_prompt = Some("Review only".into());
-    profiles.create(request.clone()).await.unwrap();
-    let response = helpers
-        .execute(HelperRequest {
-            session_id: session.clone(),
-            command: HelperCommand::Create(CreateHelper {
-                location: HelperLocation::Temporary("2026-11-20_task".into()),
-                profile_id: Some("specialist".into()),
-                title: None,
-                description: "specialized task".into(),
-                message: "task".into(),
-            }),
-        })
+    let response = create_helper(&helpers, &session, Some("specialist"))
         .await
         .unwrap();
     let target = response["session_id"].as_str().unwrap();
+    assert_eq!(launched_model(&client, target), Some(MODEL.into()));
     let binding = instructions(&control, target).await;
     assert!(
         !binding.contains(pontia_agent_control::standalone_session_instructions()),
@@ -1214,16 +1317,12 @@ async fn helper_launch_snapshots_the_selected_profile_and_keeps_the_initialized_
         "bot session must not receive standalone session instructions"
     );
     assert_eq!(binding.matches("Review only").count(), 1);
-    assert_eq!(
-        binding
-            .matches(include_str!("../src/helpers/instructions.md"))
-            .count(),
-        1
-    );
-    request.model = Some("missing/model".into());
-    profiles.update("specialist", request).await.unwrap();
+    assert_eq!(binding.matches(HELPER_INSTRUCTIONS).count(), 1);
+    profiles
+        .update("specialist", profile("specialist", MODEL, Some("Edited")))
+        .await
+        .unwrap();
     assert_eq!(instructions(&control, target).await, binding);
-    assert_ne!(instructions(&control, &original).await, binding);
 }
 
 #[path = "conversation/retrieval.rs"]
@@ -1241,34 +1340,24 @@ mod workspaces;
 #[tokio::test]
 async fn helper_rejects_missing_and_deleted_profiles_before_creating_a_session() {
     let (_root, pool, _client, control, conversation) = fixture().await;
-    let (id, session) = bot(&conversation).await;
+    let (_, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation);
-    let profiles = pontia_agent_control::AgentProfileService::new(control.db())
-        .with_clients(control.clients());
-    let deleted = pontia_bot::records::BotService::helper_profile_id(&id);
-    profiles.delete(&deleted).await.unwrap();
+    let profiles = profile_service(&control);
+    profiles
+        .create(profile("deleted", MODEL, None))
+        .await
+        .unwrap();
+    profiles.delete("deleted").await.unwrap();
     let before: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
         .fetch_one(&pool)
         .await
         .unwrap();
-    for profile_id in ["missing", &deleted] {
-        let result = helpers
-            .execute(HelperRequest {
-                session_id: session.clone(),
-                command: HelperCommand::Create(CreateHelper {
-                    location: HelperLocation::Temporary("2026-11-20_rejected".into()),
-                    profile_id: Some(profile_id.into()),
-                    title: None,
-                    description: "rejected helper".into(),
-                    message: "task".into(),
-                }),
-            })
-            .await;
+    for profile_id in ["missing", "deleted"] {
         assert!(matches!(
-            result,
-            Err(pontia_bot::helpers::HelperError::Control(
-                Error::NotFound(_) | Error::Domain(_)
-            ))
+            create_helper(&helpers, &session, Some(profile_id)).await,
+            Err(pontia_bot::helpers::HelperError::Control(Error::NotFound(
+                _
+            )))
         ));
     }
     let after: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")

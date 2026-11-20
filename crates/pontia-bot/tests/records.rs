@@ -95,16 +95,6 @@ impl Fixture {
             registry,
         }
     }
-
-    async fn profile_request(&self, id: &str) -> UpsertAgentProfileRequest {
-        let profile = self.profiles.get(id).await.unwrap().unwrap();
-        {
-            let mut value = serde_json::to_value(profile).unwrap();
-            value.as_object_mut().unwrap().remove("created_at");
-            value.as_object_mut().unwrap().remove("updated_at");
-            serde_json::from_value(value).unwrap()
-        }
-    }
 }
 
 fn configuration(name: &str, key: &str, model: &str) -> BotConfiguration {
@@ -224,65 +214,56 @@ async fn bots_have_independent_configuration_directories_and_current_sessions() 
 }
 
 #[tokio::test]
-async fn defaults_capture_creation_config_and_preserve_user_edits_and_shared_resources() {
+async fn bot_lifecycle_preserves_user_information_and_writes_no_agent_profiles() {
     let f = Fixture::new().await;
     std::fs::create_dir_all(f.root.path().join("bot")).unwrap();
     let user = f.root.path().join("bot/USER.md");
     std::fs::write(&user, "existing user information").unwrap();
-    let a = f
+    let bot = f
         .bots
         .create(configuration("A", "a", "model-a"))
         .await
         .unwrap();
-    let helper = BotService::helper_profile_id(&a.bot_id);
-    let initial = f.profiles.resolve_launch(&helper).await.unwrap();
-    assert_eq!(
-        (
-            initial.client_type.as_deref(),
-            initial.client_key.as_deref(),
-            initial.model.as_deref()
-        ),
-        (Some("generic"), Some("a"), Some("model-a"))
-    );
-    let mut request = f.profile_request(&helper).await;
-    request.client_key = Some("b".into());
-    request.model = Some("custom-model".into());
-    request.system_prompt = Some("custom instructions".into());
-    f.profiles.update(&helper, request).await.unwrap();
-    let b = f
-        .bots
-        .create(configuration("B", "b", "model-b"))
-        .await
-        .unwrap();
     f.bots
-        .update(&a.bot_id, configuration("Changed", "b", "model-new"))
+        .update(&bot.bot_id, configuration("Changed", "b", "model-new"))
         .await
         .unwrap();
-    f.bots.initialize(&a.bot_id).await.unwrap();
-    assert_eq!(
-        f.profiles
-            .resolve_launch(&BotService::helper_profile_id(&b.bot_id))
-            .await
-            .unwrap()
-            .model
-            .as_deref(),
-        Some("model-b")
-    );
-    assert_eq!(
-        f.profiles
-            .resolve_launch(&helper)
-            .await
-            .unwrap()
-            .model
-            .as_deref(),
-        Some("custom-model")
-    );
-    let launch = f.profiles.resolve_launch(&helper).await.unwrap();
-    assert_eq!(launch.system_prompt.as_deref(), Some("custom instructions"));
+    f.bots.initialize(&bot.bot_id).await.unwrap();
+    assert!(f.profiles.list().await.unwrap().is_empty());
     assert_eq!(
         std::fs::read_to_string(user).unwrap(),
         "existing user information"
     );
+}
+
+#[tokio::test]
+async fn initialization_leaves_a_deleted_legacy_helper_profile_deleted() {
+    let f = Fixture::new().await;
+    let bot = f
+        .bots
+        .create(configuration("A", "a", "model-a"))
+        .await
+        .unwrap();
+    let legacy = format!("{}-helper", bot.bot_id);
+    f.profiles
+        .create(UpsertAgentProfileRequest {
+            profile_id: legacy.clone(),
+            name: "A helper".into(),
+            description: None,
+            client_type: Some("generic".into()),
+            client_key: Some("a".into()),
+            model: Some("model-a".into()),
+            system_prompt: None,
+        })
+        .await
+        .unwrap();
+    f.profiles.delete(&legacy).await.unwrap();
+    f.bots.initialize(&bot.bot_id).await.unwrap();
+    f.bots
+        .update(&bot.bot_id, configuration("A", "b", "model-b"))
+        .await
+        .unwrap();
+    assert!(f.profiles.list().await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -311,39 +292,7 @@ async fn filesystem_initialization_failure_can_be_retried_with_the_saved_bot_id(
     reopened.initialize(&bot_id).await.unwrap();
     assert_eq!(std::fs::read_to_string(user).unwrap(), "user edited this");
     assert_eq!(reopened.list().await.unwrap().len(), 1);
-    assert_eq!(f.profiles.list().await.unwrap().len(), 1);
-}
-
-#[tokio::test]
-async fn retry_after_helper_profile_failure_uses_the_saved_bot() {
-    let f = Fixture::new().await;
-    sqlx::query("CREATE TRIGGER reject_helper BEFORE INSERT ON agent_profiles BEGIN SELECT RAISE(FAIL, 'test failure'); END").execute(&f.pool).await.unwrap();
-    let error = f
-        .bots
-        .create(configuration("A", "a", "model-a"))
-        .await
-        .unwrap_err();
-    let CreateError::Initialization {
-        bot_id,
-        source: Error::Database(_),
-    } = error
-    else {
-        panic!("expected initialization database failure")
-    };
-    sqlx::query("DROP TRIGGER reject_helper")
-        .execute(&f.pool)
-        .await
-        .unwrap();
-    f.bots.initialize(&bot_id).await.unwrap();
-    assert_eq!(
-        f.profiles
-            .resolve_launch(&BotService::helper_profile_id(&bot_id))
-            .await
-            .unwrap()
-            .model
-            .as_deref(),
-        Some("model-a")
-    );
+    assert!(f.profiles.list().await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -435,28 +384,5 @@ async fn messages_with_equal_timestamps_have_a_stable_id_order() {
     assert_eq!(
         messages.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
         vec!["a", "b", "c"]
-    );
-}
-
-#[tokio::test]
-async fn deleted_helper_profile_is_reinitialized_with_bot_defaults() {
-    let f = Fixture::new().await;
-    let bot = f
-        .bots
-        .create(configuration("A", "a", "model-a"))
-        .await
-        .unwrap();
-    let id = BotService::helper_profile_id(&bot.bot_id);
-    f.profiles.delete(&id).await.unwrap();
-    assert!(f.profiles.resolve_launch(&id).await.is_err());
-    f.bots.initialize(&bot.bot_id).await.unwrap();
-    assert_eq!(
-        f.profiles
-            .resolve_launch(&id)
-            .await
-            .unwrap()
-            .model
-            .as_deref(),
-        Some("model-a")
     );
 }
