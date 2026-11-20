@@ -298,6 +298,7 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
         if action == "create" {
             args.extend(["--workspace-id", "project"]);
             args.extend(["--description", "Task", "--profile-id", "selected-profile"]);
+            args.extend(["--title", "核对文件下载"]);
         }
         let output = f.cli(&args).await;
         assert!(
@@ -320,6 +321,7 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
                 request["command"]["input"]["profile_id"],
                 "selected-profile"
             );
+            assert_eq!(request["command"]["input"]["title"], "核对文件下载");
         }
     }
 }
@@ -380,7 +382,7 @@ async fn temporary_helper_sends_the_task_directory_name_as_the_location() {
         f.requests.try_recv().unwrap()["command"]["input"],
         json!({
             "temporary":name, "description":name, "message":"Find the exchange rate",
-            "profile_id":null
+            "profile_id":null, "title":null
         })
     );
 }

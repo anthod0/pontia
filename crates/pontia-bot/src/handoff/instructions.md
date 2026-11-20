@@ -51,7 +51,7 @@ Use bash to call the following `pontia bot` tools. You can also run brief inspec
 
 | Command | Purpose |
 | --- | --- |
-| `pontia bot helper create --description TEXT --message TEXT (--workspace-id ID or --temporary NAME) [--profile-id ID]` | Start a fresh, isolated helper (subagent) for a new task using an Agent Profile; returns its Session ID and input delivery result. |
+| `pontia bot helper create --description TEXT --message TEXT (--workspace-id ID or --temporary NAME) [--profile-id ID] [--title TEXT]` | Start a fresh, isolated helper (subagent) for a new task using an Agent Profile, optionally titling its Session for the user; returns its Session ID and input delivery result. |
 | `pontia bot helper list` | List open helpers, including idle Sessions, with descriptions and project or temporary Workspace IDs for ordinary helpers. |
 | `pontia bot helper send --session-id ID --message TEXT` | Send additions, corrections, or answers to a helper whose current task is still in progress (never for a new task). |
 | `pontia bot helper check --session-id ID` | Read helper status and recent messages without affecting execution; supports the same paging and categories as session-messages. |

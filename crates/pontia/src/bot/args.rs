@@ -257,6 +257,9 @@ pub(super) enum HelperCommand {
         temporary: Option<String>,
         #[arg(long)]
         profile_id: Option<String>,
+        /// Session title shown in the Dashboard
+        #[arg(long, allow_hyphen_values = true)]
+        title: Option<String>,
         #[arg(long, allow_hyphen_values = true)]
         description: String,
         #[arg(long, allow_hyphen_values = true)]

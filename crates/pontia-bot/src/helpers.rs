@@ -68,6 +68,7 @@ pub struct CreateHelper {
     #[serde(flatten)]
     pub location: HelperLocation,
     pub profile_id: Option<String>,
+    pub title: Option<String>,
     pub description: String,
     pub message: String,
 }
@@ -150,6 +151,7 @@ impl HelperService {
                     CreateHelper {
                         location: HelperLocation::ReadOnly,
                         profile_id: None,
+                        title: None,
                         description: input.message.clone(),
                         message: format!("{scope}\n\n{}", input.message),
                     },
@@ -327,6 +329,7 @@ impl HelperService {
                 request.workspace = Some(directory.to_string_lossy().into_owned());
             }
         }
+        request.title = input.title;
         request.description = Some(input.description);
         // Save the unique creation reference first so recovery can find a Session even if launch fails.
         sqlx::query("INSERT INTO bot_helpers(reference, bot_id) VALUES (?, ?)")

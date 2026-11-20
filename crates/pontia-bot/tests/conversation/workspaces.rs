@@ -1,16 +1,19 @@
 use super::*;
+use pontia_agent_control::ReportedFact;
 use pontia_agent_control::workspaces::upsert_canonical_workspace;
+use pontia_storage_sqlite::models::sessions::SessionRow;
 use pontia_storage_sqlite::repositories::sessions::{
     SessionOverviewOptions, SqliteSessionRepository,
 };
 use pontia_storage_sqlite::repositories::workspaces::SqliteWorkspaceRepository;
 
-fn project_helper(session: &str, workspace_id: &str) -> HelperRequest {
+fn project_helper(session: &str, workspace_id: &str, title: Option<&str>) -> HelperRequest {
     HelperRequest {
         session_id: session.into(),
         command: HelperCommand::Create(CreateHelper {
             location: HelperLocation::WorkspaceId(workspace_id.into()),
             profile_id: None,
+            title: title.map(Into::into),
             description: "Project task".into(),
             message: "Start the project task".into(),
         }),
@@ -41,7 +44,7 @@ async fn temporary_helpers_share_the_task_folder_and_appear_in_the_default_works
     .await
     .unwrap();
     let error = helpers
-        .execute(project_helper(&main, &workspace.workspace_id))
+        .execute(project_helper(&main, &workspace.workspace_id, None))
         .await
         .unwrap_err();
     assert!(matches!(
@@ -127,7 +130,7 @@ async fn project_helpers_follow_workspace_filters_and_accept_steering_on_their_r
             .await
             .unwrap();
         let created = helpers
-            .execute(project_helper(&main, &project.workspace_id))
+            .execute(project_helper(&main, &project.workspace_id, None))
             .await
             .unwrap();
         assert_eq!(created["delivery"]["status"], "accepted");
@@ -227,6 +230,53 @@ async fn project_helpers_follow_workspace_filters_and_accept_steering_on_their_r
 }
 
 #[tokio::test]
+async fn project_helper_title_names_its_recent_session() {
+    let (root, pool, _, control, conversation) = fixture().await;
+    let helpers = HelperService::new(control.clone(), conversation.clone());
+    let (_, main) = bot(&conversation).await;
+    let path = root.path().join("project");
+    std::fs::create_dir(&path).unwrap();
+    let project = upsert_canonical_workspace(&pool, path.to_str().unwrap(), None)
+        .await
+        .unwrap();
+    let created = helpers
+        .execute(project_helper(
+            &main,
+            &project.workspace_id,
+            Some("核对文件下载"),
+        ))
+        .await
+        .unwrap();
+    let id = created["session_id"].as_str().unwrap();
+
+    let snapshot = control
+        .queries()
+        .session_snapshot(id)
+        .await
+        .unwrap()
+        .unwrap();
+    control
+        .event_ingest_service()
+        .report_fact(ReportedFact {
+            session_id: id.into(),
+            turn_id: None,
+            report_key: None,
+            fact_type: EventType::SessionTitleUpdated,
+            data: json!({
+                "runtime_id": snapshot.runtimes[0].runtime_id,
+                "title": "Client generated title",
+            }),
+        })
+        .await
+        .unwrap();
+
+    let recent = recent_project_sessions(&pool, &project.workspace_id).await;
+    assert_eq!(recent.len(), 1);
+    assert_eq!(recent[0].session_id, id);
+    assert_eq!(recent[0].title.as_deref(), Some("核对文件下载"));
+}
+
+#[tokio::test]
 async fn invalid_workspace_rejects_the_assignment_without_starting_a_private_helper() {
     let (root, pool, _, control, conversation) = fixture().await;
     let (id, main) = bot(&conversation).await;
@@ -255,7 +305,7 @@ async fn invalid_workspace_rejects_the_assignment_without_starting_a_private_hel
     ] {
         assert!(
             helpers
-                .execute(project_helper(&main, invalid))
+                .execute(project_helper(&main, invalid, None))
                 .await
                 .is_err()
         );
@@ -277,6 +327,14 @@ async fn invalid_workspace_rejects_the_assignment_without_starting_a_private_hel
 }
 
 async fn recent_project_ids(pool: &sqlx::SqlitePool, workspace_id: &str) -> Vec<String> {
+    recent_project_sessions(pool, workspace_id)
+        .await
+        .into_iter()
+        .map(|s| s.session_id)
+        .collect()
+}
+
+async fn recent_project_sessions(pool: &sqlx::SqlitePool, workspace_id: &str) -> Vec<SessionRow> {
     SqliteSessionRepository::new(pool.clone())
         .session_overview(SessionOverviewOptions {
             include_pinned: false,
@@ -292,9 +350,6 @@ async fn recent_project_ids(pool: &sqlx::SqlitePool, workspace_id: &str) -> Vec<
         .list
         .unwrap()
         .sessions
-        .into_iter()
-        .map(|s| s.session_id)
-        .collect()
 }
 
 #[tokio::test]
@@ -307,7 +362,7 @@ async fn failed_launcher_keeps_project_and_bot_ownership_in_list_and_next_handof
         .unwrap();
     *client.fail_next_launch.lock().unwrap() = true;
     let failure = helpers
-        .execute(project_helper(&main, &project.workspace_id))
+        .execute(project_helper(&main, &project.workspace_id, None))
         .await
         .unwrap_err();
     assert!(

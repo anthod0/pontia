@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `pontia bot helper create` accepts `--title TEXT` to name the helper's Session in the Dashboard.
+
 ### Changed
 
 - Bots now start deep memory retrieval with `pontia bot memory retrieve`. This replaces `pontia bot helper retrieve` and removes the retrieval option `--profile-version` and its API field `profile_version`. Dreaming and deep retrieval now use built-in instructions. Deep retrieval uses the requesting Bot’s client and model. Dreaming uses those of the oldest Bot on the device.

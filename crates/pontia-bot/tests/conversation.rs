@@ -690,6 +690,7 @@ async fn helper(service: &HelperService, session: &str) -> String {
             command: HelperCommand::Create(CreateHelper {
                 location: HelperLocation::Temporary("2026-11-20_task".into()),
                 profile_id: None,
+                title: None,
                 description: "assigned work".into(),
                 message: "first assignment".into(),
             }),
@@ -948,6 +949,7 @@ async fn helper_remains_addressable_when_first_delivery_fails_or_is_unknown() {
                 command: HelperCommand::Create(CreateHelper {
                     location: HelperLocation::Temporary("2026-11-20_task".into()),
                     profile_id: None,
+                    title: None,
                     description: task.into(),
                     message: task.into(),
                 }),
@@ -1186,6 +1188,7 @@ async fn helper_launch_snapshots_the_selected_profile_and_keeps_the_initialized_
             command: HelperCommand::Create(CreateHelper {
                 location: HelperLocation::Temporary("2026-11-20_task".into()),
                 profile_id: Some("specialist".into()),
+                title: None,
                 description: "specialized task".into(),
                 message: "task".into(),
             }),
@@ -1249,6 +1252,7 @@ async fn helper_rejects_missing_and_deleted_profiles_before_creating_a_session()
                 command: HelperCommand::Create(CreateHelper {
                     location: HelperLocation::Temporary("2026-11-20_rejected".into()),
                     profile_id: Some(profile_id.into()),
+                    title: None,
                     description: "rejected helper".into(),
                     message: "task".into(),
                 }),
