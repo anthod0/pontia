@@ -7,6 +7,7 @@ mod queries;
 mod rows;
 mod validation;
 
+pub use binding::standalone_session_instructions;
 pub use models::{
     AgentProfileCommandOutcome, ExecutionProfileView, ProfileLaunchDefaults,
     UpsertExecutionProfileRequest,

@@ -194,41 +194,46 @@ async fn profile_launch_defaults_round_trip_and_reject_partial_configuration() {
 }
 
 #[tokio::test]
-async fn list_agent_profiles_includes_builtin_latest_profiles() {
+async fn list_agent_profiles_starts_empty_without_builtin_profiles() {
     let state = test_state().await;
 
     let (status, body) = get_json(state, "/api/v1/agent-profiles").await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
     let profiles = body["data"]["agent_profiles"].as_array().unwrap();
-    assert_eq!(
-        profiles.len(),
-        1,
-        "unexpected builtin profiles: {profiles:?}"
-    );
-    let default = profiles
-        .iter()
-        .find(|profile| profile["profile_id"] == "default")
-        .unwrap();
-    assert_eq!(default["version"], "2");
-    assert_eq!(default["agent_kind"], "executor");
     assert!(
-        default.get("session_reuse_policy").is_none(),
-        "session reuse policy must not be exposed: {default:?}"
+        profiles.is_empty(),
+        "unexpected default profiles: {profiles:?}"
     );
 }
 
 #[tokio::test]
 async fn get_agent_profile_returns_latest_version() {
     let state = test_state().await;
+    let (status, created) = post_json(
+        state.clone(),
+        "/api/v1/agent-profiles",
+        custom_profile_body("latest-check", "1"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    let (status, created_v2) = post_json(
+        state.clone(),
+        "/api/v1/agent-profiles/latest-check/versions",
+        custom_profile_body("latest-check", "2"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created_v2}");
 
-    let (status, body) = get_json(state, "/api/v1/agent-profiles/default").await;
+    let (status, body) = get_json(state, "/api/v1/agent-profiles/latest-check").await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
     let profile = &body["data"]["agent_profile"];
-    assert_eq!(profile["profile_id"], "default");
+    assert_eq!(profile["profile_id"], "latest-check");
+    assert_eq!(profile["version"], "2");
     assert_eq!(profile["agent_kind"], "executor");
-    assert!(profile["expected_output_schema"].is_null());
     assert!(
         profile.get("session_reuse_policy").is_none(),
         "session reuse policy must not be exposed: {profile:?}"
@@ -476,37 +481,6 @@ async fn deleting_profile_archives_custom_versions_and_hides_latest() {
 }
 
 #[tokio::test]
-async fn builtin_agent_profiles_cannot_be_updated_or_deleted() {
-    let state = test_state().await;
-    let mut body = custom_profile_body("default", "1");
-    body["name"] = json!("Custom Default");
-
-    let (status, updated) = put_json(
-        state.clone(),
-        "/api/v1/agent-profiles/default/versions/1",
-        body,
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::CONFLICT, "{updated}");
-
-    let (status, response) = post_json(
-        state.clone(),
-        "/api/v1/agent-profiles/default/versions",
-        custom_profile_body("default", "3"),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::CONFLICT, "{response}");
-    let mut forged = custom_profile_body("forged", "1");
-    forged["metadata"] = json!({"builtin": true});
-    let (status, response) = post_json(state.clone(), "/api/v1/agent-profiles", forged, None).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
-    let (status, deleted) = delete_json(state, "/api/v1/agent-profiles/default", None).await;
-    assert_eq!(status, StatusCode::CONFLICT, "{deleted}");
-}
-
-#[tokio::test]
 async fn duplicate_agent_profile_version_returns_conflict() {
     let state = test_state().await;
     let body = custom_profile_body("duplicate-reviewer", "1");
@@ -558,7 +532,7 @@ async fn codex_profile_binding_pins_content_before_first_input_and_rejects_inval
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{response}");
-    let request = json!({"client_type":"codex","workspace":app.workspace().path(),"execution_profile_id":"codex-reviewer","additional_instructions":"Keep {{literal}} unchanged.\nUse Chinese."});
+    let request = json!({"client_type":"codex","workspace":app.workspace().path(),"execution_profile_id":"codex-reviewer","additional_instructions":"Keep {{literal}} unchanged.\nUse Chinese.","include_standalone_session_instructions":true});
     for invalid in [
         json!({"client_type":"codex","execution_profile_id":"missing"}),
         json!({"client_type":"codex","execution_profile_version":"1"}),
@@ -590,9 +564,16 @@ async fn codex_profile_binding_pins_content_before_first_input_and_rejects_inval
     );
     let profiles = pontia_client_codex::profiles::CodexProfiles::new(state.db());
     let pinned = profiles.codex_binding(session).await.unwrap().unwrap();
-    assert!(pinned.system_prompt.as_deref().unwrap().ends_with(
-        "Respond with the configured review marker.\n\nKeep {{literal}} unchanged.\nUse Chinese."
-    ));
+    assert_eq!(
+        pinned.system_prompt.as_deref(),
+        Some(
+            format!(
+                "{}\n\nRespond with the configured review marker.\n\nKeep {{{{literal}}}} unchanged.\nUse Chinese.",
+                pontia_agent_control::standalone_session_instructions()
+            )
+            .as_str()
+        )
+    );
     profile["system_prompt_template"] = json!("Changed after binding");
     let (status, response) = put_json(
         state.clone(),
@@ -638,29 +619,66 @@ async fn codex_profile_binding_pins_content_before_first_input_and_rejects_inval
 }
 
 #[tokio::test]
-async fn default_profile_is_fixed_at_creation_and_legacy_sessions_remain_unbound() {
+async fn standalone_session_instructions_are_opt_in_and_fixed_at_creation() {
     let app = TestApp::new().await;
     let service = pontia_agent_control::AgentProfileService::new(app.db.clone());
-    sqlx::query("UPDATE execution_profiles SET system_prompt_template='original-default' WHERE profile_id='default' AND version='2'")
-        .execute(&app.db).await.unwrap();
-    let request = json!({"client_type":"codex", "workspace":app.workspace().path()});
-    let (status, created) =
-        post_json(app.state.clone(), "/api/v1/sessions", request.clone(), None).await;
+    let standalone = pontia_agent_control::standalone_session_instructions();
+
+    // Standalone session instructions default to off.
+    let (status, omitted) = post_json(
+        app.state.clone(),
+        "/api/v1/sessions",
+        json!({"client_type":"codex", "workspace":app.workspace().path()}),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{omitted}");
+    let omitted_session = omitted["data"]["session"]["session_id"].as_str().unwrap();
+    assert!(
+        service
+            .session_binding(omitted_session)
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    let (status, caller_only) = post_json(
+        app.state.clone(),
+        "/api/v1/sessions",
+        json!({
+            "client_type": "codex",
+            "workspace": app.workspace().path(),
+            "additional_instructions": "caller only"
+        }),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{caller_only}");
+    let caller_only_session = caller_only["data"]["session"]["session_id"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        service
+            .session_binding(caller_only_session)
+            .await
+            .unwrap()
+            .unwrap()["system_prompt"],
+        "caller only"
+    );
+
+    let request = json!({
+        "client_type": "codex",
+        "workspace": app.workspace().path(),
+        "include_standalone_session_instructions": true
+    });
+    let (status, created) = post_json(app.state.clone(), "/api/v1/sessions", request, None).await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
     let session = created["data"]["session"]["session_id"].as_str().unwrap();
     assert!(created["data"]["session"]["execution_profile_id"].is_null());
     assert!(created["data"]["session"]["execution_profile_version"].is_null());
     let snapshot = service.session_binding(session).await.unwrap().unwrap();
-    assert_eq!(snapshot["system_prompt"], "original-default");
-    sqlx::query("UPDATE execution_profiles SET system_prompt_template='updated-default' WHERE profile_id='default' AND version='2'")
-        .execute(&app.db).await.unwrap();
-    let (status, new) = post_json(app.state.clone(), "/api/v1/sessions", request, None).await;
-    assert_eq!(status, StatusCode::CREATED, "{new}");
-    let new_session = new["data"]["session"]["session_id"].as_str().unwrap();
-    assert_eq!(
-        service.session_binding(new_session).await.unwrap().unwrap()["system_prompt"],
-        "updated-default"
-    );
+    assert_eq!(snapshot["system_prompt"], standalone);
+
     // Removing the mutable source proves recovery cannot read it.
     sqlx::query("DROP TABLE execution_profiles")
         .execute(&app.db)
@@ -675,8 +693,16 @@ async fn default_profile_is_fixed_at_creation_and_legacy_sessions_remain_unbound
             .unwrap()
             .system_prompt
             .as_deref(),
-        Some("original-default")
+        Some(standalone)
     );
+    // Existing Codex bindings created with the removed builtin profile remain readable.
+    sqlx::query("UPDATE events SET payload=json_set(payload,'$.execution_profile_binding',json('{\"contract_version\":1,\"profile_id\":\"default\",\"version\":\"2\",\"system_prompt\":\"legacy-default\"}')) WHERE session_id=? AND event_type='session.created'")
+        .bind(session).execute(&app.db).await.unwrap();
+    let legacy = reopened.codex_binding(session).await.unwrap().unwrap();
+    assert_eq!(legacy.profile_id.as_deref(), Some("default"));
+    assert_eq!(legacy.version.as_deref(), Some("2"));
+    assert_eq!(legacy.system_prompt.as_deref(), Some("legacy-default"));
+
     sqlx::query("UPDATE events SET payload=json_remove(payload,'$.execution_profile_binding') WHERE session_id=? AND event_type='session.created'")
         .bind(session).execute(&app.db).await.unwrap();
     assert!(reopened.codex_binding(session).await.unwrap().is_none());
@@ -685,20 +711,27 @@ async fn default_profile_is_fixed_at_creation_and_legacy_sessions_remain_unbound
 #[tokio::test]
 async fn additional_instructions_without_explicit_profile_are_isolated_per_session() {
     let app = TestApp::new().await;
-    sqlx::query("UPDATE execution_profiles SET system_prompt_template='builtin-marker' WHERE profile_id='default' AND version='2'")
-        .execute(&app.db).await.unwrap();
+    let standalone = pontia_agent_control::standalone_session_instructions();
     let service = pontia_agent_control::AgentProfileService::new(app.db.clone());
     for (extra, expected) in [
-        (Some("first caller"), "builtin-marker\n\nfirst caller"),
-        (Some("second caller"), "builtin-marker\n\nsecond caller"),
-        (None, "builtin-marker"),
+        (
+            Some("first caller"),
+            format!("{standalone}\n\nfirst caller"),
+        ),
+        (
+            Some("second caller"),
+            format!("{standalone}\n\nsecond caller"),
+        ),
+        (None, standalone.to_owned()),
     ] {
         let (status, created) = post_json(
             app.state.clone(),
             "/api/v1/sessions",
             json!({
-                "client_type": "codex", "workspace": app.workspace().path(),
-                "additional_instructions": extra
+                "client_type": "codex",
+                "workspace": app.workspace().path(),
+                "additional_instructions": extra,
+                "include_standalone_session_instructions": true
             }),
             None,
         )

@@ -130,7 +130,6 @@
   "common.updated": "Updated",
   "common.versions": "Versions",
   "profiles.loadingVersions": "Loading versions…",
-  "profiles.builtin": "Builtin",
   "profiles.noVersions": "No versions returned for this profile.",
   "profiles.clientSupport": "Client support",
   "profiles.clientSupportDescription": "Client-specific behavior stays behind adapter/runtime capability boundaries.",

@@ -1,4 +1,4 @@
-use pontia_agent_control::{ExecutionProfileView, client_contract::ClientProfile};
+use pontia_agent_control::client_contract::{ClientProfile, ProfileBindingInput};
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -6,7 +6,7 @@ use serde_json::Value;
 pub(crate) struct ProfilePolicy;
 
 impl ClientProfile for ProfilePolicy {
-    fn inject_builtin(&self) -> bool {
+    fn inject_standalone_session_instructions(&self) -> bool {
         true
     }
 
@@ -31,10 +31,10 @@ impl ClientProfile for ProfilePolicy {
         Ok(())
     }
 
-    fn bind(&self, profile: &ExecutionProfileView, instructions_required: bool) -> Result<Value> {
+    fn bind(&self, input: &ProfileBindingInput<'_>) -> Result<Value> {
         Ok(serde_json::to_value(Instructions {
-            system_prompt: profile.system_prompt_template.clone(),
-            required: instructions_required,
+            system_prompt: input.system_prompt.map(str::to_owned),
+            required: input.instructions_required,
         })?)
     }
 }

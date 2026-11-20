@@ -8,7 +8,7 @@ pub use interactions::ClientInteractions;
 mod lifecycle;
 pub use lifecycle::{ClientEventInterpreter, ProcessObservationBehavior, SessionLifecycleBehavior};
 mod profile;
-pub use profile::{ClientProfile, ResolvedClientProfile};
+pub use profile::{ClientProfile, ProfileBindingInput, ResolvedClientProfile};
 mod data;
 pub mod history;
 pub mod native_history;

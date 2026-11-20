@@ -6,7 +6,7 @@ use serde_json::json;
 
 use super::{
     AgentProfileCommandOutcome, AgentProfileService, UpsertExecutionProfileRequest,
-    validation::{ensure_not_builtin, is_unique_constraint, validate_request},
+    validation::{is_unique_constraint, validate_request},
 };
 
 impl AgentProfileService {
@@ -64,9 +64,6 @@ impl AgentProfileService {
         &self,
         request: UpsertExecutionProfileRequest,
     ) -> Result<AgentProfileCommandOutcome> {
-        for version in self.list_versions(&request.profile_id, true).await? {
-            ensure_not_builtin(&version)?;
-        }
         self.validate_configuration(&request).await?;
 
         let result = SqliteAgentProfileRepository::new(self.pool.clone())
@@ -106,13 +103,12 @@ impl AgentProfileService {
             ));
         }
         self.validate_configuration(&request).await?;
-        let current = self
+        let _current = self
             .get_version(profile_id, version)
             .await?
             .ok_or_else(|| {
                 Error::NotFound(format!("agent profile {profile_id}@{version} not found"))
             })?;
-        ensure_not_builtin(&current)?;
 
         SqliteAgentProfileRepository::new(self.pool.clone())
             .update_version(execution_profile_write_record(&request)?)
@@ -140,7 +136,6 @@ impl AgentProfileService {
             .ok_or_else(|| {
                 Error::NotFound(format!("agent profile {profile_id}@{version} not found"))
             })?;
-        ensure_not_builtin(&current)?;
         if current.active {
             SqliteAgentProfileRepository::new(self.pool.clone())
                 .archive_version(profile_id, version)
@@ -163,9 +158,6 @@ impl AgentProfileService {
             return Err(Error::NotFound(format!(
                 "agent profile {profile_id} not found"
             )));
-        }
-        for version in &versions {
-            ensure_not_builtin(version)?;
         }
         let archived_versions = SqliteAgentProfileRepository::new(self.pool.clone())
             .archive_active_versions(profile_id)

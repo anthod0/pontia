@@ -186,13 +186,13 @@ async fn archives_active_versions_and_reports_affected_rows() {
 }
 
 #[tokio::test]
-async fn builtin_upgrade_preserves_user_profiles_and_existing_versions() {
+async fn removing_builtin_profiles_preserves_user_profiles() {
     let pool = connect_sqlite("sqlite::memory:").await.unwrap();
     let previous = sqlx::migrate::Migrator {
         migrations: std::borrow::Cow::Owned(
             sqlx::migrate!("./migrations")
                 .iter()
-                .filter(|migration| migration.version < 38)
+                .filter(|migration| migration.version < 51)
                 .cloned()
                 .collect(),
         ),
@@ -201,8 +201,6 @@ async fn builtin_upgrade_preserves_user_profiles_and_existing_versions() {
     previous.run(&pool).await.unwrap();
     sqlx::query("INSERT INTO execution_profiles (profile_id, version, name, system_prompt_template) VALUES ('custom', '1', 'Custom', 'custom instructions')")
         .execute(&pool).await.unwrap();
-    let old_prompt: Option<String> = sqlx::query_scalar("SELECT system_prompt_template FROM execution_profiles WHERE profile_id = 'default' AND version = '1'")
-        .fetch_one(&pool).await.unwrap();
     let custom_updated_at: String = sqlx::query_scalar(
         "SELECT updated_at FROM execution_profiles WHERE profile_id = 'custom' AND version = '1'",
     )
@@ -211,17 +209,26 @@ async fn builtin_upgrade_preserves_user_profiles_and_existing_versions() {
     .unwrap();
     run_migrations(&pool).await.unwrap();
     let repository = SqliteAgentProfileRepository::new(pool.clone());
-    let old_after = repository
-        .get_version("default", "1")
-        .await
-        .unwrap()
-        .unwrap();
+    assert!(
+        repository
+            .get_version("default", "1")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        repository
+            .get_version("default", "2")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(repository.get_latest("default").await.unwrap().is_none());
     let custom_after = repository
         .get_version("custom", "1")
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(old_after.system_prompt_template, old_prompt);
     assert_eq!(
         custom_after.system_prompt_template.as_deref(),
         Some("custom instructions")
@@ -230,11 +237,4 @@ async fn builtin_upgrade_preserves_user_profiles_and_existing_versions() {
     assert_eq!(custom_after.default_client_type, None);
     assert_eq!(custom_after.default_client_key, None);
     assert_eq!(custom_after.default_model, None);
-    let default = repository.get_latest("default").await.unwrap().unwrap();
-    assert_eq!(default.version, "2");
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&default.supported_client_types).unwrap(),
-        json!(["pi", "codex", "claude-agent", "acp"])
-    );
-    assert!(default.turn_prompt_template.is_none());
 }

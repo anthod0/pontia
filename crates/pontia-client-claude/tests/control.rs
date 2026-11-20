@@ -1289,12 +1289,10 @@ async fn unsupported_result_disables_input_without_inventing_a_terminal_turn() {
 }
 
 #[tokio::test]
-async fn default_instructions_are_fixed_before_input_and_survive_resume() {
+async fn standalone_session_instructions_are_fixed_before_input_and_survive_resume() {
     let h = Harness::new().await;
-    sqlx::query("UPDATE execution_profiles SET system_prompt_template='creation-marker' WHERE profile_id='default' AND version='2'")
-        .execute(&h.app.db()).await.unwrap();
     let request =
-        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"additional_instructions":"caller-marker","execution_policy":{"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"yolo":true}}))
+        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"additional_instructions":"caller-marker","include_standalone_session_instructions":true,"execution_policy":{"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"yolo":true}}))
             .unwrap();
     let created = h
         .app
@@ -1326,13 +1324,11 @@ async fn default_instructions_are_fixed_before_input_and_survive_resume() {
         .filter(|frame| frame["method"] == "spawn")
         .map(|frame| frame["system_prompt"].clone())
         .collect();
-    assert_eq!(
-        prompts,
-        vec![
-            json!("creation-marker\n\ncaller-marker"),
-            json!("creation-marker\n\ncaller-marker")
-        ]
+    let expected = format!(
+        "{}\n\ncaller-marker",
+        pontia_agent_control::standalone_session_instructions()
     );
+    assert_eq!(prompts, vec![json!(expected), json!(expected)]);
     let policies: Vec<_> = h
         .wire(session)
         .into_iter()
@@ -1354,8 +1350,6 @@ async fn explicit_profile_instructions_are_validated_fixed_and_preserved_across_
     use pontia_agent_control::{AgentProfileService, UpsertExecutionProfileRequest};
 
     let h = Harness::new().await;
-    sqlx::query("UPDATE execution_profiles SET system_prompt_template='builtin-marker' WHERE profile_id='default' AND version='2'")
-        .execute(&h.app.db()).await.unwrap();
     let profiles = AgentProfileService::new(h.app.db()).with_clients(h.app.clients());
     let profile_request =
         |id: &str, system: Option<&str>, turn: Option<&str>, clients: Vec<&str>| {
@@ -1434,6 +1428,7 @@ async fn explicit_profile_instructions_are_validated_fixed_and_preserved_across_
         "workspace": h.root.path(),
         "execution_profile_id": "claude-reviewer",
         "additional_instructions": "caller-marker",
+        "include_standalone_session_instructions": true,
     }))
     .unwrap();
     let created = h
@@ -1471,13 +1466,11 @@ async fn explicit_profile_instructions_are_validated_fixed_and_preserved_across_
         .filter(|frame| frame["method"] == "spawn")
         .map(|frame| frame["system_prompt"].clone())
         .collect();
-    assert_eq!(
-        prompts,
-        vec![
-            json!("builtin-marker\n\nexplicit-marker\n\ncaller-marker"),
-            json!("builtin-marker\n\nexplicit-marker\n\ncaller-marker"),
-        ]
+    let expected = format!(
+        "{}\n\nexplicit-marker\n\ncaller-marker",
+        pontia_agent_control::standalone_session_instructions()
     );
+    assert_eq!(prompts, vec![json!(expected), json!(expected)]);
     h.stop().await;
 }
 

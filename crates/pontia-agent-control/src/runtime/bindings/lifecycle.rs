@@ -65,7 +65,7 @@ impl RuntimeBindingUpsertService {
             .await?;
         let profile = crate::AgentProfileService::new(self.pool.clone())
             .with_clients(self.clients.clone())
-            .resolve_for_client(&request.client_type, None, None, None)
+            .resolve_for_client(&request.client_type, None, None, None, true)
             .await?;
         let session_id = new_session_id().to_string();
         let ingest = &self.events;

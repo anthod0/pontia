@@ -1,5 +1,6 @@
 use pontia_agent_control::{
-    AgentBindingService, ExecutionProfileView, client_contract::ClientProfile,
+    AgentBindingService,
+    client_contract::{ClientProfile, ProfileBindingInput},
 };
 use sqlx::SqlitePool;
 
@@ -14,22 +15,18 @@ impl CodexProfiles {
 
 pub(crate) struct CodexProfilePolicy;
 impl ClientProfile for CodexProfilePolicy {
-    fn inject_builtin(&self) -> bool {
+    fn inject_standalone_session_instructions(&self) -> bool {
         true
     }
     fn validate_templates(&self, system: Option<&str>, turn: Option<&str>) -> Result<()> {
         validate_codex_templates(system, turn)
     }
-    fn bind(
-        &self,
-        profile: &ExecutionProfileView,
-        _instructions_required: bool,
-    ) -> Result<serde_json::Value> {
+    fn bind(&self, input: &ProfileBindingInput<'_>) -> Result<serde_json::Value> {
         Ok(serde_json::to_value(CodexProfileBinding {
             contract_version: 1,
-            profile_id: profile.profile_id.clone(),
-            version: profile.version.clone(),
-            system_prompt: profile.system_prompt_template.clone(),
+            profile_id: input.profile_id.map(str::to_owned),
+            version: input.version.map(str::to_owned),
+            system_prompt: input.system_prompt.map(str::to_owned),
             native_developer_instructions: None,
         })?)
     }
@@ -42,8 +39,10 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)]
 pub struct CodexProfileBinding {
     pub contract_version: u32,
-    pub profile_id: String,
-    pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
     pub system_prompt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_developer_instructions: Option<String>,

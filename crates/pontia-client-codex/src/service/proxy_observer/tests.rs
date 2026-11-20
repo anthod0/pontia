@@ -844,8 +844,8 @@ async fn delayed_resume_receipt_does_not_reopen_a_thread_unloaded_again() {
 #[tokio::test]
 async fn native_start_pins_profile_and_resume_preserves_it_without_profile_queries() {
     let f = Fixture::new().await;
-    sqlx::query("UPDATE execution_profiles SET system_prompt_template='native-creation-marker' WHERE profile_id='default' AND version='2'")
-        .execute(&f.app.db()).await.unwrap();
+    let default = pontia_agent_control::standalone_session_instructions();
+    let expected = format!("native-user-marker\n\n{default}");
     let mut cli = f.client().await;
     let response = rpc(
         &mut cli,
@@ -858,17 +858,14 @@ async fn native_start_pins_profile_and_resume_preserves_it_without_profile_queri
     let session = f.session(native, "busy").await;
     assert_eq!(
         f.threads.lock().await[native].developer_instructions,
-        "native-user-marker\n\nnative-creation-marker"
+        expected
     );
     let binding = crate::profiles::CodexProfiles::new(f.app.db())
         .codex_binding(&session)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(
-        binding.system_prompt.as_deref(),
-        Some("native-creation-marker")
-    );
+    assert_eq!(binding.system_prompt.as_deref(), Some(default));
     assert_eq!(
         binding.native_developer_instructions.as_deref(),
         Some("native-user-marker")
@@ -890,7 +887,7 @@ async fn native_start_pins_profile_and_resume_preserves_it_without_profile_queri
     assert_eq!(f.session(native, "idle").await, session);
     assert_eq!(
         f.threads.lock().await[native].developer_instructions,
-        "native-user-marker\n\nnative-creation-marker"
+        expected
     );
     f.stop().await;
 }

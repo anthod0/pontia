@@ -104,6 +104,7 @@ async fn start_launches_first_node_with_required_task_completion_instructions() 
     assert_eq!(request.workspace_id, None);
     assert_eq!(request.execution_profile_id.as_deref(), Some("writer"));
     assert_eq!(request.execution_profile_version.as_deref(), Some("3"));
+    assert!(!request.include_standalone_session_instructions);
     assert_eq!(
         request
             .runtime_environment

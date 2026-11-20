@@ -81,7 +81,6 @@
     { label: $t('common.metadata'), value: JSON.stringify(selectedVersionProfile.metadata ?? {}, null, 2) },
     { label: $t('profiles.outputSchema'), value: selectedVersionProfile.expected_output_schema ?? $t('common.notConfigured') },
   ] : []
-  $: builtinSelected = Boolean(selectedVersionProfile?.metadata?.builtin)
   $: saving = createProfileMutation.isPending || createVersionMutation.isPending || updateVersionMutation.isPending || deleteProfileMutation.isPending || deleteVersionMutation.isPending
   $: archiveDialogTitle = pendingArchive === 'profile' ? $t('profiles.archiveConfirm') : $t('profiles.archiveVersionConfirm')
   $: archiveDialogDescription = pendingArchive === 'profile'
@@ -405,10 +404,10 @@
                   <Card.Description>{selectedVersionProfile.description ?? $t('common.noDescription')}</Card.Description>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                  <Button variant="outline" onclick={() => startNewVersion(selectedVersionProfile)} disabled={saving || builtinSelected}><CopySimpleIcon class="size-4" /> {$t('profiles.newVersion')}</Button>
-                  <Button variant="outline" onclick={() => startEdit(selectedVersionProfile)} disabled={saving || builtinSelected || !selectedVersionProfile.active}><PencilSimpleIcon class="size-4" /> {$t('common.edit')}</Button>
-                  <Button variant="outline" onclick={requestArchiveSelectedVersion} disabled={saving || builtinSelected || !selectedVersionProfile.active}><TrashIcon class="size-4" /> {$t('profiles.deleteVersion')}</Button>
-                  <Button variant="destructive" onclick={requestArchiveSelectedProfile} disabled={saving || builtinSelected}><TrashIcon class="size-4" /> {$t('profiles.delete')}</Button>
+                  <Button variant="outline" onclick={() => startNewVersion(selectedVersionProfile)} disabled={saving}><CopySimpleIcon class="size-4" /> {$t('profiles.newVersion')}</Button>
+                  <Button variant="outline" onclick={() => startEdit(selectedVersionProfile)} disabled={saving || !selectedVersionProfile.active}><PencilSimpleIcon class="size-4" /> {$t('common.edit')}</Button>
+                  <Button variant="outline" onclick={requestArchiveSelectedVersion} disabled={saving || !selectedVersionProfile.active}><TrashIcon class="size-4" /> {$t('profiles.deleteVersion')}</Button>
+                  <Button variant="destructive" onclick={requestArchiveSelectedProfile} disabled={saving}><TrashIcon class="size-4" /> {$t('profiles.delete')}</Button>
                 </div>
               </div>
             </Card.Header>
@@ -443,7 +442,6 @@
                   </div>
                   <div class="mt-2 flex flex-wrap gap-1">
                     {#if version.active}<Badge>{$t('common.active')}</Badge>{:else}<Badge variant="outline">{$t('common.archived')}</Badge>{/if}
-                    {#if version.metadata?.builtin}<Badge variant="secondary">{$t('profiles.builtin')}</Badge>{/if}
                   </div>
                 </button>
               {:else}

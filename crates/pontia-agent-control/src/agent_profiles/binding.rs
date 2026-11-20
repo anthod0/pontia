@@ -1,7 +1,11 @@
 use super::AgentProfileService;
-use crate::client_contract::ResolvedClientProfile;
+use crate::client_contract::{ProfileBindingInput, ResolvedClientProfile};
 use pontia_core::{Error, Result};
 use serde_json::Value;
+
+pub fn standalone_session_instructions() -> &'static str {
+    include_str!("standalone_session_instructions.md").trim()
+}
 
 impl AgentProfileService {
     /// Resolve and pin a Profile version before creating a Session. Instruction binding
@@ -46,6 +50,7 @@ impl AgentProfileService {
         id: Option<&str>,
         version: Option<&str>,
         additional_instructions: Option<&str>,
+        include_standalone_session_instructions: bool,
     ) -> Result<Option<ResolvedClientProfile>> {
         if additional_instructions.is_some_and(|instructions| instructions.trim().is_empty()) {
             return Err(Error::Domain(
@@ -108,54 +113,42 @@ impl AgentProfileService {
                 None
             }
         };
-        let builtin = if policy.inject_builtin() {
-            self.list_latest().await?.into_iter().find(|profile| {
-                profile.metadata.get("builtin") == Some(&Value::Bool(true))
-                    && profile
-                        .supported_client_types
-                        .iter()
-                        .any(|client| client == client_type)
-            })
-        } else {
-            None
-        };
-        let selected_version = explicit.as_ref().map(|profile| profile.version.clone());
+        let standalone_instructions = (include_standalone_session_instructions
+            && policy.inject_standalone_session_instructions())
+        .then(standalone_session_instructions)
+        .filter(|instructions| !instructions.is_empty());
         let instructions_required = additional_instructions.is_some()
             || explicit
                 .as_ref()
                 .is_some_and(|profile| profile.system_prompt_template.is_some());
-        let mut profile = match (&explicit, &builtin) {
-            (Some(profile), _) | (None, Some(profile)) => profile.clone(),
-            (None, None) => {
-                if additional_instructions.is_some() {
-                    return Err(Error::CapabilityUnavailable(
-                        "Client has no Profile for instruction binding".into(),
-                    ));
-                }
-                return Ok(None);
-            }
-        };
-        if let (Some(builtin), Some(explicit)) = (&builtin, &explicit)
-            && builtin.profile_id != explicit.profile_id
+        let mut parts = Vec::new();
+        if let Some(standalone) = standalone_instructions {
+            parts.push(standalone);
+        }
+        if let Some(selected) = explicit
+            .as_ref()
+            .and_then(|profile| profile.system_prompt_template.as_deref())
+            .filter(|prompt| !prompt.is_empty())
         {
-            profile.system_prompt_template = match (
-                &builtin.system_prompt_template,
-                &explicit.system_prompt_template,
-            ) {
-                (Some(default), Some(selected)) => Some(format!("{default}\n\n{selected}")),
-                (Some(default), None) => Some(default.clone()),
-                (None, selected) => selected.clone(),
-            };
+            parts.push(selected);
         }
         if let Some(instructions) = additional_instructions {
-            profile.system_prompt_template = Some(match profile.system_prompt_template {
-                Some(prompt) if !prompt.is_empty() => format!("{prompt}\n\n{instructions}"),
-                _ => instructions.to_owned(),
-            });
+            parts.push(instructions);
         }
+        let system_prompt = (!parts.is_empty()).then(|| parts.join("\n\n"));
+        if explicit.is_none() && system_prompt.is_none() {
+            return Ok(None);
+        }
+        let selected_version = explicit.as_ref().map(|profile| profile.version.clone());
+        let binding = policy.bind(&ProfileBindingInput {
+            profile_id: explicit.as_ref().map(|profile| profile.profile_id.as_str()),
+            version: selected_version.as_deref(),
+            system_prompt: system_prompt.as_deref(),
+            instructions_required,
+        })?;
         Ok(Some(ResolvedClientProfile {
             version: selected_version,
-            binding: policy.bind(&profile, instructions_required)?,
+            binding,
         }))
     }
 

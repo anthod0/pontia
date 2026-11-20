@@ -42,18 +42,6 @@ impl GenericClientTestScope {
             .await
             .unwrap()
     }
-
-    #[allow(dead_code)]
-    pub(crate) async fn enable_builtin_profiles(&self, state: &AppState) {
-        sqlx::query(
-            r#"UPDATE execution_profiles
-               SET supported_client_types = '["generic"]'
-               WHERE profile_id = 'default'"#,
-        )
-        .execute(&state.db())
-        .await
-        .expect("enable generic builtin profiles");
-    }
 }
 
 impl Drop for GenericClientTestScope {

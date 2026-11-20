@@ -740,7 +740,7 @@ export function createSampleData(): MockData {
     sessions,
     workflows,
     agentProfiles: [
-      agentProfile("executor", "1", "Executor", "Implements a single task.", { builtin: true }),
+      agentProfile("executor", "1", "Executor", "Implements a single task.", {}),
       agentProfile("reviewer", "1", "Reviewer", "Reviews a change for bugs and style."),
       agentProfile("reviewer", "2", "Reviewer", "Reviews a change and checks it against the spec."),
     ],

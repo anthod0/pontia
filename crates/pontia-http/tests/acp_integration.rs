@@ -391,6 +391,7 @@ async fn configured_agent_selection_flows_through_http_creation_input_permission
     let (status, result) = call(&app, "POST", "/api/v1/sessions", json!({
         "client_type":option["client_type"], "metadata":option["metadata"], "workspace_id":workspace.workspace_id, "model":"deep",
         "additional_instructions":"http-instruction-marker",
+        "include_standalone_session_instructions":true,
     })).await;
     assert_eq!(status, StatusCode::CREATED, "{result}");
     let session = result["data"]["session"]["session_id"].as_str().unwrap();

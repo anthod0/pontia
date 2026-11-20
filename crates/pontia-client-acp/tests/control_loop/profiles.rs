@@ -1,13 +1,10 @@
 use super::*;
-use pontia_agent_control::{AgentBindingService, AgentProfileService};
+use pontia_agent_control::{
+    AgentBindingService, AgentProfileService, standalone_session_instructions,
+};
 
 fn profiles(h: &Harness) -> AgentProfileService {
     AgentProfileService::new(h.app.db()).with_clients(h.app.clients())
-}
-
-async fn builtin(h: &Harness, text: &str) {
-    sqlx::query("UPDATE execution_profiles SET system_prompt_template=? WHERE profile_id='default' AND version='2'")
-        .bind(text).execute(&h.app.db()).await.unwrap();
 }
 
 async fn profile(h: &Harness, system: Option<&str>) {
@@ -81,44 +78,56 @@ fn assert_prompts(h: &Harness, expected: Option<&str>) {
 #[tokio::test]
 async fn explicit_instructions_are_appended_and_pinned_across_history_and_restart() {
     let mut h = Harness::new(&[("ACP_SYSTEM_PROMPT", "1")]).await;
-    builtin(&h, "builtin-marker").await;
     profile(&h, Some("profile-marker")).await;
     let session = create(
         &h,
-        json!({"execution_profile_id":"reviewer", "additional_instructions":"caller-marker"}),
+        json!({
+            "execution_profile_id":"reviewer",
+            "additional_instructions":"caller-marker",
+            "include_standalone_session_instructions": true,
+        }),
     )
     .await
     .unwrap();
     assert!(injected(&h, &session).await);
-    builtin(&h, "changed-builtin").await;
     sqlx::query("UPDATE execution_profiles SET system_prompt_template='changed-profile' WHERE profile_id='reviewer'")
         .execute(&h.app.db()).await.unwrap();
     h.history(&session).await.unwrap();
     h.restart().await;
     h.wait_ready(&session, 2).await;
-    assert_prompts(
-        &h,
-        Some("builtin-marker\n\nprofile-marker\n\ncaller-marker"),
+    let expected = format!(
+        "{}\n\nprofile-marker\n\ncaller-marker",
+        standalone_session_instructions()
     );
+    assert_prompts(&h, Some(&expected));
     assert_eq!(h.requests("session/new"), 1);
     assert!(h.requests("session/load") >= 2);
     h.stop().await;
 }
 
 #[tokio::test]
-async fn builtin_is_injected_when_supported() {
+async fn standalone_instructions_are_opt_in_and_injected_when_supported() {
     let h = Harness::new(&[("ACP_SYSTEM_PROMPT", "1")]).await;
-    builtin(&h, "builtin-marker").await;
     let session = h.create("first").await.unwrap();
+    assert!(!injected(&h, &session).await);
+    assert_prompts(&h, None);
+    h.stop().await;
+
+    let h = Harness::new(&[("ACP_SYSTEM_PROMPT", "1")]).await;
+    let session = create(&h, json!({"include_standalone_session_instructions": true}))
+        .await
+        .unwrap();
     assert!(injected(&h, &session).await);
-    assert_prompts(&h, Some("builtin-marker"));
+    assert_prompts(&h, Some(standalone_session_instructions()));
     h.stop().await;
 }
 
 #[tokio::test]
-async fn builtin_can_be_skipped_and_is_not_added_after_agent_gains_support() {
+async fn standalone_instructions_can_be_skipped_and_are_not_added_after_agent_gains_support() {
     let mut h = Harness::new(&[]).await;
-    let session = h.create("first").await.unwrap();
+    let session = create(&h, json!({"include_standalone_session_instructions": true}))
+        .await
+        .unwrap();
     assert!(!injected(&h, &session).await);
     h.release("system-prompt");
     h.restart().await;
@@ -134,7 +143,6 @@ async fn unsupported_agent_rejects_explicit_instructions_before_native_creation(
     for options in [
         json!({"execution_profile_id":"reviewer"}),
         json!({"additional_instructions":"caller-marker"}),
-        json!({"execution_profile_id":"default"}),
     ] {
         let h = Harness::new(&[]).await;
         profile(&h, Some("profile-marker")).await;
@@ -192,7 +200,9 @@ async fn agent_rejection_does_not_silently_drop_instructions() {
 #[tokio::test]
 async fn recovery_fails_if_previously_injected_instructions_cannot_be_applied() {
     let mut h = Harness::new(&[("ACP_SYSTEM_PROMPT", "1")]).await;
-    let session = h.create("first").await.unwrap();
+    let session = create(&h, json!({"include_standalone_session_instructions": true}))
+        .await
+        .unwrap();
     h.release("no-system-prompt");
     h.restart().await;
     tokio::time::timeout(Duration::from_secs(5), async {

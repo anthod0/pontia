@@ -1,17 +1,11 @@
 use pontia_core::error::{Error, Result};
-use serde_json::Value;
 
-use super::{ExecutionProfileView, UpsertExecutionProfileRequest};
+use super::UpsertExecutionProfileRequest;
 
 pub(super) fn validate_request(
     clients: &crate::clients::ClientRegistry,
     request: &UpsertExecutionProfileRequest,
 ) -> Result<()> {
-    if request.metadata.get("builtin") == Some(&Value::Bool(true)) {
-        return Err(Error::Domain(
-            "builtin metadata is managed by Pontia".into(),
-        ));
-    }
     validate_non_empty("profile_id", &request.profile_id)?;
     validate_non_empty("version", &request.version)?;
     validate_non_empty("name", &request.name)?;
@@ -77,19 +71,4 @@ pub(super) fn is_unique_constraint(error: &Error) -> bool {
             if database_error.code().as_deref() == Some("1555")
                 || database_error.message().contains("UNIQUE constraint failed")
     )
-}
-
-pub(super) fn ensure_not_builtin(profile: &ExecutionProfileView) -> Result<()> {
-    if profile
-        .metadata
-        .get("builtin")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        return Err(Error::StateConflict(format!(
-            "builtin execution profile {} cannot be modified or deleted",
-            profile.profile_id
-        )));
-    }
-    Ok(())
 }

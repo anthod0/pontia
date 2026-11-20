@@ -341,6 +341,7 @@ test("creates a session with initial prompt, workspace, and client then opens it
       workspace_id: "workspace-1",
       model: "provider/model",
       title: "Implement the dashboard chat flow",
+      include_standalone_session_instructions: true,
       initial_task: {
         input: "Implement the dashboard chat flow",
         metadata: { source: "dashboard_chat" },

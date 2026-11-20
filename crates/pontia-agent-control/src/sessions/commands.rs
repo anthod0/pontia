@@ -99,6 +99,7 @@ impl SessionCommandService {
                 request.execution_profile_id.as_deref(),
                 request.execution_profile_version.as_deref(),
                 request.additional_instructions.as_deref(),
+                request.include_standalone_session_instructions,
             )
             .await?;
         if let Some(version) = profile

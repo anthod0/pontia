@@ -153,7 +153,7 @@ impl ClientLauncher for Client {
 }
 
 impl pontia_agent_control::client_contract::ClientProfile for Client {
-    fn inject_builtin(&self) -> bool {
+    fn inject_standalone_session_instructions(&self) -> bool {
         true
     }
     fn validate_templates(&self, _: Option<&str>, _: Option<&str>) -> Result<()> {
@@ -161,10 +161,9 @@ impl pontia_agent_control::client_contract::ClientProfile for Client {
     }
     fn bind(
         &self,
-        profile: &pontia_agent_control::ExecutionProfileView,
-        _instructions_required: bool,
+        input: &pontia_agent_control::client_contract::ProfileBindingInput<'_>,
     ) -> Result<Value> {
-        Ok(json!({"system": profile.system_prompt_template}))
+        Ok(json!({"system": input.system_prompt}))
     }
 }
 
@@ -614,8 +613,6 @@ async fn fixture_with_client(
     .await
     .unwrap();
     run_migrations(&pool).await.unwrap();
-    sqlx::query("UPDATE execution_profiles SET supported_client_types='[\"generic\"]' WHERE profile_id='default' AND version='2'")
-        .execute(&pool).await.unwrap();
     let client = Arc::new(Client::default());
     let mut registration = test_registration();
     registration.spec = spec;
@@ -1169,6 +1166,16 @@ async fn helper_launch_pins_the_selected_profile_and_keeps_the_initialized_model
         .unwrap();
     let target = response["session_id"].as_str().unwrap();
     let binding = instructions(&control, target).await;
+    assert!(
+        !binding.contains(pontia_agent_control::standalone_session_instructions()),
+        "helper session must not receive standalone session instructions"
+    );
+    assert!(
+        !instructions(&control, &session)
+            .await
+            .contains(pontia_agent_control::standalone_session_instructions()),
+        "bot session must not receive standalone session instructions"
+    );
     assert_eq!(binding.matches("Review only").count(), 1);
     assert_eq!(
         binding

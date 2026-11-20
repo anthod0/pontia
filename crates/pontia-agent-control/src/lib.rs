@@ -20,7 +20,7 @@ pub mod workspaces;
 pub use agent_events::AgentEventBroker;
 pub use agent_profiles::{
     AgentProfileCommandOutcome, AgentProfileService, ExecutionProfileView, ProfileLaunchDefaults,
-    UpsertExecutionProfileRequest,
+    UpsertExecutionProfileRequest, standalone_session_instructions,
 };
 pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
 pub use client_contract::{ClientControlChannel, ClientControlOperation};

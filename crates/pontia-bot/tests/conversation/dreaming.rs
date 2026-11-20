@@ -55,6 +55,12 @@ async fn one_device_round_survives_failure_and_restart_without_becoming_a_helper
         .clone();
     let service = DreamingService::new(control.clone(), conversation.clone());
     let first = service.start().await.unwrap().unwrap();
+    assert!(
+        !instructions(&control, &first)
+            .await
+            .contains(pontia_agent_control::standalone_session_instructions()),
+        "dreaming session must not receive standalone session instructions"
+    );
     assert_eq!(
         conversation.resolve(&first).await.unwrap().role,
         BotRole::Dreaming

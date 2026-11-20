@@ -680,6 +680,7 @@ async fn submission_rejects_a_node_whose_workflow_is_not_running() {
             execution_profile_id: None,
             execution_profile_version: None,
             additional_instructions: None,
+            include_standalone_session_instructions: false,
             metadata: json!({}),
             initial_task: None,
             runtime_environment: Default::default(),

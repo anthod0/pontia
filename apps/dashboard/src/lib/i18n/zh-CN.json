@@ -130,7 +130,6 @@
   "common.updated": "更新时间",
   "common.versions": "版本",
   "profiles.loadingVersions": "正在加载版本…",
-  "profiles.builtin": "内置",
   "profiles.noVersions": "此配置没有可用版本。",
   "profiles.clientSupport": "客户端支持",
   "profiles.clientSupportDescription": "客户端特有行为由适配器和运行时能力决定。",

@@ -162,8 +162,6 @@ impl Fixture {
         )
         .await
         .unwrap();
-        sqlx::query("UPDATE execution_profiles SET system_prompt_template='creation-marker' WHERE profile_id='default' AND version='2'")
-            .execute(&pool).await.unwrap();
         pontia_storage_sqlite::repositories::agent_clients::SqliteAgentClientRepository::new(
             pool.clone(),
         )
@@ -179,7 +177,7 @@ impl Fixture {
             .session_commands()
             .create_session(
                 serde_json::from_value::<CreateSessionRequest>(
-                    json!({"client_type":"codex","workspace":root.path(),"additional_instructions":additional_instructions,"execution_policy":execution_policy}),
+                    json!({"client_type":"codex","workspace":root.path(),"additional_instructions":additional_instructions,"include_standalone_session_instructions":true,"execution_policy":execution_policy}),
                 )
                 .unwrap(),
             )
@@ -363,7 +361,8 @@ async fn start_and_resume_preserve_environment_filters_and_override_session_iden
         let requests = fixture.thread_requests.lock().await;
         assert_eq!(requests.len(), 2);
         let mut expected = expected_filter;
-        expected["developer_instructions"] = json!("creation-marker");
+        expected["developer_instructions"] =
+            json!(pontia_agent_control::standalone_session_instructions());
         expected["shell_environment_policy.set"] =
             json!({"PROBE_KEEP":"keep","PONTIA_SESSION_ID":fixture.session});
         for request in requests.iter() {
@@ -945,10 +944,14 @@ async fn profile_survives_first_input_and_resume_without_mutable_profiles() {
         .unwrap();
     let requests = fixture.thread_requests.lock().await;
     assert_eq!(requests.len(), 2);
+    let expected = format!(
+        "native-marker\n\n{}\n\ncaller-marker",
+        pontia_agent_control::standalone_session_instructions()
+    );
     for request in requests.iter() {
         assert_eq!(
             request["params"]["config"]["developer_instructions"],
-            "native-marker\n\ncreation-marker\n\ncaller-marker"
+            expected
         );
     }
     drop(requests);

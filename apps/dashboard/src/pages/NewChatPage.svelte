@@ -181,6 +181,7 @@
         ...(selectedCreationOption.model_catalog_key && model ? { model } : {}),
         workspace_id: workspaceId,
         title: titleFromInitialPrompt(initialPrompt),
+        include_standalone_session_instructions: true,
         initial_task: { input: initialPrompt, metadata: { source: 'dashboard_chat' } },
         metadata: { ...selectedCreationOption.metadata, source: 'dashboard_chat', title_source: 'input' },
       })

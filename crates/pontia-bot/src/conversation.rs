@@ -230,6 +230,7 @@ impl ConversationService {
             execution_profile_id: Some(profile.profile_id),
             execution_profile_version: Some(profile.version),
             additional_instructions: Some(instructions.into()),
+            include_standalone_session_instructions: false,
             metadata,
             initial_task: None,
             runtime_environment: [(TOOL_TOKEN_ENV.into(), uuid::Uuid::new_v4().to_string())].into(),
@@ -505,6 +506,7 @@ impl ConversationService {
                 execution_profile_id: None,
                 execution_profile_version: None,
                 additional_instructions: Some(handoff),
+                include_standalone_session_instructions: false,
                 metadata: self
                     .session_metadata(&bot.client_type, &bot.client_key)
                     .await?,

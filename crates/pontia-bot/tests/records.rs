@@ -42,10 +42,9 @@ impl ClientProfile for Profile {
     }
     fn bind(
         &self,
-        profile: &pontia_agent_control::ExecutionProfileView,
-        _instructions_required: bool,
+        input: &pontia_agent_control::client_contract::ProfileBindingInput<'_>,
     ) -> Result<Value> {
-        Ok(json!({"system": profile.system_prompt_template}))
+        Ok(json!({"system": input.system_prompt}))
     }
 }
 
@@ -267,7 +266,7 @@ async fn defaults_capture_creation_config_and_preserve_user_edits_and_shared_res
         );
         let binding = f
             .profiles
-            .resolve_for_client("generic", Some(id), Some("1"), None)
+            .resolve_for_client("generic", Some(id), Some("1"), None, false)
             .await
             .unwrap()
             .unwrap();

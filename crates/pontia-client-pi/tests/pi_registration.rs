@@ -48,8 +48,6 @@ fn client(
 #[tokio::test]
 async fn registration_establishes_identity_and_reconnect_never_resumes_or_replaces_a_runtime() {
     let (state, root) = state().await;
-    sqlx::query("UPDATE execution_profiles SET system_prompt_template='native-creation-marker' WHERE profile_id='default' AND version='2'")
-        .execute(&state.db()).await.unwrap();
     let (pi, mut requests) = client(&state);
     assert_eq!(
         pi.call("session.context", json!({"client_session_key":"native"}))
@@ -76,7 +74,7 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
         .unwrap();
     assert_eq!(
         snapshot["execution_profile_binding"]["system_prompt"],
-        "native-creation-marker"
+        pontia_agent_control::standalone_session_instructions()
     );
     assert!(state.client_control().available(session).await.unwrap());
     assert_eq!(registered["session"]["state"], "starting");

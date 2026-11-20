@@ -36,6 +36,12 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
     let (id, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
     let reader = retrieve(&helpers, &session, Some("workspace-a")).await;
+    assert!(
+        !instructions(&control, &reader)
+            .await
+            .contains(pontia_agent_control::standalone_session_instructions()),
+        "retrieval session must not receive standalone session instructions"
+    );
     assert_eq!(
         conversation.resolve(&reader).await.unwrap().role,
         BotRole::Retrieval
