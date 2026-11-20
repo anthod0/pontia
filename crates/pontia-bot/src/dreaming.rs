@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use pontia_agent_control::{
-    AgentControl, AgentProfileService, SessionOwnership, SubmitInboxMessageRequest,
+    AgentControl, SessionOwnership, SubmitInboxMessageRequest,
     interactions::{InteractionIntent, InteractionState},
 };
 use pontia_core::{Error, Result};
@@ -12,7 +12,6 @@ use tokio::sync::{Mutex, watch};
 use crate::{
     conversation::ConversationService,
     identity::{BotIdentity, BotRole},
-    records::DREAMING_PROFILE_ID,
 };
 
 #[derive(Clone)]
@@ -49,25 +48,6 @@ impl DreamingService {
         }
     }
 
-    fn dreaming_execution_policy(
-        &self,
-        client_type: &str,
-    ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
-        let clients = self.control.clients();
-        let configuration = clients
-            .get(client_type)
-            .and_then(|entry| entry.configuration.as_ref())
-            .ok_or_else(|| {
-                Error::CapabilityUnavailable("Client cannot run a Dreaming Session".into())
-            })?;
-        let mut policy = configuration.restricted_execution_policy().ok_or_else(|| {
-            Error::CapabilityUnavailable("Client cannot restrict Dreaming Session tools".into())
-        })?;
-        policy.yolo = true;
-        configuration.validate_execution_policy(&policy)?;
-        Ok(policy)
-    }
-
     /// Start one round; an existing active round always wins.
     pub async fn start(&self) -> Result<Option<String>> {
         let mut reported = self.gate.lock().await;
@@ -80,17 +60,13 @@ impl DreamingService {
             return Ok(None);
         }
         let bots = self.conversation.records().list().await?;
-        if bots.is_empty() {
+        let Some(bot) = bots.first() else {
             return Ok(None);
-        }
-        let profile = AgentProfileService::new(self.control.db())
-            .with_clients(self.control.clients())
-            .launch_defaults(DREAMING_PROFILE_ID, None)
-            .await?;
+        };
         if !self
             .control
             .clients()
-            .spec(&profile.client_type)
+            .spec(&bot.client_type)
             .is_some_and(|spec| {
                 spec.capabilities.report_turn_started && spec.capabilities.report_turn_finished
             })
@@ -99,21 +75,21 @@ impl DreamingService {
                 "Client cannot run a Dreaming Session".into(),
             ));
         }
-        let execution_policy = self.dreaming_execution_policy(&profile.client_type)?;
         let round = uuid::Uuid::now_v7().to_string();
-        let directory = self.conversation.records().read_only_directory().await?;
         let mut request = self
             .conversation
-            .profile_session_request(
-                profile,
+            .task_session_request(
+                &bot.client_type,
+                &bot.client_key,
+                &bot.model,
                 SessionOwnership {
                     application_id: "bot".into(),
                     reference: format!("dreaming:{round}"),
                 },
                 include_str!("dreaming/instructions.md"),
-                execution_policy,
             )
             .await?;
+        let directory = self.conversation.records().read_only_directory().await?;
         request.workspace = Some(directory.to_string_lossy().into_owned());
         request.title = Some("Dreaming".into());
         request.description = Some("Organize pending device memories".into());

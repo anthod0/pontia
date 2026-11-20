@@ -198,38 +198,38 @@ impl ConversationService {
             })
     }
 
-    pub(crate) async fn profile_session_request(
+    pub(crate) async fn task_session_request(
         &self,
-        profile: pontia_agent_control::ProfileLaunchDefaults,
+        client_type: &str,
+        client_key: &str,
+        model: &str,
         ownership: SessionOwnership,
         instructions: &str,
-        execution_policy: pontia_core::execution_policy::ExecutionPolicy,
     ) -> Result<CreateSessionRequest> {
         let clients = self.control.clients();
         if !clients
-            .get(&profile.client_type)
+            .get(client_type)
             .is_some_and(|entry| entry.spec.capabilities.accept_task && entry.profile.is_some())
         {
             return Err(Error::CapabilityUnavailable(
-                "Client cannot run tasks with an explicit Profile".into(),
+                "Client cannot run tasks with injected instructions".into(),
             ));
         }
-        let metadata = self
-            .session_metadata(&profile.client_type, &profile.client_key)
-            .await?;
+        let execution_policy = self.bot_execution_policy(client_type)?;
+        let metadata = self.session_metadata(client_type, client_key).await?;
         Ok(CreateSessionRequest {
             launch_mode: Default::default(),
             execution_policy,
-            model: Some(profile.model),
-            client_type: profile.client_type,
+            model: Some(model.into()),
+            client_type: client_type.into(),
             title: None,
             description: None,
             workspace: None,
             workspace_id: None,
             handle: None,
             role: None,
-            execution_profile_id: Some(profile.profile_id),
-            execution_profile_version: Some(profile.version),
+            execution_profile_id: None,
+            execution_profile_version: None,
             additional_instructions: Some(instructions.into()),
             include_standalone_session_instructions: false,
             metadata,
@@ -635,9 +635,10 @@ impl BotIdentity for ConversationService {
                     workspace_id: None,
                 });
             }
-            if let Some(bot_id) = crate::helpers::helper_bot(&self.control.db(), session_id)
+            if crate::helpers::helper_bot(&self.control.db(), session_id)
                 .await
                 .map_err(|_| IdentityError)?
+                .is_some()
             {
                 let session = self
                     .control
@@ -650,7 +651,7 @@ impl BotIdentity for ConversationService {
                     return Err(IdentityError);
                 }
                 return Ok(BotAccess {
-                    role: crate::helpers::helper_role(&bot_id, &session),
+                    role: crate::helpers::helper_role(&session),
                     workspace_id: None,
                 });
             }

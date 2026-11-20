@@ -429,34 +429,39 @@ async fn dreaming_rejects_clients_without_approval_free_restricted_policy_before
 }
 
 #[tokio::test]
-async fn dreaming_profile_default_execution_policy_cannot_weaken_enforced_policy() {
-    use pontia_agent_control::{AgentProfileService, UpsertExecutionProfileRequest};
-    use pontia_bot::records::DREAMING_PROFILE_ID;
-
+async fn dreaming_uses_the_oldest_bots_current_model_and_built_in_instructions() {
     let (_root, pool, client, control, conversation) = fixture().await;
-    let (_, bot_session) = bot(&conversation).await;
-    seed_pending_memory(pool, &conversation, &bot_session).await;
-
-    let profiles = AgentProfileService::new(control.db()).with_clients(control.clients());
-    let existing = profiles
-        .get_latest(DREAMING_PROFILE_ID)
+    let first = conversation
+        .records()
+        .create(bot_configuration("First", "old-model"))
+        .await
+        .unwrap();
+    let (second_id, second_session) = bot(&conversation).await;
+    seed_pending_memory(pool, &conversation, &second_session).await;
+    conversation
+        .records()
+        .update(&second_id, bot_configuration("Second", "other-model"))
+        .await
+        .unwrap();
+    conversation
+        .records()
+        .update(&first.bot_id, bot_configuration("First", MODEL))
+        .await
+        .unwrap();
+    let dreaming = DreamingService::new(control.clone(), conversation);
+    let round = dreaming.start().await.unwrap().unwrap();
+    let session = control
+        .queries()
+        .get_session(&round)
         .await
         .unwrap()
         .unwrap();
-    let mut updated: UpsertExecutionProfileRequest =
-        serde_json::from_value(json!(existing)).unwrap();
-    updated.default_execution_policy = json!({
-        "yolo": false,
-        "disable_mcp": false,
-        "disabled_tools": []
-    });
-    profiles
-        .update_version(DREAMING_PROFILE_ID, &existing.version, updated)
-        .await
-        .unwrap();
-
-    let dreaming = DreamingService::new(control.clone(), conversation);
-    let round = dreaming.start().await.unwrap().unwrap();
+    assert!(session.execution_profile_id.is_none());
+    assert!(session.execution_profile_version.is_none());
+    assert_eq!(
+        instructions(&control, &round).await.trim(),
+        include_str!("../../src/dreaming/instructions.md").trim()
+    );
     let expected = pontia_core::execution_policy::ExecutionPolicy {
         tools: None,
         disabled_tools: vec!["edit".into(), "write".into()],

@@ -2,7 +2,7 @@ use pontia_agent_control::UpsertExecutionProfileRequest;
 use pontia_core::{Error, Result};
 use serde_json::json;
 
-use super::{Bot, BotService, DREAMING_PROFILE_ID};
+use super::{Bot, BotService};
 
 impl BotService {
     /// Retry a saved Bot's initialization without replacing user-managed resources.
@@ -39,35 +39,17 @@ impl BotService {
         .await
         .map_err(|error| Error::Domain(error.to_string()))??;
         self.profiles
-            .initialize_profile(default_profile(
-                &bot,
-                Self::helper_profile_id(&bot.bot_id),
-                format!("{} helper", bot.name),
-            ))
+            .initialize_profile(helper_profile(&bot))
             .await?;
-        self.profiles
-            .initialize_profile(default_profile(
-                &bot,
-                DREAMING_PROFILE_ID.into(),
-                "Dreaming".into(),
-            ))
-            .await?;
-        let mut retrieval = default_profile(
-            &bot,
-            Self::retrieval_profile_id(&bot.bot_id),
-            format!("{} deep retrieval", bot.name),
-        );
-        retrieval.system_prompt_template = Some(include_str!("../helpers/retrieval.md").into());
-        self.profiles.initialize_profile(retrieval).await?;
         Ok(())
     }
 }
 
-fn default_profile(bot: &Bot, profile_id: String, name: String) -> UpsertExecutionProfileRequest {
+fn helper_profile(bot: &Bot) -> UpsertExecutionProfileRequest {
     UpsertExecutionProfileRequest {
-        profile_id,
+        profile_id: BotService::helper_profile_id(&bot.bot_id),
         version: "1".into(),
-        name,
+        name: format!("{} helper", bot.name),
         description: None,
         default_client_type: Some(bot.client_type.clone()),
         default_client_key: Some(bot.client_key.clone()),

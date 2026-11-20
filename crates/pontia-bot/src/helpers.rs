@@ -14,8 +14,10 @@ use std::{path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
 use crate::{
-    conversation::ConversationService, handoff::HelperContext, identity::BotRole,
-    records::BotService,
+    conversation::ConversationService,
+    handoff::HelperContext,
+    identity::BotRole,
+    records::{Bot, BotService},
 };
 
 #[derive(Debug)]
@@ -58,7 +60,6 @@ pub enum HelperCommand {
 pub struct RetrieveMemories {
     pub message: String,
     pub workspace_id: Option<String>,
-    pub profile_version: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -144,14 +145,13 @@ impl HelperService {
                     }
                     None => "Search all unarchived device memories as needed.".into(),
                 };
-                self.conversation.records().initialize(&bot.bot_id).await?;
                 self.create(
-                    &bot.bot_id,
+                    &bot,
                     &request.session_id,
                     CreateHelper {
                         location: HelperLocation::ReadOnly,
-                        profile_id: Some(BotService::retrieval_profile_id(&bot.bot_id)),
-                        profile_version: input.profile_version,
+                        profile_id: None,
+                        profile_version: None,
                         description: input.message.clone(),
                         message: format!("{scope}\n\n{}", input.message),
                     },
@@ -159,19 +159,10 @@ impl HelperService {
                 .await
                 .map_err(Into::into)
             }
-            HelperCommand::Create(input) => {
-                if input.profile_id.as_deref()
-                    == Some(&BotService::retrieval_profile_id(&bot.bot_id))
-                {
-                    return Err(Error::Domain(
-                        "Use pontia bot memory retrieve for the deep retrieval Profile".into(),
-                    )
-                    .into());
-                }
-                self.create(&bot.bot_id, &request.session_id, input)
-                    .await
-                    .map_err(Into::into)
-            }
+            HelperCommand::Create(input) => self
+                .create(&bot, &request.session_id, input)
+                .await
+                .map_err(Into::into),
             HelperCommand::List => Ok(json!({"helpers": self.list(&bot.bot_id).await?})),
             HelperCommand::Send {
                 session_id,
@@ -223,61 +214,64 @@ impl HelperService {
         }
     }
 
-    fn helper_execution_policy(
-        &self,
-        client_type: &str,
-    ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
-        let clients = self.control.clients();
-        let configuration = clients
-            .get(client_type)
-            .and_then(|entry| entry.configuration.as_ref())
-            .ok_or_else(|| {
-                Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
-            })?;
-        let mut policy = configuration.restricted_execution_policy().ok_or_else(|| {
-            Error::CapabilityUnavailable("Client cannot restrict Session tools".into())
-        })?;
-        policy.yolo = true;
-        configuration.validate_execution_policy(&policy)?;
-        Ok(policy)
-    }
-
-    async fn create(&self, bot_id: &str, source: &str, input: CreateHelper) -> Result<Value> {
+    async fn create(&self, bot: &Bot, source: &str, input: CreateHelper) -> Result<Value> {
         nonempty(&input.message)?;
         nonempty(&input.description)?;
-        let profile_id = input
-            .profile_id
-            .unwrap_or_else(|| BotService::helper_profile_id(bot_id));
-        let profile = AgentProfileService::new(self.control.db())
-            .with_clients(self.control.clients())
-            .launch_defaults(&profile_id, input.profile_version.as_deref())
-            .await?;
+        let bot_id = &bot.bot_id;
+        let reference = format!("helper:{bot_id}:{}", uuid::Uuid::now_v7());
+        let ownership = SessionOwnership {
+            application_id: "bot".into(),
+            reference: reference.clone(),
+        };
+        let mut request = if matches!(input.location, HelperLocation::ReadOnly) {
+            let mut request = self
+                .conversation
+                .task_session_request(
+                    &bot.client_type,
+                    &bot.client_key,
+                    &bot.model,
+                    ownership.clone(),
+                    concat!(
+                        include_str!("helpers/retrieval.md"),
+                        "\n",
+                        include_str!("helpers/instructions.md")
+                    ),
+                )
+                .await?;
+            request.role = Some(RETRIEVAL_ROLE.into());
+            request
+        } else {
+            let profile_id = input
+                .profile_id
+                .unwrap_or_else(|| BotService::helper_profile_id(bot_id));
+            let profile = AgentProfileService::new(self.control.db())
+                .with_clients(self.control.clients())
+                .launch_defaults(&profile_id, input.profile_version.as_deref())
+                .await?;
+            let mut request = self
+                .conversation
+                .task_session_request(
+                    &profile.client_type,
+                    &profile.client_key,
+                    &profile.model,
+                    ownership.clone(),
+                    include_str!("helpers/instructions.md"),
+                )
+                .await?;
+            request.execution_profile_id = Some(profile.profile_id);
+            request.execution_profile_version = Some(profile.version);
+            request
+        };
         if !self
             .control
             .clients()
-            .spec(&profile.client_type)
+            .spec(&request.client_type)
             .is_some_and(|spec| spec.capabilities.steer)
         {
             return Err(Error::CapabilityUnavailable(
                 "Client cannot run a helper Session".into(),
             ));
         }
-        let execution_policy = self.helper_execution_policy(&profile.client_type)?;
-        let launch = uuid::Uuid::now_v7();
-        let reference = format!("helper:{bot_id}:{launch}");
-        let ownership = SessionOwnership {
-            application_id: "bot".into(),
-            reference: reference.clone(),
-        };
-        let mut request = self
-            .conversation
-            .profile_session_request(
-                profile,
-                ownership.clone(),
-                include_str!("helpers/instructions.md"),
-                execution_policy,
-            )
-            .await?;
         let mut message = input.message;
         match input.location {
             HelperLocation::WorkspaceId(id) => {
@@ -444,7 +438,7 @@ pub(crate) async fn contexts(control: &AgentControl, bot_id: &str) -> Result<Vec
         helpers.push(HelperContext {
             bot_id: bot_id.into(),
             session_id: id,
-            role: helper_role(bot_id, &session),
+            role: helper_role(&session),
             workspace_id: session.workspace_id,
             description: session.description,
             state: session
@@ -456,10 +450,10 @@ pub(crate) async fn contexts(control: &AgentControl, bot_id: &str) -> Result<Vec
     Ok(helpers)
 }
 
-pub(crate) fn helper_role(bot_id: &str, session: &SessionView) -> BotRole {
-    if session.execution_profile_id.as_deref()
-        == Some(BotService::retrieval_profile_id(bot_id).as_str())
-    {
+const RETRIEVAL_ROLE: &str = "retrieval";
+
+pub(crate) fn helper_role(session: &SessionView) -> BotRole {
+    if session.role.as_deref() == Some(RETRIEVAL_ROLE) {
         BotRole::Retrieval
     } else {
         BotRole::Helper

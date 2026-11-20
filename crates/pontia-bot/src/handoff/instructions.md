@@ -62,7 +62,7 @@ Use bash to call the following `pontia bot` tools. You can also run brief inspec
 | `pontia bot workspace describe` | Update a Workspace description. |
 | `pontia bot memory create` | Create a memory. |
 | `pontia bot memory search` | Quickly search memories by keyword. |
-| `pontia bot memory retrieve --message TEXT [--workspace-id ID] [--profile-version VERSION]` | Start a read-only deep retrieval helper and return immediately. Findings arrive through a helper reply; close the retrieval helper once done. Do not wait or repeatedly poll. |
+| `pontia bot memory retrieve --message TEXT [--workspace-id ID]` | Start a read-only deep retrieval helper and return immediately. Findings arrive through a helper reply; close the retrieval helper once done. Do not wait or repeatedly poll. |
 | `pontia bot memory read` | Read memories by ID. |
 | `pontia bot memory neighbors` | Read directly linked memories. |
 | `pontia bot memory use` | Report memories actually used. |

@@ -322,7 +322,7 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
 }
 
 #[tokio::test]
-async fn memory_retrieve_starts_a_helper_with_the_requested_scope_and_profile_version() {
+async fn memory_retrieve_starts_a_helper_with_the_requested_scope() {
     let launch = json!({"session_id":"retrieval-session", "delivery":{"status":"accepted"}});
     let mut f = Fixture::new("helper", launch.clone()).await;
     let output = f
@@ -333,8 +333,6 @@ async fn memory_retrieve_starts_a_helper_with_the_requested_scope_and_profile_ve
             "Explain the release decision",
             "--workspace-id",
             "project",
-            "--profile-version",
-            "2",
             "--json",
         ])
         .await;
@@ -352,7 +350,7 @@ async fn memory_retrieve_starts_a_helper_with_the_requested_scope_and_profile_ve
         json!({
             "session_id":"caller-session",
             "command":{"action":"retrieve", "input":{
-                "message":"Explain the release decision", "workspace_id":"project", "profile_version":"2"
+                "message":"Explain the release decision", "workspace_id":"project"
             }}
         })
     );

@@ -95,9 +95,9 @@ async fn temporary_helpers_share_the_task_folder_and_appear_in_the_default_works
 }
 
 #[tokio::test]
-async fn ordinary_creation_rejects_invalid_task_names_and_the_retrieval_profile() {
+async fn ordinary_creation_rejects_invalid_task_names() {
     let (_root, _, _, control, conversation) = fixture().await;
-    let (id, main) = bot(&conversation).await;
+    let (_, main) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation);
     for name in ["", "one/two", ".", "..", "trailing/"] {
         assert!(
@@ -108,12 +108,6 @@ async fn ordinary_creation_rejects_invalid_task_names_and_the_retrieval_profile(
             "{name:?}"
         );
     }
-    let mut request = temporary_helper(&main, "task");
-    let HelperCommand::Create(input) = &mut request.command else {
-        unreachable!()
-    };
-    input.profile_id = Some(pontia_bot::records::BotService::retrieval_profile_id(&id));
-    assert!(helpers.execute(request).await.is_err());
     assert_eq!(
         control.queries().list_owned_sessions("bot").await.unwrap(),
         [main]

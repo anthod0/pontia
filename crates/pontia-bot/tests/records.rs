@@ -225,22 +225,14 @@ async fn defaults_capture_creation_config_and_preserve_user_edits_and_shared_res
         ),
         ("generic", "a", "model-a")
     );
-    assert_eq!(
-        f.profiles
-            .launch_defaults(DREAMING_PROFILE_ID, None)
-            .await
-            .unwrap()
-            .model,
-        "model-a"
-    );
-    let retrieval = BotService::retrieval_profile_id(&a.bot_id);
-    for id in [&helper, &retrieval, DREAMING_PROFILE_ID] {
-        let mut request = f.profile_request(id).await;
-        request.default_client_key = Some("b".into());
-        request.default_model = Some("custom-model".into());
-        request.system_prompt_template = Some("custom instructions".into());
-        f.profiles.update_version(id, "1", request).await.unwrap();
-    }
+    let mut request = f.profile_request(&helper).await;
+    request.default_client_key = Some("b".into());
+    request.default_model = Some("custom-model".into());
+    request.system_prompt_template = Some("custom instructions".into());
+    f.profiles
+        .update_version(&helper, "1", request)
+        .await
+        .unwrap();
     let b = f
         .bots
         .create(configuration("B", "b", "model-b"))
@@ -259,19 +251,21 @@ async fn defaults_capture_creation_config_and_preserve_user_edits_and_shared_res
             .model,
         "model-b"
     );
-    for id in [&helper, &retrieval, DREAMING_PROFILE_ID] {
-        assert_eq!(
-            f.profiles.launch_defaults(id, None).await.unwrap().model,
-            "custom-model"
-        );
-        let binding = f
-            .profiles
-            .resolve_for_client("generic", Some(id), Some("1"), None, false)
+    assert_eq!(
+        f.profiles
+            .launch_defaults(&helper, None)
             .await
             .unwrap()
-            .unwrap();
-        assert_eq!(binding.binding["system"], "custom instructions");
-    }
+            .model,
+        "custom-model"
+    );
+    let binding = f
+        .profiles
+        .resolve_for_client("generic", Some(&helper), Some("1"), None, false)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(binding.binding["system"], "custom instructions");
     assert_eq!(
         std::fs::read_to_string(user).unwrap(),
         "existing user information"
@@ -306,7 +300,7 @@ async fn filesystem_initialization_failure_can_be_retried_with_the_saved_bot_id(
     assert_eq!(reopened.list().await.unwrap().len(), 1);
     assert_eq!(
         f.profiles
-            .list_versions(DREAMING_PROFILE_ID, true)
+            .list_versions(&BotService::helper_profile_id(&bot_id), true)
             .await
             .unwrap()
             .len(),
@@ -315,9 +309,9 @@ async fn filesystem_initialization_failure_can_be_retried_with_the_saved_bot_id(
 }
 
 #[tokio::test]
-async fn retry_after_profile_failure_preserves_the_already_created_helper() {
+async fn retry_after_helper_profile_failure_uses_the_saved_bot() {
     let f = Fixture::new().await;
-    sqlx::query("CREATE TRIGGER reject_dreaming BEFORE INSERT ON execution_profiles WHEN NEW.profile_id = 'bot-dreaming' BEGIN SELECT RAISE(FAIL, 'test failure'); END").execute(&f.pool).await.unwrap();
+    sqlx::query("CREATE TRIGGER reject_helper BEFORE INSERT ON execution_profiles BEGIN SELECT RAISE(FAIL, 'test failure'); END").execute(&f.pool).await.unwrap();
     let error = f
         .bots
         .create(configuration("A", "a", "model-a"))
@@ -330,59 +324,19 @@ async fn retry_after_profile_failure_preserves_the_already_created_helper() {
     else {
         panic!("expected initialization database failure")
     };
-    let helper = BotService::helper_profile_id(&bot_id);
-    let mut request = f.profile_request(&helper).await;
-    request.default_model = Some("user-edited-model".into());
-    f.profiles
-        .update_version(&helper, "1", request)
-        .await
-        .unwrap();
-    sqlx::query("DROP TRIGGER reject_dreaming")
+    sqlx::query("DROP TRIGGER reject_helper")
         .execute(&f.pool)
         .await
         .unwrap();
     f.bots.initialize(&bot_id).await.unwrap();
     assert_eq!(
         f.profiles
-            .launch_defaults(&helper, None)
-            .await
-            .unwrap()
-            .model,
-        "user-edited-model"
-    );
-    assert_eq!(
-        f.profiles
-            .launch_defaults(DREAMING_PROFILE_ID, None)
+            .launch_defaults(&BotService::helper_profile_id(&bot_id), None)
             .await
             .unwrap()
             .model,
         "model-a"
     );
-    assert_eq!(
-        f.profiles.list_versions(&helper, true).await.unwrap().len(),
-        1
-    );
-}
-
-#[tokio::test]
-async fn concurrent_creations_share_one_dreaming_profile() {
-    let f = Fixture::new().await;
-    let other = BotService::new(f.pool.clone(), f.root.path(), f.registry.clone());
-    let (a, b) = tokio::join!(
-        f.bots.create(configuration("A", "a", "model-a")),
-        other.create(configuration("B", "b", "model-b"))
-    );
-    a.unwrap();
-    b.unwrap();
-    assert_eq!(
-        f.profiles
-            .list_versions(DREAMING_PROFILE_ID, true)
-            .await
-            .unwrap()
-            .len(),
-        1
-    );
-    assert_eq!(f.bots.list().await.unwrap().len(), 2);
 }
 
 #[tokio::test]

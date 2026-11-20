@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Bots now start deep memory retrieval with `pontia bot memory retrieve`. This replaces `pontia bot helper retrieve` and accepts the same arguments.
+- Bots now start deep memory retrieval with `pontia bot memory retrieve`. This replaces `pontia bot helper retrieve` and removes the retrieval option `--profile-version` and its API field `profile_version`. Dreaming and deep retrieval now use built-in instructions. Deep retrieval uses the requesting Bot’s client and model. Dreaming uses those of the oldest Bot on the device.
 
 ## [0.8.2] - 2026-11-20
 

@@ -12,8 +12,6 @@ use sqlx::SqlitePool;
 
 mod initialization;
 
-pub const DREAMING_PROFILE_ID: &str = "bot-dreaming";
-
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, sqlx::Type, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(rename_all = "snake_case")]
@@ -246,10 +244,6 @@ impl BotService {
 
     pub fn helper_profile_id(bot_id: &str) -> String {
         format!("{bot_id}-helper")
-    }
-
-    pub fn retrieval_profile_id(bot_id: &str) -> String {
-        format!("{bot_id}-retrieval")
     }
 
     async fn validate(&self, configuration: &BotConfiguration) -> Result<()> {

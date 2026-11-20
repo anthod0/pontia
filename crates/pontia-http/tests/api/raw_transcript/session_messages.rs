@@ -417,13 +417,13 @@ async fn startup_failure_can_be_checked_without_history_and_closed_without_a_con
 }
 
 #[tokio::test]
-async fn retrieval_profile_reads_arbitrary_sessions_without_memory_associations() {
+async fn retrieval_helper_reads_arbitrary_sessions_without_memory_associations() {
     let f = fixture().await;
     seed_session(&f.state, "retrieval-caller").await;
     let pool = f.state.db();
     sqlx::query("INSERT INTO bots(bot_id,name,client_type,client_key,model) VALUES ('reader-bot','Bot','pi','default','test')").execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO bot_helpers(reference,bot_id,session_id) VALUES ('helper:reader','reader-bot','retrieval-caller')").execute(&pool).await.unwrap();
-    sqlx::query("UPDATE sessions SET execution_profile_id='reader-bot-retrieval', runtime_environment=? WHERE session_id='retrieval-caller'")
+    sqlx::query("UPDATE sessions SET role='retrieval', runtime_environment=? WHERE session_id='retrieval-caller'")
         .bind(json!({"PONTIA_BOT_TOOL_TOKEN":"reader-credential"}).to_string()).execute(&pool).await.unwrap();
     let request =
         json!({"session_id":"retrieval-caller", "input":{"session_id":"sess_messages", "limit":1}});

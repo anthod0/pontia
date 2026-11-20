@@ -221,9 +221,6 @@ pub(super) enum MemoryCommand {
         /// Ask the helper to focus on this Workspace; does not restrict its read access
         #[arg(long)]
         workspace_id: Option<String>,
-        /// Version of this Bot's deep retrieval Profile; omit for the latest version
-        #[arg(long)]
-        profile_version: Option<String>,
     },
     /// Read one hop of linked active memories
     Neighbors {

@@ -12,7 +12,6 @@ async fn retrieve(helpers: &HelperService, bot_session: &str, workspace: Option<
             command: HelperCommand::Retrieve(RetrieveMemories {
                 message: "Explain the release decision and conflicting evidence".into(),
                 workspace_id: workspace.map(str::to_owned),
-                profile_version: None,
             }),
         })
         .await
@@ -52,11 +51,11 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(
-        created.execution_profile_id,
-        Some(pontia_bot::records::BotService::retrieval_profile_id(&id))
-    );
-    assert_eq!(created.execution_profile_version.as_deref(), Some("1"));
+    assert!(created.execution_profile_id.is_none());
+    assert!(created.execution_profile_version.is_none());
+    let injected = instructions(&control, &reader).await;
+    assert!(injected.contains(include_str!("../../src/helpers/retrieval.md").trim()));
+    assert!(injected.contains(include_str!("../../src/helpers/instructions.md").trim()));
     assert!(created.workspace_id.is_none());
     let shared = root.path().join("bot/readonly").canonicalize().unwrap();
     assert_eq!(created.workspace.as_deref(), shared.to_str());
