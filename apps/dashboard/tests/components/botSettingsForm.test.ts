@@ -119,7 +119,7 @@ test.each([{ catalog: [] }, { catalog: models.slice(1) }])(
     render(BotSettingsForm, { bot, onsaved: vi.fn() });
     await waitFor(() =>
       expect(
-        testDevice.queryClient.getQueryData(["agent-client-models", "pi", "default"]),
+        testDevice.queryClient.getQueryData(["agent-client-models", "pi", "default", undefined]),
       ).toBeDefined(),
     );
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
