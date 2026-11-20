@@ -226,7 +226,7 @@ function sharedFiles(...files: SharedFile[]) {
     notice_session_id: "main",
     generation_notice: null,
     next_before: null,
-    processing: false,
+    status: { kind: "idle" },
   });
 }
 
