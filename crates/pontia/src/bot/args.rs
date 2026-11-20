@@ -39,7 +39,7 @@ pub(super) struct SendToUser {
     /// Complete user-visible reply
     #[arg(long, allow_hyphen_values = true)]
     message: String,
-    /// One short phrase naming the background work still in progress; omit when no work remains
+    /// One short phrase naming the latest background work in progress; omit when no work remains
     #[arg(long, allow_hyphen_values = true)]
     working_on: Option<String>,
 }
