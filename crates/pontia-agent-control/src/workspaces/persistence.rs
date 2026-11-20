@@ -15,7 +15,13 @@ pub(crate) async fn resolve_session_directory(
     pontia_home: &Path,
     directory: &str,
 ) -> Result<(String, Option<WorkspaceRecord>)> {
-    let canonical = std::fs::canonicalize(directory)?;
+    let canonical = std::fs::canonicalize(directory).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            Error::NotFound(format!("Workspace directory {directory} not found"))
+        } else {
+            Error::Io(error)
+        }
+    })?;
     if !canonical.is_dir() {
         return Err(Error::Domain(
             "Session launch path must be a directory".into(),
