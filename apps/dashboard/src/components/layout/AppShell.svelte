@@ -66,7 +66,8 @@
     <AppSidebar />
   {/if}
   <Sidebar.Inset class="bg-surface lg:mr-[var(--file-preview-width)]">
-    <div class={['sticky z-10 flex items-center', !chatPath && 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">
+    <!-- On chat pages only the top bar buttons take pointer input, so the feed beneath still scrolls. -->
+    <div class={['sticky z-10 flex items-center', chatPath ? 'pointer-events-none' : 'bg-surface']} style="top: var(--visual-viewport-top, 0px)">
       <div class="min-w-0 flex-1">
         {#if topbar}
           {@render topbar()}

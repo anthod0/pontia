@@ -234,7 +234,7 @@
     {#if device}
       {#key device}<DeviceProvider {device}><TopBar onNewChat={openNewChat} /></DeviceProvider>{/key}
     {:else}
-      <header class="flex h-14 items-center px-3 pt-2 md:h-12 md:pt-0"><Sidebar.Trigger class="size-11 md:hidden [&_svg:not([class*=size-])]:size-5" /><TopBarMoreMenu /></header>
+      <header class="flex h-14 items-center px-3 pt-2 md:h-12 md:pt-0"><Sidebar.Trigger class="pointer-events-auto size-11 md:hidden [&_svg:not([class*=size-])]:size-5" /><TopBarMoreMenu /></header>
     {/if}
   {/snippet}
   {#snippet children()}

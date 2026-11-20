@@ -82,7 +82,8 @@
 {/snippet}
 
 {#if timeline.bot}
-  <section class="mx-auto flex h-[calc(100dvh-3.5rem)] md:h-[calc(100dvh-3rem)] max-w-3xl flex-col" aria-label={timeline.bot.name}>
+  <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
+  <section class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12" aria-label={timeline.bot.name}>
     <BotMessageFeed bind:this={feed} {timeline} {typing}>
       {#snippet row(entry)}
         {#if 'content' in entry}
