@@ -28,11 +28,25 @@ CREATE TABLE bot_messages (
     created_at TEXT NOT NULL
         DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     status TEXT NOT NULL DEFAULT 'normal'
-        CHECK (status = 'normal' OR (status = 'failed' AND kind = 'user_input'))
+        CHECK (status = 'normal' OR (status = 'failed' AND kind = 'user_input')),
+    timeline_ms INTEGER GENERATED ALWAYS AS (
+    unixepoch(substr(created_at, 1, 19) ||
+        CASE WHEN substr(created_at, -1) = 'Z' THEN 'Z' ELSE substr(created_at, -6) END) * 1000
+    + CASE WHEN substr(created_at, 20, 1) = '.' THEN
+        CAST(substr(substr(created_at, 21, length(created_at) - 20 -
+            CASE WHEN substr(created_at, -1) = 'Z' THEN 1 ELSE 6 END) || '000', 1, 3) AS INTEGER)
+      ELSE 0 END
+) VIRTUAL
 );
 
 CREATE INDEX idx_bot_messages_bot_created
     ON bot_messages(bot_id, created_at, id);
+
+CREATE INDEX idx_bot_messages_timeline
+    ON bot_messages(bot_id, timeline_ms, id);
+
+CREATE INDEX idx_bot_messages_latest_normal
+    ON bot_messages(bot_id, timeline_ms, id) WHERE status = 'normal';
 
 CREATE TABLE bot_memories (
     id TEXT PRIMARY KEY NOT NULL,
@@ -137,7 +151,15 @@ CREATE TABLE events (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   timeline_boundary TEXT,
   turn_topology TEXT,
-  report_key TEXT
+  report_key TEXT,
+    timeline_ms INTEGER GENERATED ALWAYS AS (
+    unixepoch(substr(occurred_at, 1, 19) ||
+        CASE WHEN substr(occurred_at, -1) = 'Z' THEN 'Z' ELSE substr(occurred_at, -6) END) * 1000
+    + CASE WHEN substr(occurred_at, 20, 1) = '.' THEN
+        CAST(substr(substr(occurred_at, 21, length(occurred_at) - 20 -
+            CASE WHEN substr(occurred_at, -1) = 'Z' THEN 1 ELSE 6 END) || '000', 1, 3) AS INTEGER)
+      ELSE 0 END
+) VIRTUAL
 );
 
 CREATE TABLE sessions (
@@ -460,11 +482,18 @@ CREATE TABLE session_runtimes (
 
 CREATE INDEX idx_events_session_id ON events (session_id, created_at, event_id);
 
+CREATE INDEX idx_events_type_timeline
+    ON events(session_id, timeline_ms, event_id)
+    WHERE event_type IN ('turn.failed', 'session.error', 'session.exited');
+
 CREATE INDEX idx_events_turn_id ON events (turn_id, created_at, event_id)
 WHERE
   turn_id IS NOT NULL;
 
 CREATE INDEX idx_turns_session_id ON turns (session_id, created_at, turn_id);
+
+CREATE INDEX idx_turns_active_session
+    ON turns(session_id) WHERE state IN ('queued', 'running');
 
 CREATE INDEX idx_workspaces_last_used ON workspaces (last_used_at, workspace_id);
 

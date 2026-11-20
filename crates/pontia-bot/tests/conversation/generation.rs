@@ -187,6 +187,16 @@ async fn launch_failure_keeps_old_pointer_and_failed_input_requires_explicit_ret
         .unwrap();
     reconcile(&conversation).await;
     assert!(!conversation.chat(&id).await.unwrap().notices.is_empty());
+    let page =
+        serde_json::to_value(conversation.timeline(&id, None, None, 1).await.unwrap()).unwrap();
+    let notice = &page["generation_notice"];
+    assert_eq!(notice["kind"], "bot.generation_failed");
+    assert!(matches!(
+        conversation
+            .timeline(&id, None, notice["id"].as_str(), 1)
+            .await,
+        Err(Error::NotFound(_))
+    ));
     let failed = conversation
         .send(&id, "not automatically replayed")
         .await
@@ -205,6 +215,9 @@ async fn launch_failure_keeps_old_pointer_and_failed_input_requires_explicit_ret
     reconcile(&recovered).await;
     let new = current(&recovered, &id).await.unwrap();
     assert_ne!(new, old);
+    let page = serde_json::to_value(recovered.timeline(&id, None, None, 1).await.unwrap()).unwrap();
+    assert!(page["generation_notice"].is_null());
+    assert_eq!(page["notice_session_id"], new);
     assert_eq!(
         control
             .queries()

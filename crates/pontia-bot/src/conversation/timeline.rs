@@ -1,0 +1,210 @@
+use pontia_agent_control::queries::{SessionEventSummary, TimePage};
+use pontia_core::{Error, Result, domain::EventType};
+use serde::{Deserialize, Serialize};
+
+use super::{ConversationService, Notice};
+use crate::{
+    messages::{BotMessage, TimedMessage},
+    records::Bot,
+};
+
+pub const NOTICE_EVENTS: &[EventType] = &[
+    EventType::TurnFailed,
+    EventType::SessionError,
+    EventType::SessionExited,
+];
+
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum TimelineEntry {
+    Message(BotMessage),
+    Notice(Notice),
+}
+
+struct TimedEntry {
+    ms: i64,
+    entry: TimelineEntry,
+}
+
+impl TimedEntry {
+    fn key(&self) -> (i64, &str) {
+        let id = match &self.entry {
+            TimelineEntry::Message(m) => &m.id,
+            TimelineEntry::Notice(n) => &n.id,
+        };
+        (self.ms, id)
+    }
+}
+
+impl From<TimedMessage> for TimedEntry {
+    fn from(row: TimedMessage) -> Self {
+        Self {
+            ms: row.timeline_ms,
+            entry: TimelineEntry::Message(row.message),
+        }
+    }
+}
+
+impl From<SessionEventSummary> for TimedEntry {
+    fn from(row: SessionEventSummary) -> Self {
+        Self {
+            ms: row.timeline_ms,
+            entry: TimelineEntry::Notice(Notice {
+                id: row.event_id,
+                kind: row.event_type,
+                created_at: row.occurred_at,
+            }),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct Cursor {
+    bot: String,
+    session: Option<String>,
+    ms: i64,
+    id: String,
+}
+
+#[derive(Serialize)]
+pub struct TimelinePage {
+    bot: Bot,
+    processing: bool,
+    generation_notice: Option<Notice>,
+    notice_session_id: Option<String>,
+    entries: Vec<TimelineEntry>,
+    next_before: Option<String>,
+}
+
+impl ConversationService {
+    pub async fn timeline(
+        &self,
+        bot_id: &str,
+        before: Option<&str>,
+        around: Option<&str>,
+        limit: u32,
+    ) -> Result<TimelinePage> {
+        if !(1..=100).contains(&limit) {
+            return Err(Error::Domain("limit must be between 1 and 100".into()));
+        }
+        if before.is_some() && around.is_some() {
+            return Err(Error::Domain("Choose either before or around".into()));
+        }
+        let activity = self.activity(bot_id);
+        let _reply = activity.reply.lock().await;
+        let _recording = activity.recording.lock().await;
+        let bot = self.records.get(bot_id).await?;
+        let (rows, more) = if let Some(anchor_id) = around {
+            self.around(&bot, anchor_id, limit).await?
+        } else {
+            let cursor = before
+                .map(|value| -> Result<Cursor> {
+                    let invalid = || Error::Domain("Invalid Bot timeline cursor".into());
+                    let cursor: Cursor = serde_json::from_str(value).map_err(|_| invalid())?;
+                    if cursor.bot != bot_id || cursor.id.is_empty() {
+                        return Err(invalid());
+                    }
+                    if cursor.session != bot.current_session_id {
+                        return Err(Error::Conflict {
+                            code: "bot_timeline_reset",
+                            message: "The Bot Session has changed".into(),
+                        });
+                    }
+                    Ok(cursor)
+                })
+                .transpose()?;
+            let bound = cursor
+                .as_ref()
+                .map_or(TimePage::Latest, |c| TimePage::Before(c.ms, &c.id));
+            let mut rows = self.timeline_rows(&bot, bound, limit + 1).await?;
+            let more = rows.len() > limit as usize;
+            rows.truncate(limit as usize);
+            rows.reverse();
+            (rows, more)
+        };
+        let next_before = if more {
+            let (ms, id) = rows[0].key();
+            Some(serde_json::to_string(&Cursor {
+                bot: bot_id.into(),
+                session: bot.current_session_id.clone(),
+                ms,
+                id: id.into(),
+            })?)
+        } else {
+            None
+        };
+        let processing = self.processing(&bot, &activity).await?;
+        let generation_notice = activity.generation_notice.lock().unwrap().clone();
+        Ok(TimelinePage {
+            notice_session_id: bot.current_session_id.clone(),
+            bot,
+            processing,
+            generation_notice,
+            entries: rows.into_iter().map(|row| row.entry).collect(),
+            next_before,
+        })
+    }
+
+    async fn around(&self, bot: &Bot, id: &str, limit: u32) -> Result<(Vec<TimedEntry>, bool)> {
+        let anchor = if let Some(row) = self.messages.find(&bot.bot_id, id).await? {
+            Some(TimedEntry::from(row))
+        } else if let Some(session) = &bot.current_session_id {
+            self.control
+                .queries()
+                .session_event_summary(session, NOTICE_EVENTS, id)
+                .await?
+                .map(TimedEntry::from)
+        } else {
+            None
+        }
+        .ok_or_else(|| Error::NotFound("Bot timeline entry not found".into()))?;
+
+        let mut older = self
+            .timeline_rows(bot, TimePage::Before(anchor.ms, id), limit)
+            .await?;
+        let mut newer = self
+            .timeline_rows(bot, TimePage::After(anchor.ms, id), limit - 1)
+            .await?;
+        let neighbors = limit as usize - 1;
+        let older_count = (neighbors / 2)
+            .max(neighbors - newer.len())
+            .min(older.len());
+        let more = older.len() > older_count;
+        older.truncate(older_count);
+        older.reverse();
+        newer.truncate(neighbors - older_count);
+        older.push(anchor);
+        older.extend(newer);
+        Ok((older, more))
+    }
+
+    async fn timeline_rows(
+        &self,
+        bot: &Bot,
+        page: TimePage<'_>,
+        limit: u32,
+    ) -> Result<Vec<TimedEntry>> {
+        let mut rows: Vec<_> = self
+            .messages
+            .page(&bot.bot_id, page, limit)
+            .await?
+            .into_iter()
+            .map(TimedEntry::from)
+            .collect();
+        if let Some(session) = &bot.current_session_id {
+            let notices = self
+                .control
+                .queries()
+                .session_event_page(session, NOTICE_EVENTS, page, limit)
+                .await?;
+            rows.extend(notices.into_iter().map(TimedEntry::from));
+        }
+        rows.sort_unstable_by(|a, b| a.key().cmp(&b.key()));
+        if !matches!(page, TimePage::After(..)) {
+            rows.reverse();
+        }
+        rows.truncate(limit as usize);
+        Ok(rows)
+    }
+}

@@ -46,14 +46,15 @@
 
   const sessionId = $derived(currentPath.startsWith('/chat/') ? decodeURIComponent(currentPath.split('/')[2] ?? '') : '')
   const botId = $derived(currentPath.startsWith('/bots/') ? decodeURIComponent(currentPath.split('/')[2] ?? '') : '')
-  const botChat = createQuery(
+  const bots = createQuery(
     () => ({
-      queryKey: ['bot-chat', botId],
-      queryFn: ({ signal }) => device.api.getBotChat(botId, signal),
+      queryKey: ['bots'],
+      queryFn: ({ signal }) => device.api.listBots(signal),
       enabled: !!botId,
     }),
     () => device.queryClient,
   )
+  const currentBot = $derived(bots.data?.find(bot => bot.bot_id === botId))
   const overviewSession = $derived(
     overview.pinned.find((item) => item.session_id === sessionId)
       ?? overview.active.find((item) => item.session_id === sessionId)
@@ -111,12 +112,12 @@
   {/if}
   <div class={groupClass}>
     {#if !botId}<Sidebar.Trigger class={[mobileIconClass, 'md:hidden']} />{/if}
-    {#if botId && botChat.data}
+    {#if botId && currentBot}
       <h1 class="mx-1 min-w-0 max-w-80">
         {#if sidebar.isMobile}
           <span class="flex min-w-0 items-center gap-1.5 px-2 text-sm font-normal text-heading">
-            <BotAvatar shape={botChat.data.bot.avatar_shape} color={botChat.data.bot.avatar_color} class="size-5" />
-            <span class="truncate">{botChat.data.bot.name}</span>
+            <BotAvatar shape={currentBot.avatar_shape} color={currentBot.avatar_color} class="size-5" />
+            <span class="truncate">{currentBot.name}</span>
           </span>
         {:else}
           <button
@@ -126,8 +127,8 @@
             aria-haspopup="dialog"
             onclick={() => { botSettingsOpen = true }}
           >
-            <BotAvatar shape={botChat.data.bot.avatar_shape} color={botChat.data.bot.avatar_color} class="size-5" />
-            <span class="min-w-0 truncate">{botChat.data.bot.name}</span>
+            <BotAvatar shape={currentBot.avatar_shape} color={currentBot.avatar_color} class="size-5" />
+            <span class="min-w-0 truncate">{currentBot.name}</span>
           </button>
         {/if}
       </h1>
@@ -158,7 +159,7 @@
           <PencilSimpleIcon /> {$t('chat.rename')}
         </DropdownMenu.Item>
       {/if}
-      {#if botId && botChat.data}
+      {#if botId && currentBot}
         <DropdownMenu.Item class="min-h-11 gap-3 px-3" onclick={() => { botSettingsOpen = true }}>
           <GearIcon /> {$t('bots.edit')}
         </DropdownMenu.Item>
@@ -167,10 +168,9 @@
   {/if}
 </header>
 
-{#if botSettingsOpen && botId && botChat.data}
-  <BotSettingsDialog bot={botChat.data.bot} onclose={() => { botSettingsOpen = false }} onsaved={() => {
+{#if botSettingsOpen && botId && currentBot}
+  <BotSettingsDialog bot={currentBot} onclose={() => { botSettingsOpen = false }} onsaved={() => {
     botSettingsOpen = false
-    void device.queryClient.invalidateQueries({ queryKey: ['bot-chat', botId] })
   }} />
 {/if}
 

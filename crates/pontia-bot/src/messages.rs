@@ -1,3 +1,4 @@
+use pontia_agent_control::queries::TimePage;
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
@@ -26,6 +27,13 @@ pub struct BotMessage {
     pub content: String,
     pub created_at: String,
     pub status: MessageStatus,
+}
+
+#[derive(sqlx::FromRow)]
+pub(crate) struct TimedMessage {
+    pub timeline_ms: i64,
+    #[sqlx(flatten)]
+    pub message: BotMessage,
 }
 
 /// Visible chat storage. The conversation service owns input delivery and failures.
@@ -72,6 +80,53 @@ impl MessageService {
                 .fetch_all(&self.pool)
                 .await?,
         )
+    }
+
+    pub(crate) async fn page(
+        &self,
+        bot_id: &str,
+        page: TimePage<'_>,
+        limit: u32,
+    ) -> Result<Vec<TimedMessage>> {
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM bot_messages WHERE bot_id = ");
+        query.push_bind(bot_id);
+        if let TimePage::Before(ms, id) | TimePage::After(ms, id) = page {
+            query.push(if matches!(page, TimePage::After(..)) {
+                " AND (timeline_ms, id) > ("
+            } else {
+                " AND (timeline_ms, id) < ("
+            });
+            query.push_bind(ms).push(", ").push_bind(id).push(")");
+        }
+        query
+            .push(if matches!(page, TimePage::After(..)) {
+                " ORDER BY timeline_ms, id LIMIT "
+            } else {
+                " ORDER BY timeline_ms DESC, id DESC LIMIT "
+            })
+            .push_bind(limit);
+        Ok(query.build_query_as().fetch_all(&self.pool).await?)
+    }
+
+    pub(crate) async fn find(&self, bot_id: &str, id: &str) -> Result<Option<TimedMessage>> {
+        Ok(
+            sqlx::query_as("SELECT * FROM bot_messages WHERE bot_id = ? AND id = ?")
+                .bind(bot_id)
+                .bind(id)
+                .fetch_optional(&self.pool)
+                .await?,
+        )
+    }
+
+    pub(crate) async fn unanswered(&self, bot_id: &str) -> Result<bool> {
+        let latest: Option<MessageKind> = sqlx::query_scalar(
+            "SELECT kind FROM bot_messages WHERE bot_id = ? AND status = 'normal'
+             ORDER BY timeline_ms DESC, id DESC LIMIT 1",
+        )
+        .bind(bot_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(latest == Some(MessageKind::UserInput))
     }
 
     pub(crate) async fn retry(&self, bot_id: &str, id: &str) -> Result<BotMessage> {

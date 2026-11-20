@@ -1,13 +1,21 @@
 import { render, screen, waitFor } from "@testing-library/svelte";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
 import BotChatPage from "../../src/pages/BotChatPage.svelte";
 
+beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(56);
+  vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.getAttribute("role") === "log" ? 640 : 56;
+  });
+});
 afterEach(() => vi.restoreAllMocks());
 
 test("renders Bot replies as markdown while keeping user messages as plain text", async () => {
   const botId = crypto.randomUUID();
-  vi.spyOn(testDevice.api, "getBotChat").mockResolvedValue({
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
     bot: {
       bot_id: botId,
       name: "Bot",
@@ -19,7 +27,7 @@ test("renders Bot replies as markdown while keeping user messages as plain text"
       model: "test",
       working_on: null,
     },
-    messages: [
+    entries: [
       {
         id: "msg-user",
         kind: "user_input",
@@ -43,7 +51,9 @@ test("renders Bot replies as markdown while keeping user messages as plain text"
         created_at: "2026-11-20T00:00:01Z",
       },
     ],
-    notices: [],
+    next_before: null,
+    notice_session_id: null,
+    generation_notice: null,
     processing: false,
   });
 
@@ -66,9 +76,9 @@ test("renders Bot replies as markdown while keeping user messages as plain text"
   expect(screen.getByText("Keep [literal](https://example.com/user) raw")).toBeInTheDocument();
 });
 
-function chatWith(processing: boolean) {
+function chatWith(processing: boolean, count = 1) {
   const botId = crypto.randomUUID();
-  vi.spyOn(testDevice.api, "getBotChat").mockResolvedValue({
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
     bot: {
       bot_id: botId,
       name: "Bot",
@@ -80,20 +90,20 @@ function chatWith(processing: boolean) {
       model: "test",
       working_on: null,
     },
-    messages: [
-      {
-        id: "msg-user",
-        kind: "user_input",
-        content: "Hello",
-        status: "normal",
-        created_at: "2026-11-20T00:00:00Z",
-      },
-    ],
-    notices: [],
+    entries: Array.from({ length: count }, (_, index) => ({
+      id: `msg-${index}`,
+      kind: "user_input",
+      content: index === 0 ? "Hello" : `Message ${index}`,
+      status: "normal",
+      created_at: new Date(index).toISOString(),
+    })),
+    next_before: null,
+    notice_session_id: null,
+    generation_notice: null,
     processing,
   });
   render(BotChatPage, { botId });
-  return screen.findByText("Hello");
+  return screen.findByRole("log");
 }
 
 test("shows a status while the Bot processes an unanswered message", async () => {
@@ -104,4 +114,13 @@ test("shows a status while the Bot processes an unanswered message", async () =>
 test("shows no status when the Bot is idle", async () => {
   await chatWith(false);
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
+test("mounts only the visible window of a full Bot history page", async () => {
+  const log = await chatWith(false, 50);
+  await waitFor(() => {
+    const rows = log.querySelectorAll("[data-bot-entry-id]");
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThan(30);
+  });
 });

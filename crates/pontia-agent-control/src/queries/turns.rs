@@ -6,6 +6,12 @@ use super::ControlQueryService;
 use crate::views::turns::{TurnView, row_to_view};
 
 impl ControlQueryService {
+    pub async fn session_has_active_turn(&self, session_id: &str) -> Result<bool> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM turns WHERE session_id = ? AND state IN ('queued', 'running'))"
+        ).bind(session_id).fetch_one(&self.pool).await?)
+    }
+
     pub async fn list_turns(&self, session_id: &str) -> Result<Vec<TurnView>> {
         let repository = SqliteTurnRepository::new(self.pool.clone());
         let rows = repository.list_turns(session_id).await?;

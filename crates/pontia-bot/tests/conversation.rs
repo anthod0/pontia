@@ -409,7 +409,7 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
     ));
     assert!(matches!(
         updates.recv().await.unwrap(),
-        ConversationUpdate::Changed
+        ConversationUpdate::Message { message } if message.content == "Complete\nreply"
     ));
     let chat = service.chat(a).await.unwrap();
     assert_eq!(chat.messages.last().unwrap().content, "Complete\nreply");

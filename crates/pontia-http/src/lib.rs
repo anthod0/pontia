@@ -119,7 +119,10 @@ fn external_api_router(state: HttpState) -> Router {
             "/api/v1/bots/{bot_id}",
             get(api::bots::chat).put(api::bots::update),
         )
-        .route("/api/v1/bots/{bot_id}/messages", post(api::bots::send))
+        .route(
+            "/api/v1/bots/{bot_id}/messages",
+            get(api::bots::timeline).post(api::bots::send),
+        )
         .route(
             "/api/v1/bots/{bot_id}/messages/{message_id}/retry",
             post(api::bots::retry),

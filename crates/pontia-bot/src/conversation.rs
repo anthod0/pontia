@@ -5,28 +5,32 @@ use std::{
 };
 
 use pontia_agent_control::{AgentControl, CreateSessionRequest, SessionOwnership};
-use pontia_core::{Error, Result, domain::TurnState};
+use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex as AsyncMutex, broadcast};
 
 use crate::{
     handoff::HandoffService,
     identity::{BotAccess, BotIdentity, BotRole, IdentityError, TOOL_TOKEN_ENV},
-    messages::{BotMessage, MessageKind, MessageService, MessageStatus},
+    messages::{BotMessage, MessageKind, MessageService},
     records::{Bot, BotService},
     user::UserService,
 };
 
 mod generation;
 pub use generation::GenerationLimits;
+mod timeline;
+pub use timeline::{NOTICE_EVENTS, TimelinePage};
 
 const APPLICATION_ID: &str = "bot";
 
-#[derive(Clone, Copy, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ConversationUpdate {
     Typing,
     Changed,
+    Reset,
+    Message { message: BotMessage },
 }
 
 struct Activity {
@@ -75,11 +79,17 @@ impl Drop for PendingInput<'_> {
     }
 }
 
-struct ReplyInProgress<'a>(&'a Activity);
+struct ReplyInProgress<'a>(&'a Activity, Option<BotMessage>);
 
 impl Drop for ReplyInProgress<'_> {
     fn drop(&mut self) {
-        self.0.notify(ConversationUpdate::Changed);
+        self.0.notify(
+            self.1
+                .take()
+                .map_or(ConversationUpdate::Changed, |message| {
+                    ConversationUpdate::Message { message }
+                }),
+        );
     }
 }
 
@@ -270,13 +280,6 @@ impl ConversationService {
         let _guard = activity.reply.lock().await;
         let bot = self.records.get(bot_id).await?;
         let messages = self.messages.list(bot_id).await?;
-        let delivering = !activity.pending_inputs.lock().unwrap().is_empty();
-        let unanswered = messages
-            .iter()
-            .rev()
-            .take_while(|message| message.kind != MessageKind::BotReply)
-            .any(|message| message.status == MessageStatus::Normal);
-        let mut turn_active = false;
         let mut notices: Vec<_> = activity
             .generation_notice
             .lock()
@@ -285,18 +288,6 @@ impl ConversationService {
             .into_iter()
             .collect();
         if let Some(session_id) = &bot.current_session_id {
-            if unanswered && !delivering && bot.working_on.is_none() {
-                for turn in self
-                    .control
-                    .queries()
-                    .session_snapshot(session_id)
-                    .await?
-                    .map(|snapshot| snapshot.turns)
-                    .unwrap_or_default()
-                {
-                    turn_active |= turn.state.parse::<TurnState>()?.is_active();
-                }
-            }
             for event in self
                 .control
                 .queries()
@@ -315,13 +306,31 @@ impl ConversationService {
                 }
             }
         }
-        let processing = bot.working_on.is_none() && unanswered && (delivering || turn_active);
+        let processing = self.processing(&bot, &activity).await?;
         Ok(Conversation {
             bot,
             messages,
             notices,
             processing,
         })
+    }
+
+    async fn processing(&self, bot: &Bot, activity: &Activity) -> Result<bool> {
+        if bot.working_on.is_some() || !self.messages.unanswered(&bot.bot_id).await? {
+            return Ok(false);
+        }
+        if !activity.pending_inputs.lock().unwrap().is_empty() {
+            return Ok(true);
+        }
+        match &bot.current_session_id {
+            Some(session) => {
+                self.control
+                    .queries()
+                    .session_has_active_turn(session)
+                    .await
+            }
+            None => Ok(false),
+        }
     }
 
     pub async fn send(&self, bot_id: &str, content: &str) -> Result<BotMessage> {
@@ -355,21 +364,27 @@ impl ConversationService {
             Input::Retry(id) => self.messages.retry(bot_id, &id).await?,
         };
         let pending = activity.track_input(&message.id);
+        activity.notify(ConversationUpdate::Message {
+            message: message.clone(),
+        });
         drop(recording);
-        activity.notify(ConversationUpdate::Changed);
         let input = format!("Source: User\n\n{}", message.content);
         let revision = activity.switch_failure.lock().unwrap().0;
         let _delivery = activity.delivery.lock().await;
         let result = self.deliver(bot_id, &input, &activity, revision).await;
+        let _recording = activity.recording.lock().await;
         drop(pending);
-        let message = match result {
-            Ok(()) => message,
+        match result {
+            Ok(()) => activity.notify(ConversationUpdate::Changed),
             Err(error) => {
                 tracing::warn!(%bot_id, message_id = %message.id, %error, "Bot input delivery failed");
-                self.messages.fail(&message).await?
+                let failed = self.messages.fail(&message).await?;
+                activity.notify(ConversationUpdate::Message {
+                    message: failed.clone(),
+                });
+                return Ok(failed);
             }
-        };
-        activity.notify(ConversationUpdate::Changed);
+        }
         Ok(message)
     }
 
@@ -437,7 +452,7 @@ impl ConversationService {
             .set_current_session(&bot.bot_id, Some(&session))
             .await?;
         activity.generation_notice.lock().unwrap().take();
-        activity.notify(ConversationUpdate::Changed);
+        activity.notify(ConversationUpdate::Reset);
         Ok(session)
     }
 
@@ -556,10 +571,13 @@ impl ConversationService {
         let activity = self.activity(&bot.bot_id);
         let _guard = activity.reply.lock().await;
         activity.notify(ConversationUpdate::Typing);
-        let _progress = ReplyInProgress(&activity);
-        self.messages
+        let mut progress = ReplyInProgress(&activity, None);
+        let message = self
+            .messages
             .reply(&bot.bot_id, &request.input.message, working_on.as_deref())
-            .await
+            .await?;
+        progress.1 = Some(message.clone());
+        Ok(message)
     }
 }
 

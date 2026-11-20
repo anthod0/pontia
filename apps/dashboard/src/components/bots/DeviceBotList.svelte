@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createQueries, createQuery } from '@tanstack/svelte-query'
+  import { createQueries, createQuery, skipToken } from '@tanstack/svelte-query'
   import { page } from '$app/state'
   import { t } from '$lib/i18n'
   import { dashboardPath, navigate } from '$lib/navigation'
@@ -16,14 +16,11 @@
     () => ({ queryKey: ['bots'], queryFn: ({ signal }) => device.api.listBots(signal) }),
     () => device.queryClient,
   )
-  // Read the chats the Dashboard already keeps live without fetching them here; bots without
-  // a loaded chat fall back to the work description from the bot list.
-  const chats = createQueries(
+  const statuses = createQueries(
     () => ({
       queries: (bots.data ?? []).map((bot) => ({
-        queryKey: ['bot-chat', bot.bot_id],
-        queryFn: ({ signal }: { signal: AbortSignal }) => device.api.getBotChat(bot.bot_id, signal),
-        enabled: false,
+        queryKey: ['bot-processing', bot.bot_id],
+        queryFn: skipToken,
       })),
     }),
     () => device.queryClient,
@@ -49,8 +46,7 @@
         </Sidebar.MenuItem>
       {/if}
       {#each bots.data ?? [] as bot, index (bot.bot_id)}
-        {@const chat = chats[index]?.data}
-        {@const working = chat ? !!chat.bot.working_on || chat.processing : !!bot.working_on}
+        {@const working = !!bot.working_on || statuses[index]?.data === true}
         {@const path = `/bots/${encodeURIComponent(bot.bot_id)}`}
         {@const active = page.params.botId === bot.bot_id && (handle === undefined || handle === page.params.handle)}
         <Sidebar.MenuItem>

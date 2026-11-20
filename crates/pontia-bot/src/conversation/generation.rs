@@ -172,7 +172,7 @@ impl ConversationService {
             .ok_or_else(|| Error::NotFound(format!("Session {session} not found")))?;
         if snapshot.state == "exited" {
             self.records.set_current_session(bot_id, None).await?;
-            activity.notify(ConversationUpdate::Changed);
+            activity.notify(ConversationUpdate::Reset);
             return Ok(());
         }
         if snapshot.state != "idle"
@@ -243,7 +243,7 @@ impl ConversationService {
                 .set_current_session(bot_id, next.as_deref())
                 .await?;
             activity.generation_notice.lock().unwrap().take();
-            activity.notify(ConversationUpdate::Changed);
+            activity.notify(ConversationUpdate::Reset);
         } else {
             self.records.clear_idle_timer(bot_id).await?;
         }

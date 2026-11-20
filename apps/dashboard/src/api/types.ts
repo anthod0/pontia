@@ -46,15 +46,21 @@ export interface BotMessage {
   created_at: string;
 }
 
-export interface BotChat {
+export interface BotNotice {
+  id: string;
+  kind: "turn.failed" | "session.error" | "session.exited";
+  created_at: string;
+}
+
+export type BotEntry = BotMessage | BotNotice;
+
+export interface BotMessagePage {
   bot: Bot;
-  messages: BotMessage[];
-  notices: {
-    id: string;
-    kind: "turn.failed" | "session.error" | "session.exited";
-    created_at: string;
-  }[];
   processing: boolean;
+  generation_notice: BotNotice | null;
+  notice_session_id: string | null;
+  entries: BotEntry[];
+  next_before: string | null;
 }
 
 export interface AgentClientView {

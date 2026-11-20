@@ -12,7 +12,7 @@ async function openChat() {
   const scope = `bot-test:${botId}`;
   const draft = `bot:${botId}`;
   vi.spyOn(testDevice.access, "uploadStorageScope").mockResolvedValue(scope);
-  vi.spyOn(testDevice.api, "getBotChat").mockResolvedValue({
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
     bot: {
       bot_id: botId,
       name: "Bot",
@@ -24,8 +24,10 @@ async function openChat() {
       model: "test",
       working_on: null,
     },
-    messages: [],
-    notices: [],
+    entries: [],
+    next_before: null,
+    notice_session_id: null,
+    generation_notice: null,
     processing: false,
   });
   await saveUploadRecord({
@@ -59,7 +61,13 @@ const attachment =
 
 test("sends a file without text to the Bot and clears the attachment draft", async () => {
   const { botId, scope, draft, send, submit } = await openChat();
-  send.mockResolvedValue();
+  send.mockResolvedValue({
+    id: "m1",
+    status: "normal",
+    kind: "user_input",
+    content: attachment,
+    created_at: "2026-11-18T00:00:01Z",
+  });
   await fireEvent.click(submit);
   await waitFor(() => expect(send).toHaveBeenCalledExactlyOnceWith(botId, attachment));
   await waitFor(async () => expect(await loadUploadRecords(scope, draft)).toEqual([]));
@@ -68,7 +76,15 @@ test("sends a file without text to the Bot and clears the attachment draft", asy
 
 test("keeps text and attachments after a rejected send so the user can retry", async () => {
   const { botId, scope, draft, send, submit } = await openChat();
-  send.mockRejectedValueOnce(new Error("Offline")).mockResolvedValueOnce();
+  send
+    .mockRejectedValueOnce(new Error("Offline"))
+    .mockResolvedValueOnce({
+      id: "m2",
+      status: "normal",
+      kind: "user_input",
+      content: attachment,
+      created_at: "2026-11-18T00:00:02Z",
+    });
   const editor = screen.getByRole("textbox");
   await userEvent.type(editor, "Read this report");
   await fireEvent.click(submit);

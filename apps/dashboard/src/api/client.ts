@@ -7,7 +7,8 @@ import type {
   AgentClientView,
   AgentClientSetupOperation,
   Bot,
-  BotChat,
+  BotMessage,
+  BotMessagePage,
   BotClient,
   BotConfiguration,
   JsonObject,
@@ -108,8 +109,13 @@ export function createApi(device: DeviceRuntime) {
     );
   }
 
-  function getBotChat(id: string, signal?: AbortSignal): Promise<BotChat> {
-    return request(botPath(id), { signal });
+  function getBotMessages(
+    id: string,
+    page: { before?: string; around?: string },
+    signal?: AbortSignal,
+  ): Promise<BotMessagePage> {
+    const query = new URLSearchParams({ limit: "50", ...page });
+    return request(`${botPath(id)}/messages?${query}`, { signal });
   }
 
   async function saveBot(input: BotConfiguration, id?: string): Promise<Bot> {
@@ -123,19 +129,26 @@ export function createApi(device: DeviceRuntime) {
     ).bot;
   }
 
-  async function sendBotMessage(id: string, content: string): Promise<void> {
-    await request(`${botPath(id)}/messages`, {
-      method: "POST",
-      body: { content },
-      retryNetworkErrors: false,
-    });
+  async function sendBotMessage(id: string, content: string): Promise<BotMessage> {
+    return (
+      await request<{ message: BotMessage }>(`${botPath(id)}/messages`, {
+        method: "POST",
+        body: { content },
+        retryNetworkErrors: false,
+      })
+    ).message;
   }
 
-  async function retryBotMessage(id: string, messageId: string): Promise<void> {
-    await request(`${botPath(id)}/messages/${encodeURIComponent(messageId)}/retry`, {
-      method: "POST",
-      retryNetworkErrors: false,
-    });
+  async function retryBotMessage(id: string, messageId: string): Promise<BotMessage> {
+    return (
+      await request<{ message: BotMessage }>(
+        `${botPath(id)}/messages/${encodeURIComponent(messageId)}/retry`,
+        {
+          method: "POST",
+          retryNetworkErrors: false,
+        },
+      )
+    ).message;
   }
 
   function agentClientPath(target: Pick<AgentClientView, "client_type" | "client_key">): string {
@@ -912,7 +925,7 @@ export function createApi(device: DeviceRuntime) {
     listBots,
     listBotClients,
     listAgentClientModels,
-    getBotChat,
+    getBotMessages,
     saveBot,
     sendBotMessage,
     retryBotMessage,
