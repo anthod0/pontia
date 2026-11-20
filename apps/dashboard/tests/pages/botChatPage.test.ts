@@ -111,9 +111,9 @@ test.each([
   expect(read).toHaveBeenCalledWith("previous", path, expect.any(AbortSignal));
 });
 
-function chatWith(processing: boolean, count = 1) {
+function chatWith(processing: boolean, count = 1, workingOn: string | null = null) {
   vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
-    bot,
+    bot: { ...bot, working_on: workingOn },
     entries: Array.from({ length: count }, (_, index) => ({
       id: `msg-${index}`,
       kind: "user_input",
@@ -134,6 +134,17 @@ function chatWith(processing: boolean, count = 1) {
 test("shows a status while the Bot processes an unanswered message", async () => {
   await chatWith(true);
   expect(screen.getByRole("status").querySelector("svg.bot")).toHaveClass("classic");
+});
+
+test("shows processing over the work status until the Bot replies", async () => {
+  await chatWith(true, 1, "Checking logs");
+  expect(screen.getByRole("status")).toHaveTextContent("Working on your message");
+  expect(screen.queryByText("Checking logs")).not.toBeInTheDocument();
+});
+
+test("shows the work status when no message awaits a reply", async () => {
+  await chatWith(false, 1, "Checking logs");
+  expect(screen.getByRole("status")).toHaveTextContent("Checking logs");
 });
 
 test("shows no status when the Bot is idle", async () => {

@@ -518,10 +518,16 @@ async fn processing_shows_until_the_bot_answers_or_its_turn_ends() {
         .send_to_user(reply("On it", Some("Checking")))
         .await
         .unwrap();
+    assert!(!service.chat(&id).await.unwrap().processing);
     service.send(&id, "third").await.unwrap();
     let chat = service.chat(&id).await.unwrap();
-    assert!(!chat.processing);
+    assert!(chat.processing);
     assert_eq!(chat.bot.working_on.as_deref(), Some("Checking"));
+    service
+        .send_to_user(reply("Still checking", Some("Checking")))
+        .await
+        .unwrap();
+    assert!(!service.chat(&id).await.unwrap().processing);
 
     service.send_to_user(reply("Done", None)).await.unwrap();
     service.send(&id, "fourth").await.unwrap();

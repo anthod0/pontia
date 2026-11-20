@@ -33,13 +33,13 @@ pub(super) enum BotTool {
 
 #[derive(Debug, Args, Serialize)]
 #[command(
-    after_help = "Example: pontia bot send-to-user --message 'I received your request.' --working-on 'Checking the logs'"
+    after_help = "Example: pontia bot send-to-user --message 'I received your request.' --working-on 'Checking the logs'\nKeep --working-on to one short phrase; put steps and details in --message."
 )]
 pub(super) struct SendToUser {
     /// Complete user-visible reply
     #[arg(long, allow_hyphen_values = true)]
     message: String,
-    /// Current background work; omit when no work remains
+    /// One short phrase naming the current background work (about 8 words); omit when no work remains
     #[arg(long, allow_hyphen_values = true)]
     working_on: Option<String>,
 }

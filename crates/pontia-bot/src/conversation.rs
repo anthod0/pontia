@@ -302,7 +302,7 @@ impl ConversationService {
     }
 
     async fn processing(&self, bot: &Bot, activity: &Activity) -> Result<bool> {
-        if bot.working_on.is_some() || !self.messages.unanswered(&bot.bot_id).await? {
+        if !self.messages.unanswered(&bot.bot_id).await? {
             return Ok(false);
         }
         if !activity.pending_inputs.lock().unwrap().is_empty() {
