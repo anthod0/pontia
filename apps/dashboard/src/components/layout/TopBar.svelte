@@ -94,7 +94,8 @@
 
 <svelte:window onpopstate={updatePath} onclick={updatePathAfterNavigation} />
 
-<header class={['flex items-center', chatPath ? 'pointer-events-none h-12 px-3 md:px-4' : settingsPath ? 'h-12 bg-surface pr-3 md:pr-0' : 'h-8 bg-surface px-3 md:px-4']}>
+<!-- Phones leave a gap above the tall touch targets; wider screens keep the compact bar. -->
+<header class={['flex h-14 items-center pt-2 md:pt-0', chatPath ? 'pointer-events-none px-3 md:h-12 md:px-4' : settingsPath ? 'bg-surface pr-3 md:h-12 md:pr-0' : 'bg-surface px-3 md:h-8 md:px-4']}>
   {#if settingsPath}
     <!-- Phones switch sections here; wider screens list them in the sidebar and show the current one as the title. -->
     <div class="flex min-w-0 items-center gap-2 px-3 md:hidden">

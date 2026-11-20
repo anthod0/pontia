@@ -7,7 +7,7 @@
   let { status, action, children }: { status?: DeviceStatusView; action?: Snippet; children: Snippet } = $props()
 </script>
 
-<section class="flex min-h-[calc(100svh-3.25rem)] flex-col gap-6">
+<section class="flex min-h-[calc(100svh-3.75rem)] md:min-h-[calc(100svh-3.25rem)] flex-col gap-6">
   <div class="mx-auto flex w-full max-w-[720px] flex-1 items-center justify-center py-12 text-center">
     {#if status}
       <DeviceStatus {status} {action} />
