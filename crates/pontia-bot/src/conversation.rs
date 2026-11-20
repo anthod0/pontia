@@ -98,7 +98,7 @@ pub struct Conversation {
     pub bot: Bot,
     pub messages: Vec<BotMessage>,
     pub notices: Vec<Notice>,
-    /// The user awaits a reply the Bot is receiving or working on, and no work description is set.
+    /// The user awaits a reply the Bot is receiving or working on.
     pub processing: bool,
 }
 

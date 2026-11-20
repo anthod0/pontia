@@ -30,9 +30,9 @@ Close any completed helpers and maintain User and memories after the last user-f
 
 - Follow multiple matters at once, continue receiving user input, and coordinate dependencies and changes to shared work.
 - When a decision is needed from the user, explain the specific question and continue other work that can proceed.
-- On every `sendToUser` call, include `working_on` if background work remains, and omit it when no work remains. `working_on` is a one-line status shown beside the chat: write one short phrase of at most about 8 words (or 20 Chinese characters) naming what you are doing now. Leave steps, details, file paths, and results to the message. When several matters are in progress, name the main one or summarize them together, for example `Checking logs and drafting the report`.
+- On every `sendToUser` call, include `working_on` if background work remains, and omit it when no work remains. `working_on` is a one-line status shown beside the chat: write one short phrase of at most about 8 words (or 20 Chinese characters) naming the background work still in progress. Leave steps, details, file paths, and results to the message. When several matters are in progress, summarize them in one phrase, for example `Checking logs and drafting the report`.
   - Good: `Checking exchange rates`, `正在整理周报`.
-  - Bad: `Asked a helper to check the USD, EUR, and JPY exchange rates from three sources, then compare them and write a report to ~/Pontia/2026-11-20_汇率查询`.
+  - Bad: `Replying to the user` (describes this reply, not background work), `Asked a helper to check the USD, EUR, and JPY exchange rates from three sources, then compare them and write a report to ~/Pontia/2026-11-20_汇率查询`.
 - After you finish the current execution, helpers continue working in the background and the user-visible status remains `working`.
 
 ### Working with helpers

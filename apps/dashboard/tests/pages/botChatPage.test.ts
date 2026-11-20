@@ -4,6 +4,15 @@ import { testDevice } from "../deviceFixture";
 import type { Bot, BotMessagePage } from "../../src/api/types";
 import BotChatPage from "../../src/pages/BotChatPage.svelte";
 import BotChatPreviewHarness from "./BotChatPreviewHarness.svelte";
+import type { BotUpdate } from "../../src/services/botChatStream";
+
+const stream = vi.hoisted(() => ({ push: (_update: BotUpdate) => {} }));
+vi.mock("../../src/services/botChatStream", () => ({
+  openBotChatStream: (_device: unknown, _id: string, onUpdate: (update: BotUpdate) => void) => {
+    stream.push = onUpdate;
+    return () => {};
+  },
+}));
 
 const bot: Bot = {
   bot_id: "a",
@@ -145,6 +154,31 @@ test("shows processing over the work status until the Bot replies", async () => 
 test("shows the work status when no message awaits a reply", async () => {
   await chatWith(false, 1, "Checking logs");
   expect(screen.getByRole("status")).toHaveTextContent("Checking logs");
+});
+
+test("shows only the typing bubble while a reply arrives over the work status", async () => {
+  const log = await chatWith(true, 1, "Checking logs");
+  stream.push({ type: "typing" });
+  await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  expect(within(log).getByText("•••")).toBeInTheDocument();
+});
+
+test("restores the work status as soon as the reply arrives", async () => {
+  const log = await chatWith(true, 1, "Checking logs");
+  vi.mocked(testDevice.api.getBotMessages).mockReturnValue(new Promise(() => {}));
+  stream.push({ type: "typing" });
+  stream.push({
+    type: "message",
+    message: {
+      id: "msg-reply",
+      kind: "bot_reply",
+      content: "On it",
+      status: "normal",
+      created_at: new Date(1).toISOString(),
+    },
+  });
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Checking logs"));
+  expect(within(log).queryByText("•••")).not.toBeInTheDocument();
 });
 
 test("shows no status when the Bot is idle", async () => {

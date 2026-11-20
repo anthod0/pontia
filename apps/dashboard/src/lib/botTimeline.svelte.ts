@@ -68,9 +68,16 @@ export class BotTimeline {
   }
 
   message(message: BotMessage) {
+    // A reply answers the pending input, so processing ends before the refresh confirms it.
+    if (message.kind === "bot_reply") this.setProcessing(false);
     if (this.running) this.live.set(message.id, message);
     if (this.known.has(message.id)) this.merge([message]);
     this.refresh();
+  }
+
+  private setProcessing(processing: boolean) {
+    this.processing = processing;
+    this.device.queryClient.setQueryData(["bot-processing", this.id], processing);
   }
 
   private async page(locator: { before?: string; around?: string } = {}) {
@@ -143,9 +150,8 @@ export class BotTimeline {
     if (reset || rotated) this.stale = new Set(this.known.keys());
     this.bot = latest.bot;
     this.fileLinkSession = latest.file_link_session;
-    this.processing = latest.processing;
+    this.setProcessing(latest.processing);
     this.generationNotice = latest.generation_notice;
-    this.device.queryClient.setQueryData(["bot-processing", this.id], latest.processing);
     this.device.queryClient.setQueryData<Bot[]>(["bots"], (bots) =>
       bots?.map((bot) => (bot.bot_id === this.id ? latest.bot : bot)),
     );
