@@ -22,6 +22,7 @@ impl BotIdentity for BoundSessions {
             let (role, workspace_id) = match session {
                 "bot-session" => (BotRole::Bot, None),
                 "dreaming-session" => (BotRole::Dreaming, None),
+                "helper-session" => (BotRole::Helper, Some("project".into())),
                 "reader-session" => (BotRole::Retrieval, Some("project".into())),
                 _ => return Err(IdentityError),
             };
@@ -269,6 +270,9 @@ async fn cli_runs_memory_lifecycle_through_authenticated_http_and_sqlite() {
             "bot-session",
             vec!["archive", "--id", id, "--archived", "true"],
         ),
+        ("helper-session", vec!["search", "--keyword", "Go"]),
+        ("helper-session", vec!["retrieve", "--message", "question"]),
+        ("reader-session", vec!["retrieve", "--message", "question"]),
         ("unknown-session", vec!["search", "--keyword", "Go"]),
     ] {
         let output = f.cli(Some(session), &args).await;

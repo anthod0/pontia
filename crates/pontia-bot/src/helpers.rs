@@ -164,7 +164,7 @@ impl HelperService {
                     == Some(&BotService::retrieval_profile_id(&bot.bot_id))
                 {
                     return Err(Error::Domain(
-                        "Use helper retrieve for the deep retrieval Profile".into(),
+                        "Use pontia bot memory retrieve for the deep retrieval Profile".into(),
                     )
                     .into());
                 }

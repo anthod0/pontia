@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 pub(crate) use args::BotCommand;
-use args::BotTool;
+use args::{BotTool, MemoryCommand};
 
 #[derive(Deserialize)]
 struct ApiResponse {
@@ -33,8 +33,12 @@ pub(crate) async fn run(command: BotCommand, config: &AppConfig) -> Result<(), S
         BotTool::Dreaming(input) => ("dreaming", json!(input), true),
         BotTool::Helper(input) => ("helper", json!(input), true),
         BotTool::Memory(input) => {
+            let endpoint = match input.command {
+                MemoryCommand::Retrieve { .. } => "helper",
+                _ => "memory",
+            };
             reason = input.reason;
-            ("memory", json!(input.command), true)
+            (endpoint, json!(input.command), true)
         }
         BotTool::Workspace(input) => ("workspace", json!(input), true),
         BotTool::SessionMessages(input) => ("session-messages", json!(input), false),

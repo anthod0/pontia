@@ -9,11 +9,11 @@ struct Fixture {
 }
 
 impl Fixture {
-    async fn new(data: Value) -> Self {
+    async fn new(endpoint: &str, data: Value) -> Self {
         let root = tempfile::tempdir().unwrap();
         let (sender, requests) = tokio::sync::mpsc::unbounded_channel();
         let app = Router::new().route(
-            "/api/v1/bot/{endpoint}",
+            &format!("/api/v1/bot/{endpoint}"),
             post(
                 move |headers: axum::http::HeaderMap, Json(request): Json<Value>| {
                     let sender = sender.clone();
@@ -109,7 +109,7 @@ async fn session_pages_preserve_filters_source_and_opaque_anchors_in_text_and_js
     });
     // An empty filtered page can still require continuation.
     let data = json!({"session_id":"target-session", "items":[], "has_more":true, "next":next, "history_source":"file"});
-    let mut f = Fixture::new(data.clone()).await;
+    let mut f = Fixture::new("session-messages", data.clone()).await;
     let args = [
         "session-messages",
         "--session-id",
@@ -162,7 +162,7 @@ async fn session_text_retains_message_content_and_citation_ids() {
         "turn_id":"turn-42", "item_id":"native:item:23", "role":"assistant",
         "kind":"message", "content_preview":"第一行\n第二行 'quoted'"
     }], "has_more":false, "next":null, "history_source":"native"});
-    let mut f = Fixture::new(data).await;
+    let mut f = Fixture::new("session-messages", data).await;
     let output = f.cli(&["session-messages", "--session-id", "target"]).await;
     assert!(output.status.success());
     assert!(serde_json::from_slice::<Value>(&output.stdout).is_err());
@@ -187,8 +187,11 @@ async fn session_text_retains_message_content_and_citation_ids() {
 
 #[tokio::test]
 async fn neighbor_continuation_preserves_origin_workspace_and_page_size() {
-    let mut f =
-        Fixture::new(json!({"memories":[], "next_cursor":"memory ' $(touch injected)"})).await;
+    let mut f = Fixture::new(
+        "memory",
+        json!({"memories":[], "next_cursor":"memory ' $(touch injected)"}),
+    )
+    .await;
     let first = f
         .cli(&[
             "memory",
@@ -217,7 +220,7 @@ async fn neighbor_continuation_preserves_origin_workspace_and_page_size() {
 
 #[tokio::test]
 async fn named_arguments_reject_incomplete_or_invalid_operations_before_sending_requests() {
-    let mut f = Fixture::new(json!({})).await;
+    let mut f = Fixture::new("{endpoint}", json!({})).await;
     for args in [
         vec![
             "helper",
@@ -260,6 +263,8 @@ async fn named_arguments_reject_incomplete_or_invalid_operations_before_sending_
             "--keyword",
             "x",
         ],
+        vec!["helper", "retrieve", "--message", "question"],
+        vec!["memory", "retrieve"],
         vec!["memory", "search"],
         vec!["memory", "archive", "--id", "x"],
         vec!["memory", "archive", "--id", "x", "--archived", "maybe"],
@@ -281,19 +286,17 @@ async fn named_arguments_reject_incomplete_or_invalid_operations_before_sending_
 
 #[tokio::test]
 async fn helper_commands_preserve_target_source_and_message_arguments() {
-    let mut f = Fixture::new(json!({"delivery":{"status":"accepted"}})).await;
-    for action in ["create", "retrieve", "send", "reply", "list", "close"] {
+    let mut f = Fixture::new("helper", json!({"delivery":{"status":"accepted"}})).await;
+    for action in ["create", "send", "reply", "list", "close"] {
         let mut args = vec!["helper", action, "--json"];
         if matches!(action, "send" | "close") {
             args.extend(["--session-id", "helper-session"]);
         }
-        if matches!(action, "create" | "retrieve" | "send" | "reply") {
+        if matches!(action, "create" | "send" | "reply") {
             args.extend(["--message", "new\nrequirements"]);
         }
-        if matches!(action, "retrieve" | "create") {
-            args.extend(["--workspace-id", "project", "--profile-version", "2"]);
-        }
         if action == "create" {
+            args.extend(["--workspace-id", "project", "--profile-version", "2"]);
             args.extend(["--description", "Task", "--profile-id", "selected-profile"]);
         }
         let output = f.cli(&args).await;
@@ -308,10 +311,10 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
         if matches!(action, "send" | "close") {
             assert_eq!(request["command"]["input"]["session_id"], "helper-session");
         }
-        if matches!(action, "create" | "retrieve" | "send" | "reply") {
+        if matches!(action, "create" | "send" | "reply") {
             assert_eq!(request["command"]["input"]["message"], "new\nrequirements");
         }
-        if matches!(action, "retrieve" | "create") {
+        if action == "create" {
             assert_eq!(request["command"]["input"]["workspace_id"], "project");
             assert_eq!(request["command"]["input"]["profile_version"], "2");
         }
@@ -319,8 +322,45 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
 }
 
 #[tokio::test]
+async fn memory_retrieve_starts_a_helper_with_the_requested_scope_and_profile_version() {
+    let launch = json!({"session_id":"retrieval-session", "delivery":{"status":"accepted"}});
+    let mut f = Fixture::new("helper", launch.clone()).await;
+    let output = f
+        .cli(&[
+            "memory",
+            "retrieve",
+            "--message",
+            "Explain the release decision",
+            "--workspace-id",
+            "project",
+            "--profile-version",
+            "2",
+            "--json",
+        ])
+        .await;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap(),
+        launch
+    );
+    assert_eq!(
+        f.requests.try_recv().unwrap(),
+        json!({
+            "session_id":"caller-session",
+            "command":{"action":"retrieve", "input":{
+                "message":"Explain the release decision", "workspace_id":"project", "profile_version":"2"
+            }}
+        })
+    );
+}
+
+#[tokio::test]
 async fn temporary_helper_sends_the_task_directory_name_as_the_location() {
-    let mut f = Fixture::new(json!({"delivery":{"status":"accepted"}})).await;
+    let mut f = Fixture::new("helper", json!({"delivery":{"status":"accepted"}})).await;
     let name = "2026-11-20_汇率查询";
     let output = f
         .cli(&[
@@ -347,7 +387,11 @@ async fn temporary_helper_sends_the_task_directory_name_as_the_location() {
 #[tokio::test]
 async fn helper_check_continuation_preserves_the_native_history_query() {
     let next = json!({"session_id":"helper", "turn_id":"opaque ' anchor", "direction":"backward", "limit":1, "categories":["assistant"], "history_source":"file"});
-    let mut f = Fixture::new(json!({"session":{"state":"busy"},"messages":{"next":next}})).await;
+    let mut f = Fixture::new(
+        "helper",
+        json!({"session":{"state":"busy"},"messages":{"next":next}}),
+    )
+    .await;
     let output = f.cli(&["helper", "check", "--session-id", "helper"]).await;
     let _ = f.requests.recv().await.unwrap();
     let continuation = f.continue_page(&output).await;
