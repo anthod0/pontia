@@ -134,8 +134,11 @@ impl ShimSetup {
     }
 
     fn env_script_path(&self) -> PathBuf {
-        self.root
-            .join(if self.shells.fish { "env.fish" } else { "env.sh" })
+        self.root.join(if self.shells.fish {
+            "env.fish"
+        } else {
+            "env.sh"
+        })
     }
 
     pub(super) fn activation_command(&self) -> String {

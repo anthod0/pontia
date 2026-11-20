@@ -61,7 +61,19 @@ period = 60
 [assets]
 binding = "ASSETS"
 directory = ".svelte-kit/cloudflare"
-run_worker_first = ["/", "/docs", "/docs/*", "/blog", "/blog/*", "/zh", "/zh/*", "/ja", "/ja/*", "/pt-br", "/pt-br/*"]
+run_worker_first = [
+  "/",
+  "/docs",
+  "/docs/*",
+  "/blog",
+  "/blog/*",
+  "/zh",
+  "/zh/*",
+  "/ja",
+  "/ja/*",
+  "/pt-br",
+  "/pt-br/*",
+]
 
 [[d1_databases]]
 binding = "DB"

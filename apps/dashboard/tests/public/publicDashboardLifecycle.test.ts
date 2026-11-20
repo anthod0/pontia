@@ -4,7 +4,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import PublicDashboardHarness from "../components/PublicDashboardHarness.svelte";
 import PublicDashboardRouteHarness from "../components/PublicDashboardRouteHarness.svelte";
 import { createRemoteAccessFixture } from "./fixtures/remoteConnections";
-import { load } from '../../src/routes/[[handle=handle]]/+layout';
+import { load } from "../../src/routes/[[handle=handle]]/+layout";
 
 let fixture: ReturnType<typeof createRemoteAccessFixture>;
 const redirectToSignIn = vi.hoisted(() => vi.fn());
@@ -32,20 +32,27 @@ beforeEach(() => {
   window.history.replaceState({}, "", "/office-mac");
 });
 
-test('the unscoped Bot entry opens setup for the active device', async () => {
-  expect(load({ params: {}, route: { id: '/[[handle=handle]]/bot' } })).toEqual({ handle: undefined });
-  window.history.replaceState({}, '', '/bot');
+test("the unscoped Bot entry opens setup for the active device", async () => {
+  expect(load({ params: {}, route: { id: "/[[handle=handle]]/bot" } })).toEqual({
+    handle: undefined,
+  });
+  window.history.replaceState({}, "", "/bot");
   const original = fixture.request.getMockImplementation()!;
   fixture.request.mockImplementation(async (handle, path, init) => {
-    if (path.endsWith('/bots')) return new Response(JSON.stringify({ data: { bots: [] } }));
-    if (path.endsWith('/bots/clients')) return new Response(JSON.stringify({ data: { clients: [
-      { id: 'pi', name: 'Pi', client_type: 'pi', client_key: 'default' },
-    ] } }));
+    if (path.endsWith("/bots")) return new Response(JSON.stringify({ data: { bots: [] } }));
+    if (path.endsWith("/bots/clients"))
+      return new Response(
+        JSON.stringify({
+          data: { clients: [{ id: "pi", name: "Pi", client_type: "pi", client_key: "default" }] },
+        }),
+      );
     return original(handle, path, init);
   });
-  render(PublicDashboardHarness, { handle: '' });
-  await screen.findByLabelText('Model');
-  expect(screen.getByRole('link', { name: 'Set up a workspace and start a Session' })).toHaveAttribute('href', '/office-mac');
+  render(PublicDashboardHarness, { handle: "" });
+  await screen.findByLabelText("Model");
+  expect(
+    screen.getByRole("link", { name: "Set up a workspace and start a Session" }),
+  ).toHaveAttribute("href", "/office-mac");
 });
 
 test("retries a failed device list request", async () => {

@@ -571,7 +571,10 @@ const routes: [method: string, pattern: string, handler: Handler][] = [
   [
     "GET",
     "/agent-clients/:type/:key/models",
-    ({ device }) => ({ models: device.data.models, default_model: device.data.models[0]?.id ?? null }),
+    ({ device }) => ({
+      models: device.data.models,
+      default_model: device.data.models[0]?.id ?? null,
+    }),
   ],
   [
     "GET",

@@ -34,7 +34,8 @@ test(
       );
     }
     await writeFile(join(cwd, "input.txt"), "isolated tool result marker\n");
-    const requests: Array<{ messages: unknown; model: string; tools: Array<{ name: string }> }> = [];
+    const requests: Array<{ messages: unknown; model: string; tools: Array<{ name: string }> }> =
+      [];
     const server = createServer(async (request, response) => {
       try {
         const chunks: Buffer[] = [];
@@ -321,7 +322,9 @@ test(
       }
       const policy: ExecutionPolicy = {
         tools: ["Read", "Bash", "Glob", "Write"],
-        disabled_tools: ["Write", "Agent"], disable_mcp: true, yolo: true,
+        disabled_tools: ["Write", "Agent"],
+        disable_mcp: true,
+        yolo: true,
       };
       const restricted = create(undefined, policy);
       await finish(restricted, randomUUID(), "Denied tool under YOLO");

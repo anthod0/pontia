@@ -81,7 +81,6 @@ test("a session event invalidates its session snapshots and every overview varia
   expect(isInvalidated(workflowRevisionKey)).toBe(false);
 });
 
-
 test("connection recovery invalidates mutable snapshots without expiring immutable or optimistic data", async () => {
   const sessionKey = sessionKeys.detail("session-1");
   const workflowDetailKey = workflowKeys.detail("workflow-1");

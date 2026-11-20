@@ -35,7 +35,11 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  if (process.argv[2] !== "preflight" && process.argv[2] !== "history" && process.argv[2] !== "models") {
+  if (
+    process.argv[2] !== "preflight" &&
+    process.argv[2] !== "history" &&
+    process.argv[2] !== "models"
+  ) {
     const systemCode = error instanceof Error && "code" in error ? error.code : undefined;
     const code =
       typeof systemCode === "string" &&

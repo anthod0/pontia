@@ -104,13 +104,18 @@ export class Host {
           : {}),
         includePartialMessages: true,
         permissionMode: policy?.yolo ? "bypassPermissions" : "default",
-        ...(policy?.yolo ? { allowDangerouslySkipPermissions: true, sandbox: { enabled: false } } : {}),
+        ...(policy?.yolo
+          ? { allowDangerouslySkipPermissions: true, sandbox: { enabled: false } }
+          : {}),
         ...(tools ? { tools } : {}),
         ...(policy?.disable_mcp ? { strictMcpConfig: true, mcpServers: {} } : {}),
         settingSources: ["user", "project", "local"],
         settings: { env: { PONTIA_SESSION_ID: this.options.session_id } },
-        disallowedTools: ["AskUserQuestion", ...(policy?.disabled_tools ?? []),
-          ...(policy?.disable_mcp ? ["mcp__*"] : [])],
+        disallowedTools: [
+          "AskUserQuestion",
+          ...(policy?.disabled_tools ?? []),
+          ...(policy?.disable_mcp ? ["mcp__*"] : []),
+        ],
         canUseTool: (tool, input, context) => {
           if (!this.acceptsControl())
             return Promise.resolve({ behavior: "deny", message: "Tool approval is unavailable." });

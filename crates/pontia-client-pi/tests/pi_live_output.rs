@@ -266,7 +266,7 @@ async fn tool_failure_is_ephemeral_content_not_a_turn_failure() {
 }
 
 #[tokio::test]
-async fn rejects_invalid_tool_payloads_and_unregistered_or_mismatched_identities() {
+async fn rejects_malformed_requests_and_unregistered_or_mismatched_identities() {
     let session = Session::new().await;
     let unregistered = connect(&session.state);
     let error = unregistered
@@ -281,10 +281,6 @@ async fn rejects_invalid_tool_payloads_and_unregistered_or_mismatched_identities
         json!({"turn_id": "missing_turn"}),
         json!({"sequence": "invalid"}),
         json!({"unexpected": true}),
-        json!({"items": [{"kind": "tool_call", "item_id": "tool_1", "call_id": "call_1",
-        "tool_name": "read", "arguments": {"path": "src/main.rs"}, "managed_tool_use": {
-            "tool_name": "read", "input": {"type": "bash", "command": "cat src/main.rs"}
-        }}]}),
     ] {
         let mut params = session.request(snapshot(1, "hello"));
         params

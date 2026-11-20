@@ -53,7 +53,13 @@ export const helpShortcuts: ShortcutDefinition[] = [
 export const messageInputShortcuts: { keyGroups: ShortcutKey[][]; label: MessageKey }[] = [
   { keyGroups: [["Enter"]], label: "common.send" },
   { keyGroups: [["Tab"], ["Alt", "Enter"]], label: "shortcuts.queueMessage" },
-  { keyGroups: [["Shift", "Enter"], ["Mod", "Enter"]], label: "shortcuts.newline" },
+  {
+    keyGroups: [
+      ["Shift", "Enter"],
+      ["Mod", "Enter"],
+    ],
+    label: "shortcuts.newline",
+  },
   { keyGroups: [["Enter"]], label: "shortcuts.newlineAfterBackslash" },
 ];
 

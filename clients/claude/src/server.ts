@@ -50,8 +50,10 @@ export function bootstrap(value: unknown): Bootstrap {
       !Array.isArray(policy.disabled_tools) ||
       policy.disabled_tools.some((tool) => typeof tool !== "string" || !tool.trim()) ||
       (policy.tools !== null &&
-        (!Array.isArray(policy.tools) || policy.tools.some((tool) => typeof tool !== "string" || !tool.trim())))
-    ) throw new ControlError("rejected", "invalid_execution_policy");
+        (!Array.isArray(policy.tools) ||
+          policy.tools.some((tool) => typeof tool !== "string" || !tool.trim())))
+    )
+      throw new ControlError("rejected", "invalid_execution_policy");
     result.execution_policy = {
       tools: policy.tools as ExecutionPolicy["tools"],
       disabled_tools: policy.disabled_tools as string[],

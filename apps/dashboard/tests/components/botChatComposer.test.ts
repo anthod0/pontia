@@ -77,15 +77,13 @@ test("sends a file without text to the Bot and clears the attachment draft", asy
 
 test("keeps text and attachments after a rejected send so the user can retry", async () => {
   const { botId, scope, draft, send, submit } = await openChat();
-  send
-    .mockRejectedValueOnce(new Error("Offline"))
-    .mockResolvedValueOnce({
-      id: "m2",
-      status: "normal",
-      kind: "user_input",
-      content: attachment,
-      created_at: "2026-11-18T00:00:02Z",
-    });
+  send.mockRejectedValueOnce(new Error("Offline")).mockResolvedValueOnce({
+    id: "m2",
+    status: "normal",
+    kind: "user_input",
+    content: attachment,
+    created_at: "2026-11-18T00:00:02Z",
+  });
   const editor = screen.getByRole("textbox");
   await userEvent.type(editor, "Read this report");
   await fireEvent.click(submit);
