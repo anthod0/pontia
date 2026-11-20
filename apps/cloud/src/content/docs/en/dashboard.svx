@@ -50,7 +50,7 @@ The Inbox tracks submitted messages waiting for delivery or queued by an Agent C
 
 An agent can share a file from its Session by running `pontia send-file PATH`. The file appears as a card at the end of the Turn, where you can preview or download it. Open **Shared files** in the composer menu to list every file shared in the Session. Pontia reads the file from the device when you download it, so a file that was moved or deleted is no longer available.
 
-When a Bot shares a file, click its name in the Bot chat to download it.
+When a Bot shares a file, it appears in the Bot chat with its type and size. Images are shown inline and open full size when clicked; click a text file to preview it. Click the download button to save any file.
 
 ## Chat commands
 
