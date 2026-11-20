@@ -7,7 +7,7 @@
 
 初始化你的设备，将其连接到 Pontia Cloud，然后打开 Remote Dashboard，开始与你的 Agent 协作。需要引导式设置时选择交互式向导；当 Agent 或脚本需要明确执行每一步时，使用独立命令。
 
-请先查看[安装要求](/docs/getting-started#requirements)，并安装你要使用的 Agent Client。以将要运行这些客户端的操作系统用户身份执行设置。本地服务管理需要运行 systemd 用户服务管理器的 Linux，或 macOS 13.5 及更高版本。
+请先查看[安装要求](/docs/getting-started)，并安装你要使用的 Agent Client。以将要运行这些客户端的操作系统用户身份执行设置。本地服务管理需要运行 systemd 用户服务管理器的 Linux，或 macOS 13.5 及更高版本。
 
 ## 交互式初始化
 
@@ -56,7 +56,7 @@ Client 认证和 Cloud 登录可能需要用户授权。出现提示时完成授
 
 选择要启用的 Client（Pi、Codex、Claude Code 或其组合）、设备显示名称以及要浏览的项目目录。所有步骤都以同一个操作系统用户身份运行。按照 [Agent Client](/docs/agent-clients#enable-an-acp-agent) 中的说明启用 ACP Agent。
 
-1. 使用 `npx @pontia/cli install` 安装 `pontia` 和 `pontiad`，并将 `$HOME/.local/bin` 添加到 `PATH`；或者使用 [shell 安装脚本](/docs/getting-started#install-with-the-shell-script)，但不运行交互式初始化程序。对于缺失的 Client 工具，请参考官方的 [Pi 快速开始](https://pi.dev/docs/latest/quickstart)、[tmux 安装指南](https://github.com/tmux/tmux/wiki/Installing)或 [Codex CLI 安装](https://learn.chatgpt.com/docs/codex/cli)。只安装所选 Client 及其前置依赖；复用已能正常工作的安装。
+1. 使用 `npx @pontia/cli install` 安装 `pontia` 和 `pontiad`，并将 `$HOME/.local/bin` 添加到 `PATH`；或者使用 [Linux shell 安装脚本](/docs/platforms/linux#install-with-the-shell-script)或 [macOS shell 安装脚本](/docs/platforms/macos#install-with-the-shell-script)，但不运行交互式初始化程序。对于缺失的 Client 工具，请参考官方的 [Pi 快速开始](https://pi.dev/docs/latest/quickstart)、[tmux 安装指南](https://github.com/tmux/tmux/wiki/Installing)或 [Codex CLI 安装](https://learn.chatgpt.com/docs/codex/cli)。只安装所选 Client 及其前置依赖；复用已能正常工作的安装。
 2. 为所有命令选定一个绝对路径的 `PONTIA_HOME`。保留现有安装的配置和凭据。默认值为 `~/.pontia`。
 3. 对于 Codex，选择其已认证的现有主目录：已配置的 `CODEX_HOME`，默认为 `~/.codex`。Codex 认证、其守护进程和 Pontia 都使用同一个目录。
 

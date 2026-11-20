@@ -24,6 +24,27 @@ Pontia 支持 Intel 和 Apple Silicon 上的 macOS 13.5 及更高版本。本地
 
 默认的二进制目录是 `$HOME/.local/bin`。将它添加到 shell 的 `PATH` 中，即可直接运行 `pontia` 命令。
 
+## 使用 npm 安装
+
+npm 安装方式支持 npm 镜像和私有仓库，不需要 `curl` 或 `openssl`。如果只安装而不打开初始化程序，请运行：
+
+```sh
+npx @pontia/cli install
+```
+
+设置 `PONTIA_INSTALL_DIR` 可使用其他安装目录，并将该目录添加到 shell 的 `PATH` 中。
+
+<h2 id="install-with-the-shell-script">使用 shell 脚本安装</h2>
+
+如果不使用 Node.js 安装，请使用已签名的发布版安装脚本：
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | sh
+"$HOME/.local/bin/pontia" init
+```
+
+这些命令使用默认安装目录。如果设置了 `PONTIA_INSTALL_DIR`，请改为从该目录运行 `pontia init`。
+
 ## LaunchAgent
 
 初始化会将 Pontia 服务定义安装到：

@@ -15,6 +15,27 @@ Pontia は、GNU ユーザー空間向けにビルドされた x86_64 および 
 
 正常に動作する systemd のユーザーマネージャーが必要です。標準のインストール先は `$HOME/.local/bin` です。`pontia` コマンドを直接実行するには、このディレクトリがシェルの `PATH` に含まれている必要があります。
 
+## npm でインストールする
+
+npm でのインストールは npm のミラーやプライベートレジストリでも動作し、`curl` や `openssl` は不要です。初期化を開かずにインストールするには、次を実行します。
+
+```sh
+npx @pontia/cli install
+```
+
+別のインストール先を使うには、`PONTIA_INSTALL_DIR` を設定し、そのディレクトリをシェルの `PATH` に追加してください。
+
+<h2 id="install-with-the-shell-script">シェルスクリプトでインストールする</h2>
+
+Node.js を使わずにインストールするには、署名済みのリリースインストーラーを使います。
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | sh
+"$HOME/.local/bin/pontia" init
+```
+
+これらのコマンドはデフォルトのインストール先を使います。`PONTIA_INSTALL_DIR` を設定した場合は、代わりにそのディレクトリから `pontia init` を実行してください。
+
 ## サービスファイル
 
 `pontia init` は次をインストールします。
