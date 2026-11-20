@@ -7,7 +7,7 @@
 
 デバイスを初期化して Pontia Cloud に接続し、Remote Dashboard を開いてエージェントとの作業を始めます。ガイド付きのセットアップには対話型ウィザードを選び、エージェントやスクリプトが各ステップを明示的に実行する必要がある場合は個別のコマンドを使ってください。
 
-[インストール要件](/docs/getting-started#requirements)を確認し、使いたい Agent Client をインストールしてください。セットアップは、それらのクライアントを実行する OS ユーザーで行います。ローカルサービスの管理には、systemd のユーザーサービスマネージャーが動作している Linux、または macOS 13.5 以降が必要です。
+[インストール要件](/docs/getting-started)を確認し、使いたい Agent Client をインストールしてください。セットアップは、それらのクライアントを実行する OS ユーザーで行います。ローカルサービスの管理には、systemd のユーザーサービスマネージャーが動作している Linux、または macOS 13.5 以降が必要です。
 
 ## 対話形式の初期化
 
@@ -56,7 +56,7 @@ Client の認証と Cloud へのログインには、ユーザーによる認可
 
 有効にする Client (Pi、Codex、Claude Code、またはその組み合わせ)、デバイスの表示名、参照するプロジェクトディレクトリを決めます。すべてのステップを同じ OS ユーザーで実行してください。ACP エージェントは、[Agent Client](/docs/agent-clients#enable-an-acp-agent) の説明に従って有効にします。
 
-1. `npx @pontia/cli install` で `pontia` と `pontiad` をインストールして `$HOME/.local/bin` を `PATH` に追加するか、対話型の初期化を実行せずに[シェルインストーラー](/docs/getting-started#install-with-the-shell-script)を使います。不足している Client ツールについては、公式の [Pi クイックスタート](https://pi.dev/docs/latest/quickstart)、[tmux インストールガイド](https://github.com/tmux/tmux/wiki/Installing)、[Codex CLI のインストール](https://learn.chatgpt.com/docs/codex/cli)に従ってください。インストールするのは選択した Client とその前提条件だけにし、動作しているインストールは再利用します。
+1. `npx @pontia/cli install` で `pontia` と `pontiad` をインストールして `$HOME/.local/bin` を `PATH` に追加するか、対話型の初期化を実行せずに[Linux 用のシェルインストーラー](/docs/platforms/linux#install-with-the-shell-script)または [macOS 用のシェルインストーラー](/docs/platforms/macos#install-with-the-shell-script)を使います。不足している Client ツールについては、公式の [Pi クイックスタート](https://pi.dev/docs/latest/quickstart)、[tmux インストールガイド](https://github.com/tmux/tmux/wiki/Installing)、[Codex CLI のインストール](https://learn.chatgpt.com/docs/codex/cli)に従ってください。インストールするのは選択した Client とその前提条件だけにし、動作しているインストールは再利用します。
 2. すべてのコマンドで使う絶対パスの `PONTIA_HOME` を 1 つ決めます。既存のインストールの設定と認証情報は保持してください。デフォルトは `~/.pontia` です。
 3. Codex の場合は、認証済みの既存のホームを選びます。設定済みの `CODEX_HOME`、またはデフォルトの `~/.codex` です。Codex の認証、そのデーモン、Pontia で同じディレクトリを使ってください。
 

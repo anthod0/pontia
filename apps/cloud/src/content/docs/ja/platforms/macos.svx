@@ -24,6 +24,27 @@ Pontia は、Intel と Apple Silicon の macOS 13.5 以降をサポートしま�
 
 デフォルトのバイナリディレクトリは `$HOME/.local/bin` です。`pontia` コマンドを直接実行するには、シェルの `PATH` に追加してください。
 
+## npm でインストールする
+
+npm でのインストールは npm のミラーやプライベートレジストリでも動作し、`curl` や `openssl` は不要です。初期化を開かずにインストールするには、次を実行します。
+
+```sh
+npx @pontia/cli install
+```
+
+別のインストール先を使うには、`PONTIA_INSTALL_DIR` を設定し、そのディレクトリをシェルの `PATH` に追加してください。
+
+<h2 id="install-with-the-shell-script">シェルスクリプトでインストールする</h2>
+
+Node.js を使わずにインストールするには、署名済みのリリースインストーラーを使います。
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | sh
+"$HOME/.local/bin/pontia" init
+```
+
+これらのコマンドはデフォルトのインストール先を使います。`PONTIA_INSTALL_DIR` を設定した場合は、代わりにそのディレクトリから `pontia init` を実行してください。
+
 ## LaunchAgent
 
 初期化により、Pontia のサービス定義が次の場所にインストールされます。

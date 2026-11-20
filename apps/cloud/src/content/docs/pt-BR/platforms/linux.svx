@@ -15,6 +15,27 @@ O instalador alternativo em shell exige `curl`, `grep`, `install`, `mktemp`, `mv
 
 É necessário um gerenciador de usuário do systemd funcionando. O diretório de instalação padrão é `$HOME/.local/bin`, que precisa estar no `PATH` do seu shell para executar comandos `pontia` diretamente.
 
+## Instale com npm
+
+A instalação via npm funciona com mirrors do npm e registros privados e não exige `curl` nem `openssl`. Para instalar sem abrir o inicializador:
+
+```sh
+npx @pontia/cli install
+```
+
+Defina `PONTIA_INSTALL_DIR` para usar outro diretório de instalação e adicione esse diretório ao `PATH` do seu shell.
+
+<h2 id="install-with-the-shell-script">Instale com o script de shell</h2>
+
+Para instalar sem Node.js, use o instalador de release assinado:
+
+```sh
+curl -fsSL https://get.pontia.dev/install.sh | sh
+"$HOME/.local/bin/pontia" init
+```
+
+Esses comandos usam o diretório de instalação padrão. Se você definiu `PONTIA_INSTALL_DIR`, execute `pontia init` a partir desse diretório.
+
 ## Arquivos de serviço
 
 O `pontia init` instala:
