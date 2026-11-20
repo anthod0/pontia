@@ -76,16 +76,69 @@ pub async fn ensure_no_active_execution(config: &AppConfig, operation: &str) -> 
     if response.data.blockers.is_empty() {
         return Ok(());
     }
-    let blockers = response
-        .data
-        .blockers
-        .iter()
-        .map(|blocker| format!("  {}: {}", blocker.session_id, blocker.reason))
-        .collect::<Vec<_>>()
-        .join("\n");
-    Err(format!(
-        "{operation} refused:\n{blockers}\nFinish or resolve these activities, then run pontia {operation} again. No changes were made."
-    ))
+    let home = std::env::var("HOME").ok();
+    Err(refusal(operation, &response.data.blockers, home.as_deref()))
+}
+
+const LISTED_SESSIONS: usize = 10;
+const TITLE_CHARS: usize = 60;
+
+fn refusal(operation: &str, blockers: &[UpdateBlocker], home: Option<&str>) -> String {
+    let mut sessions: Vec<(&UpdateBlocker, Vec<&str>)> = Vec::new();
+    for blocker in blockers {
+        match sessions
+            .iter_mut()
+            .find(|(session, _)| session.session_id == blocker.session_id)
+        {
+            Some((_, reasons)) => reasons.push(&blocker.reason),
+            None => sessions.push((blocker, vec![&blocker.reason])),
+        }
+    }
+    let count = sessions.len();
+    let mut lines = vec![format!(
+        "{operation} refused: {count} {} still working:",
+        if count == 1 {
+            "Session is"
+        } else {
+            "Sessions are"
+        }
+    )];
+    for (session, reasons) in sessions.iter().take(LISTED_SESSIONS) {
+        let title = match session.title.as_deref().map(str::trim) {
+            Some(title) if !title.is_empty() => title_line(title),
+            _ => "Untitled Session".into(),
+        };
+        let place = match &session.workspace_path {
+            Some(path) => format!("{}, {}", session.client_type, home_relative(path, home)),
+            None => session.client_type.clone(),
+        };
+        lines.push(format!("  - {title} ({place}): {}", reasons.join(", ")));
+    }
+    if count > LISTED_SESSIONS {
+        lines.push(format!("  and {} more", count - LISTED_SESSIONS));
+    }
+    lines.push(format!(
+        "Wait for these Sessions to finish or respond to them in the Dashboard, then run pontia {operation} again. No changes were made."
+    ));
+    lines.join("\n")
+}
+
+fn title_line(title: &str) -> String {
+    let line = title.lines().next().unwrap_or_default();
+    if line.chars().count() > TITLE_CHARS || line.len() < title.len() {
+        let short: String = line.chars().take(TITLE_CHARS).collect();
+        format!("\"{}...\"", short.trim_end())
+    } else {
+        format!("\"{line}\"")
+    }
+}
+
+fn home_relative(path: &str, home: Option<&str>) -> String {
+    match home.and_then(|home| path.strip_prefix(home)) {
+        Some("") => "~".into(),
+        Some(rest) if rest.starts_with('/') => format!("~{rest}"),
+        _ => path.into(),
+    }
 }
 
 #[cfg(test)]
@@ -139,12 +192,12 @@ mod tests {
     async fn active_execution_refuses_update_before_release_preparation() {
         let (config, _root, server) = check_server(
             200,
-            r#"{"data":{"blockers":[{"session_id":"session-a","reason":"active"}]}}"#,
+            r#"{"data":{"blockers":[{"session_id":"session-a","title":"Fix login","client_type":"codex","workspace_path":null,"reason":"running a task"}]}}"#,
         )
         .await;
         let error = prepare(Some(&config)).await.err().unwrap();
         server.await.unwrap();
-        assert!(error.contains("session-a"));
+        assert!(error.contains("Fix login"));
     }
 
     #[tokio::test]
@@ -152,11 +205,11 @@ mod tests {
         assert!(check(200, r#"{"data":{"blockers":[]}}"#).await.is_ok());
         let error = check(
             200,
-            r#"{"data":{"blockers":[{"session_id":"session-a","reason":"active"}]}}"#,
+            r#"{"data":{"blockers":[{"session_id":"session-a","title":"Fix login","client_type":"codex","workspace_path":null,"reason":"running a task"}]}}"#,
         )
         .await
         .unwrap_err();
-        assert!(error.contains("session-a"));
+        assert!(error.contains("Fix login"));
     }
 
     #[tokio::test]
@@ -171,6 +224,30 @@ mod tests {
         ] {
             assert!(check(status, body).await.is_err());
         }
+    }
+
+    fn blocker(session: &str, reason: &str) -> UpdateBlocker {
+        UpdateBlocker {
+            session_id: session.into(),
+            title: Some(format!("Task {session}")),
+            client_type: "pi".into(),
+            workspace_path: Some("/home/alice/project".into()),
+            reason: reason.into(),
+        }
+    }
+
+    #[test]
+    fn refusal_lists_each_session_once_and_caps_the_list() {
+        let mut blockers = vec![
+            blocker("s0", "running a task"),
+            blocker("s0", "has messages not yet delivered"),
+        ];
+        blockers.extend((1..12).map(|index| blocker(&format!("s{index}"), "running a task")));
+        let message = refusal("update", &blockers, Some("/home/alice"));
+        assert_eq!(message.matches("Task s0").count(), 1);
+        assert!(message.contains("has messages not yet delivered"));
+        assert!(message.contains("Task s9"));
+        assert!(!message.contains("Task s10"));
     }
 
     #[tokio::test]

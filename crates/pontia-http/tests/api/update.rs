@@ -27,6 +27,8 @@ async fn blockers(state: &AppState) -> Vec<String> {
         .unwrap()
         .iter()
         .map(|blocker| blocker["session_id"].as_str().unwrap().to_owned())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
         .collect()
 }
 

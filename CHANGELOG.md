@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `pontia update` and `pontia uninstall` now list blocking Sessions by title, Agent Client, and Workspace with a plain reason, instead of Session IDs.
+
 ## [0.8.1] - 2026-11-20
 
 ### Added
