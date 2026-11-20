@@ -38,6 +38,7 @@ dbus-run-session -- chromium --no-sandbox --no-first-run \
   --profile-directory=Default \
   --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 \
   --disable-background-networking --password-store=basic \
-  --user-data-dir="$HOME/chromium" https://pontia.dev &
+  --user-data-dir="$HOME/chromium" about:blank &
 pids+=("$!")
+node /usr/local/lib/browser-login.mjs
 wait -n "${pids[@]}"

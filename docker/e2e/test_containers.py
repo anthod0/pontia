@@ -14,6 +14,18 @@ import uuid
 import test_setup
 
 
+BROWSER_COOKIES = """
+const {webSocketDebuggerUrl} = await (await fetch("http://127.0.0.1:9222/json/version")).json();
+const socket = new WebSocket(webSocketDebuggerUrl);
+socket.onopen = () => socket.send(JSON.stringify({id: 1, method: "Storage.getCookies"}));
+socket.onmessage = ({data}) => {
+  const cookies = JSON.parse(data).result.cookies;
+  console.log(JSON.stringify(cookies.map(({name, value, domain}) => ({name, value, domain}))));
+  socket.close();
+};
+"""
+
+
 class SmokeLab(test_setup.setup.Lab):
     def compose(self, args, **kwargs):
         rendered = super().compose(["config", "--format", "json"], capture_output=True)
@@ -101,7 +113,6 @@ class ContainerSmokeTests(unittest.TestCase):
         fixture = test_setup.SetupTests()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
-        fixture.oauth()
         fixture.certificates()
         state = fixture.state
         test_setup.setup.write_private(state / "auth/device/claude.json", '{"test_credential":"original"}')
@@ -156,14 +167,16 @@ class ContainerSmokeTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 compose("exec", "-T", "device", "codex", "sandbox", "-c", 'sandbox_mode="workspace-write"',
                         "--", "sh", "-c", "printf forbidden > /home/e2e/outside-workspace.txt")
-            oauth = compose(
+            login = json.loads((first.state / "browser-login.json").read_text())
+            cookies = compose("exec", "-T", "browser", "node", "--input-type=module", "-e", BROWSER_COOKIES).stdout
+            self.assertIn({"name": "_rt", "value": login["value"], "domain": "pontia.dev"},
+                          json.loads(cookies))
+            account = compose(
                 "exec", "-T", "cloud", "curl", "--silent", "--show-error", "--cacert", "/tls/test-ca.pem",
-                "--dump-header", "-", "--output", "/dev/null", "--request", "POST",
-                "--header", "Origin: https://pontia.dev", "https://pontia.dev/api/auth/google/login",
+                "--write-out", "%{http_code}", "--output", "/dev/null",
+                "--cookie", f"_rt={login['value']}", "https://pontia.dev/settings/account",
             ).stdout
-            self.assertIn(b"303", oauth)
-            self.assertIn(b"accounts.google.com", oauth)
-            self.assertIn(b"https%3A%2F%2Fpontia.dev%2Fapi%2Fauth%2Fgoogle%2Fcallback", oauth)
+            self.assertEqual(account, b"200")
             vocabulary = compose(
                 "exec", "-T", "cloud", "./node_modules/.bin/wrangler", "d1", "execute", "DB",
                 "--local", "--persist-to", "/state", "--json", "--command",

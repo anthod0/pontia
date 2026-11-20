@@ -1,6 +1,7 @@
 """Run with: python3 -B -m unittest discover -s docker/e2e -p 'test_*.py'."""
 
 import base64
+from datetime import datetime, timedelta, timezone
 import hashlib
 import importlib.machinery
 import importlib.util
@@ -20,6 +21,15 @@ loader = importlib.machinery.SourceFileLoader("docker_e2e", str(ROOT / "scripts/
 spec = importlib.util.spec_from_loader(loader.name, loader)
 setup = importlib.util.module_from_spec(spec)
 loader.exec_module(setup)
+
+
+def migrated_database(test):
+    db = sqlite3.connect(":memory:")
+    test.addCleanup(db.close)
+    db.execute("PRAGMA foreign_keys=ON")
+    for migration in sorted((ROOT / "apps/cloud/migrations").glob("*/migration.sql")):
+        db.executescript(migration.read_text())
+    return db
 
 
 def openssl(*args):
@@ -56,11 +66,6 @@ class SetupTests(unittest.TestCase):
         setup.initialize(self.state)
         self.lab = setup.Lab(ROOT, self.state)
 
-    def oauth(self):
-        path = self.state / "cloud.dev.vars"
-        path.write_text(path.read_text().replace('GOOGLE_CLIENT_ID=""', 'GOOGLE_CLIENT_ID="test-id"')
-                        .replace('GOOGLE_CLIENT_SECRET=""', 'GOOGLE_CLIENT_SECRET="test-secret"'))
-
     def certificates(self):
         ca = self.root / "ca.pem"
         ca_key = self.root / "ca.key"
@@ -79,8 +84,11 @@ class SetupTests(unittest.TestCase):
         # Only OpenSSL in this test process trusts this temporary CA. HOME is untouched.
         return patch.dict(os.environ, {"SSL_CERT_FILE": str(ca)})
 
-    def test_initialization_preserves_existing_keys_and_oauth_configuration(self):
-        self.oauth()
+    def test_initialization_preserves_existing_keys_and_configuration(self):
+        config = self.state / "cloud.dev.vars"
+        self.assertFalse({"GOOGLE_CLIENT_ID", "GITHUB_CLIENT_ID", "OAUTH_COOKIE_SECRET"}
+                         & setup.variables(config).keys())
+        config.write_text(config.read_text() + 'OPENROUTER_API_KEY="fixture"\n')
         api_key = self.state / "openai-api-key"
         self.assertEqual(api_key.read_bytes(), b"")
         self.assertEqual(api_key.stat().st_mode & 0o777, 0o600)
@@ -126,16 +134,17 @@ class SetupTests(unittest.TestCase):
                 compose.assert_not_called()
             self.assertFalse((self.state / "auth/device/claude-settings.json").exists())
 
-    def test_saved_browser_credentials_exclude_local_auth_and_browsing_state(self):
+    def test_saved_browser_credentials_keep_only_agent_client_logins(self):
         cookie_path = self.root / "Cookies"
         with sqlite3.connect(cookie_path) as db:
             self.addCleanup(db.close)
             db.execute("PRAGMA journal_mode=WAL")
             db.execute("CREATE TABLE cookies (host_key TEXT, value TEXT)")
             db.executemany("INSERT INTO cookies VALUES (?, ?)", [
-                (".github.com", "provider-login"), ("accounts.google.com", "google-login"),
+                (".auth.openai.com", "openai-login"), ("claude.ai", "claude-login"),
+                (".github.com", "github-login"), ("accounts.google.com", "google-login"),
                 ("pontia.dev", "local-login"), ("app.pontia.dev", "local-dashboard"),
-                ("example.com", "unrelated"), ("notgithub.com", "unrelated"),
+                ("example.com", "unrelated"), ("notopenai.com", "unrelated"),
             ])
         files = {
             setup.AUTH_FILES["browser"]["Cookies"]: cookie_path.read_bytes(),
@@ -150,7 +159,7 @@ class SetupTests(unittest.TestCase):
         saved = self.state / "auth/browser/Cookies"
         with sqlite3.connect(saved) as db:
             self.assertEqual(db.execute("SELECT host_key, value FROM cookies ORDER BY host_key").fetchall(),
-                             [(".github.com", "provider-login"), ("accounts.google.com", "google-login")])
+                             [(".auth.openai.com", "openai-login"), ("claude.ai", "claude-login")])
         self.assertEqual(json.loads((self.state / "auth/browser/Local State").read_text()),
                          {"os_crypt": {"encrypted_key": "test-key"}})
         self.assertEqual(saved.stat().st_mode & 0o777, 0o600)
@@ -191,10 +200,7 @@ class SetupTests(unittest.TestCase):
             ).stdout
             self.assertEqual(public[-32:], base64.urlsafe_b64decode(first[public_key] + "=="))
 
-    def test_preflight_requires_oauth_and_forbids_public_dns_credentials(self):
-        with self.assertRaises(ValueError):
-            setup.check(self.state)
-        self.oauth()
+    def test_preflight_forbids_public_dns_credentials(self):
         path = self.state / "cloud.dev.vars"
         path.write_text(path.read_text().replace('CLOUDFLARE_DNS_TOKEN="disabled-in-local-e2e"',
                                                 'CLOUDFLARE_DNS_TOKEN="do-not-use"'))
@@ -202,7 +208,6 @@ class SetupTests(unittest.TestCase):
             setup.check(self.state)
 
     def test_preflight_accepts_matching_trusted_certificate(self):
-        self.oauth()
         with self.certificates():
             setup.check(self.state)
 
@@ -220,16 +225,10 @@ class SetupTests(unittest.TestCase):
             setup.check_certificates(self.state, ["pontia.dev"])
 
     def test_public_edge_bootstrap_is_repeatable_and_new_runs_rotate_credentials(self):
-        self.oauth()
         with self.certificates():
-            setup.prepare_edge(self.state, self.state)
+            seed = setup.prepare_edge(self.state, self.state)
             setup.check(self.state)
-        db = sqlite3.connect(":memory:")
-        self.addCleanup(db.close)
-        db.execute("PRAGMA foreign_keys=ON")
-        for migration in sorted((ROOT / "apps/cloud/migrations").glob("*/migration.sql")):
-            db.executescript(migration.read_text())
-        seed = (self.state / "cloud-bootstrap.sql").read_text()
+        db = migrated_database(self)
         db.executescript(seed)
         db.executescript(seed)  # Restarting Cloud must preserve the current registration.
         row = db.execute("SELECT id, access_scope, tunnel_url, service_credential_hash FROM edges").fetchone()
@@ -242,9 +241,32 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(row[3], base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest()).decode().rstrip("="))
         for table in ("accounts", "auth_sessions", "devices", "edge_tickets"):
             self.assertEqual(db.execute(f"SELECT count(*) FROM {table}").fetchone()[0], 0)
-        setup.prepare_edge(self.state, self.state)
+        self.assertNotEqual(setup.prepare_edge(self.state, self.state), seed)
         self.assertNotEqual((self.state / "edge/credential").read_text().strip(), credential)
-        self.assertNotEqual((self.state / "cloud-bootstrap.sql").read_text(), seed)
+
+    def test_login_bootstrap_seeds_a_browser_session_without_provider_accounts(self):
+        db = migrated_database(self)
+        seed = setup.prepare_login(self.state)
+        db.executescript(seed)
+        db.executescript(seed)  # Restarting Cloud must preserve the current session.
+        cookie = json.loads((self.state / "browser-login.json").read_text())
+        self.assertEqual((cookie["name"], cookie["url"], cookie["secure"], cookie["httpOnly"]),
+                         ("_rt", "https://pontia.dev/", True, True))
+        self.assertRegex(cookie["value"], r"^ptb_[A-Za-z0-9_-]{43}$")
+        token_hash = base64.urlsafe_b64encode(
+            hashlib.sha256(cookie["value"].encode()).digest()).decode().rstrip("=")
+        row = db.execute("SELECT s.user_id, s.kind, s.token_hash, s.expires_at, s.account_id "
+                         "FROM auth_sessions s JOIN users u ON u.id = s.user_id").fetchone()
+        self.assertEqual(row[:3], (setup.TEST_USER_ID, "browser", token_hash))
+        self.assertIsNone(row[4])
+        self.assertRegex(row[3], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")
+        self.assertEqual(int(datetime.fromisoformat(row[3]).timestamp()), cookie["expires"])
+        self.assertGreater(datetime.fromisoformat(row[3]), datetime.now(timezone.utc) + timedelta(days=29))
+        self.assertEqual(db.execute("SELECT count(*) FROM accounts").fetchone()[0], 0)
+        self.assertEqual((self.state / "browser-login.json").stat().st_mode & 0o777, 0o600)
+        setup.prepare_login(self.state)
+        self.assertNotEqual(json.loads((self.state / "browser-login.json").read_text())["value"],
+                            cookie["value"])
 
     def test_instance_names_and_checkouts_have_distinct_resources(self):
         other_name = setup.Lab(ROOT, self.state, "other")

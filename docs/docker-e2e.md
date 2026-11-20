@@ -1,6 +1,6 @@
 # Docker E2E Guide
 
-Use the prepared local environment to validate Cloud, Public Dashboard, edge, pontiad, and real Agent calls from the current checkout. Certificates, OAuth application settings, and existing test login credentials are reused automatically; routine validation requires no setup changes.
+Use the prepared local environment to validate Cloud, Public Dashboard, edge, pontiad, and real Agent calls from the current checkout. Certificates and existing test login credentials are reused automatically; routine validation requires no setup changes.
 
 Each run starts with fresh containers and databases and automatically provisions a public edge for the test user. Remove all run data when validation ends, including Sessions, client conversations, Workspaces, and background services.
 
@@ -30,7 +30,7 @@ Use the same name for all commands belonging to a task. `--name` takes precedenc
 
 If startup reports that the selected instance already exists, identify its owner before cleaning it up. Other names and other checkouts can continue running. Each instance retains its own refreshed login credentials across runs. New instances start with the prepared test credentials in `docker/e2e/.local/auth/`.
 
-## 2. Open the container browser and sign in
+## 2. Open the container browser
 
 Open the `Test browser` URL printed by `up` in the host browser. Each instance receives an available loopback port. To find it again:
 
@@ -46,15 +46,15 @@ Access the following URLs only in the **container browser**:
 
 | URL | Purpose |
 | --- | --- |
-| `https://pontia.dev` | Cloud sign-in and registration for this run |
+| `https://pontia.dev` | Cloud for this run |
 | `https://app.pontia.dev` | Public Dashboard for this run |
 | `http://localhost:8080/dashboard/` | Local Dashboard for this run |
 
-Opening `pontia.dev` or `app.pontia.dev` directly on the host still reaches production. All instances use the same container URLs and OAuth callback URLs; additional instances require no GitHub OAuth configuration changes.
+Opening `pontia.dev` or `app.pontia.dev` directly on the host still reaches production. All instances use the same container URLs.
 
-Open `https://pontia.dev` in the container browser and sign in with GitHub or Google. Existing external provider login credentials are reused, but each run still requires an OAuth flow to create the local user and login session. Complete any required reauthentication or MFA in the container browser.
+Each run creates a local Cloud test user, and the container browser starts signed in as that user at `https://pontia.dev/settings/account`.
 
-## 3. Sign in and register the device
+## 3. Sign in the device
 
 Startup provisions the public edge `docker-e2e`; no deployment ticket or manual edge registration is needed. Run:
 
@@ -62,9 +62,9 @@ Startup provisions the public edge `docker-e2e`; no deployment ticket or manual 
 ./scripts/docker-e2e login-device
 ```
 
-The command displays a device login URL and code, then waits for approval. Open the URL in the container browser, check the code, and approve it. The command then registers the device, restarts the device service, waits for it to become ready, and prints the Dashboard URL.
+The command displays a device login URL and code, then waits for approval. Open the URL in the container browser, check the code, and approve it as the test user. The command then registers the device, restarts the device service, waits for it to become ready, and prints the Dashboard URL.
 
-Open the printed Dashboard URL in the container browser. Sign in and register a new device for each run; do not reuse a device ID or Dashboard URL from a previous run. If the command fails, resolve the error before retrying.
+Open the printed Dashboard URL in the container browser. Register a new device for each run; do not reuse a device ID or Dashboard URL from a previous run. If the command fails, resolve the error before retrying.
 
 ## 4. Validate real Agent calls
 
@@ -153,6 +153,6 @@ If you have a complete validation script, use this command to manage startup and
 
 ## Validation scope
 
-This environment validates the complete local application flow on Linux, using real providers for OAuth and model calls. Finish each run within 24 hours.
+This environment validates the complete local application flow on Linux, using real providers for model calls. Finish each run within 24 hours.
 
 Pi, Codex, and Claude Code are available for validation. Claude requires a test login or API configuration. Report only the clients and user flows actually validated.

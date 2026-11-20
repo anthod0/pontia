@@ -4,6 +4,7 @@
 import argparse
 import base64
 from contextlib import closing, contextmanager
+from datetime import datetime, timedelta, timezone
 import fcntl
 import hashlib
 import io
@@ -28,6 +29,8 @@ EDGE_ID = "01900000-0000-7000-8000-000000000001"
 EDGE_OWNER_ID = "01900000-0000-7000-8000-000000000002"
 EDGE_NAME = "docker-e2e"
 EDGE_HOST = f"{EDGE_NAME}.edge.pontia.dev"
+TEST_USER_ID = "01900000-0000-7000-8000-000000000003"
+TEST_SESSION_ID = "01900000-0000-7000-8000-000000000004"
 AUTH_FILES = {
     "device": {
         "pi.json": "/home/e2e/.pi/agent/auth.json",
@@ -85,12 +88,7 @@ def initialize(state):
         proof_private, proof_public = key_pair("X25519")
         values = {
             "AUTH_ORIGIN": "https://pontia.dev",
-            "GOOGLE_CLIENT_ID": "",
-            "GOOGLE_CLIENT_SECRET": "",
-            "GITHUB_CLIENT_ID": "",
-            "GITHUB_CLIENT_SECRET": "",
             "JWT_SECRET": secrets.token_urlsafe(32),
-            "OAUTH_COOKIE_SECRET": secrets.token_urlsafe(32),
             "E2E_CAPABILITY_SIGNING_KEY": signing,
             "E2E_CAPABILITY_VERIFICATION_KEY": verification,
             "E2E_REGISTRATION_PROOF_PRIVATE_KEY": proof_private,
@@ -142,9 +140,6 @@ def check(state):
         "CLOUDFLARE_DNS_TOKEN", "CLOUDFLARE_DNS_ZONE_ID",
     )):
         raise ValueError("Public DNS credentials are not permitted in this environment")
-    if not any(all(values.get(f"{provider}_{key}") for key in ("CLIENT_ID", "CLIENT_SECRET"))
-               for provider in ("GOOGLE", "GITHUB")):
-        raise ValueError("Configure at least one OAuth provider in cloud.dev.vars")
     hosts = ["pontia.dev", "app.pontia.dev", EDGE_HOST]
     check_certificates(state, hosts)
 
@@ -220,7 +215,8 @@ class Lab:
             check(self.config)
             self.prepare_auth()
             try:
-                prepare_edge(self.state, self.config)
+                write_private(self.state / "cloud-bootstrap.sql",
+                              prepare_edge(self.state, self.config) + prepare_login(self.state))
                 run(["docker", "network", "create", "--internal", "--label",
                      f"com.docker.compose.project={self.project}", self.network], capture_output=True)
                 network = json.loads(run(["docker", "network", "inspect", self.network], capture_output=True).stdout)[0]
@@ -256,7 +252,8 @@ class Lab:
         self.compose(["down", "--volumes", "--remove-orphans"])
         if self.resources("network"):
             run(["docker", "network", "rm", self.network], capture_output=True)
-        for name in ("edge/config.json", "edge/credential", "edge/tls.pem", "cloud-bootstrap.sql", "network.json"):
+        for name in ("edge/config.json", "edge/credential", "edge/tls.pem", "cloud-bootstrap.sql",
+                     "browser-login.json", "network.json"):
             (self.state / name).unlink(missing_ok=True)
         print(f"Instance {self.name} removed. Its login credentials are retained in {self.state / 'auth'}.")
 
@@ -308,7 +305,7 @@ def save_browser_credentials(container, state):
     cookies = container_file(container, AUTH_FILES["browser"]["Cookies"])
     if cookies is None:
         return
-    # Keep provider login cookies, never the disposable Pontia login or profile.
+    # Keep agent client login cookies, never the disposable Pontia login or profile.
     with tempfile.TemporaryDirectory(prefix="pontia-e2e-cookies-") as temporary:
         path = Path(temporary) / "Cookies"
         write_private(path, cookies)
@@ -317,7 +314,7 @@ def save_browser_credentials(container, state):
             if contents:
                 write_private(Path(str(path) + suffix), contents)
         with closing(sqlite3.connect(path)) as database:
-            providers = ("github.com", "google.com", "openai.com", "anthropic.com", "claude.ai", "auth0.com")
+            providers = ("openai.com", "anthropic.com", "claude.ai", "auth0.com")
             keep = " OR ".join("(host_key = ? OR host_key LIKE ?)" for _ in providers)
             database.execute(f"DELETE FROM cookies WHERE NOT ({keep})",
                              [value for domain in providers for value in (domain, f"%.{domain}")])
@@ -362,7 +359,6 @@ def prepare_edge(state, config):
         owner_id=EDGE_OWNER_ID, edge_id=EDGE_ID, name=EDGE_NAME, hostname=EDGE_HOST,
         credential_hash=b64(hashlib.sha256(secret.encode()).digest()),
     )
-    write_private(state / "cloud-bootstrap.sql", seed)
     write_private(state / "edge/credential", f"pec_v1_{EDGE_ID}_{secret}\n")
     write_private(state / "edge/config.json", json.dumps({
         "hostname": EDGE_HOST,
@@ -374,6 +370,24 @@ def prepare_edge(state, config):
     write_private(state / "edge/tls.pem",
                   (config / "tls/fullchain.pem").read_bytes().rstrip() + b"\n"
                   + (config / "tls/privkey.pem").read_bytes())
+    return seed
+
+
+def prepare_login(state):
+    # Only called for a fresh run. The browser refresh cookie lets Cloud issue
+    # the access token through its normal session refresh.
+    token = f"ptb_{b64(secrets.token_bytes(32))}"
+    expires = datetime.now(timezone.utc) + timedelta(days=30)
+    seed = (LAB / "cloud-login.sql").read_text().format(
+        user_id=TEST_USER_ID, session_id=TEST_SESSION_ID,
+        token_hash=b64(hashlib.sha256(token.encode()).digest()),
+        expires_at=expires.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+    )
+    write_private(state / "browser-login.json", json.dumps({
+        "name": "_rt", "value": token, "url": "https://pontia.dev/", "secure": True,
+        "httpOnly": True, "sameSite": "Lax", "expires": int(expires.timestamp()),
+    }) + "\n")
+    return seed
 
 
 def main():
@@ -388,7 +402,7 @@ def main():
         parser.error("Extra arguments are only supported by compose and run")
     if options.command == "init":
         initialize(STATE)
-        print(f"Fill OAuth settings in {STATE / 'cloud.dev.vars'} and place certificates in {STATE / 'tls'}.")
+        print(f"Place certificates in {STATE / 'tls'}.")
         return
     if not (STATE / "cloud.dev.vars").exists():
         raise ValueError("Run scripts/docker-e2e init first")

@@ -1,4 +1,4 @@
--- The public edge owner has no login account; normal OAuth users can select this edge.
+-- The public edge owner has no login account; the test user can select this edge.
 INSERT INTO users (id, display_name)
 VALUES ('{owner_id}', 'E2E edge operator')
 ON CONFLICT (id) DO NOTHING;

@@ -93,6 +93,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=caddy /usr/bin/caddy /usr/local/bin/caddy
 COPY docker/e2e/browser.Caddyfile /etc/caddy/Caddyfile
 COPY docker/e2e/browser-entrypoint /usr/local/bin/browser-entrypoint
+COPY docker/e2e/browser-login.mjs /usr/local/lib/browser-login.mjs
 COPY docker/e2e/chromium-policy.json /etc/chromium/policies/managed/e2e.json
 ENV HOME=/home/e2e DISPLAY=:99
 USER 1000:1000

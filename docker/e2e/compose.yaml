@@ -161,6 +161,12 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - type: bind
+        source: ${E2E_STATE}/browser-login.json
+        target: /run/secrets/browser-login.json
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       lab:
         ipv4_address: ${E2E_BROWSER_IP:?Use scripts/docker-e2e}
