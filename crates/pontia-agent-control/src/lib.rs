@@ -20,7 +20,7 @@ pub mod workspaces;
 pub use agent_events::AgentEventBroker;
 pub use agent_profiles::{
     AgentProfileCommandOutcome, AgentProfileService, ExecutionProfileView, ProfileLaunchDefaults,
-    UpsertExecutionProfileRequest, standalone_session_instructions,
+    UpsertExecutionProfileRequest,
 };
 pub use branch_replay::{BranchReplayService, ResolveBranchReplayRequest, ResolvedBranchReplay};
 pub use client_contract::{ClientControlChannel, ClientControlOperation};
@@ -69,3 +69,5 @@ pub mod client_contract;
 
 pub use pontia_core::execution_policy::ExecutionPolicy;
 pub use views::WorkspaceView;
+
+pub use sessions::instructions::{SessionInstructionsService, standalone_session_instructions};

@@ -157,16 +157,16 @@ impl ClientLauncher for Client {
     }
 }
 
-impl pontia_agent_control::client_contract::ClientProfile for Client {
+impl pontia_agent_control::client_contract::ClientInstructions for Client {
     fn inject_standalone_session_instructions(&self) -> bool {
         true
     }
-    fn validate_templates(&self, _: Option<&str>, _: Option<&str>) -> Result<()> {
+    fn validate_instructions(&self, _: Option<&str>) -> Result<()> {
         Ok(())
     }
     fn bind(
         &self,
-        input: &pontia_agent_control::client_contract::ProfileBindingInput<'_>,
+        input: &pontia_agent_control::client_contract::InstructionsBindingInput<'_>,
     ) -> Result<Value> {
         Ok(json!({"system": input.system_prompt}))
     }
@@ -531,8 +531,8 @@ async fn processing_shows_until_the_bot_answers_or_its_turn_ends() {
 }
 
 async fn instructions(control: &AgentControl, session: &str) -> String {
-    pontia_agent_control::AgentProfileService::new(control.db())
-        .session_binding(session)
+    pontia_agent_control::SessionInstructionsService::new(control.db())
+        .session_instructions(session)
         .await
         .unwrap()
         .unwrap()["system"]
@@ -627,7 +627,7 @@ async fn fixture_with_client(
     registration.interactions = Some(client.clone());
     registration.launcher = Some(client.clone());
     registration.in_process = Some(client.clone());
-    registration.profile = Some(client.clone());
+    registration.instructions = Some(client.clone());
     let mut registry = ClientRegistry::default();
     registry.register(registration);
     AgentClientService::new(pool.clone(), registry.clone())
@@ -1217,25 +1217,8 @@ async fn helper_launch_pins_the_selected_profile_and_keeps_the_initialized_model
         .create_profile_version("specialist", request)
         .await
         .unwrap();
-    let created = control
-        .queries()
-        .get_session(target)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(created.execution_profile_id.as_deref(), Some("specialist"));
-    assert_eq!(created.execution_profile_version.as_deref(), Some("2"));
-    assert_eq!(
-        control
-            .queries()
-            .get_session(&original)
-            .await
-            .unwrap()
-            .unwrap()
-            .execution_profile_id
-            .as_deref(),
-        Some(default_id.as_str())
-    );
+    assert_eq!(instructions(&control, target).await, binding);
+    assert_ne!(instructions(&control, &original).await, binding);
 }
 
 #[path = "conversation/retrieval.rs"]
@@ -1249,3 +1232,43 @@ mod generation;
 
 #[path = "conversation/workspaces.rs"]
 mod workspaces;
+
+#[tokio::test]
+async fn helper_rejects_missing_and_archived_profiles_before_creating_a_session() {
+    let (_root, pool, _client, control, conversation) = fixture().await;
+    let (id, session) = bot(&conversation).await;
+    let helpers = HelperService::new(control.clone(), conversation);
+    let profiles = pontia_agent_control::AgentProfileService::new(control.db())
+        .with_clients(control.clients());
+    let archived = pontia_bot::records::BotService::helper_profile_id(&id);
+    profiles.archive_profile(&archived).await.unwrap();
+    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    for profile_id in ["missing", &archived] {
+        let result = helpers
+            .execute(HelperRequest {
+                session_id: session.clone(),
+                command: HelperCommand::Create(CreateHelper {
+                    location: HelperLocation::Temporary("2026-11-20_rejected".into()),
+                    profile_id: Some(profile_id.into()),
+                    profile_version: None,
+                    description: "rejected helper".into(),
+                    message: "task".into(),
+                }),
+            })
+            .await;
+        assert!(matches!(
+            result,
+            Err(pontia_bot::helpers::HelperError::Control(
+                Error::NotFound(_) | Error::Domain(_)
+            ))
+        ));
+    }
+    let after: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(after, before);
+}

@@ -30,7 +30,7 @@ mod steering;
 mod session_environment;
 
 #[path = "control_loop/profiles.rs"]
-mod profiles;
+mod instructions;
 
 struct Harness {
     app: AgentControl,

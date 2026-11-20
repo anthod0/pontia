@@ -504,124 +504,32 @@ async fn missing_agent_profile_returns_not_found() {
 }
 
 #[tokio::test]
-async fn codex_profile_binding_pins_content_before_first_input_and_rejects_invalid_contracts() {
+async fn codex_instruction_snapshot_rejects_invalid_contracts() {
     let app = TestApp::new().await;
-    let state = app.state.clone();
-    let mut profile = custom_profile_body("codex-reviewer", "1");
-    profile["supported_client_types"] = json!(["codex"]);
-    profile["turn_prompt_template"] = Value::Null;
-    profile["system_prompt_template"] = json!("Respond with the configured review marker.");
-    for (field, value) in [
-        ("turn_prompt_template", json!("Review {{input}}")),
-        ("turn_prompt_template", json!("")),
-        ("system_prompt_template", json!("{{input}}")),
-        ("system_prompt_template", json!("  ")),
-    ] {
-        let mut invalid = profile.clone();
-        invalid[field] = value;
-        let (status, response) =
-            post_json(state.clone(), "/api/v1/agent-profiles", invalid, None).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
-        assert!(response.to_string().contains(field));
-    }
-    let (status, response) = post_json(
-        state.clone(),
-        "/api/v1/agent-profiles",
-        profile.clone(),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED, "{response}");
-    let request = json!({"client_type":"codex","workspace":app.workspace().path(),"execution_profile_id":"codex-reviewer","additional_instructions":"Keep {{literal}} unchanged.\nUse Chinese.","include_standalone_session_instructions":true});
-    for invalid in [
-        json!({"client_type":"codex","execution_profile_id":"missing"}),
-        json!({"client_type":"codex","execution_profile_version":"1"}),
-        json!({"client_type":"codex","execution_profile_id":"codex-reviewer","execution_profile_version":"missing"}),
-        json!({"client_type":"codex","execution_profile_id":"default","execution_profile_version":"1"}),
-    ] {
-        let (status, response) = post_json(state.clone(), "/api/v1/sessions", invalid, None).await;
-        assert!(status.is_client_error(), "{response}");
-    }
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
-        .fetch_one(&state.db())
-        .await
-        .unwrap();
-    assert_eq!(count, 0, "invalid bindings must not create Sessions");
-    let (status, created) = post_json(state.clone(), "/api/v1/sessions", request, None).await;
+    let (status, created) = post_json(app.state.clone(), "/api/v1/sessions",
+        json!({"client_type":"codex", "workspace":app.workspace().path(), "system_instructions":"review-marker"}), None).await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
     let session = created["data"]["session"]["session_id"].as_str().unwrap();
-    assert_eq!(created["data"]["session"]["execution_profile_version"], "1");
+    let instructions = pontia_client_codex::instructions::CodexInstructions::new(app.db.clone());
     assert_eq!(
-        created["data"]["session"]["codex"]["profile"]["status"],
-        "awaiting_input"
-    );
-    assert!(
-        pontia_agent_control::AgentBindingService::new(state.db())
-            .binding_for_session(session)
+        instructions
+            .codex_binding(session)
             .await
             .unwrap()
-            .is_none()
+            .unwrap()
+            .system_prompt
+            .as_deref(),
+        Some("review-marker")
     );
-    let profiles = pontia_client_codex::profiles::CodexProfiles::new(state.db());
-    let pinned = profiles.codex_binding(session).await.unwrap().unwrap();
-    assert_eq!(
-        pinned.system_prompt.as_deref(),
-        Some(
-            format!(
-                "{}\n\nRespond with the configured review marker.\n\nKeep {{{{literal}}}} unchanged.\nUse Chinese.",
-                pontia_agent_control::standalone_session_instructions()
-            )
-            .as_str()
-        )
-    );
-    profile["system_prompt_template"] = json!("Changed after binding");
-    let (status, response) = put_json(
-        state.clone(),
-        "/api/v1/agent-profiles/codex-reviewer/versions/1",
-        profile.clone(),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{response}");
-    profile["version"] = json!("2");
-    let (status, response) = post_json(
-        state.clone(),
-        "/api/v1/agent-profiles/codex-reviewer/versions",
-        profile,
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED, "{response}");
-    assert_eq!(
-        profiles.codex_binding(session).await.unwrap().unwrap(),
-        pinned
-    );
-    let (status, response) =
-        delete_json(state.clone(), "/api/v1/agent-profiles/codex-reviewer", None).await;
-    assert_eq!(status, StatusCode::OK, "{response}");
-    assert_eq!(
-        profiles.codex_binding(session).await.unwrap().unwrap(),
-        pinned
-    );
-    let (status, response) = post_json(state.clone(), "/api/v1/sessions", json!({"client_type":"codex","execution_profile_id":"codex-reviewer","execution_profile_version":"1"}), None).await;
-    assert!(status.is_client_error(), "{response}");
-
-    // Model an existing, previously accepted binding without a content snapshot.
-    sqlx::query("UPDATE events SET payload=json_remove(payload,'$.execution_profile_binding') WHERE session_id=? AND event_type='session.created'")
-        .bind(session).execute(&state.db()).await.unwrap();
-    let (status, response) = get_json(state, &format!("/api/v1/sessions/{session}")).await;
-    assert_eq!(status, StatusCode::OK, "{response}");
-    assert_eq!(
-        response["data"]["session"]["codex"]["profile"]["status"],
-        "unverified"
-    );
-    assert!(profiles.codex_binding(session).await.is_err());
+    sqlx::query("UPDATE events SET payload=json_set(payload,'$.session_instructions.contract_version',2) WHERE session_id=? AND event_type='session.created'")
+        .bind(session).execute(&app.db).await.unwrap();
+    assert!(instructions.codex_binding(session).await.is_err());
 }
 
 #[tokio::test]
 async fn standalone_session_instructions_are_opt_in_and_fixed_at_creation() {
     let app = TestApp::new().await;
-    let service = pontia_agent_control::AgentProfileService::new(app.db.clone());
+    let service = pontia_agent_control::SessionInstructionsService::new(app.db.clone());
     let standalone = pontia_agent_control::standalone_session_instructions();
 
     // Standalone session instructions default to off.
@@ -636,7 +544,7 @@ async fn standalone_session_instructions_are_opt_in_and_fixed_at_creation() {
     let omitted_session = omitted["data"]["session"]["session_id"].as_str().unwrap();
     assert!(
         service
-            .session_binding(omitted_session)
+            .session_instructions(omitted_session)
             .await
             .unwrap()
             .is_none()
@@ -648,7 +556,7 @@ async fn standalone_session_instructions_are_opt_in_and_fixed_at_creation() {
         json!({
             "client_type": "codex",
             "workspace": app.workspace().path(),
-            "additional_instructions": "caller only"
+            "system_instructions": "caller only"
         }),
         None,
     )
@@ -659,7 +567,7 @@ async fn standalone_session_instructions_are_opt_in_and_fixed_at_creation() {
         .unwrap();
     assert_eq!(
         service
-            .session_binding(caller_only_session)
+            .session_instructions(caller_only_session)
             .await
             .unwrap()
             .unwrap()["system_prompt"],
@@ -676,7 +584,11 @@ async fn standalone_session_instructions_are_opt_in_and_fixed_at_creation() {
     let session = created["data"]["session"]["session_id"].as_str().unwrap();
     assert!(created["data"]["session"]["execution_profile_id"].is_null());
     assert!(created["data"]["session"]["execution_profile_version"].is_null());
-    let snapshot = service.session_binding(session).await.unwrap().unwrap();
+    let snapshot = service
+        .session_instructions(session)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(snapshot["system_prompt"], standalone);
 
     // Removing the mutable source proves recovery cannot read it.
@@ -684,7 +596,7 @@ async fn standalone_session_instructions_are_opt_in_and_fixed_at_creation() {
         .execute(&app.db)
         .await
         .unwrap();
-    let reopened = pontia_client_codex::profiles::CodexProfiles::new(app.db.clone());
+    let reopened = pontia_client_codex::instructions::CodexInstructions::new(app.db.clone());
     assert_eq!(
         reopened
             .codex_binding(session)
@@ -695,24 +607,16 @@ async fn standalone_session_instructions_are_opt_in_and_fixed_at_creation() {
             .as_deref(),
         Some(standalone)
     );
-    // Existing Codex bindings created with the removed builtin profile remain readable.
-    sqlx::query("UPDATE events SET payload=json_set(payload,'$.execution_profile_binding',json('{\"contract_version\":1,\"profile_id\":\"default\",\"version\":\"2\",\"system_prompt\":\"legacy-default\"}')) WHERE session_id=? AND event_type='session.created'")
-        .bind(session).execute(&app.db).await.unwrap();
-    let legacy = reopened.codex_binding(session).await.unwrap().unwrap();
-    assert_eq!(legacy.profile_id.as_deref(), Some("default"));
-    assert_eq!(legacy.version.as_deref(), Some("2"));
-    assert_eq!(legacy.system_prompt.as_deref(), Some("legacy-default"));
-
-    sqlx::query("UPDATE events SET payload=json_remove(payload,'$.execution_profile_binding') WHERE session_id=? AND event_type='session.created'")
+    sqlx::query("UPDATE events SET payload=json_remove(payload,'$.session_instructions') WHERE session_id=? AND event_type='session.created'")
         .bind(session).execute(&app.db).await.unwrap();
     assert!(reopened.codex_binding(session).await.unwrap().is_none());
 }
 
 #[tokio::test]
-async fn additional_instructions_without_explicit_profile_are_isolated_per_session() {
+async fn system_instructions_without_explicit_profile_are_isolated_per_session() {
     let app = TestApp::new().await;
     let standalone = pontia_agent_control::standalone_session_instructions();
-    let service = pontia_agent_control::AgentProfileService::new(app.db.clone());
+    let service = pontia_agent_control::SessionInstructionsService::new(app.db.clone());
     for (extra, expected) in [
         (
             Some("first caller"),
@@ -730,7 +634,7 @@ async fn additional_instructions_without_explicit_profile_are_isolated_per_sessi
             json!({
                 "client_type": "codex",
                 "workspace": app.workspace().path(),
-                "additional_instructions": extra,
+                "system_instructions": extra,
                 "include_standalone_session_instructions": true
             }),
             None,
@@ -739,17 +643,23 @@ async fn additional_instructions_without_explicit_profile_are_isolated_per_sessi
         assert_eq!(status, StatusCode::CREATED, "{created}");
         let session = created["data"]["session"]["session_id"].as_str().unwrap();
         assert_eq!(
-            service.session_binding(session).await.unwrap().unwrap()["system_prompt"],
+            service
+                .session_instructions(session)
+                .await
+                .unwrap()
+                .unwrap()["system_prompt"],
             expected
         );
     }
 }
 
 #[tokio::test]
-async fn invalid_additional_instructions_are_rejected_before_session_creation() {
+async fn invalid_system_instructions_are_rejected_before_session_creation() {
     let app = TestApp::new().await;
     for (client, extra) in [
         ("codex", json!("")),
+        ("codex", json!("Hello {{name}}")),
+        ("codex", json!("name}}")),
         ("codex", json!(" \n\t")),
         ("generic", json!("caller instructions")),
     ] {
@@ -758,7 +668,7 @@ async fn invalid_additional_instructions_are_rejected_before_session_creation() 
             "/api/v1/sessions",
             json!({
                 "client_type": client, "workspace": app.workspace().path(),
-                "additional_instructions": extra
+                "system_instructions": extra
             }),
             None,
         )

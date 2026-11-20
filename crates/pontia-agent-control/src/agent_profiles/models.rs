@@ -8,6 +8,7 @@ pub struct ProfileLaunchDefaults {
     pub client_type: String,
     pub client_key: String,
     pub model: String,
+    pub system_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]

@@ -22,14 +22,14 @@ pub struct WorkflowScheduler<S, X> {
     pontia_home: PathBuf,
 }
 
-impl WorkflowScheduler<SessionCommandService, SessionCommandService> {
+impl WorkflowScheduler<pontia_agent_control::AgentControl, SessionCommandService> {
     pub fn new(
         pool: SqlitePool,
         queries: pontia_agent_control::ControlQueryService,
-        sessions: SessionCommandService,
+        sessions: pontia_agent_control::AgentControl,
         pontia_home: PathBuf,
     ) -> Self {
-        let exits = sessions.clone();
+        let exits = sessions.session_commands();
         Self::with_services(pool, queries, sessions, exits, pontia_home)
     }
 }

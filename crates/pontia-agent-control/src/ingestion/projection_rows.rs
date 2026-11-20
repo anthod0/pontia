@@ -19,8 +19,6 @@ pub(super) fn session_from_row(row: SessionProjectionRow) -> Result<SessionProje
         handle: row.handle,
         role: row.role,
         description: row.description,
-        execution_profile_id: row.execution_profile_id,
-        execution_profile_version: row.execution_profile_version,
         state: SessionState::from_str(&row.state)?,
         current_turn_id: row.current_turn_id,
         state_version: row.state_version,

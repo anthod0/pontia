@@ -32,7 +32,7 @@ pub fn registration() -> ClientRegistration {
         ))),
         interactions: Some(Arc::new(CodexClient)),
         service: Some(Arc::new(crate::service::CodexBackgroundService)),
-        profile: Some(Arc::new(crate::profiles::CodexProfilePolicy)),
+        instructions: Some(Arc::new(crate::instructions::CodexInstructionsPolicy)),
         events: None,
         in_process: None,
         spec: &crate::SPEC,
@@ -321,28 +321,8 @@ impl ClientSession for CodexClient {
                 },
                 None => "unavailable",
             };
-            let profiles = crate::profiles::CodexProfiles::new(pool.clone());
-            let profile = match profiles.codex_binding(session).await {
-                Ok(Some(profile)) => {
-                    let status = if binding.is_some() {
-                        match profiles.configured_codex_binding(session).await {
-                            Ok(_) => "configured",
-                            Err(_) => "unverified",
-                        }
-                    } else {
-                        "awaiting_input"
-                    };
-                    json!({"profile_id":profile.profile_id,"version":profile.version,"status":status})
-                }
-                Ok(None) => Value::Null,
-                Err(_) => {
-                    let selected: Option<(String, String)> = sqlx::query_as("SELECT execution_profile_id, execution_profile_version FROM sessions WHERE session_id=? AND execution_profile_id IS NOT NULL AND execution_profile_version IS NOT NULL")
-                        .bind(session).fetch_optional(&pool).await?;
-                    selected.map_or(Value::Null, |(profile_id, version)| json!({"profile_id":profile_id,"version":version,"status":"unverified"}))
-                }
-            };
             Ok(ClientSessionDetails {
-                data: json!({"thread_id":binding.map(|binding| binding.client_session_key),"profile":profile,"connection":connection}),
+                data: json!({"thread_id":binding.map(|binding| binding.client_session_key),"connection":connection}),
             })
         })
     }

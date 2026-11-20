@@ -51,8 +51,6 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
         .await
         .unwrap()
         .unwrap();
-    assert!(created.execution_profile_id.is_none());
-    assert!(created.execution_profile_version.is_none());
     let injected = instructions(&control, &reader).await;
     assert!(injected.contains(include_str!("../../src/helpers/retrieval.md").trim()));
     assert!(injected.contains(include_str!("../../src/helpers/instructions.md").trim()));

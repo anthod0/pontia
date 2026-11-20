@@ -452,14 +452,6 @@ async fn dreaming_uses_the_oldest_bots_current_model_and_built_in_instructions()
         .unwrap();
     let dreaming = DreamingService::new(control.clone(), conversation);
     let round = dreaming.start().await.unwrap().unwrap();
-    let session = control
-        .queries()
-        .get_session(&round)
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(session.execution_profile_id.is_none());
-    assert!(session.execution_profile_version.is_none());
     assert_eq!(
         instructions(&control, &round).await.trim(),
         include_str!("../../src/dreaming/instructions.md").trim()

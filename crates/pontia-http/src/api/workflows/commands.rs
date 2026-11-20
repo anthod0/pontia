@@ -83,7 +83,7 @@ pub async fn run_workflow(
     let scheduler = WorkflowScheduler::new(
         state.db(),
         state.control().queries(),
-        state.control().session_commands(),
+        state.control().clone(),
         state.pontia_home().to_path_buf(),
     );
     let outcome = scheduler
@@ -200,7 +200,7 @@ pub async fn submit_workflow_output(
     let scheduler = WorkflowScheduler::new(
         state.db(),
         state.control().queries(),
-        state.control().session_commands(),
+        state.control().clone(),
         state.pontia_home().to_path_buf(),
     );
     scheduler

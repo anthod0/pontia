@@ -950,7 +950,7 @@ describe("pontia pi extension lifecycle", () => {
           };
         }
         if (method === "session.get") {
-          return { execution_profile_binding: { system_prompt: "first-turn-profile" } };
+          return { session_instructions: { system_prompt: "first-turn-profile" } };
         }
         return Promise.reject(new Error("unexpected"));
       });
@@ -987,7 +987,7 @@ describe("pontia pi extension lifecycle", () => {
       };
       await handlers.before_agent_start(event, promptContext);
 
-      expect(event.systemPromptOptions.sections.pontia_execution_profile).toBe(
+      expect(event.systemPromptOptions.sections.pontia_session_instructions).toBe(
         "first-turn-profile",
       );
       expect(env.PONTIA_SESSION_ID).toBe("sess_manual");
@@ -1013,7 +1013,7 @@ describe("pontia pi extension lifecycle", () => {
       const nextEvent = { ...event, prompt: "follow-up", systemPromptOptions: { sections: {} } };
       await handlers.before_agent_start(nextEvent, promptContext);
       expect(nextEvent.systemPromptOptions.sections).toEqual({
-        pontia_execution_profile: "first-turn-profile",
+        pontia_session_instructions: "first-turn-profile",
       });
       expect(
         requestImpl.mock.calls.filter(([method]) => method === "runtime.register"),
@@ -1158,7 +1158,7 @@ describe("pontia pi extension lifecycle", () => {
     );
     await handlers.agent_start({}, { sessionManager });
 
-    expect(requestImpl).toHaveBeenCalledTimes(4);
+    expect(requestImpl).toHaveBeenCalledWith("session.get", { session_id: "sess_late_env" });
     expect(reported.map((event) => event.type)).toEqual(["session.ready", "turn.started"]);
     expect(reported[0]).toMatchObject({ session_id: "sess_late_env" });
   });
@@ -1579,7 +1579,7 @@ describe("pontia pi extension lifecycle", () => {
   test("does not select an execution profile from inherited identity alone", async () => {
     const requestImpl = vi.fn(async (method: string) => {
       if (method === "session.get") {
-        return { execution_profile_binding: { system_prompt: "Reviewer instructions" } };
+        return { session_instructions: { system_prompt: "Reviewer instructions" } };
       }
       return { session_context: null };
     });
@@ -1620,7 +1620,7 @@ describe("pontia pi extension lifecycle", () => {
         if (method === "session.get") {
           expect(params).toEqual({ session_id: "sess_profile" });
           if (prompt === "error") throw new Error("snapshot unavailable");
-          return { execution_profile_binding: { system_prompt: prompt } };
+          return { session_instructions: { system_prompt: prompt } };
         }
         throw new Error(`unexpected query: ${method}`);
       });
@@ -1656,7 +1656,7 @@ describe("pontia pi extension lifecycle", () => {
         }),
       ).toBeUndefined();
       expect(event.systemPromptOptions.sections).toEqual(
-        prompt && prompt !== "error" ? { pontia_execution_profile: prompt } : {},
+        prompt && prompt !== "error" ? { pontia_session_instructions: prompt } : {},
       );
       expect(request).not.toHaveBeenCalledWith("profile.get", expect.anything());
     },

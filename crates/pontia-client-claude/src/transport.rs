@@ -85,9 +85,10 @@ impl Connection {
                     .session_execution_policy(&peer.session)
                     .await?,
             )?;
-            if let Some(binding) = pontia_agent_control::AgentProfileService::new(events.db())
-                .session_binding(&peer.session)
-                .await?
+            if let Some(binding) =
+                pontia_agent_control::SessionInstructionsService::new(events.db())
+                    .session_instructions(&peer.session)
+                    .await?
                 && let Some(prompt) = binding.get("system_prompt").and_then(Value::as_str)
             {
                 bootstrap["system_prompt"] = json!(prompt);

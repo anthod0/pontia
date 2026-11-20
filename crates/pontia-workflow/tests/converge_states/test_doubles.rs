@@ -246,7 +246,7 @@ pub(super) fn clients() -> pontia_agent_control::clients::ClientRegistry {
         configuration: None,
         interactions: None,
         service: None,
-        profile: None,
+        instructions: None,
         events: None,
         in_process: None,
         session: None,

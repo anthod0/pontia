@@ -91,17 +91,31 @@ async fn activate_claimed_node<S: SessionCreator>(
     let problem_report_file = node_dir.join("problem-report.md");
     let initial_task =
         render_initial_task(node, handoff_dir, &output_file, &problem_report_file).await?;
-    let client_type = sessions
-        .default_client_type()
-        .map_err(|error| ActivationFailure {
-            failure_message: format!(
-                "Session client selection failed for Workflow Agent Node {}: {error}",
-                node.node_id
-            ),
-            error,
-        })?;
+    let launch = async {
+        match node.execution_profile_id.as_deref() {
+            Some(id) => {
+                sessions
+                    .resolve_profile(id, node.execution_profile_version.as_deref())
+                    .await
+            }
+            None => Ok(crate::ProfileSessionConfig {
+                client_type: sessions.default_client_type()?,
+                model: None,
+                metadata: json!({}),
+                system_instructions: None,
+            }),
+        }
+    }
+    .await
+    .map_err(|error| ActivationFailure {
+        failure_message: format!(
+            "Session configuration failed for Workflow Agent Node {}: {error}",
+            node.node_id
+        ),
+        error,
+    })?;
     let session_id = sessions
-        .create_session(session_request(workflow, node, initial_task, client_type))
+        .create_session(session_request(workflow, node, initial_task, launch))
         .await
         .map_err(|error| ActivationFailure {
             failure_message: format!(
@@ -127,7 +141,7 @@ fn session_request(
     workflow: &WorkflowRow,
     node: &WorkflowNodeRow,
     initial_task: String,
-    client_type: String,
+    launch: crate::ProfileSessionConfig,
 ) -> CreateSessionRequest {
     let runtime_environment = BTreeMap::from([(
         "PONTIA_WORKFLOW_ID".to_string(),
@@ -136,23 +150,21 @@ fn session_request(
     CreateSessionRequest {
         launch_mode: Default::default(),
         execution_policy: Default::default(),
-        model: None,
+        model: launch.model,
         ownership: Some(pontia_agent_control::SessionOwnership {
             application_id: "workflow".into(),
             reference: format!("node:{}", node.node_id),
         }),
-        client_type,
+        client_type: launch.client_type,
         title: Some(node.title.clone()),
         workspace: Some(workflow.cwd.clone()),
         workspace_id: None,
         handle: None,
         role: None,
         description: None,
-        execution_profile_id: node.execution_profile_id.clone(),
-        execution_profile_version: node.execution_profile_version.clone(),
-        additional_instructions: None,
+        system_instructions: launch.system_instructions,
         include_standalone_session_instructions: false,
-        metadata: json!({}),
+        metadata: launch.metadata,
         initial_task: Some(InitialTaskRequest {
             input: initial_task,
             metadata: json!({}),

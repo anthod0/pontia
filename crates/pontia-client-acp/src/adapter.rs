@@ -83,7 +83,7 @@ fn register(
         interactions: Some(adapter.clone()),
         events: None,
         service: Some(adapter.clone()),
-        profile: Some(Arc::new(crate::profiles::ProfilePolicy)),
+        instructions: Some(Arc::new(crate::instructions::InstructionsPolicy)),
         in_process: None,
         session: Some(adapter.clone()),
         prepare_on_input: false,

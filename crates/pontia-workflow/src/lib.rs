@@ -22,7 +22,8 @@ pub use definition::{plan_workflow_definition_change, render_accepted_workflow_d
 pub use error::{Error, Result};
 pub use patch::WorkflowPatchService;
 pub use ports::{
-    AgentEventSubscriber, GracefulExitRequester, SessionCreator, TurnInterruptionRequester,
+    AgentEventSubscriber, GracefulExitRequester, ProfileSessionConfig, SessionCreator,
+    TurnInterruptionRequester,
 };
 pub use query::{
     WorkflowActivePatchView, WorkflowAgentStatus, WorkflowContextView, WorkflowDetailView,

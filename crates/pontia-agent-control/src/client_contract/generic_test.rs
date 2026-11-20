@@ -134,7 +134,7 @@ pub fn registration() -> crate::clients::ClientRegistration {
         configuration: None,
         interactions: None,
         service: None,
-        profile: None,
+        instructions: None,
         events: None,
         spec: &SPEC,
         data: None,

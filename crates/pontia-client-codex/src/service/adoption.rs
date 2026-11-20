@@ -17,7 +17,7 @@ impl CodexService {
         operation: ThreadOperation,
         result: &Value,
         params: &Value,
-        profile_binding: Option<Value>,
+        session_instructions: Option<Value>,
         reservation: Option<crate::proxy::open::Reservation>,
     ) -> Result<(String, tokio::sync::OwnedMutexGuard<()>)> {
         let connection = runtime.connection().await?;
@@ -74,7 +74,7 @@ impl CodexService {
                 },
                 pontia_agent_control::sessions::NativeSubscription {
                     metadata: json!({"codex_control_root":runtime.root,"codex_launch_cwd":cwd}),
-                    profile_binding,
+                    session_instructions,
                     launch_mode: runtime.target.launch_mode(),
                 },
                 Some(&expected_session),

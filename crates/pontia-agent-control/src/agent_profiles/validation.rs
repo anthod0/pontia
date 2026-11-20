@@ -40,12 +40,9 @@ pub(super) fn validate_request(
         }
         if let Some(policy) = clients
             .get(client_type)
-            .and_then(|client| client.profile.as_ref())
+            .and_then(|client| client.instructions.as_ref())
         {
-            policy.validate_templates(
-                request.system_prompt_template.as_deref(),
-                request.turn_prompt_template.as_deref(),
-            )?;
+            policy.validate_instructions(request.system_prompt_template.as_deref())?;
         }
     }
     if request.agent_kind != "executor" {

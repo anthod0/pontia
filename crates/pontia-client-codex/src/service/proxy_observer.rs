@@ -35,7 +35,7 @@ async fn observe(
             operation,
             result,
             params,
-            profile_binding,
+            session_instructions,
             reservation,
         } => {
             let thread = &result["thread"];
@@ -48,7 +48,7 @@ async fn observe(
                     operation,
                     &result,
                     &params,
-                    profile_binding,
+                    session_instructions,
                     reservation,
                 )
                 .await?;

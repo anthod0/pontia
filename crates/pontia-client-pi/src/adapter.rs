@@ -28,7 +28,7 @@ pub fn registration(tui_command: Option<String>) -> ClientRegistration {
         ))),
         interactions: None,
         service: Some(Arc::new(crate::service::PiService)),
-        profile: Some(Arc::new(crate::profiles::ProfilePolicy)),
+        instructions: Some(Arc::new(crate::instructions::InstructionsPolicy)),
         events: Some(Arc::new(crate::lifecycle::PiEventInterpreter)),
         in_process: None,
         session: None,

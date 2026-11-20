@@ -64,8 +64,6 @@ pub(super) async fn persist_projections_in_tx(
                 handle: session.handle.clone(),
                 role: session.role.clone(),
                 description: session.description.clone(),
-                execution_profile_id: session.execution_profile_id.clone(),
-                execution_profile_version: session.execution_profile_version.clone(),
                 state: session.state.to_string(),
                 current_turn_id: session.current_turn_id.clone(),
                 state_version,

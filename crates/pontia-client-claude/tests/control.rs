@@ -1292,7 +1292,7 @@ async fn unsupported_result_disables_input_without_inventing_a_terminal_turn() {
 async fn standalone_session_instructions_are_fixed_before_input_and_survive_resume() {
     let h = Harness::new().await;
     let request =
-        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"additional_instructions":"caller-marker","include_standalone_session_instructions":true,"execution_policy":{"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"yolo":true}}))
+        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"system_instructions":"caller-marker","include_standalone_session_instructions":true,"execution_policy":{"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"yolo":true}}))
             .unwrap();
     let created = h
         .app
@@ -1346,88 +1346,19 @@ async fn standalone_session_instructions_are_fixed_before_input_and_survive_resu
 }
 
 #[tokio::test]
-async fn explicit_profile_instructions_are_validated_fixed_and_preserved_across_resume() {
-    use pontia_agent_control::{AgentProfileService, UpsertExecutionProfileRequest};
-
+async fn session_instructions_are_validated_fixed_and_preserved_across_resume() {
     let h = Harness::new().await;
-    let profiles = AgentProfileService::new(h.app.db()).with_clients(h.app.clients());
-    let profile_request =
-        |id: &str, system: Option<&str>, turn: Option<&str>, clients: Vec<&str>| {
-            UpsertExecutionProfileRequest {
-                profile_id: id.into(),
-                version: "1".into(),
-                name: id.into(),
-                description: None,
-                default_client_type: None,
-                default_client_key: None,
-                default_model: None,
-                supported_client_types: clients.into_iter().map(str::to_owned).collect(),
-                agent_kind: "executor".into(),
-                system_prompt_template: system.map(str::to_owned),
-                turn_prompt_template: turn.map(str::to_owned),
-                default_session_role: None,
-                default_session_description: None,
-                handle_prefix: None,
-                expected_output_schema: None,
-                artifact_contract: json!({}),
-                default_execution_policy: json!({}),
-                default_review_policy: json!({}),
-                metadata: json!({}),
-            }
-        };
-    for invalid in [
-        profile_request("bad-turn", None, Some("turn prompt"), vec!["claude-agent"]),
-        profile_request("bad-blank", Some("   "), None, vec!["claude-agent"]),
-        profile_request(
-            "bad-placeholder",
-            Some("hello {{name}}"),
-            None,
-            vec!["claude-agent"],
-        ),
-    ] {
-        assert!(profiles.create_profile(invalid).await.is_err());
+    for system in ["   ", "hello {{name}}", "name}}"] {
+        let request = serde_json::from_value(json!({"client_type":"claude-agent", "workspace":h.root.path(), "system_instructions":system})).unwrap();
+        assert!(matches!(
+            h.app.session_commands().create_session(request).await,
+            Err(pontia_core::Error::Domain(_))
+        ));
     }
-    profiles
-        .create_profile(profile_request(
-            "empty-system",
-            None,
-            None,
-            vec!["claude-agent"],
-        ))
-        .await
-        .unwrap();
-    profiles
-        .create_profile(profile_request("other-client", Some("other"), None, vec![]))
-        .await
-        .unwrap();
-    let rejected: CreateSessionRequest = serde_json::from_value(json!({
-        "client_type": "claude-agent",
-        "workspace": h.root.path(),
-        "execution_profile_id": "other-client",
-    }))
-    .unwrap();
-    assert!(
-        h.app
-            .session_commands()
-            .create_session(rejected)
-            .await
-            .is_err()
-    );
-
-    profiles
-        .create_profile(profile_request(
-            "claude-reviewer",
-            Some("explicit-marker"),
-            None,
-            vec!["claude-agent"],
-        ))
-        .await
-        .unwrap();
     let request = serde_json::from_value(json!({
         "client_type": "claude-agent",
         "workspace": h.root.path(),
-        "execution_profile_id": "claude-reviewer",
-        "additional_instructions": "caller-marker",
+        "system_instructions": "explicit-marker\n\ncaller-marker",
         "include_standalone_session_instructions": true,
     }))
     .unwrap();
@@ -1438,11 +1369,6 @@ async fn explicit_profile_instructions_are_validated_fixed_and_preserved_across_
         .await
         .unwrap();
     let session = created.session_id().unwrap();
-    assert_eq!(
-        created.data["session"]["execution_profile_id"],
-        "claude-reviewer"
-    );
-    assert_eq!(created.data["session"]["execution_profile_version"], "1");
     sqlx::query("DROP TABLE execution_profiles")
         .execute(&h.app.db())
         .await

@@ -35,6 +35,19 @@ impl SequencedSessionCreator {
 }
 
 impl SessionCreator for SequencedSessionCreator {
+    async fn resolve_profile(
+        &self,
+        id: &str,
+        version: Option<&str>,
+    ) -> pontia_workflow::Result<pontia_workflow::ProfileSessionConfig> {
+        Ok(pontia_workflow::ProfileSessionConfig {
+            client_type: "pi".into(),
+            model: version.map(str::to_owned),
+            metadata: json!({}),
+            system_instructions: Some(id.into()),
+        })
+    }
+
     fn default_client_type(&self) -> pontia_workflow::Result<String> {
         Ok("pi".into())
     }
@@ -437,14 +450,14 @@ async fn confirmed_exits_chain_three_agent_nodes_with_declared_handoff_inputs() 
     assert_eq!(
         requests
             .iter()
-            .map(|request| request.execution_profile_id.as_deref())
+            .map(|request| request.system_instructions.as_deref())
             .collect::<Vec<_>>(),
         vec![Some("research"), Some("writer"), Some("review")]
     );
     assert_eq!(
         requests
             .iter()
-            .map(|request| request.execution_profile_version.as_deref())
+            .map(|request| request.model.as_deref())
             .collect::<Vec<_>>(),
         vec![Some("1"), Some("2"), Some("3")]
     );

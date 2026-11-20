@@ -172,9 +172,7 @@ where
                         handle: None,
                         role: Some("workflow_replanner".into()),
                         description: Some(format!("Resolve Workflow Patch {}", patch.patch_id)),
-                        execution_profile_id: None,
-                        execution_profile_version: None,
-                        additional_instructions: None,
+                        system_instructions: None,
                         include_standalone_session_instructions: false,
                         metadata: json!({
                             "role": "workflow_replanner",

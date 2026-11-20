@@ -73,7 +73,7 @@ async fn registration_establishes_identity_and_reconnect_never_resumes_or_replac
         .await
         .unwrap();
     assert_eq!(
-        snapshot["execution_profile_binding"]["system_prompt"],
+        snapshot["session_instructions"]["system_prompt"],
         pontia_agent_control::standalone_session_instructions()
     );
     assert!(state.client_control().available(session).await.unwrap());
@@ -580,8 +580,7 @@ async fn repeated_started_reports_return_the_first_canonical_identity() {
 }
 
 #[tokio::test]
-async fn rpc_queries_read_workspace_session_and_pinned_or_latest_profiles() {
-    use pontia_agent_control::{AgentProfileService, UpsertExecutionProfileRequest};
+async fn rpc_queries_read_workspace_and_session_instructions() {
     let (state, root) = state().await;
     let (pi, _requests) = client(&state);
     assert_eq!(
@@ -598,43 +597,13 @@ async fn rpc_queries_read_workspace_session_and_pinned_or_latest_profiles() {
         root.path().canonicalize().unwrap().to_str().unwrap()
     );
     assert_eq!(workspaces["workspaces"][0]["state"], "active");
-    let service = AgentProfileService::new(state.db()).with_clients(support::clients());
-    for version in ["1", "2"] {
-        let request: UpsertExecutionProfileRequest = serde_json::from_value(json!({
-            "profile_id": "reviewer", "version": version, "name": "Reviewer", "agent_kind": "executor",
-            "supported_client_types": ["pi"], "system_prompt_template": format!("Prompt {version}")
-        })).unwrap();
-        if version == "1" {
-            service.create_profile(request).await.unwrap();
-        } else {
-            service
-                .create_profile_version("reviewer", request)
-                .await
-                .unwrap();
-        }
-    }
-    sqlx::query("UPDATE sessions SET execution_profile_id='reviewer', execution_profile_version='1' WHERE session_id=?")
-        .bind(&session).execute(&state.db()).await.unwrap();
     let result = pi
         .call("session.get", json!({"session_id": session}))
         .await
         .unwrap();
-    assert_eq!(result["session"]["execution_profile_id"], "reviewer");
-    assert_eq!(result["session"]["execution_profile_version"], "1");
     assert_eq!(
-        pi.call(
-            "profile.get",
-            json!({"profile_id":"reviewer", "version":"1"})
-        )
-        .await
-        .unwrap()["agent_profile"]["system_prompt_template"],
-        "Prompt 1"
-    );
-    assert_eq!(
-        pi.call("profile.get", json!({"profile_id":"reviewer"}))
-            .await
-            .unwrap()["agent_profile"]["system_prompt_template"],
-        "Prompt 2"
+        result["session_instructions"]["system_prompt"],
+        pontia_agent_control::standalone_session_instructions()
     );
     for (method, params) in [
         ("session.get", json!({"session_id":"missing"})),

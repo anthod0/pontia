@@ -459,10 +459,10 @@ impl Peer {
                 missing.join(", ")
             )));
         }
-        let instructions = pontia_agent_control::AgentProfileService::new(self.events.db())
-            .session_binding(&self.session)
+        let instructions = pontia_agent_control::SessionInstructionsService::new(self.events.db())
+            .session_instructions(&self.session)
             .await?
-            .map(serde_json::from_value::<crate::profiles::Instructions>)
+            .map(serde_json::from_value::<crate::instructions::Instructions>)
             .transpose()?
             .unwrap_or_default();
         let supported = initialize
@@ -476,7 +476,7 @@ impl Peer {
         };
         if inject && !supported {
             return Err(Error::CapabilityUnavailable(
-                "ACP Agent lacks sessionCapabilities.systemPrompt; create a Session without explicit Profile instructions or additional_instructions".into(),
+                "ACP Agent lacks sessionCapabilities.systemPrompt; create a Session without system_instructions".into(),
             ));
         }
         let system_prompt = if inject {

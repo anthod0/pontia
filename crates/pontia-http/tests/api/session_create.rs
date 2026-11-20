@@ -156,8 +156,6 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
         json!({
             "client_type":"generic",
             "workspace":_workspace.path(),
-            "execution_profile_id":"implementer",
-            "execution_profile_version":"1",
             "metadata":{"purpose":"session_create"}
         }),
     )
@@ -172,8 +170,8 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
     assert_eq!(session["handle"], Value::Null);
     assert_eq!(session["state"], "idle");
     assert_eq!(session["workspace"], _workspace.path().to_str().unwrap());
-    assert_eq!(session["execution_profile_id"], "implementer");
-    assert_eq!(session["execution_profile_version"], "1");
+    assert!(session.get("execution_profile_id").is_none());
+    assert!(session.get("execution_profile_version").is_none());
     assert_eq!(session["metadata"], json!({"purpose":"session_create"}));
     assert!(session["metadata"].get("profile_id").is_none());
     assert!(session["metadata"].get("profile_version").is_none());
@@ -221,14 +219,6 @@ async fn create_session_emits_lifecycle_events_and_returns_idle_session_with_cap
     let (get_status, get_body) = get(state, &format!("/api/v1/sessions/{session_id}")).await;
     assert_eq!(get_status, StatusCode::OK);
     assert_eq!(get_body["data"]["session"]["state"], "idle");
-    assert_eq!(
-        get_body["data"]["session"]["execution_profile_id"],
-        "implementer"
-    );
-    assert_eq!(
-        get_body["data"]["session"]["execution_profile_version"],
-        "1"
-    );
     assert_eq!(
         get_body["data"]["session"]["capabilities"]["accept_task"],
         true

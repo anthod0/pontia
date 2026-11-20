@@ -21,7 +21,7 @@ pub struct NativeSessionIdentity {
 #[derive(Default)]
 pub struct NativeSubscription {
     pub metadata: Value,
-    pub profile_binding: Option<Value>,
+    pub session_instructions: Option<Value>,
     pub launch_mode: pontia_core::LaunchMode,
 }
 
@@ -73,7 +73,7 @@ impl NativeSessionService {
     ) -> Result<String> {
         let NativeSubscription {
             metadata,
-            profile_binding,
+            session_instructions,
             launch_mode,
         } = subscription;
         let workspace =
@@ -103,7 +103,7 @@ impl NativeSessionService {
                     PontiaEventSource::RuntimeManager,
                     client,
                     PontiaEventType::SessionCreated,
-                    json!({"workspace":workspace.canonical_path,"metadata":metadata,"execution_profile_binding":profile_binding,"launch_mode":launch_mode}),
+                    json!({"workspace":workspace.canonical_path,"metadata":metadata,"session_instructions":session_instructions,"launch_mode":launch_mode}),
                 ),
                 UpsertAgentBindingRequest {
                     session_id: session.clone(),

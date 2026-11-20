@@ -156,7 +156,6 @@ pub async fn serve_connection(state: AgentControl, stream: UnixStream) {
         if !matches!(
             request.method.as_str(),
             "session.get"
-                | "profile.get"
                 | "workspaces.list"
                 | "session.context"
                 | "runtime.register"
@@ -269,10 +268,7 @@ async fn dispatch(
             .validate_connection(&identity.session_id, &identity.runtime_id, &current)
             .await?;
     }
-    if matches!(
-        request.method.as_str(),
-        "session.get" | "profile.get" | "workspaces.list"
-    ) {
+    if matches!(request.method.as_str(), "session.get" | "workspaces.list") {
         return queries::dispatch(state, request).await;
     }
     if request.method == "liveOutput.publish" {

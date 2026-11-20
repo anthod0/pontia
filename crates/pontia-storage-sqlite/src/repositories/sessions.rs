@@ -4,7 +4,7 @@ use crate::models::sessions::{SessionProjectionRow, SessionRow};
 
 use pontia_core::Result;
 
-const LOAD_SESSION_PROJECTIONS_SQL: &str = "SELECT session_id, client_type, title, handle, role, description, execution_profile_id, execution_profile_version, state, current_turn_id, state_version, metadata FROM sessions WHERE session_id = ?";
+const LOAD_SESSION_PROJECTIONS_SQL: &str = "SELECT session_id, client_type, title, handle, role, description, state, current_turn_id, state_version, metadata FROM sessions WHERE session_id = ?";
 
 #[derive(Debug, Clone)]
 pub struct SessionProjectionUpsertRecord {
@@ -14,8 +14,6 @@ pub struct SessionProjectionUpsertRecord {
     pub handle: Option<String>,
     pub role: Option<String>,
     pub description: Option<String>,
-    pub execution_profile_id: Option<String>,
-    pub execution_profile_version: Option<String>,
     pub state: String,
     pub current_turn_id: Option<String>,
     pub state_version: i64,
@@ -118,17 +116,14 @@ impl SqliteSessionRepository {
     ) -> Result<()> {
         sqlx::query(
             r#"INSERT INTO sessions
-               (session_id, client_type, title, handle, role, description, execution_profile_id,
-                execution_profile_version, state, current_turn_id, state_version, metadata)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               (session_id, client_type, title, handle, role, description, state, current_turn_id, state_version, metadata)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(session_id) DO UPDATE SET
                    client_type = excluded.client_type,
                    title = excluded.title,
                    handle = excluded.handle,
                    role = excluded.role,
                    description = excluded.description,
-                   execution_profile_id = excluded.execution_profile_id,
-                   execution_profile_version = excluded.execution_profile_version,
                    state = excluded.state,
                    current_turn_id = excluded.current_turn_id,
                    state_version = excluded.state_version,
@@ -141,8 +136,6 @@ impl SqliteSessionRepository {
         .bind(session.handle)
         .bind(session.role)
         .bind(session.description)
-        .bind(session.execution_profile_id)
-        .bind(session.execution_profile_version)
         .bind(session.state)
         .bind(session.current_turn_id)
         .bind(session.state_version)
@@ -175,7 +168,6 @@ impl SqliteSessionRepository {
             Some(
                 sqlx::query_as::<_, SessionRow>(
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
-                              s.execution_profile_id, s.execution_profile_version,
                               s.state, s.current_turn_id, s.workspace_id,
                               COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
                               s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
@@ -196,7 +188,6 @@ impl SqliteSessionRepository {
             Some(
                 sqlx::query_as::<_, SessionRow>(
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
-                              s.execution_profile_id, s.execution_profile_version,
                               s.state, s.current_turn_id, s.workspace_id,
                               COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
                               s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
@@ -217,7 +208,6 @@ impl SqliteSessionRepository {
             Some(
                 sqlx::query_as::<_, SessionRow>(
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
-                              s.execution_profile_id, s.execution_profile_version,
                               s.state, s.current_turn_id, s.workspace_id,
                               COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
                               s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
@@ -239,7 +229,6 @@ impl SqliteSessionRepository {
             let mut sessions = match (options.workspace_id.as_deref(), options.cursor.as_ref()) {
                 (None, None) => sqlx::query_as::<_, SessionRow>(
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
-                                  s.execution_profile_id, s.execution_profile_version,
                                   s.state, s.current_turn_id, s.workspace_id,
                                   COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
                                   s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
@@ -255,7 +244,6 @@ impl SqliteSessionRepository {
                 .await?,
                 (None, Some(cursor)) => sqlx::query_as::<_, SessionRow>(
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
-                                  s.execution_profile_id, s.execution_profile_version,
                                   s.state, s.current_turn_id, s.workspace_id,
                                   COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
                                   s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
@@ -275,7 +263,6 @@ impl SqliteSessionRepository {
                 .await?,
                 (Some(workspace_id), None) => sqlx::query_as::<_, SessionRow>(
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
-                                  s.execution_profile_id, s.execution_profile_version,
                                   s.state, s.current_turn_id, s.workspace_id,
                                   COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
                                   s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
@@ -291,7 +278,6 @@ impl SqliteSessionRepository {
                 .await?,
                 (Some(workspace_id), Some(cursor)) => sqlx::query_as::<_, SessionRow>(
                     r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
-                                  s.execution_profile_id, s.execution_profile_version,
                                   s.state, s.current_turn_id, s.workspace_id,
                                   COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
                                   s.pinned_at, s.archived_at, s.metadata, s.created_at, s.updated_at
@@ -347,7 +333,6 @@ impl SqliteSessionRepository {
     pub async fn get_session(&self, session_id: &str) -> Result<Option<SessionRow>> {
         Ok(sqlx::query_as::<_, SessionRow>(
             r#"SELECT s.session_id, s.client_type, s.title, s.handle, s.role, s.description,
-                      s.execution_profile_id, s.execution_profile_version,
                       s.state, s.current_turn_id, s.workspace_id,
                       COALESCE(w.canonical_path, s.workspace_ref) AS workspace_ref,
                       s.pinned_at, s.archived_at,

@@ -18,6 +18,7 @@ use sqlx::SqlitePool;
 mod commands;
 mod compaction;
 mod fork;
+pub mod instructions;
 pub use fork::{ForkSessionOutcome, ForkSessionRequest};
 mod models;
 pub use compaction::CompactionAccepted;
@@ -43,9 +44,7 @@ pub struct CreateSessionRequest {
     pub handle: Option<String>,
     pub role: Option<String>,
     pub description: Option<String>,
-    pub execution_profile_id: Option<String>,
-    pub execution_profile_version: Option<String>,
-    pub additional_instructions: Option<String>,
+    pub system_instructions: Option<String>,
     #[serde(default)]
     pub include_standalone_session_instructions: bool,
     #[serde(default)]

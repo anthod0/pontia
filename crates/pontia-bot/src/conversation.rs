@@ -189,7 +189,7 @@ impl ConversationService {
             .get(client_type)
             .is_some_and(|entry| {
                 entry.spec.capabilities.steer
-                    && entry.profile.is_some()
+                    && entry.instructions.is_some()
                     && entry
                         .configuration
                         .as_ref()
@@ -207,10 +207,9 @@ impl ConversationService {
         instructions: &str,
     ) -> Result<CreateSessionRequest> {
         let clients = self.control.clients();
-        if !clients
-            .get(client_type)
-            .is_some_and(|entry| entry.spec.capabilities.accept_task && entry.profile.is_some())
-        {
+        if !clients.get(client_type).is_some_and(|entry| {
+            entry.spec.capabilities.accept_task && entry.instructions.is_some()
+        }) {
             return Err(Error::CapabilityUnavailable(
                 "Client cannot run tasks with injected instructions".into(),
             ));
@@ -228,9 +227,7 @@ impl ConversationService {
             workspace_id: None,
             handle: None,
             role: None,
-            execution_profile_id: None,
-            execution_profile_version: None,
-            additional_instructions: Some(instructions.into()),
+            system_instructions: Some(instructions.into()),
             include_standalone_session_instructions: false,
             metadata,
             initial_task: None,
@@ -505,9 +502,7 @@ impl ConversationService {
                 workspace_id: None,
                 handle: None,
                 role: None,
-                execution_profile_id: None,
-                execution_profile_version: None,
-                additional_instructions: Some(handoff),
+                system_instructions: Some(handoff),
                 include_standalone_session_instructions: false,
                 metadata: self
                     .session_metadata(&bot.client_type, &bot.client_key)

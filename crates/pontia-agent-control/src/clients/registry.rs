@@ -15,7 +15,7 @@ pub struct ClientRegistration {
     pub interactions: Option<Arc<dyn crate::client_contract::ClientInteractions>>,
     pub events: Option<Arc<dyn crate::client_contract::ClientEventInterpreter>>,
     pub service: Option<Arc<dyn ClientService>>,
-    pub profile: Option<Arc<dyn crate::client_contract::ClientProfile>>,
+    pub instructions: Option<Arc<dyn crate::client_contract::ClientInstructions>>,
     pub in_process: Option<Arc<dyn InProcessClient>>,
     pub session: Option<Arc<dyn ClientSession>>,
     pub prepare_on_input: bool,

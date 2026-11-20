@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
     let workflow_coordinator = pontia_workflow::WorkflowCoordinator::new(
         app_state.db(),
         app_state.control(),
-        app_state.control().session_commands(),
+        app_state.control().clone(),
         app_state.control().agent_events(),
         app_state.pontia_home().to_path_buf(),
     );

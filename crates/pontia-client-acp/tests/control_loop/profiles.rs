@@ -1,25 +1,5 @@
 use super::*;
-use pontia_agent_control::{
-    AgentBindingService, AgentProfileService, standalone_session_instructions,
-};
-
-fn profiles(h: &Harness) -> AgentProfileService {
-    AgentProfileService::new(h.app.db()).with_clients(h.app.clients())
-}
-
-async fn profile(h: &Harness, system: Option<&str>) {
-    profiles(h)
-        .create_profile(
-            serde_json::from_value(json!({
-                "profile_id":"reviewer", "version":"1", "name":"Reviewer",
-                "agent_kind":"executor", "supported_client_types":["acp"],
-                "system_prompt_template":system
-            }))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-}
+use pontia_agent_control::{AgentBindingService, standalone_session_instructions};
 
 async fn create(h: &Harness, options: Value) -> Result<String> {
     let mut request = json!({
@@ -78,12 +58,10 @@ fn assert_prompts(h: &Harness, expected: Option<&str>) {
 #[tokio::test]
 async fn explicit_instructions_are_appended_and_pinned_across_history_and_restart() {
     let mut h = Harness::new(&[("ACP_SYSTEM_PROMPT", "1")]).await;
-    profile(&h, Some("profile-marker")).await;
     let session = create(
         &h,
         json!({
-            "execution_profile_id":"reviewer",
-            "additional_instructions":"caller-marker",
+            "system_instructions":"profile-marker\n\ncaller-marker",
             "include_standalone_session_instructions": true,
         }),
     )
@@ -141,11 +119,10 @@ async fn standalone_instructions_can_be_skipped_and_are_not_added_after_agent_ga
 #[tokio::test]
 async fn unsupported_agent_rejects_explicit_instructions_before_native_creation() {
     for options in [
-        json!({"execution_profile_id":"reviewer"}),
-        json!({"additional_instructions":"caller-marker"}),
+        json!({"system_instructions":"profile-marker"}),
+        json!({"system_instructions":"caller-marker"}),
     ] {
         let h = Harness::new(&[]).await;
-        profile(&h, Some("profile-marker")).await;
         assert!(matches!(
             create(&h, options).await,
             Err(Error::CapabilityUnavailable(_))
@@ -162,12 +139,9 @@ async fn unsupported_agent_rejects_explicit_instructions_before_native_creation(
 }
 
 #[tokio::test]
-async fn profile_without_instructions_does_not_require_injection() {
+async fn session_without_instructions_does_not_require_injection() {
     let h = Harness::new(&[]).await;
-    profile(&h, None).await;
-    let session = create(&h, json!({"execution_profile_id":"reviewer"}))
-        .await
-        .unwrap();
+    let session = create(&h, json!({})).await.unwrap();
     assert!(!injected(&h, &session).await);
     assert_prompts(&h, None);
     h.stop().await;
@@ -182,7 +156,7 @@ async fn agent_rejection_does_not_silently_drop_instructions() {
         ])
         .await;
         assert!(
-            create(&h, json!({"additional_instructions":"caller-marker"}))
+            create(&h, json!({"system_instructions":"caller-marker"}))
                 .await
                 .is_err()
         );
@@ -220,24 +194,14 @@ async fn recovery_fails_if_previously_injected_instructions_cannot_be_applied() 
 }
 
 #[tokio::test]
-async fn invalid_profile_templates_are_rejected() {
+async fn invalid_session_instructions_are_rejected() {
     let h = Harness::new(&[]).await;
-    for templates in [
-        json!({"system_prompt_template":" "}),
-        json!({"system_prompt_template":"Hello {{name}}"}),
-        json!({"turn_prompt_template":"per-turn"}),
-    ] {
-        let mut request = json!({"profile_id":"invalid", "version":"1", "name":"Invalid", "agent_kind":"executor", "supported_client_types":["acp"]});
-        request
-            .as_object_mut()
-            .unwrap()
-            .extend(templates.as_object().unwrap().clone());
+    for system in [" ", "Hello {{name}}", "name}}"] {
         assert!(matches!(
-            profiles(&h)
-                .create_profile(serde_json::from_value(request).unwrap())
-                .await,
+            create(&h, json!({"system_instructions":system})).await,
             Err(Error::Domain(_))
         ));
     }
+    assert_eq!(h.requests("session/new"), 0);
     h.stop().await;
 }

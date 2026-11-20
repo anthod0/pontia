@@ -172,7 +172,7 @@ CREATE TABLE sessions (
     metadata TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-, workspace_id TEXT REFERENCES workspaces(workspace_id), handle TEXT, role TEXT, description TEXT, execution_profile_id TEXT, execution_profile_version TEXT, title TEXT, pinned_at TEXT, archived_at TEXT, application_id TEXT, application_ref TEXT, runtime_environment TEXT NOT NULL DEFAULT '{}');
+, workspace_id TEXT REFERENCES workspaces(workspace_id), handle TEXT, role TEXT, description TEXT, title TEXT, pinned_at TEXT, archived_at TEXT, application_id TEXT, application_ref TEXT, runtime_environment TEXT NOT NULL DEFAULT '{}');
 
 CREATE TABLE turns (
   turn_id TEXT PRIMARY KEY NOT NULL,
@@ -510,15 +510,6 @@ WHERE
   turn_id IS NOT NULL;
 
 CREATE INDEX idx_execution_profiles_profile_created ON execution_profiles (profile_id, created_at, version);
-
-CREATE INDEX idx_sessions_execution_profile ON sessions (
-  workspace_id,
-  execution_profile_id,
-  execution_profile_version,
-  state,
-  updated_at,
-  session_id
-);
 
 CREATE UNIQUE INDEX idx_sessions_workspace_handle ON sessions (workspace_id, handle)
 WHERE

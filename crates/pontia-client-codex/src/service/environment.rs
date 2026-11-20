@@ -62,15 +62,15 @@ impl CodexService {
             config["approval_policy"] = json!("never");
             config["sandbox_mode"] = json!("danger-full-access");
         }
-        if let Some(profile) = self.profiles().codex_binding(session).await?
-            && let Some(prompt) = profile.system_prompt
+        if let Some(instructions) = self.instructions().codex_binding(session).await?
+            && let Some(prompt) = instructions.system_prompt
         {
-            let existing = profile
+            let existing = instructions
                 .native_developer_instructions
                 .as_deref()
                 .or_else(|| response["config"]["developer_instructions"].as_str());
             config["developer_instructions"] =
-                json!(super::profile::append_instructions(existing, &prompt));
+                json!(super::instructions::append_instructions(existing, &prompt));
         }
         Ok(config)
     }

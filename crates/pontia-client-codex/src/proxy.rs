@@ -30,7 +30,7 @@ pub(crate) enum ObservedEvent {
         operation: ThreadOperation,
         result: Box<Value>,
         params: Value,
-        profile_binding: Option<Value>,
+        session_instructions: Option<Value>,
         reservation: Option<open::Reservation>,
     },
     ThreadUnsubscribed {
@@ -242,7 +242,7 @@ async fn relay(
                                     let (bound, ready) = tokio::sync::oneshot::channel();
                                     let reservation = prepared.as_ref().map(|prepared| open::Reservation { session: prepared.session.clone(), bound });
                                     let event = ObservedEvent::ThreadOpened { runtime_id, operation, result: Box::new(result.clone()), params,
-                                        profile_binding: prepared.as_ref().and_then(|prepared| prepared.profile_binding.clone()), reservation };
+                                        session_instructions: prepared.as_ref().and_then(|prepared| prepared.session_instructions.clone()), reservation };
                                     // Keep the reserved tool environment identity, but create the Session only on input.
                                     if operation == ThreadOperation::Start && prepared.is_some() {
                                         pending_starts.insert(thread.into(), (event, ready));

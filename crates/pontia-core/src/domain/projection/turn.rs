@@ -174,8 +174,6 @@ impl ProjectionState {
                 handle: None,
                 role: None,
                 description: None,
-                execution_profile_id: None,
-                execution_profile_version: None,
                 state: SessionState::Created,
                 current_turn_id: None,
                 state_version: 0,

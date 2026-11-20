@@ -27,11 +27,11 @@ impl Fixture {
         Self::with_instructions(None).await
     }
 
-    async fn with_instructions(additional_instructions: Option<&str>) -> Self {
-        Self::with_policy(additional_instructions, json!({})).await
+    async fn with_instructions(system_instructions: Option<&str>) -> Self {
+        Self::with_policy(system_instructions, json!({})).await
     }
 
-    async fn with_policy(additional_instructions: Option<&str>, execution_policy: Value) -> Self {
+    async fn with_policy(system_instructions: Option<&str>, execution_policy: Value) -> Self {
         let root = tempfile::tempdir().unwrap();
         let socket = root.path().join("app-server.sock");
         let listener = UnixListener::bind(&socket).unwrap();
@@ -177,7 +177,7 @@ impl Fixture {
             .session_commands()
             .create_session(
                 serde_json::from_value::<CreateSessionRequest>(
-                    json!({"client_type":"codex","workspace":root.path(),"additional_instructions":additional_instructions,"include_standalone_session_instructions":true,"execution_policy":execution_policy}),
+                    json!({"client_type":"codex","workspace":root.path(),"system_instructions":system_instructions,"include_standalone_session_instructions":true,"execution_policy":execution_policy}),
                 )
                 .unwrap(),
             )

@@ -306,3 +306,97 @@ async fn workflow_run_rejects_a_missing_phase_during_json_decoding() {
         "{body}"
     );
 }
+
+#[tokio::test]
+async fn workflow_resolves_profile_launch_settings_and_pins_instructions() {
+    use pontia_agent_control::{AgentProfileService, SessionInstructionsService};
+    use pontia_workflow::SessionCreator;
+    let app = TestApp::new().await;
+    let profiles =
+        AgentProfileService::new(app.db.clone()).with_clients(app.state.control().clients());
+    profiles.create_profile(serde_json::from_value(json!({
+        "profile_id":"reviewer", "version":"1", "name":"Reviewer", "agent_kind":"executor",
+        "supported_client_types":["codex"], "default_client_type":"codex", "default_client_key":"default",
+        "default_model":"review-model", "system_prompt_template":"Review carefully"
+    })).unwrap()).await.unwrap();
+    let launch = app
+        .state
+        .control()
+        .resolve_profile("reviewer", None)
+        .await
+        .unwrap();
+    assert_eq!(launch.client_type, "codex");
+    assert_eq!(launch.model.as_deref(), Some("review-model"));
+    assert_eq!(launch.metadata, json!({}));
+    let (status, body) = post_run(&app, json!({
+        "workflow_id":"wf_profile", "title":"Review", "cwd":app.workspace().path(),
+        "nodes":[{"type":"agent", "phase":"Review", "title":"Reviewer", "instructions":"Review the files",
+            "inputs":[], "output":"review.md", "execution_profile_id":"reviewer", "execution_profile_version":"1"}]
+    })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let repository = SqliteWorkflowRepository::new(app.db.clone(), app.state.control().queries());
+    let nodes = repository.list_nodes("wf_profile").await.unwrap();
+    let session = nodes[0].session_id.as_deref().unwrap();
+    let snapshot = SessionInstructionsService::new(app.db.clone())
+        .session_instructions(session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snapshot["system_prompt"], "Review carefully");
+    assert_eq!(
+        app.state
+            .control()
+            .queries()
+            .get_session(session)
+            .await
+            .unwrap()
+            .unwrap()
+            .client_type,
+        "codex"
+    );
+    profiles.archive_profile("reviewer").await.unwrap();
+    assert_eq!(
+        SessionInstructionsService::new(app.db.clone())
+            .session_instructions(session)
+            .await
+            .unwrap()
+            .unwrap(),
+        snapshot
+    );
+    assert!(
+        app.state
+            .control()
+            .resolve_profile("reviewer", None)
+            .await
+            .is_err()
+    );
+    assert!(
+        app.state
+            .control()
+            .resolve_profile("missing", None)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn workflow_profiles_without_launch_defaults_use_the_default_client() {
+    use pontia_agent_control::AgentProfileService;
+    use pontia_workflow::SessionCreator;
+    let app = TestApp::new().await;
+    AgentProfileService::new(app.db.clone()).with_clients(app.state.control().clients())
+        .create_profile(serde_json::from_value(json!({
+            "profile_id":"default-client", "version":"1", "name":"Default client", "agent_kind":"executor",
+            "supported_client_types":["generic"], "system_prompt_template":"Keep context"
+        })).unwrap()).await.unwrap();
+    let launch = app
+        .state
+        .control()
+        .resolve_profile("default-client", None)
+        .await
+        .unwrap();
+    assert_eq!(launch.client_type, "generic");
+    assert_eq!(launch.system_instructions.as_deref(), Some("Keep context"));
+    assert_eq!(launch.model, None);
+    assert_eq!(launch.metadata, json!({}));
+}

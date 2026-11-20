@@ -1,7 +1,7 @@
 mod adapter;
 pub mod configuration;
 mod history;
-pub mod profiles;
+pub mod instructions;
 mod proxy;
 pub mod rollout;
 pub mod runtime;

@@ -304,8 +304,8 @@ impl CodexObserver {
         shutdown: &mut watch::Receiver<bool>,
     ) -> Result<()> {
         runtime
-            .profile_service
-            .get_or_init(|| self.service.profiles());
+            .instructions_service
+            .get_or_init(|| self.service.instructions());
         let mut events = connection.events.subscribe();
         let mut observation = Observation {
             threads: HashMap::new(),

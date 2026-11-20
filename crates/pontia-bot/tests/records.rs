@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use pontia_agent_control::{
     AgentProfileService, UpsertExecutionProfileRequest,
-    client_contract::{ClientConfiguration, ClientProfile, test_registration},
+    client_contract::{ClientConfiguration, ClientInstructions, test_registration},
     clients::ClientRegistry,
 };
 use pontia_bot::{
@@ -36,13 +36,13 @@ impl ClientConfiguration for Configuration {
 }
 
 struct Profile;
-impl ClientProfile for Profile {
-    fn validate_templates(&self, _: Option<&str>, _: Option<&str>) -> Result<()> {
+impl ClientInstructions for Profile {
+    fn validate_instructions(&self, _: Option<&str>) -> Result<()> {
         Ok(())
     }
     fn bind(
         &self,
-        input: &pontia_agent_control::client_contract::ProfileBindingInput<'_>,
+        input: &pontia_agent_control::client_contract::InstructionsBindingInput<'_>,
     ) -> Result<Value> {
         Ok(json!({"system": input.system_prompt}))
     }
@@ -70,7 +70,7 @@ impl Fixture {
         let mut registry = ClientRegistry::default();
         let mut client = test_registration();
         client.configuration = Some(Arc::new(Configuration));
-        client.profile = Some(Arc::new(Profile));
+        client.instructions = Some(Arc::new(Profile));
         registry.register(client);
         Self {
             bots: BotService::new(pool.clone(), root.path(), registry.clone()),
@@ -259,13 +259,12 @@ async fn defaults_capture_creation_config_and_preserve_user_edits_and_shared_res
             .model,
         "custom-model"
     );
-    let binding = f
+    let launch = f
         .profiles
-        .resolve_for_client("generic", Some(&helper), Some("1"), None, false)
+        .launch_defaults(&helper, Some("1"))
         .await
-        .unwrap()
         .unwrap();
-    assert_eq!(binding.binding["system"], "custom instructions");
+    assert_eq!(launch.system_prompt.as_deref(), Some("custom instructions"));
     assert_eq!(
         std::fs::read_to_string(user).unwrap(),
         "existing user information"

@@ -17,6 +17,20 @@ struct RecordingSessionCreator {
 }
 
 impl SessionCreator for RecordingSessionCreator {
+    async fn resolve_profile(
+        &self,
+        id: &str,
+        version: Option<&str>,
+    ) -> pontia_workflow::Result<pontia_workflow::ProfileSessionConfig> {
+        assert_eq!((id, version), ("writer", Some("3")));
+        Ok(pontia_workflow::ProfileSessionConfig {
+            client_type: "generic".into(),
+            model: Some("writer-model".into()),
+            metadata: json!({"client_key":"writer"}),
+            system_instructions: Some("Write carefully".into()),
+        })
+    }
+
     fn default_client_type(&self) -> pontia_workflow::Result<String> {
         Ok("pi".into())
     }
@@ -98,12 +112,16 @@ async fn start_launches_first_node_with_required_task_completion_instructions() 
         assert_eq!(requests.len(), 1);
         requests[0].clone()
     };
-    assert_eq!(request.client_type, "pi");
+    assert_eq!(request.client_type, "generic");
     assert_eq!(request.title.as_deref(), Some("Release writer"));
     assert_eq!(request.workspace.as_deref(), Some("/workspace/project"));
     assert_eq!(request.workspace_id, None);
-    assert_eq!(request.execution_profile_id.as_deref(), Some("writer"));
-    assert_eq!(request.execution_profile_version.as_deref(), Some("3"));
+    assert_eq!(
+        request.system_instructions.as_deref(),
+        Some("Write carefully")
+    );
+    assert_eq!(request.model.as_deref(), Some("writer-model"));
+    assert_eq!(request.metadata, json!({"client_key":"writer"}));
     assert!(!request.include_standalone_session_instructions);
     assert_eq!(
         request

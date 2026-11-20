@@ -1,13 +1,29 @@
 use std::future::Future;
 
 use pontia_agent_control::{
-    AgentEventBroker, CreateSessionRequest, SessionCommandService, TurnCommandService,
+    AgentControl, AgentEventBroker, CreateSessionRequest, SessionCommandService, TurnCommandService,
 };
 use pontia_core::domain::DomainEvent;
 
 use crate::{Error, Result};
 
+pub struct ProfileSessionConfig {
+    pub client_type: String,
+    pub model: Option<String>,
+    pub metadata: serde_json::Value,
+    pub system_instructions: Option<String>,
+}
+
 pub trait SessionCreator {
+    fn resolve_profile(
+        &self,
+        id: &str,
+        version: Option<&str>,
+    ) -> impl Future<Output = Result<ProfileSessionConfig>> + Send {
+        let _ = version;
+        async move { Err(pontia_core::Error::NotFound(format!("agent profile {id} not found")).into()) }
+    }
+
     fn default_client_type(&self) -> Result<String>;
     fn find_session_by_ownership(
         &self,
@@ -22,9 +38,65 @@ pub trait SessionCreator {
     ) -> impl Future<Output = Result<String>> + Send;
 }
 
-impl SessionCreator for SessionCommandService {
+impl SessionCreator for AgentControl {
+    async fn resolve_profile(
+        &self,
+        id: &str,
+        version: Option<&str>,
+    ) -> Result<ProfileSessionConfig> {
+        let clients = self.clients();
+        let profile = pontia_agent_control::AgentProfileService::new(self.db())
+            .with_clients(clients.clone())
+            .resolve_launch(id, version)
+            .await?;
+        let (client_type, model, metadata) =
+            if let (Some(client_type), Some(client_key), Some(model)) = (
+                profile.default_client_type,
+                profile.default_client_key,
+                profile.default_model,
+            ) {
+                let configuration = clients
+                    .get(&client_type)
+                    .and_then(|entry| entry.configuration.as_ref())
+                    .ok_or_else(|| {
+                        pontia_core::Error::CapabilityUnavailable(format!(
+                            "Client configuration unavailable: {client_type}"
+                        ))
+                    })?;
+                let mut metadata = None;
+                for option in clients.creation_options(&self.db()).await? {
+                    if option.client_type == client_type
+                        && configuration.key(&option.metadata)? == client_key
+                    {
+                        metadata = Some(option.metadata);
+                        break;
+                    }
+                }
+                let metadata = metadata.ok_or_else(|| {
+                    pontia_core::Error::CapabilityUnavailable(format!(
+                        "Client {client_type}/{client_key} is unavailable for Session creation"
+                    ))
+                })?;
+                (client_type, Some(model), metadata)
+            } else {
+                (self.default_client_type()?, None, serde_json::json!({}))
+            };
+        if !profile.supported_client_types.contains(&client_type) {
+            return Err(pontia_core::Error::Domain(format!(
+                "agent profile {id} does not declare {client_type} support"
+            ))
+            .into());
+        }
+        Ok(ProfileSessionConfig {
+            client_type,
+            model,
+            metadata,
+            system_instructions: profile.system_prompt_template,
+        })
+    }
+
     fn default_client_type(&self) -> Result<String> {
-        Ok(SessionCommandService::default_client_type(self)?.to_string())
+        Ok(self.session_commands().default_client_type()?.to_string())
     }
     async fn find_session_by_ownership(
         &self,
@@ -34,7 +106,7 @@ impl SessionCreator for SessionCommandService {
     }
 
     async fn create_session(&self, request: CreateSessionRequest) -> Result<String> {
-        let outcome = SessionCommandService::create_session(self, request).await?;
+        let outcome = self.session_commands().create_session(request).await?;
         outcome
             .session_id()
             .map(str::to_string)

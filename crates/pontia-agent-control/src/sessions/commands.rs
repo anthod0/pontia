@@ -92,22 +92,13 @@ impl SessionCommandService {
             .for_creation(&request.client_type, &request.metadata)
             .await?;
 
-        let profile = crate::AgentProfileService::new(self.pool.clone())
+        let instructions = crate::SessionInstructionsService::new(self.pool.clone())
             .with_clients(self.clients.registry().clone())
-            .resolve_for_client(
+            .resolve(
                 &request.client_type,
-                request.execution_profile_id.as_deref(),
-                request.execution_profile_version.as_deref(),
-                request.additional_instructions.as_deref(),
+                request.system_instructions.as_deref(),
                 request.include_standalone_session_instructions,
-            )
-            .await?;
-        if let Some(version) = profile
-            .as_ref()
-            .and_then(|profile| profile.version.as_ref())
-        {
-            request.execution_profile_version = Some(version.clone());
-        }
+            )?;
 
         let handle = request.handle.as_deref();
         if let Some(handle) = handle {
@@ -179,9 +170,7 @@ impl SessionCommandService {
                     "handle": request.handle,
                     "role": request.role,
                     "description": request.description,
-                    "execution_profile_id": request.execution_profile_id,
-                    "execution_profile_version": request.execution_profile_version,
-                    "execution_profile_binding": profile.as_ref().map(|profile| &profile.binding),
+                    "session_instructions": instructions,
                     "metadata": request.metadata,
                     "ownership": request.ownership,
                     "runtime_environment": request.runtime_environment,

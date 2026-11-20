@@ -36,7 +36,7 @@ import {
   thinkingDeltaFromEvent,
   userTextFromMessage,
 } from "./pi-message.js";
-import { loadProfileSystemPrompt } from "./profile.js";
+import { loadSessionSystemPrompt } from "./instructions.js";
 import { EventReporter, type EventReportResult } from "./reporter.js";
 import {
   bindSession,
@@ -561,20 +561,19 @@ export function createPontiaPiExtension(
         }
       }
       if (!boundSessionContext) return;
-      const profilePrompt = await loadProfileSystemPrompt(
+      const sessionPrompt = await loadSessionSystemPrompt(
         rpcConnection,
         boundSessionContext.sessionId,
-        ctx.sessionManager.buildSessionProjection().messages,
       );
-      if (profilePrompt) {
-        event.systemPromptOptions.sections.pontia_execution_profile = profilePrompt;
+      if (sessionPrompt) {
+        event.systemPromptOptions.sections.pontia_session_instructions = sessionPrompt;
       }
     } catch (error) {
       if (!boundSessionContext) await closeControlSocket();
       await logDiagnostic(currentHookLogFile(), {
         level: "warn",
         code: "system_prompt_append_failed",
-        message: "failed to append pontia execution profile system prompt",
+        message: "failed to append pontia session system prompt",
         details: error instanceof Error ? error.message : String(error),
       });
     }

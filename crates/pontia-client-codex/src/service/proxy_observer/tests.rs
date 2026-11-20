@@ -860,7 +860,7 @@ async fn native_start_pins_profile_and_resume_preserves_it_without_profile_queri
         f.threads.lock().await[native].developer_instructions,
         expected
     );
-    let binding = crate::profiles::CodexProfiles::new(f.app.db())
+    let binding = crate::instructions::CodexInstructions::new(f.app.db())
         .codex_binding(&session)
         .await
         .unwrap()

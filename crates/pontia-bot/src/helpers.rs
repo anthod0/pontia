@@ -249,19 +249,23 @@ impl HelperService {
                 .with_clients(self.control.clients())
                 .launch_defaults(&profile_id, input.profile_version.as_deref())
                 .await?;
-            let mut request = self
-                .conversation
+            let instructions = [
+                profile.system_prompt.as_deref(),
+                Some(include_str!("helpers/instructions.md")),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join("\n\n");
+            self.conversation
                 .task_session_request(
                     &profile.client_type,
                     &profile.client_key,
                     &profile.model,
                     ownership.clone(),
-                    include_str!("helpers/instructions.md"),
+                    &instructions,
                 )
-                .await?;
-            request.execution_profile_id = Some(profile.profile_id);
-            request.execution_profile_version = Some(profile.version);
-            request
+                .await?
         };
         if !self
             .control

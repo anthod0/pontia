@@ -77,7 +77,7 @@ pub struct CodexRuntime {
     operations: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
     subscriptions: Mutex<HashMap<String, (SubscriptionState, u64)>>,
     subscription_sequence: AtomicU64,
-    pub(crate) profile_service: OnceLock<crate::profiles::CodexProfiles>,
+    pub(crate) instructions_service: OnceLock<crate::instructions::CodexInstructions>,
 }
 
 pub async fn probe_daemon(codex_home: &Path) -> Result<()> {
@@ -215,7 +215,7 @@ impl CodexRuntime {
             operations,
             subscriptions: Mutex::new(HashMap::new()),
             subscription_sequence: AtomicU64::new(1),
-            profile_service: OnceLock::new(),
+            instructions_service: OnceLock::new(),
         });
         if let Some(old) = registry()
             .lock()

@@ -1,7 +1,7 @@
 use super::ThreadOperation;
 use crate::{
     runtime::CodexRuntime,
-    service::{environment::environment_config, profile},
+    service::{environment::environment_config, instructions},
 };
 use pontia_agent_control::{AgentBindingService, AgentControl};
 use pontia_core::{Error, Result};
@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 pub(super) struct Prepared {
     pub session: String,
     pub bound: bool,
-    pub profile_binding: Option<Value>,
+    pub session_instructions: Option<Value>,
     _identity: Option<tokio::sync::OwnedMutexGuard<()>>,
 }
 
@@ -87,8 +87,8 @@ pub(super) async fn prepare(
     let response = connection
         .call("config/read", json!({"cwd":cwd,"includeLayers":false}))
         .await?;
-    let profile_binding =
-        profile::prepare_proxy_request(state, operation, params, &response["config"]).await?;
+    let session_instructions =
+        instructions::prepare_proxy_request(state, operation, params, &response["config"]).await?;
     let mut effective = response["config"].clone();
     if params["config"].is_null() {
         params["config"] = json!({});
@@ -134,7 +134,7 @@ pub(super) async fn prepare(
     Ok(Some(Prepared {
         bound: binding.is_some(),
         session,
-        profile_binding,
+        session_instructions,
         _identity: identity,
     }))
 }

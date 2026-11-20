@@ -1,5 +1,5 @@
 use super::CodexService;
-use crate::profiles::CodexProfiles;
+use crate::instructions::CodexInstructions;
 use pontia_core::Result;
 use serde_json::{Value, json};
 
@@ -20,8 +20,8 @@ impl CodexService {
         Ok(())
     }
 
-    pub(super) fn profiles(&self) -> CodexProfiles {
-        CodexProfiles::new(self.pool.clone())
+    pub(super) fn instructions(&self) -> CodexInstructions {
+        CodexInstructions::new(self.pool.clone())
     }
 
     pub(super) async fn resume_params(
@@ -30,7 +30,9 @@ impl CodexService {
         thread: &str,
         connection: &crate::runtime::protocol::Connection,
     ) -> Result<Value> {
-        self.profiles().configured_codex_binding(session).await?;
+        self.instructions()
+            .configured_codex_binding(session)
+            .await?;
         let binding = self.binding(session).await?;
         let config = self
             .session_config(session, connection, &binding.launch_cwd)
@@ -64,32 +66,33 @@ pub(crate) async fn prepare_proxy_request(
         params["approvalPolicy"] = json!("never");
         params["sandbox"] = json!("danger-full-access");
     }
-    let mut profile = match operation {
+    let mut instructions = match operation {
         ThreadOperation::Start => {
-            let resolved = pontia_agent_control::AgentProfileService::new(state.db())
+            let resolved = pontia_agent_control::SessionInstructionsService::new(state.db())
                 .with_clients(state.clients())
-                .resolve_for_client("codex", None, None, None, true)
-                .await?;
+                .resolve("codex", None, true)?;
             resolved
                 .map(|resolved| {
-                    serde_json::from_value::<crate::profiles::CodexProfileBinding>(resolved.binding)
+                    serde_json::from_value::<crate::instructions::CodexInstructionsBinding>(
+                        resolved,
+                    )
                 })
                 .transpose()?
         }
         ThreadOperation::Resume => match params["threadId"].as_str() {
             Some(thread) => {
-                CodexProfiles::new(state.db())
-                    .codex_profile_for_thread(thread)
+                CodexInstructions::new(state.db())
+                    .instructions_for_thread(thread)
                     .await?
             }
             None => None,
         },
         ThreadOperation::Fork => unreachable!(),
     };
-    let Some(profile) = &mut profile else {
+    let Some(instructions) = &mut instructions else {
         return Ok(None);
     };
-    let existing = profile
+    let existing = instructions
         .native_developer_instructions
         .as_deref()
         .or_else(|| params["developerInstructions"].as_str())
@@ -97,13 +100,13 @@ pub(crate) async fn prepare_proxy_request(
         .or_else(|| config["developer_instructions"].as_str());
     let existing = existing.map(str::to_owned);
     if operation == ThreadOperation::Start {
-        profile.native_developer_instructions = existing.clone();
+        instructions.native_developer_instructions = existing.clone();
     }
-    if let Some(prompt) = &profile.system_prompt {
+    if let Some(prompt) = &instructions.system_prompt {
         params["developerInstructions"] = json!(append_instructions(existing.as_deref(), prompt));
     }
     if operation == ThreadOperation::Start {
-        Ok(Some(serde_json::to_value(profile)?))
+        Ok(Some(serde_json::to_value(instructions)?))
     } else {
         Ok(None)
     }

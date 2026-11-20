@@ -78,8 +78,6 @@ async fn sqlite_session_and_turn_repositories_support_projection_rows() {
             handle: Some("reviewer".to_string()),
             role: Some("reviewer".to_string()),
             description: Some("Plans work".to_string()),
-            execution_profile_id: Some("profile".to_string()),
-            execution_profile_version: Some("1".to_string()),
             state: "ready".to_string(),
             current_turn_id: Some("turn_projection".to_string()),
             state_version: 3,

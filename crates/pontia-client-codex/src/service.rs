@@ -10,6 +10,7 @@ pub(crate) mod environment;
 mod environment_tests;
 mod events;
 mod exit;
+pub(crate) mod instructions;
 #[cfg(test)]
 mod interaction_tests;
 pub(crate) mod interactions;
@@ -18,7 +19,6 @@ mod live_output;
 mod live_output_tests;
 mod models;
 mod observer;
-pub(crate) mod profile;
 mod proxy_observer;
 mod proxy_runtimes;
 #[cfg(test)]
@@ -104,7 +104,9 @@ impl CodexService {
             CodexServerTarget::for_session(&self.pool, session_id).await?,
         )
         .await?;
-        runtime.profile_service.get_or_init(|| self.profiles());
+        runtime
+            .instructions_service
+            .get_or_init(|| self.instructions());
         Ok(runtime)
     }
 
@@ -147,7 +149,7 @@ impl CodexService {
         let binding = AgentBindingService::new(self.pool.clone())
             .binding_for_session(session_id)
             .await?;
-        let profile = self.profiles().codex_binding(session_id).await?;
+        let instructions = self.instructions().codex_binding(session_id).await?;
         let (thread, turns) = match binding {
             Some(binding) => {
                 if connection
@@ -205,8 +207,8 @@ impl CodexService {
                 runtime.current_guard().await?;
                 let thread = response["thread"].clone();
                 self.bind(session_id, &runtime, &thread).await?;
-                if profile.is_some() {
-                    self.profiles()
+                if instructions.is_some() {
+                    self.instructions()
                         .confirm_codex_configuration(session_id, string(&thread, "id")?)
                         .await?;
                 }
