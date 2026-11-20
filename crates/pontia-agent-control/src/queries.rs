@@ -8,6 +8,8 @@ pub(crate) use control::SessionControlState;
 mod event_history;
 mod events;
 pub use event_history::{SessionEventSummary, TimePage};
+mod session_files;
+pub use session_files::{OwnedSessionFile, SharedFile};
 mod sessions;
 mod turns;
 mod update;

@@ -52,7 +52,15 @@ export interface BotNotice {
   created_at: string;
 }
 
-export type BotEntry = BotMessage | BotNotice;
+export interface BotSharedFile {
+  id: string;
+  kind: "shared_file";
+  session_id: string;
+  created_at: string;
+  file: SharedFile;
+}
+
+export type BotEntry = BotMessage | BotNotice | BotSharedFile;
 
 export interface BotMessagePage {
   bot: Bot;

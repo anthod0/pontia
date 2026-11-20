@@ -1,6 +1,6 @@
 use super::{
     common::test_app::TestApp,
-    support::http::{TOKEN, get_json, json_response},
+    support::http::{TOKEN, get_json, json_response, post_json},
 };
 use axum::{
     Router,
@@ -186,6 +186,67 @@ async fn pages_and_anchors_use_the_same_millisecond_and_binary_id_order() {
 }
 
 #[tokio::test]
+async fn main_session_shares_are_downloadable_from_bot_history_after_rotation() {
+    let app = fixture().await;
+    let path = app.workspace().path().join("Pontia项目描述.xlsx");
+    let bytes = b"PK\x03\x04shared workbook";
+    std::fs::write(&path, bytes).unwrap();
+    let mut shared = Vec::new();
+    for (session, owner) in [
+        ("s", "a:launch"),
+        ("helper", "helper:a:launch"),
+        ("t", "b:launch"),
+    ] {
+        sqlx::query("INSERT INTO sessions(session_id,client_type,state,application_id,application_ref) VALUES (?,'generic','idle','bot',?)")
+            .bind(session).bind(owner).execute(&app.db).await.unwrap();
+        let (status, body) = post_json(
+            app.state.clone(),
+            &format!("/api/v1/sessions/{session}/files"),
+            json!({"path": path}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        shared.push(body["data"]["file"].clone());
+    }
+
+    let id = shared[0]["file_id"].as_str().unwrap();
+    assert_eq!(ids(&page(&app, &[]).await), [id]);
+    sqlx::query("UPDATE bots SET current_session_id=NULL WHERE bot_id='a'")
+        .execute(&app.db)
+        .await
+        .unwrap();
+    message(&app, "a", "later", "2099-01-01T00:00:00Z", "normal").await;
+    let latest = page(&app, &[("limit", "1")]).await;
+    let history = page(&app, &[("before", latest["next_before"].as_str().unwrap())]).await;
+    assert_eq!(ids(&history), [id]);
+    let entry = &history["entries"][0];
+    assert_eq!(entry["kind"], "shared_file");
+    assert_eq!(entry["file"], shared[0]);
+    assert_eq!(entry["created_at"], shared[0]["created_at"]);
+    assert_eq!(entry["session_id"], "s");
+    assert_eq!(ids(&page(&app, &[("around", id)]).await), [id, "later"]);
+    for other in &shared[1..] {
+        assert_eq!(
+            get(&app, "a", &[("around", other["file_id"].as_str().unwrap())])
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    let session = entry["session_id"].as_str().unwrap();
+    let content = get_body(
+        &pontia_http::router(app.state.clone()),
+        &format!("/api/v1/sessions/{session}/files/{id}/content"),
+    )
+    .await;
+    assert_eq!(
+        content.collect().await.unwrap().to_bytes(),
+        bytes.as_slice()
+    );
+}
+
+#[tokio::test]
 async fn processing_considers_unanswered_input_outside_the_default_fifty_rows() {
     let app = fixture().await;
     sqlx::query("INSERT INTO sessions(session_id,client_type,state) VALUES ('s','generic','busy')")
@@ -227,7 +288,7 @@ async fn processing_considers_unanswered_input_outside_the_default_fifty_rows() 
     assert_eq!(page(&app, &[]).await["processing"], false);
 }
 
-async fn open_stream(router: &Router, path: &str) -> Body {
+async fn get_body(router: &Router, path: &str) -> Body {
     let response = router
         .clone()
         .oneshot(
@@ -276,9 +337,9 @@ async fn another_clients_retry_updates_the_original_row_off_the_tail_and_reset_r
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
     message(&app, "a", "retry-me", "2026-01-01T00:00:00Z", "failed").await;
-    let mut live = open_stream(&router, "/api/v1/bots/a/stream?timeline=true").await;
+    let mut live = get_body(&router, "/api/v1/bots/a/stream?timeline=true").await;
     assert_eq!(next_update(&mut live).await, json!({"type":"reset"}));
-    let mut legacy = open_stream(&router, "/api/v1/bots/a/stream").await;
+    let mut legacy = get_body(&router, "/api/v1/bots/a/stream").await;
     assert_eq!(next_update(&mut legacy).await, "changed");
     for n in 0..55 {
         message(
@@ -319,7 +380,7 @@ async fn another_clients_retry_updates_the_original_row_off_the_tail_and_reset_r
     };
     assert_eq!(failed["message"], body["data"]["message"]);
     assert_eq!(next_update(&mut legacy).await, "changed");
-    let mut reconnected = open_stream(&router, "/api/v1/bots/a/stream?timeline=true").await;
+    let mut reconnected = get_body(&router, "/api/v1/bots/a/stream?timeline=true").await;
     assert_eq!(next_update(&mut reconnected).await, json!({"type":"reset"}));
     let anchored = page(&app, &[("around", "retry-me"), ("limit", "1")]).await;
     assert_eq!(anchored["entries"][0], body["data"]["message"]);
@@ -347,7 +408,7 @@ async fn streaming_resets_for_current_session_notices_and_missed_updates() {
             .await
             .unwrap();
     }
-    let mut live = open_stream(&router, "/api/v1/bots/a/stream?timeline=true").await;
+    let mut live = get_body(&router, "/api/v1/bots/a/stream?timeline=true").await;
     assert_eq!(next_update(&mut live).await, json!({"type":"reset"}));
     for session in ["t", "s"] {
         events

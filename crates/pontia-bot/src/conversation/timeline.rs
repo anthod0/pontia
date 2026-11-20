@@ -1,8 +1,8 @@
-use pontia_agent_control::queries::{SessionEventSummary, TimePage};
+use pontia_agent_control::queries::{OwnedSessionFile, SessionEventSummary, SharedFile, TimePage};
 use pontia_core::{Error, Result, domain::EventType};
 use serde::{Deserialize, Serialize};
 
-use super::{ConversationService, Notice};
+use super::{APPLICATION_ID, ConversationService, Notice};
 use crate::{
     messages::{BotMessage, TimedMessage},
     records::Bot,
@@ -15,9 +15,18 @@ pub const NOTICE_EVENTS: &[EventType] = &[
 ];
 
 #[derive(Serialize)]
-#[serde(untagged)]
+#[serde(tag = "kind")]
 pub enum TimelineEntry {
+    #[serde(rename = "shared_file")]
+    SharedFile {
+        id: String,
+        session_id: String,
+        created_at: String,
+        file: SharedFile,
+    },
+    #[serde(untagged)]
     Message(BotMessage),
+    #[serde(untagged)]
     Notice(Notice),
 }
 
@@ -29,6 +38,7 @@ struct TimedEntry {
 impl TimedEntry {
     fn key(&self) -> (i64, &str) {
         let id = match &self.entry {
+            TimelineEntry::SharedFile { id, .. } => id,
             TimelineEntry::Message(m) => &m.id,
             TimelineEntry::Notice(n) => &n.id,
         };
@@ -41,6 +51,20 @@ impl From<TimedMessage> for TimedEntry {
         Self {
             ms: row.timeline_ms,
             entry: TimelineEntry::Message(row.message),
+        }
+    }
+}
+
+impl From<OwnedSessionFile> for TimedEntry {
+    fn from(row: OwnedSessionFile) -> Self {
+        Self {
+            ms: row.timeline_ms,
+            entry: TimelineEntry::SharedFile {
+                id: row.file.file_id.clone(),
+                session_id: row.session_id,
+                created_at: row.file.created_at.clone(),
+                file: row.file,
+            },
         }
     }
 }
@@ -149,6 +173,13 @@ impl ConversationService {
     async fn around(&self, bot: &Bot, id: &str, limit: u32) -> Result<(Vec<TimedEntry>, bool)> {
         let anchor = if let Some(row) = self.messages.find(&bot.bot_id, id).await? {
             Some(TimedEntry::from(row))
+        } else if let Some(file) = self
+            .control
+            .queries()
+            .owned_session_file(APPLICATION_ID, &format!("{}:", bot.bot_id), id)
+            .await?
+        {
+            Some(TimedEntry::from(file))
         } else if let Some(session) = &bot.current_session_id {
             self.control
                 .queries()
@@ -200,6 +231,12 @@ impl ConversationService {
                 .await?;
             rows.extend(notices.into_iter().map(TimedEntry::from));
         }
+        let files = self
+            .control
+            .queries()
+            .owned_session_files(APPLICATION_ID, &format!("{}:", bot.bot_id), page, limit)
+            .await?;
+        rows.extend(files.into_iter().map(TimedEntry::from));
         rows.sort_unstable_by(|a, b| a.key().cmp(&b.key()));
         if !matches!(page, TimePage::After(..)) {
             rows.reverse();

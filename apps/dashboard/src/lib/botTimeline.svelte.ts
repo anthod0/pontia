@@ -133,7 +133,7 @@ export class BotTimeline {
     const latest = await this.page();
     const rotated = this.bot !== null && latest.notice_session_id !== this.noticeSession;
     if (rotated) {
-      this.entries = this.entries.filter((row) => "content" in row);
+      this.entries = this.entries.filter((row) => "content" in row || row.kind === "shared_file");
       this.known.clear();
       for (const row of this.entries) this.known.set(row.id, row);
       this.rebaseHistory = this.before !== null;

@@ -1,7 +1,20 @@
-import { render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testDevice } from "../deviceFixture";
+import type { Bot, BotMessagePage } from "../../src/api/types";
 import BotChatPage from "../../src/pages/BotChatPage.svelte";
+
+const bot: Bot = {
+  bot_id: "a",
+  name: "Bot",
+  description: null,
+  avatar_shape: "classic",
+  avatar_color: "blue",
+  client_type: "pi",
+  client_key: "default",
+  model: "test",
+  working_on: null,
+};
 
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(56);
@@ -14,19 +27,8 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 test("renders Bot replies as markdown while keeping user messages as plain text", async () => {
-  const botId = crypto.randomUUID();
   vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
-    bot: {
-      bot_id: botId,
-      name: "Bot",
-      description: null,
-      avatar_shape: "classic",
-      avatar_color: "blue",
-      client_type: "pi",
-      client_key: "default",
-      model: "test",
-      working_on: null,
-    },
+    bot,
     entries: [
       {
         id: "msg-user",
@@ -57,7 +59,7 @@ test("renders Bot replies as markdown while keeping user messages as plain text"
     processing: false,
   });
 
-  const { container } = render(BotChatPage, { botId });
+  const { container } = render(BotChatPage, { botId: bot.bot_id });
 
   const link = await screen.findByRole("link", { name: /docs/i });
   await waitFor(() => {
@@ -77,19 +79,8 @@ test("renders Bot replies as markdown while keeping user messages as plain text"
 });
 
 function chatWith(processing: boolean, count = 1) {
-  const botId = crypto.randomUUID();
   vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
-    bot: {
-      bot_id: botId,
-      name: "Bot",
-      description: null,
-      avatar_shape: "classic",
-      avatar_color: "blue",
-      client_type: "pi",
-      client_key: "default",
-      model: "test",
-      working_on: null,
-    },
+    bot,
     entries: Array.from({ length: count }, (_, index) => ({
       id: `msg-${index}`,
       kind: "user_input",
@@ -102,7 +93,7 @@ function chatWith(processing: boolean, count = 1) {
     generation_notice: null,
     processing,
   });
-  render(BotChatPage, { botId });
+  render(BotChatPage, { botId: bot.bot_id });
   return screen.findByRole("log");
 }
 
@@ -123,4 +114,61 @@ test("mounts only the visible window of a full Bot history page", async () => {
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.length).toBeLessThan(30);
   });
+});
+
+test("downloads a live file share directly from the open Bot chat", async () => {
+  const file = {
+    file_id: "file-1",
+    turn_id: null,
+    name: "Pontia项目描述.xlsx",
+    path: "/work/Pontia项目描述.xlsx",
+    size: 5821,
+    media_type: "application/octet-stream",
+    created_at: "2026-11-20T00:00:00Z",
+  };
+  const latest: BotMessagePage = {
+    bot,
+    entries: [],
+    next_before: null,
+    notice_session_id: null,
+    generation_notice: null,
+    processing: false,
+  };
+  vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue(latest);
+  const events = vi.spyOn(testDevice.events, "subscribeDashboardEvents");
+  const download = vi
+    .spyOn(testDevice.fileApi, "sharedFileContent")
+    .mockResolvedValue(new Response("workbook", { headers: { "Content-Length": "8" } }));
+  const save = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  render(BotChatPage, { botId: bot.bot_id });
+  await screen.findByRole("log");
+  latest.notice_session_id = "main";
+  latest.entries = [
+    {
+      kind: "shared_file",
+      id: file.file_id,
+      session_id: "main",
+      created_at: file.created_at,
+      file,
+    },
+  ];
+  events.mock.calls[0][0]({
+    kind: "session_event",
+    id: "e",
+    occurred_at: file.created_at,
+    event: {
+      event_id: "e",
+      session_id: "main",
+      turn_id: null,
+      source: "external_api",
+      type: "session.file_shared",
+      time: file.created_at,
+      payload: { file_id: file.file_id },
+      file,
+    },
+  });
+  await fireEvent.click(await screen.findByRole("button", { name: /Pontia项目描述.xlsx/ }));
+  expect(download).toHaveBeenCalledWith("main", "file-1", expect.any(AbortSignal));
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  expect(save.mock.instances[0]).toHaveProperty("download", file.name);
 });

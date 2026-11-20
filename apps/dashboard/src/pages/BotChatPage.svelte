@@ -5,6 +5,7 @@
   import { t } from '$lib/i18n'
   import { Button } from '$lib/components/ui/button/index.js'
   import { MessageResponse } from '$lib/components/ai-elements/message/index.js'
+  import SharedFileCard from '../components/chat/SharedFileCard.svelte'
   import MessageComposer from '../components/chat/MessageComposer.svelte'
   import { parseUploadMessage } from '$lib/uploads/message'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -28,12 +29,16 @@
       if (update.type === 'message') timeline.message(update.message)
       else if (update.type === 'changed' || update.type === 'reset') timeline.refresh(update.type === 'reset')
     }, () => { typing = false })
+    const unsubscribeFiles = device.events.subscribeDashboardEvents(event => {
+      if (event.kind === 'session_event' && event.event.file) timeline.refresh()
+    })
     const resume = () => { if (!document.hidden) timeline.refresh(true) }
     document.addEventListener('visibilitychange', resume)
     window.addEventListener('online', resume)
     timeline.refresh()
     return () => {
       stream()
+      unsubscribeFiles()
       timeline.destroy()
       document.removeEventListener('visibilitychange', resume)
       window.removeEventListener('online', resume)
@@ -107,6 +112,10 @@
                 </div>
               {/if}
             </div>
+          </div>
+        {:else if entry.kind === 'shared_file'}
+          <div class="w-fit max-w-[90%]">
+            <SharedFileCard file={entry.file} sessionId={entry.session_id} downloadOnly />
           </div>
         {:else}
           <p class="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
