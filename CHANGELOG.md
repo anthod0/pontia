@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-11-21
+
 ### Added
 
 - Bots see the Agent Profiles that can start a helper, with each Profile's name, description, client, and model, so they can pick one with `--profile-id` without querying the device.
