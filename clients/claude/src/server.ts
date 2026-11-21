@@ -47,6 +47,7 @@ export function bootstrap(value: unknown): Bootstrap {
     if (
       typeof policy.yolo !== "boolean" ||
       typeof policy.disable_mcp !== "boolean" ||
+      typeof policy.disable_skills !== "boolean" ||
       !Array.isArray(policy.disabled_tools) ||
       policy.disabled_tools.some((tool) => typeof tool !== "string" || !tool.trim()) ||
       (policy.tools !== null &&
@@ -58,6 +59,7 @@ export function bootstrap(value: unknown): Bootstrap {
       tools: policy.tools as ExecutionPolicy["tools"],
       disabled_tools: policy.disabled_tools as string[],
       disable_mcp: policy.disable_mcp,
+      disable_skills: policy.disable_skills,
       yolo: policy.yolo,
     };
   }

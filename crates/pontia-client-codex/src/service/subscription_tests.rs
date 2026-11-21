@@ -308,6 +308,46 @@ async fn yolo_is_scoped_to_the_session_and_preserved_on_resume() {
 }
 
 #[tokio::test]
+async fn skill_instructions_are_disabled_only_for_the_requested_session_across_resume() {
+    for disable_skills in [false, true] {
+        let fixture = Fixture::with_policy(None, json!({"disable_skills":disable_skills})).await;
+        *fixture.configuration.lock().await = json!({"skills":{"include_instructions":true}});
+        fixture.dispatch_first_input().await;
+        fixture
+            .app
+            .session_commands()
+            .terminate_session(&fixture.session)
+            .await
+            .unwrap();
+        fixture
+            .app
+            .session_commands()
+            .resume_session(&fixture.session, fixture.root.path())
+            .await
+            .unwrap();
+        {
+            let requests = fixture.thread_requests.lock().await;
+            assert_eq!(requests.len(), 2);
+            for request in requests.iter() {
+                assert_eq!(
+                    request["params"]["config"]["skills.include_instructions"],
+                    if disable_skills {
+                        json!(false)
+                    } else {
+                        Value::Null
+                    }
+                );
+            }
+        }
+        assert_eq!(
+            fixture.configuration.lock().await["skills"]["include_instructions"],
+            true
+        );
+        fixture.shutdown().await;
+    }
+}
+
+#[tokio::test]
 async fn start_and_resume_preserve_environment_filters_and_override_session_identity() {
     for (policy, expected_filter) in [
         (json!({}), json!({})),

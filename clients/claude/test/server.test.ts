@@ -23,6 +23,7 @@ test("bootstrap preserves native tool rules and rejects malformed execution poli
     tools: ["Read", "Glob"],
     disabled_tools: ["Agent", "Bash(git push *)"],
     disable_mcp: true,
+    disable_skills: false,
     yolo: false,
   };
   assert.deepEqual(bootstrap({ ...config, execution_policy: policy }).execution_policy, policy);
@@ -32,6 +33,7 @@ test("bootstrap preserves native tool rules and rejects malformed execution poli
     { disabled_tools: "Write" },
     { disabled_tools: [false] },
     { disable_mcp: "true" },
+    { disable_skills: "true" },
   ]) {
     assert.throws(() => bootstrap({ ...config, execution_policy: { ...policy, ...invalid } }));
   }

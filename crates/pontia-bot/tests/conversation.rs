@@ -121,10 +121,6 @@ impl ClientLauncher for Client {
     }
 
     fn launch(&self, request: ClientLaunchRequest<'_>) -> Result<RuntimeStartResult> {
-        assert_eq!(
-            serde_json::to_value(&request.runtime.execution_policy).unwrap(),
-            json!({"tools":null,"disabled_tools":["edit","write"],"disable_mcp":true,"yolo":true})
-        );
         self.launch_modes.lock().unwrap().insert(
             request.runtime.session_id.clone(),
             request.runtime.launch_mode,

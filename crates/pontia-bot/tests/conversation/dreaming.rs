@@ -378,6 +378,7 @@ async fn bot_helper_and_dreaming_enforce_yolo_on_restricted_client_policy() {
             tools: None,
             disabled_tools: vec!["edit".into(), "write".into()],
             disable_mcp: true,
+            disable_skills: false,
             yolo: false,
         })
     );
@@ -392,9 +393,12 @@ async fn bot_helper_and_dreaming_enforce_yolo_on_restricted_client_policy() {
         tools: None,
         disabled_tools: vec!["edit".into(), "write".into()],
         disable_mcp: true,
+        disable_skills: false,
         yolo: true,
     };
     for session in [&bot_session, &helper_session, &dreaming_session] {
+        let mut expected = expected.clone();
+        expected.disable_skills = session == &bot_session;
         assert_eq!(
             client.launched_policies.lock().unwrap().get(session),
             Some(&expected)
@@ -460,6 +464,7 @@ async fn dreaming_uses_the_oldest_bots_current_model_and_built_in_instructions()
         tools: None,
         disabled_tools: vec!["edit".into(), "write".into()],
         disable_mcp: true,
+        disable_skills: false,
         yolo: true,
     };
     assert_eq!(

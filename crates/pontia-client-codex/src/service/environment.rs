@@ -58,6 +58,9 @@ impl CodexService {
             config["features.multi_agent"] = json!(false);
             config["features.multi_agent_v2"] = json!(false);
         }
+        if policy.disable_skills {
+            config["skills.include_instructions"] = json!(false);
+        }
         if policy.yolo {
             config["approval_policy"] = json!("never");
             config["sandbox_mode"] = json!("danger-full-access");

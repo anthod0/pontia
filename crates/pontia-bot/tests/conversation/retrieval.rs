@@ -35,6 +35,15 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
     let (id, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
     let reader = retrieve(&helpers, &session, Some("workspace-a")).await;
+    assert!(!client.launched_policies.lock().unwrap()[&reader].disable_skills);
+    assert!(
+        !control
+            .queries()
+            .session_execution_policy(&reader)
+            .await
+            .unwrap()
+            .disable_skills
+    );
     assert!(
         !instructions(&control, &reader)
             .await

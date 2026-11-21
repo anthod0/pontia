@@ -1292,7 +1292,7 @@ async fn unsupported_result_disables_input_without_inventing_a_terminal_turn() {
 async fn standalone_session_instructions_are_fixed_before_input_and_survive_resume() {
     let h = Harness::new().await;
     let request =
-        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"system_instructions":"caller-marker","include_standalone_session_instructions":true,"execution_policy":{"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"yolo":true}}))
+        serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"system_instructions":"caller-marker","include_standalone_session_instructions":true,"execution_policy":{"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"disable_skills":true,"yolo":true}}))
             .unwrap();
     let created = h
         .app
@@ -1338,7 +1338,7 @@ async fn standalone_session_instructions_are_fixed_before_input_and_survive_resu
     assert_eq!(
         policies,
         vec![
-            json!({"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"yolo":true});
+            json!({"tools":["Read","Bash","Write"],"disabled_tools":["Write","Agent"],"disable_mcp":true,"disable_skills":true,"yolo":true});
             2
         ]
     );
