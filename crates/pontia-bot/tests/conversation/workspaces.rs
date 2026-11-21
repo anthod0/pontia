@@ -419,53 +419,141 @@ async fn failed_launcher_keeps_project_and_bot_ownership_in_list_and_next_handof
     )));
 }
 
-#[tokio::test]
-async fn only_main_session_start_restores_the_default_directory_and_workspace() {
-    let (root, pool, _, control, conversation) = fixture().await;
-    let default = root.path().join("Pontia");
-    assert!(!default.exists());
-    let (_, main) = bot(&conversation).await;
-    let helpers = HelperService::new(control, conversation.clone());
-    let path = default.to_str().unwrap();
-    let canonical = default.canonicalize().unwrap();
-    let workspace =
-        upsert_canonical_workspace(&pool, canonical.to_str().unwrap(), Some("My tasks"))
-            .await
-            .unwrap();
-    std::fs::remove_dir(&default).unwrap();
-    assert!(
-        helpers
-            .execute(temporary_helper(&main, "task"))
-            .await
-            .is_err()
-    );
-    assert!(!default.exists());
-    bot(&conversation).await;
-    let restored = pontia_agent_control::workspaces::require_active_workspace(&pool, path)
+async fn assert_temporary_helper_uses_default_workspace(
+    fixture: &Fixture,
+    main: &str,
+) -> pontia_agent_control::workspaces::WorkspaceRecord {
+    let (root, pool, client, control, conversation) = fixture;
+    let helpers = HelperService::new(control.clone(), conversation.clone());
+    let response = helpers
+        .execute(temporary_helper(main, "task"))
         .await
         .unwrap();
+    assert_eq!(response["delivery"]["status"], "accepted");
+    let id = response["session_id"].as_str().unwrap();
+    let canonical = root.path().join("Pontia").canonicalize().unwrap();
+    let workspace = pontia_agent_control::workspaces::require_active_workspace(
+        pool,
+        canonical.to_str().unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(workspace.canonical_path, canonical.to_str().unwrap());
+    assert_eq!(
+        client.launch_directories.lock().unwrap()[id],
+        workspace.canonical_path
+    );
+    assert_eq!(
+        recent_project_ids(pool, &workspace.workspace_id).await,
+        [id]
+    );
+    let folder = canonical.join("task");
+    assert!(folder.is_dir());
+    let inputs = client.inputs.lock().unwrap();
+    let input = &inputs
+        .iter()
+        .find(|input| input.session_id == id)
+        .unwrap()
+        .input;
+    assert!(input.contains(folder.to_str().unwrap()));
+    workspace
+}
+
+#[tokio::test]
+async fn temporary_helper_restores_the_missing_default_directory() {
+    let fixture = fixture().await;
+    let (root, pool, _, _, conversation) = &fixture;
+    let default = root.path().join("Pontia");
+    assert!(!default.exists());
+    let (_, main) = bot(conversation).await;
+    let canonical = default.canonicalize().unwrap();
+    let workspace = upsert_canonical_workspace(pool, canonical.to_str().unwrap(), Some("My tasks"))
+        .await
+        .unwrap();
+    std::fs::remove_dir(&default).unwrap();
+
+    let restored = assert_temporary_helper_uses_default_workspace(&fixture, &main).await;
     assert_eq!(restored.workspace_id, workspace.workspace_id);
     assert_eq!(restored.name.as_deref(), Some("My tasks"));
+}
+
+#[tokio::test]
+async fn temporary_helper_reactivates_the_default_workspace_without_restarting_the_bot() {
+    let fixture = fixture().await;
+    let (_, pool, _, control, conversation) = &fixture;
+    let (_, main) = bot(conversation).await;
+    let workspace = control.queries().list_workspaces().await.unwrap().remove(0);
+    let repository = SqliteWorkspaceRepository::new(pool.clone());
+    assert_eq!(
+        repository
+            .mark_deleted(&workspace.workspace_id)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        repository
+            .get_workspace(&workspace.workspace_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "deleted"
+    );
+
+    let restored = assert_temporary_helper_uses_default_workspace(&fixture, &main).await;
+    assert_eq!(restored.workspace_id, workspace.workspace_id);
+}
+
+#[tokio::test]
+async fn temporary_helper_registers_the_deleted_default_workspace_without_restarting_the_bot() {
+    let fixture = fixture().await;
+    let (_, pool, _, control, conversation) = &fixture;
+    let (_, main) = bot(conversation).await;
+    let workspace = control.queries().list_workspaces().await.unwrap().remove(0);
+    assert_eq!(
+        sqlx::query("DELETE FROM workspaces WHERE workspace_id = ?")
+            .bind(&workspace.workspace_id)
+            .execute(pool)
+            .await
+            .unwrap()
+            .rows_affected(),
+        1
+    );
+    assert!(
+        control
+            .queries()
+            .list_workspaces()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    let restored = assert_temporary_helper_uses_default_workspace(&fixture, &main).await;
+    assert_ne!(restored.workspace_id, workspace.workspace_id);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn temporary_helper_recovers_a_symlinked_default_workspace_using_its_canonical_path() {
+    let fixture = fixture().await;
+    let (root, pool, _, control, conversation) = &fixture;
+    let target = root.path().join("tasks");
+    std::fs::create_dir(&target).unwrap();
+    std::os::unix::fs::symlink(&target, root.path().join("Pontia")).unwrap();
+    let (_, main) = bot(conversation).await;
+    let workspace = control.queries().list_workspaces().await.unwrap().remove(0);
     SqliteWorkspaceRepository::new(pool.clone())
         .mark_deleted(&workspace.workspace_id)
         .await
         .unwrap();
-    assert!(
-        helpers
-            .execute(temporary_helper(&main, "task"))
-            .await
-            .is_err()
-    );
-    assert!(!default.join("task").exists());
-    bot(&conversation).await;
-    let restored = pontia_agent_control::workspaces::require_active_workspace(&pool, path)
-        .await
-        .unwrap();
+
+    let restored = assert_temporary_helper_uses_default_workspace(&fixture, &main).await;
     assert_eq!(restored.workspace_id, workspace.workspace_id);
-    helpers
-        .execute(temporary_helper(&main, "task"))
-        .await
-        .unwrap();
+    assert_eq!(
+        restored.canonical_path,
+        target.canonicalize().unwrap().to_str().unwrap()
+    );
 }
 
 #[test]

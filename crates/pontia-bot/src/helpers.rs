@@ -3,8 +3,7 @@ pub(crate) use notifications::seed_workspaces;
 
 use pontia_agent_control::{
     AgentControl, AgentProfileService, SessionMessagesQuery, SessionOwnership, SessionView,
-    TurnTimelineService,
-    workspaces::{require_active_workspace, require_active_workspace_id},
+    TurnTimelineService, workspaces::require_active_workspace_id,
 };
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -301,8 +300,8 @@ impl HelperService {
                 }
                 let path = self.conversation.default_workspace()?;
                 let workspace =
-                    require_active_workspace(&self.control.db(), &path.to_string_lossy()).await?;
-                let directory = path.join(name);
+                    crate::workspaces::initialize_default(&self.control.db(), path).await?;
+                let directory = Path::new(&workspace.canonical_path).join(name);
                 match tokio::fs::create_dir(&directory).await {
                     Ok(()) => {}
                     Err(error)
