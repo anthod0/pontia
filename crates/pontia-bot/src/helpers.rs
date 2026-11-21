@@ -146,7 +146,6 @@ impl HelperService {
                 };
                 self.create(
                     &bot,
-                    &request.session_id,
                     CreateHelper {
                         location: HelperLocation::ReadOnly,
                         profile_id: None,
@@ -158,10 +157,7 @@ impl HelperService {
                 .await
                 .map_err(Into::into)
             }
-            HelperCommand::Create(input) => self
-                .create(&bot, &request.session_id, input)
-                .await
-                .map_err(Into::into),
+            HelperCommand::Create(input) => self.create(&bot, input).await.map_err(Into::into),
             HelperCommand::List => Ok(json!({"helpers": self.list(&bot.bot_id).await?})),
             HelperCommand::Send {
                 session_id,
@@ -172,10 +168,7 @@ impl HelperService {
                 let result = self
                     .control
                     .turn_commands()
-                    .submit_live_input(
-                        &session_id,
-                        format!("Source: Bot\nSession: {}\n\n{message}", request.session_id),
-                    )
+                    .submit_live_input(&session_id, format!("Source: Bot\n\n{message}"))
                     .await;
                 Ok(json!({"delivery": Delivery::from_result(result)}))
             }
@@ -213,7 +206,7 @@ impl HelperService {
         }
     }
 
-    async fn create(&self, bot: &Bot, source: &str, input: CreateHelper) -> Result<Value> {
+    async fn create(&self, bot: &Bot, input: CreateHelper) -> Result<Value> {
         nonempty(&input.message)?;
         nonempty(&input.description)?;
         nonempty(&input.title)?;
@@ -362,10 +355,7 @@ impl HelperService {
         let delivery = self
             .control
             .turn_commands()
-            .submit_live_input(
-                session_id,
-                format!("Source: Bot\nSession: {source}\n\n{message}"),
-            )
+            .submit_live_input(session_id, format!("Source: Bot\n\n{message}"))
             .await;
         Ok(json!({"session_id": session_id, "delivery": Delivery::from_result(delivery)}))
     }

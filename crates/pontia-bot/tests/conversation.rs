@@ -889,9 +889,8 @@ async fn helpers_are_isolated_reusable_and_reply_to_the_current_bot() {
         assert_eq!(latest.session_id, current);
         assert!(latest.input.contains(&second));
         assert!(
-            inputs
-                .iter()
-                .any(|input| input.session_id == first && input.input.contains(&a_session))
+            inputs.iter().any(|input| input.session_id == first
+                && input.input == "Source: Bot\n\nsecond assignment")
         );
     }
     let handoff = instructions(&control, &current).await;
@@ -987,7 +986,7 @@ async fn helper_remains_addressable_when_first_delivery_fails_or_is_unknown() {
         let inputs = client.inputs.lock().unwrap();
         let mut delivered = inputs.iter().filter(|input| input.session_id == id);
         let input = &delivered.next().unwrap().input;
-        assert!(input.starts_with(&format!("Source: Bot\nSession: {session}\n\n")));
+        assert!(input.starts_with("Source: Bot\n\n"));
         assert!(input.ends_with(&format!("\n\n{task}")));
         assert!(delivered.next().is_none());
     }
@@ -1019,6 +1018,11 @@ async fn helper_delivery_results_are_not_retried_and_failed_reports_survive_rest
                 },
             ),
         ] {
+            let expected_input = if caller == session {
+                format!("Source: Bot\n\n{message}")
+            } else {
+                format!("Source: Helper\nSession: {helper}\n\n{message}")
+            };
             let before = client.inputs.lock().unwrap().len();
             let result = helpers
                 .execute(HelperRequest {
@@ -1028,7 +1032,9 @@ async fn helper_delivery_results_are_not_retried_and_failed_reports_survive_rest
                 .await
                 .unwrap();
             assert_eq!(result["delivery"]["status"], expected);
-            assert_eq!(client.inputs.lock().unwrap().len(), before + 1);
+            let inputs = client.inputs.lock().unwrap();
+            assert_eq!(inputs.len(), before + 1);
+            assert_eq!(inputs.last().unwrap().input, expected_input);
         }
     }
     *client.blocked.lock().unwrap() = Some(session.clone());
