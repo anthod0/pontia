@@ -292,8 +292,12 @@ test("shows message bubble placeholders until the first page of messages arrives
   render(BotChatPage, { botId: bot.bot_id });
   const skeleton = screen.getByRole("status", { name: "Loading conversation" });
   expect(skeleton).toHaveAttribute("data-bot-conversation-skeleton");
-  expect(skeleton.querySelectorAll(".justify-end > .rounded-2xl").length).toBeGreaterThan(0);
-  expect(skeleton.querySelectorAll(".justify-start > .rounded-2xl").length).toBeGreaterThan(0);
+  const bubbles = [...skeleton.querySelectorAll(".rounded-2xl")];
+  expect(bubbles.map((bubble) => bubble.parentElement?.className)).toEqual([
+    "flex justify-end",
+    "flex justify-start",
+  ]);
+  expect(bubbles.every((bubble) => bubble.childElementCount === 0)).toBe(true);
   expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
   resolve({
     bot,

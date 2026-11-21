@@ -2,16 +2,7 @@
   import { t } from '$lib/i18n'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon'
-  import { Skeleton } from '$lib/components/ui/skeleton/index.js'
   import { botBubbleClass, userBubbleClass } from './messageBubble'
-
-  // Bubble width and text line widths, oldest first, alternating user and Bot.
-  const messages = [
-    { user: true, width: 'w-2/5', lines: ['w-full'] },
-    { user: false, width: 'w-4/5', lines: ['w-full', 'w-11/12', 'w-3/5'] },
-    { user: true, width: 'w-3/5', lines: ['w-full', 'w-2/3'] },
-    { user: false, width: 'w-2/3', lines: ['w-full', 'w-4/5'] },
-  ]
 </script>
 
 <!-- Matches the Bot chat layout: the feed starts below the transparent top bar and the compact composer sits at the bottom. -->
@@ -19,15 +10,13 @@
   <!-- Same insets, row gap and bubble surfaces as BotMessageFeed and its rows. -->
   <div data-bot-conversation-skeleton role="status" aria-label={$t('chat.loadingConversation')}
     class="min-h-0 flex-1 space-y-5 overflow-hidden px-1 pt-[calc(3.5rem+20px)] md:pt-[calc(3rem+20px)]">
-    {#each messages as message}
-      <div class={['flex', message.user ? 'justify-end' : 'justify-start']}>
-        <div class={['max-w-[90%] text-sm', message.width, message.user ? `${userBubbleClass} leading-6` : `${botBubbleClass} leading-[1.85]`]}>
-          {#each message.lines as line}
-            <div class="flex h-lh items-center"><Skeleton class={['h-2.5', line, !message.user && 'bg-background']} /></div>
-          {/each}
-        </div>
-      </div>
-    {/each}
+    <!-- The bubbles themselves are the placeholders: a one-line user message followed by a three-line Bot reply. -->
+    <div class="flex justify-end">
+      <div class={['h-12 w-2/5 max-w-[90%] animate-pulse', userBubbleClass]}></div>
+    </div>
+    <div class="flex justify-start">
+      <div class={['h-24 w-4/5 max-w-[90%] animate-pulse', botBubbleClass]}></div>
+    </div>
   </div>
   <div class="shrink-0 px-1 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
     <!-- Decorative placeholder matching the compact composer; the conversation skeleton announces the loading state. -->
