@@ -9,6 +9,7 @@ import type {
   Bot,
   BotMessage,
   BotMessagePage,
+  BotMessageContext,
   BotClient,
   BotConfiguration,
   BotDeletionBlockers,
@@ -117,6 +118,14 @@ export function createApi(device: DeviceRuntime) {
   ): Promise<BotMessagePage> {
     const query = new URLSearchParams({ ...page, limit: String(page.limit ?? 50) });
     return request(`${botPath(id)}/messages?${query}`, { signal });
+  }
+
+  function getBotMessageContext(
+    id: string,
+    messageId: string,
+    signal?: AbortSignal,
+  ): Promise<BotMessageContext> {
+    return request(`${botPath(id)}/messages/${encodeURIComponent(messageId)}/context`, { signal });
   }
 
   async function saveBot(input: BotConfiguration, id?: string): Promise<Bot> {
@@ -903,6 +912,7 @@ export function createApi(device: DeviceRuntime) {
     listBotClients,
     listAgentClientModels,
     getBotMessages,
+    getBotMessageContext,
     saveBot,
     getBotDeletionBlockers,
     deleteBot,

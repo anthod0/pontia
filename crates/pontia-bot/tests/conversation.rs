@@ -392,6 +392,7 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
     let reply = |session: &str, text: &str| ReplyRequest {
         session_id: session.into(),
         input: Reply {
+            related_to: vec![],
             message: text.into(),
         },
     };
@@ -452,7 +453,10 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
     assert_eq!(chat.messages[0].status, MessageStatus::Failed);
     assert_eq!(client.inputs.lock().unwrap().len(), delivered);
     let inputs = client.inputs.lock().unwrap();
-    assert_eq!(inputs[0].input, "Source: User\n\nwake A");
+    assert_eq!(
+        inputs[0].input,
+        format!("Source: User\nMessage: {}\n\nwake A", wake.id)
+    );
     assert_eq!(inputs[0].session_id, a_session);
     assert_eq!(inputs[1].session_id, b_session);
     assert!(
@@ -514,6 +518,7 @@ async fn processing_shows_until_the_bot_answers_or_its_turn_ends() {
     let reply = |text: &str| ReplyRequest {
         session_id: session.clone(),
         input: Reply {
+            related_to: vec![],
             message: text.into(),
         },
     };

@@ -101,7 +101,8 @@
     --file-preview-width: 0px;
   }
   @media (min-width: 1024px) {
-    :global(.file-preview-layout[data-preview-open='true']) {
+    :global(.file-preview-layout[data-preview-open='true']),
+    :global(.file-preview-layout:has([data-bot-chat-panel])) {
       /* Keep in sync with FILE_PREVIEW_MIN_WIDTH and FILE_PREVIEW_RESERVED_WIDTH. */
       --file-preview-width: clamp(
         320px,

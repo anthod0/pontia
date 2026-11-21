@@ -130,6 +130,10 @@ fn external_api_router(state: HttpState) -> Router {
             get(api::bots::timeline).post(api::bots::send),
         )
         .route(
+            "/api/v1/bots/{bot_id}/messages/{message_id}/context",
+            get(api::bots::message_context),
+        )
+        .route(
             "/api/v1/bots/{bot_id}/messages/{message_id}/retry",
             post(api::bots::retry),
         )

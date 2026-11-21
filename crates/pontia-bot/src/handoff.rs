@@ -8,6 +8,14 @@ use crate::{identity::BotRole, memory::Memory, messages::BotMessage, user::UserS
 
 pub use render::estimate_tokens;
 
+#[derive(sqlx::FromRow)]
+struct HistoryMessage {
+    #[sqlx(flatten)]
+    message: BotMessage,
+    #[sqlx(json)]
+    related_to: Vec<String>,
+}
+
 /// Trusted Bot associations and Agent Control state, supplied by helper orchestration.
 #[derive(Clone, Debug)]
 pub struct HelperContext {
@@ -94,8 +102,10 @@ impl HandoffService {
         )
         .fetch_all(&self.pool)
         .await?;
-        let messages: Vec<BotMessage> = sqlx::query_as(
-            "SELECT * FROM bot_messages WHERE bot_id = ?
+        let messages: Vec<HistoryMessage> = sqlx::query_as(
+            "SELECT m.*, (SELECT json_group_array(target_id ORDER BY target_id) FROM bot_message_links
+                            WHERE m.kind = 'bot_reply' AND message_id = m.id) AS related_to
+             FROM bot_messages m WHERE bot_id = ?
              AND id NOT IN (SELECT value FROM json_each(?))
              ORDER BY created_at DESC, id DESC LIMIT 60",
         )

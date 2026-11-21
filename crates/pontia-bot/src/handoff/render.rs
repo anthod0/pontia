@@ -1,9 +1,9 @@
 use pontia_agent_control::{LaunchableAgentProfile, WorkspaceView};
 
-use super::HelperContext;
+use super::{HelperContext, HistoryMessage};
 use crate::{
     memory::Memory,
-    messages::{BotMessage, MessageKind, MessageStatus},
+    messages::{MessageKind, MessageStatus},
 };
 
 const NONE: &str = "None yet.\n\n";
@@ -85,7 +85,7 @@ pub(super) fn document(
     memories: &[Memory],
     profiles: &[LaunchableAgentProfile],
     helpers: &[&HelperContext],
-    messages: &[BotMessage],
+    messages: &[HistoryMessage],
 ) -> String {
     let mut output = include_str!("instructions.md").trim_end().to_owned();
     output.push_str(
@@ -196,7 +196,8 @@ pub(super) fn document(
     output.push_str(&bounded_section(
         CHAT,
         12_000,
-        messages.iter().map(|message| {
+        messages.iter().map(|history| {
+            let message = &history.message;
             let speaker = match message.kind {
                 MessageKind::UserInput => "User",
                 MessageKind::BotReply => "Bot (sendToUser)",
@@ -205,11 +206,19 @@ pub(super) fn document(
                 MessageStatus::Normal => "",
                 MessageStatus::Failed => " [Delivery failed; history only]",
             };
-            let metadata = format!(
+            let mut metadata = format!(
                 "[{}] {speaker} ({}){delivery}",
                 message.created_at,
                 inline_data(&message.id)
             );
+            if !history.related_to.is_empty() {
+                let targets = history
+                    .related_to
+                    .iter()
+                    .map(|id| inline_data(id))
+                    .collect::<Vec<_>>();
+                metadata.push_str(&format!(" [Related to: {}]", targets.join(", ")));
+            }
             (record(&metadata, &message.content), metadata)
         }),
         true,

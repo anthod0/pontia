@@ -605,3 +605,46 @@ async fn new_message_requests_cap_quotes_and_return_the_stored_excerpt() {
         assert_eq!(stored, expected);
     }
 }
+
+#[tokio::test]
+async fn context_returns_the_nearest_fifty_in_timeline_order_and_scopes_the_anchor() {
+    let app = fixture().await;
+    for n in 0..60 {
+        let id = format!("m{n:02}");
+        message(
+            &app,
+            "a",
+            &id,
+            &format!("2026-11-20T00:00:{n:02}Z"),
+            "normal",
+        )
+        .await;
+        if n > 0 {
+            sqlx::query("INSERT INTO bot_message_links VALUES (?, ?)")
+                .bind(id)
+                .bind(format!("m{:02}", n - 1))
+                .execute(&app.db)
+                .await
+                .unwrap();
+        }
+    }
+    let (status, body) = get_json(app.state.clone(), "/api/v1/bots/a/messages/m30/context").await;
+    assert_eq!(status, StatusCode::OK);
+    let context = &body["data"];
+    assert_eq!(context["truncated"], true);
+    let messages = context["messages"].as_array().unwrap();
+    assert_eq!(messages.len(), 50);
+    assert_eq!(messages.first().unwrap()["id"], "m06");
+    assert_eq!(messages.last().unwrap()["id"], "m55");
+    assert!(
+        messages
+            .windows(2)
+            .all(|rows| rows[0]["created_at"].as_str() < rows[1]["created_at"].as_str())
+    );
+    assert_eq!(
+        get_json(app.state.clone(), "/api/v1/bots/b/messages/m30/context")
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+}

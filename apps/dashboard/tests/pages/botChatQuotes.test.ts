@@ -496,3 +496,28 @@ test.each([false, true])(
     expect(sentQuote.querySelector("span")!.textContent).toBe(expected);
   },
 );
+
+test("opens context from the message menu and reveals an earlier linked message", async () => {
+  const first = { ...reply, content: "Renew the [certificate](/notes.md) first." };
+  const latest = message(5, "user_input", "Proceed");
+  const pages = serve([latest], { older: [first] });
+  const context = vi.spyOn(testDevice.api, "getBotMessageContext").mockResolvedValue({
+    messages: [first, latest],
+    truncated: false,
+  });
+  render(BotChatPage, { botId: bot.bot_id });
+  await fireEvent.contextMenu(await screen.findByText("Proceed"), { clientX: 10, clientY: 10 });
+  await fireEvent.click(await screen.findByRole("menuitem", { name: "View context" }));
+  const panel = await screen.findByRole("complementary");
+  const linked = await within(panel).findByRole("button", {
+    name: /Renew the certificate first\./,
+  });
+  expect(context).toHaveBeenCalledWith(bot.bot_id, latest.id, expect.any(AbortSignal));
+  await fireEvent.click(linked);
+  await waitFor(() =>
+    expect(document.querySelector(`[data-bot-entry-id="${first.id}"]`)).toHaveAttribute(
+      "data-highlighted",
+    ),
+  );
+  expect(pages.mock.calls.some(([, page]) => page.before === "older")).toBe(true);
+});

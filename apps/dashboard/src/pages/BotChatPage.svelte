@@ -16,6 +16,8 @@
   import BotAvatar from '../components/bots/BotAvatar.svelte'
   import BotChatSkeleton from '../components/bots/BotChatSkeleton.svelte'
   import { botBubbleClass, highlightableClass, userBubbleClass } from '../components/bots/messageBubble'
+  import BotChatPanel from '../components/bots/BotChatPanel.svelte'
+  import { provideFilePreviewNavigator } from '../components/chat/filePreviewContext'
   import BotMessageActions from '../components/bots/BotMessageActions.svelte'
   import BotQuoteBlock from '../components/bots/BotQuoteBlock.svelte'
   import { parseQuotedMessage, quoteId, quotedMessage, type BotQuote } from '$lib/botQuote'
@@ -33,6 +35,8 @@
   let feed = $state<BotMessageFeed>()
   let feedRoot = $state<HTMLElement>()
   let actions = $state<BotMessageActions>()
+  let panel = $state<BotChatPanel>()
+  provideFilePreviewNavigator({ open: file => panel?.openFile(file) })
   let composer = $state<MessageComposer>()
   let quote = $state<BotQuote | null>(loadQuoteDraft(device.id, untrack(() => botId)))
   let highlighted = $state<string | null>(null)
@@ -76,6 +80,7 @@
   onMount(() => {
     const stream = openBotChatStream(device, botId, update => {
       typing = update.type === 'typing'
+      if (update.type !== 'typing') panel?.refreshContext()
       if (update.type === 'message') timeline.message(update.message)
       else if (update.type === 'changed' || update.type === 'reset') timeline.refresh(update.type === 'reset')
     }, () => { typing = false })
@@ -153,9 +158,10 @@
 {/snippet}
 
 {#if timeline.bot}
+  <BotChatPanel bind:this={panel} bot={timeline.bot} onjump={jumpTo} />
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12" aria-label={timeline.bot.name}>
-    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} onquote={quote => void addQuote(quote)} />
+    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} oncontext={id => panel?.viewContext(id)} onquote={quote => void addQuote(quote)} />
     <BotMessageFeed bind:this={feed} bind:root={feedRoot} {timeline} {typing} highlighted={highlighted && timeline.entries.some(row => row.id === highlighted) ? highlighted : null}>
       {#snippet row(entry)}
         {#if 'content' in entry}
@@ -165,7 +171,7 @@
             {#if entry.kind === 'user_input'}{@render menuButton(entry.id)}{/if}
             <div class="max-w-[90%] min-w-0 space-y-2">
               {#if parts.files.length}
-                <ul class="flex flex-wrap justify-end gap-2" data-user-message-uploads>
+                <ul class={['flex flex-wrap justify-end gap-2', !parts.text && highlightableClass]} {...(!parts.text ? quotableProps : {})} data-user-message-uploads>
                   {#each parts.files as file}<li class="rounded-md border bg-background px-2 py-1 text-xs [overflow-wrap:anywhere]" title={file.path}>{$t('files.uploadedPrefix')} {file.name}</li>{/each}
                 </ul>
               {/if}

@@ -60,7 +60,7 @@ async fn new_quotes_are_capped_before_storage_and_bot_delivery() {
             );
             assert_eq!(
                 client.inputs.lock().unwrap().last().unwrap().input,
-                format!("Source: User\n\n{expected}")
+                format!("Source: User\nMessage: {}\n\n{expected}", message.id)
             );
         }
     }
@@ -110,6 +110,133 @@ async fn historical_quotes_are_unchanged_when_read_or_retried() {
     );
     assert_eq!(
         client.inputs.lock().unwrap().last().unwrap().input,
-        format!("Source: User\n\n{content}")
+        format!("Source: User\nMessage: old\n\n{content}")
+    );
+}
+
+#[tokio::test]
+async fn saved_user_inputs_link_only_valid_quotes_from_the_same_chat() {
+    let (_root, _pool, _client, _control, service) = fixture().await;
+    let a = service
+        .records()
+        .create(bot_configuration("A", MODEL))
+        .await
+        .unwrap()
+        .bot_id;
+    let b = service
+        .records()
+        .create(bot_configuration("B", MODEL))
+        .await
+        .unwrap()
+        .bot_id;
+    let target = service.send(&a, "Original").await.unwrap();
+    for excerpt in [false, true] {
+        let content = quoted("Original", excerpt).replace(MESSAGE_ID, &target.id);
+        let input = service.send(&a, &content).await.unwrap();
+        let context = service.message_context(&a, &input.id).await.unwrap();
+        assert_eq!(context.messages, [target.clone(), input]);
+        let foreign = service.send(&b, &content).await.unwrap();
+        assert_eq!(
+            service
+                .message_context(&b, &foreign.id)
+                .await
+                .unwrap()
+                .messages,
+            [foreign]
+        );
+    }
+    for content in [
+        quoted("missing", false),
+        format!(
+            "Example: {}",
+            quoted("Original", false).replace(MESSAGE_ID, &target.id)
+        ),
+        quoted("<nested/>", false).replace(MESSAGE_ID, &target.id),
+        quoted("Original", false)
+            .replace(MESSAGE_ID, &target.id)
+            .replace("message_id=", "file_id="),
+    ] {
+        let input = service.send(&a, &content).await.unwrap();
+        assert_eq!(
+            service
+                .message_context(&a, &input.id)
+                .await
+                .unwrap()
+                .messages,
+            [input]
+        );
+    }
+}
+
+#[tokio::test]
+async fn bot_replies_and_their_links_are_all_or_nothing() {
+    let (_root, _pool, _client, _control, service) = fixture().await;
+    let a = service
+        .records()
+        .create(bot_configuration("A", MODEL))
+        .await
+        .unwrap()
+        .bot_id;
+    let b = service
+        .records()
+        .create(bot_configuration("B", MODEL))
+        .await
+        .unwrap()
+        .bot_id;
+    let first = service.send(&a, "First").await.unwrap();
+    let second = service.send(&a, "Second").await.unwrap();
+    let foreign = service.send(&b, "Other chat").await.unwrap();
+    let session = service
+        .records()
+        .get(&a)
+        .await
+        .unwrap()
+        .current_session_id
+        .unwrap();
+    let reply = |targets: Vec<String>| ReplyRequest {
+        session_id: session.clone(),
+        input: Reply {
+            message: "Response".into(),
+            related_to: targets,
+        },
+    };
+    for targets in [
+        vec![first.id.clone(), foreign.id],
+        vec![first.id.clone(), "missing".into()],
+        vec![first.id.clone(); 6],
+    ] {
+        assert!(service.send_to_user(reply(targets)).await.is_err());
+        assert_eq!(
+            service.chat(&a).await.unwrap().messages,
+            [first.clone(), second.clone()]
+        );
+    }
+    let response = service
+        .send_to_user(reply(vec![
+            first.id.clone(),
+            second.id.clone(),
+            first.id.clone(),
+        ]))
+        .await
+        .unwrap();
+    let followup = service
+        .send_to_user(reply(vec![response.id.clone()]))
+        .await
+        .unwrap();
+    assert_eq!(
+        service
+            .message_context(&a, &response.id)
+            .await
+            .unwrap()
+            .messages,
+        [first.clone(), second, response.clone(), followup.clone()]
+    );
+    assert_eq!(
+        service
+            .message_context(&a, &first.id)
+            .await
+            .unwrap()
+            .messages,
+        [first, response, followup]
     );
 }
