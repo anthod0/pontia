@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Device login no longer fails when the login service closes an idle connection between approval checks.
+
 ## [0.8.4] - 2026-11-21
 
 ### Added

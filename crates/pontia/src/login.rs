@@ -49,13 +49,8 @@ where
 {
     let home = pontia_home(vars)?;
     let origin = auth_origin(vars)?;
-    let client = Client::builder()
-        .timeout(REQUEST_TIMEOUT)
-        .build()
-        .map_err(|error| format!("failed to create the login HTTP client: {error}"))?;
-
     tokio::select! {
-        result = login(&client, &origin, &home, on_verification) => result,
+        result = login(&origin, &home, on_verification) => result,
         result = tokio::signal::ctrl_c() => {
             result.map_err(|error| format!("failed to listen for cancellation: {error}"))?;
             Err("login canceled".to_string())
@@ -63,15 +58,16 @@ where
     }
 }
 
-async fn login<F>(
-    client: &Client,
-    origin: &Url,
-    home: &Path,
-    on_verification: F,
-) -> Result<(), String>
+async fn login<F>(origin: &Url, home: &Path, on_verification: F) -> Result<(), String>
 where
     F: FnOnce(&str),
 {
+    let client = Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .pool_max_idle_per_host(0)
+        .build()
+        .map_err(|error| format!("failed to create the login HTTP client: {error}"))?;
+
     let authorization_url = origin
         .join("api/device/authorize")
         .map_err(|error| format!("invalid authorization endpoint: {error}"))?;
@@ -317,6 +313,79 @@ fn write_credential(path: &Path, token: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn device_login_uses_a_new_connection_for_each_approval_check() {
+        use axum::{Json, Router, extract::ConnectInfo, routing::post};
+        use std::{
+            collections::HashSet,
+            net::SocketAddr,
+            sync::{Arc, Mutex},
+        };
+
+        let root = tempfile::tempdir().unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = Url::parse(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
+        let peers = Arc::new(Mutex::new(Vec::new()));
+        let authorization_peers = peers.clone();
+        let polling_peers = peers.clone();
+        let verification_uri = origin.join("device").unwrap().to_string();
+        let token = format!(
+            "ptr_v1_0199791c-6600-7000-8000-000000000001_{}",
+            URL_SAFE_NO_PAD.encode([7_u8; 32]),
+        );
+        let issued_token = token.clone();
+        let app = Router::new()
+            .route("/api/device/authorize", post(move |ConnectInfo(peer): ConnectInfo<SocketAddr>| {
+                let peers = authorization_peers.clone();
+                let verification_uri = verification_uri.clone();
+                async move {
+                    peers.lock().unwrap().push(peer);
+                    Json(serde_json::json!({
+                        "device_code": "a".repeat(43),
+                        "user_code": "BCDF-GHJK",
+                        "verification_uri": verification_uri,
+                        "expires_in": 60,
+                        "interval": 1,
+                    }))
+                }
+            }))
+            .route("/api/device/token", post(move |ConnectInfo(peer): ConnectInfo<SocketAddr>| {
+                let peers = polling_peers.clone();
+                let token = issued_token.clone();
+                async move {
+                    let mut peers = peers.lock().unwrap();
+                    peers.push(peer);
+                    if peers.len() == 2 {
+                        Json(serde_json::json!({ "error": "authorization_pending" }))
+                    } else {
+                        Json(serde_json::json!({ "access_token": token, "token_type": "Bearer" }))
+                    }
+                }
+            }));
+        let mut server = tokio::task::JoinSet::new();
+        server.spawn(async move {
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
+        });
+
+        // Exercise the login exchange over loopback; origin validation still requires HTTPS.
+        tokio::time::timeout(Duration::from_secs(10), login(&origin, root.path(), |_| {}))
+            .await
+            .unwrap()
+            .unwrap();
+
+        let peers = peers.lock().unwrap();
+        assert_eq!(peers.len(), 3);
+        assert_eq!(peers.iter().collect::<HashSet<_>>().len(), 3);
+        let saved: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(root.path().join("auth.json")).unwrap()).unwrap();
+        assert_eq!(saved["token"], token);
+    }
 
     #[test]
     fn accepts_credential_with_underscore_in_secret() {
