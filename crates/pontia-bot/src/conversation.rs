@@ -207,6 +207,7 @@ impl ConversationService {
     fn task_execution_policy(
         &self,
         client_type: &str,
+        disable_skills: bool,
     ) -> Result<pontia_core::execution_policy::ExecutionPolicy> {
         if !self
             .control
@@ -220,7 +221,7 @@ impl ConversationService {
                 "Client cannot run tasks with injected instructions".into(),
             ));
         }
-        self.restricted_execution_policy(client_type, false)
+        self.restricted_execution_policy(client_type, disable_skills)
     }
 
     /// Profiles that can currently start a helper; unavailable ones are left out of the list.
@@ -235,7 +236,7 @@ impl ConversationService {
 
     /// Checks the client capabilities a helper Session needs, without launching anything.
     pub(crate) fn require_helper_client(&self, client_type: &str) -> Result<()> {
-        self.task_execution_policy(client_type)?;
+        self.task_execution_policy(client_type, false)?;
         if !self
             .control
             .clients()
@@ -256,8 +257,9 @@ impl ConversationService {
         model: &str,
         ownership: SessionOwnership,
         instructions: &str,
+        disable_skills: bool,
     ) -> Result<CreateSessionRequest> {
-        let execution_policy = self.task_execution_policy(client_type)?;
+        let execution_policy = self.task_execution_policy(client_type, disable_skills)?;
         let metadata = self.session_metadata(client_type, client_key).await?;
         Ok(CreateSessionRequest {
             launch_mode: Default::default(),

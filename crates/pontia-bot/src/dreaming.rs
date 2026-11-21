@@ -87,6 +87,7 @@ impl DreamingService {
                     reference: format!("dreaming:{round}"),
                 },
                 include_str!("dreaming/instructions.md"),
+                true,
             )
             .await?;
         let directory = self.conversation.records().read_only_directory().await?;

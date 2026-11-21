@@ -39,6 +39,7 @@ enum PolicySupport {
     Restricted,
     NoRestriction,
     RejectYolo,
+    RejectDisableSkills,
 }
 
 #[derive(Default)]
@@ -69,7 +70,9 @@ impl ClientConfiguration for Client {
     ) -> Option<pontia_core::execution_policy::ExecutionPolicy> {
         match *self.policy_support.lock().unwrap() {
             PolicySupport::NoRestriction => None,
-            PolicySupport::Restricted | PolicySupport::RejectYolo => {
+            PolicySupport::Restricted
+            | PolicySupport::RejectYolo
+            | PolicySupport::RejectDisableSkills => {
                 Some(pontia_core::execution_policy::ExecutionPolicy {
                     disabled_tools: ["edit", "write"].into_iter().map(str::to_owned).collect(),
                     disable_mcp: true,
@@ -91,6 +94,15 @@ impl ClientConfiguration for Client {
         {
             return Err(Error::CapabilityUnavailable(
                 "Client cannot run approval-free".into(),
+            ));
+        }
+        if matches!(
+            *self.policy_support.lock().unwrap(),
+            PolicySupport::RejectDisableSkills
+        ) && policy.disable_skills
+        {
+            return Err(Error::CapabilityUnavailable(
+                "Client cannot disable skills".into(),
             ));
         }
         Ok(())

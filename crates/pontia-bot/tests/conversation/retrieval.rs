@@ -35,9 +35,9 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
     let (id, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
     let reader = retrieve(&helpers, &session, Some("workspace-a")).await;
-    assert!(!client.launched_policies.lock().unwrap()[&reader].disable_skills);
+    assert!(client.launched_policies.lock().unwrap()[&reader].disable_skills);
     assert!(
-        !control
+        control
             .queries()
             .session_execution_policy(&reader)
             .await
@@ -357,4 +357,41 @@ async fn retrieval_can_change_workspace_filters_and_follow_graph_without_writing
     memory(&commands, &session, "use", json!({"ids":[ids[0]]})).await;
     let used = memory(&commands, &reader, "read", json!({"ids":[ids[0]]})).await;
     assert!(used["memories"][0]["last_read_at"].is_string());
+}
+
+#[tokio::test]
+async fn retrieval_rejects_clients_that_cannot_disable_skills_but_ordinary_helpers_still_run() {
+    let (root, _pool, client, control, conversation) = fixture().await;
+    let (_, session) = bot(&conversation).await;
+    let helpers = HelperService::new(control.clone(), conversation);
+    *client.policy_support.lock().unwrap() = PolicySupport::RejectDisableSkills;
+
+    let result = helpers
+        .execute(HelperRequest {
+            session_id: session.clone(),
+            command: HelperCommand::Retrieve(RetrieveMemories {
+                message: "Find the release decision".into(),
+                workspace_id: None,
+            }),
+        })
+        .await;
+    assert!(matches!(
+        result,
+        Err(pontia_bot::helpers::HelperError::Control(
+            Error::CapabilityUnavailable(_)
+        ))
+    ));
+    assert_eq!(client.launched_policies.lock().unwrap().len(), 1);
+    assert!(!root.path().join("bot/readonly").exists());
+
+    let ordinary = helper(&helpers, &session).await;
+    assert!(!client.launched_policies.lock().unwrap()[&ordinary].disable_skills);
+    assert!(
+        !control
+            .queries()
+            .session_execution_policy(&ordinary)
+            .await
+            .unwrap()
+            .disable_skills
+    );
 }

@@ -236,6 +236,7 @@ impl HelperService {
                         "\n",
                         include_str!("helpers/instructions.md")
                     ),
+                    true,
                 )
                 .await?;
             request.launch_mode = pontia_core::LaunchMode::Background;
@@ -265,6 +266,7 @@ impl HelperService {
                     model,
                     ownership.clone(),
                     &instructions,
+                    false,
                 )
                 .await?
         } else {
@@ -275,6 +277,7 @@ impl HelperService {
                     &bot.model,
                     ownership.clone(),
                     HELPER_INSTRUCTIONS,
+                    false,
                 )
                 .await?
         };
