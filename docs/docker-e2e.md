@@ -68,7 +68,7 @@ Open the printed Dashboard URL in the container browser. Register a new device f
 
 ## 4. Validate real Agent calls
 
-Pi, Codex, and Claude Code are installed and enabled automatically. For Codex, put an OpenAI API key on a single line in `docker/e2e/.local/openai-api-key` before starting an instance. Leave the file empty to run tests that do not call Codex. To check the login method in a running instance, run `./scripts/docker-e2e compose exec -T device codex login status`.
+Pi, Codex, and Claude Code are installed and enabled automatically. For Pi and Codex, put an OpenAI API key on a single line in `docker/e2e/.local/openai-api-key` before starting an instance. Keep the file private (`chmod 600`). Pi uses this key for OpenAI instead of any saved OpenAI login, while retaining credentials for other providers. Leave the file empty to keep Pi's existing credentials and run tests that do not call Codex. To check Codex's login method in a running instance, run `./scripts/docker-e2e compose exec -T device codex login status`.
 
 If Pi or Claude Code needs an account login, use the device container:
 

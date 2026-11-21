@@ -115,6 +115,9 @@ class ContainerSmokeTests(unittest.TestCase):
         self.addCleanup(fixture.doCleanups)
         fixture.certificates()
         state = fixture.state
+        pi_auth = {"openai": {"type": "oauth", "refresh": "expired-fixture"},
+                   "openrouter": {"type": "api_key", "key": "router-fixture"}}
+        test_setup.setup.write_private(state / "auth/device/pi.json", json.dumps(pi_auth))
         test_setup.setup.write_private(state / "auth/device/claude.json", '{"test_credential":"original"}')
         claude_settings = {"env": {
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:1",
@@ -149,6 +152,8 @@ class ContainerSmokeTests(unittest.TestCase):
             vnc = compose("exec", "-T", "browser", "curl", "--fail", "--silent", "http://127.0.0.1:6080/vnc.html")
             self.assertIn(b"<html", vnc.stdout)
             compose("exec", "-T", "device", "pi", "--version")
+            imported_pi = compose("exec", "-T", "device", "cat", "/home/e2e/.pi/agent/auth.json")
+            self.assertEqual(json.loads(imported_pi.stdout), pi_auth)
             compose("exec", "-T", "device", "codex", "--version")
             compose("exec", "-T", "device", "claude", "--version")
             auth = compose("exec", "-T", "device", "claude", "auth", "status")
@@ -224,6 +229,12 @@ class ContainerSmokeTests(unittest.TestCase):
             compose("exec", "-T", "device", "test", "!", "-e", "/home/e2e/workspace/discard-me")
             auth = compose("exec", "-T", "device", "codex", "login", "status")
             self.assertIn(b"API key", auth.stdout + auth.stderr)
+            imported_pi = compose("exec", "-T", "device", "cat", "/home/e2e/.pi/agent/auth.json")
+            self.assertEqual(json.loads(imported_pi.stdout), {
+                "openai": {"type": "api_key", "key": "sk-fixture-openai-test-key"},
+                "openrouter": pi_auth["openrouter"],
+            })
+            self.assertEqual(json.loads((state / "auth/device/pi.json").read_text()), pi_auth)
             credentials = compose("exec", "-T", "device", "sh", "-c",
                                   "test ! -e /home/e2e/.claude/projects/discard-me && "
                                   "cat /home/e2e/.claude/.credentials.json")

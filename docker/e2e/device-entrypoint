@@ -24,6 +24,7 @@ fi
 if [[ ! -d "$HOME/workspace/.git" ]]; then
   git -C "$HOME/workspace" init --initial-branch=main
 fi
+python3 /usr/local/lib/configure-pi-auth.py "$HOME/.pi/agent/auth.json" /run/secrets/openai-api-key
 if [[ -n "$(< /run/secrets/openai-api-key)" ]]; then
   codex login --with-api-key < /run/secrets/openai-api-key
 elif [[ -f "$HOME/.codex/auth.json" ]]; then

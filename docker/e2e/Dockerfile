@@ -73,6 +73,7 @@ COPY clients/pi /opt/pontia/clients/pi
 COPY --from=claude-build /src/clients/claude /opt/pontia/claude-validation
 COPY --from=claude-build /opt/pontia/claude-client /opt/pontia/claude-client
 COPY docker/e2e/device-entrypoint /usr/local/bin/device-entrypoint
+COPY docker/e2e/configure-pi-auth.py /usr/local/lib/configure-pi-auth.py
 COPY docker/e2e/device.toml /opt/pontia/config.toml
 RUN mkdir -p /home/e2e/.pontia /home/e2e/.pi/agent /home/e2e/.codex /home/e2e/.claude /home/e2e/workspace \
     && chown -R 1000:1000 /home/e2e
