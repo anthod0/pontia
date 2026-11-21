@@ -49,6 +49,8 @@
     menuItems?: Snippet
     draftId?: string
     retainDraft?: boolean
+    /** Wraps the typed text before attachments are added to the submitted message. */
+    formatText?: (text: string) => string
     onSubmit: (message: string, deliveryPolicy: InboxDeliveryPolicy) => void | Promise<boolean | void>
     onInterrupt?: () => void
     onFocus?: () => void
@@ -73,6 +75,7 @@
     menuItems,
     draftId,
     retainDraft = false,
+    formatText = text => text,
     onSubmit,
     onInterrupt,
     onFocus,
@@ -139,6 +142,10 @@
     return () => observer.disconnect()
   })
 
+  export function focusInput(): void {
+    (fullscreenOpen ? fullscreenEditor : editor)?.focusEnd()
+  }
+
   async function openFullscreen(): Promise<void> {
     fullscreenOpen = true
     await tick()
@@ -156,7 +163,7 @@
     sending = true
     submissionError = null
     try {
-      if (!sentAwaitingCleanup) sentAwaitingCleanup = (await onSubmit(uploadMessage(value, completedFiles), deliveryPolicy)) === true
+      if (!sentAwaitingCleanup) sentAwaitingCleanup = (await onSubmit(uploadMessage(formatText(value), completedFiles), deliveryPolicy)) === true
       if (sentAwaitingCleanup) {
         await draft?.clear()
         sentAwaitingCleanup = false

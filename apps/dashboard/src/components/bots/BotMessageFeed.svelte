@@ -7,8 +7,15 @@
   import { compareBotEntries, type BotTimeline } from '$lib/botTimeline.svelte'
   import type { BotEntry } from '../../api/types'
 
-  let { timeline, typing, row }: { timeline: BotTimeline; typing: boolean; row: Snippet<[BotEntry]> } = $props()
+  let { timeline, typing, highlighted = null, root = $bindable(), row }: {
+    timeline: BotTimeline
+    root?: HTMLElement
+    typing: boolean
+    highlighted?: string | null
+    row: Snippet<[BotEntry]>
+  } = $props()
   let feed = $state<HTMLDivElement>()
+  $effect(() => { root = feed })
   const entries = $derived.by(() => {
     const notice = timeline.generationNotice
     if (!notice) return timeline.entries
@@ -120,6 +127,14 @@
     get(virtualizer).scrollToEnd()
   }
 
+  /** Scrolls a loaded entry to the middle of the feed. */
+  export function scrollToEntry(id: string) {
+    const index = entries.findIndex(row => row.id === id)
+    intent++
+    pinned = false
+    get(virtualizer).scrollToIndex(index, { align: 'center' })
+  }
+
   function measure(node: HTMLDivElement) {
     get(virtualizer).measureElement(node)
     return { destroy: () => get(virtualizer).measureElement(null) }
@@ -155,8 +170,9 @@
       </div>
     {/if}
     {#each items as item (item.key)}
-      <div class="absolute top-0 left-0 w-full" style:transform={`translateY(${item.start - topInset}px)`}
-        data-index={item.index} data-bot-entry-id={entries[item.index]?.id} use:measure>
+      <div class="group/entry absolute top-0 left-0 w-full" style:transform={`translateY(${item.start - topInset}px)`}
+        data-index={item.index} data-bot-entry-id={entries[item.index]?.id}
+        data-highlighted={highlighted !== null && entries[item.index]?.id === highlighted ? '' : undefined} use:measure>
         {#if entries[item.index]}
           {@render row(entries[item.index])}
         {:else if typing}
