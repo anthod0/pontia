@@ -101,12 +101,13 @@ pontia completions powershell | Out-String | Invoke-Expression
 | `pontia remote edges` | 利用可能な Edge を ID と名前の JSON 配列で一覧表示します |
 | `pontia remote enable` | このデバイスを登録し、対話式で Edge を選択して、E2E アイデンティティを作成します |
 | `pontia remote enable --edge EDGE_ID --name NAME` | プロンプトなしで登録します。両方のオプションが必須です |
+| `pontia remote edit` | 名前、ハンドル、Edge を対話形式で編集します。Enter で現在の値を維持します |
 | `pontia remote edit --name NAME` | デバイスの表示名を変更します |
 | `pontia remote edit --handle HANDLE` | デバイスの Dashboard URL のハンドルを変更します |
 | `pontia remote rotate-key` | デバイスの E2E アイデンティティと鍵のバージョンを置き換えます |
 | `pontia remote disable` | このデバイスの登録を解除し、ローカルのリモートアイデンティティを削除します |
 
-`pontiad` に影響するリモート設定を変更すると、ローカルサービスは自動的に再起動します。
+`pontiad` に影響するリモート設定の変更は、動作中の管理対象サービスを再起動します。停止中のサービスと復旧方法は [Edge の切り替え](/docs/device-management#switch-edge) を参照してください。
 
 ## 終了ステータスとエラー
 

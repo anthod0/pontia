@@ -28,6 +28,14 @@ pontia remote edit --handle build-workstation
 
 As duas opções podem ser usadas juntas. Mudar o handle atualiza a URL do dispositivo em `app.pontia.dev/HANDLE`, preservando a identidade de criptografia e o Edge selecionado.
 
+<h2 id="switch-edge">Trocar de Edge</h2>
+
+Execute `pontia remote edit` sem opções. Pressione Enter para manter o nome e o handle atuais, escolha um Edge pelo nome e confirme. Cada pergunta usa o valor atual como padrão; manter os três valores encerra o comando sem reiniciar o serviço. `--name` e `--handle` continuam alterando apenas os campos fornecidos, sem perguntas.
+
+A troca de Edge mantém a identidade do dispositivo e a URL do Dashboard, usando o login atual do CLI. Um serviço gerenciado em execução é reiniciado; um serviço parado usa o novo destino no próximo `pontia up`. Reinicie manualmente um `pontiad` iniciado fora do gerenciador de serviços. Reconecte ou atualize o Dashboard após a troca.
+
+O comando informa se o destino foi salvo e se o serviço foi reiniciado; isso não verifica a conexão remota. Se o destino foi salvo mas a reinicialização falhou, corrija o serviço e execute `pontia up`, ou reinicie manualmente um serviço não gerenciado. Se o resultado do salvamento for incerto, execute `pontia remote edit` para conferir os valores salvos antes de aplicá-los.
+
 ## Rotacionar a chave do dispositivo
 
 Execute:

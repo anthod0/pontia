@@ -51,6 +51,8 @@ Agent 执行和项目文件都保留在你的设备上。协议和凭据详情�
 
 你可以选择官方 Edge，也可以[部署自托管 Edge](/docs/self-hosted-edge)。两者都使用 Pontia Cloud 进行授权；自托管让你可以选择密文在哪里转发。
 
+要将已登记设备切换到另一个 Edge，不带选项运行 `pontia remote edit`。保留名称和 handle 即可保持 Dashboard URL。服务重启和故障恢复方式见[设备管理](/docs/device-management#switch-edge)。
+
 ## 禁用远程访问
 
 注销当前设备并禁用其远程访问：

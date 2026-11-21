@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `pontia remote edit` can switch Edge interactively while keeping the device identity and Dashboard URL. Each prompt defaults to the current value; unchanged settings leave the service running. Edge changes restart a running managed service and report when a manual restart is needed.
+
 ### Changed
 
 - Bot, memory retrieval, and dreaming Sessions no longer automatically load user skills. Ordinary helpers retain their existing skill loading.

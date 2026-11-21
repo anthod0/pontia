@@ -28,6 +28,14 @@ pontia remote edit --handle build-workstation
 
 Both options may be supplied together. Changing the handle updates the device URL at `app.pontia.dev/HANDLE` while preserving its encryption identity and selected Edge.
 
+<h2 id="switch-edge">Switch Edge</h2>
+
+Run `pontia remote edit` without options. Press Enter to keep the current name and handle, select an Edge by name, and confirm. Each prompt defaults to the current value; keeping all three values exits without restarting the service. `--name` and `--handle` continue to change only those fields without prompting.
+
+Switching Edge keeps the device identity and Dashboard URL. Your existing CLI login is reused. A running managed service restarts; a stopped service uses the new target on the next `pontia up`. Restart an unmanaged `pontiad` manually. Reconnect or refresh the Dashboard after switching.
+
+The command reports whether the target was saved and the service restarted; this does not verify remote connectivity. If saving succeeds but restarting fails, fix the service and run `pontia up`, or restart an unmanaged service manually. If the save result is uncertain, run `pontia remote edit` to inspect the saved values before applying them.
+
 ## Rotate the device key
 
 Run:

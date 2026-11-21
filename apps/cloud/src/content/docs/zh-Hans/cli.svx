@@ -101,12 +101,13 @@ pontia completions powershell | Out-String | Invoke-Expression
 | `pontia remote edges` | 以由 ID 和名称组成的 JSON 数组列出可用的 Edge |
 | `pontia remote enable` | 注册此设备，交互式选择 Edge，并创建其 E2E 身份 |
 | `pontia remote enable --edge EDGE_ID --name NAME` | 无提示注册；两个选项都必须提供 |
+| `pontia remote edit` | 交互修改名称、handle 和 Edge；每项回车保留当前值 |
 | `pontia remote edit --name NAME` | 更改设备显示名称 |
 | `pontia remote edit --handle HANDLE` | 更改设备的 Dashboard URL 标识 |
 | `pontia remote rotate-key` | 替换设备的 E2E 身份和密钥版本 |
 | `pontia remote disable` | 注销此设备，并移除其本地远程身份 |
 
-影响 `pontiad` 的远程配置更改会自动重启本地服务。
+影响 `pontiad` 的远程配置更改会重启正在运行的受管服务。停止的服务和故障恢复方式见[切换 Edge](/docs/device-management#switch-edge)。
 
 ## 退出状态与错误
 

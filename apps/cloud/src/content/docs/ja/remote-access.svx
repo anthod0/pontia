@@ -51,6 +51,8 @@ pontia doctor
 
 公式の Edge を選ぶことも、[セルフホストの Edge をデプロイ](/docs/self-hosted-edge)することもできます。どちらも認可には Pontia Cloud を使います。セルフホストにすると、暗号文を中継する場所を選べます。
 
+登録済みデバイスの Edge を切り替えるには、オプションなしで `pontia remote edit` を実行します。名前とハンドルを維持すれば Dashboard URL は変わりません。再起動と復旧方法は [デバイス管理](/docs/device-management#switch-edge) を参照してください。
+
 ## リモートアクセスを無効にする
 
 現在のデバイスの登録を解除し、リモートアクセスを無効にするには、次を実行します。

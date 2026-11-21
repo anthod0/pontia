@@ -103,3 +103,5 @@ Keep `/etc/pontia/edge` private and backed up according to your server policy.
 ## Delete an Edge
 
 Deleting a self-hosted Edge in Cloud permanently removes its registration and associated devices. The server installation is managed separately: move or disable the affected devices, then stop the service and remove its files from the server.
+
+Before deleting an Edge, use `pontia remote edit` on each affected device to select another Edge.

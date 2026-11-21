@@ -101,12 +101,13 @@ Execute os comandos com escopo de pane no pane `tmux` gerenciado pelo Pontia do 
 | `pontia remote edges` | Listar os Edges disponíveis como um array JSON de IDs e nomes |
 | `pontia remote enable` | Registrar este dispositivo, selecionar um Edge de forma interativa e criar sua identidade E2E |
 | `pontia remote enable --edge EDGE_ID --name NAME` | Registrar sem prompts; as duas opções são obrigatórias |
+| `pontia remote edit` | Editar nome, handle e Edge de forma interativa; Enter mantém cada valor atual |
 | `pontia remote edit --name NAME` | Alterar o nome de exibição do dispositivo |
 | `pontia remote edit --handle HANDLE` | Alterar o identificador de URL do Dashboard do dispositivo |
 | `pontia remote rotate-key` | Substituir a identidade E2E e a versão da chave do dispositivo |
 | `pontia remote disable` | Cancelar o registro deste dispositivo e remover sua identidade remota local |
 
-Mudanças na configuração remota que afetam o `pontiad` reiniciam o serviço local automaticamente.
+Mudanças na configuração remota que afetam o `pontiad` reiniciam um serviço gerenciado em execução. Veja [trocar de Edge](/docs/device-management#switch-edge) para serviços parados e recuperação.
 
 ## Código de saída e erros
 

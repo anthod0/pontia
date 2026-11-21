@@ -51,6 +51,8 @@ A execução dos agentes e os arquivos de projeto permanecem no seu dispositivo.
 
 Você pode selecionar um Edge oficial ou [implantar um Edge auto-hospedado](/docs/self-hosted-edge). Ambos usam o Pontia Cloud para autorização; a auto-hospedagem permite escolher onde o texto cifrado é repassado.
 
+Para trocar o Edge de um dispositivo registrado, execute `pontia remote edit` sem opções. Mantenha o nome e o handle para preservar a URL do Dashboard. Veja [gerenciamento de dispositivos](/docs/device-management#switch-edge) para reinicialização e recuperação.
+
 ## Desative o acesso remoto
 
 Para cancelar o registro do dispositivo atual e desativar o acesso remoto dele:

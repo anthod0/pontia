@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, exists, sql } from "drizzle-orm";
 import type { Database } from "../db";
 import { devices, edges } from "../db/schema";
 import { isUuidV7 } from "../uuid";
@@ -33,7 +33,7 @@ export type DeviceUnregistration = { status: "deleted" | "not_found" | "conflict
 
 export type DeviceUpdate =
   | { status: "updated"; device: RegisteredDevice }
-  | { status: "invalid_request" | "not_found" | "handle_conflict" };
+  | { status: "invalid_request" | "not_found" | "handle_conflict" | "edge_not_found" };
 
 export function isValidDeviceName(value: string) {
   // oxlint-disable-next-line no-control-regex -- Names must reject control characters.
@@ -109,13 +109,14 @@ export async function updateRegisteredDevice(
   db: Database,
   userId: string,
   deviceId: string,
-  update: { name?: string; handle?: string },
+  update: { name?: string; handle?: string; edgeId?: string },
 ): Promise<DeviceUpdate> {
   if (
     !isUuidV7(deviceId) ||
-    (update.name === undefined && update.handle === undefined) ||
+    (update.name === undefined && update.handle === undefined && update.edgeId === undefined) ||
     (update.name !== undefined && !isValidDeviceName(update.name)) ||
-    (update.handle !== undefined && !isValidDeviceHandle(update.handle))
+    (update.handle !== undefined && !isValidDeviceHandle(update.handle)) ||
+    (update.edgeId !== undefined && !isUuidV7(update.edgeId))
   )
     return { status: "invalid_request" };
 
@@ -131,9 +132,25 @@ export async function updateRegisteredDevice(
     const changed = await db
       .update(devices)
       .set({ ...update, updatedAt: new Date().toISOString() })
-      .where(and(eq(devices.id, deviceId), eq(devices.userId, userId)))
+      .where(
+        and(
+          eq(devices.id, deviceId),
+          eq(devices.userId, userId),
+          update.edgeId === undefined
+            ? undefined
+            : exists(
+                db
+                  .select({ id: edges.id })
+                  .from(edges)
+                  .where(and(eq(edges.id, update.edgeId), edgeIsAccessibleTo(userId))),
+              ),
+        ),
+      )
       .returning({ id: devices.id });
-    if (changed.length !== 1) return { status: "not_found" };
+    if (changed.length !== 1) {
+      const current = await storedDevice(db, deviceId);
+      return { status: current?.userId === userId ? "edge_not_found" : "not_found" };
+    }
   } catch (cause) {
     if (update.handle !== undefined) {
       const owner = await handleOwner(db, userId, update.handle);

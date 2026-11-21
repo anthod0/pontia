@@ -64,9 +64,10 @@ export const PATCH: RequestHandler = async (event) => {
   const keys = Object.keys(body);
   if (
     keys.length === 0 ||
-    keys.some((key) => !["name", "handle"].includes(key)) ||
+    keys.some((key) => !["name", "handle", "edge_id"].includes(key)) ||
     ("name" in body && typeof body.name !== "string") ||
-    ("handle" in body && typeof body.handle !== "string")
+    ("handle" in body && typeof body.handle !== "string") ||
+    ("edge_id" in body && typeof body.edge_id !== "string")
   )
     return json({ error: "invalid_request" }, { status: 400 });
 
@@ -79,6 +80,7 @@ export const PATCH: RequestHandler = async (event) => {
     {
       ...(typeof body.name === "string" ? { name: body.name } : {}),
       ...(typeof body.handle === "string" ? { handle: body.handle } : {}),
+      ...(typeof body.edge_id === "string" ? { edgeId: body.edge_id } : {}),
     },
   );
   switch (result.status) {
@@ -87,6 +89,7 @@ export const PATCH: RequestHandler = async (event) => {
     case "not_found":
       return json({ error: "device_not_found" }, { status: 404 });
     case "handle_conflict":
+    case "edge_not_found":
       return json({ error: result.status }, { status: 409 });
     case "updated":
       return json(deviceResponseBody(result.device, trustKey));
