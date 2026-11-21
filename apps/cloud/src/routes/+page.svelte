@@ -2,7 +2,7 @@
 	import { author, siteOrigin } from '$lib/site';
 	import ArrowRightIcon from 'phosphor-svelte/lib/ArrowRightIcon';
 	import HeroSection from '$lib/components/HeroSection.svelte';
-	import FeatureSection from '$lib/components/FeatureSection.svelte';
+	import DelegateSection from '$lib/components/DelegateSection.svelte';
 	import RemoteSection from '$lib/components/RemoteSection.svelte';
 	import BotSection from '$lib/components/BotSection.svelte';
 	import HomeFaq from '$lib/components/HomeFaq.svelte';
@@ -65,7 +65,7 @@
 	<HeroSection />
 
 	<BotSection />
-	<FeatureSection />
+	<DelegateSection />
 	<RemoteSection />
 	<OpenSourceSection />
 	<HomeFaq />

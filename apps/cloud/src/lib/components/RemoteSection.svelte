@@ -6,6 +6,12 @@
 	import { m } from '$lib/paraglide/messages';
 	import { localizeHref } from '$lib/paraglide/runtime';
 
+	// SVG logo sources: https://pi.dev/press-kit; Claude symbol extracted from
+	// the inline wordmark at https://claude.com/product/claude-code;
+	// https://grok.com/images/favicon.svg; OpenCode brand assets at
+	// https://opencode.ai/brand. The OpenAI symbol used for Codex comes from
+	// anomalyco/opencode: packages/ui/src/assets/icons/provider/openai.svg.
+	// Local vector assets live in static/client-logos/.
 	const clients = [
 		{ name: 'Codex', logo: '/client-logos/codex.svg', darkLogo: '/client-logos/codex-dark.svg' },
 		{ name: 'Claude Code', logo: '/client-logos/claude-code.svg' },
