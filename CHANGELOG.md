@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Bots send separate messages for unrelated matters, even when updates arrive together.
+- On phones, the Bot page top bar no longer has a **More** menu. Tap the Bot name to open its settings, where **Delete Bot** is at the bottom. A downloads button appears in the top bar while downloads are in progress or failed.
 
 ## [0.8.5] - 2026-11-21
 
