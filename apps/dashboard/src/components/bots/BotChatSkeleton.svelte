@@ -2,17 +2,17 @@
   import { t } from '$lib/i18n'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
   import ArrowUpIcon from 'phosphor-svelte/lib/ArrowUpIcon'
-  import { botBubbleClass, userBubbleClass } from './messageBubble'
+  import { botBubbleClass } from './messageBubble'
 </script>
 
 <!-- Matches the Bot chat layout: the feed starts below the transparent top bar and the compact composer sits at the bottom. -->
 <div class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12">
-  <!-- Same insets, row gap and bubble surfaces as BotMessageFeed and its rows. -->
+  <!-- Same insets and row gap as BotMessageFeed and its rows. -->
   <div data-bot-conversation-skeleton role="status" aria-label={$t('chat.loadingConversation')}
     class="min-h-0 flex-1 space-y-5 overflow-hidden px-1 pt-[calc(3.5rem+20px)] md:pt-[calc(3rem+20px)]">
     <!-- The bubbles themselves are the placeholders: a one-line user message followed by a three-line Bot reply. -->
     <div class="flex justify-end">
-      <div class={['h-12 w-2/5 max-w-[90%] animate-pulse', userBubbleClass]}></div>
+      <div class={['h-12 w-2/5 max-w-[90%] animate-pulse', botBubbleClass]}></div>
     </div>
     <div class="flex justify-start">
       <div class={['h-24 w-4/5 max-w-[90%] animate-pulse', botBubbleClass]}></div>
