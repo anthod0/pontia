@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bots use `pontia` commands, read only known file paths, and delegate exploration and system changes to helpers, with at most one external read-only lookup per input.
+
 ## [0.8.4] - 2026-11-21
 
 ### Added
