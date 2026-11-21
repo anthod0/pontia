@@ -224,8 +224,6 @@
   "deploy_expires": "This command expires at {time}.",
   "deploy_custom_port": "Custom port",
   "deploy_port_invalid": "Enter an integer from 1 to 65535 that is not blocked by browsers or the control plane. Recommended: 8443.",
-  "deploy_copied": "Copied",
-  "deploy_copy": "Copy command",
   "deploy_restore_default": "Restore default deployment",
   "deploy_use_alternative": "Can't use port 80 or 443? Use an alternative deployment",
   "deploy_retry_heading": "Initialization incomplete?",
