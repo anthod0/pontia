@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-11-21
+
 ### Added
 
 - Claude Code Sessions support manual context compaction and show compaction progress and completion in Dashboard. After compaction, readable messages remain available while earlier content is marked as compacted.
