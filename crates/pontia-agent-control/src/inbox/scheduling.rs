@@ -16,11 +16,18 @@ struct State {
     initial_inputs: HashSet<String>,
     // AgentControl owns delivery; a weak link prevents the event/scheduler/delivery cycle from leaking.
     delivery: Weak<InboxCommandService>,
+    lifecycle: Weak<crate::SessionCommandService>,
 }
 
 impl InboxScheduler {
-    pub(crate) fn connect(&self, delivery: &Arc<InboxCommandService>) {
-        self.0.lock().expect("inbox scheduler lock").delivery = Arc::downgrade(delivery);
+    pub(crate) fn connect(
+        &self,
+        delivery: &Arc<InboxCommandService>,
+        lifecycle: &Arc<crate::SessionCommandService>,
+    ) {
+        let mut state = self.0.lock().expect("inbox scheduler lock");
+        state.delivery = Arc::downgrade(delivery);
+        state.lifecycle = Arc::downgrade(lifecycle);
     }
 
     pub fn begin_initial(&self, session: &str) {
@@ -77,12 +84,18 @@ impl InboxScheduler {
         let Some(inbox) = state.delivery.upgrade() else {
             return;
         };
+        let lifecycle = state.lifecycle.upgrade();
         state.running.insert(session.clone(), false);
         let scheduler = self.clone();
         tokio::spawn(async move {
             loop {
                 if let Err(error) = inbox.drain_inbox(&session).await {
                     tracing::warn!(%session, %error, "Inbox scheduling failed");
+                }
+                if let Some(lifecycle) = &lifecycle
+                    && let Err(error) = lifecycle.auto_exit_if_done(&session).await
+                {
+                    tracing::warn!(%session, %error, "Automatic Session exit failed");
                 }
                 let mut state = scheduler.0.lock().expect("inbox scheduler lock");
                 if !state.stopped && state.running.get(&session) == Some(&true) {
@@ -134,7 +147,7 @@ impl InboxCommandService {
 
     pub async fn resume_pending(&self) -> pontia_core::Result<()> {
         let sessions: Vec<String> = sqlx::query_scalar(
-            "SELECT DISTINCT session_id FROM inbox_messages WHERE state='pending'",
+            "SELECT session_id FROM inbox_messages WHERE state='pending' UNION SELECT session_id FROM sessions WHERE exit_when_done=1 AND state='idle'",
         )
         .fetch_all(&self.pool)
         .await?;

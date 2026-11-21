@@ -130,6 +130,11 @@ impl InboxAssociations {
             || matches!(
                 event.event_type,
                 EventType::SessionReady
+                    | EventType::InteractionUnblocked
+                    | EventType::InboxMessageCancelled
+                    | EventType::InboxMessageDismissed
+                    | EventType::InboxMessageDispatched
+                    | EventType::InboxMessageFailed
                     | EventType::TurnStarted
                     | EventType::TurnCompleted
                     | EventType::TurnFailed
