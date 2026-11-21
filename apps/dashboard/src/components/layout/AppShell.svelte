@@ -4,6 +4,7 @@
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import AppSidebar from './AppSidebar.svelte'
   import TopBar from './TopBar.svelte'
+  import { provideTopBarAction } from './topBarAction'
   import DownloadCenter from './DownloadCenter.svelte'
   import ChatShortcuts from '../chat/ChatShortcuts.svelte'
   import ConnectionNotice from './ConnectionNotice.svelte'
@@ -23,6 +24,7 @@
   } = $props()
   let currentPath = $state(dashboardRelativePath())
   let currentLocation = location.pathname
+  const topBarAction = provideTopBarAction()
   const filePreview = provideFilePreview()
 
   function updatePath(): void {
@@ -75,6 +77,7 @@
           <TopBar />
         {/if}
       </div>
+      {@render $topBarAction?.()}
       <div class="shrink-0 md:pr-4"><DownloadCenter /></div>
     </div>
     <main class={mainClass}>

@@ -41,6 +41,14 @@ pub(super) struct SendToUser {
     #[arg(long = "related-to", value_name = "ID")]
     #[serde(skip_serializing_if = "Vec::is_empty")]
     related_to: Vec<String>,
+    /// Mark this reply as an open todo for the user
+    #[arg(long)]
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    todo: bool,
+    /// Close an open todo in this Bot chat with this reply (repeatable)
+    #[arg(long = "resolve-todo", value_name = "ID")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    resolve_todos: Vec<String>,
 }
 
 #[derive(Debug, Args, Serialize)]

@@ -26,7 +26,11 @@ function equalEntry(a: BotEntry, b: BotEntry): boolean {
   return (
     a.kind === b.kind &&
     a.created_at === b.created_at &&
-    (!("content" in a) || ("content" in b && a.content === b.content && a.status === b.status))
+    (!("content" in a) ||
+      ("content" in b &&
+        a.content === b.content &&
+        a.status === b.status &&
+        a.todo?.state === b.todo?.state))
   );
 }
 
@@ -35,6 +39,7 @@ export class BotTimeline {
   bot = $state.raw<Bot | null>(null);
   fileLinkSession = $state.raw<BotMessagePage["file_link_session"]>(null);
   status = $state.raw<BotWorkStatus>({ kind: "idle" });
+  openTodoCount = $state(0);
   generationNotice = $state.raw<BotNotice | null>(null);
   before = $state<string | null>(null);
   loadingOlder = $state(false);
@@ -127,6 +132,7 @@ export class BotTimeline {
     if (!snapshot || this.bot || this.controller.signal.aborted) return;
     this.cached = true;
     this.bot = snapshot.bot;
+    this.openTodoCount = snapshot.openTodoCount ?? 0;
     this.fileLinkSession = snapshot.fileLinkSession;
     for (const row of snapshot.entries) this.known.set(row.id, row);
     this.entries = snapshot.entries;
@@ -139,6 +145,7 @@ export class BotTimeline {
       botId: this.id,
       bot: this.bot,
       fileLinkSession: this.fileLinkSession,
+      openTodoCount: this.openTodoCount,
       entries: this.entries,
     });
   }
@@ -256,6 +263,7 @@ export class BotTimeline {
     }
     if (reset || rotated) this.stale = new Set(this.known.keys());
     this.bot = latest.bot;
+    this.openTodoCount = latest.open_todo_count;
     this.fileLinkSession = latest.file_link_session;
     this.status = latest.status;
     this.device.queryClient.setQueryData(["bot-status", this.id], latest.status);
@@ -265,10 +273,12 @@ export class BotTimeline {
     );
     const oldest = this.entries[0];
     this.noticeSession = latest.notice_session_id;
-    if (reset || rotated) {
-      for (const row of latest.entries) this.stale.delete(row.id);
-      await this.verifyVisible();
+    // A new reply can close a todo outside the latest page. Recheck it when visible.
+    for (const row of this.known.values()) {
+      if ("content" in row && row.todo?.state === "open") this.stale.add(row.id);
     }
+    for (const row of latest.entries) this.stale.delete(row.id);
+    await this.verifyVisible();
     const pending: BotEntry[] = [];
     let page: BotMessagePage = latest;
     // The cursor follows server order. Stage new rows until the range touches

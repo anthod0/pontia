@@ -151,6 +151,13 @@ pub async fn send(
     ))
 }
 
+pub async fn todos(
+    State(state): State<HttpState>,
+    Path(bot_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    Ok(ok(json!({"open": state.bots().open_todos(&bot_id).await?})))
+}
+
 pub async fn message_context(
     State(state): State<HttpState>,
     Path((bot_id, message_id)): Path<(String, String)>,
@@ -176,7 +183,7 @@ pub async fn reply(
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
     let Json(request) = request.map_err(|error| ApiError::invalid_request(error.body_text()))?;
     super::bot_context::authorize_tool(&state, &headers, &request.session_id).await?;
-    let message = state
+    let sent = state
         .bots()
         .send_to_user(request)
         .await
@@ -187,7 +194,9 @@ pub async fn reply(
             } => ApiError::custom(StatusCode::FORBIDDEN, "forbidden", message),
             error => error.into(),
         })?;
-    Ok(ok(json!({"sent": true, "message_id": message.id})))
+    Ok(ok(
+        json!({"sent": true, "message_id": sent.message.id, "todo": sent.message.todo.is_some(), "resolved": sent.resolved, "already_resolved": sent.already_resolved}),
+    ))
 }
 
 #[derive(Default, Deserialize)]

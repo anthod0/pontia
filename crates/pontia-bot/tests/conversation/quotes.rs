@@ -197,6 +197,8 @@ async fn bot_replies_and_their_links_are_all_or_nothing() {
         session_id: session.clone(),
         input: Reply {
             message: "Response".into(),
+            todo: false,
+            resolve_todos: vec![],
             related_to: targets,
         },
     };
@@ -218,11 +220,13 @@ async fn bot_replies_and_their_links_are_all_or_nothing() {
             first.id.clone(),
         ]))
         .await
-        .unwrap();
+        .unwrap()
+        .message;
     let followup = service
         .send_to_user(reply(vec![response.id.clone()]))
         .await
-        .unwrap();
+        .unwrap()
+        .message;
     assert_eq!(
         service
             .message_context(&a, &response.id)

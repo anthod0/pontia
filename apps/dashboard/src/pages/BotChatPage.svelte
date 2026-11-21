@@ -80,7 +80,7 @@
   onMount(() => {
     const stream = openBotChatStream(device, botId, update => {
       typing = update.type === 'typing'
-      if (update.type !== 'typing') panel?.refreshContext()
+      if (update.type !== 'typing') panel?.refresh()
       if (update.type === 'message') timeline.message(update.message)
       else if (update.type === 'changed' || update.type === 'reset') timeline.refresh(update.type === 'reset')
     }, () => { typing = false })
@@ -158,7 +158,7 @@
 {/snippet}
 
 {#if timeline.bot}
-  <BotChatPanel bind:this={panel} bot={timeline.bot} onjump={jumpTo} />
+  <BotChatPanel bind:this={panel} bot={timeline.bot} count={timeline.openTodoCount} onjump={jumpTo} onquote={addQuote} />
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12" aria-label={timeline.bot.name}>
     <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} oncontext={id => panel?.viewContext(id)} onquote={quote => void addQuote(quote)} />
@@ -203,6 +203,12 @@
                 </div>
               {/if}
             </div>
+            {#if entry.todo?.state === 'open'}
+              <button type="button" class="grid size-7 shrink-0 place-items-center self-end rounded-md outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={$t('bots.todos')} title={$t('bots.todos')} onclick={() => panel?.viewTodos()}>
+                <span class="size-2 rounded-full bg-primary"></span>
+              </button>
+            {/if}
             {#if entry.kind === 'bot_reply'}{@render menuButton(entry.id)}{/if}
           </div>
         {:else if entry.kind === 'shared_files'}

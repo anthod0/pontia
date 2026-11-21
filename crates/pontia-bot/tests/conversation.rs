@@ -392,6 +392,8 @@ async fn bot_inputs_and_replies_use_the_owned_session_and_visible_chat() {
     let reply = |session: &str, text: &str| ReplyRequest {
         session_id: session.into(),
         input: Reply {
+            todo: false,
+            resolve_todos: vec![],
             related_to: vec![],
             message: text.into(),
         },
@@ -518,6 +520,8 @@ async fn processing_shows_until_the_bot_answers_or_its_turn_ends() {
     let reply = |text: &str| ReplyRequest {
         session_id: session.clone(),
         input: Reply {
+            todo: false,
+            resolve_todos: vec![],
             related_to: vec![],
             message: text.into(),
         },
@@ -1631,3 +1635,6 @@ mod compaction;
 
 #[path = "conversation/quotes.rs"]
 mod quotes;
+
+#[path = "conversation/todos.rs"]
+mod todos;

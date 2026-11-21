@@ -85,6 +85,8 @@ async fn answer(conversation: &ConversationService, session: &str) {
         .send_to_user(ReplyRequest {
             session_id: session.into(),
             input: Reply {
+                todo: false,
+                resolve_todos: vec![],
                 related_to: vec![],
                 message: "Received".into(),
             },

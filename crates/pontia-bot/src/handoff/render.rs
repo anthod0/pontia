@@ -1,6 +1,6 @@
 use pontia_agent_control::{LaunchableAgentProfile, WorkspaceView};
 
-use super::{HelperContext, HistoryMessage};
+use super::{HelperContext, HistoryMessage, OpenTodo};
 use crate::{
     memory::Memory,
     messages::{MessageKind, MessageStatus},
@@ -86,6 +86,7 @@ pub(super) fn document(
     profiles: &[LaunchableAgentProfile],
     helpers: &[&HelperContext],
     messages: &[HistoryMessage],
+    todos: &[OpenTodo],
 ) -> String {
     let mut output = include_str!("instructions.md").trim_end().to_owned();
     output.push_str(
@@ -193,6 +194,28 @@ pub(super) fn document(
         ));
         output.push('\n');
     }
+    output.push_str("## Open todos\n\n");
+    if let Some(first) = todos.first() {
+        if first.total > todos.len() as i64 {
+            output.push_str(&format!(
+                "Showing the latest {} of {}.\n\n",
+                todos.len(),
+                first.total
+            ));
+        }
+        for todo in todos {
+            output.push_str(&record(
+                &format!("[{}] {}", todo.created_at, inline_data(&todo.id)),
+                &todo
+                    .summary
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            ));
+        }
+    } else {
+        output.push_str(NONE);
+    }
     output.push_str(&bounded_section(
         CHAT,
         12_000,
@@ -211,6 +234,12 @@ pub(super) fn document(
                 message.created_at,
                 inline_data(&message.id)
             );
+            if let Some(todo) = &message.todo {
+                metadata.push_str(match todo {
+                    crate::messages::Todo::Open => " [Todo: open]",
+                    crate::messages::Todo::Done { .. } => " [Todo: done]",
+                });
+            }
             if !history.related_to.is_empty() {
                 let targets = history
                     .related_to

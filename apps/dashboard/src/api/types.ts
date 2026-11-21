@@ -50,6 +50,10 @@ export type BotClient = Pick<AgentClientView, "id" | "name" | "client_type" | "c
 export interface BotMessage {
   id: string;
   kind: "user_input" | "bot_reply";
+  todo?:
+    | { state: "open" }
+    | { state: "done"; by: "user" | "bot"; at: string; message_id?: string }
+    | null;
   content: string;
   status: "normal" | "failed";
   created_at: string;
@@ -79,6 +83,7 @@ export interface BotSharedFiles {
 export type BotEntry = BotMessage | BotNotice | BotSharedFiles;
 
 export interface BotMessagePage {
+  open_todo_count: number;
   bot: Bot;
   status: BotWorkStatus;
   generation_notice: BotNotice | null;

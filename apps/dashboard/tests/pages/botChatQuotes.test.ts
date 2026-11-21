@@ -63,6 +63,7 @@ function serve(entries: BotEntry[], options: { older?: BotEntry[]; missing?: str
         bot,
         status: { kind: "idle" as const },
         file_link_session: null,
+        open_todo_count: 0,
         notice_session_id: "s",
         generation_notice: null,
       };
@@ -520,4 +521,24 @@ test("opens context from the message menu and reveals an earlier linked message"
     ),
   );
   expect(pages.mock.calls.some(([, page]) => page.before === "older")).toBe(true);
+});
+
+test("opens an outstanding todo from the feed and quotes it into the composer", async () => {
+  const todo = { ...reply, todo: { state: "open" as const } };
+  serve([todo]);
+  vi.spyOn(testDevice.api, "getBotTodos").mockResolvedValue({ open: [todo] });
+  const send = sent();
+  render(BotChatPage, { botId: bot.bot_id });
+  await fireEvent.click(await screen.findByRole("button", { name: "Todo" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Quote reply" }));
+  const textbox = screen.getByRole("textbox");
+  await waitFor(() => expect(textbox).toHaveFocus());
+  await userEvent.type(textbox, "Approved");
+  await fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() =>
+    expect(send).toHaveBeenCalledWith(
+      bot.bot_id,
+      `<user_quote message_id="${reply.id}" speaker="Bot">${reply.content}</user_quote>\nApproved`,
+    ),
+  );
 });

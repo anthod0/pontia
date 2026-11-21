@@ -73,6 +73,7 @@ fn message(id: &str, kind: MessageKind, content: &str, status: MessageStatus) ->
             content: content.into(),
             created_at: "2026-11-21T13:00:00Z".into(),
             status,
+            todo: None,
         },
     }
 }
@@ -103,6 +104,7 @@ fn untrusted_markdown_stays_inside_its_record_or_field() {
             malicious,
             MessageStatus::Normal,
         )],
+        &[],
     );
     let context = doc.split_once("# Handoff context\n").unwrap().1;
     assert!(!context.contains('\r'));
@@ -118,6 +120,7 @@ fn untrusted_markdown_stays_inside_its_record_or_field() {
             "## Memory",
             "## Agent Profiles",
             "## Helpers",
+            "## Open todos",
             "## Recent Chat"
         ]
     );
@@ -207,6 +210,7 @@ fn example_covers_project_temporary_retrieval_and_failed_delivery() {
                 MessageStatus::Normal,
             ),
         ],
+        &[],
     );
     let context = doc.split_once("# Handoff context\n").unwrap().1;
     assert!(context.contains("  - Type: Project\n"));
