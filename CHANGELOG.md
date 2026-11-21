@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bot chats show a skeleton of the conversation and composer while loading, instead of a loading message.
 - The Downloads dialog lists only downloads in progress and failed downloads. Finished downloads leave the list, failed ones can be retried or dismissed, and the dialog closes when the list is empty.
 - Shared files and local file links open the text preview panel only for text and code files and files without a known extension; images still open in the image viewer. Videos, audio, PDFs, archives, and Office documents are download-only, and clicking a local file link to one of them downloads it. Session chats and Bot chats use the same rules.
+- The Dashboard's Agent Profiles page uses the same list-and-editor layout as Agent Clients. New Profiles suggest an ID from their name, editing shows the ID with a copy button, and Delete is at the bottom of the editor and asks for confirmation.
+- The Dashboard requires a client and a model for every Agent Profile it saves, so each saved Profile can be offered to Bots.
+- **Breaking:** New Agent Profile IDs must start with a lowercase letter or digit and contain only lowercase letters, digits, `.`, `_`, and `-`. Existing Profiles keep their IDs and can still be edited, used, and deleted.
 
 ### Fixed
 

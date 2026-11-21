@@ -1,6 +1,6 @@
 use super::{
     AgentProfileService, AgentProfileView, UpsertAgentProfileRequest,
-    validation::{is_unique_constraint, validate_request},
+    validation::{is_unique_constraint, validate_new_profile_id, validate_request},
 };
 use pontia_core::{Error, Result};
 use pontia_storage_sqlite::repositories::agent_profiles::{
@@ -17,6 +17,7 @@ impl AgentProfileService {
     }
 
     pub async fn create(&self, request: UpsertAgentProfileRequest) -> Result<AgentProfileView> {
+        validate_new_profile_id(&request.profile_id)?;
         self.validate_configuration(&request).await?;
         let id = request.profile_id.clone();
         if let Err(error) = SqliteAgentProfileRepository::new(self.pool.clone())

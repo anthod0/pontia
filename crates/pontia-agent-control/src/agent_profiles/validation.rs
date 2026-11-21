@@ -1,6 +1,23 @@
 use super::UpsertAgentProfileRequest;
 use pontia_core::{Error, Result};
 
+/// New Profile IDs are written by hand in `--profile-id` and Workflow definitions, so they
+/// are limited to characters that need no quoting there. Existing IDs stay editable.
+pub(super) fn validate_new_profile_id(id: &str) -> Result<()> {
+    let mut chars = id.chars();
+    if chars
+        .next()
+        .is_some_and(|first| first.is_ascii_lowercase() || first.is_ascii_digit())
+        && chars
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-'))
+    {
+        return Ok(());
+    }
+    Err(Error::Domain(
+        "profile_id must start with a lowercase letter or digit and contain only lowercase letters, digits, '.', '_' or '-'".into(),
+    ))
+}
+
 pub(super) fn validate_request(
     clients: &crate::clients::ClientRegistry,
     request: &UpsertAgentProfileRequest,
