@@ -155,6 +155,7 @@ test("mounts only the visible window of a full Bot history page", async () => {
 test("downloads a live file share directly from the open Bot chat", async () => {
   const file = {
     file_id: "file-1",
+    share_id: "share-1",
     turn_id: null,
     name: "Pontia项目描述.xlsx",
     path: "/work/Pontia项目描述.xlsx",
@@ -182,11 +183,11 @@ test("downloads a live file share directly from the open Bot chat", async () => 
   latest.notice_session_id = "main";
   latest.entries = [
     {
-      kind: "shared_file",
-      id: file.file_id,
+      kind: "shared_files",
+      id: file.share_id,
       session_id: "main",
       created_at: file.created_at,
-      file,
+      files: [file],
     },
   ];
   events.mock.calls[0][0]({
@@ -198,10 +199,10 @@ test("downloads a live file share directly from the open Bot chat", async () => 
       session_id: "main",
       turn_id: null,
       source: "external_api",
-      type: "session.file_shared",
+      type: "session.files_shared",
       time: file.created_at,
-      payload: { file_id: file.file_id },
-      file,
+      payload: { share_id: file.share_id, file_ids: [file.file_id] },
+      files: [file],
     },
   });
   await fireEvent.click(
@@ -212,15 +213,16 @@ test("downloads a live file share directly from the open Bot chat", async () => 
   expect(save.mock.instances[0]).toHaveProperty("download", file.name);
 });
 
-function sharedFiles(...files: SharedFile[]) {
+/** One Bot timeline entry per share. */
+function sharedFiles(...shares: SharedFile[][]) {
   vi.spyOn(testDevice.api, "getBotMessages").mockResolvedValue({
     bot,
-    entries: files.map((file) => ({
-      kind: "shared_file",
-      id: file.file_id,
+    entries: shares.map((files) => ({
+      kind: "shared_files",
+      id: files[0].share_id,
       session_id: "main",
-      created_at: file.created_at,
-      file,
+      created_at: files[0].created_at,
+      files,
     })),
     file_link_session: null,
     notice_session_id: "main",
@@ -230,8 +232,13 @@ function sharedFiles(...files: SharedFile[]) {
   });
 }
 
-const sharedFile = (name: string, media_type = "application/octet-stream"): SharedFile => ({
+const sharedFile = (
+  name: string,
+  media_type = "application/octet-stream",
+  share = `share-${name}`,
+): SharedFile => ({
   file_id: `file-${name}`,
+  share_id: share,
   turn_id: null,
   name,
   path: `/work/${name}`,
@@ -253,7 +260,7 @@ test("shows a shared image inline and enlarges it in the image viewer", async ()
   const read = vi
     .spyOn(testDevice.fileApi, "sharedFileContent")
     .mockResolvedValue(new Response("png", { headers: { "Content-Type": "image/png" } }));
-  sharedFiles(sharedFile("chart.png", "image/png"));
+  sharedFiles([sharedFile("chart.png", "image/png")]);
   render(BotChatPreviewHarness, { botId: bot.bot_id });
 
   const enlarge = await screen.findByRole("button", { name: "Enlarge chart.png" });
@@ -263,8 +270,35 @@ test("shows a shared image inline and enlarges it in the image viewer", async ()
   );
   expect(read).toHaveBeenCalledWith("main", "file-chart.png");
   await fireEvent.click(enlarge);
-  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  const viewer = await screen.findByRole("dialog");
+  expect(within(viewer).queryByRole("button", { name: "Next image" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Download chart.png" })).toBeInTheDocument();
+  vi.unstubAllGlobals();
+});
+
+test("pages the image viewer only within one share of the Bot chat", async () => {
+  class VisibleObserver {
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+    observe(target: Element) {
+      this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as never);
+    }
+    disconnect() {}
+  }
+  vi.stubGlobal("IntersectionObserver", VisibleObserver);
+  vi.spyOn(testDevice.previews, "sharedImageUrl").mockImplementation(
+    async (_s, id) => `blob:${id}`,
+  );
+  sharedFiles(
+    [sharedFile("before.png", "image/png")],
+    [sharedFile("a.png", "image/png", "batch"), sharedFile("b.png", "image/png", "batch")],
+  );
+  render(BotChatPreviewHarness, { botId: bot.bot_id });
+  await fireEvent.click(await screen.findByRole("button", { name: "Enlarge a.png" }));
+  const viewer = await screen.findByRole("dialog");
+  expect(within(viewer).getByRole("button", { name: "Previous image" })).toBeDisabled();
+  await fireEvent.click(within(viewer).getByRole("button", { name: "Next image" }));
+  expect(within(viewer).getByRole("heading", { name: "b.png", hidden: true })).toBeInTheDocument();
+  expect(within(viewer).getByRole("button", { name: "Next image" })).toBeDisabled();
   vi.unstubAllGlobals();
 });
 
@@ -272,7 +306,7 @@ test("opens a shared text file in the file preview panel and leaves binary files
   const read = vi
     .spyOn(testDevice.fileApi, "pathFileContent")
     .mockResolvedValue(new Response("# Notes\n"));
-  sharedFiles(sharedFile("notes.md"), sharedFile("bundle.zip"));
+  sharedFiles([sharedFile("notes.md"), sharedFile("bundle.zip")]);
   render(BotChatPreviewHarness, { botId: bot.bot_id });
 
   expect(await screen.findByRole("button", { name: "Download bundle.zip" })).toBeInTheDocument();

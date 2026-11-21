@@ -11,7 +11,7 @@ mod event_history;
 mod events;
 pub use event_history::{SessionEventSummary, TimePage};
 mod session_files;
-pub use session_files::{OwnedSessionFile, SharedFile};
+pub use session_files::{OwnedFileShare, SharedFile};
 mod sessions;
 mod turns;
 mod update;

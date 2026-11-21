@@ -214,6 +214,8 @@ async fn main_session_shares_are_downloadable_from_bot_history_after_rotation() 
     let path = app.workspace().path().join("Pontia项目描述.xlsx");
     let bytes = b"PK\x03\x04shared workbook";
     std::fs::write(&path, bytes).unwrap();
+    let notes = app.workspace().path().join("notes.md");
+    std::fs::write(&notes, b"# Notes").unwrap();
     let mut shared = Vec::new();
     for (session, owner) in [
         ("s", "a:launch"),
@@ -225,14 +227,14 @@ async fn main_session_shares_are_downloadable_from_bot_history_after_rotation() 
         let (status, body) = post_json(
             app.state.clone(),
             &format!("/api/v1/sessions/{session}/files"),
-            json!({"path": path}),
+            json!({"paths": [path, notes]}),
         )
         .await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
-        shared.push(body["data"]["file"].clone());
+        shared.push(body["data"].clone());
     }
 
-    let id = shared[0]["file_id"].as_str().unwrap();
+    let id = shared[0]["share_id"].as_str().unwrap();
     assert_eq!(ids(&page(&app, &[]).await), [id]);
     sqlx::query("UPDATE bots SET current_session_id=NULL WHERE bot_id='a'")
         .execute(&app.db)
@@ -243,21 +245,28 @@ async fn main_session_shares_are_downloadable_from_bot_history_after_rotation() 
     let history = page(&app, &[("before", latest["next_before"].as_str().unwrap())]).await;
     assert_eq!(ids(&history), [id]);
     let entry = &history["entries"][0];
-    assert_eq!(entry["kind"], "shared_file");
-    assert_eq!(entry["file"], shared[0]);
-    assert_eq!(entry["created_at"], shared[0]["created_at"]);
+    assert_eq!(entry["kind"], "shared_files");
+    assert_eq!(entry["files"], shared[0]["files"]);
+    assert_eq!(entry["files"][1]["name"], "notes.md");
+    assert_eq!(entry["created_at"], shared[0]["files"][0]["created_at"]);
     assert_eq!(entry["session_id"], "s");
-    assert_eq!(ids(&page(&app, &[("around", id)]).await), [id, "later"]);
+    let second_file = shared[0]["files"][1]["file_id"].as_str().unwrap();
+    for anchor in [id, second_file] {
+        assert_eq!(ids(&page(&app, &[("around", anchor)]).await), [id, "later"]);
+    }
     for other in &shared[1..] {
-        assert_eq!(
-            get(&app, "a", &[("around", other["file_id"].as_str().unwrap())])
-                .await
-                .0,
-            StatusCode::NOT_FOUND
-        );
+        for anchor in [&other["share_id"], &other["files"][0]["file_id"]] {
+            assert_eq!(
+                get(&app, "a", &[("around", anchor.as_str().unwrap())])
+                    .await
+                    .0,
+                StatusCode::NOT_FOUND
+            );
+        }
     }
 
     let session = entry["session_id"].as_str().unwrap();
+    let id = shared[0]["files"][0]["file_id"].as_str().unwrap();
     let content = get_body(
         &pontia_http::router(app.state.clone()),
         &format!("/api/v1/sessions/{session}/files/{id}/content"),

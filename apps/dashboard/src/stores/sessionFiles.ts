@@ -48,9 +48,9 @@ export function createSessionFiles(device: DeviceRuntime) {
         if (
           event.kind === "session_event" &&
           event.event.session_id === sessionId &&
-          event.event.file
+          event.event.files
         )
-          merge([event.event.file]);
+          merge(event.event.files);
       });
       void load();
       return () => {

@@ -64,49 +64,32 @@ impl SessionFileService {
         Ok(())
     }
 
-    pub async fn share(&self, session_id: &str, path: PathBuf) -> Result<SharedFile> {
+    /// Shares `paths` as one batch. Either every path is valid and shared, or nothing is;
+    /// the error names the first invalid path.
+    pub async fn share(&self, session_id: &str, paths: Vec<PathBuf>) -> Result<Vec<SharedFile>> {
         self.ensure_session(session_id).await?;
-        let file = tokio::task::spawn_blocking(move || {
-            if !path.is_absolute() {
-                return Err(Error::Domain("An absolute file path is required".into()));
-            }
-            let path = path
-                .canonicalize()
-                .map_err(|e| Error::Domain(e.to_string()))?;
-            let (file, media_type) = open_file(&path).map_err(|e| Error::Domain(e.to_string()))?;
-            let size = file.metadata()?.len();
-            if size > MAX_FILE_SIZE {
-                return Err(Error::Domain(
-                    "File exceeds the 1 GiB download limit".into(),
-                ));
-            }
-            let name = path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .ok_or_else(|| Error::Domain("File name must be UTF-8".into()))?
-                .to_owned();
-            let path = path
-                .to_str()
-                .ok_or_else(|| Error::Domain("File path must be UTF-8".into()))?
-                .to_owned();
-            Ok(SharedFile {
-                file_id: format!("file_{}", Uuid::now_v7()),
-                turn_id: None,
-                path,
-                name,
-                size: size as i64,
-                media_type: media_type.into(),
-                created_at: pontia_core::time::utc_now()
-                    .format(&time::format_description::well_known::Rfc3339)
-                    .expect("UTC timestamp"),
-            })
+        if paths.is_empty() {
+            return Err(Error::Domain("At least one file path is required".into()));
+        }
+        let files = tokio::task::spawn_blocking(move || {
+            let share_id = format!("share_{}", Uuid::now_v7());
+            let created_at = pontia_core::time::utc_now()
+                .format(&time::format_description::well_known::Rfc3339)
+                .expect("UTC timestamp");
+            paths
+                .iter()
+                .map(|path| {
+                    declare(path, &share_id, &created_at)
+                        .map_err(|reason| Error::Domain(format!("{}: {reason}", path.display())))
+                })
+                .collect::<Result<Vec<_>>>()
         })
         .await
         .map_err(|e| Error::Io(std::io::Error::other(e)))??;
         self.repository
             .share(
                 session_id,
-                file,
+                files,
                 &pontia_core::ids::new_event_id().to_string(),
             )
             .await
@@ -176,6 +159,38 @@ impl SessionFileService {
         .await
         .map_err(|e| FileContentError::Internal(Error::Io(std::io::Error::other(e))))?
     }
+}
+
+fn declare(
+    path: &Path,
+    share_id: &str,
+    created_at: &str,
+) -> std::result::Result<SharedFile, String> {
+    if !path.is_absolute() {
+        return Err("An absolute file path is required".into());
+    }
+    let path = path.canonicalize().map_err(|e| e.to_string())?;
+    let (file, media_type) = open_file(&path).map_err(|e| e.to_string())?;
+    let size = file.metadata().map_err(|e| e.to_string())?.len();
+    if size > MAX_FILE_SIZE {
+        return Err("File exceeds the 1 GiB download limit".into());
+    }
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or("File name must be UTF-8")?
+        .to_owned();
+    let path = path.to_str().ok_or("File path must be UTF-8")?.to_owned();
+    Ok(SharedFile {
+        file_id: format!("file_{}", Uuid::now_v7()),
+        share_id: share_id.into(),
+        turn_id: None,
+        path,
+        name,
+        size: size as i64,
+        media_type: media_type.into(),
+        created_at: created_at.into(),
+    })
 }
 
 fn read_content(

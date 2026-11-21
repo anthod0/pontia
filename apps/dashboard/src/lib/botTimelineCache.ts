@@ -1,7 +1,7 @@
 import type { Bot, BotEntry, BotMessagePage } from "../api/types";
 import { deviceSnapshotStore } from "./deviceSnapshotStore";
 
-const SNAPSHOT_VERSION = 1;
+const SNAPSHOT_VERSION = 2;
 /** Matches the default page size, so the cache holds the latest page. */
 const CACHED_BOT_ENTRY_LIMIT = 50;
 

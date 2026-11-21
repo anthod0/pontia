@@ -3,8 +3,9 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import SessionConversation from "../../src/lib/components/session-chat/SessionConversation.svelte";
 import { token } from "../../src/stores/auth";
 
-const image = (id: string, turn: string) => ({
+const image = (id: string, turn: string, share = `share-${id}`) => ({
   file_id: id,
+  share_id: share,
   turn_id: turn,
   name: `${id}.png`,
   path: `/tmp/${id}.png`,
@@ -37,36 +38,42 @@ afterEach(() => {
   token.set("");
 });
 
-test("pages between the shared images of every turn in conversation order", async () => {
+test("pages only between the images of the share that was opened", async () => {
   render(SessionConversation, {
     sessionId: "viewer-session",
     messages: [
       { id: "u1", role: "user", content: "first", status: "complete", turnId: "t1" },
       { id: "u2", role: "user", content: "second", status: "complete", turnId: "t2" },
     ],
-    // The store lists newest first.
-    sharedFiles: [image("img2", "t2"), image("img1", "t1")],
+    // The store lists newest first. img1 and img2 are one share; img3 and img4 are single shares.
+    sharedFiles: [
+      image("img4", "t2"),
+      image("img3", "t1"),
+      image("img2", "t1", "batch"),
+      image("img1", "t1", "batch"),
+    ],
   });
 
-  await fireEvent.click(await screen.findByRole("button", { name: "Enlarge img1.png" }));
+  await fireEvent.click(await screen.findByRole("button", { name: "Enlarge img2.png" }));
   const viewer = await screen.findByRole("dialog");
-  const next = within(viewer).getByRole("button", { name: "Next image" });
-  expect(within(viewer).getByRole("button", { name: "Previous image" })).toBeDisabled();
-
-  await fireEvent.click(next);
   expect(
     within(viewer).getByRole("heading", { name: "img2.png", hidden: true }),
   ).toBeInTheDocument();
+  const next = within(viewer).getByRole("button", { name: "Next image" });
   expect(next).toBeDisabled();
   await fireEvent.click(within(viewer).getByRole("button", { name: "Previous image" }));
   expect(
     within(viewer).getByRole("heading", { name: "img1.png", hidden: true }),
   ).toBeInTheDocument();
+  expect(within(viewer).getByRole("button", { name: "Previous image" })).toBeDisabled();
   await fireEvent.click(within(viewer).getByRole("button", { name: "Close", exact: true }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  await fireEvent.click(screen.getByRole("button", { name: "Enlarge img2.png" }));
-  const reopened = await screen.findByRole("dialog");
+
+  await fireEvent.click(screen.getByRole("button", { name: "Enlarge img3.png" }));
+  const single = await screen.findByRole("dialog");
   expect(
-    within(reopened).getByRole("heading", { name: "img2.png", hidden: true }),
+    within(single).getByRole("heading", { name: "img3.png", hidden: true }),
   ).toBeInTheDocument();
+  expect(within(single).queryByRole("button", { name: "Next image" })).not.toBeInTheDocument();
+  expect(within(single).queryByRole("button", { name: "Previous image" })).not.toBeInTheDocument();
 });

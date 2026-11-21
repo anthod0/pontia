@@ -785,5 +785,19 @@
   "profiles.select": "选择一个 Profile 进行编辑。",
   "profiles.saved": "Profile 已保存",
   "profiles.noLaunch": "未设置客户端和模型",
-  "profiles.noClients": "请先启用 Agent 客户端，再创建 Profile。"
+  "profiles.noClients": "请先启用 Agent 客户端，再创建 Profile。",
+  "files.fileCount": "{count} 个文件",
+  "files.imageCount": "{count} 张图片",
+  "files.receivingCount": "{count} 个接收中",
+  "files.failedCount": "{count} 个失败",
+  "files.missingCount": "{count} 个已不存在",
+  "files.downloadAll": "全部下载",
+  "files.downloadAllNamed": "全部下载（{count} 个文件）",
+  "files.showMoreFiles": "再显示 {count} 个",
+  "files.showMoreImages": "再显示 {count} 张图片",
+  "files.showLess": "收起",
+  "files.showAsList": "以列表显示",
+  "files.showAsImages": "以图片显示",
+  "bots.quoteFile": "引用文件",
+  "bots.quoteImage": "引用图片"
 }

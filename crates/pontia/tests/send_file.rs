@@ -18,7 +18,7 @@ fn send_file_requires_session_identity_without_contacting_service() {
 }
 
 #[test]
-fn send_file_resolves_path_and_prints_the_returned_file_id() {
+fn send_file_resolves_paths_and_prints_the_returned_file_ids() {
     let root = tempfile::tempdir().unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     std::fs::write(
@@ -57,12 +57,12 @@ fn send_file_resolves_path_and_prints_the_returned_file_id() {
         bytes.resize(header_end + size, 0);
         socket.read_exact(&mut bytes[header_end..]).unwrap();
         let body: serde_json::Value = serde_json::from_slice(&bytes[header_end..]).unwrap();
-        let response = r#"{"data":{"file":{"file_id":"file-result"}},"error":null}"#;
+        let response = r#"{"data":{"share_id":"share-result","files":[{"file_id":"file-a"},{"file_id":"file-b"}]},"error":null}"#;
         write!(socket, "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).unwrap();
         body
     });
     let output = Command::new(env!("CARGO_BIN_EXE_pontia"))
-        .args(["send-file", "report.txt"])
+        .args(["send-file", "report.txt", "/tmp/chart.png"])
         .current_dir(root.path())
         .env("PONTIA_HOME", root.path())
         .env("PONTIA_SESSION_ID", "session-test")
@@ -75,10 +75,10 @@ fn send_file_resolves_path_and_prints_the_returned_file_id() {
     );
     assert_eq!(
         String::from_utf8(output.stdout).unwrap().trim(),
-        "file-result"
+        "file-a\nfile-b"
     );
     assert_eq!(
         server.join().unwrap(),
-        serde_json::json!({"path":root.path().join("report.txt")})
+        serde_json::json!({"paths":[root.path().join("report.txt"), "/tmp/chart.png"]})
     );
 }

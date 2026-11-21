@@ -102,11 +102,14 @@ struct Cli {
 enum Command {
     #[command(hide = true)]
     WorkspaceCheck { path: PathBuf },
-    /// Share one file with the user of the current Session
-    #[command(after_help = "The file is read when the user downloads it.")]
+    /// Share files with the user of the current Session
+    #[command(
+        after_help = "Files given together appear as one card. If any path is invalid, no file is shared.\nPrints one file ID per line. Files are read when the user downloads them."
+    )]
     SendFile {
-        /// File to share
-        path: PathBuf,
+        /// Files to share
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
     },
     /// Configure Pontia interactively and start its per-user service
     #[command(after_help = INIT_HELP)]
@@ -281,9 +284,9 @@ async fn execute(command: Command) -> Result<bool, String> {
             }
             result.map(|_| true)
         }
-        Command::SendFile { path } => {
+        Command::SendFile { paths } => {
             let config = pontia_clients::config_from_env().map_err(|e| e.to_string())?;
-            println!("{}", pontia::send_file::run(path, &config).await?);
+            println!("{}", pontia::send_file::run(paths, &config).await?);
             Ok(true)
         }
         Command::Client(command) => {
