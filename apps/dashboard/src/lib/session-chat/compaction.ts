@@ -1,5 +1,5 @@
 import { translate as defaultTranslate, type Translator } from "$lib/i18n";
-import type { EventView, SessionView } from "../../api/types";
+import type { EventView, SessionView, TurnTimelineItem } from "../../api/types";
 
 export function compactionDisabledReason(
   session: SessionView,
@@ -62,4 +62,33 @@ export function compactionStatus(
       ? translate("compaction.tokenChange", { before, after })
       : translate("compaction.completed");
   return { phase: "completed", message, busy: false };
+}
+
+// These clients report durable completion facts but cannot read native checkpoints.
+export function compactionEventItems(
+  items: TurnTimelineItem[],
+  events: EventView[],
+): TurnTimelineItem[] {
+  const completed = new Map<string, EventView>();
+  for (const event of events) {
+    if (event.type === "session.compaction_completed")
+      completed.set(event.payload.operation_id as string, event);
+  }
+  const result = [...items];
+  for (const event of [...completed.values()].sort((a, b) => a.time.localeCompare(b.time))) {
+    const checkpoint: TurnTimelineItem = {
+      item_id: `compaction-event:${event.event_id}`,
+      turn_id: null,
+      kind: "context_compaction",
+      role: "system",
+      raw_kind: event.type,
+      title: null,
+      status: "completed",
+      occurred_at: event.time,
+      content_preview: "",
+    };
+    const next = result.findIndex((item) => item.occurred_at && item.occurred_at > event.time);
+    result.splice(next < 0 ? result.length : next, 0, checkpoint);
+  }
+  return result;
 }

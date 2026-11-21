@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Claude Code Sessions support manual context compaction and show compaction progress and completion in Dashboard. After compaction, readable messages remain available while earlier content is marked as compacted.
 - `pontia bot helper compact --session-id ID` starts context compaction for an idle or interrupted helper owned by the current Bot when its client supports manual compaction.
 - Opening the Dashboard in a new tab or app window returns to the last Session chat or Bot chat viewed on that device. Links to other pages, reloads, and New Chat opened later in the same tab are unchanged. A Session or Bot that no longer exists opens New Chat instead.
 - `pontia send-file` accepts several paths and shares them as one card in the Session chat and Bot chat. If any path is invalid, nothing is shared and the error names that path. The command prints one file ID per line.

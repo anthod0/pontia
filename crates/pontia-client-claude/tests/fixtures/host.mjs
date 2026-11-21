@@ -30,6 +30,7 @@ if (process.argv[2] === "history") {
     );
   let sequence = 0;
   let active;
+  let compacting;
   let number = existsSync(join(config.cwd, "wire.jsonl"))
     ? readFileSync(join(config.cwd, "wire.jsonl"), "utf8")
         .trim()
@@ -96,6 +97,14 @@ if (process.argv[2] === "history") {
         }
         // Receipt is deliberately delivered before execution begins.
         send({ type: "response", id: request.id, status: "accepted" });
+      } else if (request.method === "compact") {
+        if (active || compacting || !ready) {
+          send({ type: "response", id: request.id, status: "rejected" });
+          return;
+        }
+        compacting = request.operation_id;
+        event({ kind: "compaction", phase: "started", data: {operation_id: compacting, trigger: "manual"} });
+        send({ type: "response", id: request.id, status: "accepted" });
       } else if (request.method === "steer") {
         if (!active?.started || request.target_input_id !== active.id) {
           send({ type: "response", id: request.id, status: "rejected" });
@@ -145,7 +154,7 @@ if (process.argv[2] === "history") {
         expire();
         send({ type: "response", id: request.id, status: "accepted" });
       } else if (request.method === "is_idle") {
-        send({ type: "response", id: request.id, status: "accepted", idle: !active });
+        send({ type: "response", id: request.id, status: "accepted", idle: !active && !compacting });
       } else if (request.method === "close") {
         clearInterval(timer);
         expire();
@@ -157,6 +166,10 @@ if (process.argv[2] === "history") {
     });
   });
   const timer = setInterval(() => {
+    if (compacting && existsSync(join(config.cwd, `compact-${config.session_id}-1`))) {
+      event({ kind: "compaction", phase: "completed", data: { operation_id: compacting, trigger: "manual", native_compaction_id: randomUUID(), tokens_before: 20000, tokens_after: 2000 } });
+      compacting = undefined;
+    }
     if (!active) return;
     const gate = (kind) =>
       existsSync(join(config.cwd, `${kind}-${config.session_id}-${active.number}`));

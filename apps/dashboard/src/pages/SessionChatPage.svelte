@@ -19,7 +19,7 @@
   import type { HistoryFork } from '../stores/historyForks'
   import { SubmissionUnconfirmedError } from '../stores/inboxRecovery'
   import type { DashboardStreamEvent, EventView, InboxDeliveryPolicy, InboxMessageView, SessionView, TurnView } from '../api/types'
-  import { compactionDisabledReason, compactionStatus } from '$lib/session-chat/compaction'
+  import { compactionDisabledReason, compactionStatus, compactionEventItems } from '$lib/session-chat/compaction'
   import type { ChatMessageRole, SessionChatMessage } from '$lib/session-chat/sessionChat'
   import {
     canSendSessionMessage,
@@ -207,10 +207,16 @@
     ? timelineItemsToChatMessages($timelineState.items, true, $t)
     : []
   $: selectedTurns = $sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.turns : []
-  $: selectedCompaction = compactionStatus([
+  $: selectedCompactionEvents = [
     ...($sessionDetail?.session.session_id === selectedSessionId ? $sessionDetail.events : []),
     ...compactionEvents,
-  ], requestedCompaction, $t)
+  ]
+  $: selectedCompaction = compactionStatus(selectedCompactionEvents, requestedCompaction, $t)
+  $: eventCheckpoints = selectedSession?.capabilities.compaction_events === true && selectedSession?.capabilities.compaction_history !== true
+  $: conversationTimelineItems = eventCheckpoints
+    ? compactionEventItems($timelineState.sessionId === selectedSessionId ? $timelineState.items : [], selectedCompactionEvents)
+    : $timelineState.sessionId === selectedSessionId ? $timelineState.items : []
+  $: compactedHistoryNotice = eventCheckpoints && selectedCompactionEvents.some(event => event.type === "session.compaction_completed")
   $: timelineMessages = mergeLiveOutputMessages(
     transcriptMessages,
     selectedTurns,
@@ -610,7 +616,8 @@
         compactionEvents = [...compactionEvents.filter(event => event.event_id !== streamEvent.event.event_id), streamEvent.event]
         void loadSessionDetail(selectedSessionId, { showLoading: false })
         if (streamEvent.event.type === 'session.compaction_completed' && sessionSupportsTimeline(currentSelectedSession())) {
-          void refreshSessionTimeline(selectedSessionId)
+          if (currentSelectedSession()?.capabilities.compaction_history) void refreshSessionTimeline(selectedSessionId)
+          else void loadSessionTimeline(selectedSessionId, { mode: 'rebuild', topology: false })
         }
         return
       }
@@ -1091,6 +1098,9 @@
                 </Empty.Content>
               </Empty.Root>
             {:else}
+              {#if compactedHistoryNotice}
+                <p role="status" class="py-2 text-sm text-muted-foreground">{$t('compaction.earlierHistory')}</p>
+              {/if}
               {#if $timelineState.status === 'pending'}
                 <p role="status" class="py-2 text-sm text-muted-foreground">{$t('chat.loadingHistory')}</p>
               {/if}
@@ -1122,7 +1132,7 @@
               {#key selectedSessionId}
                 <SessionConversation
                   {messages}
-                  timelineItems={$timelineState.sessionId === selectedSessionId ? $timelineState.items : []}
+                  timelineItems={conversationTimelineItems}
                   compactionBusy={selectedCompaction?.busy ?? false}
                   sessionId={selectedSessionId}
                   workspace={selectedSession.workspace}
