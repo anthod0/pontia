@@ -5,15 +5,18 @@ const OPEN: &str = "<user_quote ";
 const CLOSE: &str = "</user_quote>";
 
 /// Normalize new user input only; stored messages and retries keep their original content.
-pub(crate) fn limit_quote(content: &str) -> Cow<'_, str> {
-    truncate_quote(content).map_or(Cow::Borrowed(content), Cow::Owned)
+pub(crate) fn user_input(content: &str) -> (Cow<'_, str>, Option<String>) {
+    match parse_quote(content) {
+        Some((normalized, id)) => (normalized, Some(id)),
+        None => (Cow::Borrowed(content), None),
+    }
 }
 
-fn truncate_quote(content: &str) -> Option<String> {
+fn parse_quote(content: &str) -> Option<(Cow<'_, str>, String)> {
     let (attributes, rest) = content.strip_prefix(OPEN)?.split_once('>')?;
-    let excerpt = message_attributes(attributes)?;
+    let (id, excerpt) = message_attributes(attributes)?;
     let (text, after) = rest.split_once(CLOSE)?;
-    if after.strip_prefix('\n')?.trim().is_empty() {
+    if text.is_empty() || after.strip_prefix('\n')?.trim().is_empty() {
         return None;
     }
 
@@ -28,17 +31,22 @@ fn truncate_quote(content: &str) -> Option<String> {
         remaining = next_character(remaining)?.1;
         count += 1;
     }
-    let end = end?;
+    let Some(end) = end else {
+        return Some((Cow::Borrowed(content), id));
+    };
     let flag = if excerpt { "" } else { " excerpt=\"true\"" };
-    Some(format!(
-        "{OPEN}{attributes}{flag}>{}…{CLOSE}{after}",
-        &text[..end]
+    Some((
+        Cow::Owned(format!(
+            "{OPEN}{attributes}{flag}>{}…{CLOSE}{after}",
+            &text[..end]
+        )),
+        id,
     ))
 }
 
 // Match the Dashboard's text-only message quote format; file quotes remain metadata.
-fn message_attributes(mut attributes: &str) -> Option<bool> {
-    let mut message = false;
+fn message_attributes(mut attributes: &str) -> Option<(String, bool)> {
+    let mut message = None;
     let mut speaker = false;
     let mut excerpt = false;
     while !attributes.trim().is_empty() {
@@ -57,7 +65,7 @@ fn message_attributes(mut attributes: &str) -> Option<bool> {
             encoded = rest;
         }
         match name.trim_end() {
-            "message_id" if !message => {
+            "message_id" if message.is_none() => {
                 let id = value.strip_prefix("bmsg_")?;
                 let uuid = uuid::Uuid::parse_str(id).ok()?;
                 if uuid.get_version_num() != 7
@@ -66,7 +74,7 @@ fn message_attributes(mut attributes: &str) -> Option<bool> {
                 {
                     return None;
                 }
-                message = true;
+                message = Some(value);
             }
             "speaker" if !speaker && matches!(value.as_str(), "User" | "Bot") => speaker = true,
             "excerpt" if !excerpt && value == "true" => excerpt = true,
@@ -77,7 +85,7 @@ fn message_attributes(mut attributes: &str) -> Option<bool> {
         }
         attributes = rest;
     }
-    (message && speaker).then_some(excerpt)
+    speaker.then_some((message?, excerpt))
 }
 
 fn next_character(text: &str) -> Option<(char, &str)> {

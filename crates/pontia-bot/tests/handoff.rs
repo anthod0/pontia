@@ -262,8 +262,16 @@ async fn recent_chat_selects_sixty_visible_messages_for_this_bot_in_chronologica
         f.message("a", index, &format!("visible-{index:02}")).await;
     }
     f.message("b", 99, "other-bot-secret").await;
+    sqlx::query(
+        "INSERT INTO bot_message_links VALUES ('msg-a-63', 'msg-a-62'), ('msg-a-62', 'msg-a-61')",
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
     let doc = f.generate().await;
     let chat = section(&doc, "Recent Chat");
+    assert!(chat.contains("(`msg-a-63`) [Related to: `msg-a-62`]"));
+    assert!(!chat.contains("(`msg-a-62`) [Related to:"));
     assert_eq!(
         ids(chat, "- ["),
         (5..65).map(|i| format!("msg-a-{i:02}")).collect::<Vec<_>>()

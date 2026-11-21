@@ -151,6 +151,15 @@ pub async fn send(
     ))
 }
 
+pub async fn message_context(
+    State(state): State<HttpState>,
+    Path((bot_id, message_id)): Path<(String, String)>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    Ok(ok(json!(
+        state.bots().message_context(&bot_id, &message_id).await?
+    )))
+}
+
 pub async fn retry(
     State(state): State<HttpState>,
     Path((bot_id, message_id)): Path<(String, String)>,

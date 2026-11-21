@@ -55,6 +55,11 @@ export interface BotMessage {
   created_at: string;
 }
 
+export interface BotMessageContext {
+  messages: BotMessage[];
+  truncated: boolean;
+}
+
 export interface BotNotice {
   id: string;
   kind: "turn.failed" | "session.error" | "session.exited";

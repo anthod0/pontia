@@ -464,3 +464,24 @@ async fn send_to_user_rejects_the_removed_working_on_argument() {
     assert!(!output.status.success());
     assert!(f.requests.try_recv().is_err());
 }
+
+#[tokio::test]
+async fn send_to_user_forwards_repeated_related_message_ids() {
+    let mut f = Fixture::new("send-to-user", json!({"sent": true, "message_id": "new"})).await;
+    let output = f
+        .cli(&[
+            "send-to-user",
+            "--message",
+            "Hello",
+            "--related-to",
+            "a",
+            "--related-to",
+            "b",
+        ])
+        .await;
+    assert!(output.status.success());
+    assert_eq!(
+        f.requests.recv().await.unwrap()["input"],
+        json!({"message": "Hello", "related_to": ["a", "b"]})
+    );
+}

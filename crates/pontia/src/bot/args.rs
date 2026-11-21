@@ -37,6 +37,10 @@ pub(super) struct SendToUser {
     /// Complete user-visible reply
     #[arg(long, allow_hyphen_values = true)]
     message: String,
+    /// Earlier message in this Bot chat that this reply follows (repeat up to five times)
+    #[arg(long = "related-to", value_name = "ID")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    related_to: Vec<String>,
 }
 
 #[derive(Debug, Args, Serialize)]

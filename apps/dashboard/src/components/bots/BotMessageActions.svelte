@@ -5,6 +5,7 @@
   import { entryQuote, messageText, quoteSummary, type BotQuote } from '$lib/botQuote'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import * as Sheet from '$lib/components/ui/sheet/index.js'
+  import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
@@ -13,10 +14,11 @@
   import { useDeviceRuntime } from '../../device/context'
   import type { BotEntry, SharedFile } from '../../api/types'
 
-  let { root, entry, onquote }: {
+  let { root, entry, onquote, oncontext }: {
     /** Element containing the feed rows; events are delegated from it. */
     root: HTMLElement | undefined
     entry: (id: string) => BotEntry | undefined
+    oncontext: (messageId: string) => void
     onquote: (quote: BotQuote) => void
   } = $props()
 
@@ -155,6 +157,11 @@
     onquote(value)
   }
 
+  function viewContext(next: Target) {
+    menuOpen = sheetOpen = false
+    oncontext(next.entry.id)
+  }
+
   function download(next: Target) {
     menuOpen = sheetOpen = false
     if (next.file && next.entry.kind === 'shared_files')
@@ -197,6 +204,7 @@
       <DropdownMenu.Item onSelect={() => quote(current)}><QuotesIcon />{quoteLabel}<DropdownMenu.Shortcut>R</DropdownMenu.Shortcut></DropdownMenu.Item>
       {#if isMessage}
         <DropdownMenu.Item onSelect={() => void copy(current)}><CopyIcon />{$t('common.copy')}</DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={() => viewContext(current)}><TreeStructureIcon />{$t('bots.viewContext')}</DropdownMenu.Item>
       {:else if current.file}
         <DropdownMenu.Item onSelect={() => download(current)}><DownloadSimpleIcon />{$t('files.download')}</DropdownMenu.Item>
       {/if}
@@ -221,6 +229,7 @@
         {/if}
         {#if isMessage}
           <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-5" />{$t('common.copy')}</button>
+          <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => viewContext(current)}><TreeStructureIcon class="size-5" />{$t('bots.viewContext')}</button>
         {/if}
       </div>
     {/if}

@@ -131,6 +131,8 @@ pub struct ReplyRequest {
 #[serde(deny_unknown_fields)]
 pub struct Reply {
     pub message: String,
+    #[serde(default)]
+    pub related_to: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -353,11 +355,16 @@ impl ConversationService {
     }
 
     pub async fn send(&self, bot_id: &str, content: &str) -> Result<BotMessage> {
-        self.start_delivery(
-            bot_id,
-            Input::New(crate::quote::limit_quote(content).into_owned()),
-        )
-        .await
+        self.start_delivery(bot_id, Input::New(content.to_owned()))
+            .await
+    }
+
+    pub async fn message_context(
+        &self,
+        bot_id: &str,
+        id: &str,
+    ) -> Result<crate::messages::MessageContext> {
+        self.messages.context(bot_id, id).await
     }
 
     pub async fn retry(&self, bot_id: &str, message_id: &str) -> Result<BotMessage> {
@@ -391,7 +398,10 @@ impl ConversationService {
             message: message.clone(),
         });
         drop(recording);
-        let input = format!("Source: User\n\n{}", message.content);
+        let input = format!(
+            "Source: User\nMessage: {}\n\n{}",
+            message.id, message.content
+        );
         let revision = activity.switch_failure.lock().unwrap().0;
         let _delivery = activity.delivery.lock().await;
         let result = self.deliver(bot_id, &input, &activity, revision).await;
@@ -628,7 +638,11 @@ impl ConversationService {
         let mut progress = ReplyInProgress(&activity, None);
         let message = self
             .messages
-            .reply(&bot.bot_id, &request.input.message)
+            .reply(
+                &bot.bot_id,
+                &request.input.message,
+                &request.input.related_to,
+            )
             .await?;
         progress.1 = Some(message.clone());
         Ok(message)

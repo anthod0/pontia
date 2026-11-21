@@ -63,14 +63,17 @@ fn helper(id: &str, role: BotRole, description: &str) -> HelperContext {
     }
 }
 
-fn message(id: &str, kind: MessageKind, content: &str, status: MessageStatus) -> BotMessage {
-    BotMessage {
-        id: id.into(),
-        bot_id: "bot-example".into(),
-        kind,
-        content: content.into(),
-        created_at: "2026-11-21T13:00:00Z".into(),
-        status,
+fn message(id: &str, kind: MessageKind, content: &str, status: MessageStatus) -> HistoryMessage {
+    HistoryMessage {
+        related_to: vec![],
+        message: crate::messages::BotMessage {
+            id: id.into(),
+            bot_id: "bot-example".into(),
+            kind,
+            content: content.into(),
+            created_at: "2026-11-21T13:00:00Z".into(),
+            status,
+        },
     }
 }
 
