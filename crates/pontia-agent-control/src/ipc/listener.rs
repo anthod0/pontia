@@ -18,16 +18,30 @@ pub struct ControlListener {
     _lock: std::fs::File,
 }
 
+pub fn control_socket_path(pontia_home: &Path) -> Result<PathBuf> {
+    let home = std::fs::metadata(pontia_home)?;
+    Ok(PathBuf::from(format!(
+        "/tmp/pontia-control-{}-{:x}-{:x}",
+        home.uid(),
+        home.dev(),
+        home.ino()
+    ))
+    .join("rpc.sock"))
+}
+
 impl ControlListener {
     pub async fn bind(pontia_home: &Path) -> Result<Self> {
-        let directory = pontia_home.join("state/pi");
-        std::fs::create_dir_all(&directory)?;
-        if !std::fs::symlink_metadata(&directory)?.file_type().is_dir() {
+        let path = control_socket_path(pontia_home)?;
+        let directory = path.parent().expect("socket directory");
+        std::fs::create_dir_all(directory)?;
+        let metadata = std::fs::symlink_metadata(directory)?;
+        if !metadata.file_type().is_dir() || metadata.uid() != std::fs::metadata(pontia_home)?.uid()
+        {
             return Err(Error::Domain(
                 "Control socket directory must be a real directory".into(),
             ));
         }
-        std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))?;
+        std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))?;
         let lock = std::fs::OpenOptions::new()
             .create(true)
             .truncate(false)
@@ -40,12 +54,6 @@ impl ControlListener {
                 "Control listener is already running or cannot be locked: {error}"
             ))
         })?;
-        let path = directory.join("rpc.sock");
-        if path.as_os_str().as_encoded_bytes().len() > 103 {
-            return Err(Error::Domain(
-                "Pontia home is too long for the Control Unix socket (maximum 103 bytes)".into(),
-            ));
-        }
         if let Ok(metadata) = std::fs::symlink_metadata(&path) {
             if !metadata.file_type().is_socket() {
                 return Err(Error::Domain(
@@ -104,6 +112,9 @@ impl Drop for ControlListener {
             .is_ok_and(|metadata| metadata.ino() == self.inode && metadata.file_type().is_socket())
         {
             let _ = std::fs::remove_file(&self.path);
+            let directory = self.path.parent().expect("socket directory");
+            let _ = std::fs::remove_file(directory.join("rpc.lock"));
+            let _ = std::fs::remove_dir(directory);
         }
     }
 }

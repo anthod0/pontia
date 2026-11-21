@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     path::PathBuf,
-    sync::{Arc, OnceLock},
+    sync::{Arc, RwLock},
 };
 use tokio::sync::Mutex;
 
@@ -38,22 +38,20 @@ pub(crate) struct Peer {
     pub resume: Option<String>,
     pub state: Mutex<State>,
     pub interactions: pontia_agent_control::interactions::InteractionService,
-    pub connection: OnceLock<Arc<Connection>>,
+    pub connection: RwLock<Option<Arc<Connection>>>,
 }
 impl Peer {
     pub async fn start(
         self: &Arc<Self>,
         events: &EventIngestService,
+        root: &std::path::Path,
         script: &std::path::Path,
         environment: &std::collections::BTreeMap<String, String>,
     ) -> Result<()> {
         self.runtime_event(events, PontiaEventType::RuntimeStarting, json!({}))
             .await?;
-        match Connection::spawn(self.clone(), script, environment, events.clone()).await {
-            Ok(connection) => {
-                let _ = self.connection.set(connection);
-                Ok(())
-            }
+        match crate::transport::launch(self, root, script, environment, events).await {
+            Ok(()) => Ok(()),
             Err(error) => {
                 self.runtime_event(
                     events,
@@ -77,9 +75,11 @@ impl Peer {
         }
         crate::interactions::expire_all(self, &mut state).await;
     }
-    pub fn connection(&self) -> Result<&Arc<Connection>> {
+    pub fn connection(&self) -> Result<Arc<Connection>> {
         self.connection
-            .get()
+            .read()
+            .unwrap()
+            .clone()
             .ok_or_else(|| Error::CapabilityUnavailable("Claude Code host is unavailable".into()))
     }
     pub async fn runtime_event(

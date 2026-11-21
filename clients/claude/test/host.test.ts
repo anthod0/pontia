@@ -578,7 +578,7 @@ test("steering rejects stale, finished and disconnected targets without consumin
   assert.throws(() => host.steer(second, second, "wrong target"), rejects("no_matching_execution"));
   host.controlLost();
   assert.throws(() => host.steer(first, second, "disconnected"), rejects("execution_unavailable"));
-  host.controlRestored(true);
+  host.controlRestored();
   fixture.messages.push(result());
   await settle();
   assert.throws(() => host.steer(first, second, "too late"), rejects("no_matching_execution"));

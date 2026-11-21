@@ -2,7 +2,7 @@ pub mod identity;
 mod listener;
 pub mod rpc;
 use crate::AgentControl;
-pub use listener::ControlListener;
+pub use listener::{ControlListener, control_socket_path};
 use rpc::{Requests, RpcPeer};
 use std::{sync::Arc, time::Duration};
 use tokio::net::UnixStream;

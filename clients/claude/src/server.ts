@@ -1,17 +1,16 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { chmod, lstat } from "node:fs/promises";
-import { createServer, type Socket } from "node:net";
-import { dirname } from "node:path";
+import { randomUUID } from "node:crypto";
+import {
+  connectRuntime,
+  CONTROL_VERSION,
+  type RuntimeConnection,
+} from "../shared/control-socket.js";
 import { Host, ControlError, type QueryFactory, type ExecutionPolicy } from "./host.js";
 import type { HostEvent } from "./facts.js";
 
-const MAX_FRAME = 1024 * 1024;
-const RECEIPTS = 128;
 export interface Bootstrap {
   session_id: string;
   runtime_id: string;
-  socket_path: string;
-  token: string;
+  pontia_home: string;
   cwd: string;
   model?: string;
   resume?: string;
@@ -35,8 +34,7 @@ export function bootstrap(value: unknown): Bootstrap {
   const result: Bootstrap = {
     session_id: string(data.session_id),
     runtime_id: string(data.runtime_id),
-    socket_path: string(data.socket_path),
-    token: string(data.token),
+    pontia_home: string(data.pontia_home),
     cwd: string(data.cwd),
   };
   if (data.system_prompt !== undefined) result.system_prompt = string(data.system_prompt);
@@ -63,50 +61,37 @@ export function bootstrap(value: unknown): Bootstrap {
       yolo: policy.yolo,
     };
   }
-  if (!/^[0-9a-f]{64}$/.test(result.token)) throw new ControlError("rejected", "invalid_token");
   return result;
 }
 
 export async function serve(config: Bootstrap, factory?: QueryFactory) {
-  const directory = await lstat(dirname(config.socket_path));
-  if (
-    !directory.isDirectory() ||
-    directory.isSymbolicLink() ||
-    (directory.mode & 0o077) !== 0 ||
-    directory.uid !== process.getuid?.()
-  )
-    throw new Error("socket_directory_not_private");
   const generation = randomUUID();
-  let current: Socket | undefined;
+  let connected = false;
   let sequence = 0;
-  let highWater = 0;
-  let stopped = false;
-  const sockets = new Set<Socket>();
-  const receipts = new Map<number, { hash: string; response: Promise<ObjectValue> }>();
-  const send = (socket: Socket, data: unknown) => {
-    const frame = JSON.stringify(data) + "\n";
-    if (
-      Buffer.byteLength(frame) > MAX_FRAME ||
-      socket.writableLength + Buffer.byteLength(frame) > MAX_FRAME
-    ) {
-      socket.destroy();
-      if (current === socket) {
-        current = undefined;
-        host.controlLost();
-      }
-      return;
-    }
-    if (!socket.destroyed) socket.write(frame);
+  let connection: RuntimeConnection;
+  const reports = new Set<Promise<unknown>>();
+  const identity = {
+    sessionId: config.session_id,
+    runtimeId: config.runtime_id,
+    clientSessionKey: config.resume,
   };
   const host = new Host(
     config,
     (event: HostEvent) => {
-      sequence += 1;
-      if (current) send(current, { type: "event", host_id: generation, sequence, event });
+      sequence++;
+      if (event.kind === "ready") identity.clientSessionKey = event.native_session_id;
+      if (!connected) return;
+      const report = connection.request("host.event", { host_id: generation, sequence, event });
+      reports.add(report);
+      void report
+        .catch(() => {
+          console.error("Claude host fact delivery failed");
+        })
+        .finally(() => reports.delete(report));
+      connection.registered(identity);
     },
     factory,
   );
-
   const invoke = async (request: ObjectValue): Promise<ObjectValue> => {
     try {
       switch (request.method) {
@@ -145,126 +130,79 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
     }
   };
 
-  const server = createServer((socket) => {
-    sockets.add(socket);
-    let authenticated = false;
-    let buffer = Buffer.alloc(0);
-    socket.on("error", () => {});
-    socket.on("close", () => {
-      sockets.delete(socket);
-      if (current === socket) {
-        current = undefined;
-        if (!stopped && !host.status().closed) host.controlLost();
+  connection = await connectRuntime(
+    config.pontia_home,
+    () => console.error("Claude host control connection unavailable"),
+    (method, params, respond, error) => {
+      if (method === "host.status") {
+        respond({
+          result: {
+            host_id: generation,
+            ...host.status(),
+            launch: {
+              cwd: config.cwd,
+              config_dir: process.env.CLAUDE_CONFIG_DIR,
+              model: config.model,
+              resume: config.resume,
+            },
+          },
+        });
+        return;
       }
-    });
-    socket.on("data", (chunk) => {
-      buffer = Buffer.concat([buffer, Buffer.from(chunk)]);
-      for (;;) {
-        const newline = buffer.indexOf(10);
-        if (newline < 0) {
-          if (buffer.length > MAX_FRAME) socket.destroy();
-          return;
-        }
-        if (newline + 1 > MAX_FRAME) {
-          socket.destroy();
-          return;
-        }
-        const line = buffer.subarray(0, newline).toString("utf8");
-        buffer = buffer.subarray(newline + 1);
-        try {
-          const request = object(JSON.parse(line));
-          if (!authenticated) {
-            const token = Buffer.from(typeof request.token === "string" ? request.token : "");
-            const expected = Buffer.from(config.token);
-            if (
-              request.method !== "attach" ||
-              request.session_id !== config.session_id ||
-              request.runtime_id !== config.runtime_id ||
-              token.length !== expected.length ||
-              !timingSafeEqual(token, expected)
-            ) {
-              socket.destroy();
-              return;
-            }
-            if (current) {
-              // A replacement does not inherit pending replies or replay missed facts.
-              current.destroy();
-              current = undefined;
-              host.controlLost();
-            }
-            current = socket;
-            host.controlRestored(
-              request.last_host_id === generation && request.last_sequence === sequence,
-            );
-            authenticated = true;
-            send(socket, {
-              type: "attached",
-              host_id: generation,
-              sequence,
-              high_water: highWater,
-              ...host.status(),
+      if (method !== "host.command") {
+        error(-32601, "Unknown host method");
+        return;
+      }
+      connected = true;
+      host.controlRestored();
+      void invoke(params)
+        .then(async (result) => {
+          if (params.method === "close" && result.status === "accepted") {
+            await Promise.allSettled(reports);
+            respond({ result }, () => {
+              void connection.close();
             });
-            continue;
-          }
-          if (current !== socket || request.host_id !== generation) {
-            socket.destroy();
-            return;
-          }
-          const id = request.id;
-          if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 1)
-            throw new ControlError("rejected", "invalid_request_id");
-          const hash = createHash("sha256").update(line).digest("hex");
-          let receipt = receipts.get(id);
-          if (receipt) {
-            if (receipt.hash !== hash) throw new ControlError("rejected", "request_id_reused");
-          } else {
-            if (id <= highWater) throw new ControlError("rejected", "request_expired");
-            highWater = id;
-            receipt = { hash, response: invoke(request) };
-            receipts.set(id, receipt);
-            if (receipts.size > RECEIPTS) receipts.delete(receipts.keys().next().value!);
-          }
-          void receipt.response.then((response) => {
-            if (current === socket && !socket.destroyed) {
-              send(socket, { type: "response", host_id: generation, id, ...response });
-            }
-            if (request.method === "close" && response.status === "accepted" && !stopped) {
-              stopped = true;
-              server.close();
-              for (const peer of sockets) peer.destroySoon();
-            }
-          });
-        } catch (error) {
-          // Malformed or ambiguous requests are never executed, nor echoed into diagnostics.
-          send(socket, {
-            type: "error",
-            status: "rejected",
-            reason: error instanceof ControlError ? error.reason : "invalid_request",
-          });
-        }
-      }
-    });
-  });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(config.socket_path, () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
-  // Parent directory already excludes other users during the bind/chmod window.
+          } else respond({ result });
+        })
+        .catch(() => error(-32603, "Host control failed"));
+    },
+    async () => {
+      connected = true;
+      host.controlRestored();
+    },
+    () => {
+      connected = false;
+      host.controlLost();
+    },
+    true,
+  );
   try {
-    await chmod(config.socket_path, 0o600);
+    const attached = (await connection.request("runtime.attach", {
+      version: CONTROL_VERSION,
+      session_id: config.session_id,
+      runtime_id: config.runtime_id,
+      client_session_key: identity.clientSessionKey,
+    })) as Record<string, unknown>;
+    if (attached.session_id !== config.session_id || attached.runtime_id !== config.runtime_id)
+      throw new Error("runtime_identity_mismatch");
+    connection.registered(identity);
+    connected = true;
+    host.controlRestored();
   } catch (error) {
-    server.close();
+    await connection.close();
     throw error;
   }
-  return {
-    async close() {
-      stopped = true;
-      await host.close();
-      for (const socket of sockets) socket.destroy();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    },
+  const terminate = () => {
+    void close();
   };
+  process.once("SIGTERM", terminate);
+  async function close() {
+    process.off("SIGTERM", terminate);
+    try { await host.close(); }
+    finally {
+      await Promise.allSettled(reports);
+      await connection.close();
+    }
+  }
+  return { close };
 }

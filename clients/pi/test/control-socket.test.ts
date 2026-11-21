@@ -1,6 +1,6 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rmdir } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { onTestFinished, expect, test, vi } from "vitest";
 import { connectPi } from "../src/control-socket.js";
 import { controlSocketPath, MAX_RPC_FRAME_BYTES, RpcError } from "../shared/control-socket.js";
@@ -11,7 +11,7 @@ import { tempDir } from "./temp-dir.js";
 
 async function server(handler: (socket: Socket, message: any) => void) {
   const root = await tempDir("pr-");
-  await mkdir(join(root, "state/pi"), { recursive: true });
+  await mkdir(dirname(controlSocketPath(root)), { recursive: true });
   const sockets = new Set<Socket>();
   const listener = createServer((socket) => {
     socket.setEncoding("utf8");
@@ -34,6 +34,7 @@ async function server(handler: (socket: Socket, message: any) => void) {
   onTestFinished(async () => {
     for (const socket of sockets) socket.destroy();
     await new Promise<void>((resolve) => listener.close(() => resolve()));
+    await rmdir(dirname(controlSocketPath(root)));
   });
   return root;
 }

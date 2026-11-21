@@ -278,7 +278,7 @@ impl SessionCommandService {
         session_id: &str,
         pontia_home: &Path,
     ) -> Result<ControlCommandOutcome> {
-        let _launch_guard = self.control.lock_identity().await;
+        let mut launch_guard = Some(self.control.lock_identity().await);
         let query = &self.queries;
         let session = query
             .get_session_control(session_id)
@@ -333,6 +333,10 @@ impl SessionCommandService {
         let persisted_start_command = self
             .start_command(session_id, target.control_runtime_role)
             .await?;
+        // Session clients complete their launch through an incoming attachment.
+        if adapter.session_client().is_some() {
+            drop(launch_guard.take());
+        }
         let runtime = adapter
             .resume(
                 &target,

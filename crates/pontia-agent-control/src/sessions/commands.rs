@@ -179,7 +179,7 @@ impl SessionCommandService {
                 }),
             ))
             .await?;
-        let _launch_guard = self.control.lock_identity().await;
+        let mut launch_guard = Some(self.control.lock_identity().await);
         let adapter = self.clients.for_client(&request.client_type)?;
         if !adapter.prepares_on_input() {
             ingest
@@ -194,6 +194,10 @@ impl SessionCommandService {
                 .await?;
         }
 
+        // Session clients complete their launch through an incoming attachment.
+        if adapter.session_client().is_some() {
+            drop(launch_guard.take());
+        }
         let runtime = adapter
             .start(
                 &self.pontia_home,
@@ -263,7 +267,7 @@ impl SessionCommandService {
             .ingest_in_process_ready_event(&request.client_type, &session_id, runtime.runtime_id())
             .await?;
 
-        drop(_launch_guard);
+        drop(launch_guard);
         let turns = self.turns.clone();
         let initial_turn = if let Some(task) = &request.initial_task {
             turns

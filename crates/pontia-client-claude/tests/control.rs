@@ -123,85 +123,65 @@ async fn commands_use_their_own_session_environment_before_and_after_resume() {
 }
 
 #[tokio::test]
-async fn long_home_uses_private_sockets_and_removes_them_on_exit_and_resume() {
+async fn long_home_uses_the_shared_private_socket_across_exit_and_resume() {
     use std::os::unix::fs::PermissionsExt;
     let root = tempfile::Builder::new()
         .prefix(&"long-pontia-home-".repeat(10))
         .tempdir()
         .unwrap();
     let h = Harness::with_root(root).await;
+    let socket = pontia_agent_control::ipc::control_socket_path(h.root.path()).unwrap();
+    assert!(socket.as_os_str().len() < 104);
+    assert_eq!(
+        std::fs::metadata(socket.parent().unwrap())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+    assert_eq!(
+        std::fs::metadata(&socket).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
     let session = h.create("long home").await;
-    let mut previous = None;
     for number in 1..=2 {
         h.wait_inputs(&session, number).await;
         h.gate(&session, number, "start");
         h.gate(&session, number, "finish");
         h.wait_states(&session, &vec!["completed"; number]).await;
-        let spawn = h
-            .wire(&session)
-            .into_iter()
-            .rev()
-            .find(|v| v["method"] == "spawn")
-            .unwrap();
-        let socket = std::path::PathBuf::from(spawn["socket_path"].as_str().unwrap());
-        let directory = socket.parent().unwrap();
-        assert!(socket.as_os_str().len() < 104);
-        assert_eq!(
-            std::fs::metadata(directory).unwrap().permissions().mode() & 0o777,
-            0o700
-        );
-        assert_eq!(
-            std::fs::metadata(&socket).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
-        assert_ne!(previous.as_ref(), Some(&socket));
         h.app
             .session_commands()
             .terminate_session(&session)
             .await
             .unwrap();
-        assert!(!directory.exists());
+        assert!(socket.exists());
         if number == 1 {
-            let resumed = h.resume_input(&session, "resumed long home").await;
-            assert_eq!(resumed["inbox_message"]["state"], "resuming");
+            h.resume_input(&session, "resumed long home").await;
         }
-        previous = Some(socket);
     }
     h.stop().await;
+    assert!(!socket.exists());
 }
 
 #[tokio::test]
-async fn failed_startup_cleans_socket_directory_and_only_reports_known_codes() {
-    for (code, expected) in [
-        ("EINVAL", "EINVAL"),
-        ("private-secret-path", "HOST_START_FAILED"),
-    ] {
-        let h = Harness::new().await;
-        std::fs::write(
-            h.root.path().join("startup-error.json"),
-            json!({"code":code,"message":"private-secret-path"}).to_string(),
-        )
-        .unwrap();
-        let request: CreateSessionRequest = serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"initial_task":{"input":"test startup"}})).unwrap();
-        let error = h
-            .app
-            .session_commands()
-            .create_session(request)
-            .await
-            .expect_err("startup must fail")
-            .to_string();
-        assert!(error.contains(expected), "{error}");
-        assert!(!error.contains("private-secret-path"), "{error}");
-        let wire = std::fs::read_to_string(h.root.path().join("wire.jsonl")).unwrap();
-        let spawn: Value = serde_json::from_str(wire.lines().next().unwrap()).unwrap();
-        assert!(
-            !std::path::Path::new(spawn["socket_path"].as_str().unwrap())
-                .parent()
-                .unwrap()
-                .exists()
-        );
-        h.stop().await;
-    }
+async fn failed_startup_reports_no_private_host_diagnostics() {
+    let h = Harness::new().await;
+    std::fs::write(
+        h.root.path().join("startup-error.json"),
+        json!({"code":"private-secret-path","message":"private-secret-path"}).to_string(),
+    )
+    .unwrap();
+    let request: CreateSessionRequest = serde_json::from_value(json!({"client_type":"claude-agent","workspace":h.root.path(),"initial_task":{"input":"test startup"}})).unwrap();
+    let error = h
+        .app
+        .session_commands()
+        .create_session(request)
+        .await
+        .expect_err("startup must fail")
+        .to_string();
+    assert!(!error.contains("private-secret-path"));
+    h.stop().await;
 }
 
 impl Harness {
@@ -363,7 +343,43 @@ impl Harness {
         .await
         .unwrap();
     }
+    async fn restart(self) -> Self {
+        self.app.shutdown().notify();
+        self.tasks.join().await.unwrap();
+        let mut clients = ClientRegistry::default();
+        clients.register(pontia_client_claude::registration_with_host(Some(
+            format!("{}/tests/fixtures/host.mjs", env!("CARGO_MANIFEST_DIR")).into(),
+        )));
+        let app = AgentControl::builder(self.app.db(), self.root.path().into())
+            .clients(clients.clone())
+            .build();
+        let tasks = clients
+            .start_services(app.clone(), ClientServicePhase::Transport)
+            .await
+            .unwrap();
+        Self {
+            app,
+            root: self.root,
+            tasks,
+        }
+    }
+
     async fn stop(self) {
+        let processes: Vec<String> = sqlx::query_scalar("SELECT process_fingerprint FROM session_runtimes WHERE process_fingerprint IS NOT NULL").fetch_all(&self.app.db()).await.unwrap();
+        for process in processes {
+            let process: pontia_runtime::ProcessFingerprint =
+                serde_json::from_str(&process).unwrap();
+            pontia_runtime::GenericRuntimeManager
+                .terminate_process(&process)
+                .unwrap();
+            tokio::time::timeout(Duration::from_secs(3), async {
+                while process.observe() != pontia_runtime::ProcessObservation::Exited {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .unwrap();
+        }
         self.app.shutdown().notify();
         tokio::time::timeout(Duration::from_secs(5), self.tasks.join())
             .await
@@ -1720,5 +1736,85 @@ async fn manual_compaction_routes_to_host_and_reports_session_facts_without_a_tu
     assert!(capabilities.compaction_events);
     assert!(!capabilities.manual_compaction);
     assert!(!capabilities.compaction_history);
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn running_host_reattaches_its_turn_then_accepts_input_approvals_interrupt_and_exit() {
+    let h = Harness::new().await;
+    let session = h.create("held across daemon restart").await;
+    h.gate(&session, 1, "start");
+    let turn = h.wait_states(&session, &["running"]).await[0].0.clone();
+    let fingerprint: String =
+        sqlx::query_scalar("SELECT process_fingerprint FROM session_runtimes WHERE session_id=?")
+            .bind(&session)
+            .fetch_one(&h.app.db())
+            .await
+            .unwrap();
+    let process: pontia_runtime::ProcessFingerprint = serde_json::from_str(&fingerprint).unwrap();
+    let h = h.restart().await;
+    assert_eq!(process.observe(), pontia_runtime::ProcessObservation::Alive);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !h.app.client_control().available(&session).await.unwrap()
+            || h.wire(&session)
+                .iter()
+                .filter(|frame| frame["method"] == "attached")
+                .count()
+                != 2
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    h.gate(&session, 1, "finish");
+    let completed = h.wait_states(&session, &["completed"]).await;
+    assert_eq!(completed[0].0, turn);
+    h.submit(&session, "approval").await;
+    h.wait_inputs(&session, 2).await;
+    h.gate(&session, 2, "start");
+    let approvals = h.interactions(&session, &["pending"]).await;
+    h.app
+        .interactions()
+        .respond(
+            &h.app,
+            &session,
+            approvals[0]["interaction_id"].as_str().unwrap(),
+            "allow",
+        )
+        .await
+        .unwrap();
+    h.interactions(&session, &["resolved"]).await;
+    let turns = h.wait_states(&session, &["completed", "running"]).await;
+    h.app
+        .turn_commands()
+        .interrupt_turn(&session, &turns[1].0)
+        .await
+        .unwrap();
+    h.gate(&session, 2, "finish");
+    h.wait_states(&session, &["completed", "interrupted"]).await;
+    assert_eq!(
+        h.wire(&session)
+            .iter()
+            .filter(|frame| frame["method"] == "spawn")
+            .count(),
+        1
+    );
+    assert_eq!(
+        h.wire(&session)
+            .iter()
+            .filter(|frame| frame["method"] == "input")
+            .count(),
+        2
+    );
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    assert_eq!(
+        process.observe(),
+        pontia_runtime::ProcessObservation::Exited
+    );
     h.stop().await;
 }

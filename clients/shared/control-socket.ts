@@ -2,6 +2,7 @@ import { RpcError } from "./rpc-error.js";
 export { RpcError } from "./rpc-error.js";
 import { createConnection, type Socket } from "node:net";
 import { isAbsolute, join } from "node:path";
+import { statSync } from "node:fs";
 
 export const CONTROL_VERSION = 8;
 export const MAX_CONTROL_FRAME_BYTES = 64 * 1024;
@@ -21,13 +22,13 @@ export interface RuntimeConnection {
 }
 
 export function controlSocketPath(pontiaHome: string): string {
-  const path = join(pontiaHome, "state", "pi", "rpc.sock");
-  if (!isAbsolute(path) || path.includes("\0") || Buffer.byteLength(path) > 103) {
-    throw new Error(
-      "Control Unix socket requires an absolute path of at most 103 bytes without NUL",
-    );
-  }
-  return path;
+  if (!isAbsolute(pontiaHome) || pontiaHome.includes("\0"))
+    throw new Error("Control home requires an absolute path without NUL");
+  const home = statSync(pontiaHome, { bigint: true });
+  return join(
+    `/tmp/pontia-control-${home.uid}-${home.dev.toString(16)}-${home.ino.toString(16)}`,
+    "rpc.sock",
+  );
 }
 
 class RpcSocket {

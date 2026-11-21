@@ -218,9 +218,9 @@ async fn rejects_old_protocol_and_invalid_registration_before_mutating_business_
 async fn listener_preserves_occupied_paths_and_recovers_a_stale_socket() {
     use std::os::unix::{fs::PermissionsExt, net::UnixListener};
     let root = tempfile::Builder::new().prefix("pl-").tempdir().unwrap();
-    let directory = root.path().join("state/pi");
-    std::fs::create_dir_all(&directory).unwrap();
-    let path = directory.join("rpc.sock");
+    let path = pontia_agent_control::ipc::control_socket_path(root.path()).unwrap();
+    let directory = path.parent().unwrap();
+    std::fs::create_dir_all(directory).unwrap();
     std::fs::write(&path, "owned file").unwrap();
     assert!(ControlListener::bind(root.path()).await.is_err());
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "owned file");
@@ -228,7 +228,7 @@ async fn listener_preserves_occupied_paths_and_recovers_a_stale_socket() {
     drop(UnixListener::bind(&path).unwrap());
     let listener = ControlListener::bind(root.path()).await.unwrap();
     assert_eq!(
-        std::fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
+        std::fs::metadata(directory).unwrap().permissions().mode() & 0o777,
         0o700
     );
     assert_eq!(

@@ -17,7 +17,7 @@ async fn registered_service_owns_the_listener_until_shutdown() {
         .start_services(state.clone(), ClientServicePhase::Transport)
         .await
         .unwrap();
-    let path = root.path().join("state/pi/rpc.sock");
+    let path = pontia_agent_control::ipc::control_socket_path(root.path()).unwrap();
     assert!(tokio::net::UnixStream::connect(&path).await.is_ok());
     assert!(matches!(
         clients
