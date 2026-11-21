@@ -25,6 +25,13 @@ pub enum RunState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemoteServiceState {
+    Restarted,
+    Stopped,
+    Unmanaged,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServiceStatus {
     pub enabled: EnabledState,
     pub loaded: bool,
@@ -139,6 +146,35 @@ where
     pub fn restart(&self, config: &AppConfig) -> Result<(), String> {
         self.manager.restart()?;
         self.wait_until_healthy(config)
+    }
+
+    pub fn apply_remote_target(
+        &self,
+        config: &AppConfig,
+        user_home: &Path,
+    ) -> Result<RemoteServiceState, String> {
+        match self.manager.status()?.run_state {
+            RunState::Running => {
+                let definition = self.definitions.read(&self.manager.definition_path(user_home))?;
+                if definition.as_deref().map(|value| self.manager.persisted_home(value)).transpose()?
+                    != Some(config.pontia_home.clone())
+                {
+                    return Ok(RemoteServiceState::Unmanaged);
+                }
+                self.restart(config)?;
+                Ok(RemoteServiceState::Restarted)
+            }
+            RunState::Stopped => {
+                if self.health.is_healthy(local_health_addr(config.bind_addr))? {
+                    Ok(RemoteServiceState::Unmanaged)
+                } else {
+                    Ok(RemoteServiceState::Stopped)
+                }
+            }
+            RunState::Starting | RunState::Failed => Err(
+                "the managed service is not ready; resolve its state with `pontia doctor` before retrying".into(),
+            ),
+        }
     }
 
     fn wait_until_healthy(&self, config: &AppConfig) -> Result<(), String> {

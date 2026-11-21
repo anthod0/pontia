@@ -103,3 +103,5 @@ sudo pontia-edge auto-update disable
 ## 删除 Edge
 
 在 Cloud 中删除自托管 Edge 会永久移除其注册及关联的设备。服务器上的安装需要单独处理：先迁移或停用受影响的设备，然后停止服务并从服务器上删除其文件。
+
+删除 Edge 前，可在每台受影响的设备上运行 `pontia remote edit`，选择另一个 Edge。

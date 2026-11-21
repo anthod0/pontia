@@ -23,7 +23,7 @@ use clap::{
 use dialoguer::Confirm;
 use pontia::{
     init::{self, InitPlatform},
-    lifecycle::{Lifecycle, RunState, ServiceManager, UpOptions},
+    lifecycle::{Lifecycle, RemoteServiceState, RunState, ServiceManager, UpOptions},
     manager::ProcessCommandRunner,
     runtime_io::{FileDefinitionStore, HttpHealthProbe},
     setup::{self, SetupPlatform},
@@ -39,7 +39,10 @@ use std::sync::Arc;
 #[cfg(target_os = "macos")]
 use pontia::manager::LaunchdManager;
 #[cfg(target_os = "linux")]
-use pontia::manager::SystemdManager;
+use pontia::{
+    lifecycle::{HealthProbe, local_health_addr},
+    manager::SystemdManager,
+};
 
 const ROOT_HELP: &str = "\
 Configuration and state live in $PONTIA_HOME (default: ~/.pontia).
@@ -305,11 +308,25 @@ async fn execute(command: Command) -> Result<bool, String> {
         }
         Command::Remote(command) => {
             let vars: HashMap<String, String> = env::vars().collect();
-            if matches!(
-                remote::run(command, &vars).await?,
-                remote::ServiceRestart::Required
-            ) {
-                restart_service_for_remote_config()?;
+            match remote::run(command, &vars).await? {
+                remote::ServiceRestart::Required => restart_service_for_remote_config()?,
+                remote::ServiceRestart::NotRequired => {}
+                remote::ServiceRestart::ApplyEdge { edge_id } => {
+                    let outcome = apply_remote_edge().map_err(|error| format!(
+                        "Edge target {edge_id} is saved, but the service could not apply it: {error}. Fix the service and run `pontia up` to apply the saved target (or restart an unmanaged pontiad manually)."
+                    ))?;
+                    match outcome {
+                        RemoteServiceState::Restarted => println!(
+                            "Service restarted. Remote connectivity has not been verified; reconnect or refresh the Dashboard."
+                        ),
+                        RemoteServiceState::Stopped => println!(
+                            "Service is stopped. The saved Edge target will apply on the next `pontia up`."
+                        ),
+                        RemoteServiceState::Unmanaged => println!(
+                            "The service for this configuration is not managed here. Restart pontiad manually to apply the saved Edge target, then refresh the Dashboard."
+                        ),
+                    }
+                }
             }
             Ok(true)
         }
@@ -555,6 +572,30 @@ fn run_lifecycle(command: LifecycleCommand) -> Result<bool, String> {
             "automatic lifecycle management is supported only on Linux with systemd and macOS"
                 .to_string(),
         )
+    }
+}
+
+fn apply_remote_edge() -> Result<RemoteServiceState, String> {
+    let config = pontia_clients::config_from_env().map_err(|error| error.to_string())?;
+    let definitions = FileDefinitionStore;
+    let health = HttpHealthProbe;
+    let runner = ProcessCommandRunner;
+    #[cfg(target_os = "linux")]
+    {
+        if !Path::new("/run/systemd/system").is_dir() {
+            return Ok(if health.is_healthy(local_health_addr(config.bind_addr))? {
+                RemoteServiceState::Unmanaged
+            } else {
+                RemoteServiceState::Stopped
+            });
+        }
+        let manager = SystemdManager::new(&runner);
+        Lifecycle::new(&manager, &definitions, &health).apply_remote_target(&config, &user_home()?)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let manager = launchd_manager(&runner, &[])?;
+        Lifecycle::new(&manager, &definitions, &health).apply_remote_target(&config, &user_home()?)
     }
 }
 

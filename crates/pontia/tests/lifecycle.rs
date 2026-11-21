@@ -489,3 +489,71 @@ fn down_delegates_to_fixed_service_identity() {
 
     assert_eq!(manager.down_calls.into_inner(), 1);
 }
+
+#[test]
+fn remote_target_restarts_only_the_running_service_for_this_configuration() {
+    use pontia::lifecycle::RemoteServiceState;
+    let root = tempfile::tempdir().unwrap();
+    let config = config(root.path());
+    for (state, healthy, matching_home, expected) in [
+        (
+            RunState::Running,
+            true,
+            true,
+            Some(RemoteServiceState::Restarted),
+        ),
+        (
+            RunState::Running,
+            true,
+            false,
+            Some(RemoteServiceState::Unmanaged),
+        ),
+        (
+            RunState::Stopped,
+            false,
+            true,
+            Some(RemoteServiceState::Stopped),
+        ),
+        (
+            RunState::Stopped,
+            true,
+            true,
+            Some(RemoteServiceState::Unmanaged),
+        ),
+        (RunState::Failed, false, true, None),
+        (RunState::Starting, false, true, None),
+        (RunState::Running, false, true, None),
+    ] {
+        let service_home = if matching_home {
+            root.path().to_path_buf()
+        } else {
+            root.path().join("other")
+        };
+        let store = FakeStore {
+            existing: Some(format!("pontiad|{}", service_home.display())),
+            ..Default::default()
+        };
+        let manager = manager(ServiceStatus {
+            enabled: EnabledState::Disabled,
+            loaded: true,
+            run_state: state,
+        });
+        let health = FakeHealth {
+            healthy,
+            waits: RefCell::new(Vec::new()),
+            probes: RefCell::new(Vec::new()),
+        };
+        let result =
+            Lifecycle::new(&manager, &store, &health).apply_remote_target(&config, root.path());
+        match expected {
+            Some(expected) => assert_eq!(result.unwrap(), expected),
+            None => assert!(result.is_err()),
+        }
+        assert_eq!(
+            manager.applied.get(),
+            state == RunState::Running && matching_home
+        );
+        assert!(store.installed.borrow().is_empty());
+        assert!(manager.apply_calls.borrow().is_empty());
+    }
+}

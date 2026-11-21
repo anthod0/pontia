@@ -59,6 +59,7 @@ const TOKEN: &str =
 struct CloudState {
     device: Option<Value>,
     registrations: Vec<Value>,
+    edits: Vec<Value>,
     unauthorized: bool,
     edges: Option<Value>,
 }
@@ -187,6 +188,20 @@ impl Cloud {
                             state.registrations.push(body);
                             state.device = Some(device.clone());
                             (201, device)
+                        }
+                        "PATCH" => {
+                            let device = state.device.as_mut().unwrap();
+                            for (key, value) in body.as_object().unwrap() {
+                                let field = if key == "handle" {
+                                    "device_handle"
+                                } else {
+                                    key
+                                };
+                                device[field] = value.clone();
+                            }
+                            let response = device.clone();
+                            state.edits.push(body);
+                            (200, response)
                         }
                         _ => panic!("unexpected mutation: {method} {path}"),
                     }
@@ -434,4 +449,61 @@ async fn registration_diagnostics_distinguish_registered_missing_and_invalid_log
     assert_eq!(fs::read(config_path).unwrap(), config);
     assert_eq!(fs::read(identity_path).unwrap(), identity);
     assert_eq!(cloud.state.lock().unwrap().registrations.len(), 1);
+}
+
+#[tokio::test]
+async fn editing_profile_options_preserves_edge_and_local_identity_without_restart() {
+    let cloud = Cloud::new();
+    cloud
+        .run(&["enable", "--edge", SECOND_EDGE, "--name", "Original"])
+        .await
+        .unwrap();
+    let identity = fs::read(cloud.root.path().join("e2e-identity.json")).unwrap();
+    let config = fs::read(cloud.root.path().join("config.toml")).unwrap();
+    let credential = fs::read(cloud.root.path().join("auth.json")).unwrap();
+    assert!(matches!(
+        cloud
+            .run(&["edit", "--name", "Studio", "--handle", "studio-device"])
+            .await
+            .unwrap(),
+        ServiceRestart::NotRequired
+    ));
+    let state = cloud.state.lock().unwrap();
+    assert_eq!(
+        state.edits,
+        vec![json!({"name": "Studio", "handle": "studio-device"})]
+    );
+    let device = state.device.as_ref().unwrap();
+    assert_eq!(device["edge_id"], SECOND_EDGE);
+    assert_eq!(device["name"], "Studio");
+    assert_eq!(device["device_handle"], "studio-device");
+    assert_eq!(
+        fs::read(cloud.root.path().join("e2e-identity.json")).unwrap(),
+        identity
+    );
+    assert_eq!(
+        fs::read(cloud.root.path().join("config.toml")).unwrap(),
+        config
+    );
+    assert_eq!(
+        fs::read(cloud.root.path().join("auth.json")).unwrap(),
+        credential
+    );
+}
+
+#[tokio::test]
+async fn unchanged_profile_options_do_not_write_or_restart() {
+    let cloud = Cloud::new();
+    cloud
+        .run(&["enable", "--edge", SECOND_EDGE, "--name", "Original"])
+        .await
+        .unwrap();
+    assert!(matches!(
+        cloud
+            .run(&["edit", "--name", "Original", "--handle", "test-device"])
+            .await
+            .unwrap(),
+        ServiceRestart::NotRequired
+    ));
+    assert!(cloud.state.lock().unwrap().edits.is_empty());
 }

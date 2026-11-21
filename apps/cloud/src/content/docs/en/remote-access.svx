@@ -51,6 +51,8 @@ Agent execution and project files remain on your device. See [Security](/docs/se
 
 You may select an official Edge or [deploy a self-hosted Edge](/docs/self-hosted-edge). Both use Pontia Cloud for authorization; self-hosting lets you choose where ciphertext is relayed.
 
+To switch an existing device to another Edge, run `pontia remote edit` without options. Keep the name and handle to preserve the Dashboard URL. See [device management](/docs/device-management#switch-edge) for service restart and recovery steps.
+
 ## Disable remote access
 
 To unregister the current device and disable its remote access:

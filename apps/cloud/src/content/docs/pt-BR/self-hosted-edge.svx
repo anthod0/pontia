@@ -103,3 +103,5 @@ Mantenha `/etc/pontia/edge` com acesso restrito e com backup de acordo com a pol
 ## Excluir um Edge
 
 Excluir um Edge auto-hospedado no Cloud remove permanentemente o registro dele e os dispositivos associados. A instalação no servidor é gerenciada separadamente: mova ou desative os dispositivos afetados e depois pare o serviço e remova os arquivos dele do servidor.
+
+Antes de excluir um Edge, execute `pontia remote edit` em cada dispositivo afetado para selecionar outro Edge.

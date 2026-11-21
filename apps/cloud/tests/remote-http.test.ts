@@ -241,7 +241,14 @@ test("device profile updates reject malformed and invalid fields", async () => {
     name: "Office Device",
   });
 
-  for (const body of [{}, { unknown: true }, { name: "  " }, { handle: "api" }]) {
+  for (const body of [
+    {},
+    { unknown: true },
+    { name: "  " },
+    { handle: "api" },
+    { edge_id: 1 },
+    { edge_id: "invalid" },
+  ]) {
     const response = await callPatchDevice(
       event(`/api/remote/devices/${deviceId}`, {
         method: "PATCH",
@@ -297,14 +304,14 @@ test("device profile updates hide and preserve another user's device", async () 
     event(`/api/remote/devices/0195e7d5-1b22-7c33-9d44-123456789abc`, {
       method: "PATCH",
       token: credential,
-      body: { name: "No device" },
+      body: { name: "No device", edge_id: edgeId },
     }),
   );
   const inaccessible = await callPatchDevice(
     event(`/api/remote/devices/${otherDeviceId}`, {
       method: "PATCH",
       token: credential,
-      body: { name: "No device" },
+      body: { name: "No device", edge_id: edgeId },
     }),
   );
 
@@ -318,4 +325,116 @@ test("device profile updates hide and preserve another user's device", async () 
       .where(eq(devices.id, otherDeviceId))
       .get(),
   ).toEqual({ name: "Other User Device", handle: "office-device" });
+});
+
+test("editing the Edge preserves identity and URL and moves ticket authorization", async () => {
+  const {
+    issueTunnelTicket,
+    redeemTunnelTicket,
+    redeemBrowserAdmissionTicket,
+    decodeDeviceTunnelPayload,
+  } = await import("../src/lib/server/remote-access/tickets");
+  const { issueEdgeTicket } = await import("../src/lib/server/edge-tickets");
+  await authenticatedRecords();
+  const targetId = "0195e7d8-1b22-7c33-9d44-123456789abc";
+  await database.db.insert(users).values({ id: "public-owner" });
+  await database.db.insert(edges).values({
+    id: targetId,
+    userId: "public-owner",
+    accessScope: "public",
+    name: "New Edge",
+    dnsLabel: "new-edge",
+    tunnelUrl: "wss://new-edge.example/tunnel",
+    serviceCredentialHash: "hash",
+  });
+  const original = {
+    id: deviceId,
+    userId: "user-http",
+    edgeId,
+    handle: "office-device",
+    name: "Office",
+    e2ePublicKey: capabilityVerificationKey,
+    e2eKeyVersion: 2,
+  };
+  await database.db.insert(devices).values(original);
+  const oldTicket = await issueTunnelTicket(database.db, "user-http", deviceId);
+  if (oldTicket.status !== "issued") throw new Error("ticket not issued");
+  const admission = await issueEdgeTicket(database.db, {
+    purpose: "browser_admission",
+    userId: "user-http",
+    expectedEdgeId: edgeId,
+    payload: { device_id: deviceId },
+    expiresAt: new Date(Date.now() + 60_000),
+    decodePayload: decodeDeviceTunnelPayload,
+  });
+  const response = await callPatchDevice(
+    event(`/api/remote/devices/${deviceId}`, {
+      method: "PATCH",
+      token: credential,
+      body: { edge_id: targetId },
+    }),
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    id: deviceId,
+    device_handle: original.handle,
+    name: original.name,
+    edge_id: targetId,
+    e2e_public_key: original.e2ePublicKey,
+    e2e_key_version: 2,
+  });
+  expect(await redeemTunnelTicket(database.db, edgeId, oldTicket.value.ticket)).toBeNull();
+  expect(await redeemBrowserAdmissionTicket(database.db, edgeId, admission)).toBeNull();
+  const ticket = await issueTunnelTicket(database.db, "user-http", deviceId);
+  if (ticket.status !== "issued") throw new Error("ticket not issued");
+  expect(ticket.value.tunnelUrl).toBe("wss://new-edge.example/tunnel");
+  expect(await redeemTunnelTicket(database.db, edgeId, ticket.value.ticket)).toBeNull();
+  expect(await redeemTunnelTicket(database.db, targetId, ticket.value.ticket)).toEqual({
+    deviceId,
+  });
+  const back = await callPatchDevice(
+    event(`/api/remote/devices/${deviceId}`, {
+      method: "PATCH",
+      token: credential,
+      body: { edge_id: edgeId, name: "Studio", handle: "studio-device" },
+    }),
+  );
+  expect(back.status).toBe(200);
+  expect(await back.json()).toMatchObject({
+    edge_id: edgeId,
+    name: "Studio",
+    device_handle: "studio-device",
+    e2e_public_key: original.e2ePublicKey,
+    e2e_key_version: 2,
+  });
+});
+
+test("unavailable Edge updates leave all profile fields unchanged", async () => {
+  await authenticatedRecords();
+  const privateId = "0195e7d8-1b22-7c33-9d44-123456789abc";
+  await database.db.insert(users).values({ id: "private-owner" });
+  await database.db.insert(edges).values({
+    id: privateId,
+    userId: "private-owner",
+    name: "Private",
+    dnsLabel: "private-edge",
+    tunnelUrl: "wss://private-edge.example/tunnel",
+    serviceCredentialHash: "hash",
+  });
+  await database.db
+    .insert(devices)
+    .values({ id: deviceId, userId: "user-http", edgeId, name: "Office", handle: "office-device" });
+  const before = await database.db.select().from(devices);
+  for (const edge of [privateId, "0195e7d9-1b22-7c33-9d44-123456789abc"]) {
+    const response = await callPatchDevice(
+      event(`/api/remote/devices/${deviceId}`, {
+        method: "PATCH",
+        token: credential,
+        body: { name: "Must not persist", handle: "must-not-persist", edge_id: edge },
+      }),
+    );
+    expect(response.status).toBe(409);
+    expect((await response.json()) as unknown).toEqual({ error: "edge_not_found" });
+    expect(await database.db.select().from(devices)).toEqual(before);
+  }
 });

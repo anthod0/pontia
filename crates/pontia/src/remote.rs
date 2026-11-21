@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs, io::ErrorKind, path::Path, time::Duration};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use clap::{Args, Subcommand};
-use dialoguer::{Input, Select};
+use dialoguer::{Confirm, Input, Select};
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac};
 use pontia_e2e::DeviceIdentity;
@@ -28,10 +28,13 @@ For remote access, see https://pontia.dev/docs/remote-access.md";
 
 const ENABLE_HELP: &str = "\
 Prompts for the edge and name unless both --edge and --name are given.
-An already registered device keeps its name and edge; use 'pontia remote edit' to change them.";
+An already registered device keeps its name and edge.
+Use 'pontia remote edit' to change the name or select another Edge.";
 
 const EDIT_HELP: &str = "\
-Prompts for both values unless --name or --handle is given.
+Prompts for name, handle, and Edge unless --name or --handle is given.
+Press Enter to keep each current value. Options change only the supplied fields.
+Changing the Edge restarts a running managed service and keeps the Dashboard URL.
 Changing the handle invalidates the previous Dashboard URL.";
 
 #[derive(Debug, Args)]
@@ -83,6 +86,7 @@ struct EditArgs {
 pub(crate) enum ServiceRestart {
     Required,
     NotRequired,
+    ApplyEdge { edge_id: String },
 }
 
 pub(crate) async fn run(
@@ -94,9 +98,7 @@ pub(crate) async fn run(
         RemoteCommandKind::Enable(args) => enable_with_args(vars, args)
             .await
             .map(|access| access.restart),
-        RemoteCommandKind::Edit(args) => {
-            edit(vars, args).await.map(|_| ServiceRestart::NotRequired)
-        }
+        RemoteCommandKind::Edit(args) => edit(vars, args).await,
         RemoteCommandKind::RotateKey => rotate_key(vars).await.map(|_| ServiceRestart::Required),
         RemoteCommandKind::Disable => disable(vars).await.map(|_| ServiceRestart::Required),
     }
@@ -147,6 +149,8 @@ struct DeviceEditRequest<'a> {
     name: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     handle: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    edge_id: Option<&'a str>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -236,7 +240,7 @@ async fn enable_with_args(
             (edge, name.trim().to_string())
         }
         (None, None) => {
-            let edge = select_edge(&edges)?;
+            let edge = select_edge(&edges, None)?;
             let default_name = hostname::get()
                 .map_err(|error| format!("failed to read the local hostname: {error}"))?
                 .to_string_lossy()
@@ -313,17 +317,18 @@ pub(crate) async fn registration_status(
     Ok(RegistrationStatus::Registered { device, identity })
 }
 
-async fn edit(vars: &HashMap<String, String>, args: EditArgs) -> Result<(), String> {
+async fn edit(vars: &HashMap<String, String>, args: EditArgs) -> Result<ServiceRestart, String> {
     let home = login::pontia_home(vars)?;
     let device_id = read_device_id(&home.join("config.toml"))?
         .ok_or_else(|| "remote access is disabled; run `pontia remote enable` first".to_string())?;
     let parameter_mode = args.name.is_some() || args.handle.is_some();
-    let provided_name = args.name.map(|value| value.trim().to_string());
-    let provided_handle = args.handle.map(|value| value.trim().to_string());
-    if let Some(value) = &provided_name {
+    let mut name = args.name.map(|value| value.trim().to_string());
+    let mut handle = args.handle.map(|value| value.trim().to_string());
+    let mut edge_id = None;
+    if let Some(value) = &name {
         validate_name(value)?;
     }
-    if let Some(value) = &provided_handle {
+    if let Some(value) = &handle {
         validate_handle(value)?;
     }
     let origin = login::auth_origin(vars)?;
@@ -337,53 +342,82 @@ async fn edit(vars: &HashMap<String, String>, args: EditArgs) -> Result<(), Stri
     let current = api.find_device(&device_id).await?.ok_or_else(|| {
         "the configured remote device is not registered; run `pontia remote enable`".to_string()
     })?;
-    let (name, handle, send_name, send_handle) = if parameter_mode {
-        (
-            provided_name
-                .clone()
-                .unwrap_or_else(|| current.name.clone()),
-            provided_handle
-                .clone()
-                .unwrap_or_else(|| current.handle.clone()),
-            provided_name,
-            provided_handle,
-        )
-    } else {
-        let name = Input::<String>::new()
-            .with_prompt("Device name")
-            .default(current.name.clone())
-            .interact_text()
-            .map_err(|error| format!("failed to read the device name: {error}"))?
-            .trim()
-            .to_string();
-        let handle = Input::<String>::new()
-            .with_prompt("Device handle")
-            .default(current.handle.clone())
-            .interact_text()
-            .map_err(|error| format!("failed to read the device handle: {error}"))?
-            .trim()
-            .to_string();
-        validate_name(&name)?;
-        validate_handle(&handle)?;
-        (name.clone(), handle.clone(), Some(name), Some(handle))
-    };
-
+    if !parameter_mode {
+        name = Some(
+            Input::<String>::with_theme(&terminal::theme())
+                .with_prompt("Device name")
+                .default(current.name.clone())
+                .interact_text()
+                .map_err(|error| format!("failed to read the device name: {error}"))?
+                .trim()
+                .to_string(),
+        );
+        handle = Some(
+            Input::<String>::with_theme(&terminal::theme())
+                .with_prompt("Device handle")
+                .default(current.handle.clone())
+                .interact_text()
+                .map_err(|error| format!("failed to read the device handle: {error}"))?
+                .trim()
+                .to_string(),
+        );
+        validate_name(name.as_deref().unwrap())?;
+        validate_handle(handle.as_deref().unwrap())?;
+        let mut edges = api.fetch_edges().await?;
+        // Keeping the current assignment must remain possible even if its Edge is no longer selectable.
+        if !edges.iter().any(|edge| edge.id == current.edge_id) {
+            edges.insert(
+                0,
+                Edge {
+                    id: current.edge_id.clone(),
+                    name: current.edge_name.clone(),
+                },
+            );
+        }
+        let selected = select_edge(&edges, Some(&current.edge_id))?;
+        if selected.id != current.edge_id {
+            if !stored_identity_matches(&home.join("e2e-identity.json"), &current)? {
+                return Err("the local device identity does not match Cloud; run `pontia remote enable` to repair it before changing the Edge".into());
+            }
+            if !Confirm::with_theme(&terminal::theme())
+                .with_prompt(format!(
+                    "Change Edge from {} to {} and restart the running service?",
+                    current.edge_name, selected.name
+                ))
+                .default(false)
+                .interact()
+                .map_err(|error| format!("failed to confirm the Edge change: {error}"))?
+            {
+                return Ok(ServiceRestart::NotRequired);
+            }
+            edge_id = Some(selected.id.clone());
+        }
+    }
+    name = name.filter(|value| value != &current.name);
+    handle = handle.filter(|value| value != &current.handle);
+    if name.is_none() && handle.is_none() && edge_id.is_none() {
+        println!("Device unchanged.");
+        return Ok(ServiceRestart::NotRequired);
+    }
     let previous_handle = current.handle.clone();
-    let device = if name == current.name && handle == current.handle {
-        current
-    } else {
-        api.edit_device(&device_id, send_name.as_deref(), send_handle.as_deref())
-            .await?
-    };
-    let handle_changed = device.handle != previous_handle;
-    println!("Device updated.");
+    let device = api.edit_device(&device_id, name.as_deref(), handle.as_deref(), edge_id.as_deref())
+            .await.map_err(|error| {
+                if let Some(edge) = &edge_id {
+                    format!("{error}. The intended Edge was {edge}. Run `pontia remote edit` to check the saved target; if it was saved, run `pontia up` to apply it (or restart an unmanaged pontiad manually).")
+                } else { error }
+            })?;
+    println!("Device profile saved.");
     println!("  Device: {}", device.name);
     println!("  Handle: {}", device.handle);
+    println!("  Edge: {} ({})", device.edge_name, device.edge_id);
     println!("  Dashboard: {}", dashboard_url(&device.handle));
-    if handle_changed {
+    if device.handle != previous_handle {
         println!("  The previous Dashboard URL is no longer valid.");
     }
-    Ok(())
+    Ok(match edge_id {
+        Some(edge_id) => ServiceRestart::ApplyEdge { edge_id },
+        None => ServiceRestart::NotRequired,
+    })
 }
 
 fn remote_client() -> Result<Client, String> {
@@ -865,6 +899,7 @@ impl RegistrationApi<'_> {
         device_id: &str,
         name: Option<&str>,
         handle: Option<&str>,
+        edge_id: Option<&str>,
     ) -> Result<Device, String> {
         let response = self
             .client
@@ -873,7 +908,11 @@ impl RegistrationApi<'_> {
                 &format!("api/remote/devices/{device_id}"),
             )?)
             .bearer_auth(self.credential)
-            .json(&DeviceEditRequest { name, handle })
+            .json(&DeviceEditRequest {
+                name,
+                handle,
+                edge_id,
+            })
             .send()
             .await
             .map_err(|error| uncertain("update the device profile", error))?;
@@ -885,10 +924,15 @@ impl RegistrationApi<'_> {
                     .to_string(),
             ),
             StatusCode::CONFLICT => {
-                Err("the device handle is already in use by another device".to_string())
+                let body: serde_json::Value = response.json().await.map_err(|_| "Cloud returned an invalid device update error".to_string())?;
+                match body["error"].as_str() {
+                    Some("handle_conflict") => Err("the device handle is already in use by another device".into()),
+                    Some("edge_not_found") => Err("the selected Edge is no longer available; use `pontia remote edges`".into()),
+                    _ => Err("Cloud rejected the device update due to a conflict".into()),
+                }
             }
             StatusCode::BAD_REQUEST => {
-                Err("the cloud rejected the device name or handle".to_string())
+                Err("the cloud rejected the device name, handle, or Edge".to_string())
             }
             status => Err(format!(
                 "the cloud rejected the device profile update ({status}); the result is unknown"
@@ -903,31 +947,31 @@ impl RegistrationApi<'_> {
             .bearer_auth(self.credential)
             .send()
             .await
-            .map_err(|error| uncertain("fetch official edges", error))?;
+            .map_err(|error| uncertain("fetch available edges", error))?;
         if response.status() == StatusCode::UNAUTHORIZED {
             return Err(login_required());
         }
         if !response.status().is_success() {
             return Err(format!(
-                "the cloud rejected the official edge request ({})",
+                "the cloud rejected the available Edge request ({})",
                 response.status()
             ));
         }
         let edges: Vec<Edge> = response
             .json()
             .await
-            .map_err(|_| "the cloud returned an invalid official edge list".to_string())?;
+            .map_err(|_| "the cloud returned an invalid available Edge list".to_string())?;
         if edges
             .iter()
             .any(|edge| !uuid_v7(&edge.id) || edge.name.is_empty())
         {
-            return Err("the cloud returned an invalid official edge list".to_string());
+            return Err("the cloud returned an invalid available Edge list".to_string());
         }
         Ok(edges)
     }
 }
 
-fn select_edge(edges: &[Edge]) -> Result<&Edge, String> {
+fn select_edge<'a>(edges: &'a [Edge], current: Option<&str>) -> Result<&'a Edge, String> {
     if edges.len() == 1 {
         println!(
             "{}",
@@ -939,9 +983,14 @@ fn select_edge(edges: &[Edge]) -> Result<&Edge, String> {
     let selected = Select::with_theme(&terminal::theme())
         .with_prompt("Edge to connect through")
         .items(&names)
-        .default(0)
+        .default(
+            edges
+                .iter()
+                .position(|edge| Some(edge.id.as_str()) == current)
+                .unwrap_or(0),
+        )
         .interact()
-        .map_err(|error| format!("failed to select an official edge: {error}"))?;
+        .map_err(|error| format!("failed to select an Edge: {error}"))?;
     Ok(&edges[selected])
 }
 

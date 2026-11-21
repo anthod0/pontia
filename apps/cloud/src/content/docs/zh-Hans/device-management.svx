@@ -28,6 +28,14 @@ pontia remote edit --handle build-workstation
 
 两个选项可以同时提供。更改标识会更新 `app.pontia.dev/HANDLE` 处的设备 URL，同时保留其加密身份和所选 Edge。
 
+<h2 id="switch-edge">切换 Edge</h2>
+
+不带选项运行 `pontia remote edit`。在名称和 handle 提示处按回车保持当前值，再按名称选择 Edge 并确认。每一项都默认当前值；三项都不改会直接结束，不重启服务。`--name` 和 `--handle` 仍只修改指定字段，不进入交互。
+
+切换 Edge 会保留设备身份和 Dashboard URL，并复用现有 CLI 登录。正在运行的受管服务会重启；停止的服务在下次 `pontia up` 时使用新节点。自行启动的 `pontiad` 需手动重启。切换后请重连或刷新 Dashboard。
+
+命令会分别报告目标是否已保存、服务是否已重启，这不代表远程连接已验证成功。如果目标已保存但重启失败，修复服务后运行 `pontia up`，或手动重启非受管服务。如果保存结果不确定，运行 `pontia remote edit` 检查已保存的值后再应用。
+
 ## 轮换设备密钥
 
 运行：
