@@ -1,182 +1,112 @@
 <script lang="ts">
   import { createQuery } from '@tanstack/svelte-query'
   import { t } from '$lib/i18n'
+  import { toast } from 'svelte-sonner'
   import { useDeviceRuntime } from '../device/context'
   import type { AgentProfileView } from '../api/types'
-  import ClientModelSelect from '../components/chat/ClientModelSelect.svelte'
+  import ClientIcon from '../components/chat/ClientIcon.svelte'
   import { Button } from '$lib/components/ui/button/index.js'
-  import { Input } from '$lib/components/ui/input/index.js'
-  import { Label } from '$lib/components/ui/label/index.js'
-  import { Textarea } from '$lib/components/ui/textarea/index.js'
-  import * as Select from '$lib/components/ui/select/index.js'
-  import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js'
+  import { Skeleton } from '$lib/components/ui/skeleton/index.js'
+  import * as Alert from '$lib/components/ui/alert/index.js'
+  import * as Empty from '$lib/components/ui/empty/index.js'
   import PlusIcon from 'phosphor-svelte/lib/PlusIcon'
-  import ArrowsClockwiseIcon from 'phosphor-svelte/lib/ArrowsClockwiseIcon'
-  import { buildAgentProfileInput, createAgentProfileDraft, createAgentProfileDraftFromProfile, type AgentProfileDraftErrors } from './agentProfiles/form'
+  import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeftIcon'
+  import IdentificationCardIcon from 'phosphor-svelte/lib/IdentificationCardIcon'
+  import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import ProfileForm from './agentProfiles/ProfileForm.svelte'
+  import DeleteProfileDialog from './agentProfiles/DeleteProfileDialog.svelte'
 
   const device = useDeviceRuntime()
   const profiles = device.agentProfileQueries.createAgentProfilesQuery()
-  const createProfile = device.agentProfileQueries.createAgentProfileMutation()
-  const updateProfile = device.agentProfileQueries.updateAgentProfileMutation()
-  const deleteProfile = device.agentProfileQueries.deleteAgentProfileMutation()
   const clients = createQuery(
     () => ({ queryKey: ['agent-clients'], queryFn: () => device.api.listAgentClients() }),
     () => device.queryClient,
   )
   const enabledClients = $derived(clients.data?.filter((client) => client.enabled) ?? [])
-  let editing = $state(false)
-  let formOpen = $state(false)
-  let draft = $state(createAgentProfileDraft())
-  let errors = $state<AgentProfileDraftErrors>({})
-  let error = $state('')
-  let modelAvailable = $state(false)
-  let deleteOpen = $state(false)
+  // `null` selects nothing; `''` opens the new-profile editor.
+  let selectedId = $state<string | null>(null)
+  let saving = $state(false)
   let deleting = $state<AgentProfileView | null>(null)
-  const busy = $derived(createProfile.isPending || updateProfile.isPending || deleteProfile.isPending)
-  const selectedClient = $derived(enabledClients.find((client) => client.client_type === draft.client_type && client.client_key === draft.client_key))
+  const selected = $derived(profiles.data?.find((profile) => profile.profile_id === selectedId))
+  const editorOpen = $derived(selectedId === '' || !!selected)
+  // Svelte Query only notifies about result fields that were read, so read both flags
+  // instead of short-circuiting past the client query.
+  const loading = $derived([profiles.isPending, clients.isPending].includes(true))
+  // Wide screens show the editor beside the list, so start with the first profile open.
+  $effect(() => {
+    if (selectedId === null && profiles.data?.length && matchMedia('(min-width: 64rem)').matches) selectedId = profiles.data[0].profile_id
+  })
 
-  function start(profile?: AgentProfileView) {
-    editing = !!profile
-    draft = profile ? createAgentProfileDraftFromProfile(profile) : createAgentProfileDraft()
-    errors = {}
-    error = ''
-    modelAvailable = false
-    formOpen = true
-  }
-
-  function chooseClient(id: string) {
-    const client = enabledClients.find((client) => client.id === id)
-    draft.client_type = client?.client_type ?? ''
-    draft.client_key = client?.client_key ?? ''
-    draft.model = ''
-    modelAvailable = false
-  }
-
-  async function save(event: SubmitEvent) {
-    event.preventDefault()
-    if (busy) return
-    error = ''
-    const result = buildAgentProfileInput(draft)
-    errors = result.ok ? {} : result.errors
-    if (!result.ok) return
-    if (draft.client_type && (!selectedClient || !modelAvailable)) {
-      errors.model = $t('profiles.clientModelUnavailable')
-      return
-    }
-    try {
-      await (editing ? updateProfile : createProfile).mutateAsync(result.input)
-      formOpen = false
-    } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause)
-    }
-  }
-
-  async function remove() {
-    if (!deleting || busy) return
-    deleteOpen = false
-    error = ''
-    try {
-      await deleteProfile.mutateAsync(deleting.profile_id)
-      if (formOpen && editing && draft.profile_id === deleting.profile_id) formOpen = false
-      deleting = null
-    } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause)
-    }
+  function clientName(profile: AgentProfileView) {
+    return clients.data?.find((client) => client.client_type === profile.client_type && client.client_key === profile.client_key)?.name
+      ?? `${profile.client_type} / ${profile.client_key}`
   }
 </script>
 
 <section class="space-y-6">
-  <div class="flex flex-wrap justify-end gap-2">
-    <Button disabled={busy} onclick={() => start()}><PlusIcon class="size-4" />{$t('profiles.new')}</Button>
-    <Button variant="outline" disabled={busy || profiles.isFetching} onclick={() => void profiles.refetch()}><ArrowsClockwiseIcon class="size-4" />{$t('common.refresh')}</Button>
-  </div>
-  {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
+  <p class="max-w-prose text-sm text-muted-foreground">{$t('profiles.pageDescription')}</p>
+
   {#if profiles.isError}
-    <p role="alert" class="text-sm text-destructive">{profiles.error.message}</p>
-  {:else if profiles.isPending}
-    <p role="status" class="text-sm text-muted-foreground">{$t('common.loading')}</p>
+    <Alert.Root variant="destructive"><WarningCircleIcon class="size-4" /><Alert.Description>{profiles.error.message}</Alert.Description></Alert.Root>
+  {:else if loading || !profiles.data}
+    <div role="status" aria-label={$t('common.loading')} class="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]"><Skeleton class="h-48" /><Skeleton class="h-96" /></div>
+  {:else if !profiles.data.length && selectedId !== ''}
+    <Empty.Root class="border">
+      <Empty.Header>
+        <Empty.Media variant="icon"><IdentificationCardIcon /></Empty.Media>
+        <Empty.Title>{$t('profiles.emptyTitle')}</Empty.Title>
+        <Empty.Description>{$t('profiles.emptyDescription')}</Empty.Description>
+      </Empty.Header>
+      <Empty.Content><Button onclick={() => selectedId = ''}><PlusIcon class="size-4" />{$t('profiles.new')}</Button></Empty.Content>
+    </Empty.Root>
   {:else}
-    <ul aria-label={$t('profiles.title')} class="divide-y rounded-md border">
-      {#each profiles.data ?? [] as profile (profile.profile_id)}
-        <li class="flex flex-wrap items-center justify-between gap-3 p-4">
+    <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      <nav aria-label={$t('profiles.title')} class="space-y-1 {editorOpen ? 'max-lg:hidden' : ''}">
+        <Button variant="outline" class="mb-2 w-full justify-start" disabled={saving} onclick={() => selectedId = ''}><PlusIcon class="size-4" />{$t('profiles.new')}</Button>
+        {#each profiles.data as profile (profile.profile_id)}
+          <button type="button"
+            class="flex w-full items-start gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60 {selectedId === profile.profile_id ? 'bg-muted' : ''}"
+            aria-current={selectedId === profile.profile_id ? 'true' : undefined} disabled={saving} onclick={() => selectedId = profile.profile_id}>
+            <ClientIcon clientType={profile.client_type ?? undefined} acpAgentId={profile.client_key} class="mt-0.5 size-4 shrink-0 text-foreground" />
+            <span class="min-w-0 flex-1">
+              <span class="block truncate {selectedId === profile.profile_id ? 'font-medium text-heading' : ''}">{profile.name}</span>
+              <span class="block truncate text-xs text-muted-foreground">{profile.model ?? $t('profiles.noLaunch')}</span>
+            </span>
+          </button>
+        {/each}
+      </nav>
+
+      {#if editorOpen}
+        <div class="min-w-0 space-y-5">
+          <Button variant="ghost" size="sm" class="-ml-2 lg:hidden" disabled={saving} onclick={() => selectedId = null}><CaretLeftIcon class="size-4" />{$t('profiles.title')}</Button>
           <div class="min-w-0 space-y-1">
-            <h3 class="font-medium">{profile.name}</h3>
-            <p class="break-all font-mono text-xs text-muted-foreground">{profile.profile_id}</p>
-            {#if profile.description}<p class="text-sm text-muted-foreground">{profile.description}</p>{/if}
-            {#if profile.client_type}
-              <p class="break-all text-xs text-muted-foreground">{clients.data?.find((client) => client.client_type === profile.client_type && client.client_key === profile.client_key)?.name ?? `${profile.client_type} / ${profile.client_key}`} · {profile.model}</p>
+            <h3 class="text-lg font-semibold break-words text-heading">{selected?.name ?? $t('profiles.new')}</h3>
+            {#if selected?.client_type}
+              <p class="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <ClientIcon clientType={selected.client_type} acpAgentId={selected.client_key} class="size-3.5 shrink-0 text-foreground" />
+                <span class="truncate">{clientName(selected)} · <span class="font-mono">{selected.model}</span></span>
+              </p>
             {/if}
           </div>
-          <div class="flex gap-2">
-            <Button variant="outline" disabled={busy} aria-label={$t('profiles.editNamed', { name: profile.name })} onclick={() => start(profile)}>{$t('common.edit')}</Button>
-            <Button variant="ghost" disabled={busy} aria-label={$t('profiles.deleteNamed', { name: profile.name })} onclick={() => { deleting = profile; deleteOpen = true }}>{$t('common.delete')}</Button>
-          </div>
-        </li>
-      {:else}<li class="p-4 text-sm text-muted-foreground">{$t('profiles.empty')}</li>{/each}
-    </ul>
-  {/if}
-
-  {#if formOpen}
-    <form class="grid max-w-2xl gap-4" onsubmit={save} novalidate>
-      <h3 class="font-semibold">{$t(editing ? 'profiles.edit' : 'profiles.new')}</h3>
-      <div class="grid gap-2">
-        <Label for="profile-id">{$t('profiles.id')}</Label>
-        <Input id="profile-id" bind:value={draft.profile_id} readonly={editing} disabled={busy} aria-invalid={!!errors.profile_id} />
-        {#if errors.profile_id}<p role="alert" class="text-sm text-destructive">{errors.profile_id}</p>{/if}
-      </div>
-      <div class="grid gap-2">
-        <Label for="profile-name">{$t('profiles.name')}</Label>
-        <Input id="profile-name" bind:value={draft.name} disabled={busy} aria-invalid={!!errors.name} />
-        {#if errors.name}<p role="alert" class="text-sm text-destructive">{errors.name}</p>{/if}
-      </div>
-      <div class="grid gap-2">
-        <Label for="profile-description">{$t('profiles.description')}</Label>
-        <Textarea id="profile-description" bind:value={draft.description} rows={2} disabled={busy} />
-      </div>
-      <div class="grid gap-2">
-        <Label for="profile-client">{$t('clients.agentClient')}</Label>
-        <Select.Root type="single" value={selectedClient?.id ?? ''} onValueChange={chooseClient} disabled={busy}>
-          <Select.Trigger id="profile-client" class="w-full">{selectedClient?.name ?? (draft.client_type ? `${draft.client_type} / ${draft.client_key}` : $t('profiles.noClient'))}</Select.Trigger>
-          <Select.Content>
-            <Select.Item value="" label={$t('profiles.noClient')}>{$t('profiles.noClient')}</Select.Item>
-            {#each enabledClients as client (client.id)}<Select.Item value={client.id} label={client.name}>{client.name}</Select.Item>{/each}
-          </Select.Content>
-        </Select.Root>
-        {#if draft.client_type}<Button type="button" variant="ghost" class="justify-self-start" disabled={busy} onclick={() => chooseClient('')}>{$t('profiles.clearClient')}</Button>{/if}
-        {#if clients.isError}
-          <p role="alert" class="text-sm text-destructive">{clients.error.message}</p>
-          <Button type="button" variant="outline" onclick={() => void clients.refetch()}>{$t('common.retry')}</Button>
-        {/if}
-      </div>
-      {#if selectedClient}
-        <div class="grid gap-2">
-          <Label for="profile-model">{$t('model.title')}</Label>
-          {#key selectedClient.id}<ClientModelSelect id="profile-model" client={selectedClient} bind:value={draft.model} bind:available={modelAvailable} disabled={busy} />{/key}
+          {#if clients.isError}
+            <Alert.Root variant="destructive">
+              <WarningCircleIcon class="size-4" />
+              <Alert.Description>{clients.error.message}</Alert.Description>
+              <Button variant="outline" size="sm" class="mt-2 justify-self-start" onclick={() => void clients.refetch()}>{$t('common.retry')}</Button>
+            </Alert.Root>
+          {/if}
+          {#key selectedId}
+            <ProfileForm profile={selected} clients={enabledClients} bind:saving
+              oncancel={selected ? undefined : () => selectedId = null}
+              onsaved={(saved) => { selectedId = saved.profile_id; toast.success($t('profiles.saved')) }}
+              ondelete={(profile) => deleting = profile} />
+          {/key}
         </div>
-      {:else if draft.client_type}<p role="status" class="text-sm text-muted-foreground">{$t('profiles.clientModelUnavailable')}</p>{/if}
-      {#if errors.model}<p role="alert" class="text-sm text-destructive">{errors.model}</p>{/if}
-      <div class="grid gap-2">
-        <Label for="profile-prompt">{$t('profiles.systemPrompt')}</Label>
-        <Textarea id="profile-prompt" bind:value={draft.system_prompt} rows={10} disabled={busy} aria-invalid={!!errors.system_prompt} />
-        {#if errors.system_prompt}<p role="alert" class="text-sm text-destructive">{errors.system_prompt}</p>{/if}
-      </div>
-      <div class="flex justify-end gap-2">
-        <Button type="button" variant="outline" disabled={busy} onclick={() => formOpen = false}>{$t('common.cancel')}</Button>
-        <Button type="submit" disabled={busy}>{$t('common.save')}</Button>
-      </div>
-    </form>
+      {:else}
+        <p class="py-2 text-sm text-muted-foreground max-lg:hidden">{$t('profiles.select')}</p>
+      {/if}
+    </div>
   {/if}
 </section>
 
-<AlertDialog.Root bind:open={deleteOpen}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>{$t('profiles.deleteConfirm')}</AlertDialog.Title>
-      <AlertDialog.Description>{$t('profiles.deleteDescription', { name: deleting?.name ?? '' })}</AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>{$t('common.cancel')}</AlertDialog.Cancel>
-      <AlertDialog.Action onclick={remove}>{$t('common.delete')}</AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+<DeleteProfileDialog bind:profile={deleting} ondeleted={(profile) => { if (selectedId === profile.profile_id) selectedId = null }} />

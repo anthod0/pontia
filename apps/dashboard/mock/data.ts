@@ -347,14 +347,20 @@ function agentClient(
   };
 }
 
-function agentProfile(profileId: string, name: string, description: string): AgentProfileView {
+function agentProfile(
+  profileId: string,
+  name: string,
+  description: string,
+  client: string,
+  model: string,
+): AgentProfileView {
   return {
     profile_id: profileId,
     name,
     description,
-    client_type: null,
-    client_key: null,
-    model: null,
+    client_type: client,
+    client_key: client,
+    model,
     system_prompt: `You are ${name}. ${description}`,
     created_at: ago(60 * 24 * 10),
     updated_at: ago(60 * 24 * 2),
@@ -722,8 +728,20 @@ export function createSampleData(): MockData {
     sessions,
     workflows,
     agentProfiles: [
-      agentProfile("executor", "Executor", "Implements a single task."),
-      agentProfile("reviewer", "Reviewer", "Reviews a change and checks it against the spec."),
+      agentProfile(
+        "executor",
+        "Executor",
+        "Implements a single task.",
+        "pi",
+        "anthropic/claude-sonnet-4-5",
+      ),
+      agentProfile(
+        "reviewer",
+        "Reviewer",
+        "Reviews a change and checks it against the spec.",
+        "codex",
+        "openai/gpt-5-codex",
+      ),
     ],
     clientSetup: null,
     agentClients: [

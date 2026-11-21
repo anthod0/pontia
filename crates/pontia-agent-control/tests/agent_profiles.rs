@@ -177,6 +177,67 @@ async fn rejects_empty_identifiers_partial_defaults_and_invalid_instructions() {
 }
 
 #[tokio::test]
+async fn creates_profiles_only_with_handwritable_ids() {
+    let (service, _, _) = fixture().await;
+    for id in [
+        "codex-default",
+        "bot_01a1f755-70e8-7633-9528-31207e0f73c5-helper",
+        "0-review.v2",
+    ] {
+        let mut input = request();
+        input.profile_id = id.into();
+        service.create(input).await.unwrap();
+    }
+    for id in [
+        "Reviewer",
+        "-review",
+        "_review",
+        ".review",
+        "code review",
+        "a/b",
+        "评审",
+    ] {
+        let mut input = request();
+        input.profile_id = id.into();
+        assert!(
+            matches!(service.create(input).await, Err(Error::Domain(_))),
+            "{id}"
+        );
+    }
+    assert_eq!(service.list().await.unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn existing_profiles_with_older_ids_can_be_edited_launched_and_deleted() {
+    let (service, _, pool) = fixture().await;
+    sqlx::query(
+        "INSERT INTO agent_profiles (profile_id, name, client_type, client_key, model)
+         VALUES ('Old Reviewer', 'Old', 'generic', 'default', 'model')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut edited = configured();
+    edited.profile_id = "Old Reviewer".into();
+    edited.name = "Edited".into();
+    assert_eq!(
+        service.update("Old Reviewer", edited).await.unwrap().name,
+        "Edited"
+    );
+    assert_eq!(
+        service
+            .resolve_launch("Old Reviewer")
+            .await
+            .unwrap()
+            .model
+            .as_deref(),
+        Some("model")
+    );
+    service.delete("Old Reviewer").await.unwrap();
+    assert!(service.list().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn rejects_unknown_and_disabled_clients_at_save_and_launch() {
     let (service, settings, _) = fixture().await;
     let mut input = configured();
