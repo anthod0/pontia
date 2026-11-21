@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-11-21
+
 ### Changed
 
 - New Bot message quotes keep at most 2,000 Unicode characters, followed by an ellipsis when shortened. The composer and sent message show the same excerpt and retain the link to the full message.
