@@ -2,6 +2,36 @@ use pontia_agent_control::{ControlQueryService, DomainEventReader};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 
 #[tokio::test]
+async fn busy_session_summaries_select_only_requested_busy_sessions() {
+    let pool = connect_sqlite("sqlite::memory:").await.unwrap();
+    run_migrations(&pool).await.unwrap();
+    sqlx::raw_sql(
+        "INSERT INTO sessions(session_id,client_type,state,title,role,created_at) VALUES
+         ('busy','generic','busy','Task','helper','2026-01-01'),
+         ('retrieval','generic','busy','Recall','retrieval','2026-01-02'),
+         ('idle','generic','idle','Idle',NULL,'2026-01-03'),
+         ('exited','generic','exited','Exited',NULL,'2026-01-04'),
+         ('error','generic','error','Error',NULL,'2026-01-05'),
+         ('unrelated','generic','busy','Other',NULL,'2026-01-06');",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let query = ControlQueryService::new(pool);
+    let ids = ["busy", "retrieval", "idle", "exited", "error", "missing"].map(str::to_owned);
+    let mut summaries = query.busy_session_summaries(&ids).await.unwrap();
+    summaries.sort_by(|a, b| a.session_id.cmp(&b.session_id));
+    assert_eq!(summaries.len(), 2);
+    assert_eq!(summaries[0].session_id, "busy");
+    assert_eq!(summaries[0].title.as_deref(), Some("Task"));
+    assert_eq!(summaries[0].role.as_deref(), Some("helper"));
+    assert_eq!(summaries[0].created_at, "2026-01-01");
+    assert_eq!(summaries[1].session_id, "retrieval");
+    assert_eq!(summaries[1].role.as_deref(), Some("retrieval"));
+    assert!(query.busy_session_summaries(&[]).await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn filtered_event_pages_advance_over_unrelated_facts_and_survive_reopening() {
     let root = tempfile::tempdir().unwrap();
     let url = format!("sqlite://{}", root.path().join("events.db").display());

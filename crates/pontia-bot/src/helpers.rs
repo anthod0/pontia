@@ -491,7 +491,7 @@ pub(crate) async fn contexts(control: &AgentControl, bot_id: &str) -> Result<Vec
         helpers.push(HelperContext {
             bot_id: bot_id.into(),
             session_id: id,
-            role: helper_role(&session),
+            role: helper_role(session.role.as_deref()),
             workspace_id: session.workspace_id,
             description: session.description,
             state: session
@@ -505,8 +505,8 @@ pub(crate) async fn contexts(control: &AgentControl, bot_id: &str) -> Result<Vec
 
 const RETRIEVAL_ROLE: &str = "retrieval";
 
-pub(crate) fn helper_role(session: &SessionView) -> BotRole {
-    if session.role.as_deref() == Some(RETRIEVAL_ROLE) {
+pub(crate) fn helper_role(role: Option<&str>) -> BotRole {
+    if role == Some(RETRIEVAL_ROLE) {
         BotRole::Retrieval
     } else {
         BotRole::Helper

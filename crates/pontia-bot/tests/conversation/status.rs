@@ -1,5 +1,85 @@
 use super::*;
 
+struct UnavailableStatusClient;
+
+impl InProcessClient for UnavailableStatusClient {
+    fn capabilities(&self) -> AgentClientCapabilities {
+        panic!("Work status must not probe a client")
+    }
+
+    fn ready(&self, _: &str, _: &str) -> ReportedEvent {
+        unreachable!()
+    }
+
+    fn submit(&self, _: AgentInput) -> Result<()> {
+        unreachable!()
+    }
+}
+
+#[tokio::test]
+async fn chat_and_timeline_keep_helper_status_without_client_probes() {
+    let (root, pool, _client, control, conversation) = fixture().await;
+    let (id, session) = bot(&conversation).await;
+    let helpers = HelperService::new(control.clone(), conversation.clone());
+    let older = helper(&helpers, &session).await;
+    let newer = helper(&helpers, &session).await;
+    start(&control, &older).await;
+    start(&control, &newer).await;
+    answer(&conversation, &session).await;
+    sqlx::query(
+        "UPDATE sessions SET created_at='2026-01-01',title='Task' WHERE session_id IN (?,?)",
+    )
+    .bind(&older)
+    .bind(&newer)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let latest = [&older, &newer].into_iter().max().unwrap();
+    sqlx::query("UPDATE sessions SET title='Latest task' WHERE session_id=?")
+        .bind(latest)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let expected = conversation.chat(&id).await.unwrap().status;
+    assert_eq!(
+        expected,
+        WorkStatus::Working {
+            title: "Latest task".into()
+        }
+    );
+
+    let mut registration = test_registration();
+    registration.in_process = Some(Arc::new(UnavailableStatusClient));
+    let mut registry = ClientRegistry::default();
+    registry.register(registration);
+    let read_control = AgentControl::builder(pool.clone(), root.path().into())
+        .clients(registry)
+        .build();
+    let reader = test_conversation(read_control);
+    assert_eq!(reader.chat(&id).await.unwrap().status, expected);
+    let page = serde_json::to_value(reader.timeline(&id, None, None, 50).await.unwrap()).unwrap();
+    assert_eq!(page["status"], serde_json::to_value(expected).unwrap());
+
+    // A missing title on the newest helper keeps the existing Idle result.
+    sqlx::query("UPDATE sessions SET title=NULL WHERE session_id=?")
+        .bind(latest)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(reader.chat(&id).await.unwrap().status, WorkStatus::Idle);
+    sqlx::query("UPDATE sessions SET state='exited' WHERE session_id=?")
+        .bind(latest)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        reader.chat(&id).await.unwrap().status,
+        WorkStatus::Working {
+            title: "Task".into()
+        }
+    );
+}
+
 async fn answer(conversation: &ConversationService, session: &str) {
     conversation
         .send_to_user(ReplyRequest {

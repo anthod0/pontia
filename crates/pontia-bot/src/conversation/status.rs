@@ -1,5 +1,5 @@
 use pontia_core::{
-    Error, Result,
+    Result,
     domain::{DomainEvent, EventType},
 };
 use serde::Serialize;
@@ -34,27 +34,16 @@ impl ConversationService {
         .bind(&bot.bot_id)
         .fetch_all(&self.control.db())
         .await?;
-        let mut latest = None;
-        for id in ids {
-            let session = self
-                .control
-                .queries()
-                .get_session(&id)
-                .await?
-                .ok_or_else(|| Error::NotFound(format!("Session {id} not found")))?;
-            if session.state != "busy" || crate::helpers::helper_role(&session) != BotRole::Helper {
-                continue;
-            }
-            if latest
-                .as_ref()
-                .is_none_or(|current: &pontia_agent_control::SessionView| {
-                    (&session.created_at, &session.session_id)
-                        > (&current.created_at, &current.session_id)
-                })
-            {
-                latest = Some(session);
-            }
-        }
+        let latest = self
+            .control
+            .queries()
+            .busy_session_summaries(&ids)
+            .await?
+            .into_iter()
+            .filter(|session| {
+                crate::helpers::helper_role(session.role.as_deref()) == BotRole::Helper
+            })
+            .max_by(|a, b| (&a.created_at, &a.session_id).cmp(&(&b.created_at, &b.session_id)));
         Ok(latest
             .and_then(|session| session.title)
             .map_or(WorkStatus::Idle, |title| WorkStatus::Working { title }))
