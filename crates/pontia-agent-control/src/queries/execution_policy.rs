@@ -15,6 +15,7 @@ impl ControlQueryService {
         session: &str,
         path: &str,
     ) -> Result<T> {
+        // Keep the small ancestor set outermost so events use the Session index.
         let attribute: Option<String> = sqlx::query_scalar(
             "WITH RECURSIVE ancestors(session_id, depth) AS (
                  SELECT session_id, 0 FROM sessions WHERE session_id=?
@@ -23,7 +24,7 @@ impl ControlQueryService {
                  JOIN ancestors a ON l.child_session_id=a.session_id
              )
              SELECT e.payload -> ?2 FROM ancestors a
-             JOIN events e ON e.session_id=a.session_id AND e.event_type='session.created'
+             CROSS JOIN events e ON e.session_id=a.session_id AND e.event_type='session.created'
              ORDER BY (json_type(e.payload, ?2) IS NULL), a.depth
              LIMIT 1",
         )

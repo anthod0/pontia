@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dreaming and deep memory retrieval Sessions close automatically when their round finishes. Retrieval helpers reply before closing; Bots no longer need to close them. Stuck Dreaming rounds are cleaned up before the next hourly round.
 
+### Fixed
+
+- Bot status and messages load faster in Dashboard when the Bot has many past helpers.
+
 ## [0.8.6] - 2026-11-21
 
 ### Added

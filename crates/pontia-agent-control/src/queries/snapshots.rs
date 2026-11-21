@@ -17,6 +17,14 @@ pub struct OwnedSession {
 }
 
 #[derive(Debug, Clone, FromRow)]
+pub struct BusySessionSummary {
+    pub session_id: String,
+    pub title: Option<String>,
+    pub role: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, FromRow)]
 pub struct TurnSnapshot {
     pub turn_id: String,
     pub state: String,
@@ -52,6 +60,26 @@ pub struct SessionSnapshot {
 }
 
 impl ControlQueryService {
+    /// Reads busy Sessions from persisted state without probing clients.
+    pub async fn busy_session_summaries(
+        &self,
+        session_ids: &[String],
+    ) -> Result<Vec<BusySessionSummary>> {
+        if session_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+            "SELECT session_id, title, role, created_at FROM sessions
+             WHERE state = 'busy' AND session_id IN (",
+        );
+        let mut ids = query.separated(", ");
+        for id in session_ids {
+            ids.push_bind(id);
+        }
+        query.push(")");
+        Ok(query.build_query_as().fetch_all(&self.pool).await?)
+    }
+
     pub async fn verify_active_turn(
         &self,
         session_id: &str,

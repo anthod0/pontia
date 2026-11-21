@@ -701,7 +701,7 @@ impl BotIdentity for ConversationService {
                     return Err(IdentityError);
                 }
                 return Ok(BotAccess {
-                    role: crate::helpers::helper_role(&session),
+                    role: crate::helpers::helper_role(session.role.as_deref()),
                     workspace_id: None,
                 });
             }
