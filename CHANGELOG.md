@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Bots send separate messages for unrelated matters, even when updates arrive together.
 - On phones, the Bot page top bar no longer has a **More** menu. Tap the Bot name to open its settings, where **Delete Bot** is at the bottom. A downloads button appears in the top bar while downloads are in progress or failed.
+- Bot chats open with the latest messages saved in the browser and then update from the device, so recent messages stay visible while offline or on a slow connection. Deleting a Bot also removes its saved messages from the browser.
 
 ### Fixed
 
