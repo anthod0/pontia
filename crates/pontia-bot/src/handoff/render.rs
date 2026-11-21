@@ -178,7 +178,7 @@ pub(super) fn document(
         output.push_str(&field(
             "Type",
             if retrieval {
-                "Read-only deep retrieval"
+                "Read-only retrieval; closes after replying"
             } else {
                 "Ordinary helper"
             },

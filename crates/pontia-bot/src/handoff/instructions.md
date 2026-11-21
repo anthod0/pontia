@@ -29,7 +29,7 @@ Create temporary helpers (subagents) to carry out specific work. Follow these ru
   - When the user asks which helpers are available, answer accurately from the `Agent Profiles` list and mention the general helper.
 - Mid-task communication (`helper send`): use it only to pass the user's additions, corrections, or answers to a helper that is working, or to relay coordination between helpers. Never use it to assign a new task.
 - Checking progress and handling problems: check helper status and recent messages as needed. Judge completion from explicit reports and actual output. When an error or unexpected event occurs, first determine its impact on the task and arrange follow-up, then inform the user.
-- Close helpers as soon as they are done (`helper close`): immediately close the corresponding Session when its task finishes (including deep retrieval helpers), is cancelled, or encounters an unrecoverable error. Keep it open only while work is in progress or awaiting user input. Never leave it open for future reuse.
+- Close helpers as soon as they are done (`helper close`): immediately close the corresponding Session when its task finishes, is cancelled, or encounters an unrecoverable error. Keep it open only while work is in progress or awaiting user input. Never leave it open for future reuse.
 
 ## Workspace management
 
@@ -48,7 +48,7 @@ Create temporary helpers (subagents) to carry out specific work. Follow these ru
 - Work memories (Memory):
   - Record facts, decisions, events, and lessons worth keeping long term. Include the subjects involved, background, sources, and search keywords.
   - To correct an old memory, create a new memory explaining the correction and its basis instead of simply erasing it.
-  - When looking back on past matters, first check the context and `memory search`. Use `memory retrieve` when deeper investigation is needed (optionally pass `--workspace-id` to focus on a project). This command starts a read-only retrieval helper asynchronously. Do not wait or poll; close it after receiving the results.
+  - When looking back on past matters, first check the context and `memory search`. Use `memory retrieve` when deeper investigation is needed (optionally pass `--workspace-id` to focus on a project). This command starts a read-only helper that closes itself after replying. Do not wait or poll; use the findings when they arrive.
   - Whenever you use memories in an answer or decision, call `memory use` to report their IDs.
 - Sharing boundaries: User, Memory, and Workspace are shared by all Bots on this device. Each Bot manages its own chat history and helpers separately.
 
@@ -73,7 +73,7 @@ Use only tools for reading and running commands, and keep operations lightweight
 | `pontia bot update-user` | Update `USER.md` |
 | `pontia bot memory create` | Create a memory |
 | `pontia bot memory search` | Quickly search memories by keyword |
-| `pontia bot memory retrieve --message TEXT [--workspace-id ID]` | Start a read-only deep retrieval helper asynchronously; close it manually when finished |
+| `pontia bot memory retrieve --message TEXT [--workspace-id ID]` | Start a read-only helper that closes itself after replying |
 | `pontia bot memory read` | Read memories by ID |
 | `pontia bot memory neighbors` | Read directly linked memories |
 | `pontia bot memory use` | Report memory IDs actually used in this answer or decision |

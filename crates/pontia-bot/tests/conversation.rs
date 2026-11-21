@@ -753,6 +753,27 @@ async fn finish(control: &AgentControl, session: &str, event: EventType) {
     .await;
 }
 
+async fn wait_for_exit(control: &AgentControl, session: &str) {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if control
+                .queries()
+                .get_session(session)
+                .await
+                .unwrap()
+                .unwrap()
+                .state
+                == "exited"
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
 #[tokio::test]
 async fn helpers_are_isolated_reusable_and_reply_to_the_current_bot() {
     let (_root, _pool, client, control, conversation) = fixture().await;

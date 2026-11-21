@@ -129,6 +129,10 @@ impl DreamingService {
                 },
             )
             .await?;
+        self.control
+            .session_commands()
+            .exit_when_done(session_id)
+            .await?;
         let message = &delivery.data["inbox_message"];
         if let Some(reason) = message["failure_message"].as_str() {
             if message["state"] == "unknown" {
@@ -166,7 +170,6 @@ impl DreamingService {
             .await?
             .ok_or_else(|| Error::NotFound(format!("Session {id} not found")))?;
         let exited = match session.state.as_str() {
-            "idle" => self.control.session_commands().exit_if_idle(&id).await?,
             "exited" => true,
             "created" | "starting" if session.has_unsettled_input => false,
             "waiting_for_interaction" => {
@@ -305,20 +308,12 @@ impl DreamingService {
         let hour = Duration::from_secs(3600);
         let mut hourly = tokio::time::interval_at(tokio::time::Instant::now() + hour, hour);
         hourly.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let mut cleanup = tokio::time::interval(Duration::from_secs(2));
-        cleanup.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tokio::select! {
                 _ = shutdown.changed() => break,
                 _ = hourly.tick() => {
                     if let Err(error) = self.start().await {
                         tracing::warn!(%error, "Dreaming failed; next attempt is at the next hourly tick");
-                    }
-                }
-                _ = cleanup.tick() => {
-                    let mut reported = self.gate.lock().await;
-                    if let Err(error) = self.finish_previous(&mut reported).await {
-                        tracing::warn!(%error, "Dreaming Session cleanup failed");
                     }
                 }
             }
