@@ -2,9 +2,7 @@
   import { onMount } from 'svelte'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import FileIcon from 'phosphor-svelte/lib/FileIcon'
-  import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
-  import XCircleIcon from 'phosphor-svelte/lib/XCircleIcon'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import XIcon from 'phosphor-svelte/lib/XIcon'
   import { Badge } from '$lib/components/ui/badge/index.js'
@@ -21,7 +19,10 @@
     return () => document.removeEventListener('pontia:open-downloads', openDownloads)
   })
   const activeCount = $derived($downloads.filter(task => task.status === 'receiving').length)
-  const hasFinished = $derived($downloads.some(task => task.status !== 'receiving'))
+  // Finished downloads leave the list, so the dialog closes with its last entry.
+  $effect(() => {
+    if (!$downloads.length) open = false
+  })
 
   function sizeLabel(size: number) {
     return size < 1024 ? `${$number(size)} B` : size < 1024 * 1024
@@ -60,8 +61,11 @@
               </div>
               {#if task.status === 'receiving'}
                 <Button variant="ghost" size="icon-sm" onclick={() => downloads.cancel(task.id)} aria-label={$t('downloads.cancelNamed', { name: task.name })} title={$t('common.cancel')}><XIcon /></Button>
-              {:else if task.status === 'failed'}
-                <Button variant="ghost" size="icon-sm" onclick={() => downloads.retry(task.id)} aria-label={$t('downloads.retryNamed', { name: task.name })} title={$t('common.retry')}><ArrowClockwiseIcon /></Button>
+              {:else}
+                <div class="flex shrink-0 gap-1">
+                  <Button variant="ghost" size="icon-sm" onclick={() => downloads.retry(task.id)} aria-label={$t('downloads.retryNamed', { name: task.name })} title={$t('common.retry')}><ArrowClockwiseIcon /></Button>
+                  <Button variant="ghost" size="icon-sm" onclick={() => downloads.cancel(task.id)} aria-label={$t('downloads.dismissNamed', { name: task.name })} title={$t('common.dismiss')}><XIcon /></Button>
+                </div>
               {/if}
             </div>
             <div class="mt-3 space-y-2 pl-12">
@@ -72,17 +76,9 @@
                   <span>{sizeLabel(task.progress.received)}{task.progress.total === null ? '' : ` / ${sizeLabel(task.progress.total)}`}</span>
                 </div>
               {:else}
-                <p class={['flex items-center gap-1.5 text-xs', task.status === 'failed' ? 'text-destructive' : 'text-muted-foreground']}>
-                  {#if task.status === 'complete'}
-                    <CheckCircleIcon class="size-3.5 text-primary" />
-                    <span>{sizeLabel(task.progress.received)}</span>
-                  {:else if task.status === 'failed'}
-                    <WarningCircleIcon class="size-3.5 shrink-0" />
-                    <span>{$t('downloads.failed')}</span>
-                  {:else}
-                    <XCircleIcon class="size-3.5" />
-                    <span>{$t('downloads.cancelled')}</span>
-                  {/if}
+                <p class="flex items-center gap-1.5 text-xs text-destructive">
+                  <WarningCircleIcon class="size-3.5 shrink-0" />
+                  <span>{$t('downloads.failed')}</span>
                 </p>
                 {#if task.error}<p class="break-words text-xs text-destructive">{task.error}</p>{/if}
               {/if}
@@ -90,15 +86,6 @@
           </li>
         {/each}
       </ul>
-      <div class="flex items-center justify-between gap-3 border-t px-5 py-3">
-        <p class="text-xs text-muted-foreground" role="status">{activeCount ? $t('downloads.activeCount', { count: activeCount }) : $t('downloads.noActive')}</p>
-        <Button variant="ghost" size="sm" disabled={!hasFinished} onclick={() => downloads.clearFinished()}>{$t('downloads.clearFinished')}</Button>
-      </div>
-    {:else}
-      <div class="flex flex-col items-center gap-3 px-5 py-10 text-muted-foreground">
-        <DownloadSimpleIcon class="size-7" />
-        <p class="text-sm">{$t('downloads.empty')}</p>
-      </div>
     {/if}
   </Dialog.Content>
 </Dialog.Root>

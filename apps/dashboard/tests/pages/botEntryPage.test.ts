@@ -41,6 +41,15 @@ test("opens the first existing Bot without creating one", async () => {
   expect(save).not.toHaveBeenCalled();
 });
 
+test("shows the Bot chat skeleton while the Bot list loads", () => {
+  vi.spyOn(testDevice.api, "listBots").mockReturnValue(new Promise(() => {}));
+  render(BotEntryPage);
+  const skeleton = screen.getByRole("status", { name: "Loading conversation" });
+  expect(skeleton).toHaveAttribute("data-bot-conversation-skeleton");
+  expect(skeleton.querySelectorAll(".justify-end > .rounded-2xl")).toHaveLength(1);
+  expect(skeleton.querySelectorAll(".justify-start > .rounded-2xl")).toHaveLength(1);
+});
+
 test("creates the first Bot from client and model and opens it on the selected device", async () => {
   vi.spyOn(testDevice.api, "listBots").mockResolvedValue([]);
   const save = vi

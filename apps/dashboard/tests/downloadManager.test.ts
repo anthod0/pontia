@@ -64,7 +64,7 @@ test("deduplicates an active file and cancels reception without exporting partia
   expect(source.fileApi.pathFileContent).toHaveBeenCalledTimes(1);
   manager.cancel(task.id);
   await vi.waitFor(() => expect(transfer.cancel).toHaveBeenCalled());
-  expect(get(manager)[0].status).toBe("cancelled");
+  expect(get(manager)).toEqual([]);
   expect(source.fileApi.pathFileContent.mock.calls[0][2]?.aborted).toBe(true);
   expect(saved).toHaveLength(0);
 });
@@ -94,9 +94,9 @@ test("a disconnected download retries from the start on its original device's ne
   );
   manager.registerDevice(reconnected);
   manager.retry(task.id);
-  await vi.waitFor(() => expect(get(manager)[0].status).toBe("complete"));
+  await vi.waitFor(() => expect(saved).toHaveLength(1));
   expect(await saved[0].text()).toBe("replacement");
-  expect(get(manager)[0].progress.received).toBe(11);
+  expect(get(manager)).toEqual([]);
   expect(reconnected.fileApi.sharedFileContent.mock.calls[0].slice(0, 2)).toEqual([
     "session",
     "file-1",
@@ -104,7 +104,7 @@ test("a disconnected download retries from the start on its original device's ne
   expect(other.fileApi.sharedFileContent).not.toHaveBeenCalled();
 });
 
-test("clearing finished records preserves downloads still receiving on another device", async () => {
+test("a finished download leaves the list while another device keeps receiving", async () => {
   const source = device("studio");
   const other = device("laptop");
   source.fileApi.pathFileContent.mockResolvedValue(
@@ -122,12 +122,28 @@ test("clearing finished records preserves downloads still receiving on another d
     "report.txt",
   );
   await vi.waitFor(() => expect(saved).toHaveLength(1));
-  manager.clearFinished();
   expect(get(manager).map((task) => task.id)).toEqual([active.id]);
   transfer.stream.enqueue(new TextEncoder().encode("other file"));
   transfer.stream.close();
-  await vi.waitFor(() => expect(get(manager)[0].status).toBe("complete"));
+  await vi.waitFor(() => expect(get(manager)).toEqual([]));
   expect(await saved[1].text()).toBe("other file");
+});
+
+test("a failed download stays listed until it is dismissed", async () => {
+  const source = device("studio");
+  source.fileApi.sharedFileContent.mockRejectedValue(new Error("offline"));
+  manager.registerDevice(source);
+  const task = manager.start(
+    "studio",
+    "session",
+    { kind: "shared", fileId: "file-1" },
+    "report.txt",
+  );
+  await vi.waitFor(() =>
+    expect(get(manager)[0]).toMatchObject({ status: "failed", error: "offline" }),
+  );
+  manager.cancel(task.id);
+  expect(get(manager)).toEqual([]);
 });
 
 test("a failed download keeps the API error code and clears it on retry", async () => {
@@ -145,6 +161,6 @@ test("a failed download keeps the API error code and clears it on retry", async 
   await vi.waitFor(() => expect(get(manager)[0].status).toBe("failed"));
   expect(get(manager)[0]).toMatchObject({ errorCode: "not_found", error: "File no longer exists" });
   manager.retry(task.id);
-  await vi.waitFor(() => expect(get(manager)[0].status).toBe("complete"));
-  expect(get(manager)[0].errorCode).toBeNull();
+  expect(get(manager)[0]).toMatchObject({ status: "receiving", errorCode: null, error: null });
+  await vi.waitFor(() => expect(get(manager)).toEqual([]));
 });

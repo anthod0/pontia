@@ -13,7 +13,8 @@ export type DownloadTask = {
   sessionId: string;
   file: DownloadFile;
   name: string;
-  status: "receiving" | "complete" | "failed" | "cancelled";
+  /** Finished and cancelled downloads leave the list; failed ones stay until retried or cancelled. */
+  status: "receiving" | "failed";
   progress: DownloadProgress;
   error: string | null;
   /** API error code of the last failure, such as `not_found` when the file is gone. */
@@ -60,7 +61,7 @@ export function createDownloads() {
         },
         controller.signal,
       );
-      task.status = "complete";
+      tasks = tasks.filter((other) => other !== task);
     } catch (error) {
       if (controller.signal.reason !== cancelled) {
         task.status = "failed";
@@ -93,9 +94,7 @@ export function createDownloads() {
     },
     start(deviceId: string, sessionId: string, file: DownloadFile, name: string) {
       const key = downloadKey(deviceId, sessionId, file);
-      const existing = tasks.find(
-        (task) => task.key === key && (task.status === "receiving" || task.status === "failed"),
-      );
+      const existing = tasks.find((task) => task.key === key);
       if (existing) {
         if (existing.status === "failed") void receive(existing);
         return existing;
@@ -117,20 +116,15 @@ export function createDownloads() {
       void receive(task);
       return task;
     },
+    /** Stops a receiving download or dismisses a failed one, removing it from the list. */
     cancel(id: string) {
-      const task = tasks.find((task) => task.id === id);
-      if (!task || task.status !== "receiving") return;
-      task.status = "cancelled";
-      running.get(task.id)?.abort(cancelled);
+      running.get(id)?.abort(cancelled);
+      tasks = tasks.filter((task) => task.id !== id);
       emit();
     },
     retry(id: string) {
       const task = tasks.find((task) => task.id === id);
       if (task?.status === "failed") void receive(task);
-    },
-    clearFinished() {
-      tasks = tasks.filter((task) => task.status === "receiving");
-      emit();
     },
   };
 }

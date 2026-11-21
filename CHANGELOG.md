@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Bot, memory retrieval, and dreaming Sessions no longer automatically load user skills. Ordinary helpers retain their existing skill loading.
 - Bots use `pontia` commands, read only known file paths, and delegate exploration and system changes to helpers, with at most one external read-only lookup per input.
+- Bot chats show a skeleton of the conversation and composer while loading, instead of a loading message.
+- The Downloads dialog lists only downloads in progress and failed downloads. Finished downloads leave the list, failed ones can be retried or dismissed, and the dialog closes when the list is empty.
+- Shared files and local file links open the text preview panel only for text and code files and files without a known extension; images still open in the image viewer. Videos, audio, PDFs, archives, and Office documents are download-only, and clicking a local file link to one of them downloads it. Session chats and Bot chats use the same rules.
 
 ## [0.8.4] - 2026-11-21
 

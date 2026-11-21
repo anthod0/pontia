@@ -9,6 +9,7 @@
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import { canPreviewImage } from "$lib/downloads/preview";
   import { useFilePreview } from './filePreviewContext'
+  import { canPreviewText } from './fileKind'
   import { downloads, downloadKey } from '$lib/downloads/manager'
   import { ApiError } from '../../api/errors'
   import type { SharedFile } from '../../api/types'
@@ -80,7 +81,7 @@
         <img src={previewUrl} alt={file.name} class="{thumb} rounded object-cover" />
       </button>
       {@render details()}
-    {:else if canPreviewImage(file)}
+    {:else if canPreviewImage(file) || !canPreviewText(file.name)}
       {@render icon()}
       {@render details()}
     {:else}

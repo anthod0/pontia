@@ -976,13 +976,18 @@ test("mobile more menu hides downloads until a download starts, then opens the d
   expect(screen.queryByRole("menuitem", { name: "Downloads" })).not.toBeInTheDocument();
   await fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
 
-  downloads.start("missing-device", "session", { kind: "shared", fileId: "file-1" }, "report.txt");
+  const task = downloads.start(
+    "missing-device",
+    "session",
+    { kind: "shared", fileId: "file-1" },
+    "report.txt",
+  );
   await fireEvent.click(within(screen.getByRole("banner")).getByRole("button", { name: "More" }));
   const item = await screen.findByRole("menuitem", { name: /Downloads/ });
   expect(within(item).getByTestId("downloads-count")).toHaveTextContent("1");
   await fireEvent.click(item);
   expect(screen.getByRole("dialog", { name: "Downloads" })).toBeInTheDocument();
-  downloads.clearFinished();
+  downloads.cancel(task.id);
 });
 
 test("sidebar refreshes every Bot status from live updates without opening its chat", async () => {

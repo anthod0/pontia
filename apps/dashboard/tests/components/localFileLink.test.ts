@@ -23,7 +23,6 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const task of get(downloads)) downloads.cancel(task.id);
-  downloads.clearFinished();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   token.set("");
@@ -310,4 +309,17 @@ test("opens local image links in the image viewer instead of the preview panel",
   await fireEvent.click(screen.getByRole("button", { name: "Enlarge fake.png" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("not a PNG, JPEG, GIF, or WebP image");
   expect(screen.getByRole("button", { name: "Download" })).toBeEnabled();
+});
+
+test("downloads a file the preview panel cannot show instead of opening it", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(() => Promise.resolve(new Response(new Uint8Array([0, 1, 2])))),
+  );
+  message("/tmp/demo.mp4");
+  expect(screen.queryByRole("button", { name: "Preview demo.mp4" })).not.toBeInTheDocument();
+  await fireEvent.click(screen.getByRole("button", { name: "Download demo.mp4" }));
+  await waitFor(() => expect(saved).toHaveLength(1));
+  expect(saved[0].name).toBe("demo.mp4");
+  expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
 });

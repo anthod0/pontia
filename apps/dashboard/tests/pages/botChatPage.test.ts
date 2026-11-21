@@ -281,3 +281,33 @@ test("opens a shared text file in the file preview panel and leaves binary files
   await within(screen.getByRole("complementary")).findByRole("heading", { name: "Notes" });
   expect(read).toHaveBeenCalledWith("main", "/work/notes.md", expect.any(AbortSignal));
 });
+
+test("shows message bubble placeholders until the first page of messages arrives", async () => {
+  let resolve!: (page: BotMessagePage) => void;
+  vi.spyOn(testDevice.api, "getBotMessages").mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  render(BotChatPage, { botId: bot.bot_id });
+  const skeleton = screen.getByRole("status", { name: "Loading conversation" });
+  expect(skeleton).toHaveAttribute("data-bot-conversation-skeleton");
+  const bubbles = [...skeleton.querySelectorAll(".rounded-2xl")];
+  expect(bubbles.map((bubble) => bubble.parentElement?.className)).toEqual([
+    "flex justify-end",
+    "flex justify-start",
+  ]);
+  expect(bubbles.every((bubble) => bubble.childElementCount === 0)).toBe(true);
+  expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+  resolve({
+    bot,
+    entries: [],
+    next_before: null,
+    file_link_session: null,
+    notice_session_id: null,
+    generation_notice: null,
+    status: { kind: "idle" },
+  });
+  await screen.findByRole("log", { name: "Messages" });
+  expect(screen.queryByRole("status", { name: "Loading conversation" })).not.toBeInTheDocument();
+});
