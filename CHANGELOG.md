@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Bots send separate messages for unrelated matters, even when updates arrive together.
 
+### Fixed
+
+- Bot chat loading placeholders use the same gray surface for user and Bot messages.
+
 ## [0.8.5] - 2026-11-21
 
 ### Added
