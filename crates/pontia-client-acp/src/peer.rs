@@ -749,6 +749,25 @@ async fn update(
         return crate::models::replace(&mut state, events, session, runtime, config.config_options)
             .await;
     }
+    if let SessionUpdate::UsageUpdate(usage) = notification.update {
+        if state.closing || usage.size == 0 {
+            return Ok(());
+        }
+        return events
+            .report_client_fact(
+                session,
+                Some(runtime),
+                EventType::SessionContextUsageUpdated,
+                json!({"context_usage": {
+                    "used_tokens": usage.used,
+                    "max_tokens": usage.size,
+                    "remaining_tokens": usage.size.saturating_sub(usage.used),
+                    "usage_ratio": (usage.used as f64 / usage.size as f64).min(1.0),
+                    "confidence": "exact"
+                }}),
+            )
+            .await;
+    }
     // Retain field presence: schema serialization omits empty collections and
     // JSON null, which are meaningful replacement/return values for live tools.
     if let Some(replay) = &mut state.replay {

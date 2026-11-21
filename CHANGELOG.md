@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Dashboard shows context window usage for ACP Sessions when the Agent reports it.
+
+### Fixed
+
+- Resuming an ACP Session restores its previous model when the Agent loads a different default.
+
 ## [0.8.7] - 2026-11-21
 
 ### Changed

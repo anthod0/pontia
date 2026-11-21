@@ -328,8 +328,8 @@ impl ClientSession for AcpAdapter {
                     bound_identity.as_ref().map(|identity| identity[1].as_str()),
                     binding.as_ref().map(|binding| binding.metadata["system_prompt_injected"] == true),
                 ).await?;
-                if binding.is_none() && let Some(model) = &request.model {
-                    crate::models::select(&peer, &events, &request.session_id, model).await?;
+                if let Some(model) = &request.model {
+                    crate::models::select(&peer, &events, &request.session_id, model, binding.is_some()).await?;
                 }
                 let key = identity::encode(selected, &native.to_string())?;
                 let mut state = peer.state.lock().await;
@@ -352,6 +352,9 @@ impl ClientSession for AcpAdapter {
                 state.native = Some(native);
                 state.blocked = binding.is_some() && sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM turns WHERE session_id=? AND state IN ('queued','running'))")
                     .bind(&request.session_id).fetch_one(&pool).await?;
+                if let Some(model) = &state.current_model {
+                    crate::models::report(&events, &request.session_id, &runtime, model).await?;
+                }
                 state.ready = true;
                 peer.remember(&state, Some(&key)).await?;
                 peer::runtime_event(
@@ -564,8 +567,22 @@ impl ClientSession for AcpAdapter {
         implementation: &'a AgentClientCapabilities,
     ) -> ClientOperation<'a, AgentClientCapabilities> {
         Box::pin(async move {
+            // ACP has no capability flag for usage reports. The persisted observation
+            // remains evidence of support even when the peer is disconnected.
+            let mut capabilities = AgentClientCapabilities::default();
+            if let Some(pool) = self.pool.get()
+                && sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = ?
+                                   AND json_type(metadata, '$.context_usage') = 'object')",
+                )
+                .bind(session)
+                .fetch_one(pool)
+                .await?
+            {
+                capabilities.context_usage = implementation.context_usage;
+            }
             let Ok(peer) = self.peer(session).await else {
-                return Ok(AgentClientCapabilities::default());
+                return Ok(capabilities);
             };
             let retry_history = {
                 let state = peer.state.lock().await;
@@ -579,11 +596,13 @@ impl ClientSession for AcpAdapter {
                 let _ = peer.load().await;
             }
             let state = peer.state.lock().await;
-            Ok(state
-                .capabilities
-                .as_ref()
-                .map(|caps| caps.intersection(implementation))
-                .unwrap_or_default())
+            if let Some(live) = &state.capabilities {
+                capabilities = AgentClientCapabilities {
+                    context_usage: capabilities.context_usage,
+                    ..live.intersection(implementation)
+                };
+            }
+            Ok(capabilities)
         })
     }
 
@@ -635,14 +654,21 @@ impl ClientSession for AcpAdapter {
         target: &'a ControlTarget,
     ) -> ClientOperation<'a, ()> {
         Box::pin(async move {
-            target.validate(&events.db()).await?;
+            let pool = events.db();
+            target.validate(&pool).await?;
+            let model = sqlx::query_scalar(
+                "SELECT json_extract(metadata, '$.model') FROM sessions WHERE session_id = ?",
+            )
+            .bind(&target.session_id)
+            .fetch_one(&pool)
+            .await?;
             self.provision(
                 events,
                 self.root.get().ok_or_else(unavailable)?,
                 RuntimeStartRequest {
                     launch_mode: Default::default(),
                     execution_policy: Default::default(),
-                    model: None,
+                    model,
                     session_id: target.session_id.clone(),
                     runtime_id: target.runtime_id.clone(),
                     client_type: "acp".into(),

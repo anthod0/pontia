@@ -15,7 +15,7 @@ pub const ACP_MAX_CAPABILITIES: AgentClientCapabilities = AgentClientCapabilitie
     manual_compaction: false,
     compaction_events: false,
     compaction_history: false,
-    context_usage: ContextUsageCapability::Unsupported,
+    context_usage: ContextUsageCapability::Exact,
 };
 
 pub const SPEC: AgentClientSpec = AgentClientSpec {
