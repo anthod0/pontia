@@ -106,7 +106,7 @@ export function parseQuotedMessage(text: string): { quote: BotQuote | null; text
 /** The visible text of a Bot chat message, without attachments or its own quote. */
 export function messageText(message: BotMessage): string {
   if (message.kind === "bot_reply") return message.content;
-  return parseQuotedMessage(parseUploadMessage(message.content).text).text;
+  return parseUploadMessage(parseQuotedMessage(message.content).text).text;
 }
 
 export function entryQuote(entry: BotEntry, excerpt: string | null = null): BotQuote | null {

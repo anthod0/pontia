@@ -99,7 +99,7 @@
     actionError = ''
     feed?.followSend()
     try {
-      timeline.message(await device.api.sendBotMessage(botId, content))
+      timeline.message(await device.api.sendBotMessage(botId, sentQuote ? quotedMessage(sentQuote, content) : content))
       if (quote === sentQuote) setQuote(null)
       return true
     } catch (failure) {
@@ -148,8 +148,8 @@
     <BotMessageFeed bind:this={feed} bind:root={feedRoot} {timeline} {typing} {highlighted}>
       {#snippet row(entry)}
         {#if 'content' in entry}
-          {@const uploads = entry.kind === 'user_input' ? parseUploadMessage(entry.content) : { text: entry.content, files: [] }}
-          {@const parts = entry.kind === 'user_input' ? { ...parseQuotedMessage(uploads.text), files: uploads.files } : { ...uploads, quote: null }}
+          {@const quoted = entry.kind === 'user_input' ? parseQuotedMessage(entry.content) : { text: entry.content, quote: null }}
+          {@const parts = entry.kind === 'user_input' ? { ...parseUploadMessage(quoted.text), quote: quoted.quote } : { ...quoted, files: [] }}
           <div class={['flex', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']}>
             <div class="max-w-[90%] min-w-0 space-y-2">
               {#if parts.files.length}
@@ -221,7 +221,7 @@
       </div>
       <MessageComposer bind:this={composer} draftId={`bot:${botId}`} bind:value={draft} placeholder={$t('bots.message')} fullscreen
         submitDisabled={quote !== null && !draft.trim()}
-        formatText={text => quote ? quotedMessage(quote, text) : text} onSubmit={send} />
+        onSubmit={send} />
     </div>
   </section>
 {:else if timeline.refreshError}

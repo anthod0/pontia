@@ -192,7 +192,7 @@ test("cannot send a quote without text, even with an attachment", async () => {
   await fireEvent.click(submit);
   await waitFor(() => expect(send).toHaveBeenCalledOnce());
   expect(send.mock.calls[0][1]).toMatch(
-    /^<user_uploads [^]*<\/user_uploads>\n<user_quote message_id=[^]*<\/user_quote>\nx$/,
+    /^<user_quote message_id=[^]*<\/user_quote>\n<user_uploads [^]*<\/user_uploads>\nx$/,
   );
 });
 
