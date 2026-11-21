@@ -1592,3 +1592,6 @@ async fn helper_rejects_missing_and_deleted_profiles_before_creating_a_session()
 
 #[path = "conversation/status.rs"]
 mod status;
+
+#[path = "conversation/compaction.rs"]
+mod compaction;
