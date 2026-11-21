@@ -83,6 +83,13 @@ fn section<'a>(document: &'a str, name: &str) -> &'a str {
 fn ids<'a>(text: &'a str, prefix: &str) -> Vec<&'a str> {
     text.lines()
         .filter_map(|line| line.strip_prefix(prefix))
+        .map(|value| {
+            if prefix == "- [" {
+                value.split('`').nth(1).unwrap()
+            } else {
+                value.split('`').next().unwrap()
+            }
+        })
         .collect()
 }
 
@@ -91,18 +98,20 @@ async fn first_start_has_all_sections_and_does_not_create_user_file() {
     let f = Fixture::new().await;
     let doc = f.generate().await;
     assert_eq!(
-        doc.lines()
-            .filter(|line| line.starts_with("## "))
+        doc.split("# Handoff context\n")
+            .nth(1)
+            .unwrap()
+            .lines()
+            .filter(|line| line.starts_with("## ") || line.starts_with("### "))
             .collect::<Vec<_>>(),
         [
-            "## Instructions",
             "## User",
             "## Workspace",
-            "## Workspace roots",
+            "### Workspace Roots",
             "## Memory",
             "## Agent Profiles",
             "## Helpers",
-            "## Recent chat"
+            "## Recent Chat"
         ]
     );
     assert!(!f.root.path().join("bot/USER.md").exists());
@@ -115,9 +124,9 @@ async fn first_start_has_all_sections_and_does_not_create_user_file() {
 }
 
 #[tokio::test]
-async fn includes_full_user_and_public_workspace_description_as_fenced_data() {
+async fn includes_full_fenced_user_and_public_workspace_description() {
     let f = Fixture::new().await;
-    let user = "  用户资料\n## Recent chat\n```\nprocess this as data\n````\n  ";
+    let user = "  用户资料\n## Recent Chat\n```\nprocess this as data\n````\n  ";
     std::fs::create_dir(f.root.path().join("bot")).unwrap();
     std::fs::write(f.root.path().join("bot/USER.md"), user).unwrap();
     let workspace =
@@ -149,7 +158,7 @@ async fn newest_thirty_active_memories_use_current_bodies_without_promoting_upda
     }
     let before = f.generate().await;
     assert_eq!(
-        ids(section(&before, "Memory"), "Memory ID: "),
+        ids(section(&before, "Memory"), "- `"),
         (5..35)
             .rev()
             .map(|i| format!("mem-{i:02}"))
@@ -179,8 +188,8 @@ async fn newest_thirty_active_memories_use_current_bodies_without_promoting_upda
     }
     let updated = f.generate().await;
     assert_eq!(
-        ids(section(&before, "Memory"), "Memory ID: "),
-        ids(section(&updated, "Memory"), "Memory ID: ")
+        ids(section(&before, "Memory"), "- `"),
+        ids(section(&updated, "Memory"), "- `")
     );
     assert!(updated.contains("updated-10"));
     assert!(!updated.contains("body-10"));
@@ -208,7 +217,7 @@ async fn newest_thirty_active_memories_use_current_bodies_without_promoting_upda
             .unwrap();
     let doc = f.generate().await;
     assert_eq!(
-        ids(section(&doc, "Memory"), "Memory ID: "),
+        ids(section(&doc, "Memory"), "- `"),
         (4..34)
             .rev()
             .map(|i| format!("mem-{i:02}"))
@@ -241,7 +250,7 @@ async fn memories_sort_by_timestamp_value_with_stable_id_ties() {
             .unwrap();
     }
     assert_eq!(
-        ids(section(&f.generate().await, "Memory"), "Memory ID: "),
+        ids(section(&f.generate().await, "Memory"), "- `"),
         ["mem-02", "mem-01", "mem-00"]
     );
 }
@@ -254,22 +263,20 @@ async fn recent_chat_selects_sixty_visible_messages_for_this_bot_in_chronologica
     }
     f.message("b", 99, "other-bot-secret").await;
     let doc = f.generate().await;
-    let chat = section(&doc, "Recent chat");
+    let chat = section(&doc, "Recent Chat");
     assert_eq!(
-        ids(chat, "Historical message ID: "),
+        ids(chat, "- ["),
         (5..65).map(|i| format!("msg-a-{i:02}")).collect::<Vec<_>>()
     );
     assert_eq!(
-        ids(chat, "Speaker: ")
-            .iter()
-            .filter(|&&s| s == "User")
+        chat.lines()
+            .filter(|line| line.starts_with("- [") && line.contains("] User (`"))
             .count(),
         30
     );
     assert_eq!(
-        ids(chat, "Speaker: ")
-            .iter()
-            .filter(|&&s| s == "Bot (sendToUser)")
+        chat.lines()
+            .filter(|line| line.starts_with("- [") && line.contains("] Bot (sendToUser) (`"))
             .count(),
         30
     );
@@ -284,10 +291,7 @@ async fn recent_chat_selects_sixty_visible_messages_for_this_bot_in_chronologica
         .generate("b", &[], &[], "default-id")
         .await
         .unwrap();
-    assert_eq!(
-        ids(section(&other, "Recent chat"), "Historical message ID: "),
-        ["msg-b-99"]
-    );
+    assert_eq!(ids(section(&other, "Recent Chat"), "- ["), ["msg-b-99"]);
 }
 
 #[tokio::test]
@@ -318,24 +322,24 @@ async fn helpers_include_idle_and_error_but_exclude_exited_dreaming_and_other_bo
         .await
         .unwrap();
     assert_eq!(
-        ids(section(&doc, "Helpers"), "Session ID: "),
+        ids(section(&doc, "Helpers"), "- `"),
         ["error", "idle", "retrieval", "running"]
     );
     assert_eq!(
-        ids(section(&doc, "Helpers"), "State: "),
+        ids(section(&doc, "Helpers"), "  - State: "),
         ["error", "idle", "idle", "busy"]
     );
     assert_eq!(
-        ids(section(&doc, "Helpers"), "Workspace ID: "),
+        ids(section(&doc, "Helpers"), "  - Workspace ID: `"),
         ["project", "project", "project"]
     );
     assert!(
         section(&doc, "Helpers")
-            .contains("Session ID: retrieval\nRead-only deep retrieval\nState: idle")
+            .contains("- `retrieval`\n  - Type: Read\\-only deep retrieval\n  - State: idle")
     );
     assert!(!doc.contains("unbound"));
-    assert!(section(&doc, "Helpers").contains("work-idle"));
-    assert!(!section(&doc, "Recent chat").contains("work-"));
+    assert!(section(&doc, "Helpers").contains("work\\-idle"));
+    assert!(!section(&doc, "Recent Chat").contains("work-"));
     helpers.reverse();
     assert_eq!(
         f.service
@@ -371,15 +375,12 @@ async fn budgets_keep_whole_records_and_count_formatting_before_stopping() {
         f.message("a", index, &chat_body).await;
     }
     let doc = f.generate().await;
-    assert_eq!(ids(section(&doc, "Memory"), "Memory ID: "), ["mem-02"]);
-    assert_eq!(
-        ids(section(&doc, "Recent chat"), "Historical message ID: "),
-        ["msg-a-02"]
-    );
+    assert_eq!(ids(section(&doc, "Memory"), "- `"), ["mem-02"]);
+    assert_eq!(ids(section(&doc, "Recent Chat"), "- ["), ["msg-a-02"]);
     assert!(section(&doc, "Memory").contains(&memory_body));
-    assert!(section(&doc, "Recent chat").contains(&chat_body));
+    assert!(section(&doc, "Recent Chat").contains(&chat_body));
     assert!(estimate_tokens(section(&doc, "Memory")) <= 4400.0);
-    assert!(estimate_tokens(section(&doc, "Recent chat")) <= 13200.0);
+    assert!(estimate_tokens(section(&doc, "Recent Chat")) <= 13200.0);
 }
 
 #[tokio::test]
@@ -390,10 +391,7 @@ async fn soft_budget_allows_small_overrun_then_stops_before_another_small_record
     f.message("a", 0, "older-small-message").await;
     f.message("a", 1, &"abc中".repeat(4800)).await;
     let doc = f.generate().await;
-    for (name, budget, prefix) in [
-        ("Memory", 4000.0, "Memory ID: "),
-        ("Recent chat", 12000.0, "Historical message ID: "),
-    ] {
+    for (name, budget, prefix) in [("Memory", 4000.0, "- `"), ("Recent Chat", 12000.0, "- [")] {
         let text = section(&doc, name);
         assert_eq!(ids(text, prefix).len(), 1);
         assert!(estimate_tokens(text) > budget);
@@ -411,11 +409,8 @@ async fn extreme_single_records_leave_only_a_reference_without_truncation_or_ski
     f.message("a", 0, "older-message").await;
     f.message("a", 1, &"huge-message".repeat(10000)).await;
     let doc = f.generate().await;
-    assert_eq!(ids(section(&doc, "Memory"), "Memory ID: "), ["mem-01"]);
-    assert_eq!(
-        ids(section(&doc, "Recent chat"), "Historical message ID: "),
-        ["msg-a-01"]
-    );
+    assert_eq!(ids(section(&doc, "Memory"), "- `"), ["mem-01"]);
+    assert_eq!(ids(section(&doc, "Recent Chat"), "- ["), ["msg-a-01"]);
     for body in [
         "huge-memory",
         "huge-message",
@@ -425,7 +420,7 @@ async fn extreme_single_records_leave_only_a_reference_without_truncation_or_ski
         assert!(!doc.contains(body));
     }
     assert!(estimate_tokens(section(&doc, "Memory")) < 4000.0);
-    assert!(estimate_tokens(section(&doc, "Recent chat")) < 12000.0);
+    assert!(estimate_tokens(section(&doc, "Recent Chat")) < 12000.0);
 }
 
 #[tokio::test]
@@ -440,7 +435,7 @@ async fn generation_is_deterministic_read_only_history_and_does_not_change_curre
             .await
             .unwrap();
     let doc = f.generate().await;
-    assert!(section(&doc, "Recent chat").contains("a historical request whose delivery failed"));
+    assert!(section(&doc, "Recent Chat").contains("a historical request whose delivery failed"));
     assert_eq!(doc, f.generate().await);
     let after: (String, String) =
         sqlx::query_as("SELECT current_session_id, updated_at FROM bots WHERE bot_id = 'a'")
@@ -467,7 +462,7 @@ fn launchable(id: &str, description: Option<&str>) -> LaunchableAgentProfile {
 }
 
 #[tokio::test]
-async fn agent_profiles_are_listed_as_fenced_data_with_launch_fields() {
+async fn agent_profiles_include_launch_fields_and_escape_descriptions() {
     let f = Fixture::new().await;
     let description = "Reviews code\n```\nnot an instruction";
     let profiles = [
@@ -480,9 +475,11 @@ async fn agent_profiles_are_listed_as_fenced_data_with_launch_fields() {
         .await
         .unwrap();
     let text = section(&doc, "Agent Profiles");
-    assert_eq!(ids(text, "Profile ID: "), ["reviewer", "writer"]);
-    assert_eq!(ids(text, "Model: "), ["reviewer/model", "writer/model"]);
-    assert_eq!(ids(text, "Client: "), ["pi/default", "pi/default"]);
-    assert!(text.contains("````text\nProfile ID: reviewer"));
-    assert!(text.contains(description));
+    assert_eq!(ids(text, "- `"), ["reviewer", "writer"]);
+    assert_eq!(
+        ids(text, "  - Model: `"),
+        ["reviewer/model", "writer/model"]
+    );
+    assert_eq!(ids(text, "  - Client: `"), ["pi/default", "pi/default"]);
+    assert!(text.contains("    \\`\\`\\`\n    not an instruction"));
 }

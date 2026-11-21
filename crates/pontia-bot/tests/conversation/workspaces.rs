@@ -53,11 +53,11 @@ async fn temporary_helpers_share_the_task_folder_and_appear_in_the_default_works
     ));
     let handoff = instructions(&control, &main).await;
     assert!(handoff.contains(&format!(
-        "Workspace ID: {}\nTemporary Workspace",
+        "- `{}`\n  - Name: Pontia\n  - Type: Temporary",
         workspace.workspace_id
     )));
     assert!(handoff.contains(&format!(
-        "Root ID: projects\nPath: {}",
+        "- `projects`: `{}`",
         root.path().join("projects").display()
     )));
     let report = folder.join("previous-report.txt");
@@ -414,7 +414,7 @@ async fn failed_launcher_keeps_project_and_bot_ownership_in_list_and_next_handof
         .unwrap();
     assert_ne!(next, main);
     assert!(instructions(&control, &next).await.contains(&format!(
-        "Session ID: {}\nWorkspace ID: {}\nState: error",
+        "- `{}`\n  - Type: Ordinary helper\n  - State: error\n  - Workspace ID: `{}`",
         failed.session_id, project.workspace_id
     )));
 }

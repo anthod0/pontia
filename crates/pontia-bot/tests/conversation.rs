@@ -1414,8 +1414,15 @@ async fn restart_bot(
 
 fn listed_profiles(handoff: &str) -> Vec<&str> {
     handoff
+        .split("## Agent Profiles\n")
+        .nth(1)
+        .unwrap()
+        .split("## Helpers\n")
+        .next()
+        .unwrap()
         .lines()
-        .filter_map(|line| line.strip_prefix("Profile ID: "))
+        .filter_map(|line| line.strip_prefix("- `"))
+        .map(|line| line.strip_suffix('`').unwrap())
         .collect()
 }
 
