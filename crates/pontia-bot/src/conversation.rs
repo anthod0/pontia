@@ -353,8 +353,11 @@ impl ConversationService {
     }
 
     pub async fn send(&self, bot_id: &str, content: &str) -> Result<BotMessage> {
-        self.start_delivery(bot_id, Input::New(content.into()))
-            .await
+        self.start_delivery(
+            bot_id,
+            Input::New(crate::quote::limit_quote(content).into_owned()),
+        )
+        .await
     }
 
     pub async fn retry(&self, bot_id: &str, message_id: &str) -> Result<BotMessage> {

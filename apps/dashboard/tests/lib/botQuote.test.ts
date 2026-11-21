@@ -130,3 +130,39 @@ test("quoting a user message takes its text without attachments or its own quote
     excerpt: false,
   });
 });
+
+test.each([
+  ["a".repeat(2000), "a".repeat(2000), false],
+  ["a".repeat(2001), "a".repeat(2000) + "…", true],
+  ["😀".repeat(2000), "😀".repeat(2000), false],
+  ["中".repeat(1999) + "😀x", "中".repeat(1999) + "😀…", true],
+])("caps newly created and serialized quotes by Unicode characters", (text, expected, excerpt) => {
+  const quote = entryQuote(message("bot_reply", text))!;
+  expect(quote).toMatchObject({ text: expected, excerpt, messageId });
+  expect(parseQuotedMessage(quotedMessage(quote, "reply")).quote).toEqual(quote);
+  expect(
+    parseQuotedMessage(
+      quotedMessage({ kind: "message", messageId, speaker: "Bot", text, excerpt: false }, "reply"),
+    ).quote,
+  ).toEqual(quote);
+});
+
+test("keeps a selected excerpt marked and caps long selections", () => {
+  expect(entryQuote(message("bot_reply", "whole"), "selection")).toMatchObject({
+    text: "selection",
+    excerpt: true,
+  });
+  expect(entryQuote(message("bot_reply", "whole"), "😀".repeat(2001))).toMatchObject({
+    text: "😀".repeat(2000) + "…",
+    excerpt: true,
+  });
+});
+
+test("reading a historical quote does not shorten it", () => {
+  const text = "a".repeat(2100);
+  expect(
+    parseQuotedMessage(
+      `<user_quote message_id="${messageId}" speaker="Bot">${text}</user_quote>\nreply`,
+    ).quote,
+  ).toMatchObject({ text, excerpt: false });
+});

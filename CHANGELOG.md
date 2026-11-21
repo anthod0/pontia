@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- New Bot message quotes keep at most 2,000 Unicode characters, followed by an ellipsis when shortened. The composer and sent message show the same excerpt and retain the link to the full message.
+
 - Dreaming and deep memory retrieval Sessions close automatically when their round finishes. Retrieval helpers reply before closing; Bots no longer need to close them. Stuck Dreaming rounds are cleaned up before the next hourly round.
 
 ## [0.8.6] - 2026-11-21

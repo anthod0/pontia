@@ -1,4 +1,4 @@
-import type { BotQuote } from "./botQuote";
+import { limitQuote, type BotQuote } from "./botQuote";
 
 // The quote waiting above a Bot chat composer survives reloads until it is sent or removed.
 function key(deviceId: string, botId: string): string {
@@ -7,7 +7,7 @@ function key(deviceId: string, botId: string): string {
 
 export function loadQuoteDraft(deviceId: string, botId: string): BotQuote | null {
   const saved = localStorage.getItem(key(deviceId, botId));
-  return saved ? (JSON.parse(saved) as BotQuote) : null;
+  return saved ? limitQuote(JSON.parse(saved) as BotQuote) : null;
 }
 
 export function saveQuoteDraft(deviceId: string, botId: string, quote: BotQuote | null): void {
