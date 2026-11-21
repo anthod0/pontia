@@ -17,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Bots send separate messages for unrelated matters, even when updates arrive together.
+- Bots respond before acting, use a fresh helper for each task, and close helpers when their tasks finish. They may run up to three quick checks outside `pontia` per reply; writes outside `pontia` are delegated to helpers.
+- Bot handoff context uses lists for Workspaces, roots, memories, Agent Profiles, helpers, and recent chat. Historical content remains separate from instructions, with the same memory and chat budgets.
 - On phones, the Bot page top bar no longer has a **More** menu. Tap the Bot name to open its settings, where **Delete Bot** is at the bottom. A downloads button appears in the top bar while downloads are in progress or failed.
 - The image viewer pages only through the images of the card it was opened from, skipping images that no longer exist. A single shared image opens without paging. Previously the Session chat paged through every shared image and the Bot chat did not page.
 - The Session chat shows one card per `pontia send-file` call instead of grouping every file of a Turn together.
