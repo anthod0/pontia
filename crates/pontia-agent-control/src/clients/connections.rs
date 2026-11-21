@@ -129,7 +129,7 @@ impl ClientControlService {
         else {
             return Ok(None);
         };
-        Ok(sqlx::query_scalar("SELECT r.runtime_id FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id=? AND s.state IN ('created','starting','idle','busy','waiting_for_interaction','interrupted') AND r.state IN ('starting','running')")
+        Ok(sqlx::query_scalar("SELECT r.runtime_id FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id=? AND (s.state IN ('created','starting','idle','busy','waiting_for_interaction','interrupted') OR (s.state='error' AND r.state='starting')) AND r.state IN ('starting','running')")
             .bind(runtime_id).fetch_optional(&self.pool).await?)
     }
 
@@ -186,9 +186,9 @@ impl ClientControlService {
                     .await?
             }
             crate::ipc::identity::BindingConfirmation::Launch => {
-                let unbound: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions s WHERE s.session_id=? AND s.client_type=? AND NOT EXISTS(SELECT 1 FROM agent_bindings b WHERE b.session_id=s.session_id))")
-                    .bind(session_id).bind(client_type).fetch_one(&self.pool).await?;
-                if !unbound {
+                let launching: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions s WHERE s.session_id=? AND s.client_type=? AND EXISTS(SELECT 1 FROM session_runtimes r WHERE r.session_id=s.session_id AND r.runtime_id=? AND r.state='starting'))")
+                    .bind(session_id).bind(client_type).bind(runtime_id).fetch_one(&self.pool).await?;
+                if !launching {
                     return Err(Error::StateConflict(
                         "Runtime must confirm its native binding".into(),
                     ));

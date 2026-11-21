@@ -273,8 +273,8 @@ if (process.argv[2] === "history") {
     } else if (method === "host.command") { connected = true; void command(params, reply).catch(() => error(-32603, "failed")); }
     else error(-32601, "unknown");
   }, async () => { connected = true; record({method:"attached"}); }, () => { connected = false; expire(); }, true);
-  await connection.request("runtime.attach", {version: CONTROL_VERSION, session_id: config.session_id, runtime_id: config.runtime_id, client_session_key: config.resume});
-  connection.registered({sessionId: config.session_id, runtimeId: config.runtime_id, clientSessionKey: config.resume});
+  await connection.request("runtime.attach", {version: CONTROL_VERSION, session_id: config.session_id, runtime_id: config.runtime_id, client_session_key: undefined});
+  connection.registered({sessionId: config.session_id, runtimeId: config.runtime_id, clientSessionKey: undefined});
   connected = true;
   record({method:"attached"});
   process.once("SIGTERM", () => { clearInterval(timer); void connection.close(); });

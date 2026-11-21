@@ -69,7 +69,11 @@ impl Harness {
         let config = AcpConfig {
             agents: BTreeMap::from([("first".into(), config.clone()), ("second".into(), config)]),
         };
-        clients.register(pontia_client_acp::registration(config.clone()));
+        clients.register(pontia_client_acp::registration_with_relay(
+            config.clone(),
+            Default::default(),
+            env!("CARGO_BIN_EXE_pontia-acp-test-relay").into(),
+        ));
         let db = connect_sqlite(&format!(
             "sqlite://{}",
             root.path().join("test.db").display()
@@ -229,6 +233,23 @@ impl Harness {
         .unwrap();
     }
 
+    fn crash_agent(&self, session: &str) {
+        let pid = self
+            .wire()
+            .iter()
+            .rev()
+            .find_map(|frame| {
+                (frame["startup"]["session"] == session)
+                    .then(|| frame["startup"]["pid"].as_u64())
+                    .flatten()
+            })
+            .unwrap() as u32;
+        let process = pontia_runtime::ProcessFingerprint::capture(pid).unwrap();
+        pontia_runtime::GenericRuntimeManager
+            .terminate_process(&process)
+            .unwrap();
+    }
+
     async fn restart(&mut self) {
         self.app.shutdown().notify();
         tokio::time::timeout(Duration::from_secs(5), self.tasks.take().unwrap().join())
@@ -236,7 +257,11 @@ impl Harness {
             .unwrap()
             .unwrap();
         let mut clients = ClientRegistry::default();
-        clients.register(pontia_client_acp::registration(self.config.clone()));
+        clients.register(pontia_client_acp::registration_with_relay(
+            self.config.clone(),
+            Default::default(),
+            env!("CARGO_BIN_EXE_pontia-acp-test-relay").into(),
+        ));
         self.app = AgentControl::builder(self.app.db(), self.root.path().into())
             .clients(clients.clone())
             .build();
@@ -261,7 +286,12 @@ impl Harness {
     async fn wait_ready(&self, session: &str, count: i64) {
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
-                if self.events(session, "session.ready").await >= count
+                if self
+                    .wire()
+                    .iter()
+                    .filter(|frame| frame["method"] == "session/load")
+                    .count()
+                    >= count as usize
                     && self
                         .app
                         .queries()
@@ -304,6 +334,21 @@ impl Harness {
             .await
             .unwrap()
             .unwrap();
+        let processes: Vec<String> = sqlx::query_scalar("SELECT process_fingerprint FROM session_runtimes WHERE process_fingerprint IS NOT NULL").fetch_all(&self.app.db()).await.unwrap();
+        for process in processes {
+            let process: pontia_runtime::ProcessFingerprint =
+                serde_json::from_str(&process).unwrap();
+            pontia_runtime::GenericRuntimeManager
+                .terminate_process(&process)
+                .unwrap();
+            tokio::time::timeout(Duration::from_secs(10), async {
+                while process.observe() != pontia_runtime::ProcessObservation::Exited {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .unwrap();
+        }
         self.app.db().close().await;
     }
 }
@@ -959,7 +1004,27 @@ async fn disconnect_unknown_result_and_shutdown_do_not_invent_terminal_facts() {
         } else {
             h.app.shutdown().notify();
         }
-        h.wait_runtime_exited(&session).await;
+        if !flags.is_empty() {
+            h.wait_runtime_exited(&session).await;
+        } else {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while h
+                    .app
+                    .queries()
+                    .get_session(&session)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .capabilities
+                    .accept_task
+                {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(h.events(&session, "runtime.exited").await, 0);
+        }
         let view = h
             .app
             .queries()
@@ -1635,8 +1700,7 @@ async fn service_restart_loads_the_bound_agent_identity_and_preserves_runtime_an
     assert_eq!(restored.client_session_key, binding.client_session_key);
     assert_eq!(after.runtimes.len(), 1);
     assert_eq!(after.runtimes[0].runtime_id, before.runtimes[0].runtime_id);
-    #[cfg(target_os = "linux")]
-    assert_ne!(
+    assert_eq!(
         after.runtimes[0].process_fingerprint,
         before.runtimes[0].process_fingerprint
     );
@@ -1988,13 +2052,7 @@ async fn a_stalled_peer_does_not_block_other_session_recovery_or_shutdown() {
     let mut h = Harness::new(&[]).await;
     let first = h.create("first").await.unwrap();
     let second = h.create("second").await.unwrap();
-    h.config
-        .agents
-        .get_mut("first")
-        .unwrap()
-        .env
-        .insert("ACP_LOAD_GATE".into(), "first-load".into());
-    h.release("first-load");
+    h.release(&format!("hold-load-{first}"));
     h.restart().await;
     h.wait_ready(&second, 2).await;
     h.wait_requests("session/load", 4).await;
@@ -2043,7 +2101,7 @@ async fn native_history_without_pontia_turns_is_visible_without_inventing_turns(
 #[tokio::test]
 async fn recovery_rejects_missing_native_session_or_downgraded_capabilities_without_rebinding() {
     for marker in ["load-fail", "no-load"] {
-        let mut h = Harness::new(&[]).await;
+        let h = Harness::new(&[]).await;
         let session = h.create("first").await.unwrap();
         let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
             .binding_for_session(&session)
@@ -2051,7 +2109,7 @@ async fn recovery_rejects_missing_native_session_or_downgraded_capabilities_with
             .unwrap()
             .unwrap();
         h.release(marker);
-        h.restart().await;
+        h.crash_agent(&session);
         h.wait_requests("initialize", 2).await;
         tokio::time::timeout(Duration::from_secs(5), async {
             while h.events(&session, "runtime.exited").await < 2 {
@@ -2107,4 +2165,100 @@ async fn invalid_permission_options_or_native_session_do_not_register_or_approve
         assert_eq!(h.events(&session, "interaction.unblocked").await, 0);
         h.stop().await;
     }
+}
+
+#[tokio::test]
+async fn active_prompt_survives_daemon_restart_without_replay_and_releases_the_next_input() {
+    let mut h = Harness::new(&[("ACP_PERMISSION", "1")]).await;
+    let session = h.create("first").await.unwrap();
+    let first = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    let approvals = h.wait_interactions(&session, 3).await;
+    for approval in approvals {
+        h.app
+            .interactions()
+            .respond(&h.app, &session, &approval.interaction_id, "once:原")
+            .await
+            .unwrap();
+    }
+    h.wait_turn(&session, &first.turn_id, "running").await;
+    let fingerprint: String =
+        sqlx::query_scalar("SELECT process_fingerprint FROM session_runtimes WHERE session_id=?")
+            .bind(&session)
+            .fetch_one(&h.app.db())
+            .await
+            .unwrap();
+    let relay: pontia_runtime::ProcessFingerprint = serde_json::from_str(&fingerprint).unwrap();
+    let pid = h
+        .wire()
+        .iter()
+        .find_map(|frame| frame["startup"]["pid"].as_u64())
+        .unwrap() as u32;
+    let agent = pontia_runtime::ProcessFingerprint::capture(pid).unwrap();
+    h.restart().await;
+    assert_eq!(relay.observe(), pontia_runtime::ProcessObservation::Alive);
+    assert_eq!(agent.observe(), pontia_runtime::ProcessObservation::Alive);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let view = h
+                .app
+                .queries()
+                .get_session(&session)
+                .await
+                .unwrap()
+                .unwrap();
+            if view.capabilities.interrupt {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(h.requests("initialize"), 1);
+    assert_eq!(h.requests("session/load"), 1);
+    assert_eq!(h.requests("session/prompt"), 1);
+    h.release("release-1");
+    h.wait_turn(&session, &first.turn_id, "completed").await;
+    let second = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-2");
+    let approvals = h.wait_interactions(&session, 6).await;
+    for approval in approvals.into_iter().filter(|approval| {
+        approval.state == pontia_agent_control::interactions::InteractionState::Pending
+    }) {
+        h.app
+            .interactions()
+            .respond(&h.app, &session, &approval.interaction_id, "once:原")
+            .await
+            .unwrap();
+    }
+    h.wait_turn(&session, &second.turn_id, "running").await;
+    h.app
+        .turn_commands()
+        .interrupt_turn(&session, &second.turn_id)
+        .await
+        .unwrap();
+    h.release("release-2");
+    h.wait_turn(&session, &second.turn_id, "interrupted").await;
+    assert_eq!(h.requests("session/prompt"), 2);
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    assert_eq!(relay.observe(), pontia_runtime::ProcessObservation::Exited);
+    assert_eq!(agent.observe(), pontia_runtime::ProcessObservation::Exited);
+    h.stop().await;
 }

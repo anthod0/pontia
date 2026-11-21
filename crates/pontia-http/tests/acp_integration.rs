@@ -5,12 +5,19 @@ use axum::{
 use http_body_util::BodyExt;
 use pontia_agent_control::{client_contract::ClientServicePhase, clients::ClientRegistry};
 use pontia_application::AppState;
-use pontia_client_acp::registration;
 use pontia_client_acp::{AcpAgentConfig, AcpConfig};
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, time::Duration};
 use tower::ServiceExt;
+
+fn registration(config: AcpConfig) -> pontia_agent_control::clients::ClientRegistration {
+    pontia_client_acp::registration_with_relay(
+        config,
+        Default::default(),
+        env!("CARGO_BIN_EXE_pontia-http-test-relay").into(),
+    )
+}
 
 async fn call(app: &AppState, method: &str, path: &str, body: Value) -> (StatusCode, Value) {
     let request = Request::builder()

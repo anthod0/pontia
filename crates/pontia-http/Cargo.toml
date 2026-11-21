@@ -44,3 +44,7 @@ pontia-client-claude = { path = "../pontia-client-claude" }
 
 [features]
 default = []
+
+[[bin]]
+name = "pontia-http-test-relay"
+path = "../pontia-agent-control/test-support/stdio-relay.rs"

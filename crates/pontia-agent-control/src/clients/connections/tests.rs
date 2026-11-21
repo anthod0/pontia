@@ -176,6 +176,10 @@ async fn launch_attachment_does_not_claim_a_native_conversation() {
         .execute(&pool)
         .await
         .unwrap();
+    sqlx::query("UPDATE session_runtimes SET state='starting'")
+        .execute(&pool)
+        .await
+        .unwrap();
     let current = channel();
     let guard = control.lock_identity().await;
     control
@@ -195,6 +199,21 @@ async fn launch_attachment_does_not_claim_a_native_conversation() {
         .unwrap();
     assert_eq!(count, 0);
     sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding','session','test-channel','/unused','native','{}')").execute(&pool).await.unwrap();
+    control
+        .attach_binding_locked(
+            &guard,
+            "test-channel",
+            "session",
+            "original",
+            BindingConfirmation::Launch,
+            current.clone(),
+        )
+        .await
+        .unwrap();
+    sqlx::query("UPDATE session_runtimes SET state='running'")
+        .execute(&pool)
+        .await
+        .unwrap();
     assert!(
         control
             .attach_binding_locked(

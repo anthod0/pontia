@@ -344,9 +344,10 @@ async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_b
         .unwrap();
     let state_root = root.path().join("state");
     let mut clients = ClientRegistry::default();
-    clients.register(pontia_client_acp::registration_with_registry(
+    clients.register(pontia_client_acp::registration_with_relay(
         config.clone(),
         server.registry(),
+        env!("CARGO_BIN_EXE_pontia-acp-test-relay").into(),
     ));
     let app = AgentControl::builder(pool.clone(), state_root.clone())
         .clients(clients.clone())
@@ -379,9 +380,10 @@ async fn binary_recovery_uses_the_state_root_and_offline_registry_names_do_not_b
         .unwrap()
         .unwrap();
     let mut clients = ClientRegistry::default();
-    clients.register(pontia_client_acp::registration_with_registry(
+    clients.register(pontia_client_acp::registration_with_relay(
         config.clone(),
         server.registry(),
+        env!("CARGO_BIN_EXE_pontia-acp-test-relay").into(),
     ));
     let app = AgentControl::builder(pool.clone(), state_root.clone())
         .clients(clients.clone())

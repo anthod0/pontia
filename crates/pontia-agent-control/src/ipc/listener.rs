@@ -31,6 +31,7 @@ pub fn control_socket_path(pontia_home: &Path) -> Result<PathBuf> {
 
 impl ControlListener {
     pub async fn bind(pontia_home: &Path) -> Result<Self> {
+        std::fs::create_dir_all(pontia_home)?;
         let path = control_socket_path(pontia_home)?;
         let directory = path.parent().expect("socket directory");
         std::fs::create_dir_all(directory)?;

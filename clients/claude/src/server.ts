@@ -73,7 +73,7 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
   const identity = {
     sessionId: config.session_id,
     runtimeId: config.runtime_id,
-    clientSessionKey: config.resume,
+    clientSessionKey: undefined as string | undefined,
   };
   const host = new Host(
     config,

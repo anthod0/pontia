@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 FROM base AS claude-build
 WORKDIR /src
 COPY clients/claude ./clients/claude
+COPY clients/shared ./clients/shared
 COPY scripts/pack-claude-client.sh scripts/release-version.py ./scripts/
 COPY VERSION LICENSE ./
 RUN bash scripts/pack-claude-client.sh /out/claude-client.tgz \
@@ -70,6 +71,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=rust-build /out/pontia /out/pontiad /usr/local/bin/
 COPY --from=dashboard-build /out/local /opt/pontia/dashboard
 COPY clients/pi /opt/pontia/clients/pi
+COPY clients/shared /opt/pontia/clients/shared
+COPY clients/shared /opt/pontia/shared
 COPY --from=claude-build /src/clients/claude /opt/pontia/claude-validation
 COPY --from=claude-build /opt/pontia/claude-client /opt/pontia/claude-client
 COPY docker/e2e/device-entrypoint /usr/local/bin/device-entrypoint
