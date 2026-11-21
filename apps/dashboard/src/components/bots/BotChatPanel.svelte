@@ -2,6 +2,10 @@
   import { createQuery } from '@tanstack/svelte-query'
   import { onMount, tick } from 'svelte'
   import ListChecksIcon from 'phosphor-svelte/lib/ListChecksIcon'
+  import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
+  import ArrowUUpLeftIcon from 'phosphor-svelte/lib/ArrowUUpLeftIcon'
+  import CaretRightIcon from 'phosphor-svelte/lib/CaretRightIcon'
+  import * as Collapsible from '$lib/components/ui/collapsible/index.js'
   import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircleIcon'
   import { Badge } from '$lib/components/ui/badge/index.js'
   import { useTopBarAction } from '../layout/topBarAction'
@@ -21,9 +25,10 @@
   import FilePreviewResizer from '../chat/FilePreviewResizer.svelte'
   import BotAvatar from './BotAvatar.svelte'
 
-  let { bot, count, onjump, onquote }: {
+  let { bot, count, onjump, onquote, ontodochange }: {
     bot: Bot
     count: number
+    ontodochange: (id: string, action: 'resolve' | 'reopen') => void
     onjump: (id: string) => Promise<void>
     onquote: (quote: BotQuote) => Promise<void>
   } = $props()
@@ -121,6 +126,31 @@
   </Empty.Root>
 {/snippet}
 
+{#snippet todoCard(message: BotMessage)}
+  {@const done = message.todo?.state === 'done' ? message.todo : null}
+  <li class={['rounded-xl border p-3', done ? 'border-transparent bg-muted/50' : 'bg-background']}>
+    <button type="button" class="block w-full rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => jump(message.id)}>
+      <span class="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-4" />
+        <time datetime={message.created_at}>{clock.format(new Date(message.created_at))}</time>
+        {#if done}
+          <span class="ml-auto">{done.by === 'user' ? $t('bots.resolvedByYou') : $t('bots.closedByBot', { name: bot.name })} · <time datetime={done.at} title={new Date(done.at).toLocaleString($currentLocale)}>{clock.format(new Date(done.at))}</time></span>
+        {/if}
+      </span>
+      <span class={['text-[13px] leading-5 [overflow-wrap:anywhere]', done ? 'line-clamp-2 text-muted-foreground' : 'line-clamp-3']}>{summary(message)}</span>
+    </button>
+    <div class={['mt-2 flex items-center gap-1', done && 'text-muted-foreground']}>
+      {#if !done}<Button variant="outline" size="xs" onclick={() => quoteTodo(message)}><QuotesIcon />{$t('bots.quoteReply')}</Button>{/if}
+      <Button variant="ghost" size="xs" onclick={() => viewContext(message.id)}><TreeStructureIcon />{$t('bots.context')}</Button>
+      {#if !done}
+        <Button variant="ghost" size="xs" class="ml-auto" onclick={() => ontodochange(message.id, 'resolve')}><CheckIcon />{$t('bots.todoDone')}</Button>
+      {:else if done.by === 'user'}
+        <Button variant="ghost" size="xs" onclick={() => ontodochange(message.id, 'reopen')}><ArrowUUpLeftIcon />{$t('bots.reopen')}</Button>
+      {/if}
+    </div>
+  </li>
+{/snippet}
+
 {#if open}
   <aside data-bot-chat-panel aria-label={$t('nav.sidebar')} class="fixed inset-y-0 right-0 z-50 flex w-full min-w-0 flex-col border-l bg-surface pt-[env(safe-area-inset-top)] lg:w-[var(--file-preview-width)]">
     <FilePreviewResizer />
@@ -188,19 +218,7 @@
             {#if todos.data.open.length}
               <ul class="space-y-2">
                 {#each todos.data.open as message (message.id)}
-                  <li class="rounded-xl border bg-background p-3">
-                    <button type="button" class="block w-full rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => jump(message.id)}>
-                      <span class="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <BotAvatar shape={bot.avatar_shape} color={bot.avatar_color} class="size-4" />
-                        <time datetime={message.created_at}>{clock.format(new Date(message.created_at))}</time>
-                      </span>
-                      <span class="line-clamp-3 text-[13px] leading-5 [overflow-wrap:anywhere]">{summary(message)}</span>
-                    </button>
-                    <div class="mt-2 flex items-center gap-1">
-                      <Button variant="outline" size="xs" onclick={() => quoteTodo(message)}><QuotesIcon />{$t('bots.quoteReply')}</Button>
-                      <Button variant="ghost" size="xs" onclick={() => viewContext(message.id)}><TreeStructureIcon />{$t('bots.context')}</Button>
-                    </div>
-                  </li>
+                  {@render todoCard(message)}
                 {/each}
               </ul>
             {:else}
@@ -208,6 +226,18 @@
                 <Empty.Media class="size-12 rounded-xl bg-muted text-muted-foreground"><CheckCircleIcon class="size-6" /></Empty.Media>
                 <Empty.Title>{$t('bots.noTodos')}</Empty.Title>
               </Empty.Header></Empty.Root>
+            {/if}
+            {#if todos.data.recently_resolved.length}
+              <Collapsible.Root class="mt-4">
+                <Collapsible.Trigger class="group flex items-center gap-1 rounded-sm px-1 text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-ring">
+                  <CaretRightIcon class="size-3 transition-transform group-aria-expanded:rotate-90" />{$t('bots.recentlyResolved')} {todos.data.recently_resolved.length}
+                </Collapsible.Trigger>
+                <Collapsible.Content>
+                  <ul class="mt-2 space-y-2">
+                    {#each todos.data.recently_resolved as message (message.id)}{@render todoCard(message)}{/each}
+                  </ul>
+                </Collapsible.Content>
+              </Collapsible.Root>
             {/if}
           {:else}
             <p role="status" class="text-sm text-muted-foreground">{$t('common.loading')}</p>

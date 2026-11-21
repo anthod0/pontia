@@ -273,9 +273,10 @@ export class BotTimeline {
     );
     const oldest = this.entries[0];
     this.noticeSession = latest.notice_session_id;
-    // A new reply can close a todo outside the latest page. Recheck it when visible.
+    // A todo outside the latest page may have been resolved or reopened.
     for (const row of this.known.values()) {
-      if ("content" in row && row.todo?.state === "open") this.stale.add(row.id);
+      if ("content" in row && (row.todo?.state === "open" || row.todo?.by === "user"))
+        this.stale.add(row.id);
     }
     for (const row of latest.entries) this.stale.delete(row.id);
     await this.verifyVisible();

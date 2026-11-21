@@ -15,7 +15,7 @@ use tokio::sync::{Mutex as AsyncMutex, broadcast};
 use crate::{
     handoff::HandoffService,
     identity::{BotAccess, BotIdentity, BotRole, IdentityError, TOOL_TOKEN_ENV},
-    messages::{BotMessage, MessageKind, MessageService},
+    messages::{BotMessage, MessageKind, MessageService, TodoAction, TodoList},
     records::{Bot, BotService},
     user::UserService,
 };
@@ -369,9 +369,22 @@ impl ConversationService {
             .await
     }
 
-    pub async fn open_todos(&self, bot_id: &str) -> Result<Vec<BotMessage>> {
+    pub async fn todos(&self, bot_id: &str) -> Result<TodoList> {
         self.records.get(bot_id).await?;
-        self.messages.open_todos(bot_id).await
+        self.messages.todos(bot_id).await
+    }
+
+    pub async fn change_todo(
+        &self,
+        bot_id: &str,
+        id: &str,
+        action: TodoAction,
+    ) -> Result<BotMessage> {
+        let (message, changed) = self.messages.change_todo(bot_id, id, action).await?;
+        if changed {
+            self.activity(bot_id).notify(ConversationUpdate::Changed);
+        }
+        Ok(message)
     }
 
     pub async fn message_context(

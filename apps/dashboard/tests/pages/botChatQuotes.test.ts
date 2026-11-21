@@ -526,7 +526,10 @@ test("opens context from the message menu and reveals an earlier linked message"
 test("opens an outstanding todo from the feed and quotes it into the composer", async () => {
   const todo = { ...reply, todo: { state: "open" as const } };
   serve([todo]);
-  vi.spyOn(testDevice.api, "getBotTodos").mockResolvedValue({ open: [todo] });
+  vi.spyOn(testDevice.api, "getBotTodos").mockResolvedValue({
+    open: [todo],
+    recently_resolved: [],
+  });
   const send = sent();
   render(BotChatPage, { botId: bot.bot_id });
   await fireEvent.click(await screen.findByRole("button", { name: "Todo" }));

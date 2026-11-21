@@ -201,3 +201,28 @@ test("reports an entry that does not exist without loading older history", async
   expect(timeline.before).toBe("250");
   timeline.destroy();
 });
+
+test("a change event refreshes a user-resolved todo visible in an older page", async () => {
+  const old = { ...message(1), kind: "bot_reply" as const };
+  const closed = {
+    ...old,
+    todo: { state: "done" as const, by: "user" as const, at: old.created_at },
+  };
+  const reopened = { ...old, todo: { state: "open" as const } };
+  const latest = page([message(2)], "older");
+  vi.spyOn(testDevice.api, "getBotMessages")
+    .mockResolvedValueOnce(latest)
+    .mockResolvedValueOnce(page([closed], null))
+    .mockResolvedValueOnce({ ...latest, open_todo_count: 1 })
+    .mockResolvedValueOnce(page([reopened], null));
+  const timeline = new BotTimeline(testDevice, "bot");
+  timeline.refresh();
+  await waitFor(() => expect(timeline.entries).toHaveLength(1));
+  timeline.loadOlder();
+  await waitFor(() => expect(timeline.entries[0]).toEqual(closed));
+  timeline.setVisible([old.id]);
+  timeline.refresh();
+  await waitFor(() => expect(timeline.entries[0]).toEqual(reopened));
+  expect(timeline.openTodoCount).toBe(1);
+  timeline.destroy();
+});

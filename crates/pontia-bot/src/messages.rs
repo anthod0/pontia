@@ -1,3 +1,6 @@
+mod todos;
+pub use todos::{TodoAction, TodoList};
+
 use pontia_agent_control::queries::TimePage;
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -154,17 +157,6 @@ impl MessageService {
             resolved,
             already_resolved,
         })
-    }
-
-    pub async fn open_todos(&self, bot_id: &str) -> Result<Vec<BotMessage>> {
-        Ok(sqlx::query_as(
-            "SELECT m.*, '{\"state\":\"open\"}' AS todo FROM bot_messages m
-            JOIN bot_todos t ON t.message_id = m.id WHERE m.bot_id = ? AND t.state = 'open'
-            ORDER BY timeline_ms DESC, id DESC",
-        )
-        .bind(bot_id)
-        .fetch_all(&self.pool)
-        .await?)
     }
 
     pub(crate) async fn open_todo_count(&self, bot_id: &str) -> Result<i64> {

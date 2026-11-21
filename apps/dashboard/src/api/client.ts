@@ -120,8 +120,27 @@ export function createApi(device: DeviceRuntime) {
     return request(`${botPath(id)}/messages?${query}`, { signal });
   }
 
-  function getBotTodos(id: string, signal?: AbortSignal): Promise<{ open: BotMessage[] }> {
+  function getBotTodos(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<{ open: BotMessage[]; recently_resolved: BotMessage[] }> {
     return request(`${botPath(id)}/todos`, { signal });
+  }
+
+  async function changeBotTodo(
+    id: string,
+    messageId: string,
+    action: "resolve" | "reopen",
+  ): Promise<BotMessage> {
+    return (
+      await request<{ message: BotMessage }>(
+        `${botPath(id)}/todos/${encodeURIComponent(messageId)}/${action}`,
+        {
+          method: "POST",
+          retryNetworkErrors: false,
+        },
+      )
+    ).message;
   }
 
   function getBotMessageContext(
@@ -918,6 +937,7 @@ export function createApi(device: DeviceRuntime) {
     getBotMessages,
     getBotMessageContext,
     getBotTodos,
+    changeBotTodo,
     saveBot,
     getBotDeletionBlockers,
     deleteBot,

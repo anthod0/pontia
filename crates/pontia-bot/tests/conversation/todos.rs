@@ -58,7 +58,7 @@ async fn closing_todos_is_atomic_scoped_and_links_the_explanation() {
         assert_eq!(service.chat(a).await.unwrap().messages, before);
     }
     assert_eq!(
-        service.open_todos(a).await.unwrap(),
+        service.todos(a).await.unwrap().open,
         [second.clone(), first.clone()]
     );
     let mut close = reply(
@@ -71,7 +71,7 @@ async fn closing_todos_is_atomic_scoped_and_links_the_explanation() {
     let sent = service.send_to_user(close).await.unwrap();
     assert_eq!(sent.resolved, [first.id.clone(), second.id.clone()]);
     assert!(sent.already_resolved.is_empty());
-    assert!(service.open_todos(a).await.unwrap().is_empty());
+    assert!(service.todos(a).await.unwrap().open.is_empty());
     for original in [first, second] {
         let context = service
             .message_context(a, &original.id)
@@ -90,5 +90,94 @@ async fn closing_todos_is_atomic_scoped_and_links_the_explanation() {
                 .is_err()
         );
     }
-    assert_eq!(service.open_todos(&chats[1].0).await.unwrap(), [other]);
+    assert_eq!(service.todos(&chats[1].0).await.unwrap().open, [other]);
+}
+
+#[tokio::test]
+async fn user_todo_changes_notify_once_and_preserve_who_closed_it() {
+    use pontia_bot::messages::TodoAction::{Reopen, Resolve};
+    let (_root, pool, _client, _control, service) = fixture().await;
+    let bot = service
+        .records()
+        .create(bot_configuration("Planner", MODEL))
+        .await
+        .unwrap();
+    let id = &bot.bot_id;
+    service.send(id, "Plan").await.unwrap();
+    let session = service
+        .records()
+        .get(id)
+        .await
+        .unwrap()
+        .current_session_id
+        .unwrap();
+    let reply = |message, todo, resolve_todos| ReplyRequest {
+        session_id: session.clone(),
+        input: Reply {
+            message,
+            todo,
+            related_to: vec![],
+            resolve_todos,
+        },
+    };
+    let content = format!("One\n\t{}", "字".repeat(100));
+    let todo = service
+        .send_to_user(reply(content, true, vec![]))
+        .await
+        .unwrap()
+        .message
+        .id;
+    assert!(matches!(
+        service.change_todo("another-bot", &todo, Resolve).await,
+        Err(pontia_core::Error::NotFound(_))
+    ));
+    let (first, duplicate) = tokio::join!(
+        service.change_todo(id, &todo, Resolve),
+        service.change_todo(id, &todo, Resolve)
+    );
+    let first = first.unwrap();
+    assert_eq!(duplicate.unwrap(), first);
+    assert!(matches!(&first.todo, Some(Todo::Done { by, message_id: None, .. }) if by == "user"));
+    assert_eq!(service.todos(id).await.unwrap().recently_resolved, [first]);
+    let sent = service
+        .send_to_user(reply("Acknowledged".into(), false, vec![todo.clone()]))
+        .await
+        .unwrap();
+    assert_eq!(sent.already_resolved, [todo.as_str()]);
+    for _ in 0..2 {
+        assert_eq!(
+            service.change_todo(id, &todo, Reopen).await.unwrap().todo,
+            Some(Todo::Open)
+        );
+    }
+    assert!(
+        service
+            .todos(id)
+            .await
+            .unwrap()
+            .recently_resolved
+            .is_empty()
+    );
+    service
+        .send_to_user(reply("Resolved".into(), false, vec![todo.clone()]))
+        .await
+        .unwrap();
+    assert!(matches!(
+        service.change_todo(id, &todo, Reopen).await,
+        Err(pontia_core::Error::StateConflict(_))
+    ));
+    let notes: Vec<(String,String)> = sqlx::query_as("SELECT id, content FROM bot_notifications WHERE bot_id = ? AND id LIKE 'todo:%' ORDER BY created_at, id")
+        .bind(id).fetch_all(&pool).await.unwrap();
+    assert_eq!(notes.len(), 2);
+    for ((note, content), verb) in notes.iter().zip(["dismissed", "reopened"]) {
+        let uuid = note.strip_prefix(&format!("todo:{todo}:")).unwrap();
+        assert_eq!(uuid::Uuid::parse_str(uuid).unwrap().get_version_num(), 7);
+        assert_eq!(
+            content,
+            &format!(
+                "User {verb} todo message {todo}: \"One {}\"",
+                "字".repeat(76)
+            )
+        );
+    }
 }
