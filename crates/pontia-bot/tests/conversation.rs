@@ -1623,3 +1623,6 @@ mod status;
 
 #[path = "conversation/compaction.rs"]
 mod compaction;
+
+#[path = "conversation/quotes.rs"]
+mod quotes;

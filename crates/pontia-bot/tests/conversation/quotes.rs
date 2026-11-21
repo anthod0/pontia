@@ -1,0 +1,115 @@
+use super::*;
+
+const MESSAGE_ID: &str = "bmsg_0193a000-0000-7000-8000-000000000002";
+
+fn quoted(text: &str, excerpt: bool) -> String {
+    let flag = if excerpt { " excerpt=\"true\"" } else { "" };
+    format!(
+        "<user_quote message_id=\"{MESSAGE_ID}\" speaker=\"Bot\"{flag}>{text}</user_quote>\nExplain"
+    )
+}
+
+#[tokio::test]
+async fn new_quotes_are_capped_before_storage_and_bot_delivery() {
+    let (_root, _pool, client, _control, service) = fixture().await;
+    let bot = service
+        .records()
+        .create(bot_configuration("Bot", MODEL))
+        .await
+        .unwrap();
+    let cases = [
+        ("a".repeat(2000), "a".repeat(2000), false),
+        ("a".repeat(2001), format!("{}…", "a".repeat(2000)), true),
+        ("😀".repeat(2000), "😀".repeat(2000), false),
+        (
+            format!("{}😀x", "中".repeat(1999)),
+            format!("{}😀…", "中".repeat(1999)),
+            true,
+        ),
+        ("&amp;".repeat(2000), "&amp;".repeat(2000), false),
+        (
+            format!("{}&lt;x", "&amp;".repeat(1999)),
+            format!("{}&lt;…", "&amp;".repeat(1999)),
+            true,
+        ),
+        (
+            format!("{}&#x1F600;x", "a".repeat(1999)),
+            format!("{}&#x1F600;…", "a".repeat(1999)),
+            true,
+        ),
+    ];
+    for (original, expected, truncated) in cases {
+        for already_excerpt in [false, true] {
+            let expected = quoted(&expected, truncated || already_excerpt);
+            let message = service
+                .send(&bot.bot_id, &quoted(&original, already_excerpt))
+                .await
+                .unwrap();
+            assert_eq!(message.status, MessageStatus::Normal);
+            assert_eq!(message.content, expected);
+            assert_eq!(
+                service
+                    .chat(&bot.bot_id)
+                    .await
+                    .unwrap()
+                    .messages
+                    .last()
+                    .unwrap()
+                    .content,
+                expected
+            );
+            assert_eq!(
+                client.inputs.lock().unwrap().last().unwrap().input,
+                format!("Source: User\n\n{expected}")
+            );
+        }
+    }
+    let capped = quoted(&format!("{}…", "😀".repeat(2000)), true);
+    assert_eq!(
+        service.send(&bot.bot_id, &capped).await.unwrap().content,
+        capped
+    );
+}
+
+#[tokio::test]
+async fn file_quotes_and_plain_text_are_unchanged() {
+    let (_root, _pool, _client, _control, service) = fixture().await;
+    let bot = service
+        .records()
+        .create(bot_configuration("Bot", MODEL))
+        .await
+        .unwrap();
+    for content in [
+        "x".repeat(2100),
+        "<user_quote file_id=\"file_0193a000-0000-7000-8000-000000000001\" speaker=\"Bot\" path=\"/work/chart.png\">chart.png</user_quote>\nExplain".into(),
+        format!("Example:\n{}", quoted(&"a".repeat(2100), false)),
+        quoted(&"a".repeat(2100), false).replace("speaker=\"Bot\"", "speaker=\"Other\""),
+    ] {
+        assert_eq!(service.send(&bot.bot_id, &content).await.unwrap().content, content);
+    }
+}
+
+#[tokio::test]
+async fn historical_quotes_are_unchanged_when_read_or_retried() {
+    let (_root, pool, client, _control, service) = fixture().await;
+    let bot = service
+        .records()
+        .create(bot_configuration("Bot", MODEL))
+        .await
+        .unwrap();
+    let content = quoted(&"a".repeat(2100), false);
+    sqlx::query("INSERT INTO bot_messages (id, bot_id, kind, content, status) VALUES ('old', ?, 'user_input', ?, 'failed')")
+        .bind(&bot.bot_id).bind(&content).execute(&pool).await.unwrap();
+    assert_eq!(
+        service.chat(&bot.bot_id).await.unwrap().messages[0].content,
+        content
+    );
+    assert_eq!(
+        service.retry(&bot.bot_id, "old").await.unwrap().content,
+        content
+    );
+    assert_eq!(
+        client.inputs.lock().unwrap().last().unwrap().input,
+        format!("Source: User\n\n{content}")
+    );
+}

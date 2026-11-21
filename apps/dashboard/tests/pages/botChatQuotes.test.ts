@@ -317,6 +317,7 @@ test("opens the message menu from the keyboard and quotes with R", async () => {
   row.focus();
   await userEvent.keyboard("r");
   expect(screen.getByRole("button", { name: /^Remove quote/ })).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole("textbox")).toHaveFocus());
   row.focus();
   await userEvent.keyboard("{Shift>}{F10}{/Shift}");
   expect(within(await screen.findByRole("menu")).getAllByRole("menuitem").length).toBeGreaterThan(
@@ -449,5 +450,49 @@ test.each([false, true])(
         `<user_quote file_id="${selected.file_id}" speaker="Bot" path="${selected.path}">${selected.name}</user_quote>\nThis one`,
       ),
     );
+  },
+);
+
+test.each([false, true])(
+  "previews and sends the same capped quote (restored draft: %s)",
+  async (restore) => {
+    const original = "中".repeat(1999) + "😀x";
+    const expected = "中".repeat(1999) + "😀…";
+    const entries: BotEntry[] = [message(1, "bot_reply", original)];
+    serve(entries);
+    const send = sent().mockImplementation(async (_bot, content) => {
+      const result = message(99, "user_input", content);
+      entries.push(result);
+      return result;
+    });
+    if (restore) {
+      localStorage.setItem(
+        `pontia:bot-quote:v1:${JSON.stringify([testDevice.id, bot.bot_id])}`,
+        JSON.stringify({
+          kind: "message",
+          messageId: id(1),
+          speaker: "Bot",
+          text: original,
+          excerpt: false,
+        }),
+      );
+    }
+    render(BotChatPage, { botId: bot.bot_id });
+    await screen.findByText(original);
+    if (!restore) await quoteFromMenu(rows()[0]);
+    const pending = document.querySelector("[data-bot-pending-quote]")!;
+    expect(pending.querySelector("span")!.textContent).toBe(expected);
+    await userEvent.type(screen.getByRole("textbox"), "Explain");
+    await fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        bot.bot_id,
+        `<user_quote message_id="${id(1)}" speaker="Bot" excerpt="true">${expected}</user_quote>\nExplain`,
+      ),
+    );
+    const sentQuote = await screen.findByRole("button", {
+      name: `Quote from Helper Bot: ${expected}`,
+    });
+    expect(sentQuote.querySelector("span")!.textContent).toBe(expected);
   },
 );

@@ -566,3 +566,42 @@ async fn helper_api_requires_title_and_send_to_user_rejects_working_on() {
         .unwrap();
     assert_eq!(before, after);
 }
+
+#[tokio::test]
+async fn new_message_requests_cap_quotes_and_return_the_stored_excerpt() {
+    let app = fixture().await;
+    let id = "bmsg_0193a000-0000-7000-8000-000000000002";
+    for (text, expected, excerpt) in [
+        ("a".repeat(2000), "a".repeat(2000), ""),
+        (
+            "a".repeat(2001),
+            format!("{}…", "a".repeat(2000)),
+            " excerpt=\"true\"",
+        ),
+        (
+            "😀".repeat(2001),
+            format!("{}…", "😀".repeat(2000)),
+            " excerpt=\"true\"",
+        ),
+    ] {
+        let content =
+            format!("<user_quote message_id=\"{id}\" speaker=\"Bot\">{text}</user_quote>\nExplain");
+        let expected = format!(
+            "<user_quote message_id=\"{id}\" speaker=\"Bot\"{excerpt}>{expected}</user_quote>\nExplain"
+        );
+        let (status, body) = post_json(
+            app.state.clone(),
+            "/api/v1/bots/a/messages",
+            json!({"content": content}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["data"]["message"]["content"], expected);
+        let stored: String = sqlx::query_scalar("SELECT content FROM bot_messages WHERE id = ?")
+            .bind(body["data"]["message"]["id"].as_str().unwrap())
+            .fetch_one(&app.db)
+            .await
+            .unwrap();
+        assert_eq!(stored, expected);
+    }
+}

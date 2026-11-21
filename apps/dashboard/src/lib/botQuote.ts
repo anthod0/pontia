@@ -6,6 +6,16 @@ export type BotQuote =
   | { kind: "message"; messageId: string; speaker: QuoteSpeaker; text: string; excerpt: boolean }
   | { kind: "file"; fileId: string; path: string; name: string };
 
+export const QUOTE_CHARACTER_LIMIT = 2000;
+
+export function limitQuote(quote: BotQuote): BotQuote {
+  if (quote.kind !== "message") return quote;
+  const characters = Array.from(quote.text);
+  return characters.length > QUOTE_CHARACTER_LIMIT
+    ? { ...quote, text: characters.slice(0, QUOTE_CHARACTER_LIMIT).join("") + "…", excerpt: true }
+    : quote;
+}
+
 const open = "<user_quote ";
 const close = "</user_quote>";
 // Bot message and shared file IDs are a prefix plus a lowercase UUIDv7.
@@ -36,6 +46,7 @@ export function quoteSummary(quote: BotQuote): string {
 
 /** Places the quote element on its own line before the user's text. */
 export function quotedMessage(quote: BotQuote, text: string): string {
+  quote = limitQuote(quote);
   const attributes =
     quote.kind === "message"
       ? [
@@ -126,11 +137,11 @@ export function entryQuote(
       parseUploadMessage(entry.content)
         .files.map((file) => file.name)
         .join("\n"));
-  return {
+  return limitQuote({
     kind: "message",
     messageId: entry.id,
     speaker: entry.kind === "user_input" ? "User" : "Bot",
     text,
     excerpt: excerpt !== null,
-  };
+  });
 }
