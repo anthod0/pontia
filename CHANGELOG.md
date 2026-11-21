@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bot, memory retrieval, and dreaming Sessions no longer automatically load user skills. Ordinary helpers retain their existing skill loading.
+
 ## [0.8.4] - 2026-11-21
 
 ### Added

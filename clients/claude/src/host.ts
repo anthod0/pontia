@@ -7,6 +7,7 @@ export interface ExecutionPolicy {
   tools: string[] | null;
   disabled_tools: string[];
   disable_mcp: boolean;
+  disable_skills: boolean;
   yolo: boolean;
 }
 
@@ -109,6 +110,7 @@ export class Host {
           : {}),
         ...(tools ? { tools } : {}),
         ...(policy?.disable_mcp ? { strictMcpConfig: true, mcpServers: {} } : {}),
+        ...(policy?.disable_skills ? { extraArgs: { "disable-slash-commands": null } } : {}),
         settingSources: ["user", "project", "local"],
         settings: { env: { PONTIA_SESSION_ID: this.options.session_id } },
         disallowedTools: [

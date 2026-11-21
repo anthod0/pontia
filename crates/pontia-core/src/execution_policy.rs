@@ -9,6 +9,8 @@ pub struct ExecutionPolicy {
     pub disabled_tools: Vec<String>,
     /// Disable MCP connections and tools.
     pub disable_mcp: bool,
+    /// Disable automatic skill instructions in the Session context.
+    pub disable_skills: bool,
     /// Bypass client approvals and client sandboxing.
     pub yolo: bool,
 }

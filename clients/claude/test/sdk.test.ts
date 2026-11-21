@@ -23,6 +23,12 @@ test(
     const temporary = join(testRoot, "tmp");
     await Promise.all([cwd, config, temporary].map((path) => mkdir(path)));
     await mkdir(join(cwd, ".claude"));
+    const skillDirectory = join(config, "skills", "catalog-probe");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      join(skillDirectory, "SKILL.md"),
+      "---\nname: catalog-probe\ndescription: PONTIA_SKILL_CATALOG_PROBE\n---\nReport the probe when asked.\n",
+    );
     for (const path of [
       join(config, "settings.json"),
       join(cwd, ".claude", "settings.json"),
@@ -34,8 +40,12 @@ test(
       );
     }
     await writeFile(join(cwd, "input.txt"), "isolated tool result marker\n");
-    const requests: Array<{ messages: unknown; model: string; tools: Array<{ name: string }> }> =
-      [];
+    const requests: Array<{
+      messages: unknown;
+      system: unknown;
+      model: string;
+      tools: Array<{ name: string }>;
+    }> = [];
     const server = createServer(async (request, response) => {
       try {
         const chunks: Buffer[] = [];
@@ -50,7 +60,12 @@ test(
           response.writeHead(404).end();
           return;
         }
-        requests.push({ messages: body.messages, model: body.model, tools: body.tools ?? [] });
+        requests.push({
+          messages: body.messages,
+          system: body.system,
+          model: body.model,
+          tools: body.tools ?? [],
+        });
         const message = {
           id: `message_${requests.length}`,
           type: "message",
@@ -321,9 +336,10 @@ test(
         await writeFile(path, saved);
       }
       const policy: ExecutionPolicy = {
-        tools: ["Read", "Bash", "Glob", "Write"],
+        tools: ["Read", "Bash", "Glob", "Write", "Skill"],
         disabled_tools: ["Write", "Agent"],
         disable_mcp: true,
+        disable_skills: true,
         yolo: true,
       };
       const restricted = create(undefined, policy);
@@ -332,7 +348,9 @@ test(
       await restricted.close();
       const resumedRestricted = create(restrictedNative, policy);
       await finish(resumedRestricted, randomUUID(), "Denied tool after resume under YOLO");
+      assert.ok(JSON.stringify(requests[0]).includes("PONTIA_SKILL_CATALOG_PROBE"));
       for (const index of [10, 12]) {
+        assert.ok(!JSON.stringify(requests[index]).includes("PONTIA_SKILL_CATALOG_PROBE"));
         const names = requests[index]!.tools.map((tool) => tool.name);
         assert.ok(names.includes("Glob"));
         assert.ok(!names.includes("Write"));

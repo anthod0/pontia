@@ -124,6 +124,10 @@ fn execution_policy_is_applied_on_initial_launch_and_resume_without_accumulating
             vec!["--exclude-tools", "edit,write"],
         ),
         (serde_json::json!({"disable_mcp":true}), vec!["--no-mcp"]),
+        (
+            serde_json::json!({"disable_skills":true}),
+            vec!["--no-skills"],
+        ),
         (serde_json::json!({}), vec![]),
     ] {
         let mut runtime = launch_request(

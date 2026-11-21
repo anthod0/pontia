@@ -40,6 +40,7 @@ for (const tools of [null, [], ["Read", "Bash", "Glob"]] as const) {
           tools: tools === null ? null : [...tools],
           disabled_tools: [],
           disable_mcp: false,
+          disable_skills: false,
           yolo: true,
         },
       },
@@ -81,6 +82,7 @@ for (const disableMcp of [false, true]) {
           tools: ["Read", "Write", "Bash"],
           disabled_tools: ["Write", "Agent", "Bash(git push *)", "mcp__remote__*"],
           disable_mcp: disableMcp,
+          disable_skills: false,
           yolo: true,
         },
       },
@@ -103,6 +105,37 @@ for (const disableMcp of [false, true]) {
     assert.equal(options.strictMcpConfig, disableMcp ? true : undefined);
     assert.deepEqual(options.mcpServers, disableMcp ? {} : undefined);
   });
+}
+
+for (const disableSkills of [false, true]) {
+  for (const resume of [undefined, native]) {
+    test(`skill loading policy reaches the SDK (${disableSkills}, resume=${!!resume})`, (t) => {
+      const fixture = sdk();
+      const host = new Host(
+        {
+          session_id: "policy-session",
+          cwd: "/unused-fixture-workspace",
+          resume,
+          execution_policy: {
+            tools: null,
+            disabled_tools: [],
+            disable_mcp: false,
+            disable_skills: disableSkills,
+            yolo: false,
+          },
+        },
+        () => {},
+        fixture.factory,
+      );
+      t.after(() => host.close());
+      host.submit(first, "task");
+      assert.deepEqual(
+        fixture.options!.extraArgs,
+        disableSkills ? { "disable-slash-commands": null } : undefined,
+      );
+      assert.deepEqual(fixture.options!.settingSources, ["user", "project", "local"]);
+    });
+  }
 }
 
 test("authentication retries are visible without fabricating a Turn and clear when SDK execution recovers", async (t) => {

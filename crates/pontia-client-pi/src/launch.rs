@@ -64,6 +64,9 @@ impl ClientLauncher for PiLauncher {
         if runtime.execution_policy.disable_mcp {
             policy_args.push_str(" --no-mcp");
         }
+        if runtime.execution_policy.disable_skills {
+            policy_args.push_str(" --no-skills");
+        }
         let session_args = match request.native_session_key {
             Some(key) => {
                 self.validate_resume(key, request.native_session_file)?;
