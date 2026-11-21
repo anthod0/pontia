@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Temporary helpers automatically restore and reactivate `~/Pontia` if its Workspace was removed or disabled, without restarting the Bot.
 - Bot chat loading placeholders use the same gray surface for user and Bot messages.
 
 ## [0.8.5] - 2026-11-21
