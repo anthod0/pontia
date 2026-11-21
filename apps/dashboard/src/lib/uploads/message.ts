@@ -1,6 +1,6 @@
 export type UploadedFile = { path: string; name: string };
 
-function escapeXml(value: string): string {
+export function escapeXml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll('"', "&quot;")

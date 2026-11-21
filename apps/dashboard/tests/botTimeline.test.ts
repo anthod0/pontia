@@ -148,3 +148,55 @@ test("refreshes the chat and shared sidebar status through processing, working, 
   }
   timeline.destroy();
 });
+
+function history(total: number) {
+  return vi
+    .spyOn(testDevice.api, "getBotMessages")
+    .mockImplementation(async (_id, { before, around }) => {
+      if (around !== undefined) {
+        if (Number(around) >= total)
+          throw new ApiError("Bot timeline entry not found", "not_found", 404);
+        return page([message(Number(around))], null);
+      }
+      const end = before ? Number(before) : total;
+      const start = Math.max(0, end - 50);
+      return page(
+        Array.from({ length: end - start }, (_, i) => message(start + i)),
+        start ? String(start) : null,
+      );
+    });
+}
+
+test("reveals an old entry by loading every page back to it", async () => {
+  history(300);
+  const timeline = new BotTimeline(testDevice, "bot");
+  timeline.refresh();
+  await waitFor(() => expect(timeline.entries).toHaveLength(50));
+  await expect(timeline.reveal("120")).resolves.toBe(true);
+  expect(timeline.entries.map((row) => row.id)).toEqual(
+    Array.from({ length: 200 }, (_, i) => String(i + 100)),
+  );
+  timeline.destroy();
+});
+
+test("reveals a loaded entry without fetching", async () => {
+  const fetch = history(300);
+  const timeline = new BotTimeline(testDevice, "bot");
+  timeline.refresh();
+  await waitFor(() => expect(timeline.entries).toHaveLength(50));
+  const calls = fetch.mock.calls.length;
+  await expect(timeline.reveal("280")).resolves.toBe(true);
+  expect(fetch).toHaveBeenCalledTimes(calls);
+  timeline.destroy();
+});
+
+test("reports an entry that does not exist without loading older history", async () => {
+  history(300);
+  const timeline = new BotTimeline(testDevice, "bot");
+  timeline.refresh();
+  await waitFor(() => expect(timeline.entries).toHaveLength(50));
+  await expect(timeline.reveal("999")).resolves.toBe(false);
+  expect(timeline.entries).toHaveLength(50);
+  expect(timeline.before).toBe("250");
+  timeline.destroy();
+});

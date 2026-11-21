@@ -44,6 +44,11 @@ export class BotTimeline {
   private olderRequested = false;
   private verifyRequested = false;
   private live = new Map<string, BotMessage>();
+  private revealRequest: {
+    id: string;
+    resolve: (found: boolean) => void;
+    reject: (error: unknown) => void;
+  } | null = null;
 
   constructor(
     private device: DeviceRuntime,
@@ -66,6 +71,16 @@ export class BotTimeline {
     void this.drain();
   }
 
+  /** Loads history back to an entry. Resolves false when this Bot has no such entry. */
+  reveal(id: string): Promise<boolean> {
+    if (this.known.has(id)) return Promise.resolve(true);
+    return new Promise((resolve, reject) => {
+      this.revealRequest?.resolve(false);
+      this.revealRequest = { id, resolve, reject };
+      void this.drain();
+    });
+  }
+
   setVisible(ids: string[]) {
     this.visible = ids;
     if (ids.some((id) => this.stale.has(id)) && !this.refreshError) {
@@ -80,7 +95,7 @@ export class BotTimeline {
     this.refresh();
   }
 
-  private async page(locator: { before?: string; around?: string } = {}) {
+  private async page(locator: { before?: string; around?: string; limit?: number } = {}) {
     const signal = this.controller.signal;
     const page = await this.device.api.getBotMessages(this.id, locator, signal);
     signal.throwIfAborted();
@@ -114,6 +129,22 @@ export class BotTimeline {
     } else {
       this.entries = [...existing, ...added].sort(compareBotEntries);
     }
+  }
+
+  // Older pages are merged in order so the loaded history stays contiguous.
+  private async loadThrough(id: string): Promise<boolean> {
+    try {
+      await this.page({ around: id, limit: 1 });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return false;
+      throw error;
+    }
+    while (!this.known.has(id) && this.before) {
+      const page = await this.page({ before: this.before, limit: 100 });
+      this.merge(page.entries);
+      this.before = page.next_before;
+    }
+    return this.known.has(id);
   }
 
   private async verifyVisible() {
@@ -185,13 +216,15 @@ export class BotTimeline {
     this.running = true;
     try {
       while (
-        (this.pending || this.olderRequested || this.verifyRequested) &&
+        (this.pending || this.olderRequested || this.verifyRequested || this.revealRequest) &&
         !this.controller.signal.aborted
       ) {
         this.live.clear();
         const older = this.olderRequested && this.pending !== "reset";
         const refresh = older ? null : this.pending;
+        const reveal = older || refresh ? null : this.revealRequest;
         if (refresh) this.pending = null;
+        if (reveal) this.revealRequest = null;
         try {
           if (refresh) {
             await this.sync(refresh === "reset");
@@ -203,6 +236,8 @@ export class BotTimeline {
               this.merge(page.entries);
               this.before = page.next_before;
             }
+          } else if (reveal) {
+            reveal.resolve(await this.loadThrough(reveal.id));
           } else {
             this.verifyRequested = false;
             await this.verifyVisible();
@@ -211,6 +246,9 @@ export class BotTimeline {
           if (this.controller.signal.aborted) return;
           if (error instanceof ApiError && error.code === "bot_timeline_reset") {
             this.pending = "reset";
+            if (reveal) this.revealRequest ??= reveal;
+          } else if (reveal) {
+            reveal.reject(error);
           } else {
             const message = error instanceof Error ? error.message : String(error);
             if (older) this.historyError = message;

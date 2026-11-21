@@ -52,6 +52,12 @@ An agent can share a file from its Session by running `pontia send-file PATH`. T
 
 When a Bot shares a file, it appears in the Bot chat with its type and size. Images are shown inline and open full size when clicked; click a text or code file to preview it. Click the download button to save any file.
 
+## Quote a Bot chat message
+
+In a Bot chat, right-click a message or shared file and choose **Quote**, or select part of a message and choose **Quote** above the selection. On a phone, press and hold a message; the menu also offers **Copy** and **Select text**. Shift+right-click opens the browser's own menu.
+
+The quote appears above the composer; click **×** to remove it. Quoting another message replaces it, and a message needs text to be sent with a quote. The Bot receives the full quoted text. Click a quote in a sent message to scroll back to the original, even when it is in older history.
+
 ## Chat commands
 
 Type `/` in the composer to see commands available in the current context:

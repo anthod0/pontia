@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte'
+  import { onDestroy, onMount, tick, untrack } from 'svelte'
+  import { toast } from 'svelte-sonner'
   import { BotTimeline } from '$lib/botTimeline.svelte'
   import BotMessageFeed from '../components/bots/BotMessageFeed.svelte'
   import { t } from '$lib/i18n'
@@ -13,7 +14,11 @@
   import { openBotChatStream } from '../services/botChatStream'
   import BotAvatar from '../components/bots/BotAvatar.svelte'
   import BotChatSkeleton from '../components/bots/BotChatSkeleton.svelte'
-  import { botBubbleClass, userBubbleClass } from '../components/bots/messageBubble'
+  import { botBubbleClass, highlightableClass, userBubbleClass } from '../components/bots/messageBubble'
+  import BotMessageActions from '../components/bots/BotMessageActions.svelte'
+  import BotQuoteBlock from '../components/bots/BotQuoteBlock.svelte'
+  import { parseQuotedMessage, quoteId, quotedMessage, type BotQuote } from '$lib/botQuote'
+  import { loadQuoteDraft, saveQuoteDraft } from '$lib/botQuoteDraft'
 
   let { botId }: { botId: string } = $props()
   const device = useDeviceRuntime()
@@ -24,6 +29,47 @@
   let actionError = $state('')
   let retrying = $state<string[]>([])
   let feed = $state<BotMessageFeed>()
+  let feedRoot = $state<HTMLElement>()
+  let composer = $state<MessageComposer>()
+  let quote = $state<BotQuote | null>(loadQuoteDraft(device.id, untrack(() => botId)))
+  let selectableId = $state<string | null>(null)
+  let highlighted = $state<string | null>(null)
+  let jumping = $state<string | null>(null)
+  let missingQuotes = $state<string[]>([])
+  let highlightTimer: ReturnType<typeof setTimeout> | undefined
+  onDestroy(() => clearTimeout(highlightTimer))
+
+  function setQuote(next: BotQuote | null) {
+    quote = next
+    saveQuoteDraft(device.id, botId, next)
+  }
+
+  async function addQuote(next: BotQuote) {
+    setQuote(next)
+    await tick()
+    composer?.focusInput()
+  }
+
+  async function jumpTo(id: string) {
+    if (jumping) return
+    jumping = id
+    try {
+      if (!(await timeline.reveal(id))) {
+        missingQuotes = [...missingQuotes, id]
+        toast.error($t('bots.quoteMissing'))
+        return
+      }
+      await tick()
+      feed?.scrollToEntry(id)
+      highlighted = id
+      clearTimeout(highlightTimer)
+      highlightTimer = setTimeout(() => { highlighted = null }, 1500)
+    } catch (failure) {
+      toast.error(failure instanceof Error ? failure.message : String(failure))
+    } finally {
+      jumping = null
+    }
+  }
 
   onMount(() => {
     const stream = openBotChatStream(device, botId, update => {
@@ -48,11 +94,13 @@
   })
   async function send(content: string): Promise<boolean> {
     const text = draft
+    const sentQuote = quote
     draft = ''
     actionError = ''
     feed?.followSend()
     try {
       timeline.message(await device.api.sendBotMessage(botId, content))
+      if (quote === sentQuote) setQuote(null)
       return true
     } catch (failure) {
       draft = draft ? text + '\n\n' + draft : text
@@ -60,6 +108,16 @@
       timeline.refresh()
       return false
     }
+  }
+
+  // Message text stays selectable with a mouse; on touch it becomes selectable from the message menu.
+  const quotableProps = { 'data-bot-quotable': '', tabindex: 0, role: 'article' } as const
+  function quotableClass(id: string) {
+    return selectableId === id ? '' : 'pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]'
+  }
+
+  function quoteSpeaker(value: BotQuote) {
+    return value.kind === 'message' && value.speaker === 'User' ? $t('bots.you') : timeline.bot?.name ?? ''
   }
 
   async function retry(id: string) {
@@ -86,10 +144,12 @@
 {#if timeline.bot}
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12" aria-label={timeline.bot.name}>
-    <BotMessageFeed bind:this={feed} {timeline} {typing}>
+    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:selectableId onquote={quote => void addQuote(quote)} />
+    <BotMessageFeed bind:this={feed} bind:root={feedRoot} {timeline} {typing} {highlighted}>
       {#snippet row(entry)}
         {#if 'content' in entry}
-          {@const parts = entry.kind === 'user_input' ? parseUploadMessage(entry.content) : { text: entry.content, files: [] }}
+          {@const uploads = entry.kind === 'user_input' ? parseUploadMessage(entry.content) : { text: entry.content, files: [] }}
+          {@const parts = entry.kind === 'user_input' ? { ...parseQuotedMessage(uploads.text), files: uploads.files } : { ...uploads, quote: null }}
           <div class={['flex', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']}>
             <div class="max-w-[90%] min-w-0 space-y-2">
               {#if parts.files.length}
@@ -104,10 +164,18 @@
                     markdown
                     sessionId={timeline.fileLinkSession?.session_id}
                     linkBase={timeline.fileLinkSession?.workspace ? `${timeline.fileLinkSession.workspace.replace(/\/+$/, '')}/` : null}
-                    class="size-auto {botBubbleClass} break-words [&_code]:bg-background [&_th]:bg-background [&_[data-code-block]]:bg-background"
+                    class="size-auto {botBubbleClass} {highlightableClass} {quotableClass(entry.id)} break-words [&_code]:bg-background [&_th]:bg-background [&_[data-code-block]]:bg-background"
+                    {...quotableProps}
+                    data-bot-quote-source
                   />
                 {:else}
-                  <p class="{userBubbleClass} text-sm leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]">{parts.text}</p>
+                  <div class="{userBubbleClass} {highlightableClass} {quotableClass(entry.id)} text-sm leading-6" {...quotableProps}>
+                    {#if parts.quote}
+                      {@const target = quoteId(parts.quote)}
+                      <BotQuoteBlock quote={parts.quote} speaker={quoteSpeaker(parts.quote)} missing={missingQuotes.includes(target)} busy={jumping === target} onjump={() => void jumpTo(target)} />
+                    {/if}
+                    <p class="whitespace-pre-wrap [overflow-wrap:anywhere]" data-bot-quote-source>{parts.text}</p>
+                  </div>
                 {/if}
               {/if}
               {#if entry.status === 'failed'}
@@ -120,7 +188,9 @@
           </div>
         {:else if entry.kind === 'shared_file'}
           <div class="max-w-[90%]">
-            <FileBubble file={entry.file} sessionId={entry.session_id} />
+            <div class="w-fit max-w-full rounded-2xl {highlightableClass} {quotableClass(entry.id)}" {...quotableProps}>
+              <FileBubble file={entry.file} sessionId={entry.session_id} />
+            </div>
           </div>
         {:else}
           <p class="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
@@ -146,7 +216,12 @@
       {/if}
       {#if timeline.refreshError}{@render refreshFailure()}{/if}
       {#if actionError}<p role="alert" class="mb-2 text-sm text-destructive">{actionError}</p>{/if}
-      <MessageComposer draftId={`bot:${botId}`} bind:value={draft} placeholder={$t('bots.message')} fullscreen onSubmit={send} />
+      <div aria-live="polite">
+        {#if quote}<BotQuoteBlock {quote} speaker={quoteSpeaker(quote)} onremove={() => setQuote(null)} />{/if}
+      </div>
+      <MessageComposer bind:this={composer} draftId={`bot:${botId}`} bind:value={draft} placeholder={$t('bots.message')} fullscreen
+        submitDisabled={quote !== null && !draft.trim()}
+        formatText={text => quote ? quotedMessage(quote, text) : text} onSubmit={send} />
     </div>
   </section>
 {:else if timeline.refreshError}
