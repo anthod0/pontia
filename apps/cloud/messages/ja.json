@@ -224,8 +224,6 @@
   "deploy_expires": "このコマンドは {time} に期限切れになります。",
   "deploy_custom_port": "カスタムポート",
   "deploy_port_invalid": "ブラウザーやコントロールプレーンでブロックされていない、1〜65535 の整数を入力してください。推奨: 8443。",
-  "deploy_copied": "コピーしました",
-  "deploy_copy": "コマンドをコピー",
   "deploy_restore_default": "デフォルトのデプロイに戻す",
   "deploy_use_alternative": "ポート 80 や 443 を使えない場合は、代替のデプロイを使用してください",
   "deploy_retry_heading": "初期化が完了していませんか？",

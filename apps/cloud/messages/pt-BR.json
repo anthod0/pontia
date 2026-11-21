@@ -224,8 +224,6 @@
   "deploy_expires": "Este comando expira às {time}.",
   "deploy_custom_port": "Porta personalizada",
   "deploy_port_invalid": "Informe um número inteiro de 1 a 65535 que não seja bloqueado pelos navegadores nem pelo plano de controle. Recomendado: 8443.",
-  "deploy_copied": "Copiado",
-  "deploy_copy": "Copiar comando",
   "deploy_restore_default": "Restaurar implantação padrão",
   "deploy_use_alternative": "Não pode usar a porta 80 ou 443? Use uma implantação alternativa",
   "deploy_retry_heading": "Inicialização incompleta?",

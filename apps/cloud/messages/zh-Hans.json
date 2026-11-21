@@ -224,8 +224,6 @@
   "deploy_expires": "此命令将于 {time} 过期。",
   "deploy_custom_port": "自定义端口",
   "deploy_port_invalid": "请输入 1 到 65535 之间、未被浏览器或控制平面屏蔽的整数。推荐：8443。",
-  "deploy_copied": "已复制",
-  "deploy_copy": "复制命令",
   "deploy_restore_default": "恢复默认部署",
   "deploy_use_alternative": "无法使用 80 或 443 端口？使用替代部署方式",
   "deploy_retry_heading": "初始化未完成？",

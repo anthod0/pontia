@@ -1,9 +1,9 @@
 <script lang="ts">
-  import CheckIcon from "phosphor-svelte/lib/CheckIcon";
-  import CopyIcon from "phosphor-svelte/lib/CopyIcon";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { addCodeCopyButtons } from "$lib/code-copy";
   import { deploymentModeCommand } from "$lib/edge-deployment-command";
+  import "$lib/styles/article.css";
   import { m } from "$lib/paraglide/messages";
   import { getLocale, localizeHref } from "$lib/paraglide/runtime";
   import type { ActionData } from "./$types";
@@ -11,17 +11,9 @@
   let { form }: { form: ActionData } = $props();
   let mode = $state<"default" | "custom">("default");
   let port = $state<number | undefined>(8443);
-  let copiedCommand = $state<string | null>(null);
   let command = $derived(
     form?.deployment ? deploymentModeCommand(form.deployment.command, mode, port) : null,
   );
-
-  async function copyCommand() {
-    if (!command) return;
-    const copied = command;
-    await navigator.clipboard.writeText(copied);
-    copiedCommand = copied;
-  }
 </script>
 
 <svelte:head>
@@ -59,16 +51,14 @@
       </div>
 
       {#if command}
-        <pre><code>{command}</code></pre>
+        <div class="article-content" {@attach addCodeCopyButtons}>
+          <pre><code>{command}</code></pre>
+        </div>
       {:else}
         <p class="auth-error" role="alert">
           {m.deploy_port_invalid()}
         </p>
       {/if}
-      <Button type="button" disabled={!command} onclick={copyCommand}>
-        {#if command && copiedCommand === command}<CheckIcon />{:else}<CopyIcon />{/if}
-        {command && copiedCommand === command ? m.deploy_copied() : m.deploy_copy()}
-      </Button>
       <div class="alternative-action">
         <Button
           type="button"
@@ -85,7 +75,9 @@
       <div class="retry-help">
         <h3>{m.deploy_retry_heading()}</h3>
         <p>{m.deploy_retry_text()}</p>
-        <pre><code>sudo pontia-edge retry</code></pre>
+        <div class="article-content" {@attach addCodeCopyButtons}>
+          <pre><code>sudo pontia-edge retry</code></pre>
+        </div>
       </div>
     </section>
   {:else if !form?.error}
@@ -141,19 +133,5 @@
   .retry-help p {
     color: var(--muted-foreground);
     font-size: 14px;
-  }
-
-  pre {
-    background: var(--muted);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    margin-block: 16px;
-    overflow-x: auto;
-    padding: 16px;
-    white-space: pre;
-  }
-
-  code {
-    overflow-wrap: anywhere;
   }
 </style>
