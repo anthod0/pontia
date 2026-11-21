@@ -58,11 +58,21 @@ pub(crate) async fn select(
     events: &EventIngestService,
     session: &str,
     model: &str,
+    resuming: bool,
 ) -> Result<()> {
     let state = peer.state.lock().await;
-    let (option, select) = model_option(&state.config_options).ok_or_else(|| {
-        Error::CapabilityUnavailable("ACP Agent did not provide model options".into())
-    })?;
+    let Some((option, select)) = model_option(&state.config_options) else {
+        // An Agent may restore its own model without offering a selector on load.
+        if resuming {
+            return Ok(());
+        }
+        return Err(Error::CapabilityUnavailable(
+            "ACP Agent did not provide model options".into(),
+        ));
+    };
+    if resuming && state.current_model.as_deref() == Some(model) {
+        return Ok(());
+    }
     if !values(select).any(|value| value.value.to_string() == model) {
         return Err(Error::Domain(format!("ACP model is unavailable: {model}")));
     }
@@ -124,19 +134,29 @@ pub(crate) async fn replace(
     options: Vec<SessionConfigOption>,
 ) -> Result<()> {
     let current = model_option(&options).map(|(_, select)| select.current_value.to_string());
-    if let Some(model) = &current
+    if state.ready
+        && let Some(model) = &current
         && state.current_model.as_ref() != Some(model)
     {
-        events
-            .report_client_fact(
-                session,
-                Some(runtime),
-                EventType::SessionModelUpdated,
-                json!({"model":model}),
-            )
-            .await?;
+        report(events, session, runtime, model).await?;
     }
     state.current_model = current;
     state.config_options = options;
     Ok(())
+}
+
+pub(crate) async fn report(
+    events: &EventIngestService,
+    session: &str,
+    runtime: &str,
+    model: &str,
+) -> Result<()> {
+    events
+        .report_client_fact(
+            session,
+            Some(runtime),
+            EventType::SessionModelUpdated,
+            json!({"model":model}),
+        )
+        .await
 }

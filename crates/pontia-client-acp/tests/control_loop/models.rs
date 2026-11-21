@@ -214,6 +214,66 @@ async fn selected_model_is_applied_before_the_first_prompt_and_preserved_on_resu
 }
 
 #[tokio::test]
+async fn resumed_prompt_uses_the_saved_model_when_load_reports_a_different_default() {
+    let h = Harness::new(&[("ACP_MODELS", "flat")]).await;
+    let session = create_with_model(&h, "deep").await.unwrap();
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    std::fs::write(h.root.path().join("model.txt"), "fast").unwrap();
+
+    h.app
+        .session_commands()
+        .resume_session(&session, h.root.path())
+        .await
+        .unwrap();
+    let turn = h
+        .app
+        .turn_commands()
+        .create_and_dispatch_turn(&session, "end_turn".into(), json!({}))
+        .await
+        .unwrap()
+        .unwrap();
+    h.release("update-1");
+    h.release("release-1");
+    h.wait_turn(&session, &turn.turn_id, "completed").await;
+    assert!(h.wire().iter().any(|frame| frame["prompt_model"] == "deep"));
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn rejected_model_restore_keeps_the_previous_model_for_retry() {
+    let h = Harness::new(&[("ACP_MODELS", "flat"), ("ACP_REJECT_MODEL", "1")]).await;
+    let model = h.root.path().join("model.txt");
+    std::fs::write(&model, "deep").unwrap();
+    let session = h.create("first").await.unwrap();
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    std::fs::write(model, "fast").unwrap();
+
+    let result = h
+        .app
+        .session_commands()
+        .resume_session(&session, h.root.path())
+        .await;
+    assert!(result.is_err());
+    let view = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(view.model.as_deref(), Some("deep"));
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn unavailable_rejected_or_ignored_models_fail_session_startup() {
     for (flags, selected) in [
         (vec![("ACP_MODELS", "flat")], "missing"),

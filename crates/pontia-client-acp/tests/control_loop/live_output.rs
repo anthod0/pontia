@@ -56,6 +56,61 @@ fn tool<'a>(snapshot: &'a Value, id: &str) -> &'a Value {
 }
 
 #[tokio::test]
+async fn usage_reports_update_the_session_without_starting_a_turn() {
+    use pontia_agent_control::ContextUsageCapability;
+
+    let (h, session, turn) = start(vec![
+        vec![json!({"sessionId":"wrong", "update":{"sessionUpdate":"usage_update","used":1,"size":2}})],
+        vec![notification(json!({"sessionUpdate":"usage_update","used":32_000,"size":128_000,
+            "cost":{"amount":0.01,"currency":"USD"}}))],
+        vec![notification(json!({"sessionUpdate":"usage_update","used":80_000,"size":64_000})),
+            notification(json!({"sessionUpdate":"usage_update","used":1,"size":0}))],
+    ]).await;
+    step(&h, 0).await;
+    let view = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(view.context_usage, None);
+    assert_eq!(
+        view.capabilities.context_usage,
+        ContextUsageCapability::Unsupported
+    );
+
+    for (index, used, max, remaining, ratio) in [
+        (1, 32_000, 128_000, 96_000, 0.25),
+        (2, 80_000, 64_000, 0, 1.0),
+    ] {
+        step(&h, index).await;
+        let view = h
+            .app
+            .queries()
+            .get_session(&session)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            view.capabilities.context_usage,
+            ContextUsageCapability::Exact
+        );
+        let usage = view.context_usage.unwrap();
+        assert_eq!(usage.used_tokens, Some(used));
+        assert_eq!(usage.max_tokens, Some(max));
+        assert_eq!(usage.remaining_tokens, Some(remaining));
+        assert_eq!(usage.usage_ratio, Some(ratio));
+        assert_eq!(usage.confidence, "exact");
+    }
+    assert_eq!(h.events(&session, "session.context_usage_updated").await, 2);
+    assert_eq!(h.events(&session, "turn.started").await, 0);
+    h.release("release-1");
+    h.wait_turn(&session, &turn, "completed").await;
+    h.stop().await;
+}
+
+#[tokio::test]
 async fn interleaved_tools_and_text_survive_partial_call_snapshots_and_reconnect() {
     let (h, session, turn) = start(vec![
         vec![notification(json!({"sessionUpdate":"tool_call","toolCallId":"a","title":"Execute","kind":"execute","status":"pending","rawInput":{"command":"first"}}))],
