@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick } from 'svelte'
   import { toast } from 'svelte-sonner'
   import { t } from '$lib/i18n'
   import { copyText } from '$lib/copyText'
@@ -8,25 +7,21 @@
   import * as Sheet from '$lib/components/ui/sheet/index.js'
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
-  import CursorTextIcon from 'phosphor-svelte/lib/CursorTextIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import { downloads } from '$lib/downloads/manager'
   import { canPreviewImage } from '$lib/downloads/preview'
   import { useDeviceRuntime } from '../../device/context'
   import type { BotEntry, SharedFile } from '../../api/types'
 
-  let { root, entry, selectableId = $bindable(null), onquote }: {
+  let { root, entry, onquote }: {
     /** Element containing the feed rows; events are delegated from it. */
     root: HTMLElement | undefined
     entry: (id: string) => BotEntry | undefined
-    /** The row whose text a touch user chose to select. */
-    selectableId?: string | null
     onquote: (quote: BotQuote) => void
   } = $props()
 
   /** A message, or one file of a share when `file` is set. */
   type Target = { entry: BotEntry; element: HTMLElement; excerpt: string | null; file: SharedFile | null }
-  const LONG_PRESS_MS = 500
   const device = useDeviceRuntime()
 
   let target = $state<Target | null>(null)
@@ -36,8 +31,6 @@
   let selection = $state<{ target: Target; rect: DOMRect; touch: boolean } | null>(null)
   let touchSelection = false
   let pointerDown = false
-  let press: { timer: ReturnType<typeof setTimeout>; x: number; y: number } | null = null
-  let suppressClick = false
 
   const menuAnchor = { getBoundingClientRect: () => DOMRect.fromRect({ x: anchor.x, y: anchor.y, width: 0, height: 0 }) }
 
@@ -81,56 +74,30 @@
 
   function contextmenu(event: MouseEvent) {
     const row = rowOf(event.target as Node)
-    if (!row || keepsNativeMenu(event)) return
+    // A long press on touch keeps the native text selection; touch users open the menu with the row's button.
+    if (!row || keepsNativeMenu(event) || touchSelection) return
     event.preventDefault()
-    if ((event as PointerEvent).pointerType === 'touch' || press) {
-      // Android fires contextmenu on long press; iOS relies on the timer below.
-      if (press) longPress(row)
-      return
-    }
     const selected = selectedTarget()
     open(selected?.element === row.element ? selected : { ...row, excerpt: null }, false, { x: event.clientX, y: event.clientY })
-  }
-
-  function longPress(row: Row) {
-    if (!press) return
-    clearTimeout(press.timer)
-    const point = { x: press.x, y: press.y }
-    press = null
-    suppressClick = true
-    open({ ...row, excerpt: null }, true, point)
   }
 
   function pointerdown(event: PointerEvent) {
     pointerDown = true
     touchSelection = event.pointerType === 'touch'
-    if (event.pointerType !== 'touch' || keepsNativeMenu(event)) return
-    const row = rowOf(event.target as Node)
-    if (!row || row.entry.id === selectableId) return
-    press = { timer: setTimeout(() => longPress(row), LONG_PRESS_MS), x: event.clientX, y: event.clientY }
-  }
-
-  function pointermove(event: PointerEvent) {
-    if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 10) cancelPress()
-  }
-
-  function cancelPress() {
-    if (press) clearTimeout(press.timer)
-    press = null
   }
 
   function pointerup() {
     pointerDown = false
-    cancelPress()
     updateSelection()
   }
 
-  // The click that ends a long press would otherwise land on the opened sheet.
-  function click(event: MouseEvent) {
-    if (!suppressClick) return
-    suppressClick = false
-    event.preventDefault()
-    event.stopPropagation()
+  /** Opens the touch menu for a row from its menu button. */
+  export function openMenu(id: string, button: HTMLElement) {
+    const element = button.closest<HTMLElement>('[data-bot-quotable]') ?? button.closest('[data-bot-entry-id]')?.querySelector<HTMLElement>('[data-bot-quotable]')
+    const row = rowOf(element ?? null)
+    if (!row || row.entry.id !== id) return
+    const rect = button.getBoundingClientRect()
+    open({ ...row, excerpt: null }, true, { x: rect.left, y: rect.bottom })
   }
 
   function updateSelection() {
@@ -138,7 +105,6 @@
     const selected = selectedTarget()
     if (!selected) {
       selection = null
-      if (selectableId && !document.getSelection()?.toString()) selectableId = null
       return
     }
     selection = { target: selected, rect: document.getSelection()!.getRangeAt(0).getBoundingClientRect(), touch: touchSelection }
@@ -167,10 +133,8 @@
     const listeners: [string, EventListener, boolean?][] = [
       ['contextmenu', contextmenu as EventListener],
       ['pointerdown', pointerdown as EventListener],
-      ['pointermove', pointermove as EventListener],
       ['pointerup', pointerup],
       ['pointercancel', pointerup],
-      ['click', click as EventListener, true],
       ['keydown', keydown as EventListener],
       ['scroll', updateSelection, true],
     ]
@@ -179,7 +143,6 @@
     return () => {
       for (const [type, listener, capture] of listeners) element.removeEventListener(type, listener, capture)
       document.removeEventListener('selectionchange', updateSelection)
-      cancelPress()
     }
   })
 
@@ -203,19 +166,6 @@
     const text = next.excerpt ?? ('content' in next.entry ? messageText(next.entry) : '')
     if (await copyText(text)) toast.success($t('common.copied'))
     else toast.error($t('files.copyFailed'))
-  }
-
-  async function selectText(next: Target) {
-    sheetOpen = false
-    selectableId = next.entry.id
-    await tick()
-    const source = root?.querySelector(`[data-bot-entry-id="${CSS.escape(next.entry.id)}"] [data-bot-quote-source]`)
-    if (!source) return
-    const range = document.createRange()
-    range.selectNodeContents(source)
-    const current = document.getSelection()!
-    current.removeAllRanges()
-    current.addRange(range)
   }
 
   // Keyboard users return to the message the menu acted on.
@@ -271,8 +221,6 @@
         {/if}
         {#if isMessage}
           <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-5" />{$t('common.copy')}</button>
-          <div role="separator" class="mx-2 my-1 h-px bg-border"></div>
-          <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void selectText(current)}><CursorTextIcon class="size-5" />{$t('bots.selectText')}</button>
         {/if}
       </div>
     {/if}

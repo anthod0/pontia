@@ -361,3 +361,93 @@ test("quotes one image from its menu, shows its thumbnail, and jumps back to it"
   );
   vi.unstubAllGlobals();
 });
+
+test("a touch long press keeps the native text selection instead of opening the menu", async () => {
+  serve([reply]);
+  render(BotChatPage, { botId: bot.bot_id });
+  await screen.findByText("certificate");
+  await fireEvent.pointerDown(rows()[0], { pointerType: "touch" });
+  expect(await fireEvent.contextMenu(rows()[0])).toBe(true);
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+test("the message actions button opens the touch menu to quote the whole message", async () => {
+  serve([reply, file]);
+  render(BotChatPage, { botId: bot.bot_id });
+  await screen.findByText("certificate");
+  const [replyMenu, fileMenu] = screen.getAllByRole("button", { name: "Message actions" });
+  await fireEvent.click(fileMenu);
+  const sheet = within(await screen.findByRole("dialog"));
+  await fireEvent.click(sheet.getByRole("menuitem", { name: /Quote file/ }));
+  await screen.findByRole("button", { name: /^Remove quote.*checklist/ });
+  await fireEvent.click(replyMenu);
+  const replySheet = within(await screen.findByRole("dialog"));
+  await fireEvent.click(replySheet.getByRole("menuitem", { name: "Quote" }));
+  await screen.findByRole("button", { name: /^Remove quote.*certificate/ });
+});
+
+test("quotes a native touch selection from the floating bar", async () => {
+  serve([reply]);
+  const send = sent();
+  vi.spyOn(Range.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: 10, y: 10, width: 50 }),
+  );
+  render(BotChatPage, { botId: bot.bot_id });
+  const word = await screen.findByText("certificate");
+  await fireEvent.pointerDown(word, { pointerType: "touch" });
+  const range = document.createRange();
+  range.selectNodeContents(word);
+  document.getSelection()!.removeAllRanges();
+  document.getSelection()!.addRange(range);
+  await fireEvent.pointerCancel(word, { pointerType: "touch" });
+  const bar = within(await screen.findByRole("toolbar"));
+  expect(bar.queryByRole("button", { name: /Copy/ })).not.toBeInTheDocument();
+  await fireEvent.click(bar.getByRole("button", { name: /Quote/ }));
+  await userEvent.type(screen.getByRole("textbox"), "Why?");
+  await fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() =>
+    expect(send).toHaveBeenCalledWith(
+      bot.bot_id,
+      expect.stringMatching(
+        /^<user_quote message_id="[^"]+" speaker="Bot"[^>]*>certificate<\/user_quote>\nWhy\?$/,
+      ),
+    ),
+  );
+});
+
+test.each([false, true])(
+  "touch actions quote the selected image from a batch (mosaic: %s)",
+  async (mosaic) => {
+    const images = Array.from({ length: 7 }, (_, n) =>
+      sharedFile(
+        `file_0193a000-0000-7000-8000-${String(n + 10).padStart(12, "0")}`,
+        `image-${n}.png`,
+        "image/png",
+      ),
+    );
+    const share = {
+      ...file,
+      files: mosaic ? images : [sharedFile(fileId, "checklist.md", "text/markdown"), ...images],
+    };
+    serve([share]);
+    const send = sent();
+    render(BotChatPage, { botId: bot.bot_id });
+    await fireEvent.click(
+      await screen.findByRole("button", { name: mosaic ? /more images/ : /Show .* more/ }),
+    );
+    const selected = images[6];
+    const row = document.querySelector(`[data-bot-file-id="${selected.file_id}"]`)! as HTMLElement;
+    await fireEvent.click(within(row).getByRole("button", { name: "Message actions" }));
+    const sheet = within(await screen.findByRole("dialog"));
+    await fireEvent.click(sheet.getByRole("menuitem", { name: /Quote image/ }));
+    await userEvent.type(screen.getByRole("textbox"), "This one");
+    await fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        bot.bot_id,
+        `<user_quote file_id="${selected.file_id}" speaker="Bot" path="${selected.path}">${selected.name}</user_quote>\nThis one`,
+      ),
+    );
+  },
+);

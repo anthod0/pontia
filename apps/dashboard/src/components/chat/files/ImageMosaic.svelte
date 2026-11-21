@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import type { HTMLAttributes } from 'svelte/elements'
   import { t } from '$lib/i18n'
   import ImageTile from './ImageTile.svelte'
@@ -9,7 +10,8 @@
    * Fixed layouts by count, cropped to fill: 2 side by side, 3 as one large and two small,
    * 4 as 2+2, and 5 or more as 2+3 with the hidden count on the fifth. Expanded shows a 3-column grid.
    */
-  let { states, expanded = $bindable(false), highlighted = null, onenlarge, itemProps }: {
+  let { itemActions, states, expanded = $bindable(false), highlighted = null, onenlarge, itemProps }: {
+    itemActions?: Snippet
     states: SharedFileState[]
     expanded?: boolean
     highlighted?: string | null
@@ -27,7 +29,7 @@
 </script>
 
 {#snippet tile(state: SharedFileState, className: string, extra = 0)}
-  <ImageTile {state} class={className} more={extra} highlighted={highlighted === state.file.file_id} onenlarge={() => onenlarge(state)} onmore={() => expanded = true} itemProps={itemProps(state)} />
+  <ImageTile {itemActions} {state} class={className} more={extra} highlighted={highlighted === state.file.file_id} onenlarge={() => onenlarge(state)} onmore={() => expanded = true} itemProps={itemProps(state)} />
 {/snippet}
 
 {#if expanded}

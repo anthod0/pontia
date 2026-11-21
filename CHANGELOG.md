@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Temporary helpers automatically restore and reactivate `~/Pontia` if its Workspace was removed or disabled, without restarting the Bot.
+- On phones, pressing and holding Bot chat message text selects it with the system selection handles, and **Quote** appears below the selection. The message menu opens from the **⋯** button next to each message or file; **Select text** is removed.
 - Bot chat loading placeholders use the same gray surface for user and Bot messages.
 
 ## [0.8.5] - 2026-11-21
