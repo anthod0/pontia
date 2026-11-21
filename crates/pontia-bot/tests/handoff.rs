@@ -333,10 +333,9 @@ async fn helpers_include_idle_and_error_but_exclude_exited_dreaming_and_other_bo
         ids(section(&doc, "Helpers"), "  - Workspace ID: `"),
         ["project", "project", "project"]
     );
-    assert!(
-        section(&doc, "Helpers")
-            .contains("- `retrieval`\n  - Type: Read\\-only deep retrieval\n  - State: idle")
-    );
+    assert!(section(&doc, "Helpers").contains(
+        "- `retrieval`\n  - Type: Read\\-only retrieval\\; closes after replying\n  - State: idle"
+    ));
     assert!(!doc.contains("unbound"));
     assert!(section(&doc, "Helpers").contains("work\\-idle"));
     assert!(!section(&doc, "Recent Chat").contains("work-"));

@@ -118,9 +118,10 @@ async fn one_device_round_survives_failure_and_restart_without_becoming_a_helper
         client.inputs.lock().unwrap().last().unwrap().session_id,
         target
     );
-    finish(&control, &first, EventType::TurnFailed).await;
-    let restarted = DreamingService::new(control.clone(), conversation.clone());
     let _exits = report_exits(&control);
+    finish(&control, &first, EventType::TurnFailed).await;
+    wait_for_exit(&control, &first).await;
+    let restarted = DreamingService::new(control.clone(), conversation.clone());
     let second = restarted.start().await.unwrap().unwrap();
     assert_launch_mode(&control, &client, &second, LaunchMode::Background).await;
     assert_ne!(first, second);
@@ -137,6 +138,7 @@ async fn one_device_round_survives_failure_and_restart_without_becoming_a_helper
     )
     .await;
     finish(&control, &second, EventType::TurnCompleted).await;
+    wait_for_exit(&control, &second).await;
     assert!(restarted.start().await.unwrap().is_none());
 }
 
@@ -295,8 +297,6 @@ async fn accepted_first_input_keeps_an_idle_round_alive_until_its_native_turn_ar
     assert!(snapshot.turns.is_empty());
     assert_eq!(snapshot.inbox[0].state, "dispatched");
     let restarted = DreamingService::new(control.clone(), conversation);
-    let (shutdown, receiver) = tokio::sync::watch::channel(false);
-    let cleanup = tokio::spawn(restarted.clone().run(receiver));
     assert!(restarted.start().await.unwrap().is_none());
     assert!(GenericRuntimeManager.is_alive(&snapshot.runtimes[0].runtime_id));
     assert_eq!(
@@ -321,27 +321,8 @@ async fn accepted_first_input_keeps_an_idle_round_alive_until_its_native_turn_ar
     let turn = started.turn_id.unwrap();
     report(&ingest, &round, runtime, &turn, EventType::TurnCompleted).await;
     let _exits = report_exits(&control);
-    tokio::time::timeout(std::time::Duration::from_secs(8), async {
-        loop {
-            if control
-                .queries()
-                .get_session(&round)
-                .await
-                .unwrap()
-                .unwrap()
-                .state
-                == "exited"
-            {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        }
-    })
-    .await
-    .unwrap();
+    wait_for_exit(&control, &round).await;
     assert_ne!(restarted.start().await.unwrap().unwrap(), round);
-    shutdown.send(true).unwrap();
-    cleanup.await.unwrap();
 }
 
 async fn seed_pending_memory(
@@ -679,4 +660,37 @@ async fn blocked_dreaming_interaction_is_rejected_and_terminated_without_wedging
     let third = dreaming.start().await.unwrap().unwrap();
     assert_launch_mode(&control, &client, &third, LaunchMode::Background).await;
     assert_ne!(third, second);
+}
+
+#[tokio::test]
+async fn failed_launch_is_cleaned_up_before_the_next_round() {
+    let (_root, pool, client, control, conversation) = fixture().await;
+    let (_, bot_session) = bot(&conversation).await;
+    seed_pending_memory(pool, &conversation, &bot_session).await;
+    let dreaming = DreamingService::new(control.clone(), conversation);
+    *client.fail_next_launch.lock().unwrap() = true;
+    assert!(dreaming.start().await.is_err());
+    let failed = latest_dreaming_session_id(&control).await.unwrap();
+    assert_eq!(
+        control
+            .queries()
+            .get_session(&failed)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "error"
+    );
+    let next = dreaming.start().await.unwrap().unwrap();
+    assert_ne!(next, failed);
+    assert_eq!(
+        control
+            .queries()
+            .get_session(&failed)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "exited"
+    );
 }

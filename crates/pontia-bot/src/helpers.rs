@@ -3,7 +3,7 @@ pub(crate) use notifications::seed_workspaces;
 
 use pontia_agent_control::{
     AgentControl, AgentProfileService, SessionMessagesQuery, SessionOwnership, SessionView,
-    TurnTimelineService, workspaces::require_active_workspace_id,
+    SubmitInboxMessageRequest, TurnTimelineService, workspaces::require_active_workspace_id,
 };
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -225,7 +225,8 @@ impl HelperService {
             application_id: "bot".into(),
             reference: reference.clone(),
         };
-        let mut request = if matches!(input.location, HelperLocation::ReadOnly) {
+        let retrieval = matches!(input.location, HelperLocation::ReadOnly);
+        let mut request = if retrieval {
             let mut request = self
                 .conversation
                 .task_session_request(
@@ -233,11 +234,7 @@ impl HelperService {
                     &bot.client_key,
                     &bot.model,
                     ownership.clone(),
-                    concat!(
-                        include_str!("helpers/retrieval.md"),
-                        "\n",
-                        include_str!("helpers/instructions.md")
-                    ),
+                    include_str!("helpers/retrieval.md"),
                     true,
                 )
                 .await?;
@@ -361,11 +358,43 @@ impl HelperService {
         let session_id = outcome
             .session_id()
             .ok_or_else(|| Error::Domain("Helper creation returned no Session ID".into()))?;
-        let delivery = self
-            .control
-            .turn_commands()
-            .submit_live_input(session_id, format!("Source: Bot\n\n{message}"))
-            .await;
+        let message = format!("Source: Bot\n\n{message}");
+        let delivery = if retrieval {
+            async {
+                let outcome = self
+                    .control
+                    .inbox_commands()
+                    .submit_message(
+                        session_id,
+                        SubmitInboxMessageRequest {
+                            input: message,
+                            delivery_policy: "after_idle".into(),
+                            metadata: json!({}),
+                            branch_target_turn_id: None,
+                        },
+                    )
+                    .await?;
+                self.control
+                    .session_commands()
+                    .exit_when_done(session_id)
+                    .await?;
+                let message = &outcome.data["inbox_message"];
+                if let Some(reason) = message["failure_message"].as_str() {
+                    return Err(if message["state"] == "unknown" {
+                        Error::ControlUnknown(reason.into())
+                    } else {
+                        Error::Domain(reason.into())
+                    });
+                }
+                Ok(())
+            }
+            .await
+        } else {
+            self.control
+                .turn_commands()
+                .submit_live_input(session_id, message)
+                .await
+        };
         Ok(json!({"session_id": session_id, "delivery": Delivery::from_result(delivery)}))
     }
 
@@ -404,7 +433,7 @@ impl HelperService {
             .ok_or_else(|| Error::NotFound(format!("Session {session_id} not found")))
     }
 
-    /// Helpers the Bot has not closed yet, including memory retrieval helpers.
+    /// Helper Sessions that have not exited, including memory retrieval helpers.
     pub async fn list(&self, bot_id: &str) -> Result<Vec<SessionView>> {
         open_sessions(&self.control, bot_id).await
     }

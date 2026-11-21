@@ -29,8 +29,7 @@ async fn memory(commands: &MemoryCommands, session: &str, action: &str, input: V
 }
 
 #[tokio::test]
-async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_failure_notifications()
-{
+async fn retrieval_delivers_its_reply_then_exits_and_notifies_the_bot_once() {
     let (root, pool, client, control, conversation) = fixture().await;
     let (id, session) = bot(&conversation).await;
     let helpers = HelperService::new(control.clone(), conversation.clone());
@@ -62,7 +61,6 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
         .unwrap();
     let injected = instructions(&control, &reader).await;
     assert!(injected.contains(include_str!("../../src/helpers/retrieval.md").trim()));
-    assert!(injected.contains(include_str!("../../src/helpers/instructions.md").trim()));
     assert!(created.workspace_id.is_none());
     let shared = root.path().join("bot/readonly").canonicalize().unwrap();
     assert_eq!(created.workspace.as_deref(), shared.to_str());
@@ -134,10 +132,14 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
             .workspace_id
             .is_none()
     );
-    finish(&control, &reader, EventType::TurnFailed).await;
+    let ordinary = helper(&helpers, &session).await;
+    let _exits = report_exits(&control);
+    finish(&control, &reader, EventType::TurnCompleted).await;
+    wait_for_exit(&control, &reader).await;
     helpers.reconcile().await.unwrap();
-    let notices: Vec<(String, String)> = sqlx::query_as(
-        "SELECT source_session_id, content FROM bot_notifications WHERE source_session_id = ?",
+    helpers.reconcile().await.unwrap();
+    let notices: Vec<(String, String, bool)> = sqlx::query_as(
+        "SELECT source_session_id, content, delivered FROM bot_notifications WHERE source_session_id = ?",
     )
     .bind(&reader)
     .fetch_all(&pool)
@@ -145,25 +147,29 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
     .unwrap();
     assert_eq!(notices.len(), 1);
     assert_eq!(notices[0].0, reader);
-    helpers
-        .execute(HelperRequest {
-            session_id: session,
-            command: HelperCommand::Close {
-                session_id: reader.clone(),
-            },
+    assert!(notices[0].1.contains("session.exited"));
+    assert!(notices[0].2);
+    let inputs = client.inputs.lock().unwrap().clone();
+    let reply_position = inputs
+        .iter()
+        .position(|input| {
+            input.session_id == session
+                && input
+                    .input
+                    .contains("Partial findings: two conflicting decisions; source unavailable")
         })
-        .await
         .unwrap();
-    control
-        .event_ingest_service()
-        .report_client_fact(
-            &reader,
-            Some(&created.runtimes[0].runtime_id),
-            EventType::SessionExited,
-            json!({"reason":"test client exit"}),
-        )
-        .await
-        .unwrap();
+    let exit_notices: Vec<_> = inputs
+        .iter()
+        .enumerate()
+        .filter(|(_, input)| {
+            input.session_id == session
+                && input.input.contains(&format!("Session: {reader}"))
+                && input.input.contains("session.exited")
+        })
+        .collect();
+    assert_eq!(exit_notices.len(), 1);
+    assert!(reply_position < exit_notices[0].0);
     assert!(conversation.resolve(&reader).await.is_err());
     assert!(
         !helpers
@@ -172,6 +178,44 @@ async fn retrieval_returns_before_completion_and_reuses_helper_reporting_and_fai
             .unwrap()
             .iter()
             .any(|s| s.session_id == reader)
+    );
+    finish(&control, &ordinary, EventType::TurnCompleted).await;
+    assert_eq!(
+        control
+            .queries()
+            .get_session(&ordinary)
+            .await
+            .unwrap()
+            .unwrap()
+            .state,
+        "idle"
+    );
+    assert!(
+        helpers
+            .list(&id)
+            .await
+            .unwrap()
+            .iter()
+            .any(|s| s.session_id == ordinary)
+    );
+    conversation.send(&id, "Use those findings").await.unwrap();
+    assert_eq!(
+        client.inputs.lock().unwrap().last().unwrap().session_id,
+        session
+    );
+
+    finish(&control, &second, EventType::TurnFailed).await;
+    helpers.reconcile().await.unwrap();
+    let failure_notices: Vec<String> =
+        sqlx::query_scalar("SELECT content FROM bot_notifications WHERE source_session_id = ?")
+            .bind(&second)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert!(
+        failure_notices
+            .iter()
+            .any(|notice| notice.contains("turn.failed"))
     );
 }
 
@@ -394,4 +438,64 @@ async fn retrieval_rejects_clients_that_cannot_disable_skills_but_ordinary_helpe
             .unwrap()
             .disable_skills
     );
+}
+
+#[tokio::test]
+async fn retrieval_waits_for_its_native_turn_before_exiting() {
+    use pontia_agent_control::client_contract::{
+        AgentClientAdapter, AgentClientSpec, TurnLifecycleBehavior,
+    };
+    const NATIVE_TURNS: AgentClientSpec = AgentClientSpec {
+        adapter: AgentClientAdapter {
+            turn_lifecycle: TurnLifecycleBehavior::ClientManagedInteractive,
+            ..BOT_CLIENT.adapter
+        },
+        ..BOT_CLIENT
+    };
+    let (_root, _pool, client, control, conversation) = fixture_with_client(&NATIVE_TURNS).await;
+    let (_, bot_session) = bot(&conversation).await;
+    let helpers = HelperService::new(control.clone(), conversation);
+    let reader = retrieve(&helpers, &bot_session, None).await;
+    let snapshot = control
+        .queries()
+        .session_snapshot(&reader)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snapshot.state, "idle");
+    assert!(snapshot.has_unsettled_input);
+    assert!(GenericRuntimeManager.is_alive(&snapshot.runtimes[0].runtime_id));
+    let runtime = &snapshot.runtimes[0].runtime_id;
+    let ingest = control.event_ingest_service();
+    let started = ingest.report_fact(ReportedFact {
+        session_id: reader.clone(),
+        turn_id: None,
+        report_key: None,
+        fact_type: EventType::TurnStarted,
+        data: json!({"runtime_id":runtime,"metadata":{"inbox_message_id":snapshot.inbox[0].message_id}}),
+    }).await.unwrap();
+    let response = helpers
+        .execute(HelperRequest {
+            session_id: reader.clone(),
+            command: HelperCommand::Reply {
+                message: "The decision was approved".into(),
+            },
+        })
+        .await
+        .unwrap();
+    assert_eq!(response["delivery"]["status"], "accepted");
+    assert_eq!(
+        client.inputs.lock().unwrap().last().unwrap().session_id,
+        bot_session
+    );
+    let _exits = report_exits(&control);
+    report(
+        &ingest,
+        &reader,
+        runtime,
+        &started.turn_id.unwrap(),
+        EventType::TurnCompleted,
+    )
+    .await;
+    wait_for_exit(&control, &reader).await;
 }
