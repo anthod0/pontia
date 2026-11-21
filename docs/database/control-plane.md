@@ -131,6 +131,7 @@ CREATE TABLE agent_clients (
 CREATE TABLE session_files (
     file_id TEXT PRIMARY KEY NOT NULL,
     session_id TEXT NOT NULL REFERENCES sessions (session_id),
+    share_id TEXT NOT NULL,
     turn_id TEXT REFERENCES turns (turn_id),
     path TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -139,6 +140,7 @@ CREATE TABLE session_files (
     created_at TEXT NOT NULL
 );
 CREATE INDEX idx_session_files_page ON session_files (session_id, created_at DESC, file_id DESC);
+CREATE INDEX idx_session_files_share ON session_files (share_id);
 
 CREATE TABLE events (
   event_id TEXT PRIMARY KEY NOT NULL,

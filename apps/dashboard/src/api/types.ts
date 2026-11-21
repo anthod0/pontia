@@ -61,15 +61,17 @@ export interface BotNotice {
   created_at: string;
 }
 
-export interface BotSharedFile {
+/** One `pontia send-file` call; `id` is its share ID. */
+export interface BotSharedFiles {
   id: string;
-  kind: "shared_file";
+  kind: "shared_files";
   session_id: string;
   created_at: string;
-  file: SharedFile;
+  /** In share order. */
+  files: SharedFile[];
 }
 
-export type BotEntry = BotMessage | BotNotice | BotSharedFile;
+export type BotEntry = BotMessage | BotNotice | BotSharedFiles;
 
 export interface BotMessagePage {
   bot: Bot;
@@ -510,6 +512,7 @@ export interface InboxMessageView {
 
 export interface SharedFile {
   file_id: string;
+  share_id: string;
   turn_id: string | null;
   name: string;
   path: string;
@@ -519,7 +522,8 @@ export interface SharedFile {
 }
 
 export interface EventView {
-  file?: SharedFile;
+  /** Files of a `session.files_shared` event, in share order. */
+  files?: SharedFile[];
   event_id: string;
   session_id: string;
   turn_id: string | null;

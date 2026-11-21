@@ -1,8 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import FileBubble from "../../src/components/chat/FileBubble.svelte";
-import FileBubblePreviewHarness from "./FileBubblePreviewHarness.svelte";
+import SharedFilesHarness from "./SharedFilesHarness.svelte";
 import { downloads } from "../../src/lib/downloads/manager";
 import { testDevice } from "../deviceFixture";
 import { ApiError } from "../../src/api/errors";
@@ -10,6 +9,7 @@ import type { SharedFile } from "../../src/api/types";
 
 const file: SharedFile = {
   file_id: "file-1",
+  share_id: "share-1",
   turn_id: null,
   name: "release-bundle-v1.8.0.zip",
   path: "/work/release-bundle-v1.8.0.zip",
@@ -40,7 +40,7 @@ test("shows reception progress with a cancel button while downloading", async ()
       headers: { "Content-Length": String(file.size) },
     }),
   );
-  render(FileBubble, { file, sessionId: "main" });
+  render(SharedFilesHarness, { files: [file] });
   await fireEvent.click(screen.getByRole("button", { name: `Download ${file.name}` }));
   stream.enqueue(new Uint8Array(1024 * 1024));
   await waitFor(() =>
@@ -56,7 +56,7 @@ test("retries a failed download and saves it successfully", async () => {
   vi.spyOn(testDevice.fileApi, "sharedFileContent")
     .mockRejectedValueOnce(new ApiError("File path has changed", "file_path_changed", 409))
     .mockResolvedValueOnce(new Response("archive"));
-  render(FileBubble, { file, sessionId: "main" });
+  render(SharedFilesHarness, { files: [file] });
   await fireEvent.click(screen.getByRole("button", { name: `Download ${file.name}` }));
   expect(await screen.findByRole("alert")).toBeInTheDocument();
   await fireEvent.click(screen.getByRole("button", { name: `Retry download of ${file.name}` }));
@@ -69,7 +69,7 @@ test("marks a deleted file as unavailable without a download action", async () =
   vi.spyOn(testDevice.fileApi, "sharedFileContent").mockRejectedValue(
     new ApiError("File not found", "not_found", 404),
   );
-  render(FileBubble, { file, sessionId: "main" });
+  render(SharedFilesHarness, { files: [file] });
   await fireEvent.click(screen.getByRole("button", { name: `Download ${file.name}` }));
   expect(await screen.findByRole("alert")).toBeInTheDocument();
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
@@ -87,9 +87,8 @@ test("falls back to the file bubble when a shared image is gone", async () => {
   vi.spyOn(testDevice.fileApi, "sharedFileContent").mockRejectedValue(
     new ApiError("File not found", "not_found", 404),
   );
-  render(FileBubble, {
-    file: { ...file, file_id: "gone", name: "gone.png", media_type: "image/png" },
-    sessionId: "main",
+  render(SharedFilesHarness, {
+    files: [{ ...file, file_id: "gone", name: "gone.png", media_type: "image/png" }],
   });
   expect(await screen.findByRole("alert")).toBeInTheDocument();
   expect(screen.queryByRole("img", { name: "gone.png" })).not.toBeInTheDocument();
@@ -100,7 +99,7 @@ test("falls back to the file bubble when a shared image is gone", async () => {
 test.each(["release-bundle-v1.8.0.zip", "demo.mp4", "paper.pdf"])(
   "%s offers only a download, without a preview",
   (name) => {
-    render(FileBubblePreviewHarness, { file: { ...file, name, path: `/work/${name}` } });
+    render(SharedFilesHarness, { files: [{ ...file, name, path: `/work/${name}` }] });
     expect(screen.queryByRole("button", { name: `Preview ${name}` })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: `Download ${name}` })).toBeInTheDocument();
   },
@@ -110,7 +109,7 @@ test.each(["notes.md", "Makefile"])("%s opens in the preview panel", async (name
   const read = vi
     .spyOn(testDevice.fileApi, "pathFileContent")
     .mockResolvedValue(new Response("plain text"));
-  render(FileBubblePreviewHarness, { file: { ...file, name, path: `/work/${name}` } });
+  render(SharedFilesHarness, { files: [{ ...file, name, path: `/work/${name}` }] });
   await fireEvent.click(screen.getByRole("button", { name: `Preview ${name}` }));
   await within(screen.getByRole("complementary")).findByText("plain text");
   expect(read).toHaveBeenCalledWith("main", `/work/${name}`, expect.any(AbortSignal));

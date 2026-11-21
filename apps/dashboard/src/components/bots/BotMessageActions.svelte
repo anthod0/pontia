@@ -9,7 +9,11 @@
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import CursorTextIcon from 'phosphor-svelte/lib/CursorTextIcon'
-  import type { BotEntry } from '../../api/types'
+  import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
+  import { downloads } from '$lib/downloads/manager'
+  import { canPreviewImage } from '$lib/downloads/preview'
+  import { useDeviceRuntime } from '../../device/context'
+  import type { BotEntry, SharedFile } from '../../api/types'
 
   let { root, entry, selectableId = $bindable(null), onquote }: {
     /** Element containing the feed rows; events are delegated from it. */
@@ -20,8 +24,10 @@
     onquote: (quote: BotQuote) => void
   } = $props()
 
-  type Target = { entry: BotEntry; element: HTMLElement; excerpt: string | null }
+  /** A message, or one file of a share when `file` is set. */
+  type Target = { entry: BotEntry; element: HTMLElement; excerpt: string | null; file: SharedFile | null }
   const LONG_PRESS_MS = 500
+  const device = useDeviceRuntime()
 
   let target = $state<Target | null>(null)
   let menuOpen = $state(false)
@@ -35,11 +41,16 @@
 
   const menuAnchor = { getBoundingClientRect: () => DOMRect.fromRect({ x: anchor.x, y: anchor.y, width: 0, height: 0 }) }
 
-  function rowOf(node: Node | null): { entry: BotEntry; element: HTMLElement } | null {
+  type Row = Omit<Target, 'excerpt'>
+  // Files are quoted one at a time: each file of a share is its own quotable element.
+  function rowOf(node: Node | null): Row | null {
     const element = (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>('[data-bot-quotable]')
     const id = element?.closest<HTMLElement>('[data-bot-entry-id]')?.dataset.botEntryId
     const found = id ? entry(id) : undefined
-    return element && found && root?.contains(element) ? { entry: found, element } : null
+    if (!element || !found || !root?.contains(element)) return null
+    const fileId = element.dataset.botFileId
+    const file = fileId && found.kind === 'shared_files' ? found.files.find(file => file.file_id === fileId) ?? null : null
+    return { entry: found, element, file }
   }
 
   // A selection counts only when it lies within the text of one message.
@@ -53,8 +64,11 @@
     return row && text ? { ...row, excerpt: text } : null
   }
 
+  // A shared image opens the file menu; other images and links keep the browser's.
   function keepsNativeMenu(event: MouseEvent): boolean {
-    return event.shiftKey || (event.target instanceof Element && Boolean(event.target.closest('a, img, video, input, textarea, [contenteditable="true"]')))
+    if (event.shiftKey || !(event.target instanceof Element)) return event.shiftKey
+    const native = event.target.closest('a, img, video, input, textarea, [contenteditable="true"]')
+    return Boolean(native && !(native.tagName === 'IMG' && native.closest('[data-bot-file-id]')))
   }
 
   function open(next: Target, touch: boolean, point: { x: number; y: number }) {
@@ -78,7 +92,7 @@
     open(selected?.element === row.element ? selected : { ...row, excerpt: null }, false, { x: event.clientX, y: event.clientY })
   }
 
-  function longPress(row: { entry: BotEntry; element: HTMLElement }) {
+  function longPress(row: Row) {
     if (!press) return
     clearTimeout(press.timer)
     const point = { x: press.x, y: press.y }
@@ -170,12 +184,18 @@
   })
 
   function quote(next: Target) {
-    const value = entryQuote(next.entry, next.excerpt)
+    const value = entryQuote(next.entry, next.excerpt, next.file?.file_id)
     if (!value) return
     menuOpen = sheetOpen = false
     selection = null
     document.getSelection()?.removeAllRanges()
     onquote(value)
+  }
+
+  function download(next: Target) {
+    menuOpen = sheetOpen = false
+    if (next.file && next.entry.kind === 'shared_files')
+      downloads.start(device.id, next.entry.session_id, { kind: 'shared', fileId: next.file.file_id }, next.file.name)
   }
 
   async function copy(next: Target) {
@@ -205,6 +225,7 @@
   }
 
   const isMessage = $derived(target !== null && 'content' in target.entry)
+  const quoteLabel = $derived(target?.file ? (canPreviewImage(target.file) ? $t('bots.quoteImage') : $t('bots.quoteFile')) : $t('bots.quote'))
   // Touch: below the selection, clear of the system selection menu. Mouse: above it.
   // Both stay inside the viewport when the selection runs past an edge.
   const selectionStyle = $derived.by(() => {
@@ -220,9 +241,14 @@
   <DropdownMenu.Content customAnchor={menuAnchor} side="bottom" align="start" sideOffset={2} class="w-auto min-w-40" aria-label={$t('bots.messageActions')} onCloseAutoFocus={restoreFocus}>
     {#if target}
       {@const current = target}
-      <DropdownMenu.Item onSelect={() => quote(current)}><QuotesIcon />{$t('bots.quote')}<DropdownMenu.Shortcut>R</DropdownMenu.Shortcut></DropdownMenu.Item>
+      {#if current.file}
+        <DropdownMenu.Label class="max-w-64 truncate text-xs font-normal text-muted-foreground" title={current.file.name}>{current.file.name}</DropdownMenu.Label>
+      {/if}
+      <DropdownMenu.Item onSelect={() => quote(current)}><QuotesIcon />{quoteLabel}<DropdownMenu.Shortcut>R</DropdownMenu.Shortcut></DropdownMenu.Item>
       {#if isMessage}
         <DropdownMenu.Item onSelect={() => void copy(current)}><CopyIcon />{$t('common.copy')}</DropdownMenu.Item>
+      {:else if current.file}
+        <DropdownMenu.Item onSelect={() => download(current)}><DownloadSimpleIcon />{$t('files.download')}</DropdownMenu.Item>
       {/if}
     {/if}
   </DropdownMenu.Content>
@@ -234,12 +260,15 @@
     <Sheet.Title class="sr-only">{$t('bots.messageActions')}</Sheet.Title>
     {#if target}
       {@const current = target}
-      {@const preview = entryQuote(current.entry)}
+      {@const preview = entryQuote(current.entry, null, current.file?.file_id)}
       {#if preview}
         <Sheet.Description class="mx-2 mb-2 rounded-xl bg-muted px-3 py-2 text-[13px] leading-5"><span class="line-clamp-2 [overflow-wrap:anywhere]">{quoteSummary(preview)}</span></Sheet.Description>
       {/if}
       <div class="flex flex-col" role="menu" aria-label={$t('bots.messageActions')}>
-        <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuotesIcon class="size-5" />{$t('bots.quote')}</button>
+        <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => quote(current)}><QuotesIcon class="size-5" />{quoteLabel}</button>
+        {#if current.file}
+          <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => download(current)}><DownloadSimpleIcon class="size-5" />{$t('files.download')}</button>
+        {/if}
         {#if isMessage}
           <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-5" />{$t('common.copy')}</button>
           <div role="separator" class="mx-2 my-1 h-px bg-border"></div>

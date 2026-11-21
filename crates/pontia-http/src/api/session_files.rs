@@ -16,8 +16,8 @@ use tokio::io::AsyncReadExt;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ShareFileRequest {
-    path: std::path::PathBuf,
+pub struct ShareFilesRequest {
+    paths: Vec<std::path::PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -26,15 +26,19 @@ pub struct FileListQuery {
     cursor: Option<String>,
 }
 
-pub async fn share_file(
+pub async fn share_files(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
-    Json(request): Json<ShareFileRequest>,
+    Json(request): Json<ShareFilesRequest>,
 ) -> Result<Response, ApiError> {
-    let file = SessionFileService::new(state.db())
-        .share(&session_id, request.path)
+    let files = SessionFileService::new(state.db())
+        .share(&session_id, request.paths)
         .await?;
-    Ok((StatusCode::CREATED, ok(json!({"file": file}))).into_response())
+    Ok((
+        StatusCode::CREATED,
+        ok(json!({"share_id": files[0].share_id, "files": files})),
+    )
+        .into_response())
 }
 
 pub async fn list_session_files(

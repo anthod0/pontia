@@ -78,7 +78,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 
 | Command | Context | Purpose |
 | --- | --- | --- |
-| `pontia send-file PATH` | Inside a Pontia Session | Share one file with the Session's user; it appears in the Dashboard chat |
+| `pontia send-file PATH...` | Inside a Pontia Session | Share files with the Session's user; files given together appear as one card in the Dashboard chat. If any path is invalid, nothing is shared |
 
 ### Workflows
 

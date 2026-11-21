@@ -109,14 +109,16 @@ export function messageText(message: BotMessage): string {
   return parseUploadMessage(parseQuotedMessage(message.content).text).text;
 }
 
-export function entryQuote(entry: BotEntry, excerpt: string | null = null): BotQuote | null {
-  if (entry.kind === "shared_file")
-    return {
-      kind: "file",
-      fileId: entry.file.file_id,
-      path: entry.file.path,
-      name: entry.file.name,
-    };
+/** A quote of a message, or of one file of a share. */
+export function entryQuote(
+  entry: BotEntry,
+  excerpt: string | null = null,
+  fileId: string | null = null,
+): BotQuote | null {
+  if (entry.kind === "shared_files") {
+    const file = entry.files.find((file) => file.file_id === fileId);
+    return file ? { kind: "file", fileId: file.file_id, path: file.path, name: file.name } : null;
+  }
   if (!("content" in entry)) return null;
   const text =
     excerpt ??

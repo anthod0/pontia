@@ -67,16 +67,11 @@ impl ExternalQueryService {
             self.pool.clone(),
         );
         for item in &mut items {
-            if item.event.fact.event_type == "session.file_shared" {
-                let id = item.event.fact.payload["file_id"]
+            if item.event.fact.event_type == "session.files_shared" {
+                let id = item.event.fact.payload["share_id"]
                     .as_str()
-                    .ok_or_else(|| Error::Domain("File event missing file_id".into()))?;
-                item.event.file = Some(
-                    files
-                        .get(&item.event.fact.session_id, id)
-                        .await?
-                        .ok_or_else(|| Error::NotFound(format!("Shared file {id} not found")))?,
-                );
+                    .ok_or_else(|| Error::Domain("File event missing share_id".into()))?;
+                item.event.files = Some(files.share_files(&item.event.fact.session_id, id).await?);
             }
         }
         Ok(items)

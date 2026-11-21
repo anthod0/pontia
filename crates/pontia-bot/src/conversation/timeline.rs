@@ -1,5 +1,5 @@
 use pontia_agent_control::queries::{
-    OwnedSession, OwnedSessionFile, SessionEventSummary, SharedFile, TimePage,
+    OwnedFileShare, OwnedSession, SessionEventSummary, SharedFile, TimePage,
 };
 use pontia_core::{Error, Result, domain::EventType};
 use serde::{Deserialize, Serialize};
@@ -19,12 +19,13 @@ pub const NOTICE_EVENTS: &[EventType] = &[
 #[derive(Serialize)]
 #[serde(tag = "kind")]
 pub enum TimelineEntry {
-    #[serde(rename = "shared_file")]
-    SharedFile {
+    /// One `pontia send-file` call; `id` is its share ID.
+    #[serde(rename = "shared_files")]
+    SharedFiles {
         id: String,
         session_id: String,
         created_at: String,
-        file: SharedFile,
+        files: Vec<SharedFile>,
     },
     #[serde(untagged)]
     Message(BotMessage),
@@ -40,7 +41,7 @@ struct TimedEntry {
 impl TimedEntry {
     fn key(&self) -> (i64, &str) {
         let id = match &self.entry {
-            TimelineEntry::SharedFile { id, .. } => id,
+            TimelineEntry::SharedFiles { id, .. } => id,
             TimelineEntry::Message(m) => &m.id,
             TimelineEntry::Notice(n) => &n.id,
         };
@@ -57,15 +58,15 @@ impl From<TimedMessage> for TimedEntry {
     }
 }
 
-impl From<OwnedSessionFile> for TimedEntry {
-    fn from(row: OwnedSessionFile) -> Self {
+impl From<OwnedFileShare> for TimedEntry {
+    fn from(row: OwnedFileShare) -> Self {
         Self {
             ms: row.timeline_ms,
-            entry: TimelineEntry::SharedFile {
-                id: row.file.file_id.clone(),
+            entry: TimelineEntry::SharedFiles {
+                id: row.share_id,
                 session_id: row.session_id,
-                created_at: row.file.created_at.clone(),
-                file: row.file,
+                created_at: row.created_at,
+                files: row.files,
             },
         }
     }
@@ -178,16 +179,17 @@ impl ConversationService {
         })
     }
 
+    /// Entries around a message, notice, or file share. A file ID locates its share.
     async fn around(&self, bot: &Bot, id: &str, limit: u32) -> Result<(Vec<TimedEntry>, bool)> {
         let anchor = if let Some(row) = self.messages.find(&bot.bot_id, id).await? {
             Some(TimedEntry::from(row))
-        } else if let Some(file) = self
+        } else if let Some(share) = self
             .control
             .queries()
-            .owned_session_file(APPLICATION_ID, &format!("{}:", bot.bot_id), id)
+            .owned_file_share(APPLICATION_ID, &format!("{}:", bot.bot_id), id)
             .await?
         {
-            Some(TimedEntry::from(file))
+            Some(TimedEntry::from(share))
         } else if let Some(session) = &bot.current_session_id {
             self.control
                 .queries()
@@ -199,11 +201,13 @@ impl ConversationService {
         }
         .ok_or_else(|| Error::NotFound("Bot timeline entry not found".into()))?;
 
+        let (ms, id) = anchor.key();
+        let id = id.to_owned();
         let mut older = self
-            .timeline_rows(bot, TimePage::Before(anchor.ms, id), limit)
+            .timeline_rows(bot, TimePage::Before(ms, &id), limit)
             .await?;
         let mut newer = self
-            .timeline_rows(bot, TimePage::After(anchor.ms, id), limit - 1)
+            .timeline_rows(bot, TimePage::After(ms, &id), limit - 1)
             .await?;
         let neighbors = limit as usize - 1;
         let older_count = (neighbors / 2)
@@ -239,12 +243,12 @@ impl ConversationService {
                 .await?;
             rows.extend(notices.into_iter().map(TimedEntry::from));
         }
-        let files = self
+        let shares = self
             .control
             .queries()
-            .owned_session_files(APPLICATION_ID, &format!("{}:", bot.bot_id), page, limit)
+            .owned_file_shares(APPLICATION_ID, &format!("{}:", bot.bot_id), page, limit)
             .await?;
-        rows.extend(files.into_iter().map(TimedEntry::from));
+        rows.extend(shares.into_iter().map(TimedEntry::from));
         rows.sort_unstable_by(|a, b| a.key().cmp(&b.key()));
         if !matches!(page, TimePage::After(..)) {
             rows.reverse();

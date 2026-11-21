@@ -48,13 +48,13 @@ The Inbox tracks submitted messages waiting for delivery or queued by an Agent C
 
 ## Shared files
 
-An agent can share a file from its Session by running `pontia send-file PATH`. The file appears as a card at the end of the Turn, where you can download it. Images, text, and code files can also be previewed; other files, such as videos, PDFs, and archives, are download-only. Open **Shared files** in the composer menu to list every file shared in the Session. Pontia reads the file from the device when you download it, so a file that was moved or deleted is no longer available.
+An agent can share files from its Session by running `pontia send-file PATH...`. Files shared together appear as one card at the end of the Turn, where you can download each file or click **Download all** to download every file that still exists. A card of more than six files shows the first four until you click **Show more**. When every file in a card is an image, the card shows the images together; click the list button to see their names and sizes. Images, text, and code files can also be previewed; other files, such as videos, PDFs, and archives, are download-only. Open **Shared files** in the composer menu to list every file shared in the Session. Pontia reads the file from the device when you download it, so a file that was moved or deleted is no longer available.
 
-When a Bot shares a file, it appears in the Bot chat with its type and size. Images are shown inline and open full size when clicked; click a text or code file to preview it. Click the download button to save any file.
+When a Bot shares files, they appear in the Bot chat as a card with each file's type and size. Images are shown inline and open full size when clicked; the viewer pages through the other images of the same card. Click a text or code file to preview it. Click the download button to save any file.
 
 ## Quote a Bot chat message
 
-In a Bot chat, right-click a message or shared file and choose **Quote**, or select part of a message and choose **Quote** above the selection. On a phone, press and hold a message; the menu also offers **Copy** and **Select text**. Shift+right-click opens the browser's own menu.
+In a Bot chat, right-click a message or one shared file or image and choose **Quote**, or select part of a message and choose **Quote** above the selection. On a phone, press and hold a message; the menu also offers **Copy** and **Select text**. Shift+right-click opens the browser's own menu.
 
 The quote appears above the composer; click **×** to remove it. Quoting another message replaces it, and a message needs text to be sent with a quote. The Bot receives the full quoted text. Click a quote in a sent message to scroll back to the original, even when it is in older history.
 

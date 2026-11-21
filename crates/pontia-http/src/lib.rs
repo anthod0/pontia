@@ -321,7 +321,7 @@ fn external_api_router(state: HttpState) -> Router {
         )
         .route(
             "/api/v1/sessions/{session_id}/files",
-            get(api::list_session_files).post(api::share_file),
+            get(api::list_session_files).post(api::share_files),
         )
         .route(
             "/api/v1/sessions/{session_id}/files/content",

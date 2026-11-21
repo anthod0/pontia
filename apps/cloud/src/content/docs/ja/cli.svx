@@ -78,7 +78,7 @@ pontia completions powershell | Out-String | Invoke-Expression
 
 | コマンド | 実行場所 | 用途 |
 | --- | --- | --- |
-| `pontia send-file PATH` | Pontia Session 内 | 1 つのファイルを Session のユーザーと共有します。ファイルは Dashboard のチャットに表示されます |
+| `pontia send-file PATH...` | Pontia Session 内 | ファイルを Session のユーザーと共有します。一緒に指定したファイルは Dashboard のチャットに 1 枚のカードとして表示されます。無効なパスが 1 つでもあると、何も共有されません |
 
 ### Workflow
 

@@ -17,15 +17,19 @@ async fn fixture() -> TestApp {
     app
 }
 
-async fn share(app: &TestApp, path: &std::path::Path) -> Value {
-    let (status, body) = post_json(
+async fn share_paths(app: &TestApp, paths: Value) -> (StatusCode, Value) {
+    post_json(
         app.state.clone(),
         "/api/v1/sessions/s/files",
-        json!({"path": path}),
+        json!({ "paths": paths }),
     )
-    .await;
+    .await
+}
+
+async fn share(app: &TestApp, path: &std::path::Path) -> Value {
+    let (status, body) = share_paths(app, json!([path])).await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
-    body["data"]["file"].clone()
+    body["data"]["files"][0].clone()
 }
 
 async fn content(app: &TestApp, session: &str, id: &str) -> axum::response::Response {
@@ -172,7 +176,7 @@ async fn declaration_and_event_are_atomic_and_streams_enrich_replayed_events() {
         .unwrap();
     assert_eq!(
         serde_json::from_str::<Value>(&payload).unwrap(),
-        json!({"file_id": second["file_id"]})
+        json!({"share_id": second["share_id"], "file_ids": [second["file_id"]]})
     );
     for path in [
         "/api/v1/dashboard/events/stream?after=session:0",
@@ -203,17 +207,11 @@ async fn declaration_and_event_are_atomic_and_streams_enrich_replayed_events() {
         } else {
             &events[1]
         };
-        assert_eq!(event["file"], second);
+        assert_eq!(event["files"], json!([second]));
     }
     sqlx::query("CREATE TRIGGER reject_file_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT, 'test failure'); END").execute(&app.db).await.unwrap();
     assert_eq!(
-        post_json(
-            app.state.clone(),
-            "/api/v1/sessions/s/files",
-            json!({"path": path})
-        )
-        .await
-        .0,
+        share_paths(&app, json!([path])).await.0,
         StatusCode::INTERNAL_SERVER_ERROR
     );
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_files")
@@ -267,21 +265,19 @@ async fn checks_size_on_declaration_and_each_download_and_requires_absolute_regu
     let app = fixture().await;
     for path in [std::path::Path::new("relative"), app.workspace().path()] {
         assert_eq!(
-            post_json(
-                app.state.clone(),
-                "/api/v1/sessions/s/files",
-                json!({"path": path})
-            )
-            .await
-            .0,
+            share_paths(&app, json!([path])).await.0,
             StatusCode::BAD_REQUEST
         );
     }
     assert_eq!(
+        share_paths(&app, json!([])).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
         post_json(
             app.state.clone(),
             "/api/v1/sessions/missing/files",
-            json!({"path": app.workspace().path()})
+            json!({"paths": [app.workspace().path()]})
         )
         .await
         .0,
@@ -305,13 +301,7 @@ async fn checks_size_on_declaration_and_each_download_and_requires_absolute_regu
         StatusCode::PAYLOAD_TOO_LARGE
     );
     assert_eq!(
-        post_json(
-            app.state.clone(),
-            "/api/v1/sessions/s/files",
-            json!({"path": path})
-        )
-        .await
-        .0,
+        share_paths(&app, json!([path])).await.0,
         StatusCode::BAD_REQUEST
     );
     let response = pontia_http::router(app.state.clone())
@@ -371,4 +361,53 @@ async fn pagination_uses_time_then_id_without_skipping_equal_timestamps() {
         .0,
         StatusCode::BAD_REQUEST
     );
+}
+
+#[tokio::test]
+async fn batch_shares_all_files_with_one_event_or_names_the_invalid_path() {
+    let app = fixture().await;
+    let first = app.workspace().path().join("a.txt");
+    let second = app.workspace().path().join("b.png");
+    std::fs::write(&first, b"a").unwrap();
+    std::fs::write(&second, b"\x89PNG\r\n\x1a\nb").unwrap();
+    let missing = app.workspace().path().join("missing.txt");
+
+    let (status, body) = share_paths(&app, json!([first, missing, second])).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let message = body["error"]["message"].as_str().unwrap();
+    assert!(message.starts_with(missing.to_str().unwrap()), "{message}");
+    for table in ["session_files", "events"] {
+        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
+            .fetch_one(&app.db)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    let (status, body) = share_paths(&app, json!([second, first])).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let files = body["data"]["files"].as_array().unwrap();
+    let share_id = body["data"]["share_id"].as_str().unwrap();
+    assert!(share_id.starts_with("share_"));
+    assert_eq!(
+        files
+            .iter()
+            .map(|f| f["name"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["b.png", "a.txt"]
+    );
+    assert!(files.iter().all(|f| f["share_id"] == share_id));
+    assert_eq!(files[0]["media_type"], "image/png");
+    let events: Vec<String> =
+        sqlx::query_scalar("SELECT payload FROM events WHERE event_type = 'session.files_shared'")
+            .fetch_all(&app.db)
+            .await
+            .unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        serde_json::from_str::<Value>(&events[0]).unwrap(),
+        json!({"share_id": share_id, "file_ids": [files[0]["file_id"], files[1]["file_id"]]})
+    );
+    let (_, page) = get_json(app.state.clone(), "/api/v1/sessions/s/files").await;
+    assert_eq!(page["data"]["files"].as_array().unwrap().len(), 2);
 }

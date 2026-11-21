@@ -6,7 +6,7 @@
   import { t } from '$lib/i18n'
   import { Button } from '$lib/components/ui/button/index.js'
   import { MessageResponse } from '$lib/components/ai-elements/message/index.js'
-  import FileBubble from '../components/chat/FileBubble.svelte'
+  import SharedFiles from '../components/chat/files/SharedFiles.svelte'
   import MessageComposer from '../components/chat/MessageComposer.svelte'
   import { parseUploadMessage } from '$lib/uploads/message'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
@@ -18,6 +18,7 @@
   import BotMessageActions from '../components/bots/BotMessageActions.svelte'
   import BotQuoteBlock from '../components/bots/BotQuoteBlock.svelte'
   import { parseQuotedMessage, quoteId, quotedMessage, type BotQuote } from '$lib/botQuote'
+  import { canPreviewImage } from '$lib/downloads/preview'
   import { loadQuoteDraft, saveQuoteDraft } from '$lib/botQuoteDraft'
 
   let { botId }: { botId: string } = $props()
@@ -60,7 +61,7 @@
         return
       }
       await tick()
-      feed?.scrollToEntry(id)
+      feed?.scrollToEntry(timeline.entryId(id)!)
       highlighted = id
       clearTimeout(highlightTimer)
       highlightTimer = setTimeout(() => { highlighted = null }, 1500)
@@ -78,7 +79,7 @@
       else if (update.type === 'changed' || update.type === 'reset') timeline.refresh(update.type === 'reset')
     }, () => { typing = false })
     const unsubscribeFiles = device.events.subscribeDashboardEvents(event => {
-      if (event.kind === 'session_event' && event.event.file) timeline.refresh()
+      if (event.kind === 'session_event' && event.event.files) timeline.refresh()
     })
     const resume = () => { if (!document.hidden) timeline.refresh(true) }
     document.addEventListener('visibilitychange', resume)
@@ -116,6 +117,13 @@
     return selectableId === id ? '' : 'pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]'
   }
 
+  function quoteImage(value: BotQuote) {
+    // Reading the entries keeps the thumbnail in step with loaded history.
+    if (value.kind !== 'file' || !timeline.entries.length) return null
+    const found = timeline.sharedFile(value.fileId)
+    return found && canPreviewImage(found.file) ? { sessionId: found.share.session_id, file: found.file } : null
+  }
+
   function quoteSpeaker(value: BotQuote) {
     return value.kind === 'message' && value.speaker === 'User' ? $t('bots.you') : timeline.bot?.name ?? ''
   }
@@ -145,7 +153,7 @@
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12" aria-label={timeline.bot.name}>
     <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:selectableId onquote={quote => void addQuote(quote)} />
-    <BotMessageFeed bind:this={feed} bind:root={feedRoot} {timeline} {typing} {highlighted}>
+    <BotMessageFeed bind:this={feed} bind:root={feedRoot} {timeline} {typing} highlighted={highlighted && timeline.entries.some(row => row.id === highlighted) ? highlighted : null}>
       {#snippet row(entry)}
         {#if 'content' in entry}
           {@const quoted = entry.kind === 'user_input' ? parseQuotedMessage(entry.content) : { text: entry.content, quote: null }}
@@ -172,7 +180,7 @@
                   <div class="{userBubbleClass} {highlightableClass} {quotableClass(entry.id)} text-sm leading-6" {...quotableProps}>
                     {#if parts.quote}
                       {@const target = quoteId(parts.quote)}
-                      <BotQuoteBlock quote={parts.quote} speaker={quoteSpeaker(parts.quote)} missing={missingQuotes.includes(target)} busy={jumping === target} onjump={() => void jumpTo(target)} />
+                      <BotQuoteBlock quote={parts.quote} speaker={quoteSpeaker(parts.quote)} image={quoteImage(parts.quote)} missing={missingQuotes.includes(target)} busy={jumping === target} onjump={() => void jumpTo(target)} />
                     {/if}
                     <p class="whitespace-pre-wrap [overflow-wrap:anywhere]" data-bot-quote-source>{parts.text}</p>
                   </div>
@@ -186,11 +194,10 @@
               {/if}
             </div>
           </div>
-        {:else if entry.kind === 'shared_file'}
+        {:else if entry.kind === 'shared_files'}
           <div class="max-w-[90%]">
-            <div class="w-fit max-w-full rounded-2xl {highlightableClass} {quotableClass(entry.id)}" {...quotableProps}>
-              <FileBubble file={entry.file} sessionId={entry.session_id} />
-            </div>
+            <SharedFiles files={entry.files} sessionId={entry.session_id} highlighted={highlighted}
+              itemProps={file => ({ ...quotableProps, 'data-bot-file-id': file.file_id, class: quotableClass(entry.id) })} />
           </div>
         {:else}
           <p class="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
@@ -217,7 +224,7 @@
       {#if timeline.refreshError}{@render refreshFailure()}{/if}
       {#if actionError}<p role="alert" class="mb-2 text-sm text-destructive">{actionError}</p>{/if}
       <div aria-live="polite">
-        {#if quote}<BotQuoteBlock {quote} speaker={quoteSpeaker(quote)} onremove={() => setQuote(null)} />{/if}
+        {#if quote}<BotQuoteBlock {quote} speaker={quoteSpeaker(quote)} image={quoteImage(quote)} onremove={() => setQuote(null)} />{/if}
       </div>
       <MessageComposer bind:this={composer} draftId={`bot:${botId}`} bind:value={draft} placeholder={$t('bots.message')} fullscreen
         submitDisabled={quote !== null && !draft.trim()}

@@ -10,11 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Opening the Dashboard in a new tab or app window returns to the last Session chat or Bot chat viewed on that device. Links to other pages, reloads, and New Chat opened later in the same tab are unchanged. A Session or Bot that no longer exists opens New Chat instead.
+- `pontia send-file` accepts several paths and shares them as one card in the Session chat and Bot chat. If any path is invalid, nothing is shared and the error names that path. The command prints one file ID per line.
+- A card of several files lists each file with its own download, preview, and status, and **Download all** starts a separate download for every file that still exists. Cards of more than six files show the first four until expanded. When every file is a PNG, JPEG, GIF, or WebP image of 20 MiB or less, the card shows the images as a mosaic and can switch to the list.
+- In a Bot chat, right-click or press and hold one file or image of a card to quote or download it. Quoted images show a thumbnail, and jumping to a quote expands the card to show the quoted file.
 
 ### Changed
 
 - Bots send separate messages for unrelated matters, even when updates arrive together.
 - On phones, the Bot page top bar no longer has a **More** menu. Tap the Bot name to open its settings, where **Delete Bot** is at the bottom. A downloads button appears in the top bar while downloads are in progress or failed.
+- The image viewer pages only through the images of the card it was opened from, skipping images that no longer exist. A single shared image opens without paging. Previously the Session chat paged through every shared image and the Bot chat did not page.
+- The Session chat shows one card per `pontia send-file` call instead of grouping every file of a Turn together.
+- The `POST /api/v1/sessions/{session_id}/files` request takes `{"paths": [...]}` and returns the share ID and its files. The `session.file_shared` event is replaced by `session.files_shared` with `share_id` and `file_ids`, and Bot timelines return `shared_files` entries.
 - Bot chats open with the latest messages saved in the browser and then update from the device, so recent messages stay visible while offline or on a slow connection. Deleting a Bot also removes its saved messages from the browser.
 
 ### Fixed

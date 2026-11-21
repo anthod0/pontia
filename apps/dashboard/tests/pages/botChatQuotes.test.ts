@@ -23,6 +23,17 @@ const bot: Bot = {
 };
 const id = (n: number) => `bmsg_0193a000-0000-7000-8000-${String(n).padStart(12, "0")}`;
 const fileId = "file_0193a000-0000-7000-8000-000000000001";
+const imageId = "file_0193a000-0000-7000-8000-000000000002";
+const sharedFile = (file_id: string, name: string, media_type: string) => ({
+  file_id,
+  share_id: "share_0193a000-0000-7000-8000-000000000001",
+  turn_id: null,
+  name,
+  path: `/work/${name}`,
+  size: 12,
+  media_type,
+  created_at: new Date(2000).toISOString(),
+});
 const message = (n: number, kind: BotMessage["kind"], content: string): BotMessage => ({
   id: id(n),
   kind,
@@ -32,19 +43,14 @@ const message = (n: number, kind: BotMessage["kind"], content: string): BotMessa
 });
 const reply = message(1, "bot_reply", "Renew the **certificate** first.");
 const file: BotEntry = {
-  kind: "shared_file",
-  id: fileId,
+  kind: "shared_files",
+  id: "share_0193a000-0000-7000-8000-000000000001",
   session_id: "s",
   created_at: new Date(2000).toISOString(),
-  file: {
-    file_id: fileId,
-    turn_id: null,
-    name: "checklist.md",
-    path: "/work/checklist.md",
-    size: 12,
-    media_type: "text/markdown",
-    created_at: new Date(2000).toISOString(),
-  },
+  files: [
+    sharedFile(fileId, "checklist.md", "text/markdown"),
+    sharedFile(imageId, "chart.png", "image/png"),
+  ],
 };
 
 function serve(entries: BotEntry[], options: { older?: BotEntry[]; missing?: string[] } = {}) {
@@ -89,8 +95,11 @@ beforeEach(() => {
     return this.getAttribute("role") === "log" ? 2000 : 56;
   });
   vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(56);
+  // jsdom has no scrollIntoView; file cards scroll a quoted file into view.
+  Element.prototype.scrollIntoView = vi.fn();
 });
 afterEach(() => {
+  delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   vi.restoreAllMocks();
   toast.error.mockReset();
 });
@@ -114,11 +123,12 @@ test("sends a quoted Bot reply as a user_quote element before the typed text", a
   );
 });
 
-test("quotes a shared file with its ID and path", async () => {
+test("quotes one file of a share with its ID and path", async () => {
   serve([file]);
   const send = sent();
   render(BotChatPage, { botId: bot.bot_id });
   await screen.findByText(/checklist/);
+  expect(rows()).toHaveLength(2);
   await quoteFromMenu(rows()[0]);
   await userEvent.type(screen.getByRole("textbox"), "Check it");
   await fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -312,4 +322,42 @@ test("opens the message menu from the keyboard and quotes with R", async () => {
   expect(within(await screen.findByRole("menu")).getAllByRole("menuitem").length).toBeGreaterThan(
     0,
   );
+});
+
+test("quotes one image from its menu, shows its thumbnail, and jumps back to it", async () => {
+  class VisibleObserver {
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+    observe(target: Element) {
+      this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as never);
+    }
+    disconnect() {}
+  }
+  vi.stubGlobal("IntersectionObserver", VisibleObserver);
+  vi.spyOn(testDevice.previews, "sharedImageUrl").mockResolvedValue("blob:chart");
+  const quoted = message(
+    3,
+    "user_input",
+    `<user_quote file_id="${imageId}" speaker="Bot" path="/work/chart.png">chart.png</user_quote>\nBigger`,
+  );
+  serve([file, quoted]);
+  render(BotChatPage, { botId: bot.bot_id });
+  const image = await screen.findByRole("img", { name: "chart.png" });
+  await fireEvent.contextMenu(image, { clientX: 10, clientY: 10 });
+  const menu = await screen.findByRole("menu");
+  expect(within(menu).getByText("chart.png")).toBeInTheDocument();
+  expect(within(menu).getByRole("menuitem", { name: "Download" })).toBeInTheDocument();
+  await fireEvent.click(within(menu).getByRole("menuitem", { name: /Quote image/ }));
+  const pending = document.querySelector("[data-bot-pending-quote]")!;
+  expect(pending.querySelector("[data-quote-thumbnail]")).toHaveAttribute("src", "blob:chart");
+
+  const jump = screen.getByRole("button", { name: /^Quote from Helper Bot: chart\.png/ });
+  expect(jump.querySelector("[data-quote-thumbnail]")).toBeInTheDocument();
+  await fireEvent.click(jump);
+  // A mixed share is a list; the quoted row is ringed.
+  await waitFor(() =>
+    expect(document.querySelector(`[data-shared-file="${imageId}"]`)!.className).toContain(
+      "ring-2",
+    ),
+  );
+  vi.unstubAllGlobals();
 });

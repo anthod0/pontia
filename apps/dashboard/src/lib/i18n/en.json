@@ -785,5 +785,19 @@
   "profiles.select": "Select a profile to edit it.",
   "profiles.saved": "Profile saved",
   "profiles.noLaunch": "No client or model",
-  "profiles.noClients": "Enable an Agent Client to create a profile."
+  "profiles.noClients": "Enable an Agent Client to create a profile.",
+  "files.fileCount": "{count, plural, one {# file} other {# files}}",
+  "files.imageCount": "{count, plural, one {# image} other {# images}}",
+  "files.receivingCount": "{count} receiving",
+  "files.failedCount": "{count} failed",
+  "files.missingCount": "{count} gone",
+  "files.downloadAll": "Download all",
+  "files.downloadAllNamed": "Download all {count} files",
+  "files.showMoreFiles": "Show {count} more",
+  "files.showMoreImages": "Show {count} more images",
+  "files.showLess": "Show less",
+  "files.showAsList": "Show as list",
+  "files.showAsImages": "Show as images",
+  "bots.quoteFile": "Quote file",
+  "bots.quoteImage": "Quote image"
 }
