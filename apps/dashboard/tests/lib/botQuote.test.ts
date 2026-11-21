@@ -116,10 +116,10 @@ test("only user messages carry quotes; a Bot reply shows quote-like text as writ
 
 test("quoting a user message takes its text without attachments or its own quote", () => {
   const content = [
+    `<user_quote message_id="${messageId}" speaker="Bot">older</user_quote>`,
     '<user_uploads note="Temporary files; copy any you need into the workspace.">',
     '<user_upload path="/tmp/a.log">a.log</user_upload>',
     "</user_uploads>",
-    `<user_quote message_id="${messageId}" speaker="Bot">older</user_quote>`,
     "See the log",
   ].join("\n");
   expect(entryQuote(message("user_input", content))).toEqual({
