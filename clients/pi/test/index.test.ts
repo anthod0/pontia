@@ -1,7 +1,8 @@
 import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { type ControlInput, type PiConnection } from "../src/control-socket.js";
+import { type ControlInput } from "../src/control-socket.js";
+import { type RuntimeConnection } from "../shared/control-socket.js";
 import { createPontiaPiExtension } from "../src/index.js";
 import type { TurnContext } from "../src/context.js";
 import type { InternalEvent } from "../src/events.js";
@@ -88,7 +89,7 @@ afterEach(() => {
 
 function install(
   overrides: Partial<Parameters<typeof createPontiaPiExtension>[1]> & {
-    request?: PiConnection["request"];
+    request?: RuntimeConnection["request"];
   } = {},
 ) {
   const { pi, handlers, commands, sendUserMessage } = fakePi();
@@ -105,7 +106,7 @@ function install(
   delete env.PONTIA_SESSION_ID;
   delete env.PONTIA_RUNTIME_INSTANCE_ID;
   const suppliedRequest = overrides.request;
-  const request: PiConnection["request"] = async (method, params) => {
+  const request: RuntimeConnection["request"] = async (method, params) => {
     const record = params as Record<string, any>;
     if (managedRuntime && method === "session.context")
       return {
@@ -129,7 +130,7 @@ function install(
     );
     return result;
   };
-  const connection: PiConnection = { request, registered() {}, async close() {} };
+  const connection: RuntimeConnection = { request, registered() {}, async close() {} };
   const suppliedConnect = overrides.connectPi;
   createPontiaPiExtension(pi as any, {
     makeReporter: vi.fn(() => ({

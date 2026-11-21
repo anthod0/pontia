@@ -129,7 +129,7 @@ impl ClientControlService {
         else {
             return Ok(None);
         };
-        Ok(sqlx::query_scalar("SELECT r.runtime_id FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id=? AND s.state IN ('starting','idle','busy','waiting_for_interaction','interrupted') AND r.state IN ('starting','running')")
+        Ok(sqlx::query_scalar("SELECT r.runtime_id FROM session_runtimes r JOIN sessions s USING(session_id) WHERE r.runtime_id=? AND (s.state IN ('created','starting','idle','busy','waiting_for_interaction','interrupted') OR (s.state='error' AND r.state='starting')) AND r.state IN ('starting','running')")
             .bind(runtime_id).fetch_optional(&self.pool).await?)
     }
 
@@ -162,13 +162,59 @@ impl ClientControlService {
         client_session_key: &str,
         channel: Arc<dyn ClientControlChannel>,
     ) -> Result<()> {
+        self.attach_binding_locked(
+            _guard,
+            client_type,
+            session_id,
+            runtime_id,
+            crate::ipc::identity::BindingConfirmation::Native(client_session_key),
+            channel,
+        )
+        .await
+    }
+
+    pub async fn validate_attachment(
+        &self,
+        client_type: &str,
+        session_id: &str,
+        runtime_id: &str,
+        binding: crate::ipc::identity::BindingConfirmation<'_>,
+    ) -> Result<()> {
+        match binding {
+            crate::ipc::identity::BindingConfirmation::Native(key) => {
+                self.validate_identity(client_type, key, session_id, runtime_id)
+                    .await?
+            }
+            crate::ipc::identity::BindingConfirmation::Launch => {
+                let launching: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions s WHERE s.session_id=? AND s.client_type=? AND EXISTS(SELECT 1 FROM session_runtimes r WHERE r.session_id=s.session_id AND r.runtime_id=? AND r.state='starting'))")
+                    .bind(session_id).bind(client_type).bind(runtime_id).fetch_one(&self.pool).await?;
+                if !launching {
+                    return Err(Error::StateConflict(
+                        "Runtime must confirm its native binding".into(),
+                    ));
+                }
+                self.validate_runtime(session_id, runtime_id).await?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn attach_binding_locked(
+        &self,
+        _guard: &tokio::sync::OwnedMutexGuard<()>,
+        client_type: &str,
+        session_id: &str,
+        runtime_id: &str,
+        binding: crate::ipc::identity::BindingConfirmation<'_>,
+        channel: Arc<dyn ClientControlChannel>,
+    ) -> Result<()> {
         let mut connections = self.connections.lock().await;
         if connections.stopped || !channel.available() {
             return Err(Error::CapabilityUnavailable(
                 "Client connection is closed".into(),
             ));
         }
-        self.validate_identity(client_type, client_session_key, session_id, runtime_id)
+        self.validate_attachment(client_type, session_id, runtime_id, binding)
             .await?;
         if let Some(pid) = channel.process_id() {
             let record = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).get(runtime_id).await?;

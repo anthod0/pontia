@@ -1,291 +1,178 @@
-use pontia_agent_control::EventIngestService;
+use crate::peer::Peer;
+use pontia_agent_control::{
+    ClientControlChannel, ClientControlOperation, EventIngestService,
+    ipc::rpc::{MAX_FRAME_BYTES, RpcPeer},
+};
 use pontia_core::{Error, Result};
+use pontia_runtime::{ProcessFingerprint, ProcessObservation};
 use serde_json::{Value, json};
 use std::{
-    collections::HashMap, os::unix::fs::PermissionsExt, path::Path, process::Stdio, sync::Arc,
+    io::{Seek, Write},
+    path::Path,
+    process::Stdio,
+    sync::Arc,
     time::Duration,
 };
-use tokio::{
-    io::{AsyncBufRead, AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::{UnixStream, unix::OwnedWriteHalf},
-    process::Command,
-    sync::{Mutex, oneshot, watch},
-};
 
-use crate::peer::Peer;
-const MAX_FRAME: usize = 1024 * 1024;
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(30);
-type Reply = oneshot::Sender<Value>;
-
 pub(crate) struct Connection {
-    writer: Mutex<OwnedWriteHalf>,
-    pending: Mutex<HashMap<u64, Reply>>,
-    next: std::sync::atomic::AtomicU64,
+    pub rpc: Arc<RpcPeer>,
     pub host_id: String,
-    pub exited: watch::Receiver<bool>,
-    stop: watch::Sender<bool>,
+    pub process: ProcessFingerprint,
 }
 
-pub(crate) async fn frame(reader: &mut (impl AsyncBufRead + Unpin)) -> Result<Value> {
-    let mut bytes = Vec::new();
-    loop {
-        let chunk = reader.fill_buf().await?;
-        if chunk.is_empty() {
-            return Err(Error::ControlUnknown(
-                "Claude Code control connection closed".into(),
-            ));
-        }
-        let end = chunk.iter().position(|byte| *byte == b'\n');
-        let count = end.map_or(chunk.len(), |index| index + 1);
-        if bytes.len() + count > MAX_FRAME {
-            return Err(Error::Domain("Claude Code frame too large".into()));
-        }
-        bytes.extend_from_slice(&chunk[..count]);
-        reader.consume(count);
-        if end.is_some() {
-            return Ok(serde_json::from_slice(&bytes)?);
-        }
+pub(crate) async fn launch(
+    peer: &Peer,
+    root: &Path,
+    script: &Path,
+    environment: &std::collections::BTreeMap<String, String>,
+    events: &EventIngestService,
+) -> Result<()> {
+    let mut bootstrap = json!({"session_id":peer.session,"runtime_id":peer.runtime,"cwd":peer.cwd,"pontia_home":root});
+    bootstrap["execution_policy"] = serde_json::to_value(
+        pontia_agent_control::ControlQueryService::new(events.db())
+            .session_execution_policy(&peer.session)
+            .await?,
+    )?;
+    if let Some(binding) = pontia_agent_control::SessionInstructionsService::new(events.db())
+        .session_instructions(&peer.session)
+        .await?
+        && let Some(prompt) = binding.get("system_prompt").and_then(Value::as_str)
+    {
+        bootstrap["system_prompt"] = json!(prompt);
     }
+    if let Some(model) = &peer.model {
+        bootstrap["model"] = json!(model);
+    }
+    if let Some(resume) = &peer.resume {
+        bootstrap["resume"] = json!(resume);
+    }
+    let mut input = tempfile::tempfile()?;
+    writeln!(input, "{bootstrap}")?;
+    input.rewind()?;
+    std::fs::create_dir_all(root.join("state"))?;
+    let log = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(root.join("state/claude-host.log"))?;
+    let mut command =
+        pontia_runtime::detached_command(Path::new(&crate::setup::node()), "Pontia Claude host")?;
+    let mut child = command
+        .arg(script)
+        .current_dir(&peer.cwd)
+        .envs(environment)
+        .env("PONTIA_HOME", root)
+        .env("PONTIA_SESSION_ID", &peer.session)
+        .env("CLAUDE_CONFIG_DIR", &peer.config_dir)
+        .stdin(input)
+        .stdout(Stdio::null())
+        .stderr(log)
+        .spawn()?;
+    let ready = tokio::time::timeout(CONTROL_TIMEOUT, async {
+        loop {
+            if peer.connection().is_ok() {
+                return Ok(());
+            }
+            if child.try_wait()?.is_some() {
+                return Err(Error::CapabilityUnavailable(
+                    "Claude Code host did not start (HOST_START_FAILED)".into(),
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| {
+        Err(Error::CapabilityUnavailable(
+            "Claude Code host startup timed out".into(),
+        ))
+    });
+    if ready.is_err()
+        && let Some(process) = ProcessFingerprint::capture(child.id())
+    {
+        let _ = pontia_runtime::GenericRuntimeManager.terminate_process(&process);
+    }
+    pontia_runtime::reap_detached_child(child);
+    ready
 }
 
 impl Connection {
-    pub async fn spawn(
-        peer: Arc<Peer>,
-        script: &Path,
-        environment: &std::collections::BTreeMap<String, String>,
-        events: EventIngestService,
-    ) -> Result<Arc<Self>> {
-        // Unix socket limits apply to the full path, including macOS's long TMPDIR.
-        let socket_directory = tempfile::Builder::new()
-            .prefix("pontia-claude-")
-            .permissions(std::fs::Permissions::from_mode(0o700))
-            .tempdir_in("/tmp")?;
-        let socket = socket_directory.path().join("control.sock");
-        let token = format!(
-            "{}{}",
-            uuid::Uuid::new_v4().simple(),
-            uuid::Uuid::new_v4().simple()
-        );
-        let mut child = Command::new(crate::setup::node())
-            .arg(script)
-            .current_dir(&peer.cwd)
-            .envs(environment)
-            .env("PONTIA_SESSION_ID", &peer.session)
-            .env("CLAUDE_CONFIG_DIR", &peer.config_dir)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .spawn()?;
-        let setup = async {
-            let mut stdin = child.stdin.take().expect("piped stdin");
-            let mut bootstrap = json!({"session_id":peer.session,"runtime_id":peer.runtime,"cwd":peer.cwd,"socket_path":socket,"token":token});
-            bootstrap["execution_policy"] = serde_json::to_value(
-                pontia_agent_control::ControlQueryService::new(events.db())
-                    .session_execution_policy(&peer.session)
-                    .await?,
-            )?;
-            if let Some(binding) =
-                pontia_agent_control::SessionInstructionsService::new(events.db())
-                    .session_instructions(&peer.session)
-                    .await?
-                && let Some(prompt) = binding.get("system_prompt").and_then(Value::as_str)
-            {
-                bootstrap["system_prompt"] = json!(prompt);
-            }
-            if let Some(model) = &peer.model {
-                bootstrap["model"] = json!(model);
-            }
-            if let Some(resume) = &peer.resume {
-                bootstrap["resume"] = json!(resume);
-            }
-            stdin.write_all(format!("{bootstrap}\n").as_bytes()).await?;
-            drop(stdin);
-            let mut stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
-            let ready = frame(&mut stdout).await?;
-            if ready["listening"] != true {
-                let code = ready["code"]
-                    .as_str()
-                    .filter(|code| {
-                        matches!(
-                            *code,
-                            "EACCES"
-                                | "EADDRINUSE"
-                                | "EINVAL"
-                                | "ENOENT"
-                                | "ENAMETOOLONG"
-                                | "ENOTDIR"
-                                | "EPERM"
-                        )
-                    })
-                    .unwrap_or("HOST_START_FAILED");
-                return Err(Error::Domain(format!(
-                    "Claude Code host did not start ({code})"
-                )));
-            }
-            let mut stream = UnixStream::connect(&socket).await?;
-            stream.write_all(format!("{}\n", json!({"method":"attach","session_id":peer.session,"runtime_id":peer.runtime,"token":token})).as_bytes()).await?;
-            let (read, write) = stream.into_split();
-            let mut reader = BufReader::new(read);
-            let attached = frame(&mut reader).await?;
-            if attached["type"] != "attached"
-                || attached["sequence"] != 0
-                || attached["high_water"] != 0
-                || !attached["unavailable"].is_null()
-            {
-                return Err(Error::Domain("Claude Code host attachment rejected".into()));
-            }
-            let host_id = attached["host_id"]
-                .as_str()
-                .filter(|id| !id.is_empty())
-                .ok_or_else(|| Error::Domain("Claude Code host identity missing".into()))?
-                .to_owned();
-            Ok((reader, write, host_id))
-        };
-        let (mut reader, writer, host_id) = tokio::time::timeout(CONTROL_TIMEOUT, setup)
-            .await
-            .map_err(|_| {
-            Error::CapabilityUnavailable("Claude Code host startup timed out".into())
-        })??;
-        let (stop, mut stopping) = watch::channel(false);
-        let (exit, exited) = watch::channel(false);
-        let connection = Arc::new(Self {
-            writer: Mutex::new(writer),
-            pending: Mutex::new(HashMap::new()),
-            next: std::sync::atomic::AtomicU64::new(1),
-            host_id,
-            exited,
-            stop,
-        });
-        let connection_task = connection.clone();
-        tokio::spawn(async move {
-            let run = async {
-                let mut sequence = 0;
-                let read_result: Result<()> = async {
-                    loop {
-                        let value = frame(&mut reader).await?;
-                        if value["host_id"] != connection_task.host_id {
-                            return Err(Error::Domain("Claude Code host identity changed".into()));
-                        }
-                        match value["type"].as_str() {
-                            Some("response") => {
-                                if let Some(id) = value["id"].as_u64()
-                                    && let Some(reply) =
-                                        connection_task.pending.lock().await.remove(&id)
-                                {
-                                    let _ = reply.send(value);
-                                }
-                            }
-                            Some("event") => {
-                                if value["sequence"].as_u64() != Some(sequence + 1) {
-                                    return Err(Error::Domain("Claude Code fact gap".into()));
-                                }
-                                peer.event(&events, &connection_task.host_id, &value["event"])
-                                    .await?;
-                                sequence += 1;
-                            }
-                            _ => return Err(Error::Domain("Claude Code invalid frame".into())),
-                        }
-                    }
-                }
-                .await;
-                if read_result.is_err() {
-                    peer.unavailable("control_connection_lost").await;
-                }
-                connection_task.pending.lock().await.clear();
-                let _ = connection_task.writer.lock().await.shutdown().await;
-                let _ = child.wait().await;
-                if let Err(error) = peer
-                    .runtime_event(
-                        &events,
-                        pontia_agent_control::PontiaEventType::RuntimeExited,
-                        json!({"reason":"host_exited"}),
-                    )
-                    .await
-                {
-                    tracing::warn!(%error, "Claude Code runtime exit report failed");
-                }
-            };
-            let stopped = tokio::select! {
-                _ = run => false,
-                _ = stopping.wait_for(|stop| *stop) => true,
-            };
-            if stopped {
-                // Ordinary owned-child shutdown, not a Session/Turn result.
-                let _ = child.start_kill();
-                let _ = child.wait().await;
-            }
-            // Only our host is owned here; SDK internals are never observed or signalled.
-            peer.unavailable("host_unavailable").await;
-            connection_task.pending.lock().await.clear();
-            drop(socket_directory);
-            let _ = exit.send(true);
-        });
-        Ok(connection)
+    pub async fn status(rpc: &RpcPeer) -> Result<Value> {
+        let response = rpc
+            .request("host.status", json!({}), MAX_FRAME_BYTES, false)
+            .await?;
+        response
+            .get("result")
+            .cloned()
+            .ok_or_else(|| Error::ControlUnknown("Claude host status unavailable".into()))
     }
 
-    pub async fn request(&self, mut request: Value) -> Result<Value> {
-        // Allocate IDs under the writer lock: the host's high-water mark follows wire order.
-        let mut writer = tokio::time::timeout(CONTROL_TIMEOUT, self.writer.lock())
-            .await
-            .map_err(|_| Error::ControlUnknown("Claude Code writer unavailable".into()))?;
-        let id = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        request["id"] = json!(id);
-        request["host_id"] = json!(self.host_id);
-        let bytes = format!("{request}\n");
-        if bytes.len() > MAX_FRAME {
-            return Err(Error::Domain(
-                "Claude Code input exceeds host frame limit".into(),
-            ));
+    pub async fn request(&self, request: Value) -> Result<Value> {
+        let response = self
+            .rpc
+            .request("host.command", request, 1024 * 1024, false)
+            .await?;
+        let response = &response["result"];
+        match response["status"].as_str() {
+            Some("accepted") => Ok(response.clone()),
+            Some("rejected") if response["reason"] == "input_busy" => Err(Error::Conflict {
+                code: "input_busy",
+                message: "Claude Code input is still active".into(),
+            }),
+            Some("rejected") => Err(Error::StateConflict(
+                "Claude Code rejected control request".into(),
+            )),
+            Some("unsupported") => Err(Error::CapabilityUnavailable(
+                "Claude Code operation unsupported".into(),
+            )),
+            _ => Err(Error::ControlUnknown(
+                "Claude Code operation unconfirmed".into(),
+            )),
         }
-        let (send, receive) = oneshot::channel();
-        self.pending.lock().await.insert(id, send);
-        let operation = async {
-            writer
-                .write_all(bytes.as_bytes())
-                .await
-                .map_err(|_| Error::ControlUnknown("Claude Code write unconfirmed".into()))?;
-            drop(writer);
-            let response = receive
-                .await
-                .map_err(|_| Error::ControlUnknown("Claude Code receipt lost".into()))?;
-            match response["status"].as_str() {
-                Some("accepted") => Ok(response),
-                Some("rejected") if response["reason"] == "input_busy" => Err(Error::Conflict {
-                    code: "input_busy",
-                    message: "Claude Code input is still active".into(),
-                }),
-                Some("rejected") => Err(Error::StateConflict(
-                    "Claude Code rejected control request".into(),
-                )),
-                Some("unsupported") => Err(Error::CapabilityUnavailable(
-                    "Claude Code operation unsupported".into(),
-                )),
-                _ => Err(Error::ControlUnknown(
-                    "Claude Code operation unconfirmed".into(),
-                )),
-            }
-        };
-        let result = tokio::time::timeout(CONTROL_TIMEOUT, operation)
-            .await
-            .unwrap_or_else(|_| {
-                Err(Error::ControlUnknown(
-                    "Claude Code receipt timed out".into(),
-                ))
-            });
-        self.pending.lock().await.remove(&id);
-        result
     }
 
     pub async fn wait_exit(&self) -> Result<()> {
-        let mut exited = self.exited.clone();
-        tokio::time::timeout(CONTROL_TIMEOUT, exited.wait_for(|exited| *exited))
-            .await
-            .map_err(|_| Error::ControlUnknown("Claude Code host exit unconfirmed".into()))?
-            .map_err(|_| Error::ControlUnknown("Claude Code host observation lost".into()))?;
-        Ok(())
+        tokio::time::timeout(CONTROL_TIMEOUT, async {
+            while self.process.observe() != ProcessObservation::Exited {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .map_err(|_| Error::ControlUnknown("Claude Code host exit unconfirmed".into()))
     }
     pub fn stop(&self) {
-        self.stop.send_replace(true);
+        self.rpc.close();
+    }
+}
+
+impl ClientControlChannel for Connection {
+    fn process_id(&self) -> Option<u32> {
+        Some(self.process.pid)
+    }
+    fn available(&self) -> bool {
+        !self.rpc.is_closed()
+    }
+    fn invalidate(&self) {
+        self.stop();
+    }
+    fn ping(&self) -> ClientControlOperation<'_> {
+        Box::pin(async { Self::status(&self.rpc).await.map(|_| ()) })
+    }
+    fn interrupt(&self) -> ClientControlOperation<'_> {
+        Box::pin(async {
+            let status = Self::status(&self.rpc).await?;
+            self.request(json!({"method":"interrupt", "input_id":status["input_id"]}))
+                .await
+                .map(|_| ())
+        })
+    }
+    fn shutdown(&self) -> ClientControlOperation<'_> {
+        Box::pin(async { self.request(json!({"method":"close"})).await.map(|_| ()) })
+    }
+    fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
+        Box::pin(async { Err(crate::unsupported()) })
+    }
+    fn submit<'a>(&'a self, _: &'a str, _: Option<&'a str>) -> ClientControlOperation<'a> {
+        Box::pin(async { Err(crate::unsupported()) })
     }
 }

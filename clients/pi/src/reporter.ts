@@ -1,5 +1,5 @@
 import { appendDiagnostic } from "./diagnostics.js";
-import { RpcError, type PiConnection } from "./control-socket.js";
+import { RpcError, type RuntimeConnection } from "../shared/control-socket.js";
 import type { InternalEvent } from "./events.js";
 
 export interface EventReportResult {
@@ -9,12 +9,12 @@ export interface EventReportResult {
 }
 
 export interface EventReporterOptions {
-  connection: Pick<PiConnection, "request">;
+  connection: Pick<RuntimeConnection, "request">;
   logFile: string;
 }
 
 export class EventReporter {
-  private readonly connection: Pick<PiConnection, "request">;
+  private readonly connection: Pick<RuntimeConnection, "request">;
   private readonly logFile: string;
 
   constructor(options: EventReporterOptions) {

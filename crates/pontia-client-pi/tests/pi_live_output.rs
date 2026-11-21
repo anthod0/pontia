@@ -1,7 +1,8 @@
 mod support;
+use pontia_agent_control::ipc::rpc::PROTOCOL_VERSION;
 use pontia_agent_control::{AgentControl, LiveOutputItem};
 use pontia_client_pi::ipc::serve_connection;
-use pontia_client_pi::rpc::{PROTOCOL_VERSION, PiRpcPeer};
+use pontia_client_pi::rpc::PiRpcPeer;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::{Value, json};
 use std::sync::Arc;

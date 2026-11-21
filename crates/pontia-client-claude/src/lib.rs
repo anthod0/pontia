@@ -1,3 +1,4 @@
+mod connection;
 mod history;
 mod instructions;
 mod interactions;
@@ -237,10 +238,12 @@ impl ClientSession for Adapter {
                 resume: None,
                 interactions: self.interactions.get().cloned().ok_or_else(unavailable)?,
                 state: Default::default(),
-                connection: OnceLock::new(),
+                connection: Default::default(),
             });
-            peer.start(&events, &script, &request.environment).await?;
-            peers.insert(peer.session.clone(), peer);
+            peers.insert(peer.session.clone(), peer.clone());
+            drop(peers);
+            peer.start(&events, root, &script, &request.environment)
+                .await?;
             Ok(())
         })
     }
@@ -453,7 +456,7 @@ impl ClientSession for Adapter {
             let Ok(peer) = self.peer(session).await else {
                 return Ok(false);
             };
-            Ok(!self.stopped.load(Ordering::Acquire) && !*peer.connection()?.exited.borrow())
+            Ok(!self.stopped.load(Ordering::Acquire) && !peer.connection()?.rpc.is_closed())
         })
     }
     fn details<'a>(
@@ -503,6 +506,20 @@ impl ClientInteractions for Adapter {
     }
 }
 impl ClientService for Adapter {
+    fn uses_control_socket(&self) -> bool {
+        true
+    }
+    fn connect(
+        &self,
+        state: AgentControl,
+        process_id: Option<u32>,
+        rpc: Arc<pontia_agent_control::ipc::rpc::RpcPeer>,
+        first: pontia_agent_control::ipc::rpc::RpcRequest,
+        requests: pontia_agent_control::ipc::rpc::Requests,
+    ) -> ClientOperation<'_, ()> {
+        Box::pin(self.serve_connection(state, process_id, rpc, first, requests))
+    }
+
     fn phase(&self) -> ClientServicePhase {
         ClientServicePhase::Transport
     }
@@ -528,11 +545,6 @@ impl ClientService for Adapter {
                 for peer in &peers {
                     if let Ok(connection) = peer.connection() {
                         connection.stop();
-                    }
-                }
-                for peer in peers {
-                    if let Ok(connection) = peer.connection() {
-                        connection.wait_exit().await?;
                     }
                 }
                 Ok(())

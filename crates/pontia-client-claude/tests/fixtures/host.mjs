@@ -1,7 +1,12 @@
 // Private IPC substitute. File gates control execution independently of control receipts.
-import { createServer } from "node:net";
+import { registerHooks } from "node:module";
+registerHooks({ resolve(specifier, context, nextResolve) {
+  if (context.parentURL?.includes("/clients/shared/") && specifier.endsWith(".js")) specifier = specifier.slice(0, -3) + ".ts";
+  return nextResolve(specifier, context);
+}});
+const { connectRuntime, CONTROL_VERSION } = await import("../../../../clients/shared/control-socket.ts");
 import { randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, chmodSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { execFileSync } from "node:child_process";
@@ -30,6 +35,8 @@ if (process.argv[2] === "history") {
     );
   let sequence = 0;
   let active;
+  let lastInput;
+  let closed = false;
   let compacting;
   let number = existsSync(join(config.cwd, "wire.jsonl"))
     ? readFileSync(join(config.cwd, "wire.jsonl"), "utf8")
@@ -39,7 +46,10 @@ if (process.argv[2] === "history") {
         .filter((v) => v.session === config.session_id && v.method === "input").length
     : 0;
   let ready = false;
-  let connected;
+  let connection;
+  let connected = false;
+  const reports = new Set();
+  let respond;
   const permissions = new Set();
   const expire = () => {
     for (const id of permissions)
@@ -51,15 +61,22 @@ if (process.argv[2] === "history") {
       join(config.cwd, "wire.jsonl"),
       JSON.stringify({ session: config.session_id, ...value }) + "\n",
     );
-  const send = (value) => connected?.write(JSON.stringify({ host_id: host, ...value }) + "\n");
-  const event = (value) => send({ type: "event", sequence: ++sequence, event: value });
+  const send = (value) => respond({result: value});
+  const event = (value) => {
+    sequence++;
+    if (!connected) return;
+    const report = connection.request("host.event", {host_id: host, sequence, event: value});
+    reports.add(report);
+    void report.catch(() => {}).finally(() => reports.delete(report));
+    if (value.kind === "ready") connection.registered({sessionId: config.session_id, runtimeId: config.runtime_id, clientSessionKey: native});
+  };
   record({
     method: "spawn",
     system_prompt: config.system_prompt ?? null,
     execution_policy: config.execution_policy,
     resume: config.resume ?? null,
     native,
-    socket_path: config.socket_path,
+    pid: process.pid,
   });
   const startupError = join(config.cwd, "startup-error.json");
   if (existsSync(startupError)) {
@@ -69,26 +86,14 @@ if (process.argv[2] === "history") {
     );
     process.exit(1);
   }
-  const server = createServer((socket) => {
-    connected = socket;
-    const reader = createInterface({ input: socket });
-    reader.on("line", (line) => {
-      const request = JSON.parse(line);
-      if (request.method === "attach") {
-        if (
-          request.token !== config.token ||
-          request.session_id !== config.session_id ||
-          request.runtime_id !== config.runtime_id
-        )
-          return socket.destroy();
-        send({ type: "attached", sequence: 0, high_water: 0, unavailable: null });
-        return;
-      }
+  const command = async (request, reply) => {
+      respond = reply;
       record(request);
       if (request.method === "input") {
         number++;
         if (request.text === "unknown") process.exit(0);
         active = { id: request.input_id, text: request.text, number };
+        lastInput = active.id;
         history({ type: "user", uuid: active.id, message: { role: "user", content: active.text } });
         if (!ready) {
           event({ kind: "ready", native_session_id: native });
@@ -158,14 +163,14 @@ if (process.argv[2] === "history") {
       } else if (request.method === "close") {
         clearInterval(timer);
         expire();
+        closed = true;
         event({ kind: "closed", history_anchor: active?.reply ?? active?.id });
-        send({ type: "response", id: request.id, status: "accepted" });
-        socket.end();
-        server.close();
+        await Promise.allSettled([...reports]);
+        reply({ result: {status: "accepted"} }, () => { void connection.close(); });
       }
-    });
-  });
+  };
   const timer = setInterval(() => {
+    if (!existsSync(config.cwd)) process.exit(0);
     if (compacting && existsSync(join(config.cwd, `compact-${config.session_id}-1`))) {
       event({ kind: "compaction", phase: "completed", data: { operation_id: compacting, trigger: "manual", native_compaction_id: randomUUID(), tokens_before: 20000, tokens_after: 2000 } });
       compacting = undefined;
@@ -261,8 +266,16 @@ if (process.argv[2] === "history") {
       active = undefined;
     }
   }, 5);
-  server.listen(config.socket_path, () => {
-    chmodSync(config.socket_path, 0o600);
-    process.stdout.write('{"listening":true}\n');
-  });
+  connection = await connectRuntime(config.pontia_home, () => {}, (method, params, reply, error) => {
+    if (method === "host.status") {
+      reply({ result: { host_id: host, native_session_id: ready ? native : null, input_id: active?.id ?? lastInput ?? null, started: !!active?.started, finished: !active, closed, closing: closed, unavailable: null,
+        launch: {cwd: config.cwd, config_dir: process.env.CLAUDE_CONFIG_DIR, model: config.model, resume: config.resume} } });
+    } else if (method === "host.command") { connected = true; void command(params, reply).catch(() => error(-32603, "failed")); }
+    else error(-32601, "unknown");
+  }, async () => { connected = true; record({method:"attached"}); }, () => { connected = false; expire(); }, true);
+  await connection.request("runtime.attach", {version: CONTROL_VERSION, session_id: config.session_id, runtime_id: config.runtime_id, client_session_key: undefined});
+  connection.registered({sessionId: config.session_id, runtimeId: config.runtime_id, clientSessionKey: undefined});
+  connected = true;
+  record({method:"attached"});
+  process.once("SIGTERM", () => { clearInterval(timer); void connection.close(); });
 }

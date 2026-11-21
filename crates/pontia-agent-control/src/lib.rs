@@ -8,6 +8,7 @@ pub mod control;
 mod inbox;
 pub mod ingestion;
 pub mod interactions;
+pub mod ipc;
 pub mod live_output;
 pub mod queries;
 mod raw_transcripts;

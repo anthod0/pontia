@@ -229,10 +229,8 @@ export class Host {
     this.permissions.expire();
   }
 
-  controlRestored(factsCaughtUp: boolean): void {
-    // No replay buffer: only a controller that has already ingested every emitted
-    // fact can resume input. Before the first input, there cannot be a fact gap.
-    this.controlConnected = !this.execution || factsCaughtUp;
+  controlRestored(): void {
+    this.controlConnected = true;
   }
 
   private acceptsControl(): boolean {

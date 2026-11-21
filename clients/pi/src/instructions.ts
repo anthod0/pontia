@@ -1,8 +1,8 @@
-import type { PiConnection } from "./control-socket.js";
+import type { RuntimeConnection } from "../shared/control-socket.js";
 import { asRecord, optionalString } from "./values.js";
 
 export async function loadSessionSystemPrompt(
-  connection: Pick<PiConnection, "request">,
+  connection: Pick<RuntimeConnection, "request">,
   sessionId?: string,
 ): Promise<string | undefined> {
   if (!sessionId) return undefined;

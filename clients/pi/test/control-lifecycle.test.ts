@@ -1,5 +1,5 @@
 import { realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { createPontiaPiExtension } from "../src/index.js";
 import type { LifecycleControl } from "../src/control-socket.js";
@@ -109,12 +109,12 @@ test.each(["tui", "rpc"])(
 );
 
 test("a disconnected deferred registration can initialize on the next manual turn", async () => {
-  const { mkdir } = await import("node:fs/promises");
+  const { mkdir, rmdir } = await import("node:fs/promises");
   const { createServer } = await import("node:net");
-  const { piSocketPath } = await import("../src/control-socket.js");
+  const { controlSocketPath } = await import("../shared/control-socket.js");
   const root = await tempDir("pd-");
   const workspace = await realpath(root);
-  await mkdir(join(root, "state/pi"), { recursive: true });
+  await mkdir(dirname(controlSocketPath(root)), { recursive: true });
   let registrations = 0;
   const sockets = new Set<import("node:net").Socket>();
   const server = createServer((socket) => {
@@ -150,7 +150,7 @@ test("a disconnected deferred registration can initialize on the next manual tur
       }
     });
   });
-  await new Promise<void>((resolve) => server.listen(piSocketPath(root), resolve));
+  await new Promise<void>((resolve) => server.listen(controlSocketPath(root), resolve));
   const handlers: Record<string, (event: any, context?: any) => Promise<void>> = {};
   const events: InternalEvent[] = [];
   createPontiaPiExtension(
@@ -205,6 +205,7 @@ test("a disconnected deferred registration can initialize on the next manual tur
     await handlers.session_shutdown({ reason: "quit" });
     for (const socket of sockets) socket.destroy();
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rmdir(dirname(controlSocketPath(root)));
   }
 });
 

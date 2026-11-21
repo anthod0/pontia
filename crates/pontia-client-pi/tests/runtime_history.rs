@@ -1,3 +1,4 @@
+use pontia_agent_control::ipc::rpc::RpcRequest;
 mod support;
 use pontia_agent_control::{
     AgentBindingService, AgentControl, PontiaEvent, PontiaEventSource, PontiaEventType,
@@ -7,10 +8,7 @@ use pontia_agent_control::{
         raw_transcripts::{AgentBindingResolveRequest, TurnTimelineRange, TurnTimelineReadError},
     },
 };
-use pontia_client_pi::{
-    history::PiEntryCursor,
-    rpc::{PiRpcPeer, RpcRequest},
-};
+use pontia_client_pi::{history::PiEntryCursor, rpc::PiRpcPeer};
 use pontia_core::domain::{TurnState, TurnTopology};
 use pontia_storage_sqlite::{
     connect_sqlite,

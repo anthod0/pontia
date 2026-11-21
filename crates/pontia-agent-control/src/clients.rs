@@ -71,7 +71,7 @@ pub(crate) struct ClientAdapter {
 }
 
 impl ClientAdapter {
-    fn session_client(&self) -> Option<std::sync::Arc<dyn ClientSession>> {
+    pub(crate) fn session_client(&self) -> Option<std::sync::Arc<dyn ClientSession>> {
         self.registry
             .get(self.spec.client_type)
             .and_then(|entry| entry.session.clone())

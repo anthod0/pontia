@@ -4,8 +4,9 @@ use super::{
     seed_session, tempdir, test_state,
 };
 
+use pontia_agent_control::ipc::rpc::{PROTOCOL_VERSION, RpcRequest};
 use pontia_client_pi::ipc::serve_connection;
-use pontia_client_pi::rpc::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
+use pontia_client_pi::rpc::PiRpcPeer;
 use std::sync::Arc;
 use tokio::{net::UnixStream, sync::mpsc};
 

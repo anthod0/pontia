@@ -28,28 +28,12 @@ async function main(): Promise<void> {
     }
     const config = bootstrap(data);
     await serve(config);
-    process.stdout.write('{"listening":true}\n');
     return;
   }
   throw new Error("bootstrap_missing");
 }
 
-main().catch((error: unknown) => {
-  if (
-    process.argv[2] !== "preflight" &&
-    process.argv[2] !== "history" &&
-    process.argv[2] !== "models"
-  ) {
-    const systemCode = error instanceof Error && "code" in error ? error.code : undefined;
-    const code =
-      typeof systemCode === "string" &&
-      ["EACCES", "EADDRINUSE", "EINVAL", "ENOENT", "ENAMETOOLONG", "ENOTDIR", "EPERM"].includes(
-        systemCode,
-      )
-        ? systemCode
-        : "HOST_START_FAILED";
-    process.stdout.write(JSON.stringify({ listening: false, code }) + "\n");
-  }
+main().catch(() => {
   process.stderr.write("Claude Code host could not start.\n");
   process.exitCode = 1;
 });

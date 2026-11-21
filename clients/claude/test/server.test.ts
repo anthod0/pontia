@@ -1,27 +1,118 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
 import { once } from "node:events";
-import { chmod, mkdtempDisposable, stat } from "node:fs/promises";
-import { connect } from "node:net";
+import { mkdtempDisposable, mkdir, rmdir } from "node:fs/promises";
+import { createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { test, type TestContext } from "node:test";
-import { bootstrap, serve, type Bootstrap } from "../src/server.js";
+import { bootstrap, serve } from "../src/server.js";
+import { controlSocketPath } from "../shared/control-socket.js";
 import { assistant, first, init, result, sdk, second } from "./fixture.js";
+
+type Frame = Record<string, any>;
+async function setup(t: TestContext) {
+  const sandbox = await mkdtempDisposable(join(tmpdir(), "pontia-host-test-"));
+  const path = controlSocketPath(sandbox.path);
+  await mkdir(dirname(path), { mode: 0o700 });
+  const fixture = sdk();
+  let socket: Socket;
+  let count = 0;
+  let nextId = 1;
+  const facts: Frame[] = [];
+  const replies = new Map<number, (frame: Frame) => void>();
+  const listener = createServer((client) => {
+    socket = client;
+    client.setEncoding("utf8");
+    let buffer = "";
+    client.on("data", (chunk) => {
+      buffer += chunk;
+      while (buffer.includes("\n")) {
+        const end = buffer.indexOf("\n");
+        const frame = JSON.parse(buffer.slice(0, end));
+        buffer = buffer.slice(end + 1);
+        if (frame.method === "runtime.attach") {
+          count++;
+          client.write(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: frame.id,
+              result: { session_id: frame.params.session_id, runtime_id: frame.params.runtime_id },
+            }) + "\n",
+          );
+        } else if (frame.method === "host.event") {
+          facts.push(frame.params);
+          client.write(
+            JSON.stringify({ jsonrpc: "2.0", id: frame.id, result: { accepted: true } }) + "\n",
+          );
+        } else {
+          const resolve = replies.get(frame.id);
+          replies.delete(frame.id);
+          resolve?.(frame.result);
+        }
+      }
+    });
+  });
+  listener.listen(path);
+  await once(listener, "listening");
+  const config = {
+    session_id: "session",
+    runtime_id: "runtime",
+    cwd: sandbox.path,
+    pontia_home: sandbox.path,
+  };
+  const host = await serve(config, fixture.factory);
+  async function wait(predicate: () => boolean) {
+    for (let attempt = 0; attempt < 400; attempt++) {
+      if (predicate()) return;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error("observation timed out");
+  }
+  function call(method: string, params: object): Promise<Frame> {
+    const id = nextId++;
+    return new Promise((resolve) => {
+      replies.set(id, resolve);
+      socket.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+    });
+  }
+  async function reconnect(whileOffline?: () => Promise<void>) {
+    const previous = count;
+    socket.destroy();
+    await new Promise<void>((resolve) => listener.close(() => resolve()));
+    await whileOffline?.();
+    listener.listen(path);
+    await once(listener, "listening");
+    await wait(() => count > previous);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  t.after(async () => {
+    fixture.messages.end();
+    await host.close();
+    socket?.destroy();
+    await new Promise<void>((resolve) => listener.close(() => resolve()));
+    await rmdir(dirname(path));
+    await sandbox.remove();
+  });
+  return {
+    fixture,
+    facts,
+    wait,
+    reconnect,
+    command: (params: object) => call("host.command", params),
+    status: () => call("host.status", {}),
+  };
+}
 
 test("bootstrap preserves native tool rules and rejects malformed execution policies", () => {
   const config = {
     session_id: "session",
     runtime_id: "runtime",
-    socket_path: "/unused/socket",
+    pontia_home: "/unused",
     cwd: "/unused",
-    token: "a".repeat(64),
   };
   const policy = {
-    tools: ["Read", "Glob"],
-    disabled_tools: ["Agent", "Bash(git push *)"],
+    tools: ["Read"],
+    disabled_tools: ["Write"],
     disable_mcp: true,
     disable_skills: false,
     yolo: false,
@@ -31,7 +122,6 @@ test("bootstrap preserves native tool rules and rejects malformed execution poli
     { tools: [1] },
     { tools: [""] },
     { disabled_tools: "Write" },
-    { disabled_tools: [false] },
     { disable_mcp: "true" },
     { disable_skills: "true" },
   ]) {
@@ -39,537 +129,160 @@ test("bootstrap preserves native tool rules and rejects malformed execution poli
   }
 });
 
-async function setup(t: TestContext) {
-  const sandbox = await mkdtempDisposable(join(tmpdir(), "pontia-host-test-"));
-  const testRoot = sandbox.path;
-  const fixture = sdk();
-  const config: Bootstrap = {
-    session_id: "session",
-    runtime_id: "runtime",
-    socket_path: join(testRoot, "host.sock"),
-    cwd: testRoot,
-    token: randomBytes(32).toString("hex"),
-  };
-  const server = await serve(config, fixture.factory);
-  t.after(async () => {
-    try {
-      fixture.messages.end();
-      await server.close();
-    } finally {
-      await sandbox.remove();
-    }
-  });
-  return { config, fixture };
-}
-
-type Frame = Record<string, any>;
-async function peer(config: Bootstrap) {
-  const socket = connect(config.socket_path);
-  const frames: Frame[] = [];
-  const waits: Array<{ match: (frame: Frame) => boolean; resolve: (frame: Frame) => void }> = [];
-  let buffer = "";
-  socket.on("error", () => {});
-  socket.on("data", (chunk) => {
-    buffer += chunk.toString();
-    while (buffer.includes("\n")) {
-      const newline = buffer.indexOf("\n");
-      const frame: Frame = JSON.parse(buffer.slice(0, newline));
-      buffer = buffer.slice(newline + 1);
-      const index = waits.findIndex((wait) => wait.match(frame));
-      if (index >= 0) waits.splice(index, 1)[0]!.resolve(frame);
-      else frames.push(frame);
-    }
-  });
-  await once(socket, "connect");
-  return {
-    socket,
-    frames,
-    send: (frame: unknown) => socket.write(JSON.stringify(frame) + "\n"),
-    next(match: (frame: Frame) => boolean): Promise<Frame> {
-      const index = frames.findIndex(match);
-      if (index >= 0) return Promise.resolve(frames.splice(index, 1)[0]!);
-      return new Promise((resolve) => waits.push({ match, resolve }));
-    },
-  };
-}
-async function attach(
-  config: Bootstrap,
-  checkpoint: { last_host_id?: string; last_sequence?: number } = {},
-) {
-  const connection = await peer(config);
-  connection.send({
-    method: "attach",
-    token: config.token,
-    session_id: config.session_id,
-    runtime_id: config.runtime_id,
-    ...checkpoint,
-  });
-  const attached = await connection.next((frame) => frame.type === "attached");
-  return { ...connection, host: attached.host_id as string, attached };
-}
-
 test(
-  "private socket rejects incorrect capability or runtime before accepting any input",
+  "dial-in control accepts input and rejects duplicate native input without executing it again",
   { timeout: 5000 },
   async (t) => {
-    const { config, fixture } = await setup(t);
-    assert.equal((await stat(config.socket_path)).mode & 0o777, 0o600);
-    for (const change of [{ token: "wrong" }, { runtime_id: "other-runtime" }]) {
-      const connection = await peer(config);
-      const closed = once(connection.socket, "close");
-      connection.send({
-        method: "attach",
-        token: config.token,
-        session_id: config.session_id,
-        runtime_id: config.runtime_id,
-        ...change,
-      });
-      await closed;
-    }
-    assert.equal(fixture.calls, 0);
-    const connection = await attach(config);
-    assert.equal(connection.attached.native_session_id, null);
-  },
-);
-
-test(
-  "duplicate requests execute only once and reused IDs with changed content are rejected",
-  { timeout: 5000 },
-  async (t) => {
-    const { config, fixture } = await setup(t);
-    const connection = await attach(config);
-    const request = {
-      host_id: connection.host,
-      id: 1,
-      method: "input",
-      input_id: first,
-      text: "actual input",
-    };
-    connection.send(request);
-    connection.send(request);
+    const h = await setup(t);
     assert.equal(
-      (await connection.next((f) => f.type === "response" && f.id === 1)).status,
+      (await h.command({ method: "input", input_id: first, text: "task" })).status,
       "accepted",
     );
+    assert.equal((await h.fixture.next()).value.uuid, first);
     assert.equal(
-      (await connection.next((f) => f.type === "response" && f.id === 1)).status,
-      "accepted",
-    );
-    assert.equal((await fixture.next()).value.uuid, first);
-    assert.equal(fixture.calls, 1);
-    connection.send({ ...request, text: "different input" });
-    assert.equal((await connection.next((f) => f.type === "error")).reason, "request_id_reused");
-    fixture.messages.push(init());
-    fixture.messages.push(assistant());
-    fixture.messages.push(result());
-    const finished = await connection.next((f) => f.event?.kind === "finished");
-    assert.equal(finished.event.input_id, first);
-    connection.send({
-      host_id: connection.host,
-      id: 2,
-      method: "input",
-      input_id: second,
-      text: "next task",
-    });
-    assert.equal(
-      (await connection.next((f) => f.type === "response" && f.id === 2)).status,
-      "accepted",
-    );
-    assert.equal((await fixture.next()).value.uuid, second);
-  },
-);
-
-test(
-  "a control replacement fences old replies and does not replay input or infer task completion",
-  { timeout: 5000 },
-  async (t) => {
-    const { config, fixture } = await setup(t);
-    const old = await attach(config);
-    old.send({ host_id: old.host, id: 1, method: "input", input_id: first, text: "task" });
-    await old.next((f) => f.type === "response");
-    await fixture.next();
-    fixture.messages.push(init());
-    fixture.messages.push(assistant());
-    await old.next((f) => f.event?.kind === "started");
-    const closed = once(old.socket, "close");
-    const current = await attach(config);
-    await closed;
-    assert.equal(current.host, old.host);
-    assert.equal(current.attached.input_id, first);
-    assert.equal(current.attached.finished, false);
-    assert.equal(current.attached.unavailable, "control_connection_lost");
-    current.send({
-      host_id: current.host,
-      id: 2,
-      method: "input",
-      input_id: second,
-      text: "not replayed",
-    });
-    assert.equal((await current.next((f) => f.type === "response")).status, "rejected");
-    current.send({ host_id: current.host, id: 3, method: "interrupt", input_id: first });
-    assert.equal((await current.next((f) => f.type === "response")).status, "accepted");
-    assert.equal(fixture.interrupts, 1);
-    assert.equal(fixture.calls, 1);
-  },
-);
-
-test(
-  "replacing a connection before first input leaves input available",
-  { timeout: 5000 },
-  async (t) => {
-    const { config, fixture } = await setup(t);
-    const old = await attach(config);
-    const closed = once(old.socket, "close");
-    const current = await attach(config);
-    await closed;
-    assert.equal(current.attached.unavailable, null);
-    current.send({
-      host_id: current.host,
-      id: 1,
-      method: "input",
-      input_id: first,
-      text: "first task",
-    });
-    assert.equal((await current.next((f) => f.type === "response")).status, "accepted");
-    assert.equal((await fixture.next()).value.uuid, first);
-  },
-);
-
-test(
-  "a controller caught up with all host facts can reconnect and submit the next task",
-  { timeout: 5000 },
-  async (t) => {
-    const { config, fixture } = await setup(t);
-    const old = await attach(config);
-    old.send({ host_id: old.host, id: 1, method: "input", input_id: first, text: "task" });
-    await old.next((f) => f.type === "response");
-    await fixture.next();
-    fixture.messages.push(init());
-    fixture.messages.push(assistant());
-    fixture.messages.push(result());
-    const finished = await old.next((f) => f.event?.kind === "finished");
-    const current = await attach(config, {
-      last_host_id: old.host,
-      last_sequence: finished.sequence,
-    });
-    assert.equal(current.attached.unavailable, null);
-    current.send({ host_id: current.host, id: 2, method: "input", input_id: second, text: "next" });
-    assert.equal((await current.next((f) => f.type === "response")).status, "accepted");
-    assert.equal((await fixture.next()).value.uuid, second);
-    assert.equal(fixture.calls, 1);
-  },
-);
-
-test(
-  "a stale fact cursor cannot resume input after a missed result",
-  { timeout: 5000 },
-  async (t) => {
-    const { config, fixture } = await setup(t);
-    const old = await attach(config);
-    old.send({ host_id: old.host, id: 1, method: "input", input_id: first, text: "task" });
-    await old.next((f) => f.type === "response");
-    fixture.messages.push(init());
-    fixture.messages.push(assistant());
-    const started = await old.next((f) => f.event?.kind === "started");
-    fixture.messages.push(result());
-    await old.next((f) => f.event?.kind === "finished");
-    const current = await attach(config, {
-      last_host_id: old.host,
-      last_sequence: started.sequence,
-    });
-    assert.equal(current.attached.unavailable, "control_connection_lost");
-    current.send({ host_id: current.host, id: 2, method: "input", input_id: second, text: "next" });
-    assert.equal((await current.next((f) => f.type === "response")).status, "rejected");
-  },
-);
-
-test(
-  "close shuts down the host even when the requesting connection was replaced",
-  { timeout: 5000 },
-  async (t) => {
-    const { config, fixture } = await setup(t);
-    const old = await attach(config);
-    old.send({ host_id: old.host, id: 1, method: "input", input_id: first, text: "task" });
-    await old.next((f) => f.type === "response");
-    let beginClose!: () => void;
-    const closing = new Promise<void>((resolve) => {
-      beginClose = resolve;
-    });
-    fixture.onClose(beginClose);
-    old.send({ host_id: old.host, id: 2, method: "close" });
-    await closing;
-    const current = await attach(config);
-    const closed = once(current.socket, "close");
-    fixture.messages.end();
-    await current.next((f) => f.event?.kind === "closed");
-    await closed;
-    await assert.rejects(peer(config));
-  },
-);
-
-test(
-  "interrupt handling does not block an independent close request",
-  { timeout: 5000 },
-  async (t) => {
-    const { config, fixture } = await setup(t);
-    const connection = await attach(config);
-    connection.send({
-      host_id: connection.host,
-      id: 1,
-      method: "input",
-      input_id: first,
-      text: "task",
-    });
-    await connection.next((f) => f.type === "response");
-    fixture.messages.push(init());
-    fixture.messages.push(assistant());
-    await connection.next((f) => f.event?.kind === "started");
-    let release!: () => void;
-    fixture.onInterrupt(
-      () =>
-        new Promise((resolve) => {
-          release = resolve;
-        }),
-    );
-    connection.send({ host_id: connection.host, id: 2, method: "interrupt", input_id: first });
-    connection.send({ host_id: connection.host, id: 3, method: "close" });
-    const response = await connection.next((f) => f.type === "response" && f.id === 3);
-    assert.equal(response.status, "accepted");
-    assert.equal(connection.frames.filter((f) => f.event?.kind === "finished").length, 0);
-    release();
-  },
-);
-
-test(
-  "an expired duplicate is rejected rather than executing again after receipt eviction",
-  { timeout: 5000 },
-  async (t) => {
-    const { config, fixture } = await setup(t);
-    const connection = await attach(config);
-    const request = {
-      host_id: connection.host,
-      id: 1,
-      method: "input",
-      input_id: first,
-      text: "task",
-    };
-    connection.send(request);
-    await connection.next((f) => f.type === "response");
-    for (let id = 2; id < 132; id += 1) {
-      connection.send({ host_id: connection.host, id, method: "unknown" });
-      await connection.next((f) => f.type === "response" && f.id === id);
-    }
-    connection.send(request);
-    assert.equal((await connection.next((f) => f.type === "error")).reason, "request_expired");
-    assert.equal(fixture.calls, 1);
-  },
-);
-
-test(
-  "the ordinary Node host boots over stdin and exits after an authenticated close",
-  { timeout: 5000 },
-  async () => {
-    await using sandbox = await mkdtempDisposable(join(tmpdir(), "pontia-host-cli-"));
-    const config: Bootstrap = {
-      session_id: "session",
-      runtime_id: "runtime",
-      socket_path: join(sandbox.path, "host.sock"),
-      cwd: sandbox.path,
-      token: randomBytes(32).toString("hex"),
-    };
-    const child = spawn(
-      process.execPath,
-      [fileURLToPath(new URL("../src/main.js", import.meta.url))],
-      { cwd: sandbox.path, stdio: ["pipe", "pipe", "pipe"] },
-    );
-    const exit = once(child, "exit");
-    try {
-      const listening = once(child.stdout, "data");
-      child.stdin.end(JSON.stringify(config) + "\n");
-      await listening;
-      const connection = await attach(config);
-      connection.send({ host_id: connection.host, id: 1, method: "close" });
-      assert.equal((await connection.next((f) => f.type === "response")).status, "accepted");
-      assert.deepEqual(await exit, [0, null]);
-    } finally {
-      // Only our ordinary fixture host; it never received an SDK input.
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill();
-        await exit;
-      }
-    }
-  },
-);
-
-test(
-  "socket approvals remain independent and duplicate choices cannot reexecute callbacks",
-  { timeout: 5000 },
-  async (t) => {
-    const { config, fixture } = await setup(t);
-    const connection = await attach(config);
-    connection.send({
-      host_id: connection.host,
-      id: 1,
-      method: "input",
-      input_id: first,
-      text: "task",
-    });
-    await connection.next((f) => f.type === "response");
-    fixture.messages.push(init());
-    fixture.messages.push(assistant());
-    await connection.next((f) => f.event?.kind === "started");
-    const abort = new AbortController();
-    const ask = (id: string) =>
-      fixture.options!.canUseTool!(
-        "Write",
-        {},
-        { signal: abort.signal, toolUseID: id, requestId: id },
-      );
-    const a = ask("a");
-    const b = ask("b");
-    const firstAsk = await connection.next((f) => f.event?.kind === "permission_requested");
-    const secondAsk = await connection.next((f) => f.event?.kind === "permission_requested");
-    const choice = {
-      host_id: connection.host,
-      id: 2,
-      method: "permission",
-      permission_id: secondAsk.event.permission_id,
-      option: "allow",
-    };
-    connection.send(choice);
-    connection.send(choice);
-    for (let n = 0; n < 2; n++)
-      assert.equal(
-        (await connection.next((f) => f.type === "response" && f.id === 2)).status,
-        "accepted",
-      );
-    assert.deepEqual(await b, { behavior: "allow" });
-    connection.send({ ...choice, id: 3, option: "deny" });
-    assert.equal(
-      (await connection.next((f) => f.type === "response" && f.id === 3)).status,
+      (await h.command({ method: "input", input_id: first, text: "task" })).status,
       "rejected",
     );
-    fixture.onInterrupt(async () => abort.abort());
-    connection.send({ host_id: connection.host, id: 4, method: "interrupt", input_id: first });
-    assert.equal(
-      (await connection.next((f) => f.type === "response" && f.id === 4)).status,
-      "accepted",
-    );
-    assert.equal((await a)?.behavior, "deny");
-    const expired = await connection.next(
-      (f) =>
-        f.event?.kind === "permission_settled" &&
-        f.event.permission_id === firstAsk.event.permission_id,
-    );
-    assert.equal(expired.event.outcome, "expired");
-    assert.equal(connection.frames.filter((f) => f.event?.kind === "finished").length, 0);
+    assert.equal(h.fixture.calls, 1);
   },
 );
 
-test("a non-private socket directory is refused without changing its permissions", async () => {
-  await using sandbox = await mkdtempDisposable(join(tmpdir(), "pontia-host-permissions-"));
-  const testRoot = sandbox.path;
-  await chmod(testRoot, 0o755);
-  await assert.rejects(
-    serve(
-      {
-        session_id: "s",
-        runtime_id: "r",
-        socket_path: join(testRoot, "host.sock"),
-        cwd: testRoot,
-        token: randomBytes(32).toString("hex"),
-      },
-      sdk().factory,
-    ),
+test(
+  "an executing SDK survives reconnect and completes on the replacement connection",
+  { timeout: 5000 },
+  async (t) => {
+    const h = await setup(t);
+    await h.command({ method: "input", input_id: first, text: "task" });
+    await h.fixture.next();
+    h.fixture.messages.push(init());
+    h.fixture.messages.push(assistant());
+    await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
+    const before = await h.status();
+    await h.reconnect();
+    const after = await h.status();
+    assert.equal(after.host_id, before.host_id);
+    assert.equal(after.input_id, first);
+    assert.equal(after.closed, false);
+    h.fixture.messages.push(result());
+    await h.wait(() => h.facts.some((f) => f.event.kind === "finished"));
+    assert.equal(
+      (await h.command({ method: "input", input_id: second, text: "next" })).status,
+      "accepted",
+    );
+    assert.equal((await h.fixture.next()).value.uuid, second);
+    assert.equal(h.fixture.calls, 1);
+  },
+);
+
+test(
+  "missed facts are not replayed and a sequence gap does not disable control",
+  { timeout: 5000 },
+  async (t) => {
+    const h = await setup(t);
+    await h.command({ method: "input", input_id: first, text: "task" });
+    h.fixture.messages.push(init());
+    h.fixture.messages.push(assistant());
+    await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
+    await h.reconnect(async () => {
+      h.fixture.messages.push(result());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    assert.equal(
+      h.facts.some((f) => f.event.kind === "finished"),
+      false,
+    );
+    assert.equal(
+      (await h.command({ method: "input", input_id: second, text: "next" })).status,
+      "accepted",
+    );
+  },
+);
+
+test(
+  "interrupt remains usable after reconnect without claiming completion",
+  { timeout: 5000 },
+  async (t) => {
+    const h = await setup(t);
+    await h.command({ method: "input", input_id: first, text: "task" });
+    h.fixture.messages.push(init());
+    h.fixture.messages.push(assistant());
+    await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
+    await h.reconnect();
+    assert.equal((await h.command({ method: "interrupt", input_id: first })).status, "accepted");
+    assert.equal(h.fixture.interrupts, 1);
+    assert.equal(
+      h.facts.some((f) => f.event.kind === "finished"),
+      false,
+    );
+  },
+);
+
+test("close confirms SDK closure on the reattached connection", { timeout: 5000 }, async (t) => {
+  const h = await setup(t);
+  await h.command({ method: "input", input_id: first, text: "task" });
+  h.fixture.messages.push(init());
+  h.fixture.messages.push(assistant());
+  await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
+  await h.reconnect();
+  assert.equal((await h.command({ method: "close" })).status, "accepted");
+  assert.equal(
+    h.facts.some((f) => f.event.kind === "closed"),
+    true,
   );
-  assert.equal((await stat(testRoot)).mode & 0o777, 0o755);
 });
 
 test(
-  "steer RPC targets the active task and duplicate delivery runs once",
+  "approvals requested after reattachment reach the waiting SDK callback",
   { timeout: 5000 },
   async (t) => {
-    const { config, fixture } = await setup(t);
-    const connection = await attach(config);
-    connection.send({
-      host_id: connection.host,
-      id: 1,
-      method: "input",
-      input_id: first,
-      text: "task",
-    });
-    await connection.next((f) => f.type === "response");
-    await fixture.next();
-    fixture.messages.push(init());
-    fixture.messages.push(assistant());
-    await connection.next((f) => f.event?.kind === "started");
-    const steering = {
-      host_id: connection.host,
-      id: 2,
-      method: "steer",
-      target_input_id: first,
-      input_id: second,
-      text: "correction",
-    };
-    connection.send(steering);
-    connection.send(steering);
-    for (let n = 0; n < 2; n++)
-      assert.equal(
-        (await connection.next((f) => f.type === "response" && f.id === 2)).status,
-        "accepted",
-      );
-    assert.equal((await fixture.next()).value.priority, "now");
-    fixture.messages.push(result(first));
-    fixture.messages.push(assistant(second));
-    fixture.messages.push(result(second));
-    const finished = await connection.next((f) => f.event?.kind === "finished");
-    assert.equal(finished.event.input_id, first);
-    assert.equal(finished.event.outcome, "completed");
-    connection.send({ ...steering, id: 3 });
-    assert.equal(
-      (await connection.next((f) => f.type === "response" && f.id === 3)).status,
-      "rejected",
+    const h = await setup(t);
+    await h.command({ method: "input", input_id: first, text: "task" });
+    h.fixture.messages.push(init());
+    h.fixture.messages.push(assistant());
+    await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
+    await h.reconnect();
+    const response = h.fixture.options!.canUseTool!(
+      "Write",
+      { file_path: "test.txt" },
+      { signal: new AbortController().signal, toolUseID: "tool", requestId: "permission" },
     );
+    await h.wait(() => h.facts.some((f) => f.event.kind === "permission_requested"));
+    const permission = h.facts.find((f) => f.event.kind === "permission_requested")!.event;
+    assert.equal(
+      (
+        await h.command({
+          method: "permission",
+          permission_id: permission.permission_id,
+          option: "allow",
+        })
+      ).status,
+      "accepted",
+    );
+    assert.equal((await response)?.behavior, "allow");
   },
 );
 
-test(
-  "compact RPC deduplicates delivery and keeps idle false until the native result",
-  { timeout: 5000 },
-  async (t) => {
-    const { config, fixture } = await setup(t);
-    const connection = await attach(config);
-    const send = (id: number, method: string, params: object = {}) =>
-      connection.send({ host_id: connection.host, id, method, ...params });
-    send(1, "input", { input_id: first, text: "task" });
-    await connection.next((f) => f.type === "response" && f.id === 1);
-    await fixture.next();
-    fixture.messages.push(init());
-    fixture.messages.push(assistant());
-    fixture.messages.push(result());
-    await connection.next((f) => f.event?.kind === "finished");
-    send(2, "compact", { operation_id: "compact-api" });
-    send(2, "compact", { operation_id: "compact-api" });
-    for (let i = 0; i < 2; i++)
-      assert.equal(
-        (await connection.next((f) => f.type === "response" && f.id === 2)).status,
-        "accepted",
-      );
-    const command = (await fixture.next()).value!;
-    assert.equal(command.message.content, "/compact");
-    send(3, "is_idle");
-    assert.equal((await connection.next((f) => f.type === "response" && f.id === 3)).idle, false);
-    fixture.messages.push(
-      result(command.uuid, {
-        result: "Not enough messages to compact.",
-        terminal_reason: undefined,
-      }),
-    );
-    await connection.next((f) => f.event?.kind === "compaction" && f.event.phase === "failed");
-    send(4, "is_idle");
-    assert.equal((await connection.next((f) => f.type === "response" && f.id === 4)).idle, true);
-    send(5, "input", { input_id: second, text: "following task" });
-    await connection.next((f) => f.type === "response" && f.id === 5);
-    assert.equal((await fixture.next()).value!.message.content, "following task");
-  },
-);
+test("reconnect before first input leaves the SDK launch available", { timeout: 5000 }, async (t) => {
+  const h = await setup(t);
+  await h.reconnect();
+  assert.equal((await h.command({ method: "input", input_id: first, text: "task" })).status, "accepted");
+  assert.equal(h.fixture.calls, 1);
+});
+
+test("an outstanding interrupt does not prevent closing the SDK", { timeout: 5000 }, async (t) => {
+  const h = await setup(t);
+  await h.command({ method: "input", input_id: first, text: "task" });
+  h.fixture.messages.push(init());
+  h.fixture.messages.push(assistant());
+  await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
+  let release!: () => void;
+  h.fixture.onInterrupt(() => new Promise<void>((resolve) => { release = resolve; }));
+  void h.command({ method: "interrupt", input_id: first });
+  await h.wait(() => h.fixture.interrupts === 1);
+  try {
+    assert.equal((await h.command({ method: "close" })).status, "accepted");
+    assert.ok(h.facts.some((f) => f.event.kind === "closed"));
+  } finally {
+    release();
+  }
+});

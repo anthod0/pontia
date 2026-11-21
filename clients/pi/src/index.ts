@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { HistoryContext } from "./history.js";
 import { PiCompaction } from "./compaction.js";
-import { connectPi, RpcError, type PiConnection, type ControlInput } from "./control-socket.js";
+import { connectPi, type ControlInput } from "./control-socket.js";
+import { RpcError, type RuntimeConnection } from "../shared/control-socket.js";
 import { defaultHookLogFile, type EnvLike, type TurnContext } from "./context.js";
 import { appendDiagnostic, type DiagnosticEntry } from "./diagnostics.js";
 import { pontiaHomeFromEnv } from "./discovery.js";
@@ -164,7 +165,7 @@ export function createPontiaPiExtension(
   const currentPontiaHome = () => pontiaHomeFromEnv(sourceEnv)!;
   const currentHookLogFile = () => defaultHookLogFile(currentPontiaHome());
 
-  const rpcConnection: Pick<PiConnection, "request"> = {
+  const rpcConnection: Pick<RuntimeConnection, "request"> = {
     request(method, params) {
       if (!controlSocket) return Promise.reject(new Error("Pi connection is unavailable"));
       return controlSocket.request(method, params);
@@ -190,7 +191,7 @@ export function createPontiaPiExtension(
   let reportingDisabled = false;
   let lastContextUsageJson: string | undefined;
   let pendingPrompt: string | undefined;
-  let controlSocket: PiConnection | undefined;
+  let controlSocket: RuntimeConnection | undefined;
   let controlGeneration = 0;
   let piContext: ExtensionContext | undefined;
   const compaction = () => {
@@ -259,7 +260,7 @@ export function createPontiaPiExtension(
     if (socket) await socket.close().catch(controlError);
   }
 
-  async function registrationConnection(): Promise<PiConnection> {
+  async function registrationConnection(): Promise<RuntimeConnection> {
     if (controlSocket) return controlSocket;
     const generation = controlGeneration;
     const lifecycleContext = () => {

@@ -175,12 +175,12 @@ async fn agent_rejection_does_not_silently_drop_instructions() {
 
 #[tokio::test]
 async fn recovery_fails_if_previously_injected_instructions_cannot_be_applied() {
-    let mut h = Harness::new(&[("ACP_SYSTEM_PROMPT", "1")]).await;
+    let h = Harness::new(&[("ACP_SYSTEM_PROMPT", "1")]).await;
     let session = create(&h, json!({"include_standalone_session_instructions": true}))
         .await
         .unwrap();
     h.release("no-system-prompt");
-    h.restart().await;
+    h.crash_agent(&session);
     tokio::time::timeout(Duration::from_secs(5), async {
         while h.events(&session, "runtime.exited").await < 2 {
             tokio::time::sleep(Duration::from_millis(5)).await;

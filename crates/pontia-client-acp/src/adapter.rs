@@ -46,6 +46,7 @@ pub fn registration_from_sources(
     register(
         crate::configuration::AcpConfiguration::new(file),
         crate::registry::Registry::default(),
+        None,
     )
 }
 
@@ -56,12 +57,26 @@ pub fn registration_with_registry(
     register(
         crate::configuration::AcpConfiguration::with_defaults(config, Default::default()),
         registry,
+        None,
+    )
+}
+
+pub fn registration_with_relay(
+    config: AcpConfig,
+    registry: crate::registry::Registry,
+    executable: std::path::PathBuf,
+) -> ClientRegistration {
+    register(
+        crate::configuration::AcpConfiguration::with_defaults(config, Default::default()),
+        registry,
+        Some(executable),
     )
 }
 
 fn register(
     mut config: crate::configuration::AcpConfiguration,
     registry: crate::registry::Registry,
+    relay_executable: Option<std::path::PathBuf>,
 ) -> ClientRegistration {
     config.registry = registry.clone();
     let root = config.root.clone();
@@ -70,6 +85,7 @@ fn register(
     let adapter = Arc::new(AcpAdapter {
         reconnect,
         recovery: Arc::new(Mutex::new(Some(recovery))),
+        relay_executable,
         config: config.clone(),
         pool: Arc::new(OnceLock::new()),
         registry,
@@ -95,12 +111,13 @@ fn register(
 
 #[derive(Clone)]
 pub(crate) struct AcpAdapter {
+    pub(crate) reconnect: tokio::sync::mpsc::UnboundedSender<String>,
+    recovery: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>>,
     config: Arc<crate::configuration::AcpConfiguration>,
     pool: Arc<OnceLock<SqlitePool>>,
     registry: crate::registry::Registry,
     root: Arc<OnceLock<std::path::PathBuf>>,
-    reconnect: tokio::sync::mpsc::UnboundedSender<String>,
-    recovery: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>>,
+    pub(crate) relay_executable: Option<std::path::PathBuf>,
     pub(crate) peers: Peers,
     stopped: Arc<AtomicBool>,
     interactions: Arc<OnceLock<pontia_agent_control::interactions::InteractionService>>,
@@ -223,7 +240,7 @@ impl ClientSession for AcpAdapter {
                 configuration
             };
             let config: AcpAgentConfig = serde_json::from_value(configuration)?;
-            let mut peers = self.peers.lock().await;
+            let peers = self.peers.lock().await;
             if self.stopped.load(Ordering::Acquire) {
                 return Err(unavailable());
             }
@@ -287,19 +304,10 @@ impl ClientSession for AcpAdapter {
                     return Err(error);
                 }
             };
-            let peer = match Peer::spawn(
-                events.clone(),
-                self.interactions.get().cloned().ok_or_else(unavailable)?,
-                &request.session_id,
-                &runtime,
-                &cwd,
-                &config,
-                peer::PeerOwner {
-                    peers: Arc::downgrade(&self.peers),
-                    reconnect: self.reconnect.clone(),
-                },
-            )
-            .await
+            drop(peers);
+            let peer = match self
+                .launch(&root, &request.session_id, &runtime, &cwd, &config)
+                .await
             {
                 Ok(peer) => peer,
                 Err(error) => {
@@ -314,8 +322,6 @@ impl ClientSession for AcpAdapter {
                     return Err(error);
                 }
             };
-            peers.insert(request.session_id.clone(), peer.clone());
-            drop(peers);
             let setup = async {
                 let (native, metadata) = peer.initialize(
                     &cwd,
@@ -344,6 +350,10 @@ impl ClientSession for AcpAdapter {
                     })
                     .await?;
                 state.native = Some(native);
+                state.blocked = binding.is_some() && sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM turns WHERE session_id=? AND state IN ('queued','running'))")
+                    .bind(&request.session_id).fetch_one(&pool).await?;
+                state.ready = true;
+                peer.remember(&state, Some(&key)).await?;
                 peer::runtime_event(
                     &events,
                     &request.session_id,
@@ -360,15 +370,13 @@ impl ClientSession for AcpAdapter {
                         json!({"client_session_key":key,"launch_cwd":cwd.display().to_string(),"binding_metadata":metadata}),
                     )
                     .await?;
-                state.blocked = binding.is_some() && sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM turns WHERE session_id=? AND state IN ('queued','running'))")
-                    .bind(&request.session_id).fetch_one(&pool).await?;
-                state.ready = true;
+
                 state.refresh_capabilities();
                 Ok(())
             }
             .await;
             if setup.is_err() {
-                peer.stop().await;
+                let _ = peer.terminate().await;
             }
             setup
         })
@@ -392,6 +400,13 @@ impl ClientSession for AcpAdapter {
                 Error::Domain("ACP input requires explicit Pontia Turn identity".into())
             })?;
             let peer = self.peer(&target.session_id).await?;
+            let reload = {
+                let state = peer.state.lock().await;
+                state.current && state.active.is_none() && state.history_error.is_some()
+            };
+            if reload {
+                peer.load().await?;
+            }
             let mut state = peer.state.lock().await;
             target.validate(&events.db()).await?;
             if !state.current || state.closing || state.capabilities.is_none() {
@@ -406,7 +421,12 @@ impl ClientSession for AcpAdapter {
             let native = state.native.clone().ok_or_else(unavailable)?;
             let history_index = crate::history::user_bytes(&state.history);
             crate::history::append(&mut state.history, "user", input);
+            let sent = peer.connection.prepare_request(PromptRequest::new(
+                native,
+                vec![ContentBlock::Text(TextContent::new(input))],
+            ));
             state.active = Some(Prompt {
+                request_id: serde_json::to_value(sent.id())?,
                 turn: turn.into(),
                 started: false,
                 sequence: 0,
@@ -416,10 +436,7 @@ impl ClientSession for AcpAdapter {
                 history_index,
                 history_end: history_index + input.len(),
             });
-            let sent = peer.connection.prepare_request(PromptRequest::new(
-                native,
-                vec![ContentBlock::Text(TextContent::new(input))],
-            ));
+            peer.remember(&state, None).await?;
             let key = serde_json::to_string(sent.id())?;
             let session = target.session_id.clone();
             let turn = turn.to_owned();
@@ -471,6 +488,7 @@ impl ClientSession for AcpAdapter {
             if let Some(prompt) = state.active.as_mut() {
                 prompt.cancelled = true;
             }
+            peer.remember(&state, None).await?;
             let permissions = std::mem::take(&mut state.permissions);
             drop(state);
             let sent = peer.receipts.wait("session/cancel".into()).await;
@@ -516,7 +534,7 @@ impl ClientSession for AcpAdapter {
             let session = target.session_id.clone();
             let close = async move {
                 peer.close_session(native).await?;
-                peer.stop().await;
+                peer.terminate().await?;
                 events
                     .report_client_fact(
                         &session,
@@ -554,6 +572,7 @@ impl ClientSession for AcpAdapter {
                 state.current
                     && state.ready
                     && state.history_error.is_some()
+                    && state.active.is_none()
                     && state.replay.is_none()
             };
             if retry_history {
@@ -656,6 +675,19 @@ impl ClientInteractions for AcpAdapter {
 }
 
 impl ClientService for AcpAdapter {
+    fn uses_control_socket(&self) -> bool {
+        true
+    }
+    fn connect(
+        &self,
+        state: AgentControl,
+        process_id: Option<u32>,
+        rpc: Arc<pontia_agent_control::ipc::rpc::RpcPeer>,
+        first: pontia_agent_control::ipc::rpc::RpcRequest,
+        requests: pontia_agent_control::ipc::rpc::Requests,
+    ) -> ClientOperation<'_, ()> {
+        Box::pin(self.attach(state, process_id, rpc, first, requests))
+    }
     fn phase(&self) -> ClientServicePhase {
         ClientServicePhase::Transport
     }
@@ -673,40 +705,29 @@ impl ClientService for AcpAdapter {
             let adapter = self.clone();
             let mut shutdown = state.shutdown().subscribe();
             let mut recovery = self.recovery.lock().await.take().ok_or_else(unavailable)?;
-            // Recover only persisted ACP bindings. Never create native sessions on startup.
-            let sessions: Vec<String> = sqlx::query_scalar("SELECT s.session_id FROM sessions s JOIN agent_bindings b USING(session_id) WHERE b.client_type='acp' AND s.state IN ('starting','idle','busy','waiting_for_interaction','interrupted')")
-                .fetch_all(&state.db()).await?;
-            for session in sessions {
-                let _ = adapter.reconnect.send(session);
-            }
             Ok(Some(tokio::spawn(async move {
                 let mut recoveries = tokio::task::JoinSet::new();
                 loop {
                     tokio::select! {
-                        _ = async { let _ = shutdown.wait_for(|stop| *stop).await; } => break,
+                        _ = shutdown.wait_for(|stop| *stop) => break,
                         session = recovery.recv() => {
                             let Some(session) = session else { break; };
                             let adapter = adapter.clone();
                             let state = state.clone();
                             recoveries.spawn(async move {
-                            let recover = async {
-                                let target = ControlTarget::resolve(&state.db(), &state.clients(), &session, None).await?;
-                                let active: bool = sqlx::query_scalar("SELECT state IN ('starting','idle','busy','waiting_for_interaction','interrupted') FROM sessions WHERE session_id=?")
-                                    .bind(&session).fetch_one(&state.db()).await?;
-                                if active { adapter.resume(state.event_ingest_service(), &target).await?; }
-                                Ok::<_, Error>(())
-                            };
-                            if let Err(error) = recover.await { tracing::warn!(%session, %error, "ACP reconnect unavailable"); }
+                                let result = async {
+                                    let target = ControlTarget::resolve(&state.db(), &state.clients(), &session, None).await?;
+                                    adapter.resume(state.event_ingest_service(), &target).await
+                                }.await;
+                                if let Err(error) = result { tracing::warn!(%session, %error, "ACP process recovery failed"); }
                             });
                         }
-                        result = recoveries.join_next(), if !recoveries.is_empty() => {
-                            if let Some(Err(error)) = result { tracing::warn!(%error, "ACP recovery task failed"); }
-                        }
+                        _ = recoveries.join_next(), if !recoveries.is_empty() => {}
                     }
                 }
-                adapter.stopped.store(true, Ordering::Release);
                 recoveries.abort_all();
                 while recoveries.join_next().await.is_some() {}
+                adapter.stopped.store(true, Ordering::Release);
                 let peers: Vec<_> = adapter
                     .peers
                     .lock()
@@ -715,6 +736,7 @@ impl ClientService for AcpAdapter {
                     .map(|(_, peer)| peer)
                     .collect();
                 for peer in &peers {
+                    peer.relay.rpc.close();
                     peer.stop.send_replace(true);
                 }
                 for peer in peers {

@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { LiveOutputPublisher } from "../src/live-output.js";
-import { MAX_RPC_FRAME_BYTES } from "../src/control-socket.js";
+import { MAX_RPC_FRAME_BYTES } from "../shared/control-socket.js";
 
 const BUDGET = 1024 * 1024;
 

@@ -8,6 +8,13 @@ import threading
 import time
 
 root = Path(os.environ["ACP_FIXTURE_ROOT"])
+# A failed test still owns and removes its unique root; do not leave its detached fixture alive.
+def watch_root():
+    while root.exists():
+        time.sleep(0.1)
+    os._exit(0)
+
+threading.Thread(target=watch_root, daemon=True).start()
 lock = threading.Lock()
 active = None
 number = 0
@@ -172,6 +179,8 @@ for line in sys.stdin:
         gate = os.environ.get("ACP_LOAD_GATE")
         if gate and (root / gate).exists():
             wait_for(f"release-{gate}")
+        if (root / f"hold-load-{os.environ['PONTIA_SESSION_ID']}").exists():
+            wait_for(f"release-load-{os.environ['PONTIA_SESSION_ID']}")
         if (root / "hold-load").exists():
             wait_for("release-load")
         if (root / "load-fail").exists() or os.environ.get("ACP_LOAD_FAIL") == "1":

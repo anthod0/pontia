@@ -14,6 +14,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("--stdio-relay") {
+        return pontia_agent_control::ipc::relay::run_from_stdin().await;
+    }
     let config = pontia_clients::config_from_env()?;
     init_tracing();
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;

@@ -1,17 +1,21 @@
+use base64::{Engine, engine::general_purpose::STANDARD};
+use pontia_agent_control::{
+    ClientControlChannel, ClientControlOperation,
+    ipc::rpc::{MAX_FRAME_BYTES, Requests, RpcPeer},
+};
+use pontia_core::{Error, Result};
+use pontia_runtime::{ProcessFingerprint, ProcessObservation};
+use serde_json::{Value, json};
 use std::{
     collections::HashSet,
-    io,
-    pin::Pin,
     sync::{Arc, Mutex},
-    task::{Context, Poll},
+    time::Duration,
+};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, ReadHalf, WriteHalf},
+    sync::watch,
 };
 
-use pontia_core::{Error, Result};
-use serde_json::Value;
-use tokio::{io::AsyncWrite, process::ChildStdin, sync::watch};
-
-// SDK send_request/send_notification enqueue output. A control receipt must instead
-// wait until the corresponding frame has actually been flushed to the peer pipe.
 #[derive(Default)]
 struct Written {
     keys: HashSet<String>,
@@ -23,7 +27,6 @@ pub(crate) struct Receipts {
     state: Mutex<Written>,
     changed: watch::Sender<u64>,
 }
-
 impl Receipts {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
@@ -31,7 +34,6 @@ impl Receipts {
             changed: watch::channel(0).0,
         })
     }
-
     pub async fn wait(&self, key: String) -> Result<()> {
         let mut changes = self.changed.subscribe();
         loop {
@@ -52,88 +54,170 @@ impl Receipts {
                 .map_err(|_| Error::ControlUnknown("ACP connection closed".into()))?;
         }
     }
-
-    // Only observed response writes need a receipt. Unsupported requests and
-    // already-cancelled prompts can send protocol replies without retaining keys.
     pub fn response(&self, id: &agent_client_protocol::v1::schema::RequestId) -> Result<String> {
         let key = format!("response:{}", serde_json::to_string(id)?);
         self.state.lock().unwrap().responses.insert(key.clone());
         Ok(key)
     }
-
     pub fn close(&self) {
         self.state.lock().unwrap().closed = true;
         self.changed.send_modify(|version| *version += 1);
     }
-}
-
-pub(crate) struct FlushedWriter {
-    stdin: ChildStdin,
-    bytes: Vec<u8>,
-    receipts: Arc<Receipts>,
-}
-
-impl FlushedWriter {
-    pub fn new(stdin: ChildStdin, receipts: Arc<Receipts>) -> Self {
-        Self {
-            stdin,
-            bytes: Vec::new(),
-            receipts,
+    fn written(&self, frame: &Value) {
+        let key = if let Some(id) = frame.get("id").filter(|_| frame.get("method").is_some()) {
+            Some(id.to_string())
+        } else if let Some(id) = frame.get("id") {
+            Some(format!("response:{id}"))
+        } else if frame["method"] == "session/cancel" {
+            Some("session/cancel".into())
+        } else {
+            None
+        };
+        if let Some(key) = key {
+            let mut state = self.state.lock().unwrap();
+            if !key.starts_with("response:") || state.responses.remove(&key) {
+                state.keys.insert(key);
+                self.changed.send_modify(|version| *version += 1);
+            }
         }
     }
+}
 
-    fn flushed(&mut self) {
-        while let Some(end) = self.bytes.iter().position(|byte| *byte == b'\n') {
-            if let Ok(frame) = serde_json::from_slice::<Value>(&self.bytes[..end]) {
-                let key =
-                    if let Some(id) = frame.get("id").filter(|_| frame.get("method").is_some()) {
-                        Some(id.to_string())
-                    } else if let Some(id) = frame.get("id") {
-                        Some(format!("response:{id}"))
-                    } else if frame["method"] == "session/cancel" {
-                        Some("session/cancel".into())
-                    } else {
-                        None
-                    };
-                if let Some(key) = key {
-                    let mut state = self.receipts.state.lock().unwrap();
-                    if !key.starts_with("response:") || state.responses.remove(&key) {
-                        state.keys.insert(key);
-                        self.receipts.changed.send_modify(|version| *version += 1);
+pub(crate) struct Relay {
+    pub rpc: Arc<RpcPeer>,
+    pub process: ProcessFingerprint,
+}
+impl Relay {
+    pub async fn call(&self, method: &str, params: Value) -> Result<Value> {
+        let response = self
+            .rpc
+            .request(method, params, MAX_FRAME_BYTES, false)
+            .await?;
+        response
+            .get("result")
+            .cloned()
+            .ok_or_else(|| Error::ControlUnknown("Relay operation was not confirmed".into()))
+    }
+    pub async fn terminate(&self) -> Result<()> {
+        if !self.rpc.is_closed() {
+            // Native session/close may have already ended the Agent and its relay.
+            let _ = self.call("relay.exit", json!({})).await;
+        }
+        if self.process.observe() != ProcessObservation::Exited {
+            pontia_runtime::GenericRuntimeManager.terminate_process(&self.process)?;
+        }
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while self.process.observe() != ProcessObservation::Exited {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .map_err(|_| Error::ControlUnknown("ACP relay exit unconfirmed".into()))
+    }
+}
+impl ClientControlChannel for Relay {
+    fn process_id(&self) -> Option<u32> {
+        Some(self.process.pid)
+    }
+    fn available(&self) -> bool {
+        !self.rpc.is_closed()
+    }
+    fn invalidate(&self) {
+        self.rpc.close();
+    }
+    fn ping(&self) -> ClientControlOperation<'_> {
+        Box::pin(async { self.call("relay.status", json!({})).await.map(|_| ()) })
+    }
+    fn shutdown(&self) -> ClientControlOperation<'_> {
+        Box::pin(self.terminate())
+    }
+    fn interrupt(&self) -> ClientControlOperation<'_> {
+        Box::pin(async {
+            Err(Error::CapabilityUnavailable(
+                "ACP interrupt requires its native Session".into(),
+            ))
+        })
+    }
+    fn replay<'a>(&'a self, _: &'a str) -> ClientControlOperation<'a> {
+        Box::pin(async {
+            Err(Error::CapabilityUnavailable(
+                "ACP input replay is unavailable".into(),
+            ))
+        })
+    }
+    fn submit<'a>(&'a self, _: &'a str, _: Option<&'a str>) -> ClientControlOperation<'a> {
+        Box::pin(async {
+            Err(Error::CapabilityUnavailable(
+                "ACP input requires a Turn".into(),
+            ))
+        })
+    }
+}
+
+// The SDK sees native ACP frames. Only the relay's confirmed pipe flush releases a receipt.
+pub(crate) async fn bridge(
+    relay: Arc<Relay>,
+    mut requests: Requests,
+    receipts: Arc<Receipts>,
+    mut writer: WriteHalf<DuplexStream>,
+    reader: ReadHalf<DuplexStream>,
+    recovered_request: Option<Value>,
+    ready: watch::Sender<bool>,
+) -> Result<()> {
+    let outgoing = async {
+        let mut reader = BufReader::new(reader);
+        loop {
+            let mut bytes = Vec::new();
+            if reader.read_until(b'\n', &mut bytes).await? == 0 {
+                return Ok(());
+            }
+            let frame: Value = serde_json::from_slice(&bytes)?;
+            for chunk in bytes.chunks(64 * 1024) {
+                relay
+                    .call("relay.write", json!({"chunk":STANDARD.encode(chunk)}))
+                    .await?;
+            }
+            receipts.written(&frame);
+        }
+    };
+    let incoming = async {
+        let mut bytes = Vec::new();
+        while let Some(request) = requests.recv().await {
+            if request.method == "relay.ready" {
+                ready.send_replace(true);
+                relay.rpc.reply(request.id, json!({})).await?;
+                continue;
+            }
+            if request.method != "relay.frame" {
+                return Err(Error::Domain("Unknown ACP relay method".into()));
+            }
+            let chunk = STANDARD
+                .decode(
+                    request.params["chunk"]
+                        .as_str()
+                        .ok_or_else(|| Error::Domain("Relay output requires bytes".into()))?,
+                )
+                .map_err(|_| Error::Domain("Invalid relay output bytes".into()))?;
+            bytes.extend(chunk);
+            if request.params["last"] == true {
+                if let Some(id) = &recovered_request {
+                    let frame: Value = serde_json::from_slice(&bytes)?;
+                    if frame.get("id") == Some(id) && frame.get("method").is_none() {
+                        bytes = serde_json::to_vec(
+                            &json!({"jsonrpc":"2.0","method":"pontia/recovered-result","params":frame}),
+                        )?;
+                        bytes.push(b'\n');
                     }
                 }
+                writer.write_all(&bytes).await?;
+                bytes.clear();
             }
-            self.bytes.drain(..=end);
+            relay.rpc.reply(request.id, json!({})).await?;
         }
-    }
-}
-
-impl AsyncWrite for FlushedWriter {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bytes: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        let result = Pin::new(&mut self.stdin).poll_write(cx, bytes);
-        match &result {
-            Poll::Ready(Ok(count)) => self.bytes.extend_from_slice(&bytes[..*count]),
-            Poll::Ready(Err(_)) => self.receipts.close(),
-            _ => {}
-        }
-        result
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let result = Pin::new(&mut self.stdin).poll_flush(cx);
-        match &result {
-            Poll::Ready(Ok(())) => self.flushed(),
-            Poll::Ready(Err(_)) => self.receipts.close(),
-            _ => {}
-        }
-        result
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.stdin).poll_shutdown(cx)
-    }
+        Ok(())
+    };
+    let result = tokio::select! { result = outgoing => result, result = incoming => result };
+    receipts.close();
+    relay.rpc.close();
+    result
 }

@@ -1,4 +1,4 @@
-use crate::rpc::RpcRequest;
+use pontia_agent_control::ipc::rpc::RpcRequest;
 use pontia_agent_control::{AgentControl, ControlQueryService, SessionInstructionsService};
 use pontia_core::{Error, Result};
 use serde::Deserialize;

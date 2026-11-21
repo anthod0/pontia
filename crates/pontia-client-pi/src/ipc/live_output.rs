@@ -4,7 +4,7 @@ use pontia_agent_control::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::Attach;
+use pontia_agent_control::ipc::identity::NativeAttachment;
 use pontia_core::{Error, Result};
 use serde_json::Value;
 
@@ -46,7 +46,7 @@ struct LiveOutputResponse {
 
 pub(super) async fn publish(
     state: &AgentControl,
-    identity: &Attach,
+    identity: &NativeAttachment,
     params: Value,
 ) -> Result<Value> {
     let request: LiveOutputRequest = serde_json::from_value(params)?;

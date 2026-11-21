@@ -1,4 +1,4 @@
-import { CONTROL_VERSION, type PiConnection } from "./control-socket.js";
+import { CONTROL_VERSION, type RuntimeConnection } from "../shared/control-socket.js";
 import { asRecord, optionalString } from "./values.js";
 import type { SessionContext } from "./session.js";
 
@@ -30,7 +30,7 @@ export function piSessionDetailsFromHookContext(ctx: unknown): PiSessionDetails 
 }
 
 export async function bindSession(
-  connection: PiConnection,
+  connection: RuntimeConnection,
   sessionDetails: PiSessionDetails,
   options: { startKind?: "fork"; parentSessionId?: string; runtimeId?: string } = {},
 ): Promise<SessionContext | undefined> {
@@ -71,7 +71,7 @@ export interface ExistingPiSessionContext extends SessionContext {
 }
 
 export async function loadExistingSessionContext(
-  connection: PiConnection,
+  connection: RuntimeConnection,
   sessionDetails: PiSessionDetails,
 ): Promise<ExistingPiSessionContext | undefined> {
   if (!sessionDetails.clientSessionKey) return undefined;

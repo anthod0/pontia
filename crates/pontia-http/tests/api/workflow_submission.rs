@@ -3,7 +3,8 @@ use pontia_workflow::repository::{
 };
 use std::{fs, sync::Arc};
 
-use pontia_client_pi::rpc::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
+use pontia_agent_control::ipc::rpc::{PROTOCOL_VERSION, RpcRequest};
+use pontia_client_pi::rpc::PiRpcPeer;
 use tokio::net::UnixStream;
 
 use axum::{

@@ -102,7 +102,7 @@ pub(crate) async fn select(
                         "ACP Agent did not select model: {model}"
                     )));
                 }
-                Ok(())
+                result_peer.remember(&state, None).await
             }
             .await;
             let _ = send.send(result);

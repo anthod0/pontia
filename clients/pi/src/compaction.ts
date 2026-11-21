@@ -7,7 +7,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { InternalEvent } from "./events.js";
 import type { SessionContext } from "./session.js";
-import { RpcError } from "./rpc-error.js";
+import { RpcError } from "../shared/rpc-error.js";
 
 type Trigger = "manual" | "threshold" | "overflow" | "unknown";
 interface Operation {

@@ -2,10 +2,7 @@ use crate::{Adapter, Peer, unavailable};
 use pontia_agent_control::{AgentBindingService, EventIngestService, runtime::ControlTarget};
 use pontia_core::{Error, Result};
 use serde_json::Value;
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, OnceLock},
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 impl Adapter {
     pub(crate) async fn resume_bound(
@@ -19,7 +16,17 @@ impl Adapter {
             return Err(unavailable());
         }
         if let Some(previous) = peers.get(&target.session_id)
-            && (!previous.state.lock().await.closed || !*previous.connection()?.exited.borrow())
+            && previous
+                .connection()
+                .is_ok_and(|connection| !connection.rpc.is_closed())
+            && !previous.state.lock().await.closed
+        {
+            return Ok(());
+        }
+        if let Some(previous) = peers.get(&target.session_id)
+            && (!previous.state.lock().await.closed
+                || previous.connection()?.process.observe()
+                    != pontia_runtime::ProcessObservation::Exited)
         {
             return Err(Error::CapabilityUnavailable(
                 "Claude Code previous execution has not confirmed closure".into(),
@@ -67,7 +74,7 @@ impl Adapter {
             resume: Some(binding.client_session_key),
             interactions: self.interactions.get().cloned().ok_or_else(unavailable)?,
             state: Default::default(),
-            connection: OnceLock::new(),
+            connection: Default::default(),
         });
         // Restore the existing Workflow context without persisting secrets or an
         // arbitrary environment snapshot in the binding.
@@ -94,8 +101,9 @@ impl Adapter {
                 ("PONTIA_WORKFLOW_PATCH_ID".into(), patch_id),
             ]);
         }
-        peer.start(&events, &script, &environment).await?;
-        peers.insert(peer.session.clone(), peer);
+        peers.insert(peer.session.clone(), peer.clone());
+        drop(peers);
+        peer.start(&events, root, &script, &environment).await?;
         Ok(())
     }
 }

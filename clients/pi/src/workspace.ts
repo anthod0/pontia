@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { PiConnection } from "./control-socket.js";
+import type { RuntimeConnection } from "../shared/control-socket.js";
 import { asRecord } from "./values.js";
 
 async function canonicalPath(path: string): Promise<string> {
@@ -12,7 +12,7 @@ async function canonicalPath(path: string): Promise<string> {
 }
 
 export async function isActiveRegisteredWorkspace(
-  connection: Pick<PiConnection, "request">,
+  connection: Pick<RuntimeConnection, "request">,
   clientCwd: string | undefined,
 ): Promise<boolean> {
   if (!clientCwd) return false;

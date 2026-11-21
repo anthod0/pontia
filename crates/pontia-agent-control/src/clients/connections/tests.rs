@@ -167,3 +167,88 @@ async fn retired_shutdown_receipt_stays_unknown_after_replacement_also_exits() {
     assert!(!replacement.available());
     assert!(!control.available("session").await.unwrap());
 }
+
+#[tokio::test]
+async fn launch_attachment_does_not_claim_a_native_conversation() {
+    use crate::ipc::identity::BindingConfirmation;
+    let (pool, _root, control) = fixture().await;
+    sqlx::query("DELETE FROM agent_bindings")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE session_runtimes SET state='starting'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let current = channel();
+    let guard = control.lock_identity().await;
+    control
+        .attach_binding_locked(
+            &guard,
+            "test-channel",
+            "session",
+            "original",
+            BindingConfirmation::Launch,
+            current.clone(),
+        )
+        .await
+        .unwrap();
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_bindings")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    sqlx::query("INSERT INTO agent_bindings(id,session_id,client_type,launch_cwd,client_session_key,metadata) VALUES ('binding','session','test-channel','/unused','native','{}')").execute(&pool).await.unwrap();
+    control
+        .attach_binding_locked(
+            &guard,
+            "test-channel",
+            "session",
+            "original",
+            BindingConfirmation::Launch,
+            current.clone(),
+        )
+        .await
+        .unwrap();
+    sqlx::query("UPDATE session_runtimes SET state='running'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        control
+            .attach_binding_locked(
+                &guard,
+                "test-channel",
+                "session",
+                "original",
+                BindingConfirmation::Launch,
+                current.clone()
+            )
+            .await
+            .is_err()
+    );
+    control
+        .attach_locked(
+            &guard,
+            "test-channel",
+            "session",
+            "original",
+            "native",
+            current.clone(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        control
+            .attach_locked(
+                &guard,
+                "test-channel",
+                "session",
+                "original",
+                "other",
+                current
+            )
+            .await
+            .is_err()
+    );
+}

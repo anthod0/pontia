@@ -101,7 +101,7 @@ for (const action of ["disconnect", "close", "sdk-failure"] as const) {
     const a = request();
     if (action === "disconnect") {
       host.controlLost();
-      host.controlRestored(true);
+      host.controlRestored();
     } else if (action === "close") await host.close();
     else {
       fixture.messages.failure = new Error("fixture failure");

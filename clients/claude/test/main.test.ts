@@ -38,16 +38,12 @@ for (const invalidToken of [false, true]) {
           session_id: "private-session",
           runtime_id: "private-runtime",
           cwd: sandbox.path,
-          socket_path: join(sandbox.path, "private-missing-directory", "control.sock"),
-          token: invalidToken ? "private-invalid-token" : "a".repeat(64),
+          pontia_home: invalidToken ? 1 : join(sandbox.path, "private-missing-directory"),
         }) + "\n",
       );
       const [code] = await closed;
       assert.equal(code, 1);
-      assert.deepEqual(JSON.parse(stdout), {
-        listening: false,
-        code: invalidToken ? "HOST_START_FAILED" : "ENOENT",
-      });
+      assert.equal(stdout, "");
       assert.notEqual(stderr, "");
       assert.doesNotMatch(stderr, /private-/);
     },

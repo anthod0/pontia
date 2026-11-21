@@ -1,4 +1,4 @@
-use pontia_client_pi::ipc::PiIpcListener;
+use pontia_agent_control::ipc::ControlListener;
 mod common;
 use axum::{
     body::Body,
@@ -61,7 +61,7 @@ async fn attach(
     runtime: &str,
 ) -> (
     std::sync::Arc<PiRpcPeer>,
-    tokio::sync::mpsc::Receiver<pontia_client_pi::rpc::RpcRequest>,
+    tokio::sync::mpsc::Receiver<pontia_agent_control::ipc::rpc::RpcRequest>,
 ) {
     let (server, client) = UnixStream::pair().unwrap();
     let (peer, requests) = PiRpcPeer::new(server);
@@ -155,7 +155,7 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
         .execute(&state.db())
         .await
         .unwrap();
-    let listener = PiIpcListener::bind(root.path()).await.unwrap();
+    let listener = ControlListener::bind(root.path()).await.unwrap();
     let task = tokio::spawn(listener.run(
         state.control().clone(),
         state.control().shutdown().subscribe(),
@@ -237,7 +237,7 @@ async fn real_pi_client_reconnects_after_daemon_restart_and_delivers_external_in
     let body: Value =
         serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(body["data"]["inbox_message"]["state"], "pending");
-    let listener = PiIpcListener::bind(root.path()).await.unwrap();
+    let listener = ControlListener::bind(root.path()).await.unwrap();
     let task = tokio::spawn(listener.run(
         restarted.control().clone(),
         restarted.control().shutdown().subscribe(),

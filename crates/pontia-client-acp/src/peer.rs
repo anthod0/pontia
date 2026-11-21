@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     path::Path,
-    process::Stdio,
     sync::{Arc, Weak},
 };
 
@@ -16,18 +15,17 @@ use pontia_agent_control::{
 };
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
-use tokio::{
-    process::Command,
-    sync::{Mutex, oneshot, watch},
-};
+use tokio::sync::{Mutex, oneshot, watch};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 use crate::{
     spec::ACP_MAX_CAPABILITIES,
-    transport::{FlushedWriter, Receipts},
+    transport::{Receipts, Relay},
 };
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct Prompt {
+    pub request_id: Value,
     pub turn: String,
     pub started: bool,
     pub sequence: u64,
@@ -44,9 +42,9 @@ pub(crate) struct SessionState {
     pub current: bool,
     pub ready: bool,
     pub blocked: bool,
+    reconnect_needed: bool,
     pub steer: bool,
     pub system_prompt: Option<SystemPrompt>,
-    reconnect_needed: bool,
     pub native: Option<SessionId>,
     pub capabilities: Option<pontia_core::client_capabilities::AgentClientCapabilities>,
     pub current_model: Option<String>,
@@ -63,8 +61,8 @@ pub(crate) struct SessionState {
 pub(crate) type Peers = Arc<Mutex<HashMap<String, Arc<Peer>>>>;
 
 pub(crate) struct PeerOwner {
-    pub peers: Weak<Mutex<HashMap<String, Arc<Peer>>>>,
     pub reconnect: tokio::sync::mpsc::UnboundedSender<String>,
+    pub peers: Weak<Mutex<HashMap<String, Arc<Peer>>>>,
 }
 
 impl SessionState {
@@ -83,6 +81,8 @@ impl SessionState {
 
 pub(crate) struct Peer {
     pub connection: ConnectionTo<Agent>,
+    pub relay: Arc<Relay>,
+    pub attached: watch::Receiver<bool>,
     pub state: Arc<Mutex<SessionState>>,
     pub receipts: Arc<Receipts>,
     pub interactions: pontia_agent_control::interactions::InteractionService,
@@ -90,8 +90,8 @@ pub(crate) struct Peer {
     pub runtime: String,
     pub stop: watch::Sender<bool>,
     pub done: watch::Receiver<bool>,
-    events: EventIngestService,
-    session: String,
+    pub(crate) events: EventIngestService,
+    pub(crate) session: String,
 }
 
 pub(crate) fn protocol_error(error: agent_client_protocol::Error) -> Error {
@@ -176,52 +176,24 @@ pub(crate) fn start_command(config: &AcpAgentConfig) -> String {
         .join(" ")
 }
 
-fn fingerprint(pid: Option<u32>) -> Option<String> {
-    let pid = pid?;
-    #[cfg(target_os = "linux")]
-    {
-        let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-        let start = stat.rsplit_once(") ")?.1.split_whitespace().nth(19)?;
-        let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
-        Some(json!({"pid":pid,"start_time_ticks":start,"boot_id":boot.trim()}).to_string())
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = pid;
-        None
-    }
-}
-
 impl Peer {
-    pub async fn spawn(
-        events: EventIngestService,
-        interactions: pontia_agent_control::interactions::InteractionService,
-        session: &str,
-        runtime: &str,
+    pub async fn connect(
+        app: &pontia_agent_control::AgentControl,
+        identity: &pontia_agent_control::ipc::identity::RuntimeAttachment,
         cwd: &Path,
-        config: &AcpAgentConfig,
+        relay: Arc<Relay>,
+        requests: pontia_agent_control::ipc::rpc::Requests,
+        context: Value,
         owner: PeerOwner,
     ) -> Result<Arc<Self>> {
-        let mut child = Command::new(&config.command)
-            .args(&config.args)
-            .envs(&config.env)
-            .env("PONTIA_SESSION_ID", session)
-            .current_dir(cwd)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .kill_on_drop(true)
-            .spawn()?;
-        let process_fingerprint = fingerprint(child.id());
-        // Starting again updates this runtime's process incarnation, not its identity.
-        if let Err(error) = runtime_event(&events, session, runtime, PontiaEventType::RuntimeStarting,
-            json!({"start_command":start_command(config),"process_fingerprint":process_fingerprint})).await {
-            let _ = child.kill().await;
-            return Err(error);
-        }
+        let events = app.event_ingest_service();
+        let interactions = app.interactions();
+        let session = identity.session_id.as_str();
+        let runtime = identity.runtime_id.as_str();
         let receipts = Receipts::new();
-        let writer = FlushedWriter::new(child.stdin.take().expect("piped stdin"), receipts.clone());
-        let reader = child.stdout.take().expect("piped stdout");
+        let (native, forwarded) = tokio::io::duplex(64 * 1024);
+        let (reader, writer) = tokio::io::split(native);
+        let (outgoing, incoming) = tokio::io::split(forwarded);
         let state = Arc::new(Mutex::new(SessionState {
             current: true,
             ready: false,
@@ -241,6 +213,30 @@ impl Peer {
             history_error: Some("ACP history has not been loaded".into()),
             cwd: cwd.to_path_buf(),
         }));
+        if !context.is_null() {
+            super::connection::restore(&events, session, &mut *state.lock().await, &context)
+                .await?;
+        }
+        let recovered_request = state
+            .lock()
+            .await
+            .active
+            .as_ref()
+            .map(|prompt| prompt.request_id.clone());
+        let bridge_relay = relay.clone();
+        let bridge_receipts = receipts.clone();
+        let (ready, attached) = watch::channel(false);
+        let bridge = tokio::spawn(crate::transport::bridge(
+            bridge_relay,
+            requests,
+            bridge_receipts,
+            incoming,
+            outgoing,
+            recovered_request,
+            ready,
+        ));
+        let associated = Arc::new(std::sync::OnceLock::<Weak<Peer>>::new());
+        let recovered_peer = associated.clone();
         let (connected, connection) = oneshot::channel();
         let (stop, mut stopping) = watch::channel(false);
         let (done, completion) = watch::channel(false);
@@ -248,10 +244,11 @@ impl Peer {
         let update_events = events.clone();
         let update_session = session.to_owned();
         let update_runtime = runtime.to_owned();
+        let cleanup_relay = relay.clone();
+        let task_runtime = runtime.to_owned();
         let task_state = state.clone();
         let task_receipts = receipts.clone();
         let session = session.to_owned();
-        let task_runtime = runtime.to_owned();
         let permission_service = interactions.clone();
         let cleanup_service = interactions.clone();
         let permission_state = state.clone();
@@ -278,6 +275,22 @@ impl Peer {
                 )
                 .on_receive_notification(
                     async move |message: agent_client_protocol::UntypedMessage, _cx| {
+                        if message.method() == "pontia/recovered-result" {
+                            if let Some(peer) = recovered_peer.get().and_then(Weak::upgrade) {
+                                let turn = peer.state.lock().await.active.as_ref()
+                                    .filter(|prompt| prompt.request_id == message.params()["id"])
+                                    .map(|prompt| prompt.turn.clone());
+                                if let Some(turn) = turn {
+                                    let result = if let Some(error) = message.params().get("error") {
+                                        Err(serde_json::from_value(error.clone())?)
+                                    } else { Ok(serde_json::from_value(message.params()["result"].clone())?) };
+                                    if let Err(error) = finish(&update_events, &update_session, &peer, &turn, result).await {
+                                        tracing::warn!(session=%update_session, %error, "Restored ACP prompt result rejected");
+                                    }
+                                }
+                            }
+                            return Ok(());
+                        }
                         if message.method() != "session/update" { return Ok(()); }
                         let notification: SessionNotification = match serde_json::from_value(message.params().clone()) {
                             Ok(notification) => notification,
@@ -319,12 +332,13 @@ impl Peer {
             // Release write waiters before taking the state lock: a control operation
             // may hold that lock while awaiting a pipe flush.
             task_receipts.close();
+            cleanup_relay.rpc.close();
+            bridge.abort();
+            let _ = bridge.await;
             let (permissions, recover) = {
                 let mut state = task_state.lock().await;
-                let recover = state.ready
-                    && !state.closing
-                    && (state.current || state.reconnect_needed)
-                    && (!*stopping.borrow() || state.reconnect_needed);
+                let recover =
+                    state.ready && !state.closing && (state.current || state.reconnect_needed);
                 state.current = false;
                 state.capabilities = None;
                 state.active = None;
@@ -338,18 +352,26 @@ impl Peer {
             if let Some(output) = events.live_output() {
                 output.discard_session(&session);
             }
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            if let Err(error) = runtime_event(
-                &events,
-                &session,
-                &task_runtime,
-                PontiaEventType::RuntimeExited,
-                json!({"reason":"peer_unavailable"}),
-            )
-            .await
+            // A broken controller connection never implies process exit or authorizes a replacement.
+            let mut exited = false;
+            for _ in 0..25 {
+                if cleanup_relay.process.observe() == pontia_runtime::ProcessObservation::Exited {
+                    exited = true;
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            if exited
+                && let Err(error) = runtime_event(
+                    &events,
+                    &session,
+                    &task_runtime,
+                    PontiaEventType::RuntimeExited,
+                    json!({"reason":"peer_exited"}),
+                )
+                .await
             {
-                tracing::warn!(%session, %error, "ACP runtime cleanup failed");
+                tracing::warn!(%session, %error, "ACP runtime exit failed");
             }
             if let Some(peers) = owner.peers.upgrade() {
                 let mut peers = peers.lock().await;
@@ -361,14 +383,16 @@ impl Peer {
                 }
             }
             done.send_replace(true);
-            if recover {
+            if exited && recover {
                 let _ = owner.reconnect.send(session);
             }
         });
         let connection = connection
             .await
             .map_err(|_| Error::ControlUnknown("ACP connection startup failed".into()))?;
-        Ok(Arc::new(Self {
+        let peer = Arc::new(Self {
+            relay,
+            attached,
             connection,
             state,
             receipts,
@@ -379,7 +403,9 @@ impl Peer {
             done: completion,
             events: model_events,
             session: model_session,
-        }))
+        });
+        let _ = associated.set(Arc::downgrade(&peer));
+        Ok(peer)
     }
 
     pub async fn call<R: JsonRpcRequest>(&self, request: R) -> Result<R::Response> {
@@ -628,6 +654,13 @@ impl Peer {
     }
 
     pub fn invalidate(&self, state: &mut SessionState) {
+        // Native protocol failures fence execution; controller loss alone leaves it running.
+        if !self.relay.rpc.is_closed()
+            && let Err(error) =
+                pontia_runtime::GenericRuntimeManager.terminate_process(&self.relay.process)
+        {
+            tracing::warn!(session=%self.session, %error, "ACP protocol failure could not stop the process");
+        }
         state.reconnect_needed = true;
         state.current = false;
         state.capabilities = None;
@@ -635,6 +668,7 @@ impl Peer {
     }
 
     pub async fn stop(&self) {
+        self.relay.rpc.close();
         self.stop.send_replace(true);
         let mut done = self.done.clone();
         while !*done.borrow_and_update() {
@@ -728,7 +762,7 @@ async fn update(
     if state.active.is_none() {
         return Ok(());
     }
-    if update["sessionUpdate"] != "user_message_chunk" {
+    if update["sessionUpdate"] != "user_message_chunk" && state.history_error.is_none() {
         let _ = crate::history::collect(&mut state.history, update);
     }
     let prompt = state.active.as_mut().expect("checked active prompt");
@@ -795,6 +829,7 @@ pub(crate) async fn finish(
     data["acp_history_anchor"] = json!(prompt.history_end);
     fact(events, session, &peer.runtime, turn, terminal, data).await?;
     state.active = None;
+    peer.remember(&state, None).await?;
     let permissions = std::mem::take(&mut state.permissions);
     state.refresh_capabilities();
     drop(state);

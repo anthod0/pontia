@@ -10,7 +10,8 @@
   },
   "files": [
     "dist/src",
-    "LICENSE"
+    "LICENSE",
+    "dist/shared"
   ],
   "type": "module",
   "main": "dist/src/main.js",

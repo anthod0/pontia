@@ -7,7 +7,8 @@ import { registerHooks } from "node:module";
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      context.parentURL?.startsWith(new URL("../src/", import.meta.url).href) &&
+      (context.parentURL?.startsWith(new URL("../src/", import.meta.url).href) ||
+        context.parentURL?.startsWith(new URL("../../shared/", import.meta.url).href)) &&
       specifier.endsWith(".js")
     ) {
       specifier = `${specifier.slice(0, -3)}.ts`;
@@ -15,7 +16,8 @@ registerHooks({
     return nextResolve(specifier, context);
   },
 });
-const { connectPi, CONTROL_VERSION } = await import("../src/control-socket.ts");
+const { connectPi } = await import("../src/control-socket.ts");
+const { CONTROL_VERSION } = await import("../shared/control-socket.ts");
 
 const [directory, sessionId, runtimeId, clientSessionKey] = process.argv.slice(2);
 process.stdin.resume();

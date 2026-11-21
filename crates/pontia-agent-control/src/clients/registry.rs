@@ -124,6 +124,26 @@ impl ClientRegistry {
                 }
             }
         }
+        if phase == ClientServicePhase::Transport
+            && self.registrations().any(|registration| {
+                registration
+                    .service
+                    .as_ref()
+                    .is_some_and(|service| service.uses_control_socket())
+            })
+        {
+            let listener = match crate::ipc::ControlListener::bind(state.pontia_home()).await {
+                Ok(listener) => listener,
+                Err(error) => {
+                    tasks.abort().await;
+                    return Err(error);
+                }
+            };
+            let shutdown = state.shutdown().subscribe();
+            tasks
+                .tasks
+                .push(tokio::spawn(listener.run(state, shutdown)));
+        }
         Ok(tasks)
     }
 

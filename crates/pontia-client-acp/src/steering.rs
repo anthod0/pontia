@@ -63,7 +63,9 @@ pub(crate) async fn send(
                                 .as_ref()
                                 .is_some_and(|prompt| prompt.turn == turn) =>
                     {
-                        crate::history::append(&mut state.history, "user", &input);
+                        if state.history_error.is_none() {
+                            crate::history::append(&mut state.history, "user", &input);
+                        }
                         state
                             .active
                             .as_mut()
@@ -92,6 +94,10 @@ pub(crate) async fn send(
             if matches!(result, Err(Error::ControlUnknown(_))) {
                 result_peer.invalidate(&mut state);
             }
+            let result = match result {
+                Ok(()) => result_peer.remember(&state, None).await,
+                Err(error) => Err(error),
+            };
             let _ = send.send(result);
             Ok(())
         })

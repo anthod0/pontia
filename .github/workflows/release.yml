@@ -312,6 +312,7 @@ jobs:
           mkdir "$STAGING"
           cp clients/pi/package.json clients/pi/README.md clients/pi/LICENSE "$STAGING/"
           cp -a clients/pi/src "$STAGING/src"
+          cp -a clients/shared "$STAGING/shared"
           python3 scripts/release-version.py materialize-npm "$STAGING/package.json"
           test "$(jq -r .version "$STAGING/package.json")" = "$VERSION"
           npm pack --dry-run "$STAGING"
