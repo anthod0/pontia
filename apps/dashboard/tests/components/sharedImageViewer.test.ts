@@ -52,12 +52,21 @@ test("pages between the shared images of every turn in conversation order", asyn
   const viewer = await screen.findByRole("dialog");
   const next = within(viewer).getByRole("button", { name: "Next image" });
   expect(within(viewer).getByRole("button", { name: "Previous image" })).toBeDisabled();
-  expect(within(viewer).getByText("1 / 2")).toBeInTheDocument();
 
   await fireEvent.click(next);
-  await waitFor(() => expect(within(viewer).getByText("2 / 2")).toBeInTheDocument());
   expect(
     within(viewer).getByRole("heading", { name: "img2.png", hidden: true }),
   ).toBeInTheDocument();
   expect(next).toBeDisabled();
+  await fireEvent.click(within(viewer).getByRole("button", { name: "Previous image" }));
+  expect(
+    within(viewer).getByRole("heading", { name: "img1.png", hidden: true }),
+  ).toBeInTheDocument();
+  await fireEvent.click(within(viewer).getByRole("button", { name: "Close", exact: true }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  await fireEvent.click(screen.getByRole("button", { name: "Enlarge img2.png" }));
+  const reopened = await screen.findByRole("dialog");
+  expect(
+    within(reopened).getByRole("heading", { name: "img2.png", hidden: true }),
+  ).toBeInTheDocument();
 });

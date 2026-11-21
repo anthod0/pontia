@@ -6,16 +6,20 @@
   import { canPreviewImage } from '$lib/downloads/preview'
   import { ApiError } from '../../api/errors'
   import type { SharedFile } from '../../api/types'
-  import { useFilePreview } from '../chat/filePreviewContext'
-  import SharedImageViewer from '../chat/SharedImageViewer.svelte'
-  import { fileKind } from '../chat/fileKind'
+  import { useFilePreview } from './filePreviewContext'
+  import SharedImageViewer from './SharedImageViewer.svelte'
+  import { fileKind } from './fileKind'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import XIcon from 'phosphor-svelte/lib/XIcon'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'
   import FileXIcon from 'phosphor-svelte/lib/FileXIcon'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
 
-  let { file, sessionId }: { file: SharedFile; sessionId: string } = $props()
+  let { file, sessionId, onenlarge }: {
+    file: SharedFile
+    sessionId: string
+    onenlarge?: () => void
+  } = $props()
   const device = useDeviceRuntime()
   const preview = useFilePreview()
 
@@ -108,7 +112,7 @@
   {#if showImage}
     <figure class="overflow-hidden rounded-2xl bg-muted">
       {#if imageUrl}
-        <button type="button" class="block w-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset" onclick={() => { viewerOpen = true }} aria-label={$t('files.enlargeNamed', { name: file.name })}>
+        <button type="button" class="block w-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset" onclick={() => { if (onenlarge) onenlarge(); else viewerOpen = true }} aria-label={$t('files.enlargeNamed', { name: file.name })}>
           <img src={imageUrl} alt={file.name} class="max-h-72 w-full object-cover" />
         </button>
       {:else}
@@ -119,7 +123,7 @@
         {@render action()}
       </figcaption>
     </figure>
-    <SharedImageViewer {sessionId} files={[file]} bind:open={viewerOpen} />
+    {#if !onenlarge}<SharedImageViewer {sessionId} files={[file]} bind:open={viewerOpen} />{/if}
   {:else}
     <div class={['flex items-center gap-2 rounded-2xl bg-muted p-2.5', missing && 'opacity-80']}>
       {#snippet summary()}
