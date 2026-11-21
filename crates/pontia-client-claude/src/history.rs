@@ -3,7 +3,7 @@ use pontia_agent_control::{
     AgentBindingService,
     client_contract::{
         history::{RecoveredTurnHistory, TurnHistoryCandidate},
-        native_history::{HistoryRead, NativeHistory},
+        native_history::{HistoryRead, HistorySelection, HistorySource, NativeHistory},
         raw_transcripts::*,
         *,
     },
@@ -209,6 +209,23 @@ impl History {
     }
 }
 impl NativeHistory for History {
+    fn select_timeline(
+        &self,
+        turns: Vec<SessionTimelineTurn>,
+        source: Option<HistorySource>,
+    ) -> HistoryRead<'_, Result<Option<HistorySelection>>> {
+        Box::pin(async move {
+            if source == Some(HistorySource::File) {
+                return Err(source_unavailable());
+            }
+            self.messages().await?;
+            Ok(Some(HistorySelection {
+                source: HistorySource::Native,
+                turn_ids: turns.into_iter().map(|turn| turn.turn_id).collect(),
+            }))
+        })
+    }
+
     fn read_ranges(
         &self,
         ranges: Vec<TurnTimelineRange>,
@@ -218,18 +235,43 @@ impl NativeHistory for History {
             let mut items = Vec::new();
             // A persisted input can precede the first authoritative Turn start.
             // The Turn timeline cannot claim that such a conversation is empty.
-            if ranges.is_empty() {
+            let compacted = messages
+                .iter()
+                .rposition(|message| message["isCompactSummary"] == true);
+            if ranges.is_empty() && compacted.is_none() {
                 return Err(Error::CapabilityUnavailable(
                     "Claude Code history has no confirmed Turn association".into(),
                 )
                 .into());
             }
             for range in ranges {
-                let start = self.position(messages, &range.head_cursor, &range.turn_id)?;
-                let end = match &range.tail_cursor {
-                    Some(tail) => self.position(messages, tail, &range.turn_id)? + 1,
-                    None => messages.len(),
+                let start = self.position(messages, &range.head_cursor, &range.turn_id);
+                let end = range
+                    .tail_cursor
+                    .as_ref()
+                    .map(|tail| {
+                        self.position(messages, tail, &range.turn_id)
+                            .map(|index| index + 1)
+                    })
+                    .unwrap_or(Ok(messages.len()));
+                let (start, end) = match (start, end) {
+                    (Ok(start), Ok(end)) => (start, end),
+                    // A native summary proves that the SDK has replaced the earlier chain.
+                    // Keep the surviving suffix of a Turn that crossed that boundary.
+                    (Err(TurnTimelineReadError::InvalidRange { .. }), Ok(end))
+                        if compacted.is_some() =>
+                    {
+                        (compacted.expect("checked summary") + 1, end)
+                    }
+                    (
+                        Err(TurnTimelineReadError::InvalidRange { .. }),
+                        Err(TurnTimelineReadError::InvalidRange { .. }),
+                    ) if compacted.is_some() => continue,
+                    (Err(error), _) | (_, Err(error)) => return Err(error),
                 };
+                if start == end && compacted.is_some() {
+                    continue;
+                }
                 if start >= end {
                     return Err(TurnTimelineReadError::InvalidRange {
                         turn_id: range.turn_id,
@@ -325,6 +367,12 @@ impl NativeHistory for History {
 }
 
 fn render(message: &Value, position: usize, turn: &str, items: &mut Vec<TurnTimelineItem>) {
+    if message["isCompactSummary"] == true
+        || message["is_meta"] == true
+        || message["isCompletedLocalCommand"] == true
+    {
+        return;
+    }
     let role = message["type"].as_str().unwrap_or("unknown");
     let content = &message["message"]["content"];
     let blocks = content
@@ -389,7 +437,7 @@ fn render(message: &Value, position: usize, turn: &str, items: &mut Vec<TurnTime
                 raw_kind: block["type"].as_str().map(str::to_owned),
                 title,
                 status,
-                occurred_at: None,
+                occurred_at: message["timestamp"].as_str().map(str::to_owned),
                 content_preview: text,
                 call_id,
                 managed_tool_use: None,

@@ -337,6 +337,37 @@ impl ClientSession for Adapter {
             })
         })
     }
+    fn compact<'a>(
+        &'a self,
+        events: EventIngestService,
+        target: &'a ControlTarget,
+        operation_id: &'a str,
+    ) -> ClientOperation<'a, ()> {
+        Box::pin(async move {
+            let peer = self.target(&events, target).await?;
+            peer.connection()?
+                .request(json!({"method":"compact", "operation_id":operation_id}))
+                .await
+                .map(|_| ())
+        })
+    }
+    fn manual_compaction_available<'a>(
+        &'a self,
+        _: SqlitePool,
+        session: &'a str,
+    ) -> ClientOperation<'a, bool> {
+        Box::pin(async move {
+            let Ok(peer) = self.peer(session).await else {
+                return Ok(false);
+            };
+            let state = peer.state.lock().await;
+            Ok(state.native.is_some()
+                && state.unavailable.is_none()
+                && !state.closed
+                && !state.closing
+                && !self.stopped.load(Ordering::Acquire))
+        })
+    }
     fn interrupt<'a>(
         &'a self,
         events: EventIngestService,
@@ -400,6 +431,7 @@ impl ClientSession for Adapter {
         Box::pin(async move {
             let mut offline = AgentClientCapabilities {
                 timeline: true,
+                compaction_events: implementation.compaction_events,
                 ..Default::default()
             };
             if let Some((pool, _)) = self.context.get() {

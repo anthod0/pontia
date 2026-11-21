@@ -139,3 +139,17 @@ test("compaction history remains readable when ordinary timeline control is unav
     ),
   );
 });
+
+test("event-only compaction refreshes the readable history after a completion", async () => {
+  renderChat({
+    capabilities: { timeline: true, compaction_events: true, compaction_history: false },
+  });
+  report(event("completed"));
+  await waitFor(() =>
+    expect(mocks.loadSessionTimeline).toHaveBeenCalledWith("session-1", {
+      mode: "rebuild",
+      topology: false,
+    }),
+  );
+  expect(mocks.submitInboxMessage).not.toHaveBeenCalled();
+});

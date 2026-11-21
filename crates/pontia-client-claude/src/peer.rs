@@ -146,6 +146,25 @@ impl Peer {
                     )
                     .await?;
             }
+            Some("compaction") => {
+                if state.native.is_none() || state.closed {
+                    return Err(invalid());
+                }
+                let kind = match event["phase"].as_str() {
+                    Some("started") => EventType::SessionCompactionStarted,
+                    Some("completed") => EventType::SessionCompactionCompleted,
+                    Some("failed") => EventType::SessionCompactionFailed,
+                    _ => return Err(invalid()),
+                };
+                events
+                    .report_client_fact(
+                        &self.session,
+                        Some(&self.runtime),
+                        kind,
+                        event["data"].clone(),
+                    )
+                    .await?;
+            }
             Some("context_usage") => {
                 if state.native.is_none() || state.closed {
                     return Err(invalid());

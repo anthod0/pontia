@@ -1520,3 +1520,205 @@ async fn restricted_execution_policy_defaults_yolo_false_and_accepts_explicit_yo
     assert_eq!(spawn["execution_policy"], json!(approval_free));
     h.stop().await;
 }
+
+#[tokio::test]
+async fn compacted_sdk_history_keeps_readable_turns_and_resumes_without_private_summaries() {
+    use pontia_agent_control::{TurnTimelineDirection, TurnTimelineService};
+    let h = Harness::new().await;
+    let session = h.create("old input").await;
+    h.gate(&session, 1, "start");
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    h.submit(&session, "retained input").await;
+    h.gate(&session, 2, "start");
+    h.gate(&session, 2, "finish");
+    let turns = h.wait_states(&session, &["completed", "completed"]).await;
+    let binding = pontia_agent_control::AgentBindingService::new(h.app.db())
+        .binding_for_session(&session)
+        .await
+        .unwrap()
+        .unwrap();
+    let path = h
+        .root
+        .path()
+        .join(format!("history-{}.jsonl", binding.client_session_key));
+    let source = std::fs::read_to_string(&path).unwrap();
+    let rows: Vec<Value> = source
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let write = |messages: &[Value]| {
+        std::fs::write(
+            &path,
+            messages
+                .iter()
+                .map(|row| format!("{row}\n"))
+                .collect::<String>(),
+        )
+        .unwrap()
+    };
+    let summary = json!({"session_id":binding.client_session_key,"uuid":"compact-summary","type":"user","isCompactSummary":true,"is_meta":true,"message":{"role":"user","content":"private summary"}});
+    let command = json!({"session_id":binding.client_session_key,"uuid":"local-command","type":"user","isCompletedLocalCommand":true,"message":{"role":"user","content":"local command result"}});
+    let service = TurnTimelineService::new(h.app.event_ingest_service());
+    write(&rows[2..]);
+    assert!(matches!(
+        service
+            .page(session.clone(), TurnTimelineDirection::Backward, None, 20)
+            .await,
+        Err(pontia_agent_control::TurnTimelineServiceError::TimelineInvalid { .. })
+    ));
+    write(&[
+        summary.clone(),
+        command.clone(),
+        rows[2].clone(),
+        rows[3].clone(),
+    ]);
+    let page = service
+        .page(session.clone(), TurnTimelineDirection::Backward, None, 20)
+        .await
+        .unwrap();
+    assert_eq!(page.items.len(), 2);
+    assert!(
+        page.items
+            .iter()
+            .all(|item| item.turn_id.as_deref() == Some(turns[1].0.as_str())
+                && item.item.content_preview == "retained input")
+    );
+    assert!(
+        service
+            .page(
+                session.clone(),
+                TurnTimelineDirection::Backward,
+                Some(turns[0].0.clone()),
+                1
+            )
+            .await
+            .unwrap()
+            .items
+            .is_empty()
+    );
+    // Automatic compaction can remove the input in the middle of a Turn.
+    write(&[summary.clone(), rows[3].clone()]);
+    let page = service
+        .page(session.clone(), TurnTimelineDirection::Backward, None, 20)
+        .await
+        .unwrap();
+    assert_eq!(page.items.len(), 1);
+    assert_eq!(page.items[0].turn_id.as_deref(), Some(turns[1].0.as_str()));
+    assert_eq!(page.items[0].item.kind, "assistant");
+    write(&[summary, command]);
+    assert!(
+        service
+            .page(session.clone(), TurnTimelineDirection::Backward, None, 20)
+            .await
+            .unwrap()
+            .items
+            .is_empty()
+    );
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    let receipt = h.resume_input(&session, "after compact resume").await;
+    assert_eq!(receipt["inbox_message"]["state"], "resuming");
+    h.wait_inputs(&session, 3).await;
+    h.gate(&session, 3, "start");
+    h.gate(&session, 3, "finish");
+    h.wait_states(&session, &["completed", "completed", "completed"])
+        .await;
+    let page = service
+        .page(session.clone(), TurnTimelineDirection::Backward, None, 20)
+        .await
+        .unwrap();
+    assert_eq!(page.items.len(), 2);
+    assert!(
+        page.items
+            .iter()
+            .all(|item| item.item.content_preview == "after compact resume")
+    );
+    assert_eq!(
+        h.wire(&session)
+            .into_iter()
+            .filter(|f| f["method"] == "spawn")
+            .map(|f| f["native"].clone())
+            .collect::<Vec<_>>(),
+        vec![
+            json!(binding.client_session_key),
+            json!(binding.client_session_key)
+        ]
+    );
+    h.stop().await;
+}
+
+#[tokio::test]
+async fn manual_compaction_routes_to_host_and_reports_session_facts_without_a_turn() {
+    let h = Harness::new().await;
+    let session = h.create("before compaction").await;
+    assert!(
+        h.app
+            .session_commands()
+            .compact_session(&session)
+            .await
+            .is_err()
+    );
+    h.gate(&session, 1, "start");
+    h.gate(&session, 1, "finish");
+    h.wait_states(&session, &["completed"]).await;
+    let receipt = h
+        .app
+        .session_commands()
+        .compact_session(&session)
+        .await
+        .unwrap();
+    assert!(receipt.accepted);
+    h.wait_session(&session, "busy").await;
+    assert!(
+        h.app
+            .session_commands()
+            .compact_session(&session)
+            .await
+            .is_err()
+    );
+    h.gate(&session, 1, "compact");
+    h.wait_session(&session, "idle").await;
+    let facts: Vec<(String, Option<String>, String)> = sqlx::query_as(
+        "SELECT event_type, turn_id, payload FROM events WHERE session_id=? AND event_type LIKE 'session.compaction_%' ORDER BY rowid"
+    ).bind(&session).fetch_all(&h.app.db()).await.unwrap();
+    assert_eq!(
+        facts.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(),
+        ["session.compaction_started", "session.compaction_completed"]
+    );
+    for (_, turn, payload) in facts {
+        assert!(turn.is_none());
+        assert_eq!(
+            serde_json::from_str::<Value>(&payload).unwrap()["operation_id"],
+            receipt.operation_id
+        );
+    }
+    assert_eq!(h.turns(&session).await.len(), 1);
+    h.app
+        .session_commands()
+        .terminate_session(&session)
+        .await
+        .unwrap();
+    assert!(
+        h.app
+            .session_commands()
+            .compact_session(&session)
+            .await
+            .is_err()
+    );
+    let capabilities = h
+        .app
+        .queries()
+        .get_session(&session)
+        .await
+        .unwrap()
+        .unwrap()
+        .capabilities;
+    assert!(capabilities.compaction_events);
+    assert!(!capabilities.manual_compaction);
+    assert!(!capabilities.compaction_history);
+    h.stop().await;
+}

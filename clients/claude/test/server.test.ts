@@ -532,3 +532,44 @@ test(
     );
   },
 );
+
+test(
+  "compact RPC deduplicates delivery and keeps idle false until the native result",
+  { timeout: 5000 },
+  async (t) => {
+    const { config, fixture } = await setup(t);
+    const connection = await attach(config);
+    const send = (id: number, method: string, params: object = {}) =>
+      connection.send({ host_id: connection.host, id, method, ...params });
+    send(1, "input", { input_id: first, text: "task" });
+    await connection.next((f) => f.type === "response" && f.id === 1);
+    await fixture.next();
+    fixture.messages.push(init());
+    fixture.messages.push(assistant());
+    fixture.messages.push(result());
+    await connection.next((f) => f.event?.kind === "finished");
+    send(2, "compact", { operation_id: "compact-api" });
+    send(2, "compact", { operation_id: "compact-api" });
+    for (let i = 0; i < 2; i++)
+      assert.equal(
+        (await connection.next((f) => f.type === "response" && f.id === 2)).status,
+        "accepted",
+      );
+    const command = (await fixture.next()).value!;
+    assert.equal(command.message.content, "/compact");
+    send(3, "is_idle");
+    assert.equal((await connection.next((f) => f.type === "response" && f.id === 3)).idle, false);
+    fixture.messages.push(
+      result(command.uuid, {
+        result: "Not enough messages to compact.",
+        terminal_reason: undefined,
+      }),
+    );
+    await connection.next((f) => f.event?.kind === "compaction" && f.event.phase === "failed");
+    send(4, "is_idle");
+    assert.equal((await connection.next((f) => f.type === "response" && f.id === 4)).idle, true);
+    send(5, "input", { input_id: second, text: "following task" });
+    await connection.next((f) => f.type === "response" && f.id === 5);
+    assert.equal((await fixture.next()).value!.message.content, "following task");
+  },
+);

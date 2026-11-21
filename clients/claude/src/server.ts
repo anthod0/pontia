@@ -120,6 +120,9 @@ export async function serve(config: Bootstrap, factory?: QueryFactory) {
             string(request.text),
           );
           break;
+        case "compact":
+          host.compact(string(request.operation_id));
+          break;
         case "interrupt":
           await host.interrupt(string(request.input_id));
           break;

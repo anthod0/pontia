@@ -1,4 +1,5 @@
 import { query, type Options, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { Compaction } from "./compaction.js";
 import { Input } from "./input.js";
 import { Permissions } from "./permissions.js";
 import { FactError, InputFacts, type Emit, type ResultDiagnostic } from "./facts.js";
@@ -28,6 +29,7 @@ export class ControlError extends Error {
 
 export class Host {
   private readonly input = new Input();
+  private readonly compaction: Compaction;
   private readonly permissions: Permissions;
   private execution?: ReturnType<QueryFactory>;
   private reader?: Promise<void>;
@@ -55,6 +57,7 @@ export class Host {
     private readonly createQuery: QueryFactory = query,
   ) {
     this.permissions = new Permissions(emit);
+    this.compaction = new Compaction(emit);
   }
 
   status() {
@@ -71,13 +74,13 @@ export class Host {
 
   isIdle(): boolean {
     if (!this.acceptsControl()) throw new ControlError("rejected", "execution_unavailable");
-    return !this.current || this.current.finished;
+    return !this.compaction.busy && (!this.current || this.current.finished);
   }
 
   submit(id: string, text: string): void {
     if (!this.acceptsControl()) throw new ControlError("rejected", "execution_unavailable");
     this.validateInput(id, text);
-    if (this.current && !this.current.finished) throw new ControlError("rejected", "input_busy");
+    if (!this.isIdle()) throw new ControlError("rejected", "input_busy");
     this.usedInputs.add(id);
     this.current = new InputFacts(id, this.emit);
     this.input.push({
@@ -136,6 +139,20 @@ export class Host {
         throw new ControlError("unknown", "sdk_start_failed");
       }
     }
+  }
+
+  compact(operationId: string): void {
+    if (!this.acceptsControl() || !this.execution || !this.native)
+      throw new ControlError("rejected", "execution_unavailable");
+    if (!this.isIdle()) throw new ControlError("rejected", "input_busy");
+    const id = this.compaction.request(operationId);
+    this.input.push({
+      type: "user",
+      uuid: id as `${string}-${string}-${string}-${string}-${string}`,
+      session_id: this.native,
+      parent_tool_use_id: null,
+      message: { role: "user", content: "/compact" },
+    });
   }
 
   steer(target: string, id: string, text: string): void {
@@ -225,6 +242,7 @@ export class Host {
   private fail(reason: string, result?: ResultDiagnostic): void {
     if (this.unavailable) return;
     this.unavailable = reason;
+    this.compaction.closed(false);
     this.permissions.expire();
     this.emit({ kind: "unavailable", reason, ...(result ? { result } : {}) });
   }
@@ -252,6 +270,7 @@ export class Host {
         }
       }
       if (this.closing) {
+        this.compaction.closed(true);
         this.closed = true;
         this.emit({ kind: "closed", history_anchor: this.current?.historyAnchor });
       } else {
@@ -323,6 +342,15 @@ export class Host {
       });
       return;
     }
+    if (
+      message.type === "system" &&
+      (message.subtype === "status" || message.subtype === "compact_boundary")
+    ) {
+      if (!this.native || message.session_id !== this.native)
+        throw new Error("native_identity_mismatch");
+      this.compaction.accept(message);
+      return;
+    }
     if (["stream_event", "assistant", "result", "user"].includes(message.type)) {
       if (!this.native || message.session_id !== this.native)
         throw new Error("native_identity_mismatch");
@@ -330,7 +358,7 @@ export class Host {
         this.retrying = false;
         this.emit({ kind: "retry", reason: null });
       }
-      this.current?.accept(message);
+      if (!this.compaction.accept(message)) this.current?.accept(message);
     }
   }
 }

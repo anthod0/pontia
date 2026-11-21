@@ -535,6 +535,7 @@
   "chat.noAssistantSummary": "没有可用的助手摘要。",
   "chat.user": "用户",
   "chat.assistant": "助手",
+  "compaction.earlierHistory": "更早的内容已压缩，仅显示客户端仍可读取的对话内容。",
   "compaction.completed": "上下文已压缩",
   "files.uploadedPrefix": "上传文件：",
   "chat.editHistoricalMessage": "编辑历史消息",

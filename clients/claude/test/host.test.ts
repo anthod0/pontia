@@ -642,7 +642,13 @@ test("context snapshots refresh on init, replies, result and compaction without 
     confidence: "estimated",
   });
   snapshot = usage(10000);
-  fixture.messages.push({ type: "system", subtype: "compact_boundary", session_id: native });
+  fixture.messages.push({
+    type: "system",
+    subtype: "compact_boundary",
+    session_id: native,
+    uuid: "usage-compact",
+    compact_metadata: { trigger: "auto", pre_tokens: 20000 },
+  });
   await settle();
   assert.equal(observed()?.used_tokens, 10000);
   snapshot = usage(99000);
@@ -670,7 +676,13 @@ test("invalid or failed context queries preserve usage and do not block task com
   assert.equal(host.status().finished, true);
   assert.equal(events.filter((e) => e.kind === "context_usage").length, 1);
   fixture.onContextUsage(async () => usage(200));
-  fixture.messages.push({ type: "system", subtype: "compact_boundary", session_id: native });
+  fixture.messages.push({
+    type: "system",
+    subtype: "compact_boundary",
+    session_id: native,
+    uuid: "usage-compact",
+    compact_metadata: { trigger: "auto", pre_tokens: 20000 },
+  });
   await settle();
   assert.equal(
     events.filter((e) => e.kind === "context_usage").at(-1)?.context_usage.used_tokens,

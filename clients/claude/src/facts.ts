@@ -1,6 +1,7 @@
 import type { SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 
 export type HostEvent =
+  | { kind: "compaction"; phase: "started" | "completed" | "failed"; data: Record<string, unknown> }
   | { kind: "ready"; native_session_id: string }
   | { kind: "model"; model: string }
   | {
