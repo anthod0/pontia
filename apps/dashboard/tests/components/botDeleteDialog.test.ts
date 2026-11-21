@@ -5,6 +5,7 @@ import type { Bot, SessionView } from "../../src/api/types";
 import BotDeleteDialog from "../../src/components/bots/BotDeleteDialog.svelte";
 import BotDeleteFromListHarness from "./BotDeleteFromListHarness.svelte";
 import { readCachedBotTimeline, writeCachedBotTimeline } from "../../src/lib/botTimelineCache";
+import { rememberLastPage } from "../../src/lib/lastPage";
 
 const goto = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("$app/navigation", () => ({ goto }));
@@ -56,7 +57,8 @@ test("a working Bot cannot be deleted", async () => {
   expect(screen.getByRole("button", { name: "Delete Bot" })).toBeDisabled();
 });
 
-test("deleting the Bot opens the Bot entry and clears its cached messages", async () => {
+test("deleting the Bot opens the Bot entry, clears its cached messages, and forgets it as the last page", async () => {
+  rememberLastPage("local", { kind: "bot", id: "doomed" });
   testDevice.queryClient.setQueryData(["bots"], [bot("doomed"), bot("kept")]);
   for (const id of ["doomed", "kept"]) {
     await writeCachedBotTimeline({
@@ -81,6 +83,7 @@ test("deleting the Bot opens the Bot entry and clears its cached messages", asyn
   await waitFor(() => expect(goto).toHaveBeenCalledWith("/dashboard/bot", { replaceState: true }));
   expect(remove).toHaveBeenCalledWith("doomed");
   expect(ondone).toHaveBeenCalled();
+  expect(localStorage.getItem("pontia.lastPage:local")).toBeNull();
   expect(testDevice.queryClient.getQueryData<Bot[]>(["bots"])?.map((item) => item.bot_id)).toEqual([
     "kept",
   ]);

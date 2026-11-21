@@ -18,7 +18,7 @@
   import TopBar from '../../components/layout/TopBar.svelte';
   import ChatShortcuts from '../../components/chat/ChatShortcuts.svelte';
   import ConnectionNotice from '../../components/layout/ConnectionNotice.svelte';
-  import NewChatPage from '../../pages/NewChatPage.svelte';
+  import DashboardEntryPage from '../../pages/DashboardEntryPage.svelte';
   import BotEntryPage from '../../pages/BotEntryPage.svelte';
   import NewChatLayout from '../../components/chat/NewChatLayout.svelte';
   import NewChatComposerPlaceholder from '../../components/chat/NewChatComposerPlaceholder.svelte';
@@ -246,7 +246,7 @@
           {:else if currentPath === '/bot'}
             <BotEntryPage routeScope={`/${activeHandle}`} />
           {:else}
-            <NewChatPage routeScope={`/${activeHandle}`} {deviceSelector} />
+            <DashboardEntryPage routeScope={`/${activeHandle}`} {deviceSelector} />
           {/if}
         </DeviceProvider>
       {/key}

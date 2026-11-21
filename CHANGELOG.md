@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Opening the Dashboard in a new tab or app window returns to the last Session chat or Bot chat viewed on that device. Links to other pages, reloads, and New Chat opened later in the same tab are unchanged. A Session or Bot that no longer exists opens New Chat instead.
+
 ### Changed
 
 - Bots send separate messages for unrelated matters, even when updates arrive together.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import NewChatPage from '../../pages/NewChatPage.svelte';
+  import DashboardEntryPage from '../../pages/DashboardEntryPage.svelte';
 </script>
 
-<NewChatPage />
+<DashboardEntryPage />
