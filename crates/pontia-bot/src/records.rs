@@ -175,6 +175,30 @@ impl BotService {
         .await?)
     }
 
+    /// Deletes the Bot, its chat and associations, and its directory, all or nothing in the database.
+    pub(crate) async fn delete(&self, bot_id: &str) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        for table in [
+            "bot_messages",
+            "bot_helpers",
+            "bot_notifications",
+            "bot_known_workspaces",
+            "bots",
+        ] {
+            sqlx::query(&format!("DELETE FROM {table} WHERE bot_id = ?"))
+                .bind(bot_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        // Remove files before committing so a failure leaves the Bot in place to retry.
+        match tokio::fs::remove_dir_all(self.home.join("bot").join(bot_id)).await {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
+            _ => {}
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn directory(&self, bot_id: &str) -> Result<PathBuf> {
         let bot = self.get(bot_id).await?;
         Ok(self.home.join("bot").join(bot.bot_id))

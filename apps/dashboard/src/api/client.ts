@@ -11,6 +11,7 @@ import type {
   BotMessagePage,
   BotClient,
   BotConfiguration,
+  BotDeletionBlockers,
   JsonObject,
   AgentProfileView,
   ApiEnvelope,
@@ -127,6 +128,14 @@ export function createApi(device: DeviceRuntime) {
         retryNetworkErrors: false,
       })
     ).bot;
+  }
+
+  function getBotDeletionBlockers(id: string, signal?: AbortSignal): Promise<BotDeletionBlockers> {
+    return request(`${botPath(id)}/deletion-blockers`, { signal });
+  }
+
+  async function deleteBot(id: string): Promise<void> {
+    await request(botPath(id), { method: "DELETE", idempotency: false, retryNetworkErrors: false });
   }
 
   async function sendBotMessage(id: string, content: string): Promise<BotMessage> {
@@ -895,6 +904,8 @@ export function createApi(device: DeviceRuntime) {
     listAgentClientModels,
     getBotMessages,
     saveBot,
+    getBotDeletionBlockers,
+    deleteBot,
     sendBotMessage,
     retryBotMessage,
     listAgentClients,

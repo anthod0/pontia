@@ -82,6 +82,14 @@ Bot 分享的文件会连同类型和大小显示在该 Bot 的对话中。图�
 | `Alt+?` | 显示快捷键参考 |
 | `Ctrl+B`（macOS 上为 `Cmd+B`） | 显示或隐藏侧边栏 |
 
+## 删除 Bot
+
+点击对话顶部的 Bot 名称打开设置，在底部选择 **删除 Bot**。在手机上，使用顶栏 **更多** 菜单中的 **删除 Bot**。
+
+删除会永久移除该 Bot、它的聊天记录和 `$PONTIA_HOME/bot` 下的目录，无法恢复。记忆、`USER.md` 和 Workspace 由所有 Bot 共用，会保留；该 Bot 的 helper Session 历史也会保留。
+
+只有当 Bot 不在工作、且它的 helper 都已关闭时才能删除。确认弹窗会列出还开着的 helper，可以让 Bot 关闭它们，或打开每个 helper 后结束它。最后一个 Bot 也可以删除，之后记忆整理（dreaming）会暂停，新建 Bot 后恢复。
+
 ## 整理 Session
 
 使用 Session 的操作菜单可以重命名、置顶、归档或结束它。**Sessions** 页面将活跃、已归档和已置顶的 Session 分开显示。归档会将 Session 从活跃列表中移除，但不会删除其已记录的控制状态。

@@ -5,6 +5,7 @@
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
   import GearIcon from 'phosphor-svelte/lib/GearIcon'
+  import TrashIcon from 'phosphor-svelte/lib/TrashIcon'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import BotAvatar from '../bots/BotAvatar.svelte'
   import TopBarMoreMenu from './TopBarMoreMenu.svelte'
@@ -14,6 +15,7 @@
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
   import BotSettingsDialog from '../bots/BotSettingsDialog.svelte'
+  import BotDeleteDialog from '../bots/BotDeleteDialog.svelte'
   import SettingsSectionNav from '../settings/SettingsSectionNav.svelte'
   import { isSettingsPath, isSettingsSectionActive, settingsSections } from '../settings/sections'
   import { snapshotSessionOverview } from "../../queries/sessionOverview";
@@ -29,6 +31,7 @@
   const overview = $derived(snapshotSessionOverview(overviewQuery.data))
   let renameDialogOpen = $state(false)
   let botSettingsOpen = $state(false)
+  let botDeleteOpen = $state(false)
   let renameBusy = $state(false)
   let renameError = $state<string | null>(null)
 
@@ -163,6 +166,9 @@
         <DropdownMenu.Item class="min-h-11 gap-3 px-3" onclick={() => { botSettingsOpen = true }}>
           <GearIcon /> {$t('bots.edit')}
         </DropdownMenu.Item>
+        <DropdownMenu.Item variant="destructive" class="min-h-11 gap-3 px-3" onclick={() => { botDeleteOpen = true }}>
+          <TrashIcon /> {$t('bots.delete')}
+        </DropdownMenu.Item>
       {/if}
   </TopBarMoreMenu>
   {/if}
@@ -172,6 +178,10 @@
   <BotSettingsDialog bot={currentBot} onclose={() => { botSettingsOpen = false }} onsaved={() => {
     botSettingsOpen = false
   }} />
+{/if}
+
+{#if botDeleteOpen && currentBot}
+  <BotDeleteDialog bot={currentBot} onclose={() => { botDeleteOpen = false }} ondone={() => { botDeleteOpen = false }} />
 {/if}
 
 <RenameSessionDialog

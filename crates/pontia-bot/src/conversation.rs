@@ -23,6 +23,8 @@ use crate::{
 mod status;
 pub use status::WorkStatus;
 
+mod deletion;
+pub use deletion::DeletionBlockers;
 mod generation;
 pub use generation::GenerationLimits;
 mod timeline;
@@ -66,6 +68,10 @@ impl Default for Activity {
 impl Activity {
     fn notify(&self, update: ConversationUpdate) {
         let _ = self.updates.send(update);
+    }
+
+    fn has_pending_input(&self) -> bool {
+        !self.pending_inputs.lock().unwrap().is_empty()
     }
 
     fn track_input<'a>(&'a self, id: &'a str) -> PendingInput<'a> {
@@ -585,7 +591,11 @@ impl ConversationService {
         let Some((bot_id, _)) = ownership.reference.split_once(':') else {
             return Ok(None);
         };
-        let bot = self.records.get(bot_id).await?;
+        // Sessions of a deleted Bot remain as records but no longer act for it.
+        let bot = match self.records.get(bot_id).await {
+            Err(Error::NotFound(_)) => return Ok(None),
+            bot => bot?,
+        };
         Ok((bot.current_session_id.as_deref() == Some(session_id)).then_some(bot))
     }
 
