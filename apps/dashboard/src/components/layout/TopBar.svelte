@@ -1,11 +1,13 @@
 <script lang="ts">
   import { createQuery } from '@tanstack/svelte-query'
-  import { t } from '$lib/i18n';
+  import { t, number } from '$lib/i18n';
+  import { downloads } from '$lib/downloads/manager'
   import { useDeviceRuntime } from '../../device/context';
   import PencilSimpleIcon from 'phosphor-svelte/lib/PencilSimpleIcon'
   import NotePencilIcon from 'phosphor-svelte/lib/NotePencilIcon'
-  import GearIcon from 'phosphor-svelte/lib/GearIcon'
-  import TrashIcon from 'phosphor-svelte/lib/TrashIcon'
+  import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
+  import { Badge } from '$lib/components/ui/badge/index.js'
+  import { Button } from '$lib/components/ui/button/index.js'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
   import BotAvatar from '../bots/BotAvatar.svelte'
   import TopBarMoreMenu from './TopBarMoreMenu.svelte'
@@ -15,12 +17,10 @@
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import RenameSessionDialog from '../chat/RenameSessionDialog.svelte'
   import BotSettingsDialog from '../bots/BotSettingsDialog.svelte'
-  import BotDeleteDialog from '../bots/BotDeleteDialog.svelte'
   import SettingsSectionNav from '../settings/SettingsSectionNav.svelte'
   import { isSettingsPath, isSettingsSectionActive, settingsSections } from '../settings/sections'
   import { snapshotSessionOverview } from "../../queries/sessionOverview";
   const device = useDeviceRuntime();
-  const sidebar = Sidebar.useSidebar();
   const { sessionDetail, sessionDetailError, updateSessionTitle } = device.sessions;
   const { createSessionOverviewQuery } = device.sessionOverview;
 
@@ -31,7 +31,6 @@
   const overview = $derived(snapshotSessionOverview(overviewQuery.data))
   let renameDialogOpen = $state(false)
   let botSettingsOpen = $state(false)
-  let botDeleteOpen = $state(false)
   let renameBusy = $state(false)
   let renameError = $state<string | null>(null)
 
@@ -67,6 +66,7 @@
   const session = $derived(sessionId
     ? ($sessionDetail?.session.session_id === sessionId ? $sessionDetail.session : ($sessionDetailError ? null : overviewSession))
     : null)
+  const activeDownloadCount = $derived($downloads.filter(task => task.status === 'receiving').length)
   const title = $derived(session ? sessionChatTitle(session, $t) : '')
   const chatPath = $derived(isChatPath(currentPath))
   const settingsPath = $derived(isSettingsPath(currentPath))
@@ -117,23 +117,17 @@
     {#if !botId}<Sidebar.Trigger class={[mobileIconClass, 'md:hidden']} />{/if}
     {#if botId && currentBot}
       <h1 class="mx-1 min-w-0 max-w-80">
-        {#if sidebar.isMobile}
-          <span class="flex min-w-0 items-center gap-1.5 px-2 text-sm font-normal text-heading">
-            <BotAvatar shape={currentBot.avatar_shape} color={currentBot.avatar_color} class="size-5" />
-            <span class="truncate">{currentBot.name}</span>
-          </span>
-        {:else}
-          <button
-            type="button"
-            class="flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-0.5 text-left text-sm font-normal text-heading focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            title={$t('bots.edit')}
-            aria-haspopup="dialog"
-            onclick={() => { botSettingsOpen = true }}
-          >
-            <BotAvatar shape={currentBot.avatar_shape} color={currentBot.avatar_color} class="size-5" />
-            <span class="min-w-0 truncate">{currentBot.name}</span>
-          </button>
-        {/if}
+        <!-- Phones get a full-height touch target; wider screens keep the compact title. -->
+        <button
+          type="button"
+          class="flex h-11 w-full min-w-0 items-center gap-1.5 rounded-md px-2 text-left text-sm font-normal text-heading focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:h-auto md:py-0.5"
+          title={$t('bots.edit')}
+          aria-haspopup="dialog"
+          onclick={() => { botSettingsOpen = true }}
+        >
+          <BotAvatar shape={currentBot.avatar_shape} color={currentBot.avatar_color} class="size-5" />
+          <span class="min-w-0 truncate">{currentBot.name}</span>
+        </button>
       </h1>
     {:else if title}
       <h1 class="mx-1 hidden min-w-0 max-w-80 md:block">
@@ -152,6 +146,16 @@
   {/if}
   {#if settingsPath}
     <TopBarMoreMenu />
+  {:else if botId}
+    <!-- Wider screens open downloads from the download center beside the top bar. -->
+    {#if $downloads.length}
+      <div class={['ml-auto shrink-0 md:hidden', pillClass]}>
+        <Button variant="ghost" size="icon-sm" class="relative size-11" aria-label={$t('downloads.title')} onclick={() => document.dispatchEvent(new CustomEvent('pontia:open-downloads'))}>
+          <DownloadSimpleIcon class={['size-5', activeDownloadCount && 'text-primary']} />
+          <Badge data-testid="downloads-count" class="absolute top-0.5 right-0.5 h-4 min-w-4 rounded-full px-1 text-[0.625rem] tabular-nums">{$number($downloads.length)}</Badge>
+        </Button>
+      </div>
+    {/if}
   {:else}
   <TopBarMoreMenu>
       <DropdownMenu.Item class="min-h-11 gap-3 px-3" onclick={onNewChat}>
@@ -162,14 +166,6 @@
           <PencilSimpleIcon /> {$t('chat.rename')}
         </DropdownMenu.Item>
       {/if}
-      {#if botId && currentBot}
-        <DropdownMenu.Item class="min-h-11 gap-3 px-3" onclick={() => { botSettingsOpen = true }}>
-          <GearIcon /> {$t('bots.edit')}
-        </DropdownMenu.Item>
-        <DropdownMenu.Item variant="destructive" class="min-h-11 gap-3 px-3" onclick={() => { botDeleteOpen = true }}>
-          <TrashIcon /> {$t('bots.delete')}
-        </DropdownMenu.Item>
-      {/if}
   </TopBarMoreMenu>
   {/if}
 </header>
@@ -178,10 +174,6 @@
   <BotSettingsDialog bot={currentBot} onclose={() => { botSettingsOpen = false }} onsaved={() => {
     botSettingsOpen = false
   }} />
-{/if}
-
-{#if botDeleteOpen && currentBot}
-  <BotDeleteDialog bot={currentBot} onclose={() => { botDeleteOpen = false }} ondone={() => { botDeleteOpen = false }} />
 {/if}
 
 <RenameSessionDialog

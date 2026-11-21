@@ -990,6 +990,57 @@ test("mobile more menu hides downloads until a download starts, then opens the d
   downloads.cancel(task.id);
 });
 
+function mockCurrentBot() {
+  vi.spyOn(testDevice.api, "listBots").mockResolvedValue([
+    {
+      bot_id: "bot-1",
+      name: "Release Captain",
+      description: null,
+      avatar_shape: "classic",
+      avatar_color: "blue",
+      client_type: "pi",
+      client_key: "default",
+      model: "provider/model",
+    },
+  ]);
+  window.history.pushState({}, "", "/dashboard/bots/bot-1");
+}
+
+test("Bot top bar opens the Bot edit dialog from its name and has no more menu", async () => {
+  mockCurrentBot();
+  render(TopBarHost);
+
+  const banner = screen.getByRole("banner");
+  await fireEvent.click(await within(banner).findByRole("button", { name: "Release Captain" }));
+
+  const dialog = screen.getByRole("dialog", { name: "Edit Bot" });
+  expect(within(dialog).getByRole("button", { name: "Delete Bot" })).toBeInTheDocument();
+  expect(within(banner).queryByRole("button", { name: "More" })).not.toBeInTheDocument();
+  vi.restoreAllMocks();
+});
+
+test("Bot top bar shows a downloads button only while downloads exist", async () => {
+  mockCurrentBot();
+  render(AppShellHost);
+
+  const banner = screen.getByRole("banner");
+  await within(banner).findByRole("button", { name: "Release Captain" });
+  expect(within(banner).queryByRole("button", { name: "Downloads" })).not.toBeInTheDocument();
+
+  const task = downloads.start(
+    "missing-device",
+    "session",
+    { kind: "shared", fileId: "file-1" },
+    "report.txt",
+  );
+  const button = await within(banner).findByRole("button", { name: "Downloads" });
+  expect(within(button).getByTestId("downloads-count")).toHaveTextContent("1");
+  await fireEvent.click(button);
+  expect(screen.getByRole("dialog", { name: "Downloads" })).toBeInTheDocument();
+  downloads.cancel(task.id);
+  vi.restoreAllMocks();
+});
+
 test("sidebar refreshes every Bot status from live updates without opening its chat", async () => {
   const bots = ["first", "second"].map((id) => ({
     bot_id: id,
