@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import type { HTMLAttributes } from 'svelte/elements'
   import { tick, untrack } from 'svelte'
   import { t, number } from '$lib/i18n'
@@ -19,7 +20,8 @@
    * The files of one share as a single card: one file keeps the single-file bubble, a share where
    * every file can be previewed as an image becomes a mosaic, and anything else a list.
    */
-  let { files, sessionId, highlighted = null, itemProps = () => ({}) }: {
+  let { itemActions, files, sessionId, highlighted = null, itemProps = () => ({}) }: {
+    itemActions?: Snippet
     files: SharedFile[]
     sessionId: string
     /** File ID to mark, such as a quote's jump target; a hidden file is revealed first. */
@@ -74,13 +76,13 @@
 </script>
 
 {#if states.length === 1}
-  <FileBubble state={states[0]} highlighted={highlighted === states[0].file.file_id} onenlarge={() => enlarge(states[0])} itemProps={stateItemProps(states[0])} />
+  <FileBubble {itemActions} state={states[0]} highlighted={highlighted === states[0].file.file_id} onenlarge={() => enlarge(states[0])} itemProps={stateItemProps(states[0])} />
 {:else if allImages}
   <figure bind:this={root} class="w-80 max-w-full overflow-hidden rounded-2xl bg-muted" data-shared-files>
     {#if showList}
-      <div class="p-1"><FileList {states} bind:expanded {highlighted} onenlarge={enlarge} itemProps={stateItemProps} /></div>
+      <div class="p-1"><FileList {itemActions} {states} bind:expanded {highlighted} onenlarge={enlarge} itemProps={stateItemProps} /></div>
     {:else}
-      <ImageMosaic {states} bind:expanded {highlighted} onenlarge={enlarge} itemProps={stateItemProps} />
+      <ImageMosaic {itemActions} {states} bind:expanded {highlighted} onenlarge={enlarge} itemProps={stateItemProps} />
     {/if}
     <figcaption class="flex items-center gap-2 px-3 py-2">
       <div class="min-w-0 flex-1">
@@ -104,7 +106,7 @@
       </p>
       <DownloadAllButton {states} />
     </div>
-    <FileList {states} bind:expanded {highlighted} onenlarge={enlarge} itemProps={stateItemProps} />
+    <FileList {itemActions} {states} bind:expanded {highlighted} onenlarge={enlarge} itemProps={stateItemProps} />
   </div>
 {/if}
 {#if viewerFiles.length}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import type { HTMLAttributes } from 'svelte/elements'
   import { t } from '$lib/i18n'
   import { useDeviceRuntime } from '../../../device/context'
@@ -11,7 +12,8 @@
   import { observePreview, type SharedFileState } from './sharedFileState.svelte'
 
   /** One file as an icon or thumbnail, its name and status, and its download action. */
-  let { state, onenlarge, class: className = '', ...rest }: HTMLAttributes<HTMLDivElement> & {
+  let { itemActions, state, onenlarge, class: className = '', ...rest }: HTMLAttributes<HTMLDivElement> & {
+    itemActions?: Snippet
     state: SharedFileState
     /** Opens the image viewer at this file. */
     onenlarge?: () => void
@@ -53,4 +55,5 @@
     </button>
   {/if}
   <FileAction {state} />
+  {@render itemActions?.()}
 </div>

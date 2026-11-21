@@ -53,7 +53,6 @@
   "bots.sessionExited": "Bot Session 已退出",
   "bots.processing": "正在处理消息",
   "bots.quote": "引用",
-  "bots.selectText": "选择文本",
   "bots.messageActions": "消息操作",
   "bots.removeQuote": "移除引用：{text}",
   "bots.quoteFrom": "引用 {speaker}：{text}",

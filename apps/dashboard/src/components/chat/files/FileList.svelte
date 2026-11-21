@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import type { HTMLAttributes } from 'svelte/elements'
   import { t } from '$lib/i18n'
   import CaretDownIcon from 'phosphor-svelte/lib/CaretDownIcon'
@@ -7,7 +8,8 @@
   import { LIST_COLLAPSED, LIST_FULL } from './layout'
 
   /** Rows of a multi-file share. Long lists show their first rows until expanded. */
-  let { states, expanded = $bindable(false), highlighted = null, onenlarge, itemProps }: {
+  let { itemActions, states, expanded = $bindable(false), highlighted = null, onenlarge, itemProps }: {
+    itemActions?: Snippet
     states: SharedFileState[]
     expanded?: boolean
     highlighted?: string | null
@@ -22,7 +24,7 @@
   {#each shown as state (state.file.file_id)}
     {@const props = itemProps(state)}
     <li>
-      <FileRow {state} onenlarge={state.image ? () => onenlarge(state) : undefined} {...props} data-shared-file={state.file.file_id}
+      <FileRow {itemActions} {state} onenlarge={state.image ? () => onenlarge(state) : undefined} {...props} data-shared-file={state.file.file_id}
         class={['rounded-xl p-1.5 transition-[background-color,box-shadow] hover:bg-background/60', highlighted === state.file.file_id && 'bg-background/60 ring-2 ring-primary/50', props.class]} />
     </li>
   {/each}

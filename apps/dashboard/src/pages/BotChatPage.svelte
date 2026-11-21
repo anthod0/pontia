@@ -10,6 +10,7 @@
   import MessageComposer from '../components/chat/MessageComposer.svelte'
   import { parseUploadMessage } from '$lib/uploads/message'
   import WarningCircleIcon from 'phosphor-svelte/lib/WarningCircleIcon'
+  import DotsThreeIcon from 'phosphor-svelte/lib/DotsThreeIcon'
   import { useDeviceRuntime } from '../device/context'
   import { openBotChatStream } from '../services/botChatStream'
   import BotAvatar from '../components/bots/BotAvatar.svelte'
@@ -31,9 +32,9 @@
   let retrying = $state<string[]>([])
   let feed = $state<BotMessageFeed>()
   let feedRoot = $state<HTMLElement>()
+  let actions = $state<BotMessageActions>()
   let composer = $state<MessageComposer>()
   let quote = $state<BotQuote | null>(loadQuoteDraft(device.id, untrack(() => botId)))
-  let selectableId = $state<string | null>(null)
   let highlighted = $state<string | null>(null)
   let jumping = $state<string | null>(null)
   let missingQuotes = $state<string[]>([])
@@ -111,11 +112,7 @@
     }
   }
 
-  // Message text stays selectable with a mouse; on touch it becomes selectable from the message menu.
   const quotableProps = { 'data-bot-quotable': '', tabindex: 0, role: 'article' } as const
-  function quotableClass(id: string) {
-    return selectableId === id ? '' : 'pointer-coarse:select-none pointer-coarse:[-webkit-touch-callout:none]'
-  }
 
   function quoteImage(value: BotQuote) {
     // Reading the entries keeps the thumbnail in step with loaded history.
@@ -149,16 +146,23 @@
   </div>
 {/snippet}
 
+<!-- A long press on touch selects text, so touch rows open their menu from this button. -->
+{#snippet menuButton(id: string)}
+  <Button variant="ghost" size="icon-sm" class="hidden shrink-0 self-end text-muted-foreground pointer-coarse:inline-flex" aria-label={$t('bots.messageActions')}
+    onclick={(event: MouseEvent) => actions?.openMenu(id, event.currentTarget as HTMLElement)}><DotsThreeIcon weight="bold" /></Button>
+{/snippet}
+
 {#if timeline.bot}
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12" aria-label={timeline.bot.name}>
-    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:selectableId onquote={quote => void addQuote(quote)} />
+    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} onquote={quote => void addQuote(quote)} />
     <BotMessageFeed bind:this={feed} bind:root={feedRoot} {timeline} {typing} highlighted={highlighted && timeline.entries.some(row => row.id === highlighted) ? highlighted : null}>
       {#snippet row(entry)}
         {#if 'content' in entry}
           {@const quoted = entry.kind === 'user_input' ? parseQuotedMessage(entry.content) : { text: entry.content, quote: null }}
           {@const parts = entry.kind === 'user_input' ? { ...parseUploadMessage(quoted.text), quote: quoted.quote } : { ...quoted, files: [] }}
-          <div class={['flex', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']}>
+          <div class={['flex gap-1', entry.kind === 'user_input' ? 'justify-end' : 'justify-start']}>
+            {#if entry.kind === 'user_input'}{@render menuButton(entry.id)}{/if}
             <div class="max-w-[90%] min-w-0 space-y-2">
               {#if parts.files.length}
                 <ul class="flex flex-wrap justify-end gap-2" data-user-message-uploads>
@@ -172,12 +176,12 @@
                     markdown
                     sessionId={timeline.fileLinkSession?.session_id}
                     linkBase={timeline.fileLinkSession?.workspace ? `${timeline.fileLinkSession.workspace.replace(/\/+$/, '')}/` : null}
-                    class="size-auto {botBubbleClass} {highlightableClass} {quotableClass(entry.id)} break-words [&_code]:bg-background [&_th]:bg-background [&_[data-code-block]]:bg-background"
+                    class="size-auto {botBubbleClass} {highlightableClass} break-words [&_code]:bg-background [&_th]:bg-background [&_[data-code-block]]:bg-background"
                     {...quotableProps}
                     data-bot-quote-source
                   />
                 {:else}
-                  <div class="{userBubbleClass} {highlightableClass} {quotableClass(entry.id)} text-sm leading-6" {...quotableProps}>
+                  <div class="{userBubbleClass} {highlightableClass} text-sm leading-6" {...quotableProps}>
                     {#if parts.quote}
                       {@const target = quoteId(parts.quote)}
                       <BotQuoteBlock quote={parts.quote} speaker={quoteSpeaker(parts.quote)} image={quoteImage(parts.quote)} missing={missingQuotes.includes(target)} busy={jumping === target} onjump={() => void jumpTo(target)} />
@@ -193,11 +197,14 @@
                 </div>
               {/if}
             </div>
+            {#if entry.kind === 'bot_reply'}{@render menuButton(entry.id)}{/if}
           </div>
         {:else if entry.kind === 'shared_files'}
           <div class="max-w-[90%]">
             <SharedFiles files={entry.files} sessionId={entry.session_id} highlighted={highlighted}
-              itemProps={file => ({ ...quotableProps, 'data-bot-file-id': file.file_id, class: quotableClass(entry.id) })} />
+              itemProps={file => ({ ...quotableProps, 'data-bot-file-id': file.file_id })}>
+              {#snippet itemActions()}{@render menuButton(entry.id)}{/snippet}
+            </SharedFiles>
           </div>
         {:else}
           <p class="flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">

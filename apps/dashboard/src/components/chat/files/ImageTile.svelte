@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import type { HTMLAttributes } from 'svelte/elements'
   import { t } from '$lib/i18n'
   import { Skeleton } from '$lib/components/ui/skeleton/index.js'
@@ -9,7 +10,8 @@
   import { observePreview, type SharedFileState } from './sharedFileState.svelte'
 
   /** One image of an all-image share, cropped to fill its cell, with its download state drawn on it. */
-  let { state, more = 0, highlighted = false, onenlarge, onmore, itemProps = {}, class: className = '' }: {
+  let { itemActions, state, more = 0, highlighted = false, onenlarge, onmore, itemProps = {}, class: className = '' }: {
+    itemActions?: Snippet
     state: SharedFileState
     /** Images hidden after this one; the tile then expands the card instead of opening the viewer. */
     more?: number
@@ -64,5 +66,6 @@
       <div class={['absolute right-1.5 bottom-1.5 transition-opacity', state.imageUrl && 'opacity-0 group-hover/tile:opacity-100 group-focus-within/tile:opacity-100 pointer-coarse:hidden']}><FileAction {state} overlay small /></div>
     {/if}
   {/if}
+  {#if itemActions}<div class="absolute top-1.5 right-1.5 rounded-lg bg-background/90">{@render itemActions()}</div>{/if}
   {#if highlighted}<div class="pointer-events-none absolute inset-0 ring-3 ring-primary ring-inset"></div>{/if}
 </div>
