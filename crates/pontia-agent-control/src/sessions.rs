@@ -133,3 +133,6 @@ impl SessionCommandService {
         }
     }
 }
+
+#[cfg(test)]
+mod auto_exit_tests;

@@ -10,6 +10,7 @@ impl InboxCommandService {
     ) -> Result<()> {
         sqlx::query("UPDATE inbox_messages SET state='failed',failure_message=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE session_id=? AND message_id=? AND state IN ('resuming','pending')")
             .bind(reason).bind(session_id).bind(message_id).execute(&self.pool).await?;
+        self.notify_available(session_id);
         Ok(())
     }
 

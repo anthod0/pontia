@@ -47,7 +47,7 @@ struct IntegrationState {
 }
 
 struct CommandServices {
-    sessions: crate::SessionCommandService,
+    sessions: Arc<crate::SessionCommandService>,
     turns: crate::TurnCommandService,
     inbox: Arc<crate::InboxCommandService>,
 }
@@ -99,8 +99,7 @@ impl AgentControl {
             branches,
             scheduler.clone(),
         ));
-        scheduler.connect(&inbox);
-        let sessions = crate::SessionCommandService::new(
+        let sessions = Arc::new(crate::SessionCommandService::new(
             builder.db.clone(),
             ingest.clone(),
             queries,
@@ -108,7 +107,8 @@ impl AgentControl {
             turns.clone(),
             inbox.clone(),
             builder.pontia_home.clone(),
-        );
+        ));
+        scheduler.connect(&inbox, &sessions);
         Self {
             inner: Arc::new(AgentControlInner {
                 commands: CommandServices {
@@ -177,7 +177,7 @@ impl AgentControl {
     }
 
     pub fn session_commands(&self) -> crate::SessionCommandService {
-        self.inner.commands.sessions.clone()
+        self.inner.commands.sessions.as_ref().clone()
     }
     pub fn turn_commands(&self) -> crate::TurnCommandService {
         self.inner.commands.turns.clone()

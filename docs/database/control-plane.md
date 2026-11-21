@@ -175,7 +175,7 @@ CREATE TABLE sessions (
     metadata TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-, workspace_id TEXT REFERENCES workspaces(workspace_id), handle TEXT, role TEXT, description TEXT, title TEXT, pinned_at TEXT, archived_at TEXT, application_id TEXT, application_ref TEXT, runtime_environment TEXT NOT NULL DEFAULT '{}');
+, workspace_id TEXT REFERENCES workspaces(workspace_id), handle TEXT, role TEXT, description TEXT, title TEXT, pinned_at TEXT, archived_at TEXT, application_id TEXT, application_ref TEXT, runtime_environment TEXT NOT NULL DEFAULT '{}', exit_when_done INTEGER NOT NULL DEFAULT 0 CHECK (exit_when_done IN (0, 1)));
 
 CREATE TABLE turns (
   turn_id TEXT PRIMARY KEY NOT NULL,

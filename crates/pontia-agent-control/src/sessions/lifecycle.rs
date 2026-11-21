@@ -37,6 +37,64 @@ impl SessionCommandService {
     /// Serialize with input delivery and reject an exit if execution has resumed.
     pub async fn exit_if_idle(&self, session_id: &str) -> Result<bool> {
         let _input = self.inbox.reserve_initial_input(session_id).await;
+        if !self.request_idle_exit(session_id).await? {
+            return Ok(false);
+        }
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            if self
+                .queries
+                .session_snapshot(session_id)
+                .await?
+                .is_some_and(|session| session.state == "exited")
+            {
+                return Ok(true);
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(Error::ControlUnknown(
+                    "Session exit has not been confirmed".into(),
+                ));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    }
+
+    /// Arm automatic exit for this Session, including after a daemon restart.
+    /// Submit or prepare the intended input before arming: an already idle Session
+    /// with no unsettled input is eligible immediately. The policy remains armed
+    /// if the Session is later resumed. Interrupted, waiting, and error states do
+    /// not count as done; the Session must return to idle.
+    pub async fn exit_when_done(&self, session_id: &str) -> Result<()> {
+        let changed = sqlx::query("UPDATE sessions SET exit_when_done=1 WHERE session_id=?")
+            .bind(session_id)
+            .execute(&self.pool)
+            .await?;
+        if changed.rows_affected() == 0 {
+            return Err(Error::NotFound(format!("Session {session_id} not found")));
+        }
+        self.inbox.notify_available(session_id);
+        Ok(())
+    }
+
+    pub(crate) async fn auto_exit_if_done(&self, session_id: &str) -> Result<()> {
+        // Input commands acquire this lock before the delivery reservation too.
+        // Hold both across the check and client request so new input cannot slip in.
+        let command = self.inbox.scheduler.command_lock(session_id);
+        let _command = command.lock().await;
+        let _input = self.inbox.reserve_initial_input(session_id).await;
+        let armed: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id=? AND exit_when_done=1 AND state='idle')",
+        )
+        .bind(session_id)
+        .fetch_one(&self.pool)
+        .await?;
+        if armed && !self.inbox.scheduler.awaiting_initial(session_id) {
+            self.request_idle_exit(session_id).await?;
+        }
+        Ok(())
+    }
+
+    async fn request_idle_exit(&self, session_id: &str) -> Result<bool> {
         let snapshot = self
             .queries
             .session_snapshot(session_id)
@@ -61,29 +119,8 @@ impl SessionCommandService {
             None,
         )
         .await?;
-        if !self
-            .exit_target(&snapshot.client_type, &target, ClientExitMode::IfIdle)
-            .await?
-        {
-            return Ok(false);
-        }
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
-        loop {
-            if self
-                .queries
-                .session_snapshot(session_id)
-                .await?
-                .is_some_and(|session| session.state == "exited")
-            {
-                return Ok(true);
-            }
-            if tokio::time::Instant::now() >= deadline {
-                return Err(Error::ControlUnknown(
-                    "Session exit has not been confirmed".into(),
-                ));
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        }
+        self.exit_target(&snapshot.client_type, &target, ClientExitMode::IfIdle)
+            .await
     }
 
     pub async fn ensure_current_runtime(&self, session_id: &str, runtime_id: &str) -> Result<()> {

@@ -51,7 +51,7 @@ pub struct InboxCommandService {
     clients: crate::clients::ClientExecutionService,
     turns: TurnCommandService,
     branches: BranchReplayService,
-    scheduler: InboxScheduler,
+    pub(crate) scheduler: InboxScheduler,
 }
 
 impl InboxCommandService {
