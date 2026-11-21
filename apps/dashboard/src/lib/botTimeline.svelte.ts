@@ -8,6 +8,11 @@ import type {
 } from "../api/types";
 import { ApiError } from "../api/errors";
 import type { DeviceRuntime } from "../device/runtime";
+import {
+  readCachedBotTimeline,
+  removeCachedBotTimeline,
+  writeCachedBotTimeline,
+} from "./botTimelineCache";
 
 export function compareBotEntries(a: BotEntry, b: BotEntry): number {
   return (
@@ -38,6 +43,9 @@ export class BotTimeline {
   private visible: string[] = [];
   private stale = new Set<string>();
   private noticeSession: string | null = null;
+  // Entries restored from the device cache, shown until the first latest page replaces them.
+  private cached = false;
+  private deleted = false;
   private rebaseHistory = false;
   private pending: "changed" | "reset" | null = null;
   private running = false;
@@ -53,7 +61,9 @@ export class BotTimeline {
   constructor(
     private device: DeviceRuntime,
     private id: string,
-  ) {}
+  ) {
+    void this.restore();
+  }
 
   destroy() {
     this.controller.abort();
@@ -93,6 +103,27 @@ export class BotTimeline {
     if (this.running) this.live.set(message.id, message);
     if (this.known.has(message.id)) this.merge([message]);
     this.refresh();
+  }
+
+  private async restore() {
+    const snapshot = await readCachedBotTimeline(this.device.id, this.id);
+    if (!snapshot || this.bot || this.controller.signal.aborted) return;
+    this.cached = true;
+    this.bot = snapshot.bot;
+    this.fileLinkSession = snapshot.fileLinkSession;
+    for (const row of snapshot.entries) this.known.set(row.id, row);
+    this.entries = snapshot.entries;
+  }
+
+  private persist() {
+    if (this.cached || this.deleted || !this.bot || this.controller.signal.aborted) return;
+    void writeCachedBotTimeline({
+      deviceId: this.device.id,
+      botId: this.id,
+      bot: this.bot,
+      fileLinkSession: this.fileLinkSession,
+      entries: this.entries,
+    });
   }
 
   private async page(locator: { before?: string; around?: string; limit?: number } = {}) {
@@ -168,9 +199,37 @@ export class BotTimeline {
     }
   }
 
+  // A missing latest page means the Bot was deleted, possibly from another browser.
+  private async latestPage() {
+    try {
+      return await this.page();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        this.deleted = true;
+        void removeCachedBotTimeline(this.device.id, this.id);
+        if (this.cached) {
+          this.cached = false;
+          this.bot = null;
+          this.known.clear();
+          this.entries = [];
+        }
+      }
+      throw error;
+    }
+  }
+
   private async sync(reset: boolean) {
-    const latest = await this.page();
-    const rotated = this.bot !== null && latest.notice_session_id !== this.noticeSession;
+    const latest = await this.latestPage();
+    const rotated =
+      !this.cached && this.bot !== null && latest.notice_session_id !== this.noticeSession;
+    if (this.cached) {
+      // The latest page replaces the cached one, dropping rows changed or removed since.
+      this.cached = false;
+      this.known.clear();
+      this.entries = [];
+      this.merge(latest.entries);
+      this.before = latest.next_before;
+    }
     if (rotated) {
       this.entries = this.entries.filter((row) => "content" in row || row.kind === "shared_file");
       this.known.clear();
@@ -261,6 +320,7 @@ export class BotTimeline {
     } finally {
       this.live.clear();
       this.running = false;
+      this.persist();
     }
   }
 }

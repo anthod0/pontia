@@ -7,6 +7,7 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { useDeviceRuntime } from '../../device/context'
   import type { Bot } from '../../api/types'
+  import { removeCachedBotTimeline } from '$lib/botTimelineCache'
 
   // ondone also closes the dialogs that opened this one, after deletion or when leaving for a helper.
   let { bot, onclose, ondone }: { bot: Bot; onclose: () => void; ondone: () => void } = $props()
@@ -48,6 +49,8 @@
     done()
     // The Bot entry opens the first remaining Bot, or the first-Bot setup when none is left.
     await navigate('/bot', undefined, { replaceState: true })
+    // After navigation the deleted Bot's chat has closed and cannot write its cache again.
+    await removeCachedBotTimeline(device.id, id)
   }
 
   function openHelper(sessionId: string) {

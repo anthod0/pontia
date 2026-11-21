@@ -4,6 +4,7 @@ import { testDevice } from "../deviceFixture";
 import type { Bot, SessionView } from "../../src/api/types";
 import BotDeleteDialog from "../../src/components/bots/BotDeleteDialog.svelte";
 import BotDeleteFromListHarness from "./BotDeleteFromListHarness.svelte";
+import { readCachedBotTimeline, writeCachedBotTimeline } from "../../src/lib/botTimelineCache";
 
 const goto = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("$app/navigation", () => ({ goto }));
@@ -55,8 +56,17 @@ test("a working Bot cannot be deleted", async () => {
   expect(screen.getByRole("button", { name: "Delete Bot" })).toBeDisabled();
 });
 
-test("deleting the Bot opens the Bot entry", async () => {
+test("deleting the Bot opens the Bot entry and clears its cached messages", async () => {
   testDevice.queryClient.setQueryData(["bots"], [bot("doomed"), bot("kept")]);
+  for (const id of ["doomed", "kept"]) {
+    await writeCachedBotTimeline({
+      deviceId: testDevice.id,
+      botId: id,
+      bot: bot(id),
+      fileLinkSession: null,
+      entries: [],
+    });
+  }
   vi.spyOn(testDevice.api, "listBots").mockResolvedValue([bot("kept")]);
   vi.spyOn(testDevice.api, "getBotDeletionBlockers").mockResolvedValue({
     running: false,
@@ -74,6 +84,10 @@ test("deleting the Bot opens the Bot entry", async () => {
   expect(testDevice.queryClient.getQueryData<Bot[]>(["bots"])?.map((item) => item.bot_id)).toEqual([
     "kept",
   ]);
+  await waitFor(async () =>
+    expect(await readCachedBotTimeline(testDevice.id, "doomed")).toBeNull(),
+  );
+  expect(await readCachedBotTimeline(testDevice.id, "kept")).not.toBeNull();
 });
 
 test("deleting from a view that only shows listed Bots still opens the Bot entry", async () => {
