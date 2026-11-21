@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { RpcError } from "../src/control-socket.js";
+import { RpcError } from "../shared/control-socket.js";
 import type { TurnContext } from "../src/context.js";
 import { completeToolCallFromMessageUpdate, LiveOutputPublisher } from "../src/live-output.js";
 

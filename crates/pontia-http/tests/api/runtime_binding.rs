@@ -28,7 +28,7 @@ pub(super) async fn post_upsert(state: AppState, body: Value) -> (StatusCode, Va
         state,
         "runtime.register",
         json!({
-            "version": pontia_client_pi::rpc::PROTOCOL_VERSION, "binding": body,
+            "version": pontia_agent_control::ipc::rpc::PROTOCOL_VERSION, "binding": body,
         }),
     )
     .await

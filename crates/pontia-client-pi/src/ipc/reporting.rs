@@ -1,4 +1,4 @@
-use super::Attach;
+use pontia_agent_control::ipc::identity::NativeAttachment;
 use pontia_agent_control::{AgentControl, EventReportError, ReportedFact};
 use pontia_core::{Error, Result, domain::EventType};
 use serde::Deserialize;
@@ -25,7 +25,7 @@ struct Event {
 
 async fn validate_identity(
     state: &AgentControl,
-    identity: &Attach,
+    identity: &NativeAttachment,
     session_id: &str,
     runtime_id: &str,
 ) -> Result<()> {
@@ -42,7 +42,7 @@ async fn validate_identity(
 
 pub(super) async fn report_event(
     state: &AgentControl,
-    identity: &Attach,
+    identity: &NativeAttachment,
     params: Value,
 ) -> Result<Value> {
     let request: EventRequest = serde_json::from_value(params)?;

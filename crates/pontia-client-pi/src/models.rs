@@ -84,7 +84,7 @@ async fn request(
     let message = format!("{}\n", json!({"id":command,"type":command}));
     stdin.write_all(message.as_bytes()).await?;
     loop {
-        let frame = crate::rpc::read_frame(stdout).await?;
+        let frame = pontia_agent_control::ipc::rpc::read_frame(stdout).await?;
         let response: Value = serde_json::from_slice(&frame)?;
         if response["type"] != "response" || response["id"] != command {
             continue;

@@ -1,7 +1,9 @@
 mod support;
 use pontia_agent_control::AgentControl;
-use pontia_client_pi::ipc::{PiIpcListener, serve_connection};
-use pontia_client_pi::rpc::{PROTOCOL_VERSION, PiRpcPeer};
+use pontia_agent_control::ipc::ControlListener;
+use pontia_agent_control::ipc::rpc::PROTOCOL_VERSION;
+use pontia_client_pi::ipc::serve_connection;
+use pontia_client_pi::rpc::PiRpcPeer;
 use pontia_storage_sqlite::{connect_sqlite, run_migrations};
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
@@ -38,7 +40,7 @@ fn client(
     state: &AgentControl,
 ) -> (
     Arc<PiRpcPeer>,
-    tokio::sync::mpsc::Receiver<pontia_client_pi::rpc::RpcRequest>,
+    tokio::sync::mpsc::Receiver<pontia_agent_control::ipc::rpc::RpcRequest>,
 ) {
     let (server, client) = UnixStream::pair().unwrap();
     tokio::spawn(serve_connection(state.clone(), server));
@@ -220,11 +222,11 @@ async fn listener_preserves_occupied_paths_and_recovers_a_stale_socket() {
     std::fs::create_dir_all(&directory).unwrap();
     let path = directory.join("rpc.sock");
     std::fs::write(&path, "owned file").unwrap();
-    assert!(PiIpcListener::bind(root.path()).await.is_err());
+    assert!(ControlListener::bind(root.path()).await.is_err());
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "owned file");
     std::fs::remove_file(&path).unwrap();
     drop(UnixListener::bind(&path).unwrap());
-    let listener = PiIpcListener::bind(root.path()).await.unwrap();
+    let listener = ControlListener::bind(root.path()).await.unwrap();
     assert_eq!(
         std::fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
         0o700
@@ -233,7 +235,7 @@ async fn listener_preserves_occupied_paths_and_recovers_a_stale_socket() {
         std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
         0o600
     );
-    assert!(PiIpcListener::bind(root.path()).await.is_err());
+    assert!(ControlListener::bind(root.path()).await.is_err());
     assert!(path.exists());
     drop(listener);
     assert!(!path.exists());

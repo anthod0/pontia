@@ -111,7 +111,7 @@ test.each(["tui", "rpc"])(
 test("a disconnected deferred registration can initialize on the next manual turn", async () => {
   const { mkdir } = await import("node:fs/promises");
   const { createServer } = await import("node:net");
-  const { piSocketPath } = await import("../src/control-socket.js");
+  const { controlSocketPath } = await import("../shared/control-socket.js");
   const root = await tempDir("pd-");
   const workspace = await realpath(root);
   await mkdir(join(root, "state/pi"), { recursive: true });
@@ -150,7 +150,7 @@ test("a disconnected deferred registration can initialize on the next manual tur
       }
     });
   });
-  await new Promise<void>((resolve) => server.listen(piSocketPath(root), resolve));
+  await new Promise<void>((resolve) => server.listen(controlSocketPath(root), resolve));
   const handlers: Record<string, (event: any, context?: any) => Promise<void>> = {};
   const events: InternalEvent[] = [];
   createPontiaPiExtension(

@@ -1,4 +1,5 @@
-use pontia_client_pi::rpc::{MAX_CONTROL_FRAME_BYTES, MAX_FRAME_BYTES, PiRpcPeer};
+use pontia_agent_control::ipc::rpc::MAX_FRAME_BYTES;
+use pontia_client_pi::rpc::{MAX_CONTROL_FRAME_BYTES, PiRpcPeer};
 use pontia_core::Error;
 use serde_json::{Value, json};
 use tokio::{

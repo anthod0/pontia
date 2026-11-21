@@ -1,4 +1,4 @@
-import { RpcError } from "./rpc-error.js";
+import { RpcError } from "../shared/rpc-error.js";
 
 const PAGE_BYTES = 1024 * 1024;
 export const MAX_HISTORY_ENTRIES = 100_000;

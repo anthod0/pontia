@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { TurnContext } from "./context.js";
-import { MAX_RPC_FRAME_BYTES, RpcError, type PiConnection } from "./control-socket.js";
+import { MAX_RPC_FRAME_BYTES, RpcError, type RuntimeConnection } from "../shared/control-socket.js";
 import { asRecord, optionalString } from "./values.js";
 
 const DEFAULT_BATCH_DELAY_MS = 75;
@@ -90,13 +90,13 @@ interface LiveOutputResponse {
 }
 
 export interface LiveOutputPublisherOptions {
-  connection: Pick<PiConnection, "request">;
+  connection: Pick<RuntimeConnection, "request">;
   streamId?: string;
   batchDelayMs?: number;
 }
 
 export class LiveOutputPublisher implements LiveOutputPublisherLike {
-  private readonly connection: Pick<PiConnection, "request">;
+  private readonly connection: Pick<RuntimeConnection, "request">;
   private readonly context: TurnContext & { turnId: string };
   private readonly streamId: string;
   private readonly batchDelayMs: number;

@@ -11,7 +11,7 @@ import {
   contextUsageFromPiEvent,
   contextUsageFromPiHook,
 } from "../src/events.js";
-import { RpcError } from "../src/control-socket.js";
+import { RpcError } from "../shared/control-socket.js";
 import { EventReporter } from "../src/reporter.js";
 import { tempDir } from "./temp-dir.js";
 

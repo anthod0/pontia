@@ -2,7 +2,8 @@ import { mkdir } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { join } from "node:path";
 import { onTestFinished, expect, test, vi } from "vitest";
-import { connectPi, piSocketPath, MAX_RPC_FRAME_BYTES, RpcError } from "../src/control-socket.js";
+import { connectPi } from "../src/control-socket.js";
+import { controlSocketPath, MAX_RPC_FRAME_BYTES, RpcError } from "../shared/control-socket.js";
 import { LiveOutputPublisher } from "../src/live-output.js";
 import { EventReporter } from "../src/reporter.js";
 import { buildTurnStartedEvent } from "../src/events.js";
@@ -13,6 +14,7 @@ async function server(handler: (socket: Socket, message: any) => void) {
   await mkdir(join(root, "state/pi"), { recursive: true });
   const sockets = new Set<Socket>();
   const listener = createServer((socket) => {
+    socket.setEncoding("utf8");
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
     socket.on("error", () => {});
@@ -28,7 +30,7 @@ async function server(handler: (socket: Socket, message: any) => void) {
       }
     });
   });
-  await new Promise<void>((resolve) => listener.listen(piSocketPath(root), resolve));
+  await new Promise<void>((resolve) => listener.listen(controlSocketPath(root), resolve));
   onTestFinished(async () => {
     for (const socket of sockets) socket.destroy();
     await new Promise<void>((resolve) => listener.close(() => resolve()));

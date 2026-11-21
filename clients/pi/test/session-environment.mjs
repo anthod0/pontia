@@ -5,7 +5,8 @@ import { join } from "node:path";
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      context.parentURL?.startsWith(new URL("../src/", import.meta.url).href) &&
+      (context.parentURL?.startsWith(new URL("../src/", import.meta.url).href) ||
+        context.parentURL?.startsWith(new URL("../../shared/", import.meta.url).href)) &&
       specifier.endsWith(".js")
     ) {
       specifier = `${specifier.slice(0, -3)}.ts`;

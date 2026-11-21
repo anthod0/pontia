@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { readHistory, type HistoryContext } from "../src/history.js";
-import { RpcError } from "../src/control-socket.js";
+import { RpcError } from "../shared/control-socket.js";
 function fixture(count = 5) {
   const entries = Array.from({ length: count }, (_, i) => ({
     id: `e${i}`,

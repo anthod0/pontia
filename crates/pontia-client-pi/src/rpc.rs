@@ -1,309 +1,208 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
-    },
-    time::Duration,
-};
-
+use pontia_agent_control::ipc::rpc::{MAX_FRAME_BYTES, Requests, RpcPeer};
 use pontia_core::{Error, Result};
 use serde_json::{Value, json};
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::{UnixStream, unix::OwnedWriteHalf},
-    sync::{mpsc, oneshot, watch},
-};
+use std::sync::Arc;
+use tokio::net::UnixStream;
 
-pub const PROTOCOL_VERSION: u32 = 8;
 pub const MAX_CONTROL_FRAME_BYTES: usize = 64 * 1024;
-// The former HTTP event body limit plus space for the RPC envelope.
-pub const MAX_FRAME_BYTES: usize = 2 * 1024 * 1024 + 1024;
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub struct RpcRequest {
-    pub id: Option<Value>,
-    pub method: String,
-    pub params: Value,
-}
-
-/// The reader dispatches requests independently of outstanding calls in either direction.
 pub struct PiRpcPeer {
-    writer: tokio::sync::Mutex<OwnedWriteHalf>,
-    pending: Mutex<HashMap<String, oneshot::Sender<Value>>>,
-    closed: watch::Sender<bool>,
-    cancelled_history: Mutex<HashSet<String>>,
-    sequence: AtomicU64,
+    rpc: Arc<RpcPeer>,
+}
+impl PiRpcPeer {
+    pub fn new(stream: UnixStream) -> (Arc<Self>, Requests) {
+        let (rpc, requests) = RpcPeer::new(stream);
+        (Self::from_rpc(rpc), requests)
+    }
+    pub(crate) fn from_rpc(rpc: Arc<RpcPeer>) -> Arc<Self> {
+        Arc::new(Self { rpc })
+    }
+    pub fn is_closed(&self) -> bool {
+        self.rpc.is_closed()
+    }
+    pub fn close(&self) {
+        self.rpc.close();
+    }
+    pub async fn closed(&self) {
+        self.rpc.closed().await;
+    }
+    pub async fn reply(&self, id: Option<Value>, result: Value) -> Result<()> {
+        self.rpc.reply(id, result).await
+    }
+    pub async fn reply_error(&self, id: Option<Value>, code: i64, message: &str) -> Result<()> {
+        self.rpc.reply_error(id, code, message).await
+    }
+    pub async fn call(&self, method: &str, params: Value) -> Result<Value> {
+        let limit = if method == "submit" {
+            MAX_CONTROL_FRAME_BYTES
+        } else {
+            MAX_FRAME_BYTES
+        };
+        let response = self
+            .rpc
+            .request(method, params, limit, method == "history.read")
+            .await?;
+        if let Some(error) = response.get("error") {
+            if method == "history.read" && error["code"] == -32601 {
+                return Err(Error::CapabilityUnavailable(
+                    "Pi peer does not support native history".into(),
+                ));
+            }
+            if error["code"] == -32010 {
+                return Err(Error::Conflict {
+                    code: "input_busy",
+                    message: error["message"].as_str().unwrap().into(),
+                });
+            }
+            if error["code"] == -32011 {
+                return Err(Error::Conflict {
+                    code: "steer_target_changed",
+                    message: error["message"].as_str().unwrap().into(),
+                });
+            }
+            if error["code"] == -32007 {
+                return Err(Error::ControlUnknown(
+                    error["message"].as_str().unwrap().into(),
+                ));
+            }
+            return Err(Error::Domain(format!(
+                "Pi RPC {}: {}",
+                error["code"], error["message"]
+            )));
+        }
+        Ok(response["result"].clone())
+    }
 }
 
-impl PiRpcPeer {
-    pub fn new(stream: UnixStream) -> (Arc<Self>, mpsc::Receiver<RpcRequest>) {
-        let (reader, writer) = stream.into_split();
-        let (requests, incoming) = mpsc::channel(16);
-        let peer = Arc::new(Self {
-            writer: tokio::sync::Mutex::new(writer),
-            pending: Mutex::new(HashMap::new()),
-            closed: watch::channel(false).0,
-            cancelled_history: Mutex::new(HashSet::new()),
-            sequence: AtomicU64::new(0),
-        });
-        let running = peer.clone();
-        tokio::spawn(async move {
-            let mut reader = BufReader::new(reader);
-            loop {
-                let frame = tokio::select! {
-                    biased;
-                    _ = running.closed() => break,
-                    frame = read_frame(&mut reader) => frame,
-                };
-                let frame = match frame {
-                    Ok(frame) => frame,
-                    Err(_) => break,
-                };
-                let value: Value = match serde_json::from_slice(&frame) {
-                    Ok(value) => value,
-                    Err(_) => {
-                        let _ = running
-                            .reply_error(Some(Value::Null), -32700, "Invalid JSON")
-                            .await;
-                        break;
-                    }
-                };
-                if value["jsonrpc"] != "2.0" || !value.is_object() {
-                    let _ = running
-                        .reply_error(Some(Value::Null), -32600, "Invalid JSON-RPC request")
-                        .await;
-                    break;
-                }
-                if let Some(method) = value.get("method") {
-                    let id = value.get("id").cloned();
-                    if !method.is_string()
-                        || id
-                            .as_ref()
-                            .is_some_and(|id| !id.is_string() && !id.is_number())
-                        || value.get("result").is_some()
-                        || value.get("error").is_some()
-                    {
-                        let _ = running
-                            .reply_error(Some(Value::Null), -32600, "Invalid JSON-RPC request")
-                            .await;
-                        break;
-                    }
-                    let params = value.get("params").cloned().unwrap_or_else(|| json!({}));
-                    if !params.is_object() {
-                        let _ = running
-                            .reply_error(id, -32602, "Expected named parameters")
-                            .await;
-                        continue;
-                    }
-                    if requests
-                        .try_send(RpcRequest {
-                            id,
-                            method: method.as_str().unwrap().into(),
-                            params,
-                        })
-                        .is_err()
-                    {
-                        break;
-                    }
-                } else {
-                    if value.get("result").is_some() == value.get("error").is_some()
-                        || value.get("error").is_some_and(|error| {
-                            !error["code"].is_i64() || !error["message"].is_string()
-                        })
-                    {
-                        break;
-                    }
-                    let Some(id) = value["id"].as_str() else {
-                        break;
-                    };
-                    let pending = running.pending.lock().unwrap().remove(id);
-                    let Some(pending) = pending else {
-                        if running.cancelled_history.lock().unwrap().remove(id) {
-                            continue;
-                        }
-                        break;
-                    };
-                    let _ = pending.send(value);
-                }
-            }
-            running.close();
-            let _ = running.writer.lock().await.shutdown().await;
-        });
-        (peer, incoming)
-    }
-
-    pub fn is_closed(&self) -> bool {
-        *self.closed.borrow()
-    }
-
-    pub fn close(&self) {
-        self.closed.send_replace(true);
-        self.pending.lock().unwrap().clear();
-    }
-
-    pub async fn closed(&self) {
-        let mut closed = self.closed.subscribe();
-        let _ = closed.wait_for(|value| *value).await;
-    }
-
-    pub async fn call(&self, method: &str, params: Value) -> Result<Value> {
-        if self.is_closed() {
-            return Err(Error::CapabilityUnavailable(
-                "Pi connection is closed".into(),
-            ));
-        }
-        let id = format!("pontia:{}", self.sequence.fetch_add(1, Ordering::Relaxed));
-        let (send, receive) = oneshot::channel();
-        let request = json!({"jsonrpc":"2.0", "id":id, "method":method, "params":params});
-        // Validate before creating an uncertain operation.
-        encode(&request)?;
-        self.pending.lock().unwrap().insert(id.clone(), send);
-        let mut guard = PendingCall {
-            peer: self,
-            id,
-            completed: false,
-            read_only: method == "history.read",
-        };
-        let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
-            self.write(request).await?;
-            let response = receive.await.map_err(|_| {
-                Error::ControlUnknown(
-                    "Pi connection closed before response; request was not replayed".into(),
+impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
+    fn steer<'a>(
+        &'a self,
+        input: &'a str,
+        inbox_message_id: Option<&'a str>,
+        turn_id: &'a str,
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
+        Box::pin(async move {
+            if self
+                .call(
+                    "steer",
+                    json!({"input":input,"inbox_message_id":inbox_message_id,"turn_id":turn_id}),
                 )
-            })?;
-            if let Some(error) = response.get("error") {
-                if method == "history.read" && error["code"] == -32601 {
-                    return Err(Error::CapabilityUnavailable(
-                        "Pi peer does not support native history".into(),
-                    ));
-                }
-                if error["code"] == -32010 {
-                    return Err(Error::Conflict {
-                        code: "input_busy",
-                        message: error["message"].as_str().unwrap().into(),
-                    });
-                }
-                if error["code"] == -32011 {
-                    return Err(Error::Conflict {
-                        code: "steer_target_changed",
-                        message: error["message"].as_str().unwrap().into(),
-                    });
-                }
-                if error["code"] == -32007 {
-                    return Err(Error::ControlUnknown(
-                        error["message"].as_str().unwrap().into(),
-                    ));
-                }
-                return Err(Error::Domain(format!(
-                    "Pi RPC {}: {}",
-                    error["code"], error["message"]
-                )));
+                .await?
+                != json!({"accepted":true})
+            {
+                return Err(Error::ControlUnknown("Invalid Pi steer response".into()));
             }
-            Ok(response["result"].clone())
+            Ok(())
         })
-        .await;
-        match result {
-            Ok(result) => {
-                guard.completed = true;
-                result
+    }
+    fn compact<'a>(
+        &'a self,
+        operation_id: &'a str,
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
+        Box::pin(async move {
+            if self
+                .call("compact", json!({"operation_id": operation_id}))
+                .await?
+                != json!({"accepted": true})
+            {
+                return Err(Error::ControlUnknown(
+                    "Invalid Pi compaction acknowledgement".into(),
+                ));
             }
-            Err(_) => Err(Error::ControlUnknown(
-                "Pi RPC timed out; request was not replayed".into(),
-            )),
-        }
+            Ok(())
+        })
     }
-
-    pub async fn reply(&self, id: Option<Value>, result: Value) -> Result<()> {
-        if let Some(id) = id {
-            self.write(json!({"jsonrpc":"2.0", "id":id, "result":result}))
-                .await?;
-        }
-        Ok(())
+    fn native_history(
+        &self,
+        params: Value,
+    ) -> pontia_agent_control::ClientControlOperation<'_, Value> {
+        Box::pin(async move { self.call("history.read", params).await })
     }
-
-    pub async fn reply_error(&self, id: Option<Value>, code: i64, message: &str) -> Result<()> {
-        if let Some(id) = id {
-            self.write(json!({"jsonrpc":"2.0", "id":id, "error":{"code":code, "message":message}}))
-                .await?;
-        }
-        Ok(())
+    fn available(&self) -> bool {
+        !self.is_closed()
     }
-
-    async fn write(&self, value: Value) -> Result<()> {
-        let encoded = encode(&value)?;
-        let result = tokio::select! {
-            biased;
-            _ = self.closed() => return Err(Error::CapabilityUnavailable("Pi connection is closed".into())),
-            result = tokio::time::timeout(REQUEST_TIMEOUT, async {
-                self.writer.lock().await.write_all(&encoded).await
-            }) => result,
-        };
-        match result {
-            Ok(Ok(())) => Ok(()),
-            _ => {
-                self.close();
+    fn invalidate(&self) {
+        self.close();
+    }
+    fn replay<'a>(
+        &'a self,
+        inbox_message_id: &'a str,
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
+        Box::pin(async move {
+            if self
+                .call(
+                    "branch.replay",
+                    json!({"inbox_message_id": inbox_message_id}),
+                )
+                .await?
+                != json!({"accepted": true})
+            {
+                return Err(Error::ControlUnknown(
+                    "Invalid Pi branch replay acknowledgement".into(),
+                ));
+            }
+            Ok(())
+        })
+    }
+    fn interrupt(&self) -> pontia_agent_control::ClientControlOperation<'_> {
+        Box::pin(async {
+            if self.call("interrupt", json!({})).await? != json!({"accepted":true}) {
+                return Err(Error::ControlUnknown(
+                    "Invalid Pi interrupt acknowledgement".into(),
+                ));
+            }
+            Ok(())
+        })
+    }
+    fn shutdown_if_idle(&self) -> pontia_agent_control::ClientControlOperation<'_, bool> {
+        Box::pin(async {
+            let response = self.call("shutdown_if_idle", json!({})).await?;
+            if response == json!({"accepted":true}) {
+                Ok(true)
+            } else if response == json!({"accepted":false}) {
+                Ok(false)
+            } else {
                 Err(Error::ControlUnknown(
-                    "Pi RPC write failed; request was not replayed".into(),
+                    "Invalid Pi conditional shutdown acknowledgement".into(),
                 ))
             }
-        }
+        })
     }
-}
-
-struct PendingCall<'a> {
-    peer: &'a PiRpcPeer,
-    id: String,
-    completed: bool,
-    read_only: bool,
-}
-impl Drop for PendingCall<'_> {
-    fn drop(&mut self) {
-        self.peer.pending.lock().unwrap().remove(&self.id);
-        if !self.completed {
-            if self.read_only {
-                let mut cancelled = self.peer.cancelled_history.lock().unwrap();
-                if cancelled.len() < 64 {
-                    cancelled.insert(self.id.clone());
-                } else {
-                    self.peer.close();
-                }
-            } else {
-                self.peer.close();
+    fn shutdown(&self) -> pontia_agent_control::ClientControlOperation<'_> {
+        Box::pin(async {
+            if self.call("shutdown", json!({})).await? != json!({"accepted":true}) {
+                return Err(Error::ControlUnknown(
+                    "Invalid Pi shutdown acknowledgement".into(),
+                ));
             }
-        }
+            Ok(())
+        })
     }
-}
-
-fn encode(value: &Value) -> Result<Vec<u8>> {
-    let mut encoded = serde_json::to_vec(value)?;
-    if encoded.len() > MAX_FRAME_BYTES
-        || (value["method"] == "submit" && encoded.len() > MAX_CONTROL_FRAME_BYTES)
-    {
-        return Err(Error::Domain("Pi RPC frame exceeds size limit".into()));
+    fn ping(&self) -> pontia_agent_control::ClientControlOperation<'_> {
+        Box::pin(async {
+            if self.call("ping", json!({})).await? != json!({"pong":true}) {
+                return Err(Error::ControlUnknown("Invalid Pi ping response".into()));
+            }
+            Ok(())
+        })
     }
-    encoded.push(b'\n');
-    Ok(encoded)
-}
-
-pub(crate) async fn read_frame<R: tokio::io::AsyncBufRead + Unpin>(
-    stream: &mut R,
-) -> Result<Vec<u8>> {
-    let mut frame = Vec::new();
-    loop {
-        let available = stream.fill_buf().await?;
-        if available.is_empty() {
-            return Err(Error::CapabilityUnavailable("Pi connection closed".into()));
-        }
-        let newline = available.iter().position(|byte| *byte == b'\n');
-        let size = newline.unwrap_or(available.len());
-        if frame.len() + size > MAX_FRAME_BYTES {
-            return Err(Error::Domain("Pi RPC frame exceeds size limit".into()));
-        }
-        frame.extend_from_slice(&available[..size]);
-        stream.consume(size + usize::from(newline.is_some()));
-        if newline.is_some() {
-            return Ok(frame);
-        }
+    fn submit<'a>(
+        &'a self,
+        input: &'a str,
+        inbox_message_id: Option<&'a str>,
+    ) -> pontia_agent_control::ClientControlOperation<'a> {
+        Box::pin(async move {
+            if self
+                .call(
+                    "submit",
+                    json!({"input":input,"inbox_message_id":inbox_message_id}),
+                )
+                .await?
+                != json!({"accepted":true})
+            {
+                return Err(Error::ControlUnknown("Invalid Pi submit response".into()));
+            }
+            Ok(())
+        })
     }
 }

@@ -23,7 +23,8 @@
   "files": [
     "src",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "shared"
   ],
   "type": "module",
   "publishConfig": {

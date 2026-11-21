@@ -11,6 +11,7 @@ bun run --cwd "$root/clients/claude" build
 cp "$root/clients/claude/package.json" "$root/LICENSE" "$stage/"
 mkdir "$stage/dist"
 cp -R "$root/clients/claude/dist/src" "$stage/dist/src"
+cp -R "$root/clients/claude/dist/shared" "$stage/dist/shared"
 python3 "$root/scripts/release-version.py" materialize-npm "$stage/package.json"
 package=$(cd "$stage" && npm pack --ignore-scripts --silent)
 mkdir -p "$(dirname "$destination")"

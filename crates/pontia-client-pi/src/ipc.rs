@@ -3,119 +3,20 @@ mod live_output;
 mod queries;
 mod reporting;
 
-use crate::rpc::{PROTOCOL_VERSION, PiRpcPeer, RpcRequest};
-use pontia_agent_control::{AgentBindingService, AgentControl, RuntimeBindingUpsertRequest};
+use crate::rpc::PiRpcPeer;
+use pontia_agent_control::ipc::{identity::NativeAttachment, rpc::RpcRequest};
+use pontia_agent_control::{AgentBindingService, AgentControl};
 use pontia_core::{Error, Result};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
-    os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt},
-    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
 };
-use tokio::{
-    net::{UnixListener, UnixStream},
-    sync::watch,
-    task::JoinSet,
-};
-
-pub struct PiIpcListener {
-    listener: UnixListener,
-    path: PathBuf,
-    inode: u64,
-    owner: u32,
-    _lock: std::fs::File,
-}
-
-impl PiIpcListener {
-    pub async fn bind(pontia_home: &Path) -> Result<Self> {
-        let directory = pontia_home.join("state/pi");
-        std::fs::create_dir_all(&directory)?;
-        if !std::fs::symlink_metadata(&directory)?.file_type().is_dir() {
-            return Err(Error::Domain(
-                "Pi socket directory must be a real directory".into(),
-            ));
-        }
-        std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))?;
-        let lock = std::fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .mode(0o600)
-            .open(directory.join("rpc.lock"))?;
-        lock.try_lock().map_err(|error| {
-            Error::StateConflict(format!(
-                "Pi listener is already running or cannot be locked: {error}"
-            ))
-        })?;
-        let path = directory.join("rpc.sock");
-        if path.as_os_str().as_encoded_bytes().len() > 103 {
-            return Err(Error::Domain(
-                "Pontia home is too long for the Pi Unix socket (maximum 103 bytes)".into(),
-            ));
-        }
-        if let Ok(metadata) = std::fs::symlink_metadata(&path) {
-            if !metadata.file_type().is_socket() {
-                return Err(Error::Domain(
-                    "Pi socket path is occupied by a non-socket file".into(),
-                ));
-            }
-            match UnixStream::connect(&path).await {
-                Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {
-                    std::fs::remove_file(&path)?
-                }
-                _ => return Err(Error::StateConflict("Pi socket is already in use".into())),
-            }
-        }
-        let listener = UnixListener::bind(&path)?;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-        let metadata = std::fs::metadata(&path)?;
-        Ok(Self {
-            listener,
-            path,
-            inode: metadata.ino(),
-            owner: metadata.uid(),
-            _lock: lock,
-        })
-    }
-
-    pub async fn run(self, state: AgentControl, mut shutdown: watch::Receiver<bool>) -> Result<()> {
-        let mut connections = JoinSet::new();
-        loop {
-            if *shutdown.borrow() {
-                break;
-            }
-            tokio::select! {
-                _ = shutdown.changed() => break,
-                Some(_) = connections.join_next(), if !connections.is_empty() => {},
-                accepted = self.listener.accept() => {
-                    let (stream, _) = accepted?;
-                    if stream.peer_cred()?.uid() != self.owner { continue; }
-                    let state = state.clone();
-                    connections.spawn(async move { serve_connection(state, stream).await; });
-                }
-            }
-        }
-        connections.abort_all();
-        while connections.join_next().await.is_some() {}
-        Ok(())
-    }
-}
-
-impl Drop for PiIpcListener {
-    fn drop(&mut self) {
-        if std::fs::symlink_metadata(&self.path)
-            .is_ok_and(|metadata| metadata.ino() == self.inode && metadata.file_type().is_socket())
-        {
-            let _ = std::fs::remove_file(&self.path);
-        }
-    }
-}
+use tokio::{net::UnixStream, task::JoinSet};
 
 struct ClosePeer(Arc<PiRpcPeer>);
 impl Drop for ClosePeer {
@@ -125,12 +26,17 @@ impl Drop for ClosePeer {
 }
 
 pub async fn serve_connection(state: AgentControl, stream: UnixStream) {
-    let process_id = stream
-        .peer_cred()
-        .ok()
-        .and_then(|credentials| credentials.pid())
-        .and_then(|pid| u32::try_from(pid).ok());
-    let (peer, mut requests) = PiRpcPeer::new(stream);
+    let (process_id, peer, requests) = pontia_agent_control::ipc::connection(stream);
+    serve_peer(state, process_id, PiRpcPeer::from_rpc(peer), None, requests).await;
+}
+
+pub(crate) async fn serve_peer(
+    state: AgentControl,
+    process_id: Option<u32>,
+    peer: Arc<PiRpcPeer>,
+    mut first: Option<RpcRequest>,
+    mut requests: pontia_agent_control::ipc::rpc::Requests,
+) {
     let _close = ClosePeer(peer.clone());
     let channel = Arc::new(PiChannel {
         process_id,
@@ -142,12 +48,16 @@ pub async fn serve_connection(state: AgentControl, stream: UnixStream) {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     let mut reads = JoinSet::new();
     loop {
-        let request = tokio::select! {
-            biased;
-            _ = peer.closed() => break,
-            _ = tokio::time::sleep_until(deadline), if registered.is_none() => break,
-            Some(_) = reads.join_next(), if !reads.is_empty() => continue,
-            request = requests.recv() => request,
+        let request = if let Some(first) = first.take() {
+            Some(first)
+        } else {
+            tokio::select! {
+                biased;
+                _ = peer.closed() => break,
+                _ = tokio::time::sleep_until(deadline), if registered.is_none() => break,
+                Some(_) = reads.join_next(), if !reads.is_empty() => continue,
+                request = requests.recv() => request,
+            }
         };
         let Some(request) = request else { break };
         if request.id.is_none() {
@@ -236,20 +146,6 @@ async fn reply_result(peer: &PiRpcPeer, id: Option<Value>, result: Result<Value>
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Registration {
-    version: u32,
-    binding: RuntimeBindingUpsertRequest,
-}
-#[derive(Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Attach {
-    version: u32,
-    session_id: String,
-    runtime_id: String,
-    client_session_key: String,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct ContextQuery {
     client_session_key: String,
 }
@@ -258,7 +154,7 @@ async fn dispatch(
     state: &AgentControl,
     channel: &Arc<PiChannel>,
     request: &RpcRequest,
-    registered: &mut Option<Attach>,
+    registered: &mut Option<NativeAttachment>,
 ) -> Result<Value> {
     let _identity_guard = state.client_control().lock_identity().await;
     if let Some(identity) = registered.as_ref() {
@@ -340,57 +236,13 @@ async fn dispatch(
             "Connection is already registered".into(),
         ));
     }
-    let (identity, result) = match request.method.as_str() {
-        "runtime.register" => {
-            let registration: Registration = serde_json::from_value(request.params.clone())?;
-            version(registration.version)?;
-            if registration.binding.client_type != "pi" {
-                return Err(Error::Domain(
-                    "Pi registration requires client_type pi".into(),
-                ));
-            }
-            let client_session_key = registration.binding.client_session_key.clone();
-            let result = state
-                .session_runtimes()
-                .with_session_identity_hint(client_session_key.clone())
-                .upsert(
-                    registration.binding,
-                    channel
-                        .process_id
-                        .and_then(pontia_runtime::ProcessFingerprint::capture)
-                        .ok_or_else(|| {
-                            Error::StateConflict(
-                                "Pi IPC peer process identity is unavailable".into(),
-                            )
-                        })?,
-                )
-                .await?;
-            let session_id = result["session"]["session_id"]
-                .as_str()
-                .ok_or_else(|| Error::Domain("Registration returned no session identity".into()))?
-                .to_owned();
-            let runtime_id = result["runtime"]["runtime_id"]
-                .as_str()
-                .ok_or_else(|| Error::Domain("Registration returned no runtime identity".into()))?
-                .to_owned();
-            (
-                Attach {
-                    version: registration.version,
-                    session_id,
-                    runtime_id,
-                    client_session_key,
-                },
-                result,
-            )
-        }
-        "runtime.attach" => {
-            let identity: Attach = serde_json::from_value(request.params.clone())?;
-            version(identity.version)?;
-            let result = json!({"session_id":identity.session_id,"runtime_id":identity.runtime_id});
-            (identity, result)
-        }
-        _ => return Err(Error::Domain("Unknown Pi RPC method".into())),
-    };
+    let (identity, result) = pontia_agent_control::ipc::identity::native_registration(
+        state,
+        "pi",
+        channel.process_id,
+        request,
+    )
+    .await?;
     state
         .client_control()
         .attach_locked(
@@ -487,144 +339,4 @@ impl pontia_agent_control::ClientControlChannel for PiChannel {
     ) -> pontia_agent_control::ClientControlOperation<'a> {
         self.peer.steer(input, inbox_message_id, turn_id)
     }
-}
-
-impl pontia_agent_control::ClientControlChannel for PiRpcPeer {
-    fn steer<'a>(
-        &'a self,
-        input: &'a str,
-        inbox_message_id: Option<&'a str>,
-        turn_id: &'a str,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
-        Box::pin(async move {
-            if self
-                .call(
-                    "steer",
-                    json!({"input":input,"inbox_message_id":inbox_message_id,"turn_id":turn_id}),
-                )
-                .await?
-                != json!({"accepted":true})
-            {
-                return Err(Error::ControlUnknown("Invalid Pi steer response".into()));
-            }
-            Ok(())
-        })
-    }
-    fn compact<'a>(
-        &'a self,
-        operation_id: &'a str,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
-        Box::pin(async move {
-            if self
-                .call("compact", json!({"operation_id": operation_id}))
-                .await?
-                != json!({"accepted": true})
-            {
-                return Err(Error::ControlUnknown(
-                    "Invalid Pi compaction acknowledgement".into(),
-                ));
-            }
-            Ok(())
-        })
-    }
-    fn native_history(
-        &self,
-        params: Value,
-    ) -> pontia_agent_control::ClientControlOperation<'_, Value> {
-        Box::pin(async move { self.call("history.read", params).await })
-    }
-    fn available(&self) -> bool {
-        !self.is_closed()
-    }
-    fn invalidate(&self) {
-        self.close();
-    }
-    fn replay<'a>(
-        &'a self,
-        inbox_message_id: &'a str,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
-        Box::pin(async move {
-            if self
-                .call(
-                    "branch.replay",
-                    json!({"inbox_message_id": inbox_message_id}),
-                )
-                .await?
-                != json!({"accepted": true})
-            {
-                return Err(Error::ControlUnknown(
-                    "Invalid Pi branch replay acknowledgement".into(),
-                ));
-            }
-            Ok(())
-        })
-    }
-    fn interrupt(&self) -> pontia_agent_control::ClientControlOperation<'_> {
-        Box::pin(async {
-            if self.call("interrupt", json!({})).await? != json!({"accepted":true}) {
-                return Err(Error::ControlUnknown(
-                    "Invalid Pi interrupt acknowledgement".into(),
-                ));
-            }
-            Ok(())
-        })
-    }
-    fn shutdown_if_idle(&self) -> pontia_agent_control::ClientControlOperation<'_, bool> {
-        Box::pin(async {
-            let response = self.call("shutdown_if_idle", json!({})).await?;
-            if response == json!({"accepted":true}) {
-                Ok(true)
-            } else if response == json!({"accepted":false}) {
-                Ok(false)
-            } else {
-                Err(Error::ControlUnknown(
-                    "Invalid Pi conditional shutdown acknowledgement".into(),
-                ))
-            }
-        })
-    }
-    fn shutdown(&self) -> pontia_agent_control::ClientControlOperation<'_> {
-        Box::pin(async {
-            if self.call("shutdown", json!({})).await? != json!({"accepted":true}) {
-                return Err(Error::ControlUnknown(
-                    "Invalid Pi shutdown acknowledgement".into(),
-                ));
-            }
-            Ok(())
-        })
-    }
-    fn ping(&self) -> pontia_agent_control::ClientControlOperation<'_> {
-        Box::pin(async {
-            if self.call("ping", json!({})).await? != json!({"pong":true}) {
-                return Err(Error::ControlUnknown("Invalid Pi ping response".into()));
-            }
-            Ok(())
-        })
-    }
-    fn submit<'a>(
-        &'a self,
-        input: &'a str,
-        inbox_message_id: Option<&'a str>,
-    ) -> pontia_agent_control::ClientControlOperation<'a> {
-        Box::pin(async move {
-            if self
-                .call(
-                    "submit",
-                    json!({"input":input,"inbox_message_id":inbox_message_id}),
-                )
-                .await?
-                != json!({"accepted":true})
-            {
-                return Err(Error::ControlUnknown("Invalid Pi submit response".into()));
-            }
-            Ok(())
-        })
-    }
-}
-
-fn version(version: u32) -> Result<()> {
-    if version != PROTOCOL_VERSION {
-        return Err(Error::Domain("Unsupported Pi RPC protocol version".into()));
-    }
-    Ok(())
 }

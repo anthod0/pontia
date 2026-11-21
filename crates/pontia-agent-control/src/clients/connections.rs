@@ -162,13 +162,59 @@ impl ClientControlService {
         client_session_key: &str,
         channel: Arc<dyn ClientControlChannel>,
     ) -> Result<()> {
+        self.attach_binding_locked(
+            _guard,
+            client_type,
+            session_id,
+            runtime_id,
+            crate::ipc::identity::BindingConfirmation::Native(client_session_key),
+            channel,
+        )
+        .await
+    }
+
+    pub async fn validate_attachment(
+        &self,
+        client_type: &str,
+        session_id: &str,
+        runtime_id: &str,
+        binding: crate::ipc::identity::BindingConfirmation<'_>,
+    ) -> Result<()> {
+        match binding {
+            crate::ipc::identity::BindingConfirmation::Native(key) => {
+                self.validate_identity(client_type, key, session_id, runtime_id)
+                    .await?
+            }
+            crate::ipc::identity::BindingConfirmation::Launch => {
+                let unbound: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sessions s WHERE s.session_id=? AND s.client_type=? AND NOT EXISTS(SELECT 1 FROM agent_bindings b WHERE b.session_id=s.session_id))")
+                    .bind(session_id).bind(client_type).fetch_one(&self.pool).await?;
+                if !unbound {
+                    return Err(Error::StateConflict(
+                        "Runtime must confirm its native binding".into(),
+                    ));
+                }
+                self.validate_runtime(session_id, runtime_id).await?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn attach_binding_locked(
+        &self,
+        _guard: &tokio::sync::OwnedMutexGuard<()>,
+        client_type: &str,
+        session_id: &str,
+        runtime_id: &str,
+        binding: crate::ipc::identity::BindingConfirmation<'_>,
+        channel: Arc<dyn ClientControlChannel>,
+    ) -> Result<()> {
         let mut connections = self.connections.lock().await;
         if connections.stopped || !channel.available() {
             return Err(Error::CapabilityUnavailable(
                 "Client connection is closed".into(),
             ));
         }
-        self.validate_identity(client_type, client_session_key, session_id, runtime_id)
+        self.validate_attachment(client_type, session_id, runtime_id, binding)
             .await?;
         if let Some(pid) = channel.process_id() {
             let record = pontia_storage_sqlite::repositories::session_runtimes::SqliteSessionRuntimeRepository::new(self.pool.clone()).get(runtime_id).await?;
