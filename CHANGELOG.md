@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Messages from a Bot to its helpers no longer include the Bot Session ID.
 - Bot, memory retrieval, and dreaming Sessions no longer automatically load user skills. Ordinary helpers retain their existing skill loading.
 - Bots use `pontia` commands, read only known file paths, and delegate exploration and system changes to helpers, with at most one external read-only lookup per input.
 - Bot chats show a skeleton of the conversation and composer while loading, instead of a loading message.
