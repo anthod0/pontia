@@ -282,7 +282,7 @@ test("opens a shared text file in the file preview panel and leaves binary files
   expect(read).toHaveBeenCalledWith("main", "/work/notes.md", expect.any(AbortSignal));
 });
 
-test("shows a conversation skeleton until the first page of messages arrives", async () => {
+test("shows message bubble placeholders until the first page of messages arrives", async () => {
   let resolve!: (page: BotMessagePage) => void;
   vi.spyOn(testDevice.api, "getBotMessages").mockReturnValue(
     new Promise((done) => {
@@ -290,7 +290,10 @@ test("shows a conversation skeleton until the first page of messages arrives", a
     }),
   );
   render(BotChatPage, { botId: bot.bot_id });
-  expect(screen.getByRole("status", { name: "Loading conversation" })).toBeInTheDocument();
+  const skeleton = screen.getByRole("status", { name: "Loading conversation" });
+  expect(skeleton).toHaveAttribute("data-bot-conversation-skeleton");
+  expect(skeleton.querySelectorAll(".justify-end > .rounded-2xl").length).toBeGreaterThan(0);
+  expect(skeleton.querySelectorAll(".justify-start > .rounded-2xl").length).toBeGreaterThan(0);
   expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
   resolve({
     bot,

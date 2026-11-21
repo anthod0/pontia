@@ -13,6 +13,7 @@
   import { openBotChatStream } from '../services/botChatStream'
   import BotAvatar from '../components/bots/BotAvatar.svelte'
   import BotChatSkeleton from '../components/bots/BotChatSkeleton.svelte'
+  import { botBubbleClass, userBubbleClass } from '../components/bots/messageBubble'
 
   let { botId }: { botId: string } = $props()
   const device = useDeviceRuntime()
@@ -103,10 +104,10 @@
                     markdown
                     sessionId={timeline.fileLinkSession?.session_id}
                     linkBase={timeline.fileLinkSession?.workspace ? `${timeline.fileLinkSession.workspace.replace(/\/+$/, '')}/` : null}
-                    class="size-auto rounded-2xl bg-muted px-4 py-3 break-words [&_code]:bg-background [&_th]:bg-background [&_[data-code-block]]:bg-background"
+                    class="size-auto {botBubbleClass} break-words [&_code]:bg-background [&_th]:bg-background [&_[data-code-block]]:bg-background"
                   />
                 {:else}
-                  <p class="rounded-2xl border border-border bg-background px-4 py-3 text-sm leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]">{parts.text}</p>
+                  <p class="{userBubbleClass} text-sm leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]">{parts.text}</p>
                 {/if}
               {/if}
               {#if entry.status === 'failed'}
