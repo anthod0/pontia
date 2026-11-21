@@ -3,7 +3,7 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import * as Dialog from '$lib/components/ui/dialog/index.js'
   import type { SessionFilesStore } from '../../stores/sessionFiles'
-  import SharedFileCard from './SharedFileCard.svelte'
+  import SharedFileRow from './SharedFileRow.svelte'
   import SharedImageViewer from './SharedImageViewer.svelte'
   import { canPreviewImage } from '$lib/downloads/preview'
   import { provideFilePreviewNavigator, useFilePreview } from './filePreviewContext'
@@ -34,7 +34,7 @@
     {/if}
     {#if files.length > 0}
       <ul class="-mx-2 min-h-0 overflow-y-auto">
-        {#each files as file (file.file_id)}<li><SharedFileCard {file} {sessionId} variant="row" onenlarge={() => { imageViewerIndex = images.indexOf(file); imageViewerOpen = true }} /></li>{/each}
+        {#each files as file (file.file_id)}<li><SharedFileRow {file} {sessionId} onenlarge={() => { imageViewerIndex = images.indexOf(file); imageViewerOpen = true }} /></li>{/each}
       </ul>
     {:else if loading}
       <p role="status" class="text-sm text-muted-foreground">{$t('files.loadingShared')}</p>

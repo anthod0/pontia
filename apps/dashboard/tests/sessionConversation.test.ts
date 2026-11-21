@@ -837,9 +837,9 @@ test("conversation shows shared files on the Turn they are bound to", () => {
   const turn = document.querySelector('[data-chat-turn-id="turn-1"]');
   const list = screen.getByRole("list", { name: "Shared files in this turn" });
   expect(turn).toContainElement(list);
-  expect(within(list).getByText("bound.txt")).toBeInTheDocument();
-  expect(screen.queryByText("other.txt")).not.toBeInTheDocument();
-  expect(screen.queryByText("unbound.txt")).not.toBeInTheDocument();
+  expect(within(list).getByRole("button", { name: "Download bound.txt" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Download other.txt" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Download unbound.txt" })).not.toBeInTheDocument();
 });
 
 test("Codex question replies render as answered questions", async () => {

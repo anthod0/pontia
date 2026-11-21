@@ -20,7 +20,7 @@
   import CompactionCheckpoint from './CompactionCheckpoint.svelte'
   import MessageTime from './MessageTime.svelte'
   import QuestionReplyCard from './QuestionReplyCard.svelte'
-  import SharedFileCard from '../../../components/chat/SharedFileCard.svelte'
+  import FileBubble from '../../../components/chat/FileBubble.svelte'
   import SharedImageViewer from '../../../components/chat/SharedImageViewer.svelte'
   import { canPreviewImage } from '$lib/downloads/preview'
   import type { SharedFile, TurnView, TimelineItem } from '../../../api/types'
@@ -476,7 +476,7 @@
           {/each}
           {#if displayTurn.turnId && sharedFilesByTurn.get(displayTurn.turnId)?.length}
             <ul class="max-w-md space-y-2" aria-label={$t('files.sharedInTurn')} data-chat-turn-files>
-              {#each sharedFilesByTurn.get(displayTurn.turnId) ?? [] as file (file.file_id)}<li><SharedFileCard {file} {sessionId} onenlarge={() => openImage(file)} /></li>{/each}
+              {#each sharedFilesByTurn.get(displayTurn.turnId) ?? [] as file (file.file_id)}<li><FileBubble {file} {sessionId} onenlarge={() => openImage(file)} /></li>{/each}
             </ul>
           {/if}
           {@render turnFooter(displayTurn, showProgress)}

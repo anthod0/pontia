@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/sve
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import DownloadCenter from "../../src/components/layout/DownloadCenter.svelte";
-import SharedFileCard from "../../src/components/chat/SharedFileCard.svelte";
+import SharedFileRow from "../../src/components/chat/SharedFileRow.svelte";
 import { downloads } from "../../src/lib/downloads/manager";
 
 const file = {
@@ -68,7 +68,7 @@ test("a shared file keeps receiving after its card and download dialog close, an
     "fetch",
     vi.fn().mockResolvedValue(new Response(body, { headers: { "Content-Length": "10" } })),
   );
-  const card = render(SharedFileCard, { file, sessionId: "session" });
+  const card = render(SharedFileRow, { file, sessionId: "session" });
   render(DownloadCenter);
   await fireEvent.click(screen.getByRole("button", { name: "Download report.txt" }));
   stream.enqueue(new TextEncoder().encode("first"));
@@ -114,7 +114,7 @@ test("a failed download stays in the dialog after leaving its card and leaves it
         ),
       ),
   );
-  const card = render(SharedFileCard, { file, sessionId: "session" });
+  const card = render(SharedFileRow, { file, sessionId: "session" });
   render(DownloadCenter);
   await fireEvent.click(screen.getByRole("button", { name: "Download report.txt" }));
   card.unmount();
@@ -135,7 +135,7 @@ test("a failed download stays in the dialog after leaving its card and leaves it
 
 test("a failed download can be dismissed from the dialog", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-  render(SharedFileCard, { file, sessionId: "session" });
+  render(SharedFileRow, { file, sessionId: "session" });
   render(DownloadCenter);
   await fireEvent.click(screen.getByRole("button", { name: "Download report.txt" }));
   await fireEvent.click(await screen.findByRole("button", { name: "Downloads", exact: true }));

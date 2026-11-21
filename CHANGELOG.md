@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Session chats use the same file bubbles as Bot chats, with inline image previews, download progress, cancellation, and retries. Session images can still be browsed together in the image viewer.
 - The homepage shows a Bot taking one request, splitting it across three agents, and reporting back when the work is done, in place of the section listing individual agent Sessions.
 - Messages from a Bot to its helpers no longer include the Bot Session ID.
 - Bot, memory retrieval, and dreaming Sessions no longer automatically load user skills. Ordinary helpers retain their existing skill loading.
