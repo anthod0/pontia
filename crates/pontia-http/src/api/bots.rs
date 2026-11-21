@@ -12,6 +12,7 @@ use axum::{
 use pontia_agent_control::{agent_clients::AgentClientService, client_contract::DetectionContext};
 use pontia_bot::{
     conversation::{ConversationUpdate, ReplyRequest},
+    messages::TodoAction,
     records::{BotConfiguration, CreateError},
 };
 use serde::Deserialize;
@@ -155,7 +156,25 @@ pub async fn todos(
     State(state): State<HttpState>,
     Path(bot_id): Path<String>,
 ) -> Result<Json<ApiResponse<Value>>, ApiError> {
-    Ok(ok(json!({"open": state.bots().open_todos(&bot_id).await?})))
+    Ok(ok(json!(state.bots().todos(&bot_id).await?)))
+}
+
+pub async fn resolve_todo(
+    State(state): State<HttpState>,
+    Path((bot_id, message_id)): Path<(String, String)>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    Ok(ok(
+        json!({"message": state.bots().change_todo(&bot_id, &message_id, TodoAction::Resolve).await?}),
+    ))
+}
+
+pub async fn reopen_todo(
+    State(state): State<HttpState>,
+    Path((bot_id, message_id)): Path<(String, String)>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    Ok(ok(
+        json!({"message": state.bots().change_todo(&bot_id, &message_id, TodoAction::Reopen).await?}),
+    ))
 }
 
 pub async fn message_context(

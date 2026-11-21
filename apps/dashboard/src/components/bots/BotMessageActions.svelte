@@ -4,9 +4,11 @@
   import { copyText } from '$lib/copyText'
   import { entryQuote, messageText, quoteSummary, type BotQuote } from '$lib/botQuote'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
+  import { Separator } from '$lib/components/ui/separator/index.js'
   import * as Sheet from '$lib/components/ui/sheet/index.js'
   import TreeStructureIcon from 'phosphor-svelte/lib/TreeStructureIcon'
   import QuotesIcon from 'phosphor-svelte/lib/QuotesIcon'
+  import CheckIcon from 'phosphor-svelte/lib/CheckIcon'
   import CopyIcon from 'phosphor-svelte/lib/CopyIcon'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import { downloads } from '$lib/downloads/manager'
@@ -14,10 +16,11 @@
   import { useDeviceRuntime } from '../../device/context'
   import type { BotEntry, SharedFile } from '../../api/types'
 
-  let { root, entry, onquote, oncontext }: {
+  let { root, entry, onquote, oncontext, onresolve }: {
     /** Element containing the feed rows; events are delegated from it. */
     root: HTMLElement | undefined
     entry: (id: string) => BotEntry | undefined
+    onresolve: (messageId: string) => void
     oncontext: (messageId: string) => void
     onquote: (quote: BotQuote) => void
   } = $props()
@@ -162,6 +165,11 @@
     oncontext(next.entry.id)
   }
 
+  function resolveTodo(next: Target) {
+    menuOpen = sheetOpen = false
+    onresolve(next.entry.id)
+  }
+
   function download(next: Target) {
     menuOpen = sheetOpen = false
     if (next.file && next.entry.kind === 'shared_files')
@@ -181,6 +189,10 @@
     if (target?.element.isConnected && target.element.tabIndex >= 0) target.element.focus()
   }
 
+  const openTodo = $derived.by(() => {
+    const row = target && entry(target.entry.id)
+    return row && 'content' in row && row.todo?.state === 'open'
+  })
   const isMessage = $derived(target !== null && 'content' in target.entry)
   const quoteLabel = $derived(target?.file ? (canPreviewImage(target.file) ? $t('bots.quoteImage') : $t('bots.quoteFile')) : $t('bots.quote'))
   // Touch: below the selection, clear of the system selection menu. Mouse: above it.
@@ -205,6 +217,10 @@
       {#if isMessage}
         <DropdownMenu.Item onSelect={() => void copy(current)}><CopyIcon />{$t('common.copy')}</DropdownMenu.Item>
         <DropdownMenu.Item onSelect={() => viewContext(current)}><TreeStructureIcon />{$t('bots.viewContext')}</DropdownMenu.Item>
+        {#if openTodo}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item onSelect={() => resolveTodo(current)}><CheckIcon />{$t('bots.markDone')}</DropdownMenu.Item>
+        {/if}
       {:else if current.file}
         <DropdownMenu.Item onSelect={() => download(current)}><DownloadSimpleIcon />{$t('files.download')}</DropdownMenu.Item>
       {/if}
@@ -230,6 +246,10 @@
         {#if isMessage}
           <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => void copy(current)}><CopyIcon class="size-5" />{$t('common.copy')}</button>
           <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => viewContext(current)}><TreeStructureIcon class="size-5" />{$t('bots.viewContext')}</button>
+          {#if openTodo}
+            <Separator class="mx-2 my-1 data-[orientation=horizontal]:w-auto" />
+            <button type="button" role="menuitem" class="flex items-center gap-3.5 rounded-xl px-3.5 py-3 text-base outline-none hover:bg-muted focus-visible:bg-muted" onclick={() => resolveTodo(current)}><CheckIcon class="size-5" />{$t('bots.markDone')}</button>
+          {/if}
         {/if}
       </div>
     {/if}

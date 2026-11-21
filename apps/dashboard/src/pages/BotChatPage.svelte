@@ -130,6 +130,21 @@
     return value.kind === 'message' && value.speaker === 'User' ? $t('bots.you') : timeline.bot?.name ?? ''
   }
 
+  async function changeTodo(id: string, action: 'resolve' | 'reopen') {
+    try {
+      const message = await device.api.changeBotTodo(botId, id, action)
+      timeline.message(message)
+      if (action === 'resolve' && message.todo?.state === 'done' && message.todo.by === 'user') {
+        toast.success($t('bots.markedDone'), { id: message.id, action: { label: $t('common.undo'), onClick: () => void changeTodo(id, 'reopen') } })
+      }
+    } catch (failure) {
+      toast.error(failure instanceof Error ? failure.message : String(failure))
+      timeline.refresh()
+    } finally {
+      panel?.refresh()
+    }
+  }
+
   async function retry(id: string) {
     retrying = [...retrying, id]
     actionError = ''
@@ -158,10 +173,10 @@
 {/snippet}
 
 {#if timeline.bot}
-  <BotChatPanel bind:this={panel} bot={timeline.bot} count={timeline.openTodoCount} onjump={jumpTo} onquote={addQuote} />
+  <BotChatPanel bind:this={panel} bot={timeline.bot} count={timeline.openTodoCount} onjump={jumpTo} onquote={addQuote} ontodochange={changeTodo} />
   <!-- The feed scrolls beneath the transparent top bar, like the Session chat page. -->
   <section class="mx-auto -mt-14 flex h-dvh max-w-3xl flex-col md:-mt-12" aria-label={timeline.bot.name}>
-    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} oncontext={id => panel?.viewContext(id)} onquote={quote => void addQuote(quote)} />
+    <BotMessageActions root={feedRoot} entry={id => timeline.entries.find(row => row.id === id)} bind:this={actions} onresolve={id => changeTodo(id, 'resolve')} oncontext={id => panel?.viewContext(id)} onquote={quote => void addQuote(quote)} />
     <BotMessageFeed bind:this={feed} bind:root={feedRoot} {timeline} {typing} highlighted={highlighted && timeline.entries.some(row => row.id === highlighted) ? highlighted : null}>
       {#snippet row(entry)}
         {#if 'content' in entry}
