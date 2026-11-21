@@ -1344,6 +1344,9 @@ mod retrieval;
 #[path = "conversation/dreaming.rs"]
 mod dreaming;
 
+#[path = "conversation/deletion.rs"]
+mod deletion;
+
 #[path = "conversation/generation.rs"]
 mod generation;
 

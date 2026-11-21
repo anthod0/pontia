@@ -72,6 +72,26 @@ pub async fn update(
     ))
 }
 
+pub async fn deletion_blockers(
+    State(state): State<HttpState>,
+    Path(bot_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    Ok(ok(json!(state.bots().deletion_blockers(&bot_id).await?)))
+}
+
+pub async fn delete(
+    State(state): State<HttpState>,
+    Path(bot_id): Path<String>,
+) -> Result<Json<ApiResponse<Value>>, ApiError> {
+    let service = state.bots().clone();
+    let id = bot_id.clone();
+    // Finish deletion even if the client disconnects mid-request.
+    tokio::spawn(async move { service.delete(&id).await })
+        .await
+        .map_err(|error| pontia_core::Error::Domain(error.to_string()))??;
+    Ok(ok(json!({"bot_id": bot_id})))
+}
+
 fn validate_client(state: &HttpState, request: &BotConfiguration) -> Result<(), ApiError> {
     if !state.bots().supports_bot_client(&request.client_type) {
         return Err(ApiError::invalid_request(

@@ -117,7 +117,13 @@ fn external_api_router(state: HttpState) -> Router {
         .route("/api/v1/bots/clients", get(api::bots::clients))
         .route(
             "/api/v1/bots/{bot_id}",
-            get(api::bots::chat).put(api::bots::update),
+            get(api::bots::chat)
+                .put(api::bots::update)
+                .delete(api::bots::delete),
+        )
+        .route(
+            "/api/v1/bots/{bot_id}/deletion-blockers",
+            get(api::bots::deletion_blockers),
         )
         .route(
             "/api/v1/bots/{bot_id}/messages",

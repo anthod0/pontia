@@ -35,6 +35,11 @@ export interface Bot extends BotConfiguration {
   bot_id: string;
 }
 
+export interface BotDeletionBlockers {
+  running: boolean;
+  helpers: SessionView[];
+}
+
 export type BotWorkStatus =
   | { kind: "processing" }
   | { kind: "working"; title: string }

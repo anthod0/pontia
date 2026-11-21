@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Bots can be deleted from the Dashboard: use **Delete Bot** at the bottom of the Bot settings, or in the top bar's **More** menu on phones. Deletion permanently removes the Bot's chat history, its links to helpers, notifications, and Workspaces, and its directory under `$PONTIA_HOME/bot`. Memories, `USER.md`, and Workspaces are kept. A Bot that is working or has open helpers cannot be deleted; the confirmation lists the open helpers to close first. Deleting the last Bot pauses dreaming until a new Bot is created.
 - `pontia remote edit` can switch Edge interactively while keeping the device identity and Dashboard URL. Each prompt defaults to the current value; unchanged settings leave the service running. Edge changes restart a running managed service and report when a manual restart is needed.
 
 ### Changed

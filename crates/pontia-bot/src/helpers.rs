@@ -395,18 +395,31 @@ impl HelperService {
             .ok_or_else(|| Error::NotFound(format!("Session {session_id} not found")))
     }
 
+    /// Helpers the Bot has not closed yet, including memory retrieval helpers.
     pub async fn list(&self, bot_id: &str) -> Result<Vec<SessionView>> {
-        let ids: Vec<String> = sqlx::query_scalar("SELECT session_id FROM bot_helpers WHERE bot_id = ? AND session_id IS NOT NULL ORDER BY session_id")
-            .bind(bot_id).fetch_all(&self.control.db()).await?;
-        let mut sessions = Vec::new();
-        for id in ids {
-            let session = self.require_helper(bot_id, &id).await?;
-            if session.state != "exited" {
-                sessions.push(session);
-            }
-        }
-        Ok(sessions)
+        open_sessions(&self.control, bot_id).await
     }
+}
+
+/// Helper Sessions of a Bot that have not exited.
+pub(crate) async fn open_sessions(
+    control: &AgentControl,
+    bot_id: &str,
+) -> Result<Vec<SessionView>> {
+    let ids: Vec<String> = sqlx::query_scalar("SELECT session_id FROM bot_helpers WHERE bot_id = ? AND session_id IS NOT NULL ORDER BY session_id")
+        .bind(bot_id).fetch_all(&control.db()).await?;
+    let mut sessions = Vec::new();
+    for id in ids {
+        let session = control
+            .queries()
+            .get_session(&id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("Session {id} not found")))?;
+        if session.state != "exited" {
+            sessions.push(session);
+        }
+    }
+    Ok(sessions)
 }
 
 pub(crate) async fn helper_bot(pool: &SqlitePool, session_id: &str) -> Result<Option<String>> {

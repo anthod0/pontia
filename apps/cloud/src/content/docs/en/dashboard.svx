@@ -82,6 +82,14 @@ Chat pages provide these shortcuts:
 | `Alt+?` | Show the shortcut reference |
 | `Ctrl+B` (`Cmd+B` on macOS) | Toggle the sidebar |
 
+## Delete a Bot
+
+Open the Bot's settings by clicking its name at the top of the chat, then choose **Delete Bot** at the bottom. On a phone, use **Delete Bot** in the top bar's **More** menu.
+
+Deleting permanently removes the Bot, its chat history, and its directory under `$PONTIA_HOME/bot`. It cannot be undone. Memories, `USER.md`, and Workspaces are shared by all Bots and are kept, as is the history of the Bot's helper Sessions.
+
+A Bot can be deleted only when it is not working and all of its helpers are closed. The confirmation lists any open helpers; ask the Bot to close them, or open each one and end it. You can delete the last Bot. Memory organization (dreaming) then pauses until you create a new Bot.
+
 ## Organize Sessions
 
 Use a Session's action menu to rename, pin, archive, or end it. The **Sessions** page separates active, archived, and pinned Sessions. Archiving removes a Session from the active list without deleting its recorded control state.

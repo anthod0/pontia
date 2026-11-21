@@ -82,6 +82,14 @@ As páginas de chat oferecem estes atalhos:
 | `Alt+?` | Mostrar a referência de atalhos |
 | `Ctrl+B` (`Cmd+B` no macOS) | Mostrar ou ocultar a barra lateral |
 
+## Excluir um Bot
+
+Clique no nome do Bot no topo da conversa para abrir as configurações e escolha **Delete Bot** na parte de baixo. No celular, use **Delete Bot** no menu **More** da barra superior.
+
+A exclusão remove permanentemente o Bot, o histórico de conversa e o diretório dele em `$PONTIA_HOME/bot`, e não pode ser desfeita. As memórias, o `USER.md` e as Workspaces são compartilhados por todos os Bots e são mantidos, assim como o histórico das Sessions de helper do Bot.
+
+Só é possível excluir um Bot quando ele não está trabalhando e todos os helpers dele estão fechados. A confirmação lista os helpers ainda abertos; peça ao Bot para fechá-los ou abra cada um e encerre-o. O último Bot também pode ser excluído. Nesse caso, a organização de memórias (dreaming) fica pausada até você criar um novo Bot.
+
 ## Organizar Sessions
 
 Use o menu de ações de uma Session para renomeá-la, fixá-la, arquivá-la ou encerrá-la. A página **Sessions** separa as Sessions ativas, arquivadas e fixadas. Arquivar remove uma Session da lista de ativas sem excluir o estado de controle registrado.
