@@ -8,7 +8,7 @@
   import type { SharedFile } from '../../api/types'
   import { useFilePreview } from '../chat/filePreviewContext'
   import SharedImageViewer from '../chat/SharedImageViewer.svelte'
-  import { fileKind } from './fileKind'
+  import { fileKind } from '../chat/fileKind'
   import DownloadSimpleIcon from 'phosphor-svelte/lib/DownloadSimpleIcon'
   import XIcon from 'phosphor-svelte/lib/XIcon'
   import ArrowClockwiseIcon from 'phosphor-svelte/lib/ArrowClockwiseIcon'

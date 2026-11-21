@@ -12,6 +12,7 @@
   import { useDeviceRuntime } from '../device/context'
   import { openBotChatStream } from '../services/botChatStream'
   import BotAvatar from '../components/bots/BotAvatar.svelte'
+  import BotChatSkeleton from '../components/bots/BotChatSkeleton.svelte'
 
   let { botId }: { botId: string } = $props()
   const device = useDeviceRuntime()
@@ -150,5 +151,5 @@
 {:else if timeline.refreshError}
   {@render refreshFailure()}
 {:else}
-  <p role="status" class="mx-auto max-w-3xl text-sm text-muted-foreground">{$t('common.loading')}</p>
+  <BotChatSkeleton />
 {/if}

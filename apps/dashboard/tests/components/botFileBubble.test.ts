@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import BotFileBubble from "../../src/components/bots/BotFileBubble.svelte";
+import BotFilePreviewHarness from "./BotFilePreviewHarness.svelte";
 import { downloads } from "../../src/lib/downloads/manager";
 import { testDevice } from "../deviceFixture";
 import { ApiError } from "../../src/api/errors";
@@ -27,7 +28,6 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const task of get(downloads)) downloads.cancel(task.id);
-  downloads.clearFinished();
   unregister();
   vi.restoreAllMocks();
 });
@@ -53,7 +53,7 @@ test("shows reception progress with a cancel button while downloading", async ()
     expect(screen.getByRole("status")).toHaveTextContent("Receiving… 1 MiB / 3 MiB"),
   );
   await fireEvent.click(screen.getByRole("button", { name: `Cancel download of ${file.name}` }));
-  await waitFor(() => expect(get(downloads)[0].status).toBe("cancelled"));
+  await waitFor(() => expect(get(downloads)).toEqual([]));
   expect(screen.getByRole("button", { name: `Download ${file.name}` })).toBeInTheDocument();
 });
 
@@ -99,4 +99,23 @@ test("falls back to the file bubble when a shared image is gone", async () => {
   expect(screen.queryByRole("img", { name: "gone.png" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
   vi.unstubAllGlobals();
+});
+
+test.each(["release-bundle-v1.8.0.zip", "demo.mp4", "paper.pdf"])(
+  "%s offers only a download, without a preview",
+  (name) => {
+    render(BotFilePreviewHarness, { file: { ...file, name, path: `/work/${name}` } });
+    expect(screen.queryByRole("button", { name: `Preview ${name}` })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Download ${name}` })).toBeInTheDocument();
+  },
+);
+
+test.each(["notes.md", "Makefile"])("%s opens in the preview panel", async (name) => {
+  const read = vi
+    .spyOn(testDevice.fileApi, "pathFileContent")
+    .mockResolvedValue(new Response("plain text"));
+  render(BotFilePreviewHarness, { file: { ...file, name, path: `/work/${name}` } });
+  await fireEvent.click(screen.getByRole("button", { name: `Preview ${name}` }));
+  await within(screen.getByRole("complementary")).findByText("plain text");
+  expect(read).toHaveBeenCalledWith("main", `/work/${name}`, expect.any(AbortSignal));
 });

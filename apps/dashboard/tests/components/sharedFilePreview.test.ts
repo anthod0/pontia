@@ -37,3 +37,22 @@ test("previews a shared text file in the file preview panel", async () => {
   expect(request.pathname).toBe("/api/v1/sessions/session-1/files/content");
   expect(request.searchParams.get("path")).toBe("/tmp/out/notes.md");
 });
+
+test("lists a shared file the preview panel cannot show without a preview action", () => {
+  render(SharedFilePreviewHarness, {
+    sharedFiles: [
+      {
+        file_id: "file-1",
+        turn_id: "t1",
+        name: "demo.mp4",
+        path: "/tmp/out/demo.mp4",
+        size: 8,
+        media_type: "video/mp4",
+        created_at: "2026-06-11T00:00:05Z",
+      },
+    ],
+  });
+  expect(screen.getByText("demo.mp4")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Preview demo.mp4" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Download demo.mp4" })).toBeInTheDocument();
+});

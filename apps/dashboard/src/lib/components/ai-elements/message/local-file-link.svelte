@@ -11,6 +11,7 @@
   import { ApiError } from '../../../../api/errors'
   import { useDeviceRuntime } from '../../../../device/context'
   import { useFilePreview } from '../../../../components/chat/filePreviewContext'
+  import { canPreviewText } from '../../../../components/chat/fileKind'
   import ImageLightbox from '../../../../components/chat/ImageLightbox.svelte'
 
   type ImageFailure = { kind: 'missing' | 'notImage' } | { kind: 'failed'; message: string }
@@ -27,6 +28,8 @@
   const preview = useFilePreview()
   const name = $derived(path.slice(path.lastIndexOf('/') + 1))
   const image = $derived(isImagePath(path))
+  // Files the preview panel cannot show, such as videos and archives, are only downloaded.
+  const previewable = $derived(image || canPreviewText(name))
   let enlarged = $state(false)
   let imageUrl = $state<string | null>(null)
   let failure = $state<ImageFailure | null>(null)
@@ -43,7 +46,12 @@
 
   function open() {
     if (image) showImage()
-    else preview.open({ device, sessionId, path, anchor })
+    else if (previewable) preview.open({ device, sessionId, path, anchor })
+    else download()
+  }
+
+  function download() {
+    downloads.start(device.id, sessionId, { kind: 'path', path }, name)
   }
 
   function showImage() {
@@ -73,12 +81,14 @@
   variant="link"
   class="inline h-auto rounded-sm p-0 align-baseline font-normal whitespace-normal underline"
   title={title || path}
-  aria-label={$t(image ? 'files.enlargeNamed' : 'files.previewNamed', { name })}
+  aria-label={$t(image ? 'files.enlargeNamed' : previewable ? 'files.previewNamed' : 'files.downloadNamed', { name })}
   onclick={open}
 >
   {@render children?.()}
   {#if image}
     <ImageIcon class="ml-1 inline-block size-3.5 align-[-0.125em]" aria-hidden="true" />
+  {:else if !previewable}
+    <DownloadSimpleIcon class="ml-1 inline-block size-3.5 align-[-0.125em]" aria-hidden="true" />
   {:else}
     <FileTextIcon class="ml-1 inline-block size-3.5 align-[-0.125em]" aria-hidden="true" />
   {/if}
@@ -91,7 +101,7 @@
         {failure.kind === 'failed' ? failure.message : $t(failure.kind === 'missing' ? 'files.missing' : 'files.previewNotImage')}
       </p>
       {#if failure.kind !== 'missing'}
-        <Button size="sm" variant="secondary" onclick={() => downloads.start(device.id, sessionId, { kind: 'path', path }, name)}>
+        <Button size="sm" variant="secondary" onclick={download}>
           <DownloadSimpleIcon data-icon="inline-start" />{$t('files.download')}
         </Button>
       {/if}

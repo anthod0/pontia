@@ -7,6 +7,7 @@
   import { useDeviceRuntime } from '../device/context'
   import BotSettingsForm from '../components/bots/BotSettingsForm.svelte'
   import PontiaMascot from '../components/chat/PontiaMascot.svelte'
+  import BotChatSkeleton from '../components/bots/BotChatSkeleton.svelte'
 
   let { routeScope }: { routeScope?: string } = $props()
   const device = useDeviceRuntime()
@@ -21,12 +22,14 @@
   })
 </script>
 
+{#if !bots.isError && (bots.isPending || bots.data?.length)}
+  <!-- The page opens the first Bot's chat, so it loads in that layout. -->
+  <BotChatSkeleton />
+{:else}
 <section class="mx-auto flex min-h-[calc(100svh-5.5rem)] max-w-md flex-col justify-center gap-6 py-8 md:min-h-[calc(100svh-6.5rem)]">
   {#if bots.isError}
     <p role="alert" class="text-sm text-destructive">{bots.error.message}</p>
     <Button variant="outline" onclick={() => void bots.refetch()}>{$t('common.retry')}</Button>
-  {:else if bots.isPending || bots.data?.length}
-    <p role="status" class="text-sm text-muted-foreground">{$t('common.loading')}</p>
   {:else}
     <div class="flex items-center gap-3">
       <PontiaMascot class="size-12 shrink-0" />
@@ -45,3 +48,4 @@
     </p>
   {/if}
 </section>
+{/if}

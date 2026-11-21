@@ -48,9 +48,9 @@ O Inbox acompanha as mensagens enviadas que aguardam entrega ou que estão na fi
 
 ## Arquivos compartilhados
 
-Um agente pode compartilhar um arquivo da Session dele executando `pontia send-file PATH`. O arquivo aparece como um card no fim do Turn, onde você pode visualizá-lo ou baixá-lo. Abra **Shared files** no menu do compositor para listar todos os arquivos compartilhados na Session. O Pontia lê o arquivo do dispositivo no momento do download, então um arquivo que foi movido ou excluído deixa de estar disponível.
+Um agente pode compartilhar um arquivo da Session dele executando `pontia send-file PATH`. O arquivo aparece como um card no fim do Turn, onde você pode baixá-lo. Imagens e arquivos de texto e código também podem ser visualizados; outros arquivos, como vídeos, PDFs e arquivos compactados, só podem ser baixados. Abra **Shared files** no menu do compositor para listar todos os arquivos compartilhados na Session. O Pontia lê o arquivo do dispositivo no momento do download, então um arquivo que foi movido ou excluído deixa de estar disponível.
 
-Quando um Bot compartilhar um arquivo, ele aparece na conversa com o Bot com o tipo e o tamanho. Imagens aparecem na própria conversa e abrem em tamanho real ao clicar; clique em um arquivo de texto para visualizá-lo. Clique no botão de download para salvar qualquer arquivo.
+Quando um Bot compartilhar um arquivo, ele aparece na conversa com o Bot com o tipo e o tamanho. Imagens aparecem na própria conversa e abrem em tamanho real ao clicar; clique em um arquivo de texto ou código para visualizá-lo. Clique no botão de download para salvar qualquer arquivo.
 
 ## Comandos do chat
 
