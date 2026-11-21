@@ -2,6 +2,9 @@
   import { onMount, type Snippet } from 'svelte';
   import { currentLocale, updateBrowserLanguage } from '$lib/i18n';
   import { cleanupDownloads } from '$lib/downloads/save';
+  import { openDashboardTab } from '$lib/lastPage';
+
+  openDashboardTab();
 
   onMount(() => { void cleanupDownloads().catch(console.error); });
   import '../app.css';

@@ -2,6 +2,7 @@
   import { createQuery } from '@tanstack/svelte-query'
   import { t } from '$lib/i18n'
   import { navigate } from '$lib/navigation'
+  import { forgetLastPage } from '$lib/lastPage'
   import { sessionChatTitle } from '$lib/session-chat/sessionChat'
   import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
@@ -44,6 +45,7 @@
     }
     device.queryClient.setQueryData<Bot[]>(['bots'], (current) => current?.filter((item) => item.bot_id !== id))
     device.queryClient.removeQueries({ queryKey: ['bot-status', id] })
+    forgetLastPage(device.id, { kind: 'bot', id })
     void device.queryClient.invalidateQueries({ queryKey: ['bots'] })
     done()
     // The Bot entry opens the first remaining Bot, or the first-Bot setup when none is left.
