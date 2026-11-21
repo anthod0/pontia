@@ -15,7 +15,7 @@ pub(super) enum BotTool {
     /// Ask a Bot to clarify ambiguous memories (dreaming)
     #[command(subcommand)]
     Dreaming(DreamingCommand),
-    /// Create, message, inspect, or close helpers; helpers use reply to report to their Bot
+    /// Create, message, inspect, compact, or close helpers; helpers use reply to report to their Bot
     #[command(subcommand)]
     Helper(HelperCommand),
     /// Read Session messages without changing execution state
@@ -276,6 +276,14 @@ pub(super) enum HelperCommand {
     },
     /// Read status and paginated messages without affecting execution
     Check(SessionMessages),
+    /// Start context compaction for one of your idle or interrupted helpers
+    #[command(
+        after_help = "Requires a client with manual compaction available. Wait for a working helper to become idle.\nAn accepted result and operation ID mean compaction was requested, not completed."
+    )]
+    Compact {
+        #[arg(long)]
+        session_id: String,
+    },
     /// Exit a helper Session and release its runtime resources, retaining history
     Close {
         #[arg(long)]

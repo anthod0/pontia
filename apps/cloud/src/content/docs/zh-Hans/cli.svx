@@ -32,6 +32,12 @@
 
 停止 `pontiad` 会停止观察、输入接收和 Workflow 调度。Agent Client 会单独管理其原生对话的生命周期。
 
+## Bot 助手上下文压缩
+
+在当前 Bot Session 中运行 `pontia bot helper compact --session-id ID`，可请求压缩该 Bot 所关联助手的上下文。助手必须处于 idle 或 interrupted 状态，且客户端当前具备手动压缩能力。助手正在工作时，请等它空闲后再试。
+
+`pontia bot helper check --session-id ID` 显示上下文用量及 `capabilities.manual_compaction`。两个命令均可加 `--json` 输出 JSON。压缩请求成功时返回 `accepted: true` 和 `operation_id`，仅表示请求已接受，不代表压缩完成。如果结果未知，请先检查助手再重试，因为压缩可能已经开始。
+
 ## Shell 补全
 
 `pontia completions` 支持 `bash`、`zsh`、`fish`、`elvish` 和 `powershell`。将对应 shell 的配置加入其配置文件，然后打开新终端：

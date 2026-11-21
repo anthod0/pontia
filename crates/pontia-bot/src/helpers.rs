@@ -50,6 +50,7 @@ pub enum HelperCommand {
     Send { session_id: String, message: String },
     Reply { message: String },
     Check(SessionMessagesQuery),
+    Compact { session_id: String },
     Close { session_id: String },
 }
 
@@ -191,6 +192,15 @@ impl HelperService {
                         }
                     }
                 }
+            }
+            HelperCommand::Compact { session_id } => {
+                self.require_helper(&bot.bot_id, &session_id).await?;
+                let accepted = self
+                    .control
+                    .session_commands()
+                    .compact_session(&session_id)
+                    .await?;
+                Ok(json!(accepted))
             }
             HelperCommand::Close { session_id } => {
                 self.require_helper(&bot.bot_id, &session_id).await?;

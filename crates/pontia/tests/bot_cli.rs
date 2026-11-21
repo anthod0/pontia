@@ -268,6 +268,7 @@ async fn named_arguments_reject_incomplete_or_invalid_operations_before_sending_
             "x",
         ],
         vec!["helper", "retrieve", "--message", "question"],
+        vec!["helper", "compact"],
         vec!["memory", "retrieve"],
         vec!["memory", "search"],
         vec!["memory", "archive", "--id", "x"],
@@ -291,9 +292,9 @@ async fn named_arguments_reject_incomplete_or_invalid_operations_before_sending_
 #[tokio::test]
 async fn helper_commands_preserve_target_source_and_message_arguments() {
     let mut f = Fixture::new("helper", json!({"delivery":{"status":"accepted"}})).await;
-    for action in ["create", "send", "reply", "list", "close"] {
+    for action in ["create", "send", "reply", "list", "compact", "close"] {
         let mut args = vec!["helper", action, "--json"];
-        if matches!(action, "send" | "close") {
+        if matches!(action, "send" | "compact" | "close") {
             args.extend(["--session-id", "helper-session"]);
         }
         if matches!(action, "create" | "send" | "reply") {
@@ -313,7 +314,7 @@ async fn helper_commands_preserve_target_source_and_message_arguments() {
         let request = f.requests.recv().await.unwrap();
         assert_eq!(request["session_id"], "caller-session");
         assert_eq!(request["command"]["action"], action);
-        if matches!(action, "send" | "close") {
+        if matches!(action, "send" | "compact" | "close") {
             assert_eq!(request["command"]["input"]["session_id"], "helper-session");
         }
         if matches!(action, "create" | "send" | "reply") {

@@ -32,6 +32,12 @@ See [Initialization](/docs/initialization) for interactive setup and the equival
 
 Stopping `pontiad` stops observation, input reception, and Workflow scheduling. Agent Clients manage the lifecycle of their native conversations separately.
 
+## Bot helper compaction
+
+Run `pontia bot helper compact --session-id ID` from the current Bot Session to request context compaction for one of its helpers. The helper must be idle or interrupted, with manual compaction available from its client. Wait for a working helper to become idle before retrying.
+
+`pontia bot helper check --session-id ID` shows context usage and `capabilities.manual_compaction`. Add `--json` to either command for JSON output. A successful compact result contains `accepted: true` and an `operation_id`; it confirms the request, not completion. If the result is unknown, inspect the helper before retrying because compaction may already have started.
+
 ## Shell completion
 
 `pontia completions` supports `bash`, `zsh`, `fish`, `elvish`, and `powershell`. Add the line for your shell to its configuration file, then open a new terminal:
