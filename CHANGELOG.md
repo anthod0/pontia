@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-11-21
+
 ### Added
 
 - Bot chat messages and shared files have a menu: right-click on a computer, press and hold on a phone, or select part of a message. **Quote** adds the message, selection, or file above the composer, and **Copy** copies the message or selection. The Bot receives the quote as a `<user_quote>` element before the message text, with the full quoted text. Clicking a quote in a sent message scrolls back to the original, loading older history when needed.
