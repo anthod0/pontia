@@ -36,6 +36,7 @@ function page(id: string, entries: BotEntry[], before: string | null = null): Bo
     bot: bot(id),
     status: { kind: "idle" },
     file_link_session: null,
+    open_todo_count: 0,
     notice_session_id: "s",
     generation_notice: null,
     next_before: before,

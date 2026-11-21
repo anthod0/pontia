@@ -4,7 +4,12 @@ use pontia_agent_control::{ControlQueryService, LaunchableAgentProfile};
 use pontia_core::domain::SessionState;
 use sqlx::SqlitePool;
 
-use crate::{identity::BotRole, memory::Memory, messages::BotMessage, user::UserService};
+use crate::{
+    identity::BotRole,
+    memory::Memory,
+    messages::{BotMessage, MESSAGE_COLUMNS},
+    user::UserService,
+};
 
 pub use render::estimate_tokens;
 
@@ -14,6 +19,14 @@ struct HistoryMessage {
     message: BotMessage,
     #[sqlx(json)]
     related_to: Vec<String>,
+}
+
+#[derive(sqlx::FromRow)]
+struct OpenTodo {
+    id: String,
+    created_at: String,
+    summary: String,
+    total: i64,
 }
 
 /// Trusted Bot associations and Agent Control state, supplied by helper orchestration.
@@ -103,16 +116,21 @@ impl HandoffService {
         .fetch_all(&self.pool)
         .await?;
         let messages: Vec<HistoryMessage> = sqlx::query_as(
-            "SELECT m.*, (SELECT json_group_array(target_id ORDER BY target_id) FROM bot_message_links
+            &format!("SELECT {MESSAGE_COLUMNS}, (SELECT json_group_array(target_id ORDER BY target_id) FROM bot_message_links
                             WHERE m.kind = 'bot_reply' AND message_id = m.id) AS related_to
              FROM bot_messages m WHERE bot_id = ?
              AND id NOT IN (SELECT value FROM json_each(?))
-             ORDER BY created_at DESC, id DESC LIMIT 60",
+             ORDER BY created_at DESC, id DESC LIMIT 60"),
         )
         .bind(bot_id)
         .bind(serde_json::json!(pending_message_ids).to_string())
         .fetch_all(&self.pool)
         .await?;
+        let todos: Vec<OpenTodo> = sqlx::query_as(
+            "SELECT m.id, m.created_at, substr(m.content, 1, 160) AS summary, count(*) OVER () AS total
+             FROM bot_messages m JOIN bot_todos t ON t.message_id = m.id
+             WHERE m.bot_id = ? AND t.state = 'open' ORDER BY timeline_ms DESC, m.id DESC LIMIT 20",
+        ).bind(bot_id).fetch_all(&self.pool).await?;
         let mut helpers: Vec<_> = helpers
             .iter()
             .filter(|helper| {
@@ -131,6 +149,7 @@ impl HandoffService {
             profiles,
             &helpers,
             &messages,
+            &todos,
         ))
     }
 }

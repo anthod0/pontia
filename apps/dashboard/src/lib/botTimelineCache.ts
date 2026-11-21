@@ -11,6 +11,7 @@ export interface CachedBotTimeline {
   botId: string;
   bot: Bot;
   fileLinkSession: BotMessagePage["file_link_session"];
+  openTodoCount?: number;
   entries: BotEntry[];
   cachedAt: number;
 }

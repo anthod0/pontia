@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Bots can mark replies as todos and close them with a follow-up message. Dashboard lists open todos with actions to quote a reply or view its context.
+
 - Bot chat messages now have a Context view for following quoted messages and replies linked with `pontia bot send-to-user --related-to ID`.
 
 - Dashboard shows context window usage for ACP Sessions when the Agent reports it.

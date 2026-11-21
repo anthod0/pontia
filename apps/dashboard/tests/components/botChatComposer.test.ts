@@ -26,6 +26,7 @@ async function openChat() {
     entries: [],
     next_before: null,
     file_link_session: null,
+    open_todo_count: 0,
     notice_session_id: null,
     generation_notice: null,
     status: { kind: "idle" },

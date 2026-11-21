@@ -137,6 +137,7 @@ fn external_api_router(state: HttpState) -> Router {
             "/api/v1/bots/{bot_id}/messages/{message_id}/retry",
             post(api::bots::retry),
         )
+        .route("/api/v1/bots/{bot_id}/todos", get(api::bots::todos))
         .route("/api/v1/bots/{bot_id}/stream", get(api::bots::stream))
         .route("/api/v1/uploads", post(api::create_upload))
         .route(

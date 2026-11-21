@@ -120,6 +120,10 @@ export function createApi(device: DeviceRuntime) {
     return request(`${botPath(id)}/messages?${query}`, { signal });
   }
 
+  function getBotTodos(id: string, signal?: AbortSignal): Promise<{ open: BotMessage[] }> {
+    return request(`${botPath(id)}/todos`, { signal });
+  }
+
   function getBotMessageContext(
     id: string,
     messageId: string,
@@ -913,6 +917,7 @@ export function createApi(device: DeviceRuntime) {
     listAgentClientModels,
     getBotMessages,
     getBotMessageContext,
+    getBotTodos,
     saveBot,
     getBotDeletionBlockers,
     deleteBot,

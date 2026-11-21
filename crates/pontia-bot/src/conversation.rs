@@ -133,6 +133,16 @@ pub struct Reply {
     pub message: String,
     #[serde(default)]
     pub related_to: Vec<String>,
+    #[serde(default)]
+    pub todo: bool,
+    #[serde(default)]
+    pub resolve_todos: Vec<String>,
+}
+
+pub struct SentReply {
+    pub message: BotMessage,
+    pub resolved: Vec<String>,
+    pub already_resolved: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -357,6 +367,11 @@ impl ConversationService {
     pub async fn send(&self, bot_id: &str, content: &str) -> Result<BotMessage> {
         self.start_delivery(bot_id, Input::New(content.to_owned()))
             .await
+    }
+
+    pub async fn open_todos(&self, bot_id: &str) -> Result<Vec<BotMessage>> {
+        self.records.get(bot_id).await?;
+        self.messages.open_todos(bot_id).await
     }
 
     pub async fn message_context(
@@ -621,7 +636,7 @@ impl ConversationService {
             })
     }
 
-    pub async fn send_to_user(&self, request: ReplyRequest) -> Result<BotMessage> {
+    pub async fn send_to_user(&self, request: ReplyRequest) -> Result<SentReply> {
         let bot = self
             .bot_for_session(&request.session_id)
             .await?
@@ -636,16 +651,11 @@ impl ConversationService {
         let _guard = activity.reply.lock().await;
         activity.notify(ConversationUpdate::Typing);
         let mut progress = ReplyInProgress(&activity, None);
-        let message = self
-            .messages
-            .reply(
-                &bot.bot_id,
-                &request.input.message,
-                &request.input.related_to,
-            )
-            .await?;
-        progress.1 = Some(message.clone());
-        Ok(message)
+        let sent = self.messages.reply(&bot.bot_id, &request.input).await?;
+        if !request.input.todo && sent.resolved.is_empty() {
+            progress.1 = Some(sent.message.clone());
+        }
+        Ok(sent)
     }
 }
 

@@ -1062,6 +1062,7 @@ test("sidebar refreshes every Bot status from live updates without opening its c
         entries: [],
         next_before: null,
         generation_notice: null,
+        open_todo_count: 0,
         notice_session_id: null,
         file_link_session: null,
       }) satisfies BotMessagePage,

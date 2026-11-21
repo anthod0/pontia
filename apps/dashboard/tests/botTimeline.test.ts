@@ -29,6 +29,7 @@ function page(entries: BotEntry[], before: string | null, session = "s"): BotMes
     },
     status: { kind: "idle" },
     file_link_session: null,
+    open_todo_count: 0,
     notice_session_id: session,
     generation_notice: null,
     next_before: before,

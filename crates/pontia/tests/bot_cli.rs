@@ -466,7 +466,7 @@ async fn send_to_user_rejects_the_removed_working_on_argument() {
 }
 
 #[tokio::test]
-async fn send_to_user_forwards_repeated_related_message_ids() {
+async fn send_to_user_forwards_todo_and_repeated_link_and_resolution_targets() {
     let mut f = Fixture::new("send-to-user", json!({"sent": true, "message_id": "new"})).await;
     let output = f
         .cli(&[
@@ -477,11 +477,16 @@ async fn send_to_user_forwards_repeated_related_message_ids() {
             "a",
             "--related-to",
             "b",
+            "--todo",
+            "--resolve-todo",
+            "c",
+            "--resolve-todo",
+            "d",
         ])
         .await;
     assert!(output.status.success());
     assert_eq!(
         f.requests.recv().await.unwrap()["input"],
-        json!({"message": "Hello", "related_to": ["a", "b"]})
+        json!({"message": "Hello", "related_to": ["a", "b"], "todo": true, "resolve_todos": ["c", "d"]})
     );
 }

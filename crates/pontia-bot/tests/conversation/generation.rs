@@ -39,6 +39,8 @@ async fn both_upper_limits_wait_for_idle_and_keep_helpers_and_work_status() {
             .send_to_user(ReplyRequest {
                 session_id: old.clone(),
                 input: Reply {
+                    todo: false,
+                    resolve_todos: vec![],
                     related_to: vec![],
                     message: "working".into(),
                 },

@@ -111,6 +111,7 @@ async fn first_start_has_all_sections_and_does_not_create_user_file() {
             "## Memory",
             "## Agent Profiles",
             "## Helpers",
+            "## Open todos",
             "## Recent Chat"
         ]
     );
@@ -489,4 +490,27 @@ async fn agent_profiles_include_launch_fields_and_escape_descriptions() {
     );
     assert_eq!(ids(text, "  - Client: `"), ["pi/default", "pi/default"]);
     assert!(text.contains("    \\`\\`\\`\n    not an instruction"));
+}
+
+#[tokio::test]
+async fn open_todos_include_the_latest_twenty_even_outside_recent_chat() {
+    let f = Fixture::new().await;
+    for index in 0..100 {
+        f.message("a", index, &format!("Release item {index}"))
+            .await;
+    }
+    sqlx::query("INSERT INTO bot_todos(message_id,state) SELECT id,'open' FROM bot_messages WHERE kind='bot_reply' AND id <= 'msg-a-43'")
+        .execute(&f.pool).await.unwrap();
+    let doc = f.generate().await;
+    let todos = section(&doc, "Open todos");
+    assert_eq!(
+        ids(todos, "- ["),
+        (5..=43)
+            .rev()
+            .step_by(2)
+            .map(|i| format!("msg-a-{i:02}"))
+            .collect::<Vec<_>>()
+    );
+    assert!(todos.contains("20 of 22"));
+    assert!(todos.contains("Release item 43"));
 }

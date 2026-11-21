@@ -2,6 +2,26 @@ use pontia_agent_control::queries::TimePage;
 use pontia_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
+use std::collections::BTreeSet;
+
+use crate::conversation::{Reply, SentReply};
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum Todo {
+    Open,
+    Done {
+        by: String,
+        at: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message_id: Option<String>,
+    },
+}
+
+pub(crate) const MESSAGE_COLUMNS: &str = "m.*, (
+    SELECT json_object('state', state, 'by', resolved_by, 'at', resolved_at,
+                       'message_id', resolved_message_id)
+    FROM bot_todos WHERE message_id = m.id) AS todo";
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, sqlx::Type, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -27,6 +47,8 @@ pub struct BotMessage {
     pub content: String,
     pub created_at: String,
     pub status: MessageStatus,
+    #[sqlx(default, json(nullable))]
+    pub todo: Option<Todo>,
 }
 
 #[derive(Serialize)]
@@ -72,37 +94,92 @@ impl MessageService {
         Ok(message)
     }
 
-    pub(crate) async fn reply(
-        &self,
-        bot_id: &str,
-        content: &str,
-        related_to: &[String],
-    ) -> Result<BotMessage> {
-        let mut tx = self.pool.begin().await?;
-        if related_to.len() > 5 {
+    pub(crate) async fn reply(&self, bot_id: &str, reply: &Reply) -> Result<SentReply> {
+        if reply.related_to.len() > 5 {
             return Err(Error::Domain(
                 "at most five related messages are allowed".into(),
             ));
         }
-        let message = append_message(&mut *tx, bot_id, MessageKind::BotReply, content).await?;
-        for target in related_to.iter().collect::<std::collections::BTreeSet<_>>() {
+        let mut tx = self.pool.begin().await?;
+        let mut message =
+            append_message(&mut *tx, bot_id, MessageKind::BotReply, &reply.message).await?;
+        for target in reply
+            .related_to
+            .iter()
+            .chain(&reply.resolve_todos)
+            .collect::<BTreeSet<_>>()
+        {
             if !link_message(&mut tx, &message, target).await? {
                 return Err(Error::Domain(format!(
                     "related message {target} does not exist in this Bot chat"
                 )));
             }
         }
+        let mut resolved = Vec::new();
+        let mut already_resolved = Vec::new();
+        for target in reply.resolve_todos.iter().collect::<BTreeSet<_>>() {
+            let updated = sqlx::query(
+                "UPDATE bot_todos SET state = 'done', resolved_by = 'bot',
+                    resolved_message_id = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                WHERE message_id = ? AND state = 'open'",
+            )
+            .bind(&message.id)
+            .bind(target)
+            .execute(&mut *tx)
+            .await?;
+            if updated.rows_affected() == 1 {
+                resolved.push(target.clone());
+            } else if sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM bot_todos WHERE message_id = ? AND resolved_by = 'user')"
+            ).bind(target).fetch_one(&mut *tx).await? {
+                already_resolved.push(target.clone());
+            } else {
+                return Err(Error::Domain(format!("message {target} is not an open todo")));
+            }
+        }
+        if reply.todo {
+            sqlx::query("INSERT INTO bot_todos(message_id, state) VALUES (?, 'open')")
+                .bind(&message.id)
+                .execute(&mut *tx)
+                .await?;
+            message.todo = Some(Todo::Open);
+        }
         sqlx::query("UPDATE bots SET awaiting_reply = 0 WHERE bot_id = ?")
             .bind(bot_id)
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;
-        Ok(message)
+        Ok(SentReply {
+            message,
+            resolved,
+            already_resolved,
+        })
+    }
+
+    pub async fn open_todos(&self, bot_id: &str) -> Result<Vec<BotMessage>> {
+        Ok(sqlx::query_as(
+            "SELECT m.*, '{\"state\":\"open\"}' AS todo FROM bot_messages m
+            JOIN bot_todos t ON t.message_id = m.id WHERE m.bot_id = ? AND t.state = 'open'
+            ORDER BY timeline_ms DESC, id DESC",
+        )
+        .bind(bot_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub(crate) async fn open_todo_count(&self, bot_id: &str) -> Result<i64> {
+        Ok(sqlx::query_scalar(
+            "SELECT count(*) FROM bot_todos t JOIN bot_messages m ON m.id = t.message_id
+            WHERE m.bot_id = ? AND t.state = 'open'",
+        )
+        .bind(bot_id)
+        .fetch_one(&self.pool)
+        .await?)
     }
 
     pub async fn context(&self, bot_id: &str, id: &str) -> Result<MessageContext> {
         let mut rows: Vec<TimedMessage> = sqlx::query_as(
-            "WITH RECURSIVE
+            &format!("WITH RECURSIVE
                 selected AS (SELECT id, timeline_ms FROM bot_messages WHERE bot_id = ? AND id = ?),
                 ancestors(id) AS (
                     SELECT id FROM selected UNION
@@ -112,9 +189,9 @@ impl MessageService {
                     SELECT id FROM selected UNION
                     SELECT message_id FROM bot_message_links JOIN descendants ON target_id = descendants.id
                 )
-             SELECT m.* FROM bot_messages m CROSS JOIN selected s
+             SELECT {MESSAGE_COLUMNS} FROM bot_messages m CROSS JOIN selected s
              WHERE m.id IN (SELECT id FROM ancestors UNION SELECT id FROM descendants)
-             ORDER BY m.id = s.id DESC, abs(m.timeline_ms - s.timeline_ms), m.id DESC LIMIT 51",
+             ORDER BY m.id = s.id DESC, abs(m.timeline_ms - s.timeline_ms), m.id DESC LIMIT 51"),
         ).bind(bot_id).bind(id).fetch_all(&self.pool).await?;
         if rows.is_empty() {
             return Err(Error::NotFound(format!("Bot message {id} not found")));
@@ -129,12 +206,12 @@ impl MessageService {
     }
 
     pub async fn list(&self, bot_id: &str) -> Result<Vec<BotMessage>> {
-        Ok(
-            sqlx::query_as("SELECT * FROM bot_messages WHERE bot_id = ? ORDER BY created_at, id")
-                .bind(bot_id)
-                .fetch_all(&self.pool)
-                .await?,
-        )
+        Ok(sqlx::query_as(&format!(
+            "SELECT {MESSAGE_COLUMNS} FROM bot_messages m WHERE bot_id = ? ORDER BY created_at, id"
+        ))
+        .bind(bot_id)
+        .fetch_all(&self.pool)
+        .await?)
     }
 
     pub(crate) async fn page(
@@ -143,7 +220,9 @@ impl MessageService {
         page: TimePage<'_>,
         limit: u32,
     ) -> Result<Vec<TimedMessage>> {
-        let mut query = sqlx::QueryBuilder::new("SELECT * FROM bot_messages WHERE bot_id = ");
+        let mut query = sqlx::QueryBuilder::new(format!(
+            "SELECT {MESSAGE_COLUMNS} FROM bot_messages m WHERE bot_id = "
+        ));
         query.push_bind(bot_id);
         if let TimePage::Before(ms, id) | TimePage::After(ms, id) = page {
             query.push(if matches!(page, TimePage::After(..)) {
@@ -164,13 +243,13 @@ impl MessageService {
     }
 
     pub(crate) async fn find(&self, bot_id: &str, id: &str) -> Result<Option<TimedMessage>> {
-        Ok(
-            sqlx::query_as("SELECT * FROM bot_messages WHERE bot_id = ? AND id = ?")
-                .bind(bot_id)
-                .bind(id)
-                .fetch_optional(&self.pool)
-                .await?,
-        )
+        Ok(sqlx::query_as(&format!(
+            "SELECT {MESSAGE_COLUMNS} FROM bot_messages m WHERE bot_id = ? AND id = ?"
+        ))
+        .bind(bot_id)
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?)
     }
 
     pub(crate) async fn retry(&self, bot_id: &str, id: &str) -> Result<BotMessage> {

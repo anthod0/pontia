@@ -102,6 +102,7 @@ pub struct TimelinePage {
     notice_session_id: Option<String>,
     file_link_session: Option<OwnedSession>,
     entries: Vec<TimelineEntry>,
+    open_todo_count: i64,
     next_before: Option<String>,
 }
 
@@ -165,6 +166,7 @@ impl ConversationService {
         let status = self.work_status(&bot, &activity).await?;
         let generation_notice = activity.generation_notice.lock().unwrap().clone();
         Ok(TimelinePage {
+            open_todo_count: self.messages.open_todo_count(bot_id).await?,
             notice_session_id: bot.current_session_id.clone(),
             file_link_session: self
                 .control
