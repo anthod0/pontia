@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bots send separate messages for unrelated matters, even when updates arrive together.
+
 ## [0.8.5] - 2026-11-21
 
 ### Added
