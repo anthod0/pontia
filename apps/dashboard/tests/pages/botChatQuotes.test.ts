@@ -600,6 +600,18 @@ test("ignoring a todo resolves it like marking it done", async () => {
   await waitFor(() => expect(change).toHaveBeenCalledWith(bot.bot_id, todo.id, "resolve"));
 });
 
+test("ignores an open todo from its message menu", async () => {
+  serve([todo]);
+  const change = vi.spyOn(testDevice.api, "changeBotTodo").mockResolvedValue({
+    ...todo,
+    todo: { state: "done", by: "user", at: new Date().toISOString() },
+  });
+  render(BotChatPage, { botId: bot.bot_id });
+  await fireEvent.contextMenu(await screen.findByText("certificate"), { clientX: 10, clientY: 10 });
+  await fireEvent.click(await screen.findByRole("menuitem", { name: "Ignore" }));
+  await waitFor(() => expect(change).toHaveBeenCalledWith(bot.bot_id, todo.id, "resolve"));
+});
+
 test("opens an outstanding todo from the feed and quotes it into the composer", async () => {
   serve([todo]);
   const send = sent();
