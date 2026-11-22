@@ -24,7 +24,7 @@
   import FilePreviewPanel from '../chat/FilePreviewPanel.svelte'
   import FilePreviewResizer from '../chat/FilePreviewResizer.svelte'
   import BotAvatar from './BotAvatar.svelte'
-  import { fileKind } from '../chat/fileKind'
+  import { fileKindOf } from '../chat/fileKind'
   import { createRecentFiles, withRecentFile } from '$lib/botRecentFiles'
 
   let { bot, count, onjump, onquote, ontodochange }: {
@@ -142,8 +142,7 @@
       {#each recentFiles.current as recent (recent.path)}
         {@const slash = recent.path.lastIndexOf('/')}
         {@const name = recent.path.slice(slash + 1)}
-        {@const dot = name.lastIndexOf('.')}
-        {@const kind = fileKind(dot > 0 ? name.slice(dot + 1) : '')}
+        {@const kind = fileKindOf(name)}
         <li>
           <button type="button" class="flex w-full items-center gap-3 rounded-lg p-2 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
             title={recent.path} aria-label={$t('files.previewNamed', { name })} onclick={() => openFile({ device, ...recent })}>

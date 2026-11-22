@@ -3,7 +3,7 @@ import { PersistedState, scopedKey } from "./storage";
 /** A file opened in a Bot chat's side panel, read through the Session it was opened from. */
 export type RecentFile = { sessionId: string; path: string };
 
-export const recentFileLimit = 10;
+const recentFileLimit = 10;
 
 /** Puts `file` first. A path already in the list moves up instead of appearing twice. */
 export function withRecentFile(files: RecentFile[], file: RecentFile): RecentFile[] {
