@@ -450,12 +450,15 @@ CREATE TABLE interactions (
   response_option_key TEXT,
   requested_at TEXT NOT NULL,
   resolved_at TEXT,
+  report_key TEXT,
+  authorization_digest TEXT,
   CHECK (
     (state = 'resolved' AND response_option_key IS NOT NULL AND resolved_at IS NOT NULL)
     OR (state <> 'resolved' AND response_option_key IS NULL AND resolved_at IS NULL)
   )
 );
 
+CREATE UNIQUE INDEX idx_interactions_report_key ON interactions (session_id, report_key) WHERE report_key IS NOT NULL;
 CREATE INDEX idx_interactions_session_order ON interactions (session_id, requested_at, interaction_id);
 CREATE INDEX idx_interactions_session_state_order ON interactions (session_id, state, requested_at, interaction_id);
 

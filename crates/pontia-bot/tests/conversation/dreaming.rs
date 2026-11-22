@@ -501,6 +501,9 @@ async fn blocked_dreaming_interaction_is_rejected_and_terminated_without_wedging
     let rejectable = control
         .interactions()
         .register(ChoiceInteractionRequest {
+            authorization_digest: "a".repeat(64),
+            report_key: "rejectable".into(),
+            blocked: None,
             session_id: first.clone(),
             turn_id: Some(turn.clone()),
             title: "Approve command".into(),
@@ -523,6 +526,9 @@ async fn blocked_dreaming_interaction_is_rejected_and_terminated_without_wedging
     let positive_only = control
         .interactions()
         .register(ChoiceInteractionRequest {
+            authorization_digest: "a".repeat(64),
+            report_key: "positive_only".into(),
+            blocked: None,
             session_id: first.clone(),
             turn_id: Some(turn.clone()),
             title: "Confirm action".into(),
@@ -622,6 +628,9 @@ async fn blocked_dreaming_interaction_is_rejected_and_terminated_without_wedging
     let failing = control
         .interactions()
         .register(ChoiceInteractionRequest {
+            authorization_digest: "a".repeat(64),
+            report_key: "failing".into(),
+            blocked: None,
             session_id: second.clone(),
             turn_id: Some(second_turn.clone()),
             title: "Approve command".into(),

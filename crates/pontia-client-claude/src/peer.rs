@@ -121,14 +121,19 @@ impl Peer {
         if let Some(report) = crate::reports::HostReport::parse(host, params)? {
             return self.report(events, &mut state, host, report, stale).await;
         }
-        if stale {
+        if stale
+            && !matches!(
+                event["kind"].as_str(),
+                Some("permission_requested" | "permission_settled")
+            )
+        {
             return Err(Error::StateConflict(
                 "Claude host sequence already processed".into(),
             ));
         }
         match event["kind"].as_str() {
             Some("permission_requested" | "permission_settled") => {
-                crate::interactions::event(self, &mut state, events, host, event).await?;
+                return crate::interactions::event(self, &mut state, events, host, params).await;
             }
             Some("closed") => {
                 state.closed = true;

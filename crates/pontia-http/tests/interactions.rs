@@ -106,28 +106,34 @@ impl Fixture {
             root,
         }
     }
-    async fn register(&self) -> Interaction {
+    fn choice(&self, key: &str) -> ChoiceInteractionRequest {
+        ChoiceInteractionRequest {
+            authorization_digest: "a".repeat(64),
+            report_key: key.into(),
+            blocked: None,
+            session_id: self.session.clone(),
+            turn_id: None,
+            title: "Choose".into(),
+            description: None,
+            options: vec![
+                InteractionOption {
+                    key: "proceed-once".into(),
+                    label: "Proceed".into(),
+                    intent: InteractionIntent::Positive,
+                },
+                InteractionOption {
+                    key: "reject-once".into(),
+                    label: "Reject".into(),
+                    intent: InteractionIntent::Negative,
+                },
+            ],
+        }
+    }
+    async fn register(&self, key: &str) -> Interaction {
         self.app
             .control()
             .interactions()
-            .register(ChoiceInteractionRequest {
-                session_id: self.session.clone(),
-                turn_id: None,
-                title: "Choose".into(),
-                description: None,
-                options: vec![
-                    InteractionOption {
-                        key: "proceed-once".into(),
-                        label: "Proceed".into(),
-                        intent: InteractionIntent::Positive,
-                    },
-                    InteractionOption {
-                        key: "reject-once".into(),
-                        label: "Reject".into(),
-                        intent: InteractionIntent::Negative,
-                    },
-                ],
-            })
+            .register(self.choice(key))
             .await
             .unwrap()
     }
@@ -160,7 +166,7 @@ async fn request(
 #[tokio::test]
 async fn first_choice_claims_once_and_completed_retries_return_saved_result() {
     let f = Fixture::new().await;
-    let i = f.register().await;
+    let i = f.register("choice").await;
     let path = format!("{}/response", f.path(&i.interaction_id));
     let (status, body) = request(
         f.app.clone(),
@@ -240,7 +246,7 @@ async fn transient_notifications_are_delivered_before_a_durable_backlog_is_drain
         .await
         .unwrap();
     let mut stream = response.into_body();
-    let interaction = f.register().await;
+    let interaction = f.register("choice").await;
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
             let frame = stream.frame().await.unwrap().unwrap().into_data().unwrap();
@@ -272,8 +278,8 @@ async fn transient_notifications_are_delivered_before_a_durable_backlog_is_drain
 async fn pages_are_ordered_scoped_and_validate_query_parameters() {
     let f = Fixture::new().await;
     let mut ids = Vec::new();
-    for _ in 0..3 {
-        ids.push(f.register().await.interaction_id);
+    for key in ["one", "two", "three"] {
+        ids.push(f.register(key).await.interaction_id);
     }
     let base = format!("/api/v1/sessions/{}/interactions", f.session);
     let (status, page) = request(
@@ -332,14 +338,14 @@ async fn pages_are_ordered_scoped_and_validate_query_parameters() {
 #[tokio::test]
 async fn process_restart_expires_live_records_and_preserves_history() {
     let f = Fixture::new().await;
-    let pending = f.register().await;
-    let resolving = f.register().await;
+    let pending = f.register("pending").await;
+    let resolving = f.register("resolving").await;
     sqlx::query("UPDATE interactions SET state='resolving' WHERE interaction_id=?")
         .bind(&resolving.interaction_id)
         .execute(&f.app.db())
         .await
         .unwrap();
-    let resolved = f.register().await;
+    let resolved = f.register("choice").await;
     f.resolver.release.add_permits(1);
     f.app
         .control()
@@ -403,7 +409,7 @@ async fn process_restart_expires_live_records_and_preserves_history() {
 #[tokio::test]
 async fn lost_native_association_expires_without_recording_a_choice() {
     let f = Fixture::new().await;
-    let interaction = f.register().await;
+    let interaction = f.register("choice").await;
     let disconnected = AppState::builder(
         pontia_agent_control::AgentControl::builder(f.app.db(), f.root.path().into()).build(),
     )
@@ -444,7 +450,7 @@ async fn transient_interaction_sse_does_not_replace_the_durable_cursor() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let mut stream = response.into_body();
-    let i = f.register().await;
+    let i = f.register("choice").await;
     let frame = tokio::time::timeout(std::time::Duration::from_secs(3), stream.frame())
         .await
         .unwrap()
@@ -480,7 +486,7 @@ async fn transient_interaction_sse_does_not_replace_the_durable_cursor() {
 #[tokio::test]
 async fn completion_storage_failure_releases_the_claim_without_replaying_native_response() {
     let f = Fixture::new().await;
-    let interaction = f.register().await;
+    let interaction = f.register("choice").await;
     sqlx::query("CREATE TRIGGER fail_interaction_completion BEFORE UPDATE OF state ON interactions WHEN NEW.state='resolved' BEGIN SELECT RAISE(ABORT,'test completion failure'); END").execute(&f.app.db()).await.unwrap();
     f.resolver.release.add_permits(1);
     let path = format!("{}/response", f.path(&interaction.interaction_id));
@@ -512,4 +518,45 @@ async fn completion_storage_failure_releases_the_claim_without_replaying_native_
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(f.resolver.calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn concurrent_registrations_share_an_interaction_and_a_notification() {
+    let f = Fixture::new().await;
+    let service = f.app.control().interactions();
+    let mut changes = service.subscribe();
+    let request = f.choice("same-key");
+    let (first, second) = tokio::join!(
+        service.register(request.clone()),
+        service.register(request.clone())
+    );
+    let first = first.unwrap();
+    assert_eq!(second.unwrap(), first);
+    assert_eq!(
+        changes.recv().await.unwrap().interaction_id,
+        first.interaction_id
+    );
+    let mut changed = request.clone();
+    changed.description = Some("different".into());
+    assert!(matches!(
+        service.register(changed).await,
+        Err(pontia_core::Error::StateConflict(_))
+    ));
+    assert!(changes.try_recv().is_err());
+    service
+        .expire(&f.session, &first.interaction_id)
+        .await
+        .unwrap();
+    let replay = service.register(request).await.unwrap();
+    assert_eq!(replay.interaction_id, first.interaction_id);
+    assert_eq!(replay.state, InteractionState::Expired);
+    assert_eq!(
+        service
+            .list(&f.session, None, 10, None)
+            .await
+            .unwrap()
+            .interactions
+            .len(),
+        1
+    );
 }

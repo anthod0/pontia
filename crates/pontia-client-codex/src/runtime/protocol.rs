@@ -94,6 +94,7 @@ enum Outgoing {
     },
     Reply {
         id: Value,
+        digest: String,
         result: Value,
         written: oneshot::Sender<Result<()>>,
     },
@@ -114,7 +115,7 @@ pub struct Connection {
     pending: Pending,
     server_requests: ServerRequests,
     // Preserve request/resolution ordering even when observer broadcasts lag.
-    pub(crate) interaction_events: Arc<Mutex<std::collections::VecDeque<Value>>>,
+    pub(crate) interaction_events: Arc<Mutex<std::collections::VecDeque<(Value, bool)>>>,
     next_id: AtomicU64,
     pub events: broadcast::Sender<Notification>,
 }
@@ -255,13 +256,35 @@ impl Connection {
                                 let message = Message::Text(json!({"id":id,"method":method,"params":params}).to_string().into());
                                 if socket.send(message).await.is_err() { break; }
                             }
-                            Outgoing::Reply { id, result, written } => {
-                                if server_requests.lock().await.remove(&id.to_string()).is_none() {
+                            Outgoing::Reply { id, digest, result, written } => {
+                                let mut requests = server_requests.lock().await;
+                                let key = id.to_string();
+                                let Some(current) = requests.remove(&key) else {
                                     let _ = written.send(Err(protocol_error("server request is no longer pending")));
                                     continue;
-                                }
-                                let result = socket.send(Message::Text(json!({"id":id,"result":result}).to_string().into())).await.map_err(protocol_error);
+                                };
+                                drop(requests);
+                                let conflict = crate::service::interactions::approval_digest(&current) != digest;
+                                let reply = if conflict {
+                                    match crate::service::interactions::denial(&current) {
+                                        Ok(denial) => denial,
+                                        Err(error) => {
+                                            let _ = written.send(Err(error));
+                                            continue;
+                                        }
+                                    }
+                                } else {
+                                    result
+                                };
+                                let result = socket.send(Message::Text(json!({"id":id,"result":reply}).to_string().into())).await.map_err(protocol_error);
                                 let failed = result.is_err();
+                                let result = result.and_then(|()| {
+                                    if conflict {
+                                        Err(Error::StateConflict("Codex permission changed before delivery".into()))
+                                    } else {
+                                        Ok(())
+                                    }
+                                });
                                 let _ = written.send(result);
                                 if failed { break; }
                             }
@@ -314,7 +337,7 @@ impl Connection {
                                         });
                                     }
                                     if value.get("id").is_some() || value["method"] == "serverRequest/resolved" {
-                                        interaction_events.lock().await.push_back(value.clone());
+                                        interaction_events.lock().await.push_back((value.clone(), false));
                                     }
                                     // Requests and notifications are observed without waiting for user input.
                                     let _ = events.send(Notification { value, sequence: notification_sequence });
@@ -460,6 +483,21 @@ impl Connection {
         }
     }
 
+    pub(crate) async fn request_pending(&self, key: &str) -> bool {
+        self.server_requests.lock().await.contains_key(key)
+    }
+
+    pub(crate) async fn discard_replay(&self, id: &Value, digest: &str) {
+        let mut requests = self.server_requests.lock().await;
+        let key = id.to_string();
+        if requests
+            .get(&key)
+            .is_some_and(|request| crate::service::interactions::approval_digest(request) == digest)
+        {
+            requests.remove(&key);
+        }
+    }
+
     pub(crate) async fn pending_server_requests(&self) -> Vec<Notification> {
         let mut requests: Vec<_> = self
             .server_requests
@@ -472,11 +510,12 @@ impl Connection {
         requests
     }
 
-    pub(crate) async fn reply(&self, id: Value, result: Value) -> Result<()> {
+    pub(crate) async fn reply(&self, id: Value, digest: String, result: Value) -> Result<()> {
         let (written, receiver) = oneshot::channel();
         self.outgoing
             .send(Outgoing::Reply {
                 id,
+                digest,
                 result,
                 written,
             })

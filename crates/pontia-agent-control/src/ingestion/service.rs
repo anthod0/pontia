@@ -276,8 +276,16 @@ impl EventIngestService {
                 initial_agent_binding,
                 enforce_runtime_fence,
                 expected_session_state,
+                None,
             )
             .await?;
+        self.apply_outcome(outcome).await
+    }
+
+    async fn apply_outcome(
+        &self,
+        outcome: commit::CommitOutcome,
+    ) -> Result<Option<EventIngestResult>> {
         match outcome {
             commit::CommitOutcome::Skipped => Ok(None),
             commit::CommitOutcome::Duplicate { result, .. } => Ok(Some(result)),

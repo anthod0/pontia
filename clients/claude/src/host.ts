@@ -200,6 +200,14 @@ export class Host {
     // The result, not this acknowledgement, decides whether interruption won.
   }
 
+  hasPermission(id: string): boolean {
+    return this.permissions.has(id);
+  }
+
+  cancelPermission(id: string): void {
+    this.permissions.cancel(id);
+  }
+
   resolvePermission(id: string, option: string): void {
     if (!this.acceptsControl() || !this.permissions.resolve(id, option))
       throw new ControlError("rejected", "permission_expired_or_invalid");

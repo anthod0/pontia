@@ -10,7 +10,7 @@ import { controlSocketPath } from "../shared/control-socket.js";
 import { assistant, first, init, result, sdk, second } from "./fixture.js";
 
 type Frame = Record<string, any>;
-async function setup(t: TestContext, rejectKind?: string) {
+async function setup(t: TestContext, rejectKind?: string, transient = false) {
   const sandbox = await mkdtempDisposable(join(tmpdir(), "pontia-host-test-"));
   const path = controlSocketPath(sandbox.path);
   await mkdir(dirname(path), { mode: 0o700 });
@@ -41,12 +41,14 @@ async function setup(t: TestContext, rejectKind?: string) {
           );
         } else if (frame.method === "host.event") {
           facts.push(frame.params);
+          if (transient && facts.filter((f) => f.event.kind === rejectKind).length > 1)
+            rejectKind = undefined;
           client.write(
             JSON.stringify({
               jsonrpc: "2.0",
               id: frame.id,
               ...(frame.params.event.kind === rejectKind
-                ? { error: { code: -32009, message: "conflicting fact" } }
+                ? { error: { code: transient ? -32603 : -32009, message: "rejected fact" } }
                 : { result: { accepted: true } }),
             }) + "\n",
           );
@@ -328,5 +330,70 @@ test(
             : fact.sequence;
       assert.equal(fact.report_key, `claude:${fact.host_id}:${suffix}`);
     }
+  },
+);
+
+for (const transient of [false, true]) {
+  test(
+    `permission registration ${transient ? "retries the original observation" : "denies the waiting callback on conflict"}`,
+    { timeout: 6000 },
+    async (t) => {
+      const h = await setup(t, "permission_requested", transient);
+      await h.command({ method: "input", input_id: first, text: "task" });
+      h.fixture.messages.push(init());
+      h.fixture.messages.push(assistant());
+      await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
+      const response = h.fixture.options!.canUseTool!(
+        "Write",
+        {},
+        {
+          signal: new AbortController().signal,
+          toolUseID: "tool",
+          requestId: "native-request",
+        },
+      );
+      if (transient) {
+        await h.wait(
+          () => h.facts.filter((f) => f.event.kind === "permission_requested").length === 2,
+        );
+        await h.command({ method: "permission", permission_id: "native-request", option: "allow" });
+      }
+      assert.equal((await response)?.behavior, transient ? "allow" : "deny");
+      const registrations = h.facts.filter((f) => f.event.kind === "permission_requested");
+      assert.equal(registrations[0]!.event.permission_id, "native-request");
+      assert.equal(
+        registrations[0]!.report_key,
+        `claude:${registrations[0]!.host_id}:native-request`,
+      );
+      assert.deepEqual(registrations, Array(transient ? 2 : 1).fill(registrations[0]));
+    },
+  );
+}
+
+test(
+  "settlement retries independently after a single delivered choice",
+  { timeout: 6000 },
+  async (t) => {
+    const h = await setup(t, "permission_settled", true);
+    await h.command({ method: "input", input_id: first, text: "task" });
+    h.fixture.messages.push(init());
+    h.fixture.messages.push(assistant());
+    await h.wait(() => h.facts.some((f) => f.event.kind === "started"));
+    const response = h.fixture.options!.canUseTool!(
+      "Write",
+      {},
+      {
+        signal: new AbortController().signal,
+        toolUseID: "tool",
+        requestId: "native-request",
+      },
+    );
+    await h.wait(() => h.facts.some((f) => f.event.kind === "permission_requested"));
+    await h.command({ method: "permission", permission_id: "native-request", option: "allow" });
+    assert.equal((await response)?.behavior, "allow");
+    const settlements = () => h.facts.filter((f) => f.event.kind === "permission_settled");
+    await h.wait(() => settlements().length === 2);
+    assert.deepEqual(settlements()[0], settlements()[1]);
+    assert.equal(h.facts.filter((f) => f.event.kind === "permission_requested").length, 1);
   },
 );

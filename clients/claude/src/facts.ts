@@ -28,12 +28,20 @@ export type HostEvent =
     }
   | { kind: "unavailable"; reason: string; result?: ResultDiagnostic }
   | { kind: "retry"; reason: "authentication_failed_retrying" | "api_request_retrying" | null }
-  | { kind: "permission_requested"; permission_id: string; tool: string; blocking: boolean }
+  | {
+      kind: "permission_requested";
+      permission_id: string;
+      tool: string;
+      blocking: boolean;
+      authorization_digest: string;
+    }
   | { kind: "permission_settled"; permission_id: string; outcome: "resolved" | "expired" }
   | { kind: "closed"; history_anchor?: string };
 
 function reportKey(host: string, sequence: number, event: HostEvent): string | undefined {
   switch (event.kind) {
+    case "permission_requested":
+      return `claude:${host}:${event.permission_id}`;
     case "started":
       return `claude:${host}:${event.input_id}:start`;
     case "finished":

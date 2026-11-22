@@ -49,7 +49,7 @@ impl Harness {
 }
 
 #[tokio::test]
-async fn fact_ingestion_retries_without_delaying_or_replaying_permission_delivery() {
+async fn registration_retries_atomically_and_unblock_retries_without_replaying_delivery() {
     for failing_kind in ["interaction.blocked", "interaction.unblocked"] {
         let h = Harness::new(&[("ACP_PERMISSION", "1"), ("ACP_REPLY_BACKPRESSURE", "1")]).await;
         let session = h.create("first").await.unwrap();
@@ -60,14 +60,38 @@ async fn fact_ingestion_retries_without_delaying_or_replaying_permission_deliver
             .await
             .unwrap()
             .unwrap();
+        // AUTOINCREMENT cannot allocate a row after i64::MAX and reports SQLITE_FULL.
+        sqlx::query("CREATE TABLE full_disk (id INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT); INSERT INTO full_disk VALUES (9223372036854775807, 'last')").execute(&h.app.db()).await.unwrap();
         if failing_kind == "interaction.blocked" {
-            sqlx::query("CREATE TRIGGER fail_permission_fact BEFORE INSERT ON events WHEN NEW.event_type='interaction.blocked' BEGIN SELECT RAISE(ABORT, 'temporary event outage'); END").execute(&h.app.db()).await.unwrap();
+            sqlx::query("CREATE TRIGGER fail_permission_fact BEFORE INSERT ON events WHEN NEW.event_type='interaction.blocked' BEGIN INSERT INTO full_disk(value) VALUES ('full'); END").execute(&h.app.db()).await.unwrap();
         }
+        let mut changed = h.app.interactions().subscribe();
         h.release("update-1");
+        if failing_kind == "interaction.blocked" {
+            assert!(
+                tokio::time::timeout(Duration::from_millis(300), changed.recv())
+                    .await
+                    .is_err()
+            );
+            assert!(
+                h.app
+                    .interactions()
+                    .list(&session, None, 10, None)
+                    .await
+                    .unwrap()
+                    .interactions
+                    .is_empty()
+            );
+            assert_eq!(h.events(&session, failing_kind).await, 0);
+            sqlx::query("DROP TRIGGER fail_permission_fact")
+                .execute(&h.app.db())
+                .await
+                .unwrap();
+        }
         let record = h.wait_interactions(&session, 1).await.remove(0);
         if failing_kind == "interaction.unblocked" {
             h.wait_permission_facts(&session, 1).await;
-            sqlx::query("CREATE TRIGGER fail_permission_fact BEFORE INSERT ON events WHEN NEW.event_type='interaction.unblocked' BEGIN SELECT RAISE(ABORT, 'temporary event outage'); END").execute(&h.app.db()).await.unwrap();
+            sqlx::query("CREATE TRIGGER fail_permission_fact BEFORE INSERT ON events WHEN NEW.event_type='interaction.unblocked' BEGIN INSERT INTO full_disk(value) VALUES ('full'); END").execute(&h.app.db()).await.unwrap();
         }
         h.release("backpressure-1");
         let result = tokio::time::timeout(
@@ -83,11 +107,23 @@ async fn fact_ingestion_retries_without_delaying_or_replaying_permission_deliver
         .unwrap()
         .unwrap();
         assert_eq!(result.state, InteractionState::Resolved);
-        assert_eq!(h.events(&session, failing_kind).await, 0);
-        sqlx::query("DROP TRIGGER fail_permission_fact")
-            .execute(&h.app.db())
-            .await
-            .unwrap();
+        if failing_kind == "interaction.unblocked" {
+            assert_eq!(h.events(&session, failing_kind).await, 0);
+            sqlx::query("DROP TRIGGER fail_permission_fact")
+                .execute(&h.app.db())
+                .await
+                .unwrap();
+        }
+        assert_eq!(
+            h.app
+                .interactions()
+                .list(&session, None, 10, None)
+                .await
+                .unwrap()
+                .interactions
+                .len(),
+            1
+        );
         let facts = h.wait_permission_facts(&session, 2).await;
         assert_eq!(
             facts,

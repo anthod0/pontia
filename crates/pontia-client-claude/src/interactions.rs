@@ -1,6 +1,9 @@
 use pontia_agent_control::{
     EventIngestService, ReportedFact,
-    interactions::{ChoiceInteractionRequest, InteractionIntent, InteractionOption},
+    interactions::{
+        ChoiceInteractionRequest, InteractionBlock, InteractionIntent, InteractionOption,
+        InteractionState,
+    },
 };
 use pontia_core::{Error, Result, domain::EventType};
 use serde_json::{Value, json};
@@ -18,53 +21,89 @@ pub(crate) async fn event(
     state: &mut State,
     events: &EventIngestService,
     host: &str,
-    event: &Value,
-) -> Result<()> {
+    params: &Value,
+) -> Result<Value> {
+    let event = &params["event"];
     let native = field(event, "permission_id")?;
     match event["kind"].as_str() {
         Some("permission_requested") => {
-            if state.closed
-                || state.unavailable.is_some()
-                || state.permissions.values().any(|p| p.native == native)
-            {
-                return Err(expired());
-            }
             let blocking = event["blocking"].as_bool().ok_or_else(expired)?;
-            let interaction = peer
-                .interactions
-                .register(ChoiceInteractionRequest {
-                    session_id: peer.session.clone(),
-                    // canUseTool identifies a callback, not a user input. In particular,
-                    // background work must never be assigned to the latest Inbox Turn.
-                    turn_id: None,
-                    title: "Tool permission".into(),
-                    description: Some(field(event, "tool")?.chars().take(256).collect()),
-                    options: vec![
-                        InteractionOption {
-                            key: "allow".into(),
-                            label: "Allow once".into(),
-                            intent: InteractionIntent::Positive,
-                        },
-                        InteractionOption {
-                            key: "deny".into(),
-                            label: "Deny once".into(),
-                            intent: InteractionIntent::Negative,
-                        },
-                    ],
-                })
-                .await?;
-            let id = interaction.interaction_id;
-            state.permissions.insert(
-                id.clone(),
-                Permission {
-                    native: native.into(),
-                    blocking,
-                    resolving: false,
-                },
-            );
-            if blocking {
-                report(peer, events, host, &id, EventType::InteractionBlocked).await?;
+            let key = field(params, "report_key")?;
+            if key != format!("claude:{host}:{native}") {
+                return Err(Error::StateConflict(
+                    "Claude permission key does not match request".into(),
+                ));
             }
+            let request = ChoiceInteractionRequest {
+                report_key: key.into(),
+                authorization_digest: field(event, "authorization_digest")?.into(),
+                blocked: blocking.then(|| InteractionBlock {
+                    key_prefix: format!("claude:{host}"),
+                    runtime_id: Some(peer.runtime.clone()),
+                    turn_id: None,
+                }),
+                session_id: peer.session.clone(),
+                // canUseTool identifies a callback, not a user input. In particular,
+                // background work must never be assigned to the latest Inbox Turn.
+                turn_id: None,
+                title: "Tool permission".into(),
+                description: Some(field(event, "tool")?.chars().take(256).collect()),
+                options: vec![
+                    InteractionOption {
+                        key: "allow".into(),
+                        label: "Allow once".into(),
+                        intent: InteractionIntent::Positive,
+                    },
+                    InteractionOption {
+                        key: "deny".into(),
+                        label: "Deny once".into(),
+                        intent: InteractionIntent::Negative,
+                    },
+                ],
+            };
+            let interaction = if state.closed || state.unavailable.is_some() {
+                peer.interactions
+                    .registered(&request)
+                    .await?
+                    .ok_or_else(expired)?
+            } else {
+                match peer.interactions.register(request).await {
+                    Ok(stored) => stored,
+                    Err(error @ Error::StateConflict(_)) => {
+                        if let Some((stored, _)) =
+                            peer.interactions.registration(&peer.session, key).await?
+                        {
+                            peer.interactions
+                                .expire(&peer.session, &stored.interaction_id)
+                                .await?;
+                            if let Some(permission) =
+                                state.permissions.get_mut(&stored.interaction_id)
+                            {
+                                permission.resolving = true;
+                            }
+                        }
+                        return Err(error);
+                    }
+                    Err(error) => return Err(error),
+                }
+            };
+            if matches!(
+                interaction.state,
+                InteractionState::Pending | InteractionState::Resolving
+            ) {
+                state
+                    .permissions
+                    .entry(interaction.interaction_id.clone())
+                    .or_insert_with(|| Permission {
+                        native: native.into(),
+                        blocking,
+                        resolving: false,
+                    });
+            }
+            return Ok(
+                json!({"accepted": true, "interaction_id": interaction.interaction_id,
+                "ended": matches!(interaction.state, InteractionState::Resolved | InteractionState::Expired)}),
+            );
         }
         Some("permission_settled") => {
             let id = state
@@ -80,28 +119,27 @@ pub(crate) async fn event(
                 _ => return Err(expired()),
             }
             if permission.blocking {
-                report(peer, events, host, &id, EventType::InteractionUnblocked).await?;
+                report_unblocked(peer, events, host, &id).await?;
             }
             state.permissions.remove(&id);
         }
         _ => return Err(expired()),
     }
-    Ok(())
+    Ok(json!({"accepted": true}))
 }
 
-async fn report(
+async fn report_unblocked(
     peer: &Peer,
     events: &EventIngestService,
     host: &str,
     id: &str,
-    kind: EventType,
 ) -> Result<()> {
     events
         .report_fact(ReportedFact {
             session_id: peer.session.clone(),
             turn_id: None,
-            report_key: Some(format!("claude:{host}:{id}:{kind}")),
-            fact_type: kind,
+            report_key: Some(format!("claude:{host}:{id}:interaction.unblocked")),
+            fact_type: EventType::InteractionUnblocked,
             data: json!({"runtime_id":peer.runtime,"interaction_id":id}),
         })
         .await

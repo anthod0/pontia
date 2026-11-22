@@ -21,12 +21,18 @@ async function setup(t: TestContext) {
   fixture.messages.push(init());
   fixture.messages.push(assistant());
   await settle();
+  let requestNumber = 0;
   const request = (agentID?: string) => {
     const abort = new AbortController();
     const response = fixture.options!.canUseTool!(
       "Write",
       { secret: "not for storage" },
-      { signal: abort.signal, toolUseID: "tool-call", requestId: "request", agentID },
+      {
+        signal: abort.signal,
+        toolUseID: "tool-call",
+        requestId: `request-${++requestNumber}`,
+        agentID,
+      },
     );
     const event = events.at(-1)!;
     assert.equal(event.kind, "permission_requested");
@@ -125,4 +131,19 @@ test("background callback after a foreground result is not attached to a new use
   host.resolvePermission(a.id, "deny");
   assert.equal((await a.response)?.behavior, "deny");
   assert.equal(events.filter((e) => e.kind === "started").length, 1);
+});
+
+test("reordered tool arguments reuse the wait and changed authorization denies both callbacks", async (t) => {
+  const { fixture, events, host } = await setup(t);
+  const opts = { signal: new AbortController().signal, requestId: "same", toolUseID: "call" };
+  const ask = fixture.options!.canUseTool!;
+  const a = ask("Write", { path: "a", content: "original" }, opts);
+  const b = ask("Write", { content: "original", path: "a" }, opts);
+  assert.equal(events.filter((e) => e.kind === "permission_requested").length, 1);
+  const changed = ask("Write", { path: "b", content: "original" }, opts);
+  for (const wait of [a, b, changed]) assert.equal((await wait)?.behavior, "deny");
+  const reports = events.filter((e) => e.kind === "permission_requested");
+  assert.equal(reports.length, 2);
+  assert.notEqual(reports[0]!.authorization_digest, reports[1]!.authorization_digest);
+  assert.throws(() => host.resolvePermission("same", "allow"));
 });
